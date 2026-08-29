@@ -177,7 +177,11 @@ class TestAdapterEnvelope:
         env = _route("Compare direct_001 with acquired_009", semantics,
                      frame_resolver=lambda c, r: _frame())
         assert env["metadata"]["route"] == prc.WORKFLOW_ID
-        assert env["ok"] is True                 # controlled, not an error
+        # CONTROLLED, AND NOT A SUCCESS — see the matching note in
+        # test_concentration_analysis_route. Still HTTP 200, still explained,
+        # and no longer shaped like a delivered answer.
+        assert env["ok"] is False
+        assert env["metadata"]["controlledUnsupported"] is True
         assert "acquired_009" in env["answer"]
         assert env["workflow"]["available"] is False
 

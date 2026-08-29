@@ -266,6 +266,21 @@ EXPLICIT_DIMENSION_TERMS = {
     "region": "geographic_region_obligor",
     "account status": "account_status",
     "status": "account_status",
+    # THE PIPELINE AXIS, curated for the same reason "region" is. Both bare
+    # words sit on `_GENERIC_DIM_TOKENS`, which drops over-generic single tokens
+    # harvested from the registry so a synonym cannot hijack an unrelated
+    # question — and this curated map is the governed way past it.
+    #
+    # Without it, "show the pipeline BY STAGE" resolved no dimension at all and
+    # was refused as unmapped, on a tape that carries `pipeline_stage` with five
+    # values and answers "show pipeline evolution by stage" happily. No other
+    # governed field claims the word, and a funded tape carries no such column,
+    # so a funded question naming it refuses by name rather than answering
+    # something else.
+    "stage": "pipeline_stage",
+    "stages": "pipeline_stage",
+    "pipeline stage": "pipeline_stage",
+    "funnel stage": "pipeline_stage",
     "borrower age bucket": "age_bucket",
     "age bucket": "age_bucket",
     "age band": "age_bucket",
@@ -433,8 +448,17 @@ _METRIC_TERMS = (
     ("weighted average ltv", "ltv"),
     ("loan to value", "ltv"),
     ("ltv", "ltv"),
+    # Plurals, in the same convention the redemption/recovery entries already
+    # follow. A lender types "how have direct and acquired BALANCES moved";
+    # without these the question resolved NO metric, could not compose an
+    # analytical plan, fell through to a whole-book series and was refused with
+    # a message naming the product's limit rather than a missing plural.
+    # Longer forms first, as everywhere in this table.
+    ("outstanding balances", "balance"),
     ("outstanding balance", "balance"),
+    ("balances", "balance"),
     ("balance", "balance"),
+    ("exposures", "balance"),
     ("exposure", "balance"),
     # "size" is a MEASURE noun when it is what is being averaged and a bucket
     # DIMENSION when it is what the answer is grouped by. The dimension reading
@@ -626,6 +650,10 @@ _GENERIC_METRIC_TOKENS = {
     "balance", "value", "amount", "rate", "count", "age", "ltv", "exposure",
     "total", "sum", "principal", "interest", "loan", "loans", "mortgage",
     "income", "margin", "ratio", "period", "number", "term",
+    # The PIPELINE population noun, on the same footing as "loan"/"loans". A
+    # pipeline row is a case; "how many CASES are at offer stage" surfaced
+    # "cases" as an unresolved measure and refused.
+    "case", "cases",
 }
 
 
@@ -646,11 +674,28 @@ def _registry_metric_terms(semantics: dict) -> Dict[str, str]:
             if name:
                 phrases.append(str(name))
         phrases.append(key.replace("_", " "))
+        # A LENDER TYPES PLURALS. The registry carries singular business terms
+        # ("balance", "exposure"), so "how have direct and acquired BALANCES
+        # moved" resolved no metric at all — and a question with no metric
+        # cannot compose an analytical plan, so it fell through to a route that
+        # returned a whole-book series and was then refused. The refusal named
+        # the product's limit; the actual limit was a missing plural.
+        #
+        # Registered through the SAME ambiguity mechanism as the singular, so a
+        # plural that collides with another field's term is dropped rather than
+        # guessed, and the generic-token filter applies to both forms.
+        for phrase in list(phrases):
+            p = str(phrase).strip().lower()
+            if p and not p.endswith("s"):
+                phrases.append(p + "s")
         for phrase in phrases:
             p = str(phrase).strip().lower()
             if len(p) < 3:
                 continue
             if " " not in p and p in _GENERIC_METRIC_TOKENS:
+                continue
+            # The plural of a generic token is just as generic.
+            if " " not in p and p.endswith("s") and p[:-1] in _GENERIC_METRIC_TOKENS:
                 continue
             existing = out.get(p)
             if existing is not None and existing != key:
@@ -708,6 +753,13 @@ _ANALYTICAL_FRAMING_WORDS = frozenset({
     # "which broker has the worst arrears" still answers on arrears.
     "mix", "composition", "profile", "position", "snapshot", "spread",
     "exposure", "exposures", "book", "portfolio", "portfolios",
+    # THE DATASET NOUNS, on the same footing as "book" and "portfolio".
+    # `workspace.resolve_dataset` owns "pipeline" — it is what the answer is
+    # built FROM, not a measure of it. Without it here, "show the PIPELINE by
+    # stage" surfaced "pipeline" as an unresolved measure and refused, while
+    # "show the BOOK by region" answered with the governed default. One word's
+    # absence, two behaviours for one sentence shape.
+    "pipeline", "pipelines",
 })
 
 #: Minimum token length for a residue word to count as a named measure. Filters
@@ -715,8 +767,48 @@ _ANALYTICAL_FRAMING_WORDS = frozenset({
 _METRIC_RESIDUE_MIN_LEN = 3
 
 
+#: Generic measure words that name more than one governed measure on a book
+#: carrying both. The CANDIDATES come from the registry, never from a list here.
+_AMBIGUOUS_MEASURE_WORDS = {
+    "value": ("balance", "valuation"),
+    "amount": ("balance", "valuation"),
+}
+
+
+def _ambiguous_measure_word(metric_part: str, semantics: dict,
+                            available_columns=None
+                            ) -> Optional[Tuple[str, str]]:
+    """``(word, "A or B")`` when the only measure word named is ambiguous here.
+
+    Ambiguous only where the dataset ACTUALLY CARRIES more than one candidate:
+    on a tape with a balance and no valuation there is nothing to disambiguate
+    and the caller's existing default stands.
+    """
+    text = f" {str(metric_part or '').strip().lower()} "
+    fields = _fields(semantics)
+    available = {str(c) for c in (available_columns or ())}
+    for word, concepts in _AMBIGUOUS_MEASURE_WORDS.items():
+        if not re.search(r"\b" + re.escape(word) + r"\b", text):
+            continue
+        names = []
+        for key, entry in fields.items():
+            if (entry or {}).get("role") != "metric":
+                continue
+            canonical = (entry or {}).get("canonical_field", key)
+            if available and canonical not in available and key not in available:
+                continue
+            label = str((entry or {}).get("business_name") or key)
+            if any(c in key.lower() or c in label.lower() for c in concepts):
+                names.append(label)
+        names = sorted(dict.fromkeys(names))
+        if len(names) > 1:
+            return word, " or ".join(names[:3])
+    return None
+
+
 def _metric_side_residue(metric_part: str, semantics: dict,
-                         available_columns=None) -> Optional[str]:
+                         available_columns=None,
+                         available_values=None) -> Optional[str]:
     """The measure the user named that this dataset does not carry, if any.
 
     ``_deterministic_parse`` used to default an unresolved metric to the balance
@@ -743,6 +835,20 @@ def _metric_side_residue(metric_part: str, semantics: dict,
     terms |= set(EXPLICIT_DIMENSION_TERMS)
     terms |= set(_NUMERIC_AXIS_BUCKET)
     terms |= _REGION_GENERIC_TERMS | _BORROWER_GENERIC_TERMS
+    # THE BOOK'S OWN CATEGORY VALUES ARE NOT NAMED MEASURES. A word another
+    # governed owner has already claimed as a VALUE — a pipeline stage, a
+    # product type, a region — is the population the reader named, not a measure
+    # this dataset fails to carry. Measured: "what is the value of outstanding
+    # OFFERS?" refused with residue "outstanding offers", on a tape whose
+    # `pipeline_stage` carries `offer`, and whose governed stage reader had
+    # already resolved it.
+    for _field, _values in (available_values or {}).items():
+        for _v in (_values.keys() if hasattr(_values, "keys") else _values):
+            v = re.sub(r"[\s_]+", " ", str(_v or "").strip().lower())
+            if len(v) >= 2:
+                terms.add(v)
+                if not v.endswith("s"):
+                    terms.add(v + "s")     # the plural the reader writes
     for term in sorted(terms, key=len, reverse=True):
         if len(term) < 2:
             continue
@@ -1029,6 +1135,19 @@ _SLOT_IS_A_CLAUSE_RE = re.compile(
     r"give|gives|show|shows|tell|tells)\b", re.I)
 
 
+def _slot_states_a_comparison(piece: str) -> bool:
+    """Does this measure slot compare something against a value?
+
+    Read from `_FILTER_COMPARATORS`, the vocabulary this module already uses to
+    extract predicates, so the two cannot drift: a slot the filter grammar would
+    read as a comparison is not also reported as a measure nobody could resolve.
+    """
+    for pattern, _op in _FILTER_COMPARATORS:
+        if re.search(pattern, piece, re.I):
+            return True
+    return False
+
+
 def unresolved_measure_slots(text: str, semantics: dict,
                              available_columns=None) -> Tuple[str, ...]:
     """Slots in the question's measure list that named no governed measure.
@@ -1078,6 +1197,21 @@ def unresolved_measure_slots(text: str, semantics: dict,
         piece = text[slot_start:slot_end]
         if _SLOT_IS_A_CLAUSE_RE.search(piece):
             continue        # a second question, not a measure name
+        if _slot_states_a_comparison(piece):
+            # A COMPARISON IS A PREDICATE, NOT AN UNNAMED MEASURE. A measure
+            # slot in a coordinated list is a noun phrase — "balance, loan
+            # count, weighted-average LTV". A slot that compares something
+            # against a number is the sentence narrowing its population, and
+            # the threshold owner has already read it.
+            #
+            # Structural, like the clause test beside it, and read from the
+            # comparator vocabulary this module already owns rather than a
+            # second list. Without it "how many loans have a borrower older
+            # than 55 and AN LTV GREATER THAN 50%?" refused: both predicates
+            # were extracted and applied correctly, and the answer was withheld
+            # because a guard could not match the span an article was attached
+            # to. The same question without the article answered.
+            continue
         residue = [w for w in re.findall(r"[a-z][a-z'-]*", piece.lower())
                    if w not in _MEASURE_SLOT_FILLER]
         if not residue or len(residue) > 6:
@@ -1105,13 +1239,41 @@ def _mask_spans(text: str, spans) -> str:
 #: ``_detect_ranking``; this only extracts the N. "bottom"/"smallest"/"lowest"
 #: were missing, so a Bottom-N question kept its ascending sort but silently lost
 #: its limit and returned every group.
+#: Retained for callers that still reference it. The LIMIT itself is no longer
+#: read here — see `_detect_top_n`.
 _TOP_N_RE = re.compile(
     r"\b(?:top|bottom|first|last|largest|biggest|highest|smallest|lowest)\s+(\d+)\b")
 
 
 def _detect_top_n(q: str) -> Optional[int]:
-    m = _TOP_N_RE.search(q)
-    return int(m.group(1)) if m else None
+    """The ordering LIMIT, from the estate's single owner of it.
+
+    ONE READER, NOT TWO. `question_interpretation.lexical.ordering_request`
+    "owns direction, basis and limit for the whole estate" — its words — and the
+    governed contract carries its answer as `OperationClaim.ordering_limit`.
+    This function had a regex of its own, and the two disagreed:
+
+        "What are the top THREE regions by balance?"
+            contract  ordering_limit = 3
+            spec      top_n          = None      -> all seven regions returned
+
+    The regex above matches digits only, so every word-form limit the owner
+    reads was silently dropped between the contract and execution — an explicit
+    constraint lost, with no disclosure. Delegating is not a widening: over the
+    numeric forms the owner returns exactly what the regex did (measured on
+    top/bottom/first/largest/smallest 1-5), and it additionally reads the words
+    the reader actually typed.
+    """
+    try:
+        from question_interpretation.lexical import ordering_request
+    except Exception:  # noqa: BLE001 - no owner, fall back to the local reading
+        m = _TOP_N_RE.search(q)
+        return int(m.group(1)) if m else None
+    order = ordering_request(q)
+    if not getattr(order, "requested", False):
+        return None
+    limit = getattr(order, "limit", None)
+    return int(limit) if isinstance(limit, int) and limit > 0 else None
 
 
 # --------------------------------------------------------------------------- #
@@ -1176,12 +1338,13 @@ def _detect_periods(q: str) -> List[str]:
     return out
 
 
-_COMPARE_TRIGGER_RE = re.compile(
-    r"\bcompare[ds]?\b|change (?:from|between)|how did .+ change|"
-    r"compared (?:to|with)|versus")
+# _COMPARE_TRIGGER_RE lived here and is DELETED. `_compare_recognizer` now asks
+# `lexical.is_movement_question`, and a private trigger left beside it would be
+# a second answer to the same question waiting to drift from the first.
 
 
-def _compare_recognizer(q: str, title: str, semantics: dict
+def _compare_recognizer(q: str, title: str, semantics: dict,
+                        available_columns=None, available_values=None
                         ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Cross-period comparison → governed ``temporal_mode='compare'`` plan.
 
@@ -1189,17 +1352,131 @@ def _compare_recognizer(q: str, title: str, semantics: dict
     runtime / API layer fills value A, value B, absolute + % delta, source
     periods and a controlled insufficient-data response from evolution data.
     """
-    if not _COMPARE_TRIGGER_RE.search(q):
+    # DELEGATED. `lexical.temporal_aspect` owns LEVEL versus MOVEMENT; this
+    # recogniser owns which PERIODS a comparison runs over, and nothing else.
+    #
+    # The trigger it replaces was a bare "compare|versus|compared to" with no
+    # period requirement, so it read six corpus questions as changes that are
+    # not: two compare an actual against a FORECAST, one compares a level
+    # against a LIMIT, and three contrast the front book with the back book —
+    # cohorts of one snapshot, which the `seasoning` owner exists for.
+    from question_interpretation.lexical import is_movement_question
+
+    if not is_movement_question(q):
         return None
     periods = _detect_periods(q)
     if len(periods) < 2:
         rel = next((rp for rp in _RELATIVE_PERIOD_TERMS if rp in q), None)
         if rel:
-            periods = ([periods[0], rel] if periods else ["latest", rel])
+            # CHRONOLOGICAL, and this order is the whole meaning of the pair.
+            # The plan compares "b relative to a" and the executor computes
+            # `vb - va`, so element 0 is the OPENING period. `latest` is by
+            # definition the closing one; building `["latest", rel]` opened the
+            # comparison at the close, which inverted the sign of every
+            # movement AND divided the percentage by the closing value instead
+            # of the opening one. "Since last month" then reported a book that
+            # grew £18.9m -> £21.1m as a 10.57% fall.
+            #
+            # Only this branch invents an order. Where the reader NAMES both
+            # periods the stated order is honoured unchanged — "compare
+            # November and October" asks for exactly that, and reordering it
+            # would substitute our chronology for their question.
+            periods = ([periods[0], rel] if periods else [rel, "latest"])
         else:
             return None
-    metric, agg, matched = _detect_metric(q, semantics)
-    if _wants_count(q):
+    # THE FILTER PASS, which this recogniser used to skip entirely.
+    #
+    # It built its spec directly and never called `_parse_filters`, so a
+    # comparison carrying a governed predicate lost it — and because
+    # `_detect_metric` then ran over the WHOLE question, the predicate's field
+    # became the MEASURE. "which region added the most balance since last month
+    # for loans with LTV above 50%" resolved to metric=LTV with no filter at
+    # all, and the projection faithfully carried that wrong parse into the
+    # contract. Removing the temporal clause fixed it and removing the ranking
+    # did not, which is how the fault was located here rather than downstream.
+    #
+    # Neither helper is reimplemented. `_parse_filters` already returns the
+    # CLAUSE OFFSETS it resolved each filter from, so masking those spans before
+    # metric detection is the same two-step order the main deterministic path
+    # already uses — with the same two functions.
+    filter_spans: Dict[str, Tuple[int, int]] = {}
+    unresolved_filters: List[str] = []
+    # THE CATALOGUE TRAVELS WITH THE CALL, as it does at the other four
+    # `_parse_filters` sites. Without it `_parse_categorical_filter` has no
+    # book values to resolve against, so a GOVERNED CATEGORICAL predicate
+    # ("for lump sum loans") resolved to nothing and the comparison ran over
+    # the whole book. The numeric half of the pass worked, which is why the
+    # LTV case above was fixed here and the categorical one was not: the two
+    # halves of one filter pass were reading different inputs.
+    filters = _parse_filters(q, semantics, available_columns,
+                             unresolved=unresolved_filters,
+                             spans=filter_spans,
+                             available_values=available_values) or {}
+
+    # A CLAUSE THAT IS THE PERIOD EXPRESSION IS NOT A PREDICATE.
+    #
+    # This recogniser has already resolved which periods the comparison runs
+    # over, and `_parse_filters` does not know that. On "show funded balance
+    # evolution from October to November" it reads the period phrase as a
+    # categorical geography filter — {collateral_geography: "October To
+    # November"} — whose clause span covers the word "balance", so masking it
+    # would delete the measure. Measured: exactly one corpus question.
+    #
+    # The rule is generic and names no field: where a filter was resolved from
+    # text the period detection already claimed, the period detection wins.
+    #
+    # THE TEST IS THE VALUE'S OWN TEXT, NOT THE CLAUSE IT CAME FROM. A clause
+    # span is as wide as the sentence the clause splitter did not split, so
+    # testing it asks "does this question mention a period anywhere?" — which
+    # is true of every comparison question by construction. On "which region
+    # added the most balance since last month for lump sum loans?" the whole
+    # question is one clause, its span (0, 72) overlaps "last month", and a
+    # governed Product Type predicate the reader stated was dropped, leaving a
+    # whole-book movement rendered as though it were the filtered one.
+    #
+    # The guard's own sentence says what it means to catch: a filter "resolved
+    # FROM text the period detection already claimed". That is a fact about
+    # where the VALUE was read, so the value's own span is what decides it.
+    # "October To November" is spelled out of the period phrase and still
+    # drops; "lump sum" is not and survives.
+    _period_spans = []
+    for _token in periods:
+        _needle = str(_token).lower()
+        _at = q.find(_needle)
+        while _at != -1:
+            _period_spans.append((_at, _at + len(_needle)))
+            _at = q.find(_needle, _at + 1)
+
+    def _value_span(field: str, clause_span: Tuple[int, int]) -> Tuple[int, int]:
+        """Where the filter's VALUE is written, falling back to its clause."""
+        raw = filters.get(field)
+        if not isinstance(raw, str):
+            # A numeric predicate carries no text to have been read out of a
+            # period phrase; its clause span is the only locator there is.
+            return clause_span
+        spelled = str(raw).replace("_", " ").strip().lower()
+        if not spelled:
+            return clause_span
+        at = q.find(spelled)
+        if at == -1:
+            # Governed spelling differs from the reader's; keep the old test
+            # rather than guess, so this can only ever drop what it dropped.
+            return clause_span
+        return (at, at + len(spelled))
+
+    for _field, _clause in list(filter_spans.items()):
+        _s, _e = _value_span(_field, _clause)
+        if any(_s < pe and ps < _e for ps, pe in _period_spans):
+            filter_spans.pop(_field, None)
+            filters.pop(_field, None)
+
+    metric_text = q
+    for start, end in sorted(filter_spans.values(), reverse=True):
+        if 0 <= start < end <= len(metric_text):
+            metric_text = metric_text[:start] + " " * (end - start) + metric_text[end:]
+
+    metric, agg, matched = _detect_metric(metric_text, semantics)
+    if _wants_count(metric_text):
         metric, agg = None, "count"
     elif metric is None:
         agg = "sum"  # money compare (funded / pipeline amount); no field referenced
@@ -1207,6 +1484,15 @@ def _compare_recognizer(q: str, title: str, semantics: dict
         intent="summary", chart_type="none", metric=metric, aggregation=agg,
         execution_mode="temporal", temporal_mode="compare",
         compare_periods=periods[:2], output_format="table", title=title,
+        filters=filters,
+        # THE UNRESOLVED NOTES TRAVEL WITH THE SPEC. They were collected three
+        # lines above and then dropped on the floor, so a comparison naming a
+        # category the book does not carry — "which region added the most
+        # balance last month for Atlantis loans?" — lost the note and was
+        # answered with the UNFILTERED whole-book ranking. Every other
+        # `_parse_filters` caller publishes them; this one collected them and
+        # published nothing.
+        unavailable_filters=list(unresolved_filters),
         explanation=("Governed cross-period comparison (period A vs period B) over "
                      "governed evolution data: value A, value B, absolute and % "
                      "delta, source periods and a controlled insufficient-data "
@@ -1270,6 +1556,13 @@ def _forecast_question_kind(q: str) -> str:
         return "pipeline_needed"
     if "reach" in q and ("when" in q or re.search(r"£?\s?\d+\s*m", q)):
         return "reach_threshold"
+    # THE SAME COMPOSITION THAT ADMITTED THE QUESTION DECIDES ITS KIND. Gating
+    # entry on "asks WHEN and names a target" and then letting the verb list
+    # decide the kind would admit a milestone question and answer it with an
+    # extrapolation curve — which is what "when do we get to £100 million?" got:
+    # a run-rate line, where "when will we reach £100m?" got the milestone.
+    if _asks_when_a_target_is_reached(q):
+        return "reach_threshold"
     if "what happens if" in q:
         return "scenario"
     if "downside" in q:
@@ -1289,11 +1582,37 @@ def _forecast_question_kind(q: str) -> str:
     return "extrapolation_curve"
 
 
+def _asks_when_a_target_is_reached(q: str) -> bool:
+    """A milestone question, decided by the two owners that already know.
+
+    THE VERB LIST WAS A THIRD OPINION. `_FORECAST_SCALE_RE` gates this
+    recogniser on a vocabulary of milestone verbs — "reach", "run rate",
+    "bridge to" — and a question phrased with any other verb fell through to
+    "I couldn't map this question to a governed analytic", however plainly it
+    asked. "When will we reach £100m of funded loans?" was answered and "At the
+    current trajectory, when do we get to £100 million?" was not.
+
+    Neither owner needed extending. `answer_type.asked` already decides that a
+    question wants a DATE back, and `_forecast_target_value` already resolves
+    the governed monetary target — both of them correctly, on every phrasing
+    that was failing. A question that asks WHEN and names a target IS a
+    milestone question, whatever verb joins them, so the two owners are composed
+    here rather than a third vocabulary being maintained beside them.
+
+    Measured over 1,446 distinct corpus questions before it shipped: the verb
+    list claims 40, and this claims exactly 3 more — all three plainly
+    milestone questions, no other movement anywhere.
+    """
+    from . import answer_type as _AT
+
+    return (_AT.asked(q) == _AT.DATE) and _forecast_target_value(q) is not None
+
+
 def _forecast_scale_recognizer(q: str, title: str
                                ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Securitisation scale-up / run-rate question → governed
     ``forecast_mode='extrapolation'`` plan (resolved by /mi/forecast/extrapolation)."""
-    if not _FORECAST_SCALE_RE.search(q):
+    if not (_FORECAST_SCALE_RE.search(q) or _asks_when_a_target_is_reached(q)):
         return None
     kind = _forecast_question_kind(q)
     spec = MIQuerySpec(
@@ -1313,7 +1632,20 @@ _RISK_LIMIT_RE = re.compile(
     r"\brisk limits?\b|concentration limit|\blimit breach|\bbreach(?:ed|es)?\b|"
     r"\bheadroom\b|within (?:the |our )?limits?|over (?:the )?limits?|"
     r"exceed(?:s|ed)? (?:the )?limits?|against (?:the )?limits?|schedule 8|"
-    r"limit status|limit utilis|which limits|are we within")
+    r"limit status|limit utilis|which limits|are we within|"
+    # THE NOUN THE ANSWER ITSELF USES. The governed limit monitor publishes one
+    # row per TEST — the artefact is titled "Risk limit tests", its column is
+    # `test`, and each row is a named test against Schedule 8. That noun was
+    # readable on the way out and not on the way in, so "which of our
+    # concentration TESTS are most at risk today?" fell through to the generic
+    # exposure-concentration route and answered with a ranking of largest
+    # exposures: a different operation over the same book, and the only one of
+    # the two that never consults the governing document.
+    #
+    # Bounded to the test noun QUALIFIED by limit or concentration, so an
+    # ordinary "show product concentration" is untouched and still reaches the
+    # concentration methodology.
+    r"(?:concentration|limit)\s+tests?\b|tests?\s+(?:are|is)\s+(?:most )?at risk")
 
 # Natural-language risk-limit category -> the category key used by the risk
 # monitor (``risk_limits.testsByCategory``). Order matters (most specific first).
@@ -1372,8 +1704,21 @@ def _bridge_recognizer(q: str, title: str, semantics: dict, available_columns=No
                 break
     periods = _detect_periods(q)
     start = periods[0] if periods else None
+    # INTENT AND OUTPUT SHAPE MUST AGREE. A bridge spec names NO chart type,
+    # because the waterfall is built by the `funded_bridge` route rather than by
+    # the chart factory — so declaring `intent="chart"` beside
+    # `chart_type="none"` claimed an output shape this spec does not carry, and
+    # `mi_query_validator` rejects that pair outright ("chart_type 'none' is not
+    # valid for intent 'chart'").
+    #
+    # It never surfaced while the route claimed every such question. The moment
+    # one was declined the spec reached validation and the reader was shown
+    # *"I could not build a governed query for this question: chart_type 'none'
+    # is not valid for intent 'chart'."* — an internal message, not a governed
+    # refusal. `table` is the valid encoding of "this spec names no chart; a
+    # route builds the artifact", and is the pair the validator already permits.
     spec = MIQuerySpec(
-        intent="chart", chart_type="none", metric=None, aggregation="sum",
+        intent="table", chart_type="none", metric=None, aggregation="sum",
         execution_mode="temporal", bridge_query=True, bridge_dimension=dim,
         compare_periods=([start] if start else []),
         output_format="chart", title=title,
@@ -1869,6 +2214,24 @@ def _grouped_metric(metric_part: str, q: str, semantics: dict) -> Tuple[Optional
 #: "in London?" (a question mark), "for London" and "in the South East" all
 #: failed while "in london" succeeded — the shapes a person actually types were
 #: exactly the ones that missed.
+#: "<value> loans / cases / mortgages / book" — a category used as an adjective.
+#: Resolved ONLY against values the book carries, so it cannot manufacture a
+#: filter from an ordinary adjective.
+#: Group 2 is the HEAD NOUN, captured rather than discarded: a governed value
+#: may END in it. A broker called "London Bridge Loans" produced "…London Bridge
+#: Loans loans…", where only the words BEFORE the noun were ever offered as a
+#: candidate, so the value could not resolve and the narrowing vanished.
+#: Digits are admitted INSIDE the qualifier span. "how many tier 1 loans do we
+#: have?" is a product-tier question whose qualifier ends in a numeral, and a
+#: letters-only span could not match it at all — so the phrase reached no
+#: reader, bound to nothing and was answered over the whole book. Measured over
+#: the 150 questions of the three standing banks with the production gate
+#: applied: what BINDS is unchanged (0 differences) and the residue rule fires
+#: on the same two questions, both of which already refuse.
+_ATTRIBUTIVE_CATEGORICAL_RE = re.compile(
+    r"((?:[a-z0-9][a-z0-9_]*\s+){1,4}?)(loans?|cases?|mortgages?|accounts?|book)\b",
+    re.I)
+
 _CATEGORICAL_FILTER_RE = re.compile(
     # "to" is NOT a general scope preposition. Admitting it outright made
     # "when is it expected to complete?" bind a geography called "Complete",
@@ -2020,7 +2383,245 @@ def _contribution_request(q: str, semantics: dict, available_columns=None
     return metric, weight
 
 
-def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None
+def _categorical_value_field(value: str, available_values) -> Optional[Tuple[str, str]]:
+    """The governed field whose values include ``value`` — ``(field, value)``.
+
+    THE RESOLVER LIVES IN ONE PLACE. `mi_agent.categorical_spans` owns both the
+    value->field resolution and the SPAN a resolved value has claimed, because
+    the two are the same fact asked twice: the portfolio-lens resolver needed to
+    know which characters a categorical value had already spoken for, and the
+    only honest way to tell it was to share this function rather than write a
+    second copy of it there. This name is kept as the parser's entry point; the
+    implementation is the owner's.
+    """
+    from .categorical_spans import value_field
+
+    return value_field(value, available_values)
+
+
+#: "... is drawdown", "... are second home". Bounded to four words so the
+#: complement is a category rather than the rest of the sentence.
+_COPULAR_CATEGORICAL_RE = re.compile(
+    r"\b(?:is|are|was|were)\s+((?:[a-z][a-z_&'-]*)(?:\s+[a-z][a-z_&'-]*){0,3})"
+    r"\s*[?.!,]*\s*$", re.I)
+
+
+def _copular_categorical(masked: str, available_values
+                         ) -> Optional[Tuple[str, str]]:
+    """A category named as the COMPLEMENT of the verb, at the end of a clause."""
+    if not available_values:
+        return None
+    m = _COPULAR_CATEGORICAL_RE.search(masked or "")
+    if not m:
+        return None
+    words = m.group(1).split()
+    # LONGEST FIRST, as everywhere else: only a value the book carries resolves.
+    for start in range(len(words)):
+        owned = _categorical_value_field(" ".join(words[start:]), available_values)
+        if owned is not None:
+            return owned
+    return None
+
+
+#: Grouping markers. A token in the attributive slot that is one of these is
+#: not a qualifier at all — "show balance by loan type" is `by <dimension>`, and
+#: reading "by" as an unrecognised qualifier is how the first attempt at the
+#: rule below refused a question that works.
+_GROUPING_MARKERS = frozenset({"by", "per", "across", "between", "split",
+                               "versus", "vs", "against"})
+
+
+def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
+                         available_values) -> bool:
+    """Does ANY existing owner claim this word? Ask them; never guess.
+
+    The one test both unknown-category paths use, so the attributive and the
+    prepositional readings of one question cannot disagree about whether a word
+    is a category nobody carries. Consulted: the book's value catalogue, the
+    dimension owner, the measure owner, the scope owner, and the estate's
+    request-framing, aggregation, chart and analytical-framing vocabularies.
+    """
+    token = (token or "").strip().lower()
+    if not token or token.isdigit():
+        return True
+    if token in _GROUPING_MARKERS:
+        return True
+    if token in _METRIC_SIDE_STOPWORDS or token in _ANALYTICAL_FRAMING_WORDS:
+        return True
+    if _categorical_value_field(token, available_values):
+        return True
+    if _explicit_dimensions(token, semantics, available_columns=available_columns)[0]:
+        return True
+    if _detect_metric(token, semantics)[2]:
+        return True
+    try:
+        from .portfolio_lens import mentions_portfolio
+        if mentions_portfolio(token):
+            return True
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        pass
+    # THE PERIOD OWNER. "compare october and november loan count" names two
+    # PERIODS, and a month is not a category the book fails to carry. Without
+    # this the comparison recogniser published `unknown category: 'november'`
+    # — inert until a routed guard began acting on these notes, at which point
+    # it would have refused a working question.
+    if _detect_periods(token):
+        return True
+    return False
+
+
+def _unclaimed_attributive_slot(masked: str, semantics: dict, available_columns,
+                                available_values) -> Optional[str]:
+    """The attributive qualifier that NO governed owner claims, if there is one.
+
+    "how many platinum loans do we have?" narrows to something. No governed
+    field claims "platinum", so the narrowing vanished and 640 loans — the whole
+    book — came back as the answer to a question about a subset. The
+    PREPOSITIONAL form of the same question ("what is the balance for platinum
+    loans?") already records `unknown category: 'platinum'` and refuses; the two
+    shapes of one question must not disagree.
+
+    NOTHING HERE KNOWS WHAT ANY WORD MEANS, and no vocabulary is added. The
+    candidate is the single token standing in the attributive slot — immediately
+    before the head noun — and it is reported only if EVERY existing owner
+    declines it:
+
+      * the book's own value catalogue (a governed value binds upstream, and
+        this function is only reached when it did not);
+      * the dimension owner (`_explicit_dimensions`), so "offer stage cases"
+        keeps its stage;
+      * the measure owner (`_detect_metric`), so "balance" is never residue;
+      * the scope owner (`portfolio_lens`), so "direct loans" stays the Direct
+        book;
+      * request framing, aggregation and chart words, and grouping markers.
+
+    ONE TOKEN, not the whole span. The first attempt reported every word between
+    the framing and the head noun, which produced residues like "balance offer
+    stage" and "balance by" and refused three questions that work. Measured over
+    the 150 questions of the three standing banks, this rule fires on two — both
+    already refusing, for the same reason, by another owner.
+    """
+    for match in _ATTRIBUTIVE_CATEGORICAL_RE.finditer(masked or ""):
+        words = match.group(1).split()
+        if not words:
+            continue
+        # A NUMERAL IS NOT THE QUALIFIER, but it does not end the search: in
+        # "how many tier 1 loans do we have?" the qualifier is the word the
+        # numeral qualifies. Step back over trailing numerals rather than
+        # giving up on the slot, or the one shape that reads as a product tier
+        # stays fail-open.
+        cursor = list(words)
+        while cursor and cursor[-1].strip().lower().isdigit():
+            cursor.pop()
+        if not cursor:
+            continue
+        token = cursor[-1].strip().lower()
+        if not token or _claimed_by_an_owner(token, semantics, available_columns,
+                                             available_values):
+            continue
+        return token
+    return None
+
+
+def _attributive_categorical(masked: str, available_values
+                             ) -> Optional[Tuple[str, str]]:
+    """THE ATTRIBUTIVE FORM — "<value> loans" with no preposition in front.
+
+    "how many lump sum loans do we have?" names a category with no preposition,
+    so the prepositional pattern never matched and the narrowing vanished
+    silently — the whole book came back as the answer to a question about 396
+    loans.
+
+    Safe only because the value must be one the BOOK CARRIES: a phrase no
+    governed field claims resolves to nothing, so this cannot invent a filter
+    out of an adjective.
+
+    One function, two callers: it is reached when the prepositional pattern does
+    not match AND when it matches a phrase the book does not claim as written.
+    """
+    if not available_values:
+        return None
+    # THE SPAN OWNER FIRST. `categorical_spans` resolves the LONGEST governed
+    # multi-word value anywhere in the text, which is the same question this scan
+    # asks and a stricter answer than it can give: the scan splits on a head noun
+    # and cannot see a value that CONTAINS one. Measured on a broker called
+    # "Pipeline Mortgage Club" — the scan matched "mortgage" as the noun, offered
+    # "pipeline" and "club" as candidates, and the narrowing vanished.
+    #
+    # The safety argument is unchanged and stronger: the owner claims only values
+    # the BOOK CARRIES, only where exactly one governed field claims them, and
+    # only where the value is more than one word.
+    try:
+        from .categorical_spans import value_field, value_spans
+
+        for start, end in value_spans(masked, available_values):
+            owned = value_field((masked or "")[start:end], available_values)
+            if owned is not None:
+                return owned
+    except Exception:  # noqa: BLE001 - the owner missing leaves the scan below
+        pass
+    for attributive in _ATTRIBUTIVE_CATEGORICAL_RE.finditer(masked or ""):
+        words = attributive.group(1).split()
+        noun = attributive.group(2)
+        # LONGEST SUFFIX FIRST. The words before the noun are a mixture of
+        # question framing and the category — "how many lump sum loans" — so the
+        # candidate is the tail, tried from longest to shortest. Only a value the
+        # book carries resolves, so a wrong tail simply does not match.
+        #
+        # Each tail is tried WITH the head noun before without it, because a
+        # governed value may end in that noun ("London Bridge Loans"). Longest
+        # first throughout, so a value that does not include the noun is
+        # unaffected: "lump sum loans" does not resolve, "lump sum" does.
+        for start in range(len(words)):
+            tail = " ".join(words[start:])
+            for candidate in (f"{tail} {noun}", tail):
+                owned = _categorical_value_field(candidate, available_values)
+                if owned is not None:
+                    return owned
+    return None
+
+
+#: How an UNRESOLVED category is spelled in `spec.unavailable_filters`. The
+#: prefix is the marker: a caller has to be able to tell "the reader named a
+#: category this book does not carry" from "the field for this filter is absent",
+#: because the first must refuse and the second may warn.
+UNKNOWN_CATEGORY_PREFIX = "unknown category: "
+
+
+def unknown_category_names(notes) -> List[str]:
+    """The category names in a spec's ``unavailable_filters``, unprefixed."""
+    return [str(n)[len(UNKNOWN_CATEGORY_PREFIX):] for n in (notes or ())
+            if str(n).startswith(UNKNOWN_CATEGORY_PREFIX)]
+
+
+def unknown_category_refusal(notes) -> Optional[str]:
+    """THE sentence for "the reader named a category this book does not carry".
+
+    One author. The point-in-time workflow and the routed guard both call this,
+    so a reader who asks the same question two ways cannot be told two different
+    things about the same obstacle — which is what happened while the routed
+    path said nothing at all and answered over the whole book.
+    """
+    named = unknown_category_names(notes)
+    if not named:
+        return None
+    return (f"No loans in this book match that filter ({', '.join(named)}), so "
+            "there is nothing to calculate. I have not returned a whole-book "
+            "figure in its place.")
+
+
+def _names_a_book(text: str) -> bool:
+    """Delegation: `portfolio_lens` owns what counts as naming a book."""
+    try:
+        from .portfolio_lens import names_a_book_noun
+
+        return names_a_book_noun(text)
+    except Exception:  # noqa: BLE001 - the owner missing claims nothing
+        return False
+
+
+def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None,
+                              available_values=None, unresolved=None
                               ) -> Optional[Tuple[str, str]]:
     """Detect a categorical region filter in a clause -> (field_key, value).
 
@@ -2036,9 +2637,38 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     # Governed SCOPE phrases (P1I-A) and governed SEASONING phrases (P1J-1) are
     # both claimed before the place-resolver runs. Either one read as a place
     # invents a region that does not exist — "Entire", "Current", "Front".
-    m = _CATEGORICAL_FILTER_RE.search(
-        mask_segment_phrases(mask_scope_phrases(clause)).strip())
+    masked = mask_segment_phrases(mask_scope_phrases(clause)).strip()
+    # THE COPULAR FORM — "what share of the book IS DRAWDOWN?". The value is the
+    # complement of the verb, so it is followed by no noun for the attributive
+    # scan to anchor on and preceded by no preposition for the pattern below.
+    # Measured: the share capability answered "what proportion of the book is
+    # above 60% LTV" and "what share of the balance is in Scotland", and refused
+    # the plainest phrasing of the same question about a product type.
+    #
+    # Safe on the same terms as the attributive form and no wider: only a value
+    # the BOOK CARRIES resolves, so this cannot make a filter out of an
+    # adjective, and a clause the pattern below can read is read there first.
+    m = _CATEGORICAL_FILTER_RE.search(masked)
     if not m:
+        attributive = _attributive_categorical(masked, available_values)
+        if attributive is not None:
+            return attributive
+        copular = _copular_categorical(masked, available_values)
+        if copular is not None:
+            return copular
+        # RECORDED, NOT DROPPED — the attributive form of the rule the
+        # prepositional branch below already applies. The `_names_a_book`
+        # deference is the same one, for the same reason: "the Highgate
+        # Mortgages book" is an unheld PORTFOLIO and `portfolio_lens` has a
+        # better refusal for it, naming the book and saying it is not in the
+        # governed registry.
+        if available_values and unresolved is not None and not _names_a_book(clause):
+            token = _unclaimed_attributive_slot(masked, semantics,
+                                                available_columns, available_values)
+            if token:
+                note = f"{UNKNOWN_CATEGORY_PREFIX}'{token}'"
+                if note not in unresolved:
+                    unresolved.append(note)
         return None
     value = m.group(1).strip()
     # "for loans in Wales" captures "loans in wales" — peel leading filler and
@@ -2054,7 +2684,62 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         break
     if not value or value in _CATEGORICAL_STOPWORDS:
         return None
+    # THE BOOK'S OWN VALUES DECIDE THE FIELD, and they decide it FIRST.
+    #
+    # `_NON_PLACE_TERMS` used to run before this. It is a WORD-level version of
+    # the ownership rule `mi_agent.categorical_spans` now owns per SPAN, and at
+    # word level it vetoes a value the book actually carries because ONE of its
+    # words belongs to another vocabulary. Measured: a broker called "Gamma
+    # Direct" resolved for "how many Gamma Direct loans" (the attributive path,
+    # which never consulted the list) and REFUSED for "what is the total balance
+    # for Gamma Direct loans" (this path), because "direct" is on the list. Two
+    # phrasings of one question, two different answers.
+    #
+    # The list keeps its job — it exists to stop an INVENTED geography, and it
+    # still runs below for a value nothing claims. What it may no longer do is
+    # overrule the book about the book's own values.
+    owned = _categorical_value_field(value, available_values)
+    if owned is not None:
+        return owned[0], owned[1]
     if any(word in _NON_PLACE_TERMS for word in value.split()):
+        return None
+    if available_values:
+        # The book is known and no governed field claims this phrase AS WRITTEN.
+        # The attributive reading is tried before giving up: the prepositional
+        # pattern captures the whole phrase after "for", so "for Gamma Direct
+        # loans" arrives here as a candidate that only the tail-first scan can
+        # resolve. If that fails too, the narrowing is UNRESOLVED — binding it
+        # to region anyway is how a product type became a geography — and the
+        # fail-closed machinery discloses it rather than dropping it.
+        owned = _attributive_categorical(masked, available_values)
+        if owned is not None:
+            return owned
+        # RECORDED, NOT DROPPED. "what is the average LTV in Atlantis" names a
+        # place the book has no exposure to. Before the book's own values were
+        # available this bound to the geography field, selected nothing and
+        # refused — right answer, wrong reason. With the values available it
+        # correctly declines to invent the binding, and declining SILENTLY would
+        # answer over the whole book instead: a confident figure about a place
+        # the reader was asking about and the book does not hold.
+        # ... unless the SCOPE OWNER is the one who should be speaking. "the
+        # Highgate Mortgages Book" is an unheld PORTFOLIO, and `portfolio_lens`
+        # has a refusal of its own for exactly that, naming the book and saying
+        # it is not in the governed registry. Announcing "no loans match
+        # 'highgate mortgages'" over the top of it is the same fact explained
+        # worse — and it is the very collision this whole rule is about, in the
+        # other direction.
+        # THE SAME OWNER TEST THE ATTRIBUTIVE PATH USES. Without it this branch
+        # recorded an ANALYTIC NOUN as a category the book does not carry:
+        # "where is the largest geographic concentration?" produced
+        # `unknown category: 'concentration'`. The note was inert while nothing
+        # routed acted on it; once a routed guard began refusing on these notes
+        # it would have refused a question that answers correctly. The two
+        # paths now agree about what counts as an unrecognised category.
+        if (unresolved is not None and not _names_a_book(clause)
+                and not all(_claimed_by_an_owner(w, semantics, available_columns,
+                                                 available_values)
+                            for w in str(value).split())):
+            unresolved.append(f"{UNKNOWN_CATEGORY_PREFIX}'{value}'")
         return None
     field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"
     if field not in _fields(semantics):
@@ -2133,7 +2818,8 @@ _POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
 
 def _parse_filters(q: str, semantics: dict, available_columns=None,
                    unresolved: Optional[List[str]] = None,
-                   spans: Optional[Dict[str, Tuple[int, int]]] = None
+                   spans: Optional[Dict[str, Tuple[int, int]]] = None,
+                   available_values=None
                    ) -> Dict[str, Any]:
     """Parse one or more filters joined by ``and`` / ``with`` / ``where`` (numeric
     thresholds — prefix OR postfix — and a categorical value).
@@ -2227,7 +2913,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
                 if spans is not None:
                     spans[age_field] = (clause_start, clause_end)
                 continue
-        cat = _parse_categorical_filter(clause, semantics, available_columns)
+        cat = _parse_categorical_filter(clause, semantics, available_columns,
+                                        available_values, unresolved=unresolved)
         if cat:
             filters[cat[0]] = cat[1]
             if spans is not None:
@@ -2236,7 +2923,9 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
 
 
 def _grouped_value_filters(q: str, semantics: dict, available_columns,
-                           exclude_dims: Iterable[str] = ()) -> Tuple[Dict[str, Any], List[str]]:
+                           exclude_dims: Iterable[str] = (), *,
+                           available_values=None
+                           ) -> Tuple[Dict[str, Any], List[str]]:
     """Value filters expressed ALONGSIDE a grouping, e.g. 'balance by region where
     LTV above 50%' or 'balance by broker in the north'. Execution applies filters
     to the mask BEFORE grouping, so a grouped spec may legitimately carry them.
@@ -2246,7 +2935,8 @@ def _grouped_value_filters(q: str, semantics: dict, available_columns,
     the filtered-KPI branch so a grouped filter is never silently discarded."""
     exclude = set(exclude_dims or ())
     unavailable: List[str] = []
-    filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable)
+    filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable,
+                             available_values=available_values)
     # A borrower-structure value filter ("... for joint borrowers") resolves to a
     # categorical filter (or an unavailable note). Skip it when the grouping IS
     # the borrower dimension (that is the breakdown, not a filter).
@@ -2317,7 +3007,8 @@ def _build_multi_dim_table_spec(metric: Optional[str], dims: List[str], semantic
 
 
 def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[int],
-                        top_n: Optional[int], semantics: dict, available_columns=None
+                        top_n: Optional[int], semantics: dict, available_columns=None,
+                        available_values=None
                         ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Build a ranked spec: grouped ranking bar (a categorical dimension is
     present) or a loan-level 'top loans' ranking table."""
@@ -2364,8 +3055,14 @@ def _build_ranking_spec(q: str, title: str, rank_dir: str, rank_limit: Optional[
         # A value filter on the ranked population ("top 5 regions by balance where
         # LTV above 50%") is applied before ranking — attach it (excluding the
         # ranking dimension itself) so it is never silently dropped.
+        # THE BOOK'S OWN VALUES. Without them this branch resolved a category
+        # against nothing and fell back to GEOGRAPHY, so "which broker channel
+        # has the largest balance for LUMP SUM loans?" filtered
+        # `geographic_region_obligor = Lump Sum`, matched no rows, and refused
+        # naming a field the reader never mentioned.
         g_filters, g_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=[dim])
+            q, semantics, available_columns, exclude_dims=[dim],
+            available_values=available_values)
         spec = MIQuerySpec(
             intent="chart", chart_type="bar", metric=rmetric, dimension=dim,
             aggregation=ragg, weight_field=weight, top_n=(rank_limit or top_n),
@@ -2435,7 +3132,7 @@ def _contribution_recognizer(q: str, title: str, semantics: dict,
 
 
 def _measure_set_recognizer(q: str, title: str, semantics: dict,
-                            available_columns=None):
+                            available_columns=None, available_values=None):
     """A governed MULTI-MEASURE plan, or None.
 
     One population, one optional filter set, one optional governed grouping,
@@ -2466,8 +3163,15 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
     remainder = _mask_spans(q, spans)
     dims, _terms, _rest = _explicit_dimensions(
         remainder, semantics, grouping=True, available_columns=available_columns)
-    filters = _parse_filters(remainder, semantics, available_columns)
-    region = _parse_categorical_filter(remainder, semantics, available_columns)
+    # THE BOOK'S OWN VALUES, here too. This was the last governed branch that
+    # resolved a category without them, so "which broker channel has the largest
+    # balance for LUMP SUM loans?" bound a product type to the GEOGRAPHY field,
+    # selected nothing, and refused naming a field the reader never mentioned —
+    # the exact substitution the catalogue exists to prevent.
+    filters = _parse_filters(remainder, semantics, available_columns,
+                             available_values=available_values)
+    region = _parse_categorical_filter(remainder, semantics, available_columns,
+                                       available_values)
     if region is None:
         # A CFO usually states the scope FIRST — "For the London book, give me
         # …". The existing categorical resolver reads a trailing scope clause,
@@ -2475,7 +3179,8 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
         # second pattern being invented for it.
         lead = remainder.split(",", 1)[0].strip()
         if lead and lead != remainder.strip():
-            region = _parse_categorical_filter(lead, semantics, available_columns)
+            region = _parse_categorical_filter(lead, semantics, available_columns,
+                                               available_values)
     if region and region[0] not in filters:
         filters[region[0]] = region[1]
 
@@ -2549,8 +3254,80 @@ def _qualitative_threshold(q: str) -> Optional[str]:
     return m.group(0) if m else None
 
 
+def _owned_question(q: str, available_values) -> str:
+    """``q`` with spans a governed categorical VALUE has claimed blanked.
+
+    Delegation only: `mi_agent.categorical_spans` owns which spans those are and
+    why. With no catalogue the sentence comes back unchanged, so a caller that
+    cannot see the book keeps exactly the reading it had.
+    """
+    if not q or not available_values:
+        return q
+    try:
+        from .categorical_spans import mask_value_spans
+
+        return mask_value_spans(q, available_values)
+    except Exception:  # noqa: BLE001 - the owner missing must not change a parse
+        return q
+
+
+def _spec_shape_is_coherent(spec) -> bool:
+    """Does this spec's INTENT agree with the output shape it names?
+
+    THE INVARIANT: a parser must not emit an internally invalid combination of
+    intent and output shape. `intent="chart"` beside `chart_type="none"` is a
+    spec claiming an output it does not name, and `mi_query_validator` rejects
+    the pair outright.
+
+    Deliberately ONLY the self-contradiction. The validator's other chart rules —
+    "bar chart requires a dimension", "line chart requires a metric" — ask whether
+    a chart can be RENDERED from the fields, which a route that builds its own
+    artifact legitimately moots; 22 questions across the corpus carry such a spec
+    and are answered correctly by a route today. Failing those closed would
+    convert working answers into refusals, which is not what this invariant is
+    for.
+
+    Returns True for anything it cannot read, so a spec shape it does not
+    understand keeps its existing behaviour.
+    """
+    try:
+        return not (getattr(spec, "intent", None) == "chart"
+                    and getattr(spec, "chart_type", None) == "none")
+    except Exception:  # noqa: BLE001 - a shape check must never break a parse
+        return True
+
+
 def _deterministic_parse(question: str, semantics: dict,
-                         available_columns=None) -> Tuple[MIQuerySpec, dict]:
+                         available_columns=None, available_values=None
+                         ) -> "Tuple[MIQuerySpec, dict]":
+    """The deterministic parse, with the spec-shape invariant enforced.
+
+    FAILS CLOSED. An internally contradictory spec is not emitted: the caller is
+    told nothing was parsed, and the normal path produces its governed refusal,
+    rather than the spec escaping to validation and showing the reader an
+    internal message — *"chart_type 'none' is not valid for intent 'chart'"* —
+    which is what happened to the funded-bridge specs the moment a route stopped
+    claiming them.
+
+    Measured at the time of writing: zero specs across the 1,446-question corpus
+    trip this, because the one builder that emitted the pair now names the shape
+    it carries. The guard is here so the class cannot return silently.
+    """
+    parsed = _deterministic_parse_unchecked(
+        question, semantics, available_columns=available_columns,
+        available_values=available_values)
+    spec = parsed[0] if isinstance(parsed, tuple) else parsed
+    if spec is not None and not _spec_shape_is_coherent(spec):
+        logger.info("deterministic parse discarded an incoherent spec shape for "
+                    "%r: intent=%r chart_type=%r", question,
+                    getattr(spec, "intent", None), getattr(spec, "chart_type", None))
+        return None, _det_meta("low", False, [], note="incoherent_spec_shape")
+    return parsed
+
+
+def _deterministic_parse_unchecked(question: str, semantics: dict,
+                         available_columns=None,
+                         available_values=None) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
 
     Honours explicitly-requested dimensions EXACTLY and never substitutes an
@@ -2560,6 +3337,17 @@ def _deterministic_parse(question: str, semantics: dict,
     q = question.lower().strip()
     title = question.strip()
     top_n = _detect_top_n(q)
+
+    # GOVERNED SPAN OWNERSHIP. The same sentence with spans the book has already
+    # claimed as categorical VALUES blanked, offsets preserved. Used ONLY by the
+    # governed analytical-intent recognisers below, whose vocabularies —
+    # waterfall/bridge, growth/movement, cohort, compare, limit, forecast — own
+    # no book field, so a match found INSIDE a claimed value span belongs to the
+    # value. Measured: brokers called "London Bridge Loans" and "Growth Partners"
+    # were parsed as a funded bridge and a movement question respectively, and
+    # both refused. Everything else on this path keeps the raw `q`, because the
+    # categorical resolution is the claim these spans come from.
+    q_owned = _owned_question(q, available_values)
 
     # "How much is missing?" is a data-quality question, and the estate has no
     # governed intent that answers it. Answering the adjacent question instead
@@ -2591,7 +3379,7 @@ def _deterministic_parse(question: str, semantics: dict,
     # A scale-up / run-rate forecast, a cross-period comparison, or a risk-limit
     # question must never fall through to a point-in-time KPI. Forecast is checked
     # before compare so "compare ... run-rate extrapolation" routes to forecast.
-    fc = _forecast_scale_recognizer(q, title)
+    fc = _forecast_scale_recognizer(q_owned, title)
     if fc is not None:
         return fc
     # An aggregate-contribution question is a DIFFERENT calculation from both
@@ -2605,23 +3393,26 @@ def _deterministic_parse(question: str, semantics: dict,
                                        available_columns=available_columns)
     if contrib is not None:
         return contrib
-    br = _bridge_recognizer(q, title, semantics, available_columns=available_columns)
+    br = _bridge_recognizer(q_owned, title, semantics, available_columns=available_columns)
     if br is not None:
         return br
-    cp = _cohort_progression_recognizer(q, title, semantics)
+    cp = _cohort_progression_recognizer(q_owned, title, semantics)
     if cp is not None:
         return cp
-    cmp_spec = _compare_recognizer(q, title, semantics)
+    cmp_spec = _compare_recognizer(q_owned, title, semantics,
+                                   available_columns=available_columns,
+                                   available_values=available_values)
     if cmp_spec is not None:
         return cmp_spec
-    rl = _risk_limit_recognizer(q, title)
+    rl = _risk_limit_recognizer(q_owned, title)
     if rl is not None:
         return rl
     # A question naming several governed measures is ONE request over one
     # population. Recognised before the generic single-metric paths, which would
     # otherwise keep whichever measure they matched first and drop the rest.
     ms = _measure_set_recognizer(q, title, semantics,
-                                 available_columns=available_columns)
+                                 available_columns=available_columns,
+                                 available_values=available_values)
     if ms is not None:
         return ms
 
@@ -2649,7 +3440,8 @@ def _deterministic_parse(question: str, semantics: dict,
         # geographic region south west".
         unresolved_notes: List[str] = []
         filters = _parse_filters(q, semantics, available_columns,
-                                 unresolved=unresolved_notes)
+                                 unresolved=unresolved_notes,
+                                 available_values=available_values)
         # Borrower-structure intent ("how many joint borrowers"): resolve joint/sole
         # to a filter. When the field is unavailable, record the predicate as
         # UNAVAILABLE (never silently dropped).
@@ -2709,7 +3501,8 @@ def _deterministic_parse(question: str, semantics: dict,
     is_show_loans = (bool(re.search(r"\b(show|list|display|drill)\b", q))
                      and bool(re.search(r"\bloans?\b", q)) and " by " not in q)
     if is_show_loans:
-        d_filters = _parse_filters(q, semantics, available_columns)
+        d_filters = _parse_filters(q, semantics, available_columns,
+                                   available_values=available_values)
         bstruct = _borrower_structure_filter(q, semantics, available_columns)
         if bstruct is not None:
             d_filters.update(bstruct[0])
@@ -2744,7 +3537,46 @@ def _deterministic_parse(question: str, semantics: dict,
                 explanation="Filtered loan-level drill-through.")
             return spec, _det_meta("high", True, sorted(d_filters), note="drill_filtered")
 
+    #: Dimension terms this parse DISCARDED because they also name a value the
+    #: book carries. The discard is right — a value standing outside a grouping
+    #: position is a qualifier — but it leaves the question with one fewer axis
+    #: than the reader wrote, and a later branch must not fill that hole with a
+    #: dimension of its own choosing. See the concentration default below.
+    _dropped_dimension_terms: List[str] = []
     dim_keys, dim_terms, remaining = _explicit_dimensions(q, semantics, available_columns=available_columns)
+    # A GOVERNED VALUE IS NOT A GROUPING.
+    #
+    # Dimension terms come from the registry's SYNONYMS, and a field's synonyms
+    # frequently spell its own values — "owner occupied" is both the wording of
+    # `occupancy_type` and one of its two values. Matched as a dimension, "what
+    # is the balance for owner occupied loans?" was answered as a BREAKDOWN by
+    # occupancy type over all 640 loans, with no warning, for a question about
+    # 585. Its sibling "how many owner occupied loans do we have?" narrowed
+    # correctly, because a count sets no dimension — the same constraint, two
+    # shapes, opposite outcomes.
+    #
+    # A term that names a value the book carries and does NOT stand after a
+    # grouping marker is a qualifier. Dropping it here lets the categorical
+    # resolver claim it as a predicate, which is where a narrowing belongs. A
+    # term after "by" is untouched, so "balance by occupancy type" still groups.
+    if dim_keys and available_values:
+        # A GROUP SEGMENT ENDS AT ITS OWN QUALIFIER. "by region for owner
+        # occupied loans" is one grouping axis narrowed to a value, not two
+        # axes: without the cut the value became a second heatmap dimension and
+        # the population widened again, one shape further along. The same cut is
+        # what makes "by region in London" a filtered regional breakdown.
+        _after_by = " ".join(
+            re.split(r"\s+(?:for|in|within|among|amongst)\s+", seg, 1)[0]
+            for seg in _grouping_segments(q)[1]).lower()
+        _kept_keys, _kept_terms = [], []
+        for _key, _term in zip(dim_keys, dim_terms):
+            _is_value = _categorical_value_field(_term, available_values) is not None
+            if _is_value and str(_term).lower() not in _after_by:
+                _dropped_dimension_terms.append(str(_term))
+                continue
+            _kept_keys.append(_key)
+            _kept_terms.append(_term)
+        dim_keys, dim_terms = _kept_keys, _kept_terms
     explicit = bool(dim_keys)
 
     # ---- heatmap (two dimensions + metric) --------------------------------
@@ -2766,6 +3598,22 @@ def _deterministic_parse(question: str, semantics: dict,
                     if ("scatter" in q or " vs " in q or " versus " in q) else None)
     explicit_plot = ("bubble" in q or "scatter" in q or "sized by" in q
                      or scatter_axes is not None or "plot" in q or "against" in q)
+    # A SCATTER NEEDS TWO NUMERIC AXES. "Plot" and "against" are in that list to
+    # catch loan-level plotting language, but "plot" is also the ordinary
+    # imperative verb for showing anything — and as a bare substring it caught
+    # "PLOT portfolio balance across LTV buckets and borrower-age buckets",
+    # disabled the grouped-matrix path below, and returned a one-dimension
+    # answer to a two-dimension question. The receipt then correctly reported
+    # the second axis as lost and refused.
+    #
+    # Decided by what the axes ARE, not by the verb that introduced them: where
+    # a segment resolves to a categorical dimension there is nothing to scatter,
+    # so the grouped matrix is the only reading. The unambiguous scatter words
+    # and a resolved pair of numeric axes still disqualify it.
+    if explicit_plot and not ("bubble" in q or "scatter" in q or "sized by" in q
+                              or scatter_axes is not None):
+        if any(c[0] == "categorical" for c in seg_classes):
+            explicit_plot = False
     numeric_bubble = False
     if len(seg_classes) >= 2 and not explicit_plot and "treemap" not in q:
         n_categorical = sum(1 for c in seg_classes if c[0] == "categorical")
@@ -2800,13 +3648,13 @@ def _deterministic_parse(question: str, semantics: dict,
             if len(full_dims) >= 3:
                 # 3+ dimensions cannot be charted -> a table/pivot over all of them.
                 g_filters, g_unavail = _grouped_value_filters(
-                    q, semantics, available_columns, exclude_dims=full_dims)
+                    q, semantics, available_columns, exclude_dims=full_dims, available_values=available_values)
                 return _build_multi_dim_table_spec(
                     metric, full_dims, semantics, title, True,
                     [c[1] for c in seg_classes], has_count=("count" in matched),
                     filters=g_filters, unavailable_filters=g_unavail)
             g_filters, g_unavail = _grouped_value_filters(
-                q, semantics, available_columns, exclude_dims=dims)
+                q, semantics, available_columns, exclude_dims=dims, available_values=available_values)
             return _build_two_dim_spec(metric, dims, semantics, title, True,
                                        [c[1] for c in seg_classes[:2]],
                                        has_count=("count" in matched),
@@ -2825,7 +3673,7 @@ def _deterministic_parse(question: str, semantics: dict,
             and "treemap" not in q):
         metric, _agg, matched = _detect_metric(remaining, semantics)
         g_filters, g_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=dim_keys)
+            q, semantics, available_columns, exclude_dims=dim_keys, available_values=available_values)
         if len(dim_keys) >= 3:
             # 3+ dimensions -> a table/pivot over ALL of them (never truncate).
             return _build_multi_dim_table_spec(
@@ -2840,7 +3688,8 @@ def _deterministic_parse(question: str, semantics: dict,
     # ---- ranked / "largest" queries ---------------------------------------
     if is_ranking and "treemap" not in q and "heatmap" not in q:
         ranked = _build_ranking_spec(q, title, rank_dir, rank_limit, top_n,
-                                     semantics, available_columns)
+                                     semantics, available_columns,
+                                     available_values=available_values)
         if ranked is not None:
             return ranked
 
@@ -2852,7 +3701,7 @@ def _deterministic_parse(question: str, semantics: dict,
             metric, agg = _balance_metric(semantics), "sum"
         conf = "high" if len(g_keys) >= 1 else "low"
         g_filters, g_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=g_keys[:3])
+            q, semantics, available_columns, exclude_dims=g_keys[:3], available_values=available_values)
         return (MIQuerySpec(
             intent="chart", chart_type="treemap", metric=metric,
             hierarchy=g_keys[:3], aggregation=agg, top_n=top_n, title=title,
@@ -2905,11 +3754,42 @@ def _deterministic_parse(question: str, semantics: dict,
             _det_meta("high" if "scatter" in q else "medium", explicit, dim_terms))
 
     # ---- line (trend over time) -------------------------------------------
-    is_line = ("over time" in q or "trend" in q or "monthly" in q
-               or "by month" in q or "evolution" in q or "by reporting date" in q
-               or "over the months" in q or "by reporting month" in q
-               or "reporting month" in q or "by week" in q or "per week" in q
-               or "weekly" in q or "by reporting period" in q)
+    # THE TIME-AXIS QUESTION IS ASKED OF ITS OWNER, not of a second list here.
+    #
+    # `question_interpretation.lexical.time_axis_request` owns "did this sentence
+    # ask the answer to vary over time?", and `period_request.requested_unit`
+    # already delegates to it. Its docstring recorded the gap this closes:
+    # the owner "is already correct for every time-series probe, including 'by
+    # quarter' and 'each month', which the deterministic parser does not
+    # recognise as a time axis at all — and what has been missing is the
+    # CARRIAGE, not the comprehension."
+    #
+    # The inline list below is NOT a second time-axis vocabulary. It is the
+    # grain-agnostic TREND words the owner deliberately does not hold — "trend",
+    # "evolution", "monthly", "weekly" name a shape rather than an axis and
+    # carry no time noun for the owner to read. They are kept so this change is
+    # purely additive; every phrase that names an AXIS is the owner's to decide.
+    #
+    # Adding a new axis wording HERE instead of to the owner would recreate the
+    # split this removes — see docs/mi_dual_mechanism_pattern.md.
+    from question_interpretation.lexical import time_axis_request as _axis_owner
+
+    # The ORIGINAL vocabulary, verbatim and unguarded, so nothing that produced
+    # a line before this change stops producing one. The first draft of this
+    # edit moved "over time" out of here and behind the metric guard below,
+    # which silently stopped "Show pipeline by stage over time" — a question
+    # with no resolvable metric — from being a line at all. Caught by
+    # test_pipeline_by_stage_over_time_e2e.
+    _legacy_line_words = ("over time" in q or "trend" in q or "monthly" in q
+                          or "by month" in q or "evolution" in q
+                          or "by reporting date" in q or "over the months" in q
+                          or "by reporting month" in q or "reporting month" in q
+                          or "by week" in q or "per week" in q or "weekly" in q
+                          or "by reporting period" in q)
+    _axis_named = bool(_axis_owner(q))
+    # `is_line` is settled AFTER the metric is resolved, a few lines below,
+    # because a newly-carried axis must not on its own make a question that
+    # named NO MEASURE answerable. See the guard at its assignment.
     # NOTE: a vintage request used to force a line here. It must not: a VINTAGE
     # is a cohort label (2014, 2015, …), not a point on a time axis, and the
     # line path coerces its x to a date — turning every integer year into epoch
@@ -2930,6 +3810,39 @@ def _deterministic_parse(question: str, semantics: dict,
     metric, agg, _matched = _detect_metric(_metric_slot(metric_part), semantics)
     if metric is None and not _matched:
         metric, agg, _ = _detect_metric(_metric_slot(remaining), semantics)
+
+    # THE GUARD. The line path below defaults a missing metric to Total Balance
+    # (`elif metric is None`). That default predates this reading and is left
+    # exactly as it was — but a question reaching the line path ONLY because the
+    # axis vocabulary widened must not inherit it, or widening the time
+    # vocabulary would quietly answer questions that name no measure.
+    #
+    # Measured: with the axis alone deciding, "how is the loan book tracking
+    # month to month" and "how is the front book tracking over the periods" —
+    # neither of which names a measure — began answering "Total Balance". That
+    # is the substitution the no-silent-substitution rule exists to prevent, and
+    # it is a SEPARATE question from carrying the axis. Both refuse again with
+    # this guard, exactly as they did before.
+    #
+    # The pre-existing trend-shape words keep their old behaviour unchanged,
+    # default and all: this narrows nothing that worked before.
+    #
+    # `metric is not None` WAS THE PROXY FOR THE GUARD ABOVE, and it is now the
+    # guard itself that holds the line. The proxy asked "did the reader name a
+    # measure?" and answered it with the parser's own default already applied,
+    # so it could only be conservative: it refused "how has the pipeline
+    # evolved?" — a question whose measure is not defaulted at all but
+    # DETERMINED, by the governed dataset it names, exactly as the working
+    # wording "show pipeline evolution" is — while "how is the loan book
+    # tracking month to month" refused for the right reason.
+    #
+    # Both are now decided downstream by the one governed rule: the spec
+    # records that the metric was defaulted, and the route refuses the BARE
+    # case — no dataset, no analytic, no dimension, no measure. A question
+    # naming the pipeline is not bare, so it answers on the governed pipeline
+    # amount; a question naming nothing still refuses, and now says which
+    # metric it is missing rather than "I couldn't map this question".
+    is_line = _legacy_line_words or _axis_named
     if is_line:
         x = ("origination_date" if "origination_date" in _fields(semantics)
              else None)
@@ -2938,7 +3851,7 @@ def _deterministic_parse(question: str, semantics: dict,
         # executor filters `work` before _execute_line), so attach it — a
         # filtered trend is never silently returned unfiltered.
         line_filters, line_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=[])
+            q, semantics, available_columns, exclude_dims=[], available_values=available_values)
         # If a FILTER-field keyword hijacked the metric (e.g. "balance trend where
         # LTV above 50%" -> metric=LTV, because the LTV filter term is also read as
         # a metric) but a balance measure is explicitly named, prefer balance so
@@ -2950,12 +3863,22 @@ def _deterministic_parse(question: str, semantics: dict,
         # Loan/case COUNT evolutions stay a COUNT metric (not balance/sum): "loan
         # count evolution", "number of loans by reporting month", "case count by
         # week" all resolve to a governed count time-series.
+        _defaulted = False
         if _wants_count(q) or agg == "count":
             metric, agg = None, "count"
         elif metric is None:
+            # THE DEFAULT IS KEPT AND RECORDED. A time series must plot some
+            # measure, so substituting the governed balance is how this branch
+            # has always produced a chart for "show me the trend". What was
+            # missing is the record that nobody asked for it: the spec came out
+            # indistinguishable from one where the reader wrote "balance", so
+            # every consumer downstream — the contract, the route, the receipt
+            # and the answer — believed the measure had been named.
             metric, agg = _balance_metric(semantics), "sum"
+            _defaulted = True
         return (MIQuerySpec(
             intent="chart", chart_type="line", x=x, metric=metric,
+            metric_defaulted=_defaulted,
             aggregation=agg, filters=line_filters, unavailable_filters=line_unavail,
             title=title, explanation="Line chart of a metric over time.",
             output_format="chart"),
@@ -2989,8 +3912,22 @@ def _deterministic_parse(question: str, semantics: dict,
         metric, agg, _ = _detect_metric(_metric_slot(remaining), semantics)
 
     # Generic concentration questions may pick a sensible default dimension.
+    #
+    # GENERIC MEANS THE READER NAMED NO AXIS — not that we discarded the one
+    # they named. "Show broker concentration" resolves `broker` to the governed
+    # broker_channel dimension, then loses it to the qualifier rule above
+    # (`broker` is also a value of origination_channel), then arrived here with
+    # no dimension and was given the region default. The answer measured
+    # GEOGRAPHIC concentration for a question about brokers; only the receipt's
+    # substitution guard stopped it reaching the reader, and it could report
+    # nothing better than "broker could not be applied".
+    #
+    # A default is legitimate where the question supplies no axis at all
+    # ("show concentration"). Where a term was read as an axis and discarded,
+    # the honest state is no dimension — the ambiguity owner then asks whether
+    # the term meant a breakdown or a narrowing, which is the actual question.
     generic = False
-    if dimension is None and not explicit and any(
+    if dimension is None and not explicit and not _dropped_dimension_terms and any(
             w in q for w in ("concentrat", "most ", "where are", "split", "breakdown")):
         for cand in (_preferred_region(semantics, available_columns) or "geographic_region_obligor",
                      "broker_channel", "erm_product_type", "account_status"):
@@ -3016,7 +3953,7 @@ def _deterministic_parse(question: str, semantics: dict,
         share = _share_request(q, semantics, available_columns)
         if share and not (re.search(r"\bby\b", q) or dim_terms):
             share_filters, share_unavail = _grouped_value_filters(
-                q, semantics, available_columns)
+                q, semantics, available_columns, available_values=available_values)
             if share_filters:
                 return (MIQuerySpec(
                     intent="summary", chart_type="none",
@@ -3027,12 +3964,70 @@ def _deterministic_parse(question: str, semantics: dict,
                                 "condition (filtered population over total).",
                     output_format="table"),
                     _det_meta("medium", explicit, dim_terms))
+            # A GOVERNED SCOPE IS A POPULATION TOO.
+            #
+            # The branch above needs a ROW filter, and "what proportion of the
+            # book is in the ACQUIRED PORTFOLIO?" names its population as a
+            # governed portfolio scope instead — resolved by `portfolio_lens`
+            # and applied downstream as `source_portfolio_id`. With no row
+            # filter here the share was never requested, an absolute figure was
+            # computed, and the answer refused for not being a proportion:
+            #
+            #   "an absolute figure was calculated for the filtered population,
+            #    not its proportion of the book"
+            #
+            # on a book where the same request over a row value ("what share of
+            # the balance is in Scotland?") answers. The predicate arrives from
+            # the scope owner before execution, so the numerator is the scope
+            # and the denominator stays the whole book — measured at 31.79% for
+            # the acquired book, which is £54.7m of £172.1m.
+            #
+            # `mentions_portfolio` is the scope owner's own test, asked here
+            # rather than re-read: no scope vocabulary lives in this module.
+            from .portfolio_lens import mentions_portfolio as _names_scope
+
+            if _names_scope(q):
+                return (MIQuerySpec(
+                    intent="summary", chart_type="none",
+                    metric=share[1] or _balance_metric(semantics, available_columns),
+                    aggregation="share", title=title,
+                    unavailable_filters=share_unavail,
+                    explanation="Share of the whole book in the named governed "
+                                "portfolio scope (scope population over total).",
+                    output_format="table"),
+                    _det_meta("medium", explicit, dim_terms))
         if wants_summary:
             return (MIQuerySpec(
                 intent="summary", chart_type="none", aggregation="count", title=title,
                 explanation="Whole-book portfolio summary (count + balance).",
                 output_format="text"),
                 _det_meta("medium", explicit, dim_terms, note="portfolio_summary"))
+        # AN AMBIGUOUS MEASURE WORD IS NAMED, NOT ABSENT — checked before the
+        # unmapped fallback, which is where such a question actually lands.
+        #
+        # `_GENERIC_METRIC_TOKENS` holds "recognised metric words even when too
+        # ambiguous to map to one field", so a question whose ONLY measure word
+        # is one of them leaves no residue and no metric, and was answered
+        # "I couldn't map this question to a governed analytic":
+        #
+        #     "What is the VALUE of outstanding offers?"
+        #
+        # on a tape carrying both `current_outstanding_balance` and
+        # `current_valuation_amount`, whose OFFER population resolved perfectly
+        # well. Nothing was un-understood; one word had two governed meanings.
+        # This names them and substitutes neither.
+        _ambiguous = _ambiguous_measure_word(q, semantics, available_columns)
+        if _ambiguous:
+            word, candidates = _ambiguous
+            return (MIQuerySpec(
+                intent="summary", chart_type="none", aggregation="count",
+                title=title,
+                explanation=(f"'{word}' could mean more than one governed "
+                             f"measure in this dataset ({candidates}). Say "
+                             "which one and I will answer; no measure was "
+                             "substituted."),
+                output_format="text"),
+                _det_meta("low", explicit, dim_terms, note="unresolved_metric"))
         return (MIQuerySpec(
             intent="summary", chart_type="none", aggregation="count", title=title,
             explanation="Could not map question to a governed analytic.",
@@ -3060,7 +4055,7 @@ def _deterministic_parse(question: str, semantics: dict,
         # while "exposure to borrowers over 85" did not. Same helper the bar
         # branch uses, so an unavailable predicate is surfaced, never dropped.
         kpi_filters, kpi_unavail = _grouped_value_filters(
-            q, semantics, available_columns)
+            q, semantics, available_columns, available_values=available_values)
         share = _share_request(q, semantics, available_columns)
         if share and kpi_filters:
             # "What proportion of the book is below 75% LTV" is a ratio of two
@@ -3084,7 +4079,8 @@ def _deterministic_parse(question: str, semantics: dict,
         # unicorn ratio by region") used to default to balance and answer with
         # ok:true — a confident answer to a question nobody asked. Refuse it,
         # naming the term, so the governed response is traceable.
-        residue = _metric_side_residue(metric_part, semantics, available_columns)
+        residue = _metric_side_residue(metric_part, semantics, available_columns,
+                                       available_values)
         if residue:
             return (MIQuerySpec(
                 intent="summary", chart_type="none", aggregation="count",
@@ -3100,7 +4096,7 @@ def _deterministic_parse(question: str, semantics: dict,
         share = _share_request(q, semantics, available_columns)
         if share and not grouping_requested:
             share_filters, share_unavail = _grouped_value_filters(
-                q, semantics, available_columns)
+                q, semantics, available_columns, available_values=available_values)
             if share_filters:
                 return (MIQuerySpec(
                     intent="summary", chart_type="none",
@@ -3127,7 +4123,7 @@ def _deterministic_parse(question: str, semantics: dict,
     # LTV above 50%") is applied to the mask before grouping — attach it so it is
     # never silently dropped. The grouping dimension itself is excluded.
     g_filters, g_unavail = _grouped_value_filters(
-        q, semantics, available_columns, exclude_dims=[dimension] if dimension else [])
+        q, semantics, available_columns, exclude_dims=[dimension] if dimension else [], available_values=available_values)
     return (MIQuerySpec(
         intent="chart", chart_type="bar", metric=metric, dimension=dimension,
         aggregation=agg, weight_field=weight, top_n=top_n, title=title,
@@ -3440,19 +4436,94 @@ def _message_text(message) -> str:
     return "".join(parts)
 
 
-# Model families that REJECT sampling params (`temperature`/`top_p`/`top_k`)
-# with an HTTP 400. Newer reasoning models fix their own sampling; sending
-# `temperature=0.0` to them fails the request outright. When overriding
-# ``MI_AGENT_LLM_MODEL`` to one of these, we must omit the sampling kwargs.
-_NO_SAMPLING_MODELS = (
-    "opus-4-7", "opus-4-8", "opus-4.7", "opus-4.8",
-    "sonnet-5", "fable", "mythos",
-)
+# --------------------------------------------------------------------------- #
+# SAMPLING PARAMETERS — ASKED, NOT ASSUMED
+# --------------------------------------------------------------------------- #
+# There was a hardcoded allowlist here:
+#
+#     _NO_SAMPLING_MODELS = ("opus-4-7", "opus-4-8", "opus-4.7", "opus-4.8",
+#                            "sonnet-5", "fable", "mythos")
+#
+# and `temperature=0.0` was sent to every model that did not match it. It cost a
+# whole measurement. `claude-haiku-4-5-20251001` — THE REPOSITORY DEFAULT — is
+# not on that list, and neither is `claude-opus-5`, so an LLM-enabled
+# acceptance run over 166 questions raised `TypeError` on every single call,
+# before any HTTP request, and was reported as a clean model comparison having
+# never reached the API.
+#
+# The list was answering the wrong question. Whether `temperature` can be sent
+# is TWO facts, and the allowlist encoded neither:
+#
+#   1. DOES THIS SDK EXPOSE THE PARAMETER? `anthropic` 1.x removed
+#      `temperature`, `top_p` and `top_k` from `messages.create()` altogether.
+#      On that SDK no model accepts them, whatever its name — which is why an
+#      allowlist keyed on the model could not get this right for any model.
+#      This is asked of the signature, once, and cached.
+#
+#   2. DOES THIS MODEL ACCEPT IT? Only reachable where (1) is true, and only
+#      the API can answer. It is LEARNED from the rejection — a 400 naming a
+#      sampling parameter — and remembered, so one model release costs one
+#      retry rather than a source edit.
+#
+# The point is not that the list was stale. It is that a list keyed on model
+# names must be edited on every release, which is a maintenance bomb that has
+# already gone off once. Nothing here needs updating when a model ships.
+
+#: Models the API has told us reject sampling parameters, learned at runtime.
+_SAMPLING_REJECTED: set = set()
+
+#: Phrases an SDK or the API uses when the sampling kwarg is the problem. Not a
+#: model list: a list of ways one specific rejection is worded.
+_SAMPLING_REJECTION_MARKS = ("temperature", "top_p", "top_k")
 
 
-def _supports_temperature(model: str) -> bool:
-    m = (model or "").lower()
-    return not any(tok in m for tok in _NO_SAMPLING_MODELS)
+def _sdk_sampling_parameters(client) -> frozenset:
+    """Which sampling parameters THIS SDK's ``messages.create`` accepts.
+
+    Asked of the signature rather than assumed from a version string, because
+    a version string is one more thing to keep in step with a release. An SDK
+    that accepts arbitrary ``**kwargs`` reports them as acceptable and the
+    model's own rejection (below) is then the authority, which is the correct
+    order: the SDK cannot know what the API allows.
+    """
+    import inspect
+
+    try:
+        params = inspect.signature(client.messages.create).parameters
+    except (TypeError, ValueError):  # noqa: BLE001 - an unreadable signature
+        return frozenset(_SAMPLING_REJECTION_MARKS)
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return frozenset(_SAMPLING_REJECTION_MARKS)
+    return frozenset(n for n in _SAMPLING_REJECTION_MARKS if n in params)
+
+
+def _is_sampling_rejection(exc: BaseException) -> bool:
+    """Is this failure the sampling parameter being refused?
+
+    A `TypeError` from the SDK and a 400 from the API are the same fact told
+    two ways, and both must downgrade rather than escape. The old code caught
+    neither on the uncached call.
+    """
+    text = str(exc).lower()
+    if not any(mark in text for mark in _SAMPLING_REJECTION_MARKS):
+        return False
+    return isinstance(exc, TypeError) or "400" in text or "unexpected keyword" \
+        in text or "not supported" in text or "deprecated" in text \
+        or "unsupported" in text or "invalid_request" in text
+
+
+def _sampling_for(client, model: str) -> Dict[str, Any]:
+    """The sampling kwargs to send for ``model`` on this client, possibly none.
+
+    Determinism where the runtime allows it. Where it does not, the task is a
+    constrained NL->JSON parse validated downstream, so the model's own default
+    sampling is used rather than the call being failed.
+    """
+    if (model or "") in _SAMPLING_REJECTED:
+        return {}
+    if "temperature" not in _sdk_sampling_parameters(client):
+        return {}
+    return {"temperature": 0.0}
 
 
 def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
@@ -3467,33 +4538,49 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
         ) from exc
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
-    # Determinism where the model allows it; newer models reject `temperature`
-    # and are deterministic enough for strict-JSON parsing without it.
-    sampling = {"temperature": 0.0} if _supports_temperature(model) else {}
+    sampling = _sampling_for(client, model)
+
+    def _create(**kwargs):
+        """One call, downgrading ONCE if the sampling parameter is refused.
+
+        The refusal is remembered against the model, so a run of 166 questions
+        pays for it once rather than 166 times — and never pays for it again on
+        this process. The old code sent the sampling kwargs on BOTH the cached
+        and the uncached attempt and caught the failure on NEITHER of the paths
+        that mattered: the cached attempt swallowed every exception into
+        "cache unsupported", and the uncached one let the `TypeError` out. That
+        is how an entire acceptance run raised before reaching the API and was
+        reported as a model comparison.
+        """
+        try:
+            return client.messages.create(**kwargs, **sampling)
+        except Exception as exc:  # noqa: BLE001 - re-raised unless it is THIS
+            if not sampling or not _is_sampling_rejection(exc):
+                raise
+            _SAMPLING_REJECTED.add(model or "")
+            logger.info("model %r rejects sampling parameters (%s); retrying "
+                        "without them and remembering", model, exc)
+            sampling.clear()
+            return client.messages.create(**kwargs)
+
     cache_supported = False
     message = None
-    # NOTE: ``temperature`` is intentionally NOT sent. Newer Claude models
-    # (Sonnet 5 / Opus 4.x …) reject it with a 400 "temperature is deprecated"
-    # error; the model's default sampling is used. The task is a constrained
-    # NL->JSON parse validated downstream, so a fixed temperature isn't needed.
     if use_cache:
         try:
-            message = client.messages.create(
+            message = _create(
                 model=model, max_tokens=1024,
                 system=[{"type": "text", "text": prompt["system"],
                          "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": prompt["user"]}],
-                **sampling,
             )
             cache_supported = True
         except Exception:  # pragma: no cover - SDK without cache support
             message = None
     if message is None:
-        message = client.messages.create(
+        message = _create(
             model=model, max_tokens=1024,
             system=prompt["system"],
             messages=[{"role": "user", "content": prompt["user"]}],
-            **sampling,
         )
     text = _message_text(message)
     u = getattr(message, "usage", None)
@@ -4134,6 +5221,7 @@ def parse_with_repair(
     semantics,
     available_columns=None,
     *,
+    available_values=None,
     llm_enabled: bool = False,
     model: Optional[str] = None,
     max_attempts: int = 1,
@@ -4177,7 +5265,8 @@ def parse_with_repair(
 
     # ---- deterministic parse (always computed; free) ----------------------
     det_spec, det_meta = _deterministic_parse(user_question, semantics,
-                                              available_columns=cols)
+                                              available_columns=cols,
+                                              available_values=available_values)
     det_seasoning = resolve_seasoning_role(det_spec, user_question, cols)
     # P1M: before validation, so an ungoverned statistic is REFUSED here rather
     # than silently replaced by the field default further down.

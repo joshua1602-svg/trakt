@@ -1,0 +1,2719 @@
+{
+  "rows": [
+    {
+      "id": "R020",
+      "question": "what is the largest loan",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "The largest single-loan exposure is \u00a3364k, representing 1.7% of exposure. Top 5 loans account for 8.6% of exposure.\n\nCalculated: Largest single-loan c"
+    },
+    {
+      "id": "R021",
+      "question": "show me the biggest loan",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "The largest single-loan exposure is \u00a3364k, representing 1.7% of exposure. Top 5 loans account for 8.6% of exposure.\n\nCalculated: Largest single-loan c"
+    },
+    {
+      "id": "R022",
+      "question": "largest single loan by balance",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R156",
+      "question": "top 10 regions by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 10,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R157",
+      "question": "top 5 brokers by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R158",
+      "question": "top 10 products by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "erm_product_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "erm_product_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 10,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R159",
+      "question": "which region has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "geo_exposure",
+      "owned": false,
+      "grade": "EMPTY",
+      "ranked_applied": false,
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure."
+    },
+    {
+      "id": "R160",
+      "question": "which broker has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R161",
+      "question": "which product type has the highest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "erm_product_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "erm_product_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R162",
+      "question": "regions with the most loans",
+      "intended": "ranking_underspecified",
+      "contract_operation": "amount",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "count_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R163",
+      "question": "highest average LTV regions",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loa"
+    },
+    {
+      "id": "R164",
+      "question": "which region has the highest average LTV",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loa"
+    },
+    {
+      "id": "R165",
+      "question": "smallest region by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R166",
+      "question": "largest loans",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "The largest single-loan exposure is \u00a3364k, representing 1.7% of exposure. Top 5 loans account for 8.6% of exposure.\n\nCalculated: Largest single-loan c"
+    },
+    {
+      "id": "R167",
+      "question": "show the largest loans",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "The largest single-loan exposure is \u00a3364k, representing 1.7% of exposure. Top 5 loans account for 8.6% of exposure.\n\nCalculated: Largest single-loan c"
+    },
+    {
+      "id": "R168",
+      "question": "highest LTV loans",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Current LTV \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 80 loans \u00b7 as at "
+    },
+    {
+      "id": "R169",
+      "question": "top 10 loans by balance",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R170",
+      "question": "biggest 20 loans",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "The largest single-loan exposure is \u00a3364k, representing 1.7% of exposure. Top 5 loans account for 8.6% of exposure.\n\nCalculated: Largest single-loan c"
+    },
+    {
+      "id": "R171",
+      "question": "top 5 region by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R172",
+      "question": "top 5 broker by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R173",
+      "question": "top 10 product type by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "erm_product_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "erm_product_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 10,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R174",
+      "question": "top 3 age bucket by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "age_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "age_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 3,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R175",
+      "question": "top 5 account status by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "account_status",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "account_status",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the que"
+    },
+    {
+      "id": "R176",
+      "question": "which broker has the highest average LTV",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 Ju"
+    },
+    {
+      "id": "R177",
+      "question": "which product type has the highest average LTV",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "erm_product_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "erm_product_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R178",
+      "question": "which borrower type has the highest average LTV",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "borrower_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "borrower_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the quest"
+    },
+    {
+      "id": "R185",
+      "question": "top brokers by expected funded amount",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "I understood this as a forecast projection question, but I have not answered it: this asks for a forward-looking figure, which needs a governed foreca"
+    },
+    {
+      "id": "R200",
+      "question": "largest regional concentration",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "geo_exposure",
+      "owned": false,
+      "grade": "EMPTY",
+      "ranked_applied": false,
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure."
+    },
+    {
+      "id": "R259",
+      "question": "What is the largest loan?",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "The largest single-loan exposure is \u00a3364k, representing 1.7% of exposure. Top 5 loans account for 8.6% of exposure.\n\nCalculated: Largest single-loan c"
+    },
+    {
+      "id": "R260",
+      "question": "What is the smallest loan?",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R333",
+      "question": "Which broker has the highest funded balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R334",
+      "question": "Which broker has the highest average loan balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Average Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R335",
+      "question": "Which broker has the most loans?",
+      "intended": "ranking_underspecified",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "count_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R336",
+      "question": "Which broker has the highest WA LTV?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 Ju"
+    },
+    {
+      "id": "R337",
+      "question": "Which broker has the highest WA interest rate?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_interest_rate",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Interest Rate \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 "
+    },
+    {
+      "id": "R338",
+      "question": "Which region has the highest funded balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "geo_exposure",
+      "owned": false,
+      "grade": "EMPTY",
+      "ranked_applied": false,
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure."
+    },
+    {
+      "id": "R339",
+      "question": "Which region has the highest average LTV?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loa"
+    },
+    {
+      "id": "R340",
+      "question": "Which region has the highest interest rate?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_interest_rate",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "geo_exposure",
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "I could not answer this as asked: the answer reports balance, but the question asked about rate. I have not returned the substituted breakdown."
+    },
+    {
+      "id": "R341",
+      "question": "Which LTV bucket has the highest balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ltv_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ltv_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R342",
+      "question": "Which age bucket has the highest balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "age_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "age_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R343",
+      "question": "What are the top 10 brokers by funded balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 10,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R344",
+      "question": "What are the top 10 regions by funded balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 10,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R345",
+      "question": "What are the top 10 loans by balance?",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R346",
+      "question": "What are the top 10 loans by LTV?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ltv_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 80 loans \u00b7 as at 3"
+    },
+    {
+      "id": "R348",
+      "question": "What are the highest interest rate loans?",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_interest_rate",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Interest Rate \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 80 loans \u00b7 as a"
+    },
+    {
+      "id": "R349",
+      "question": "What is the top 5 broker concentration?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neit"
+    },
+    {
+      "id": "R350",
+      "question": "What is the top 10 broker concentration?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 10,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neit"
+    },
+    {
+      "id": "R351",
+      "question": "What is the largest broker concentration?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "concentration_analysis",
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neit"
+    },
+    {
+      "id": "R352",
+      "question": "What is the largest regional concentration?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "geo_exposure",
+      "owned": false,
+      "grade": "EMPTY",
+      "ranked_applied": false,
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure."
+    },
+    {
+      "id": "R353",
+      "question": "What percentage of the book is in the top 5 brokers?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_percent",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R354",
+      "question": "What percentage of the book is in the top 3 regions?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_percent",
+      "route_rank_limit": 3,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "geo_exposure",
+      "owned": false,
+      "grade": "EMPTY",
+      "ranked_applied": false,
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure."
+    },
+    {
+      "id": "R362",
+      "question": "Show loans for the largest broker.",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "count_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R363",
+      "question": "Show loans in the highest LTV bucket.",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ltv_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ltv_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "count_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 80 loans \u00b7 as at 3"
+    },
+    {
+      "id": "R364",
+      "question": "Show loans in the highest age bucket.",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "age_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "youngest_borrower_age",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "age_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "count_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Average Borrower Age \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 80 loans \u00b7 as at 30 June 2"
+    },
+    {
+      "id": "R382",
+      "question": "Which vintage has the highest balance?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "vintage_year",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "vintage_year",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Vintage' is not available in this dataset. The MI book for this client does not include vintage_year. This field is not reported, so the question can"
+    },
+    {
+      "id": "R383",
+      "question": "Which vintage has the highest WA LTV?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "vintage_year",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_loan_to_value",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "vintage_year",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Vintage' is not available in this dataset. The MI book for this client does not include vintage_year. This field is not reported, so the question can"
+    },
+    {
+      "id": "R424",
+      "question": "Which broker has the largest pipeline?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "No governed pipeline data is available for the pipeline view."
+    },
+    {
+      "id": "R425",
+      "question": "Which stage has the largest pipeline?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "pipeline_stage",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "No governed pipeline data is available for the pipeline view."
+    },
+    {
+      "id": "R502",
+      "question": "What is the largest geographic concentration versus limit?",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "risk_limits",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "3 passed, 0 warning(s), 7 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-35.0 pp headroom). Largest concentration: Top 3 "
+    },
+    {
+      "id": "R506",
+      "question": "Show the single largest loan against the large-loan limit.",
+      "intended": "ranked_level_no_dimension",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "risk_limits",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "3 passed, 0 warning(s), 7 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-35.0 pp headroom). Largest concentration: Top 3 "
+    },
+    {
+      "id": "R771",
+      "question": "top 5 Account Status by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "account_status",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "account_status",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the que"
+    },
+    {
+      "id": "R772",
+      "question": "top 5 Age Bucket by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "age_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "age_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 5 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 5 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R773",
+      "question": "top 5 Borrower Type by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "borrower_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "borrower_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the quest"
+    },
+    {
+      "id": "R774",
+      "question": "top 5 Broker by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R775",
+      "question": "top 5 Product Type by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "erm_product_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "erm_product_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R776",
+      "question": "top 5 Obligor Region (NUTS3) by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "geographic_region_obligor",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "geographic_region_obligor",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R777",
+      "question": "top 5 Rate Type by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "interest_rate_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "interest_rate_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Rate Type' is not available in this dataset. The MI book for this client does not include interest_rate_type. This field is not reported, so the ques"
+    },
+    {
+      "id": "R778",
+      "question": "top 5 LTV Bucket by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ltv_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ltv_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R779",
+      "question": "top 5 Occupancy Type by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "occupancy_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "occupancy_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Occupancy Type' is not available in this dataset. The MI book for this client does not include occupancy_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R780",
+      "question": "top 5 Origination Channel by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "origination_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "origination_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Origination Channel \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June"
+    },
+    {
+      "id": "R781",
+      "question": "top 5 Term Bucket by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "term_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "term_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question "
+    },
+    {
+      "id": "R782",
+      "question": "top 5 Ticket Size by balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ticket_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ticket_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": 5,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R783",
+      "question": "which Account Status has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "account_status",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "account_status",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the que"
+    },
+    {
+      "id": "R784",
+      "question": "which Account Status has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "account_status",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "account_status",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the que"
+    },
+    {
+      "id": "R785",
+      "question": "which Age Bucket has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "age_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "age_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R786",
+      "question": "which Age Bucket has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "age_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "age_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R787",
+      "question": "which Borrower Type has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "borrower_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "borrower_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the quest"
+    },
+    {
+      "id": "R788",
+      "question": "which Borrower Type has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "borrower_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "borrower_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the quest"
+    },
+    {
+      "id": "R789",
+      "question": "which Broker has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R790",
+      "question": "which Broker has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "broker_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "broker_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R791",
+      "question": "which Product Type has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "erm_product_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "erm_product_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R792",
+      "question": "which Product Type has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "erm_product_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "erm_product_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R793",
+      "question": "which Obligor Region (NUTS3) has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "geographic_region_obligor",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "geographic_region_obligor",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "geo_exposure",
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "I understood that you asked for obligor region, but that could not be applied to the calculation (obligor region \u2014 this answer covers the whole popula"
+    },
+    {
+      "id": "R794",
+      "question": "which Obligor Region (NUTS3) has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "geographic_region_obligor",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "geographic_region_obligor",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J"
+    },
+    {
+      "id": "R795",
+      "question": "which Rate Type has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "interest_rate_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "interest_rate_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Rate Type' is not available in this dataset. The MI book for this client does not include interest_rate_type. This field is not reported, so the ques"
+    },
+    {
+      "id": "R796",
+      "question": "which Rate Type has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "interest_rate_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "interest_rate_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Rate Type' is not available in this dataset. The MI book for this client does not include interest_rate_type. This field is not reported, so the ques"
+    },
+    {
+      "id": "R797",
+      "question": "which LTV Bucket has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ltv_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ltv_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R798",
+      "question": "which LTV Bucket has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ltv_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ltv_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R799",
+      "question": "which Occupancy Type has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "occupancy_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "occupancy_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Occupancy Type' is not available in this dataset. The MI book for this client does not include occupancy_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R800",
+      "question": "which Occupancy Type has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "occupancy_type",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "occupancy_type",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Occupancy Type' is not available in this dataset. The MI book for this client does not include occupancy_type. This field is not reported, so the que"
+    },
+    {
+      "id": "R801",
+      "question": "which Origination Channel has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "origination_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "origination_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Origination Channel \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June"
+    },
+    {
+      "id": "R802",
+      "question": "which Origination Channel has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "origination_channel",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "origination_channel",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Origination Channel \u00b7 4 groups \u00b7 80 loans \u00b7 as at 30 June"
+    },
+    {
+      "id": "R803",
+      "question": "which Term Bucket has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "term_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "term_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question "
+    },
+    {
+      "id": "R804",
+      "question": "which Term Bucket has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "term_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "term_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "REFUSED",
+      "ranked_applied": false,
+      "answer": "'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question "
+    },
+    {
+      "id": "R805",
+      "question": "which Ticket Size has the largest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ticket_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ticket_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R806",
+      "question": "which Ticket Size has the smallest balance",
+      "intended": "ranked_level",
+      "contract_operation": "ranking",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "ticket_bucket",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "ticket_bucket",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "balance_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 June 2026."
+    },
+    {
+      "id": "R856",
+      "question": "Which of our limits are currently most at risk?",
+      "intended": "ranking_underspecified",
+      "contract_operation": "amount",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "risk_limits",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "3 passed, 0 warning(s), 7 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-35.0 pp headroom). Largest concentration: Top 3 "
+    }
+  ],
+  "disagreements": [
+    {
+      "id": "R162",
+      "question": "regions with the most loans",
+      "intended": "ranking_underspecified",
+      "contract_operation": "amount",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": "collateral_geography",
+      "route_rank_direction": "increase",
+      "route_rank_basis": "count_absolute",
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": null,
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 80 loans \u00b7 as at 30 J",
+      "family": "contract_not_ranking",
+      "contract_says_ranking": false,
+      "route_says_ranking": true
+    },
+    {
+      "id": "R856",
+      "question": "Which of our limits are currently most at risk?",
+      "intended": "ranking_underspecified",
+      "contract_operation": "amount",
+      "contract_modifiers": [],
+      "contract_dimensions": [
+        [
+          "collateral_geography",
+          "grouping"
+        ]
+      ],
+      "contract_measure": "current_outstanding_balance",
+      "contract_comparison_periods": [],
+      "contract_span": null,
+      "route_rank_requested": true,
+      "route_rank_field": null,
+      "route_rank_direction": null,
+      "route_rank_basis": null,
+      "route_rank_limit": null,
+      "route_recognised": false,
+      "route_recognition_reason": "no_change_language",
+      "route": "risk_limits",
+      "owned": false,
+      "grade": "DELIVERED",
+      "ranked_applied": false,
+      "answer": "3 passed, 0 warning(s), 7 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-35.0 pp headroom). Largest concentration: Top 3 ",
+      "family": "contract_not_ranking",
+      "contract_says_ranking": false,
+      "route_says_ranking": true
+    }
+  ]
+}

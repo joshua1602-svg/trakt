@@ -1,0 +1,772 @@
+{
+  "meta": {
+    "name": "Routed surface \u2014 the governed service path, routing as shipped",
+    "description": "The third measurement surface. Drives execute_governed_mi_query, so a question is claimed by whichever route claims it in production, and the answer is adjudicated by the guard that actually adjudicates it.",
+    "count": 32,
+    "entry_point": "mi_agent_api.mi_service.execute_governed_mi_query",
+    "enforced_by": "question_interpretation/routed_surface.py",
+    "sees": [
+      "The routing decision itself. Which route claims a question is the thing neither other bank can observe \u2014 the calibration bank calls run_mi_agent_query directly and is always point-in-time, and the robustness bank exercises routing but grades only an outcome label.",
+      "The verdict and the facet kinds and statuses the guard produced, so a false APPLIED is visible as data rather than only as a wrong sentence.",
+      "Behaviour that differs between the routed and point-in-time paths. Four of the six Stage 5 trace questions behave differently on the two."
+    ],
+    "cannot_see": [
+      "Numeric correctness. Nothing here checks that a figure is right; it checks which capability answered and what the receipt claimed. The calibration bank remains the only surface that grades numbers.",
+      "The LLM parser arm. Deterministic only, like every surface in this programme, for the reason standing condition 1 records.",
+      "Any book but alderbridge. The robustness bank is the only two-book surface, so a defect appearing on kestrelmoor alone is invisible here.",
+      "Answer TEXT. answer_diff owns that, byte for byte. This asserts structure, so a reworded refusal does not fail it and a changed verdict does.",
+      "Anything a route declines to declare. The residual tier of the routed grouping check is unprovable from the payload, so a facet applied on that tier reads the same here as one proven by name. rt_013 is that tier's one demonstrably false member, declared rather than left to read as coverage.",
+      "A named dimension the parser slotted as a FILTER. The deterministic parser resolves no categorical filter at all \u2014 every filter it fills is a numeric bound on a measure \u2014 so no question this surface can ASK reaches the role owner's filter branch. `test_d2_routed_role_carriage.py` constructs the parse instead, and asserts that the day the parser learns categorical filters, that construction can be replaced by a real question here."
+    ]
+  },
+  "rows": [
+    {
+      "id": "rt_001",
+      "question": "balance by month over the last 12 months",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "evolution",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "comparison_period",
+            "unsupported"
+          ],
+          [
+            "granularity",
+            "applied"
+          ]
+        ],
+        "answer": "I understood that you asked for comparison period (over the stated period), but that could not be applied to the calculation (comparison period (over the stated period) \u2014 you asked about the last 12 months, which spans 12 reporting period(s); this answer covers 3, which is all this book carries). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_002",
+      "question": "funded balance by month",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "evolution",
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "granularity",
+            "applied"
+          ]
+        ],
+        "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_003",
+      "question": "balance by week over the last 6 months",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "evolution",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "comparison_period",
+            "unsupported"
+          ],
+          [
+            "granularity",
+            "unsupported"
+          ]
+        ],
+        "answer": "I understood that you asked for comparison period (over the stated period) and week, but that could not be applied to the calculation (comparison period (over the stated period) \u2014 you asked about the last 6 months, which spans 6 reporting period(s); this answer covers 3, which is all this book carries; week \u2014 this answer is reported at month level, not by week). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_004",
+      "question": "funded balance by quarter",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [
+        "route 'evolution' != expected None",
+        "verdict 'refuse' != expected None",
+        "answer does not contain 'requires a dimension'"
+      ],
+      "observed": {
+        "route": "evolution",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "granularity",
+            "unsupported"
+          ]
+        ],
+        "answer": "I understood that you asked for quarter, but that could not be applied to the calculation (quarter \u2014 this answer is reported at month level, not by quarter). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_005",
+      "question": "how many loans each month",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "period_comparison",
+            "unavailable"
+          ]
+        ],
+        "answer": "I understood this as a movement trend question, but I have not answered it: this asks how something changed, which needs two governed reporting snapshots to compare. I have NOT substituted a current-position figure, because that would answer a different question from the one you asked. Ask for the governed analytic directly \u2014 for example the concentration limit tests, the completion run-rate, the pipeline at a named stage, or a named measure compared across two reporting periods \u2014 and I will compute it.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_005b",
+      "question": "Show regional concentration evolution over time.",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "geo_exposure",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "series_axis",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for a series over time, but that could not be applied to the calculation (a series over time \u2014 the answer that was produced carries no time axis; it reports a single position and cannot show movement). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_006",
+      "question": "balance by month by region",
+      "expected_to_fail": false,
+      "will_change_when": "The segmented series lands. A refusal is right today because the answer would be the whole book; once the route can cut a series by a dimension this must become an answer, and this case failing is how the estate finds out. Not declared expected-to-fail: the CURRENT behaviour is correct, and marking correct behaviour as a known defect is how a surface stops meaning anything.",
+      "failures": [],
+      "observed": {
+        "route": "evolution",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "granularity",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_007",
+      "question": "show geographic exposure by postcode",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "geo_exposure",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "granularity",
+            "unsupported"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for postcode and postcode, but that could not be applied to the calculation (postcode \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by postcode; postcode \u2014 this answer is reported at ITL3 area level, not by postcode). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_008",
+      "question": "geographic exposure by ITL3 area",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "geo_exposure",
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "granularity",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_009",
+      "question": "What is the balance of the front book?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "row_population",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 1,177 loans \u00b7 as at 30 June 2026.",
+        "population": 1177,
+        "filters": [
+          "Seasoning Segment = Front Book"
+        ]
+      }
+    },
+    {
+      "id": "rt_010",
+      "question": "How does the front book compare with our older lending from a risk perspective?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "analytical_composition",
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "cohort_comparison",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Front Book (0-12 months) against Back Book (13+ months) (1,177 vs 9,858 loans): Loan Count 1,177 vs 9,858 (-8,681); Current Outstanding Balance \u00a3171.7m vs \u00a31.79bn (\u2212\u00a31.62bn); Current Loan To Value 34.71% vs 43.97% (-9.26pp); Current Interest Rate 6.45% vs 6.57% (-0.12pp); Youngest Borrower Age 68.0 vs 71.8 (-3.8). Across 13 governed origination vintage(s), 2014 holds \u00a367.6m at 54.47% weighted-average LTV and 2026 holds \u00a371.8m at 34.59%.\n\nCalculated: Composed governed capabilities.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_011",
+      "question": "What is the run rate of new lending and is it accelerating?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "forecast_extrapolation",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "row_population",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for the population months_on_book le 1, but that could not be applied to the calculation (the population months_on_book le 1 \u2014 this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_012",
+      "question": "What is the completion run rate?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "forecast_extrapolation",
+        "view": "funded",
+        "ok": true,
+        "verdict": null,
+        "facets": [],
+        "answer": "The current completion run-rate is ~\u00a316.3m/month (\u00a3195.5m/year) based on 2 month(s) of funded growth.\n\nCalculated: Run-rate extrapolation.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_013",
+      "question": "Show concentration limit status.",
+      "expected_to_fail": true,
+      "will_change_when": null,
+      "failures": [
+        "ok False != expected True",
+        "verdict 'refuse' != expected 'ok'",
+        "facets [('grouping_dimension', 'lost')] != expected []"
+      ],
+      "observed": {
+        "route": "risk_limits",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "grouping_dimension",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for status, but that could not be applied to the calculation (status \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by status). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_013b",
+      "question": "Are any regional limits breached?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "risk_limits",
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "geographic concentration: 4 passed, 0 warning(s), 0 breach(es), 0 need review, 0 unavailable. Nearest to limit: Largest other region (South West) (2.9 pp headroom). Largest concentration: South East at 26.3%.\n\nCalculated: Concentration limits vs the governing document.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_014",
+      "question": "What is the forecast run rate for the front book?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "forecast_extrapolation",
+        "view": "forecast",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "projection",
+            "applied"
+          ],
+          [
+            "row_population",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for the population seasoning_segment = Front Book, but that could not be applied to the calculation (the population seasoning_segment = Front Book \u2014 this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_015",
+      "question": "What is the balance where account status is active?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "lost_narrowing",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for Active, but that could not be applied to the calculation (Active (Account Status) \u2014 this narrowing was not applied, so the figure covers the whole book rather than only Active). I have not substituted a broader figure.",
+        "population": 11035,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_016",
+      "question": "Show geographic exposure by ITL3 area.",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "geo_exposure",
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "granularity",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ],
+          [
+            "row_population",
+            "applied"
+          ]
+        ],
+        "answer": "Largest geographic concentration: West Surrey at \u00a349.3m (9.6% of the book) across 23 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_017",
+      "question": "What is the forecast run rate by vintage?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "forecast_extrapolation",
+        "view": "forecast",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "grouping_dimension",
+            "lost"
+          ],
+          [
+            "projection",
+            "applied"
+          ]
+        ],
+        "answer": "I understood that you asked for vintage, but that could not be applied to the calculation (vintage \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by vintage). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_018",
+      "question": "What is the forecast run rate by region?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "forecast_extrapolation",
+        "view": "forecast",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "grouping_dimension",
+            "lost"
+          ],
+          [
+            "projection",
+            "applied"
+          ]
+        ],
+        "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_019",
+      "question": "What is the forecast run rate for active loans?",
+      "expected_to_fail": true,
+      "will_change_when": null,
+      "failures": [
+        "ok True != expected False",
+        "verdict 'ok' != expected 'refuse'"
+      ],
+      "observed": {
+        "route": "forecast_extrapolation",
+        "view": "forecast",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "projection",
+            "applied"
+          ]
+        ],
+        "answer": "The current completion run-rate is ~\u00a316.3m/month (\u00a3195.5m/year) based on 2 month(s) of funded growth.\n\nCalculated: Run-rate extrapolation.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_020",
+      "question": "What is the balance of the front book?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "row_population",
+            "applied"
+          ],
+          [
+            "row_population",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Seasoning Segment = Front Book \u00b7 South East \u00b7 278 loans \u00b7 as at 30 June 2026.",
+        "population": 278,
+        "filters": [
+          "Seasoning Segment = Front Book",
+          "South East"
+        ]
+      }
+    },
+    {
+      "id": "rt_022",
+      "question": "What is the completion run rate?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "forecast_extrapolation",
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "row_population",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for the population collateral_geography = South East, but that could not be applied to the calculation (the population collateral_geography = South East \u2014 this analytical route calculated across the whole book; it did not narrow to the requested population). I have not substituted a broader figure.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_023",
+      "question": "What is the balance for loans purchased at auction?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "population": 11035,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_024",
+      "question": "What is the balance of the acquired book?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_acquired \u00b7 3,909 loans \u00b7 as at 30 June 2026.",
+        "population": 3909,
+        "filters": [
+          "Source Portfolio in alp_acquired"
+        ]
+      }
+    },
+    {
+      "id": "rt_025",
+      "question": "What is the balance where the borrower acquired the property recently?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "population": 11035,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_026",
+      "question": "What is the balance excluding the acquired book?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": false,
+        "verdict": "refuse",
+        "facets": [
+          [
+            "lost_narrowing",
+            "lost"
+          ]
+        ],
+        "answer": "I understood that you asked for excluding the acquired book, but that could not be applied to the calculation (excluding the acquired book \u2014 this narrowing was not applied, so the figure covers the whole book rather than only excluding the acquired book). I have not substituted a broader figure.",
+        "population": 11035,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_027",
+      "question": "Show balance by region for directly held collateral.",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "population": 11035,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_028",
+      "question": "What is the balance by vintage, ignoring the forecast?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the bar for your query, covering 13 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Vintage \u00b7 13 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "population": 11035,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_029",
+      "question": "Show forecast balance by region.",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": "analytical_composition",
+        "view": "forecast",
+        "ok": false,
+        "verdict": null,
+        "facets": [],
+        "answer": "No governed pipeline source is available for this book, so a forecast funded balance cannot be produced. The current funded balance above is not a forecast. No governed pipeline source is configured for this book. I have not substituted the figures that did compute for the ones you asked for.",
+        "population": null,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_030",
+      "question": "What is the balance by seasoning segment excluding pipeline cases?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "funded",
+        "ok": true,
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the bar for your query, covering 2 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Seasoning Segment \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "population": 11035,
+        "filters": []
+      }
+    },
+    {
+      "id": "rt_031",
+      "question": "How much pipeline is overdue?",
+      "expected_to_fail": false,
+      "will_change_when": null,
+      "failures": [],
+      "observed": {
+        "route": null,
+        "view": "pipeline",
+        "ok": false,
+        "verdict": null,
+        "facets": [],
+        "answer": "No governed pipeline data is available for the pipeline view.",
+        "population": null,
+        "filters": []
+      }
+    }
+  ]
+}

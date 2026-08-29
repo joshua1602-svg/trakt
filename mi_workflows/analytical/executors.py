@@ -354,14 +354,20 @@ def period_movement(ctx: AnalyticalContext, *,
             frame = _routing._apply_lens_filter(frame, pops.resolve_lens(population))
         if predicates:
             frame, ev = _population.apply_population(frame, predicates, ctx.semantics)
-            unavailable.extend(ev.unavailable)
+            if not ev.is_usable:
+                # FAIL CLOSED: `apply_population` hands back no frame for a
+                # predicate it could not execute, so there is nothing to
+                # measure. The refusal below is the governed outcome; building
+                # a snapshot out of the un-narrowed book first is exactly the
+                # substitution this route exists not to make.
+                unavailable.extend(ev.unavailable
+                                   or [ev.blocked_reason or "predicate could not execute"])
+                break
         narrowed.append(SnapshotFrame(
             snapshot_id=snap.snapshot_id, reporting_date=snap.reporting_date,
             frame=frame, dataset_label=snap.dataset_label,
             dataset_reference=snap.dataset_reference, row_count=int(len(frame)),
             portfolio_ids=snap.portfolio_ids))
-    rows_before = int(len(snaps[-1].frame))
-    rows_after = int(len(narrowed[-1].frame))
     if unavailable:
         return [Finding(
             capability="period_movement", kind=KIND_MOVEMENT, label="Movement",
@@ -370,6 +376,8 @@ def period_movement(ctx: AnalyticalContext, *,
             note=("This book does not carry the field the requested population "
                   f"needs ({'; '.join(sorted(set(unavailable)))}), so no "
                   "narrowed movement was calculated."))]
+    rows_before = int(len(snaps[-1].frame))
+    rows_after = int(len(narrowed[-1].frame))
 
     # THE SPAN THE QUESTION ASKED FOR, ahead of the plan's default window.
     #
@@ -433,15 +441,13 @@ def period_movement(ctx: AnalyticalContext, *,
                        method=resolution.resolution_method,
                        available=tuple(str(s.reporting_date) for s in snaps))
     predicate_text = "; ".join(p.describe() for p in predicates)
+    narrowed_on: Tuple[Tuple[str, str], ...] = ()
     if not predicate_text and population.lens_term:
-        # The RESOLVED lens, with the registry's explicit portfolio ids — the
-        # same text ``populations.apply`` records, so a population reads
-        # identically whichever capability produced it.
-        lens = pops.resolve_lens(population)
-        ids = (lens.filters or {}).get("source_portfolio_id") or []
-        predicate_text = (f"portfolio lens = {lens.label}"
-                          + (f" ({', '.join(sorted(str(i) for i in ids))})"
-                             if ids else ""))
+        # The RESOLVED lens, through the one primitive that composes it. This
+        # branch used to compose the text itself under a comment asserting it
+        # matched ``populations.apply``; the assertion held until the two had to
+        # say more than text, and then it did not.
+        predicate_text, narrowed_on = pops.lens_narrowing(population)
     # A3 — the membership of this population at the START of the compared
     # period. Taken from the snapshot the governed resolution actually chose,
     # matched by reporting date, so it describes the same two dates the movement
@@ -455,7 +461,8 @@ def period_movement(ctx: AnalyticalContext, *,
                         rows=rows_after, rows_before=rows_before,
                         rows_prior=rows_prior,
                         time_relative=(population.kind == pops.KIND_SEASONING),
-                        is_total=population.is_total)
+                        is_total=population.is_total,
+                        narrowed_on=narrowed_on)
 
     out: List[Finding] = []
     wanted = set(measures) if measures else None

@@ -1,0 +1,157 @@
+# =========================================================================
+# CFO / management MI acceptance bank — FROZEN before execution.
+# =========================================================================
+#
+# What a CFO, Head of Treasury or portfolio manager at a specialist
+# equity-release lender would reasonably ask in recurring MI.
+#
+# `expect` is written from the QUESTION and the governed data, independently
+# of what the agent answers:
+#   DELIVER  the analysis is supported and the data is present
+#   REFUSE   the system genuinely lacks the information or capability, and the
+#            only safe outcome is to say so
+#
+# `must` / `must_not` are substrings the ANSWER has to carry (or avoid) for the
+# delivery to count as addressing the question asked. `rows` is a minimum row
+# count where a breakdown is the point of the question.
+#
+# Not padded with paraphrases: family coverage first, one phrasing each, with
+# the adversarial phrasings held separately in the wording check.
+version: 1
+questions:
+
+# ---- portfolio size and composition ------------------------------------- #
+- {q: "What is our total funded balance?", family: size, expect: DELIVER, must: ["Total Balance"]}
+- {q: "How many loans do we have?", family: size, expect: DELIVER, must: ["Count of loans"]}
+- {q: "What is the average loan balance?", family: size, expect: DELIVER}
+- {q: "What is our weighted average LTV?", family: size, expect: DELIVER}
+- {q: "What is the average borrower age?", family: size, expect: DELIVER}
+- {q: "What is the average interest rate on the book?", family: size, expect: DELIVER}
+- {q: "Show balance by region.", family: composition, expect: DELIVER, rows: 5}
+- {q: "Show loan count by region.", family: composition, expect: DELIVER, rows: 5}
+- {q: "Show balance by product type.", family: composition, expect: DELIVER, rows: 2}
+- {q: "Show balance by broker channel.", family: composition, expect: DELIVER, rows: 3}
+- {q: "Show balance by origination channel.", family: composition, expect: DELIVER, rows: 2}
+- {q: "Show balance by LTV bucket.", family: composition, expect: DELIVER, rows: 2}
+- {q: "Show balance by age bucket.", family: composition, expect: DELIVER, rows: 2}
+- {q: "Show loan count by product type.", family: composition, expect: DELIVER, rows: 2}
+- {q: "What is the balance in the direct book?", family: composition, expect: DELIVER}
+- {q: "What is the balance in the acquired book?", family: composition, expect: DELIVER}
+- {q: "Summarise the portfolio.", family: size, expect: DELIVER}
+- {q: "Give me a portfolio overview.", family: size, expect: DELIVER}
+
+# ---- historical trends --------------------------------------------------- #
+- {q: "Show funded balance over time.", family: trends, expect: DELIVER, rows: 3}
+- {q: "Show loan count over time.", family: trends, expect: DELIVER, rows: 3}
+- {q: "Show funded balance evolution.", family: trends, expect: DELIVER, rows: 3}
+- {q: "How has the book grown over the last 3 months?", family: trends, expect: DELIVER}
+- {q: "Show average LTV over time.", family: trends, expect: DELIVER}
+- {q: "Show average balance over time.", family: trends, expect: DELIVER}
+- {q: "What has changed since last month?", family: trends, expect: DELIVER, must: ["month"]}
+- {q: "How did the book move last month?", family: trends, expect: DELIVER}
+- {q: "How did balance change since last month?", family: trends, expect: DELIVER}
+- {q: "How did average LTV change since last month?", family: trends, expect: DELIVER}
+
+# ---- comparisons --------------------------------------------------------- #
+- {q: "Compare this month with last month.", family: comparisons, expect: DELIVER}
+- {q: "How does the current month compare with the previous month?", family: comparisons, expect: DELIVER}
+- {q: "Compare the direct and acquired books.", family: comparisons, expect: DELIVER}
+- {q: "What is the balance difference between this month and last month?", family: comparisons, expect: DELIVER}
+- {q: "Show the balance bridge for last month.", family: comparisons, expect: DELIVER}
+- {q: "What drove the movement in the book last month?", family: comparisons, expect: DELIVER}
+
+# ---- filters ------------------------------------------------------------- #
+- {q: "What is the balance for loans with LTV above 50%?", family: filters, expect: DELIVER}
+- {q: "How many loans have LTV above 50%?", family: filters, expect: DELIVER}
+- {q: "Balance by region for loans with LTV above 50%.", family: filters, expect: DELIVER, rows: 3}
+- {q: "For loans with LTV above 50%, balance by region", family: filters, expect: DELIVER, rows: 3}
+- {q: "What is the balance for loans with borrower age above 75?", family: filters, expect: DELIVER}
+- {q: "For loans with borrower age above 75, balance by region", family: filters, expect: DELIVER, rows: 3}
+- {q: "Balance by region for loans with borrower age above 75.", family: filters, expect: DELIVER, rows: 3}
+- {q: "How many loans are above £300,000?", family: filters, expect: DELIVER}
+- {q: "What is the balance for loans in London?", family: filters, expect: DELIVER}
+- {q: "How many loans have an interest rate above 7%?", family: filters, expect: DELIVER}
+- {q: "Balance by product type for loans with LTV above 40%.", family: filters, expect: DELIVER, rows: 2}
+- {q: "How many drawdown loans do we have?", family: filters, expect: DELIVER}
+
+# ---- ranking ------------------------------------------------------------- #
+- {q: "Which region has the largest balance?", family: ranking, expect: DELIVER}
+- {q: "Which region has the smallest balance?", family: ranking, expect: DELIVER}
+- {q: "Which broker channel has the largest balance?", family: ranking, expect: DELIVER}
+- {q: "Which region added the most balance since last month?", family: ranking, expect: DELIVER, must: ["increased the most"]}
+- {q: "Which region lost the most balance since last month?", family: ranking, expect: DELIVER}
+- {q: "Which two regions added the most balance since last month?", family: ranking, expect: DELIVER, must: ["top 2"]}
+- {q: "Which three regions added the most balance since last month?", family: ranking, expect: DELIVER, must: ["top 3"]}
+- {q: "Which region grew fastest in balance since last month?", family: ranking, expect: DELIVER}
+- {q: "Which broker channel added the most balance since last month?", family: ranking, expect: DELIVER}
+- {q: "Which region added the most balance since last month for loans with LTV above 50%?", family: ranking, expect: DELIVER}
+- {q: "For loans with LTV above 50%, which region added the most balance since last month?", family: ranking, expect: DELIVER}
+- {q: "Which product type grew the most since last month?", family: ranking, expect: DELIVER}
+
+# ---- concentration ------------------------------------------------------- #
+- {q: "What proportion of the book is in London?", family: concentration, expect: DELIVER}
+- {q: "Show product concentration.", family: concentration, expect: DELIVER}
+- {q: "Show broker concentration.", family: concentration, expect: DELIVER}
+- {q: "Which product type has the largest share of the book?", family: concentration, expect: DELIVER}
+- {q: "What share of the book is drawdown?", family: concentration, expect: DELIVER}
+- {q: "Show origination channel concentration.", family: concentration, expect: DELIVER}
+- {q: "What proportion of the book is in the acquired portfolio?", family: concentration, expect: DELIVER}
+
+# ---- pipeline (data-backed only) ----------------------------------------- #
+- {q: "What is the pipeline balance?", family: pipeline, expect: DELIVER}
+- {q: "How many cases are in the pipeline?", family: pipeline, expect: DELIVER}
+- {q: "Show the pipeline by stage.", family: pipeline, expect: DELIVER}
+- {q: "How has the pipeline evolved?", family: pipeline, expect: DELIVER}
+- {q: "Show pipeline evolution by stage.", family: pipeline, expect: DELIVER}
+- {q: "What is the value of outstanding offers?", family: pipeline, expect: DELIVER}
+
+# ---- shipped specialist capabilities ------------------------------------- #
+- {q: "Are any of our concentration limits at risk?", family: specialist, expect: DELIVER}
+- {q: "Which of our limits are currently most at risk?", family: specialist, expect: DELIVER}
+- {q: "At the current run rate, when do we reach £250m of loans?", family: specialist, expect: DELIVER}
+# Schedule 8 6.1 defines single-name as a single Borrower, and this tape carries no
+# borrower identifier. The governed answer is a refusal that says so -- not the
+# largest single LOAN, which is a different exposure measured against a different
+# limit. The estate already reports the borrower-concentration limit as unavailable
+# for exactly this reason.
+- {q: "What is our largest single-name exposure?", family: specialist, expect: REFUSE}
+# The answer to this question IS the table; the sentence describes only the largest
+# one. Verified against the tape: ten rows, this ranking, cumulative share climbing
+# to 2.6% of book exposure.
+- q: "Show the largest 10 loan exposures."
+  family: specialist
+  expect: DELIVER
+  ranked_artefact:
+    exact_rows: 10
+    key: category
+    cumulative_key: cumulative_share
+    cumulative_total: 2.6
+    order:
+    - L00141
+    - L00617
+    - L00576
+    - L00343
+    - L00173
+    - L00383
+    - L00234
+    - L00438
+    - L00425
+    - L00400
+
+
+# ---- ambiguity and insufficiency: the correct answer is a refusal -------- #
+- {q: "Which region grew the most?", family: insufficiency, expect: REFUSE, must: ["period"]}
+- {q: "What changed?", family: insufficiency, expect: REFUSE}
+- {q: "Which region added the most?", family: insufficiency, expect: REFUSE}
+- {q: "Show me the trend.", family: insufficiency, expect: REFUSE}
+- {q: "How much is in the Highgate Mortgages book?", family: insufficiency, expect: REFUSE}
+- {q: "Show balance by risk grade.", family: insufficiency, expect: REFUSE}
+- {q: "What is our arrears rate?", family: insufficiency, expect: REFUSE}
+- {q: "Show the cure rate by vintage.", family: insufficiency, expect: REFUSE}
+- {q: "What is the NNEG exposure?", family: insufficiency, expect: REFUSE}
+- {q: "Show roll rates by bucket.", family: insufficiency, expect: REFUSE}
+- {q: "How many loans have a Risk Score above 700?", family: insufficiency, expect: REFUSE}
+- {q: "Compare us with the market.", family: insufficiency, expect: REFUSE}
+- {q: "Show balance by servicer.", family: insufficiency, expect: REFUSE}
+- {q: "What will the book be worth in five years?", family: insufficiency, expect: REFUSE}
+- {q: "Which cohort is performing best?", family: insufficiency, expect: REFUSE}

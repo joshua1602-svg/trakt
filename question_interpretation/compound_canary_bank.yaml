@@ -1,0 +1,544 @@
+# The permanent adversarial compound-question canary bank.
+#
+# FROZEN before the C7 (period_change) conversion. Base commit: 174d14d (C6 close).
+# Nothing in this file is adjusted to make a conversion pass. A canary that
+# changes behaviour is reported as a movement, never edited into agreement.
+#
+# ---------------------------------------------------------------------------
+# WHY THIS EXISTS
+# ---------------------------------------------------------------------------
+# Every defect this programme has found in seven cycles is the same defect:
+#
+#     A question DECLARES several elements. The system honours some of them and
+#     silently replaces or drops the rest, then delivers a confident answer to a
+#     DIFFERENT question.
+#
+# C6 found five of them at once (a question named a governed stage and received
+# the whole funded book, £1.96bn, disclosed nowhere). B13 and B15 were the same
+# shape. A route-by-route regression cannot catch this class, because each route
+# is individually self-consistent — the failure lives in the COMPOSITION.
+#
+# A compound question is one that declares two or more elements owned by two or
+# more different semantic owners. This bank is adversarial: the elements are
+# chosen to collide, and to fall into the seams between owners.
+#
+# ---------------------------------------------------------------------------
+# WHAT IS PINNED, AND WHAT IS NOT
+# ---------------------------------------------------------------------------
+# PINNED — the invariants below. They are architecture-independent and permanent.
+#   They say what must be TRUE of any answer, not what any answer must SAY.
+#
+# NOT PINNED — the freeze observations in `freeze_observations`. Those record
+#   what the estate actually did on the day the bank was frozen, defects
+#   included. They are a BASELINE, not a target. Three known defects are
+#   recorded there deliberately: pinning them as expected output is the exact
+#   mistake C6 made with `test_the_stage_the_shipped_route_cannot_name`, which
+#   asserted a defect and therefore had to be retired when the product fixed it.
+#
+# A canary FAILS when an invariant is breached. A canary MOVES when an
+# observation changes. A move is neither pass nor fail — it is reported, and
+# attributed, and it is how capability movement is caught.
+version: 1
+frozen_at: "2026-08-25"
+frozen_at_commit: "174d14d"
+frozen_before: "C7 period_change conversion — no C7 production code changed at freeze time"
+
+# ---------------------------------------------------------------------------
+# The invariants. Permanent. Breaching one is a defect regardless of route.
+# ---------------------------------------------------------------------------
+invariants:
+  I1_honour_or_disclose: >
+    For every element a question declares, the delivered answer must either
+    honour it — visibly, in machine-readable evidence — or disclose that it was
+    not honoured. Silently dropping a declared element is a defect.
+  I2_no_silent_substitution: >
+    Where a declared element cannot be honoured, the answer must not quietly
+    honour a DIFFERENT element in its place: not a different dimension, not a
+    different direction, not a different measure, not a different period, and
+    not a level where a movement was asked for.
+  I3_composition_preserves_parts: >
+    Adding an element to a question must not un-honour an element that was
+    honoured without it. If Q honours {A} and Q+B declares {A,B}, then Q+B must
+    still honour A, or disclose why it no longer can. This is compositionality
+    stated as a testable property, and it is the architectural thesis under test.
+  I4_phrasing_is_not_meaning: >
+    Two questions declaring the SAME elements must reach the same honouring
+    outcome. A synonym, a plural, or a different verb for the same operation may
+    change the wording of an answer; it must not change which question was
+    answered, nor which route answered it in a way the reader can perceive.
+  I5_refusal_reason_is_true: >
+    A stated refusal reason must be a true statement about the book. Refusing a
+    dimension the book carries, on the grounds that the book does not carry it,
+    is a wrong refusal — the mirror of C6's wrong delivery, and equally invisible.
+  I7_period_order_is_chronological: >
+    An answer that reports a change must report it from the earlier reporting
+    date to the later one. Reversing the pair inverts the sign of every movement
+    in it, and the prose still reads as a confident answer.
+  I6_no_vacuous_pass: >
+    A canary answered by a refusal on every case proves nothing. Each family
+    must contain at least one case that DELIVERS, or the family is reported
+    UNEXERCISED and its evidence is not counted.
+
+# ---------------------------------------------------------------------------
+# THE THREE GRADES, and why there are three rather than two.
+#
+#   HONOURED    the element is visible in machine-readable evidence
+#   DISCLOSED   not honoured, and the answer says so
+#   UNEVIDENCED the answering route publishes NO channel for this element, so
+#               whether it was honoured cannot be verified either way
+#   DROPPED     a channel exists, or a route-independent signal contradicts the
+#               element, and the answer neither honours nor discloses it
+#
+# UNEVIDENCED is not a pass. It is the honest reading of an estate whose only
+# element-level evidence channel (`metadata.rankedMovement`) is published by ONE
+# route: off that route, a declared element cannot be shown to have been
+# honoured. Counting UNEVIDENCED as DROPPED would make this instrument
+# route-biased — it would score every non-period_change answer as a defect — and
+# "route identity determines meaning" is a condition this programme stops on,
+# not one its own instruments may assume. Only DROPPED breaches I1.
+#
+# The declarable elements, and the machine-readable channel each is read from.
+# `evidence` is what the instrument inspects; a channel that does not exist is
+# itself a finding, because an element with no evidence channel cannot be
+# honoured verifiably.
+elements:
+  RANK:      {evidence: "metadata.rankedMovement.applied"}
+  DIMENSION: {evidence: "metadata.rankedMovement.canonicalField"}
+  DIRECTION: {evidence: "metadata.rankedMovement.direction"}
+  BASIS:     {evidence: "metadata.rankedMovement.basis"}
+  TOP_N:     {evidence: "metadata.rankedMovement.topN"}
+  SPAN:      {evidence: "metadata.rankedMovement.openingPeriod + answer period prose"}
+  SCOPE:     {evidence: "metadata.lensApplied + governance.scope"}
+  MOVEMENT:  {evidence: "route answers a CHANGE between two dates, not a level at one"}
+  MEASURE:   {evidence: "metadata.rankedMovement.canonicalField / answer basis prose"}
+
+families:
+
+  # -------------------------------------------------------------------------
+  - id: F1
+    name: narrative_versus_dimension
+    hazard: >
+      `period_change_route._NARRATIVE_RANK_SUBJECTS` (36 nouns) decides that a
+      question is "the governed narrative" rather than a ranking, and it is
+      reached only through `_RANK_SUBJECT_LEAD_RE` (which|what|rank|order). A
+      question that means the same thing but opens differently never reaches the
+      guard. Two phrasings of one question, two different meanings — I4.
+    cases:
+      - id: F1.a
+        question: "Which drivers grew the most since last month?"
+        declares: [RANK, DIRECTION, SPAN]
+      - id: F1.b
+        question: "Show me the drivers that grew the most since last month."
+        declares: [RANK, DIRECTION, SPAN]
+      - id: F1.c
+        question: "Which movements grew the most since last month?"
+        declares: [RANK, DIRECTION, SPAN]
+      - id: F1.d
+        question: "Show me the movements that grew the most since last month."
+        declares: [RANK, DIRECTION, SPAN]
+    paraphrase_sets:
+      - [F1.a, F1.b]
+      - [F1.c, F1.d]
+
+  # -------------------------------------------------------------------------
+  - id: F2
+    name: declared_dimension_the_book_carries
+    hazard: >
+      `requested_dimension_terms` returns a PRIMARY key plus `alt_fields`, and
+      its own docstring says the alts exist "so an availability difference is
+      never read as a substitution". The route passes only the primary into the
+      analysis. Where the primary is absent and an alt is present, the reader is
+      told the dimension is not governed for this book — which is false. I5.
+    cases:
+      - id: F2.a
+        question: "Which geographic region obligor grew the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT]
+        note: "the canonical field, named exactly — the control"
+      - id: F2.b
+        question: "Which region grew the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT]
+        note: "the natural term for the same field"
+      - id: F2.c
+        question: "Which geographic region obligors grew the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT]
+        note: "the same field, pluralised"
+      - id: F2.d
+        question: "Which underwriter grew the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT]
+        note: "a dimension no registry carries — must refuse, and refuse truthfully"
+    paraphrase_sets:
+      - [F2.a, F2.b, F2.c]
+
+  # -------------------------------------------------------------------------
+  - id: F3
+    name: movement_versus_level
+    hazard: >
+      A question declaring a CHANGE between periods can be routed to a
+      single-period grouped chart, which answers a level. The reader asked what
+      moved and is shown what is. Nothing discloses the substitution. I2.
+    cases:
+      - id: F3.a
+        question: "Which geographic region obligor grew the most balance?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT, MEASURE]
+      - id: F3.b
+        question: "Which geographic region obligor added the most balance?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT, MEASURE]
+      - id: F3.c
+        question: "Which geographic region obligor increased its balance the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT, MEASURE]
+    paraphrase_sets:
+      - [F3.a, F3.b, F3.c]
+
+  # -------------------------------------------------------------------------
+  - id: F4
+    name: top_n_and_number_collision
+    hazard: >
+      `rank_request._TOP_N_RE` reads "which <n>" as a Top N, and
+      `period_request._N_MONTHS_RE` reads "<n> months" as a span. A question
+      carrying both numbers must bind each to the right element, and a declared
+      Top N must be honoured or disclosed rather than dropped.
+    cases:
+      - id: F4.a
+        question: "Which three geographic region obligors grew the most?"
+        declares: [RANK, DIMENSION, DIRECTION, TOP_N, MOVEMENT]
+      - id: F4.b
+        question: "Which 3 geographic region obligors grew the most over the last 6 months?"
+        declares: [RANK, DIMENSION, DIRECTION, TOP_N, SPAN, MOVEMENT]
+      - id: F4.c
+        question: "Show me the top 2 geographic region obligors by growth over the last 3 months."
+        declares: [RANK, DIMENSION, DIRECTION, TOP_N, SPAN, MOVEMENT]
+
+  # -------------------------------------------------------------------------
+  - id: F5
+    name: basis_collision
+    hazard: >
+      `rank_request._detect_basis` picks ONE basis from four competing regexes
+      over the raw question. A question naming both a count noun and a balance
+      noun declares one measure and can be given the other. I2.
+    cases:
+      - id: F5.a
+        question: "Which geographic region obligor added the most loans?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, MOVEMENT]
+      - id: F5.b
+        question: "Which geographic region obligor grew fastest?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, MOVEMENT]
+      - id: F5.c
+        question: "Which geographic region obligor increased its share the most?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, MOVEMENT]
+      - id: F5.d
+        question: "Which geographic region obligor added the most loan balance?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, MOVEMENT]
+        note: "count noun and balance noun in one phrase — deliberately ambiguous"
+
+  # -------------------------------------------------------------------------
+  - id: F6
+    name: direction_and_absence
+    hazard: >
+      Where nothing moved in the declared direction, "no region declined" IS the
+      answer. Answering with the increases instead is the substitution
+      `_unrankable_message` exists to prevent. I2.
+    cases:
+      - id: F6.a
+        question: "Which geographic region obligor declined the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT]
+      - id: F6.b
+        question: "Which geographic region obligor shrank the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT]
+      - id: F6.c
+        question: "Which geographic region obligor changed the most?"
+        declares: [RANK, DIMENSION, MOVEMENT]
+    paraphrase_sets:
+      - [F6.a, F6.b]
+
+  # -------------------------------------------------------------------------
+  - id: F7
+    name: scope_and_dimension_collision
+    hazard: >
+      `_explicit_dimensions` masks governed SCOPE phrases because "for the
+      acquired portfolio" names a population and was being grouped by
+      `acquired_portfolio_id`. The mask is a route-independent semantic
+      decision; a question that declares both a scope and a dimension must get
+      both, and the scope must not consume the dimension. I3.
+    cases:
+      - id: F7.a
+        question: "Which geographic region obligor grew the most in the Direct book?"
+        declares: [RANK, DIMENSION, DIRECTION, SCOPE, MOVEMENT]
+      - id: F7.b
+        question: "Which geographic region obligor grew the most for the acquired portfolio?"
+        declares: [RANK, DIMENSION, DIRECTION, SCOPE, MOVEMENT]
+      - id: F7.c
+        question: "Which portfolio grew the most in the acquired book?"
+        declares: [RANK, DIMENSION, DIRECTION, SCOPE, MOVEMENT]
+        note: "the dimension and the scope name the same noun"
+
+  # -------------------------------------------------------------------------
+  - id: F8
+    name: measure_overridden_by_dimension
+    hazard: >
+      When ranking is requested the route sets `mode = MODE_REQUESTED_METRIC`
+      and `requested_fields = (rank_intent.field,)` — the ranked DIMENSION
+      becomes the requested METRIC. A question declaring both a measure and a
+      dimension has one of them overwritten by the other. I1.
+    cases:
+      - id: F8.a
+        question: "How did LTV change since last month?"
+        declares: [MEASURE, SPAN, MOVEMENT]
+      - id: F8.b
+        question: "Which geographic region obligor grew the most by LTV?"
+        declares: [RANK, DIMENSION, DIRECTION, MEASURE, MOVEMENT]
+      - id: F8.c
+        question: "Which LTV band grew the most?"
+        declares: [RANK, DIMENSION, DIRECTION, MOVEMENT]
+
+  # -------------------------------------------------------------------------
+  - id: F9
+    name: saturated_compound
+    hazard: >
+      Every element at once. If the architecture is compositional, saturation is
+      unremarkable; if meaning is assembled by route-shaped special cases,
+      saturation is where they run out. I3.
+    cases:
+      - id: F9.a
+        question: "Which three geographic region obligors added the most balance in the Direct book over the last 3 months?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, TOP_N, SCOPE, SPAN, MOVEMENT]
+      - id: F9.b
+        question: "Which two geographic region obligors lost the most share in the acquired book over the last 6 months?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, TOP_N, SCOPE, SPAN, MOVEMENT]
+      - id: F9.c
+        question: "Which geographic region obligor grew fastest in the Direct book since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, SCOPE, SPAN, MOVEMENT]
+
+  # -------------------------------------------------------------------------
+  - id: F10
+    name: period_order
+    hazard: >
+      "since last month" declares a direction in time: the earlier date opens
+      and the later one closes. An answer that reports the pair in the other
+      order inverts the sign of the movement and reads as confident. Found by
+      this bank during its own construction, on a route C7 does not own.
+    period_order_checked: true
+    cases:
+      - id: F10.a
+        question: "How did the book change since last month?"
+        declares: [SPAN, MOVEMENT]
+      - id: F10.b
+        question: "How did LTV change since last month?"
+        declares: [MEASURE, SPAN, MOVEMENT]
+      - id: F10.c
+        question: "How did the book change between April and May?"
+        declares: [SPAN, MOVEMENT]
+
+  # -------------------------------------------------------------------------
+  - id: F11
+    name: ranked_movement_with_a_stated_period
+    hazard: >
+      ADDED, not edited. The governed ruling is that a movement question naming
+      no period is CLARIFIED rather than answered over an invented window. That
+      ruling is right, and it made most of this bank's ranked cases refuse —
+      F3, F5, F6 and F7 became unexercised, so the bank's zero breaches became
+      a zero measured over refusals, which is the vacuity I6 exists to catch.
+      These cases carry a period, so ranking is exercised again. Every existing
+      case is untouched: the bank may grow, it may not shrink.
+    cases:
+      - id: F11.a
+        question: "Which geographic region obligor grew the most since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, SPAN, MOVEMENT]
+      - id: F11.b
+        question: "Which geographic region obligor declined the most since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, SPAN, MOVEMENT]
+      - id: F11.c
+        question: "Which two geographic region obligors added the most balance since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, TOP_N, SPAN, MEASURE, MOVEMENT]
+      - id: F11.d
+        question: "Which geographic region obligor grew fastest in balance since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, BASIS, SPAN, MEASURE, MOVEMENT]
+      - id: F11.e
+        question: "Which region grew the most since last month?"
+        declares: [RANK, DIMENSION, DIRECTION, SPAN, MOVEMENT]
+        note: "the natural term — D1's alternate must bind"
+    paraphrase_sets:
+      - [F11.a, F11.e]
+
+# ---------------------------------------------------------------------------
+# COMPOSITION LATTICES — the direct test of I3.
+#
+# Each step adds exactly ONE element to the case before it. The invariant is not
+# that the answers match; it is that an element honoured at step N is still
+# honoured, or explicitly disclosed as unhonourable, at every later step.
+# ---------------------------------------------------------------------------
+lattices:
+  - id: L1
+    base: F2.a
+    steps:
+      - {case: F6.a,  adds: DIRECTION_DECREASE}
+      - {case: F7.a,  adds: SCOPE}
+      - {case: F9.c,  adds: [BASIS, SPAN]}
+  - id: L2
+    base: F2.a
+    steps:
+      - {case: F4.a,  adds: TOP_N}
+      - {case: F4.b,  adds: SPAN}
+  - id: L3
+    base: F3.a
+    steps:
+      - {case: F5.d,  adds: BASIS_AMBIGUITY}
+      - {case: F9.a,  adds: [TOP_N, SCOPE, SPAN]}
+
+# ---------------------------------------------------------------------------
+# FREEZE OBSERVATIONS — a BASELINE, not a target.
+#
+# What the estate did on 2026-08-25 at 174d14d, against the two-snapshot
+# governed fixture. Recorded so that any later movement is attributable. Three
+# of these are DEFECTS and are recorded as defects; they must not be read as
+# expected behaviour, and a conversion that fixes one is reported as an
+# authorised movement, not as a canary failure.
+# ---------------------------------------------------------------------------
+freeze_observations:
+  method: >
+    Two governed funded snapshots (mi_2026_04, mi_2026_05) carrying
+    geographic_region_obligor and broker_channel, executed through the live
+    /mi/query path. Written by migration_phase0/compound_canary.py.
+  known_defects_at_freeze:
+    - id: D1
+      canaries: [F2.b, F2.c]
+      breaches: I5_refusal_reason_is_true
+      statement: >
+        "Which region grew the most?" is refused with "region ... is not a
+        governed period-change dimension for this book". The book carries
+        geographic_region_obligor, which IS a governed cross-asset period-change
+        dimension, and requested_dimension_terms already returned it as an alt.
+        The route passes only the primary (collateral_geography, absent) into the
+        analysis, so the alt is never computed. The refusal reason is false.
+    - id: D2
+      canaries: [F3.b, F4.a, F4.b]
+      breaches: I2_no_silent_substitution
+      statement: >
+        "Which geographic region obligor added the most balance?" leaves the
+        period-change route entirely and is answered by a single-period grouped
+        bar chart — "Total Balance grouped by Obligor Region, as at 31 May 2026".
+        A declared movement is answered with a level. Nothing discloses it.
+    - id: D3
+      canaries: [F3.a, F3.b]
+      breaches: I4_phrasing_is_not_meaning
+      statement: >
+        "grew the most balance" and "added the most balance" declare the same
+        thing. The first is answered by the governed period-change route with a
+        ranked movement; the second by a different route with a level. The verb,
+        not the meaning, selects the route.
+    - id: D4
+      canaries: [F10.a, F10.b]
+      breaches: I7_period_order_is_chronological
+      statement: >
+        "How did LTV change since last month?" is answered "WA current LTV moved
+        from 36.5% in 2026-05 to 37.4% in 2026-04 — a change of 0.9% (+2.33%,
+        up)". The pair is reversed: May opens and April closes. LTV fell from
+        37.4% in April to 36.5% in May, and the answer reports it as a rise. The
+        route is temporal_compare (C5), not period_change — this is a finding
+        about the converted estate, not about the C7 candidate.
+
+# ---------------------------------------------------------------------------
+# AUTHORISED MOVEMENTS — the permanent before/after ledger.
+#
+# The freeze observations above are NEVER rewritten. D1-D4 stand as the record
+# of what was true on 2026-08-25, defects included, and a defect that is later
+# fixed does not get edited out of history — that erasure is the thing this
+# ledger exists to prevent.
+#
+# What DOES advance is `migration_phase0/COMPOUND_CANARY_FREEZE.json`, the
+# movement detector's reference point. If it never advanced it would fail
+# forever on an already-attributed movement and could never detect the NEXT
+# one, which is the only job it has. So the rule is: the JSON advances, and it
+# advances only in a commit that adds an entry here saying what moved and why.
+#
+# Every entry states the before and after counts, so the arithmetic is checkable
+# from this file alone without reading git.
+# ---------------------------------------------------------------------------
+authorised_movements:
+  - id: M1
+    date: "2026-08-26"
+    defect: D4
+    kind: authorised defect correction
+    breaches_before: 9
+    breaches_after: 7
+    cleared:
+      - "I7_period_order_is_chronological · F10.a · SPAN"
+      - "I7_period_order_is_chronological · F10.b · SPAN"
+    new_breaches: 0
+    grade_movements: 0
+    statement: >
+      `llm_query_parser._compare_recognizer` built the comparison pair as
+      ["latest", <relative>] when a question named a relative period but no
+      explicit month. `latest` IS the closing period, so the comparison opened
+      at the close: the sign of every movement inverted, and `pct = abs/va`
+      then divided by the closing value, so the magnitude was wrong too. A book
+      that grew £18.87m -> £21.10m was reported as a 10.57% fall; it is now
+      reported as a 11.81% rise. Pre-registered in
+      docs/mi_d4_comparison_direction_preregistration.md before the change,
+      and the movement matched that registration exactly: two I7 breaches
+      cleared, ZERO grade movements, zero new breaches.
+    scope: >
+      Only the branch that INVENTS an order. Where the reader names both
+      periods the stated order is honoured unchanged — 8 explicit-pair
+      questions are byte-identical before and after, and they are the control.
+  - id: M2
+    date: "2026-08-26"
+    defect: D3
+    kind: authorised capability movement
+    breaches_before: 7
+    breaches_after: 7
+    cleared: []
+    new_breaches: 0
+    grade_movements: 0
+    statement: >
+      One generic owner for LEVEL versus MOVEMENT
+      (question_interpretation.lexical.temporal_aspect) replaced five
+      independent inferrers that disagreed on 30 of 882 corpus questions with
+      no reader a superset of any other. NO GRADE MOVED and no breach changed,
+      but THREE canary questions changed route — F8.a, F10.a and F10.b moved
+      from temporal_compare to period_change_analysis, because the retired
+      reader missed the bare verb in "how did X change" and the owner does not.
+      Economics are identical on the shared metric (+£3.9m, £12.2m -> £16.1m;
+      LTV 37.4% -> 36.5% falling) and both routes report the pair
+      chronologically, so this is a movement in which answer is given, not in
+      what is true.
+    scope: >
+      Recorded here because a route change that leaves every grade identical is
+      exactly the movement a grade-level detector cannot see. D3 — "the verb,
+      not the meaning, selects the route" — is the defect this narrows: the
+      verb no longer selects the route through five different vocabularies,
+      though route PRECEDENCE still decides which of two eligible routes
+      answers, and that is not closed.
+  - id: M3
+    date: "2026-08-26"
+    defect: D1
+    kind: authorised defect correction and governed-refusal activation
+    breaches_before: 7
+    breaches_after: 0
+    cleared:
+      - "I1_honour_or_disclose · F3.b · MOVEMENT"
+      - "I1_honour_or_disclose · F5.d · MOVEMENT"
+      - "I3_composition_preserves_parts · F3.a -> F5.d · MOVEMENT"
+      - "I4_phrasing_is_not_meaning · F1.a / F1.b"
+      - "I4_phrasing_is_not_meaning · F1.c / F1.d"
+      - "I4_phrasing_is_not_meaning · F2.a / F2.b / F2.c"
+      - "I4_phrasing_is_not_meaning · F3.a / F3.b / F3.c"
+    new_breaches: 0
+    grade_movements: 70
+    statement: >
+      C7 reduction. The route's ranking vocabulary — _rank_subject and three
+      word lists — was deleted and the route now reads the contract's
+      ordering_direction, ordering_basis, ordering_limit and the dimension
+      claim's candidate_concepts. D1 is closed at the route: "which region grew
+      the most" binds geographic_region_obligor instead of falsely reporting
+      that the book carries no such dimension. A governed no-implicit-period
+      guard was added: a ranked movement naming no window is now CLARIFIED, not
+      answered over an invented latest-versus-previous pair.
+    scope: >
+      THE ZERO IS NOT A CLEAN BILL. Clearing all seven breaches came with 70
+      grade movements, and most of this bank's ranked cases name no period, so
+      under the new ruling they refuse: F3, F5, F6 and F7 joined F4 as
+      UNEXERCISED. Zero breaches measured over refusals is the vacuity I6
+      exists to catch, and it is reported as such rather than as success.
+      Family F11 was ADDED — never edited — with five period-carrying ranked
+      movement cases, all of which honour every element they declare, so
+      ranking is exercised again on evidence that did not exist before.

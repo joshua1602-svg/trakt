@@ -1,0 +1,379 @@
+{
+  "lines": [
+    {
+      "name": "<module>",
+      "kind": "STRUCTURE",
+      "lines": 22,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 5,
+      "delegates": []
+    },
+    {
+      "name": "<imports>",
+      "kind": "STRUCTURE",
+      "lines": 20,
+      "delegates": []
+    },
+    {
+      "name": "logger",
+      "kind": "STRUCTURE",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "ROUTE_NAME",
+      "kind": "ADAPTS",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "FAILURE_ERROR_CODES",
+      "kind": "ADAPTS",
+      "lines": 10,
+      "delegates": []
+    },
+    {
+      "name": "build_snapshots",
+      "kind": "ADAPTS",
+      "lines": 38,
+      "delegates": []
+    },
+    {
+      "name": "_dataset_label",
+      "kind": "ADAPTS",
+      "lines": 5,
+      "delegates": []
+    },
+    {
+      "name": "_portfolio_ids",
+      "kind": "ADAPTS",
+      "lines": 10,
+      "delegates": []
+    },
+    {
+      "name": "_registry_for",
+      "kind": "ADAPTS",
+      "lines": 16,
+      "delegates": []
+    },
+    {
+      "name": "scope_ref_from_lens",
+      "kind": "ADAPTS",
+      "lines": 40,
+      "delegates": []
+    },
+    {
+      "name": "KNOWN_ASSET_CLASSES",
+      "kind": "ADAPTS",
+      "lines": 4,
+      "delegates": []
+    },
+    {
+      "name": "resolve_asset_classes",
+      "kind": "ADAPTS",
+      "lines": 16,
+      "delegates": []
+    },
+    {
+      "name": "analyse_period_change",
+      "kind": "DELEGATES",
+      "lines": 36,
+      "delegates": [
+        "PeriodChangeRequest"
+      ]
+    },
+    {
+      "name": "recognise_request",
+      "kind": "ADAPTS",
+      "lines": 9,
+      "delegates": []
+    },
+    {
+      "name": "route_period_change",
+      "kind": "DELEGATES",
+      "lines": 143,
+      "delegates": [
+        "PeriodChangeRequest",
+        "_failure_envelope",
+        "_period_request.requested_span",
+        "_rank_refusal_envelope",
+        "_render",
+        "chat_routing._envelope",
+        "chat_routing._resolve_lens",
+        "recognise"
+      ]
+    },
+    {
+      "name": "RankingOutcome",
+      "kind": "STRUCTURE",
+      "lines": 28,
+      "delegates": []
+    },
+    {
+      "name": "_distribution_for",
+      "kind": "ADAPTS",
+      "lines": 8,
+      "delegates": []
+    },
+    {
+      "name": "resolve_rank_intent",
+      "kind": "ADAPTS",
+      "lines": 34,
+      "delegates": []
+    },
+    {
+      "name": "_rank_request_from_contract",
+      "kind": "ADAPTS",
+      "lines": 23,
+      "delegates": []
+    },
+    {
+      "name": "apply_ranking",
+      "kind": "ADAPTS",
+      "lines": 42,
+      "delegates": []
+    },
+    {
+      "name": "_unrankable_message",
+      "kind": "ADAPTS",
+      "lines": 20,
+      "delegates": []
+    },
+    {
+      "name": "_rank_refusal_envelope",
+      "kind": "DELEGATES",
+      "lines": 23,
+      "delegates": [
+        "chat_routing._envelope"
+      ]
+    },
+    {
+      "name": "_PROSE_RUNNERS_UP",
+      "kind": "VOCABULARY",
+      "lines": 1,
+      "delegates": []
+    },
+    {
+      "name": "_RANK_COLUMNS",
+      "kind": "ADAPTS",
+      "lines": 9,
+      "delegates": []
+    },
+    {
+      "name": "_BASIS_UNITS",
+      "kind": "VOCABULARY",
+      "lines": 7,
+      "delegates": []
+    },
+    {
+      "name": "_share_pp",
+      "kind": "RENDERS",
+      "lines": 3,
+      "delegates": []
+    },
+    {
+      "name": "_rank_rows",
+      "kind": "RENDERS",
+      "lines": 20,
+      "delegates": []
+    },
+    {
+      "name": "build_rank_answer",
+      "kind": "ADAPTS",
+      "lines": 62,
+      "delegates": []
+    },
+    {
+      "name": "_failure_envelope",
+      "kind": "DELEGATES",
+      "lines": 19,
+      "delegates": [
+        "chat_routing._envelope"
+      ]
+    },
+    {
+      "name": "_UNIT_WORDS",
+      "kind": "STRUCTURE",
+      "lines": 4,
+      "delegates": []
+    },
+    {
+      "name": "_format_value",
+      "kind": "RENDERS",
+      "lines": 12,
+      "delegates": []
+    },
+    {
+      "name": "_format_movement",
+      "kind": "RENDERS",
+      "lines": 7,
+      "delegates": []
+    },
+    {
+      "name": "describe_basis",
+      "kind": "RENDERS",
+      "lines": 21,
+      "delegates": []
+    },
+    {
+      "name": "_metric_rows",
+      "kind": "RENDERS",
+      "lines": 24,
+      "delegates": []
+    },
+    {
+      "name": "_METRIC_COLUMNS",
+      "kind": "ADAPTS",
+      "lines": 16,
+      "delegates": []
+    },
+    {
+      "name": "_DISTRIBUTION_COLUMNS",
+      "kind": "ADAPTS",
+      "lines": 9,
+      "delegates": []
+    },
+    {
+      "name": "_BRIDGE_COLUMNS",
+      "kind": "ADAPTS",
+      "lines": 5,
+      "delegates": []
+    },
+    {
+      "name": "_distribution_rows",
+      "kind": "RENDERS",
+      "lines": 19,
+      "delegates": []
+    },
+    {
+      "name": "_bridge_rows",
+      "kind": "RENDERS",
+      "lines": 19,
+      "delegates": []
+    },
+    {
+      "name": "build_answer",
+      "kind": "RENDERS",
+      "lines": 65,
+      "delegates": []
+    },
+    {
+      "name": "_render",
+      "kind": "DELEGATES",
+      "lines": 112,
+      "delegates": [
+        "chat_routing._envelope"
+      ]
+    }
+  ],
+  "composition_decisions": [
+    {
+      "id": "K1",
+      "name": "a ranked dimension IS the requested metric",
+      "anchor": "mode = MODE_REQUESTED_METRIC",
+      "decides": "overwrites the analysis mode and requested_fields with the ranked dimension",
+      "generic": false,
+      "note": "drops rank_intent.alt_fields, which the resolver returned precisely so an availability difference is not read as a substitution. This is the mechanism behind canary defect D1."
+    },
+    {
+      "id": "K2",
+      "name": "honour the stated span, or clarify",
+      "anchor": "if len(snapshots) > span.periods:",
+      "decides": "rewrites period_request.requested_start to a snapshot's year-month, or returns a clarification envelope",
+      "generic": false,
+      "note": "a genuine product rule, owned by no shared layer. It reaches into the governed period_request and rewrites it."
+    },
+    {
+      "id": "K3",
+      "name": "ranking is resolved BEFORE the analysis",
+      "anchor": "rank_intent = resolve_rank_intent(interpretation)",
+      "decides": "ordering: a rank refusal returns before the span guard runs",
+      "generic": false,
+      "note": "so a question with BOTH an unrankable dimension and an unhonourable span is told only about the dimension."
+    },
+    {
+      "id": "K4",
+      "name": "suppress requested concepts when ranking",
+      "anchor": "requested_concepts=() if rank_intent.requested",
+      "decides": "which governed concepts the analysis covers",
+      "generic": false,
+      "note": ""
+    },
+    {
+      "id": "K5",
+      "name": "when to reconcile the book",
+      "anchor": "include_bridge=(intent.include_bridge or mode !=",
+      "decides": "whether the bridge is computed",
+      "generic": false,
+      "note": ""
+    },
+    {
+      "id": "K6",
+      "name": "ranking implies composition focus",
+      "anchor": "composition_focus=intent.composition_focus or rank_intent.requested",
+      "decides": "whether the analysis is composition-focused",
+      "generic": false,
+      "note": ""
+    },
+    {
+      "id": "K7",
+      "name": "reinterpret a controlled failure as a dimension refusal",
+      "anchor": "refusal_reason=\"dimension_not_governed\"",
+      "decides": "replaces the workflow's FAIL_NO_ELIGIBLE_FIELDS with a statement about the dimension",
+      "generic": false,
+      "note": "CLOSED at the reduction \u2014 the message now names every candidate field considered, so the refusal is checkable instead of a bare false assertion. Still route-local."
+    }
+  ]
+}

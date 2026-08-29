@@ -1,0 +1,450 @@
+{
+  "comparisons": [
+    {
+      "case": "B1",
+      "scope": "None",
+      "question": "funded balance bridge",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": []
+    },
+    {
+      "case": "B1",
+      "scope": "direct",
+      "question": "funded balance bridge",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "B1",
+      "scope": "acquired",
+      "question": "funded balance bridge",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "B2",
+      "scope": "None",
+      "question": "Show me the funded balance bridge",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": []
+    },
+    {
+      "case": "B2",
+      "scope": "direct",
+      "question": "Show me the funded balance bridge",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "B2",
+      "scope": "acquired",
+      "question": "Show me the funded balance bridge",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "B3",
+      "scope": "None",
+      "question": "What drove the change in funded balance?",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": []
+    },
+    {
+      "case": "B3",
+      "scope": "direct",
+      "question": "What drove the change in funded balance?",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "B3",
+      "scope": "acquired",
+      "question": "What drove the change in funded balance?",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "B4",
+      "scope": "None",
+      "question": "waterfall of funded balance change",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": []
+    },
+    {
+      "case": "B4",
+      "scope": "direct",
+      "question": "waterfall of funded balance change",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "B4",
+      "scope": "acquired",
+      "question": "waterfall of funded balance change",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "D1",
+      "scope": "None",
+      "question": "Funded balance bridge by region",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": []
+    },
+    {
+      "case": "D1",
+      "scope": "direct",
+      "question": "Funded balance bridge by region",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "D1",
+      "scope": "acquired",
+      "question": "Funded balance bridge by region",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "D2",
+      "scope": "None",
+      "question": "Bridge the funded balance by product",
+      "dimensionCol": null,
+      "netChange": null,
+      "differences": []
+    },
+    {
+      "case": "D2",
+      "scope": "direct",
+      "question": "Bridge the funded balance by product",
+      "dimensionCol": null,
+      "netChange": null,
+      "differences": []
+    },
+    {
+      "case": "D2",
+      "scope": "acquired",
+      "question": "Bridge the funded balance by product",
+      "dimensionCol": null,
+      "netChange": null,
+      "differences": []
+    },
+    {
+      "case": "D3",
+      "scope": "None",
+      "question": "balance bridge by LTV band",
+      "dimensionCol": "ltv_bucket",
+      "netChange": 32575267.01,
+      "differences": []
+    },
+    {
+      "case": "D3",
+      "scope": "direct",
+      "question": "balance bridge by LTV band",
+      "dimensionCol": "ltv_bucket",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "D3",
+      "scope": "acquired",
+      "question": "balance bridge by LTV band",
+      "dimensionCol": "ltv_bucket",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "D4",
+      "scope": "None",
+      "question": "Bridge the funded balance by region since March 2026",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": []
+    },
+    {
+      "case": "D4",
+      "scope": "direct",
+      "question": "Bridge the funded balance by region since March 2026",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "D4",
+      "scope": "acquired",
+      "question": "Bridge the funded balance by region since March 2026",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "S1",
+      "scope": "None",
+      "question": "Funded balance bridge for the acquired book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "S1",
+      "scope": "direct",
+      "question": "Funded balance bridge for the acquired book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "S1",
+      "scope": "acquired",
+      "question": "Funded balance bridge for the acquired book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 11077756.84,
+      "differences": []
+    },
+    {
+      "case": "S2",
+      "scope": "None",
+      "question": "Funded balance bridge for the direct book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "S2",
+      "scope": "direct",
+      "question": "Funded balance bridge for the direct book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "S2",
+      "scope": "acquired",
+      "question": "Funded balance bridge for the direct book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": []
+    },
+    {
+      "case": "S3",
+      "scope": "None",
+      "question": "Funded balance bridge for the ALP Origination Book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": [
+        "POPULATION rows 11035 vs 7126",
+        "netChange: 32575267.01 vs 21497510.17",
+        "lens: 'Total' vs 'ALP Origination Book'",
+        "start.total: 1932310991.2 vs 1364011072.81",
+        "end.total: 1964886258.21 vs 1385508582.98",
+        "contributions[0].delta: 11061534.05 vs 8194442.53",
+        "contributions[0].end: 516214136.58 vs 369127190.4",
+        "contributions[0].start: 505152602.53 vs 360932747.87",
+        "contributions[1].category: 'South West' vs 'London'",
+        "contributions[1].delta: 4742647.1 vs 4333700.35",
+        "contributions[1].end: 237410495.59 vs 295501213.42",
+        "contributions[1].start: 232667848.49 vs 291167513.07",
+        "contributions[2].category: 'London' vs 'East of England'",
+        "contributions[2].delta: 4721689.35 vs 2781395.73",
+        "contributions[2].end: 413804467.49 vs 149544173.38",
+        "contributions[2].start: 409082778.14 vs 146762777.65",
+        "contributions[3].category: 'East of England' vs 'South West'",
+        "contributions[3].delta: 3976687.06 vs 2510353.43",
+        "contributions[3].end: 213736192.37 vs 163124512.27",
+        "contributions[3].start: 209759505.31 vs 160614158.84",
+        "contributions[4].delta: 2126389.92 vs 1289529.19",
+        "contributions[4].end: 104436198.85 vs 74789662.76",
+        "contributions[4].start: 102309808.93 vs 73500133.57",
+        "contributions[5].category: 'Yorkshire and The Humber' vs 'West Midlands'",
+        "contributions[5].delta: 1454811.94 vs 569636.92",
+        "contributions[5].end: 96800530.68 vs 88101041.34",
+        "contributions[5].start: 95345718.74 vs 87531404.42",
+        "contributions[6].category: 'North West' vs 'Scotland'",
+        "contributions[6].delta: 1419152.19 vs 487382.9",
+        "contributions[6].end: 128727079.34 vs 44740997.25",
+        "contributions[6].start: 127307927.15 vs 44253614.35",
+        "contributions[7].category: 'West Midlands' vs 'North West'",
+        "contributions[7].delta: 1086144.79 vs 469577.02",
+        "contributions[7].end: 121848183.49 vs 90299963.45",
+        "contributions[7].start: 120762038.7 vs 89830386.43",
+        "contributions[8].delta: 1986210.61 vs 861492.1",
+        "contributions[8].end: 131908973.82 vs 110279828.71",
+        "contributions[8].start: 129922763.21 vs 109418336.61"
+      ]
+    },
+    {
+      "case": "S3",
+      "scope": "direct",
+      "question": "Funded balance bridge for the ALP Origination Book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": [
+        "lens: 'Direct' vs 'ALP Origination Book'"
+      ]
+    },
+    {
+      "case": "S3",
+      "scope": "acquired",
+      "question": "Funded balance bridge for the ALP Origination Book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 21497510.17,
+      "differences": [
+        "POPULATION rows 3909 vs 7126",
+        "netChange: 11077756.84 vs 21497510.17",
+        "lens: 'Acquired' vs 'ALP Origination Book'",
+        "start.total: 568299918.39 vs 1364011072.81",
+        "end.total: 579377675.23 vs 1385508582.98",
+        "contributions[0].delta: 2867091.52 vs 8194442.53",
+        "contributions[0].end: 147086946.18 vs 369127190.4",
+        "contributions[0].start: 144219854.66 vs 360932747.87",
+        "contributions[1].category: 'South West' vs 'London'",
+        "contributions[1].delta: 2232293.67 vs 4333700.35",
+        "contributions[1].end: 74285983.32 vs 295501213.42",
+        "contributions[1].start: 72053689.65 vs 291167513.07",
+        "contributions[2].delta: 1195291.33 vs 2781395.73",
+        "contributions[2].end: 64192018.99 vs 149544173.38",
+        "contributions[2].start: 62996727.66 vs 146762777.65",
+        "contributions[3].category: 'Yorkshire and The Humber' vs 'South West'",
+        "contributions[3].delta: 1057208.99 vs 2510353.43",
+        "contributions[3].end: 30791312.12 vs 163124512.27",
+        "contributions[3].start: 29734103.13 vs 160614158.84",
+        "contributions[4].category: 'North West' vs 'East Midlands'",
+        "contributions[4].delta: 949575.17 vs 1289529.19",
+        "contributions[4].end: 38427115.89 vs 74789662.76",
+        "contributions[4].start: 37477540.72 vs 73500133.57",
+        "contributions[5].category: 'East Midlands' vs 'West Midlands'",
+        "contributions[5].delta: 836860.73 vs 569636.92",
+        "contributions[5].end: 29646536.09 vs 88101041.34",
+        "contributions[5].start: 28809675.36 vs 87531404.42",
+        "contributions[6].delta: 573389.51 vs 487382.9",
+        "contributions[6].end: 19589459.78 vs 44740997.25",
+        "contributions[6].start: 19016070.27 vs 44253614.35",
+        "contributions[7].category: 'West Midlands' vs 'North West'",
+        "contributions[7].delta: 516507.87 vs 469577.02",
+        "contributions[7].end: 33747142.15 vs 90299963.45",
+        "contributions[7].start: 33230634.28 vs 89830386.43",
+        "contributions[8].delta: 849538.05 vs 861492.1",
+        "contributions[8].end: 141611160.71 vs 110279828.71",
+        "contributions[8].start: 140761622.66 vs 109418336.61"
+      ]
+    },
+    {
+      "case": "R1",
+      "scope": "None",
+      "question": "Funded balance bridge for the Highgate Mortgages Book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": [
+        "lens: 'Total' vs 'Highgate Mortgages Book'"
+      ]
+    },
+    {
+      "case": "R1",
+      "scope": "direct",
+      "question": "Funded balance bridge for the Highgate Mortgages Book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": [
+        "POPULATION rows 7126 vs 11035",
+        "netChange: 21497510.17 vs 32575267.01",
+        "lens: 'Direct' vs 'Highgate Mortgages Book'",
+        "start.total: 1364011072.81 vs 1932310991.2",
+        "end.total: 1385508582.98 vs 1964886258.21",
+        "contributions[0].delta: 8194442.53 vs 11061534.05",
+        "contributions[0].end: 369127190.4 vs 516214136.58",
+        "contributions[0].start: 360932747.87 vs 505152602.53",
+        "contributions[1].category: 'London' vs 'South West'",
+        "contributions[1].delta: 4333700.35 vs 4742647.1",
+        "contributions[1].end: 295501213.42 vs 237410495.59",
+        "contributions[1].start: 291167513.07 vs 232667848.49",
+        "contributions[2].category: 'East of England' vs 'London'",
+        "contributions[2].delta: 2781395.73 vs 4721689.35",
+        "contributions[2].end: 149544173.38 vs 413804467.49",
+        "contributions[2].start: 146762777.65 vs 409082778.14",
+        "contributions[3].category: 'South West' vs 'East of England'",
+        "contributions[3].delta: 2510353.43 vs 3976687.06",
+        "contributions[3].end: 163124512.27 vs 213736192.37",
+        "contributions[3].start: 160614158.84 vs 209759505.31",
+        "contributions[4].delta: 1289529.19 vs 2126389.92",
+        "contributions[4].end: 74789662.76 vs 104436198.85",
+        "contributions[4].start: 73500133.57 vs 102309808.93",
+        "contributions[5].category: 'West Midlands' vs 'Yorkshire and The Humber'",
+        "contributions[5].delta: 569636.92 vs 1454811.94",
+        "contributions[5].end: 88101041.34 vs 96800530.68",
+        "contributions[5].start: 87531404.42 vs 95345718.74",
+        "contributions[6].category: 'Scotland' vs 'North West'",
+        "contributions[6].delta: 487382.9 vs 1419152.19",
+        "contributions[6].end: 44740997.25 vs 128727079.34",
+        "contributions[6].start: 44253614.35 vs 127307927.15",
+        "contributions[7].category: 'North West' vs 'West Midlands'",
+        "contributions[7].delta: 469577.02 vs 1086144.79",
+        "contributions[7].end: 90299963.45 vs 121848183.49",
+        "contributions[7].start: 89830386.43 vs 120762038.7",
+        "contributions[8].delta: 861492.1 vs 1986210.61",
+        "contributions[8].end: 110279828.71 vs 131908973.82",
+        "contributions[8].start: 109418336.61 vs 129922763.21"
+      ]
+    },
+    {
+      "case": "R1",
+      "scope": "acquired",
+      "question": "Funded balance bridge for the Highgate Mortgages Book",
+      "dimensionCol": "collateral_geography",
+      "netChange": 32575267.01,
+      "differences": [
+        "POPULATION rows 3909 vs 11035",
+        "netChange: 11077756.84 vs 32575267.01",
+        "lens: 'Acquired' vs 'Highgate Mortgages Book'",
+        "start.total: 568299918.39 vs 1932310991.2",
+        "end.total: 579377675.23 vs 1964886258.21",
+        "contributions[0].delta: 2867091.52 vs 11061534.05",
+        "contributions[0].end: 147086946.18 vs 516214136.58",
+        "contributions[0].start: 144219854.66 vs 505152602.53",
+        "contributions[1].delta: 2232293.67 vs 4742647.1",
+        "contributions[1].end: 74285983.32 vs 237410495.59",
+        "contributions[1].start: 72053689.65 vs 232667848.49",
+        "contributions[2].category: 'East of England' vs 'London'",
+        "contributions[2].delta: 1195291.33 vs 4721689.35",
+        "contributions[2].end: 64192018.99 vs 413804467.49",
+        "contributions[2].start: 62996727.66 vs 409082778.14",
+        "contributions[3].category: 'Yorkshire and The Humber' vs 'East of England'",
+        "contributions[3].delta: 1057208.99 vs 3976687.06",
+        "contributions[3].end: 30791312.12 vs 213736192.37",
+        "contributions[3].start: 29734103.13 vs 209759505.31",
+        "contributions[4].category: 'North West' vs 'East Midlands'",
+        "contributions[4].delta: 949575.17 vs 2126389.92",
+        "contributions[4].end: 38427115.89 vs 104436198.85",
+        "contributions[4].start: 37477540.72 vs 102309808.93",
+        "contributions[5].category: 'East Midlands' vs 'Yorkshire and The Humber'",
+        "contributions[5].delta: 836860.73 vs 1454811.94",
+        "contributions[5].end: 29646536.09 vs 96800530.68",
+        "contributions[5].start: 28809675.36 vs 95345718.74",
+        "contributions[6].category: 'Scotland' vs 'North West'",
+        "contributions[6].delta: 573389.51 vs 1419152.19",
+        "contributions[6].end: 19589459.78 vs 128727079.34",
+        "contributions[6].start: 19016070.27 vs 127307927.15",
+        "contributions[7].delta: 516507.87 vs 1086144.79",
+        "contributions[7].end: 33747142.15 vs 121848183.49",
+        "contributions[7].start: 33230634.28 vs 120762038.7",
+        "contributions[8].delta: 849538.05 vs 1986210.61",
+        "contributions[8].end: 141611160.71 vs 131908973.82",
+        "contributions[8].start: 140761622.66 vs 129922763.21"
+      ]
+    }
+  ]
+}

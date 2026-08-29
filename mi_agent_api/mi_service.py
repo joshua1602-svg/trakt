@@ -92,6 +92,10 @@ class MiQueryRequest:
     portfolio_id: Optional[str] = None
     as_of_date: Optional[str] = None
     filters: Optional[Dict[str, Any]] = None
+    #: The workspace tab the caller is on. Carried for the UI and for callers
+    #: that echo it back; it is NOT an input to dataset semantics. A question
+    #: means the same thing on every tab — see
+    #: `mi_agent_api.workspace.resolve_dataset`.
     dataset_context: Optional[str] = None
     context: Optional[Any] = None
     #: The portfolio scope the caller has selected. A LIST selects several books
@@ -132,7 +136,8 @@ def split_portfolio(portfolio_id: Optional[str],
 # --------------------------------------------------------------------------- #
 def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
                       client_id: str, run_id: Optional[str], view: str,
-                      run_required: bool) -> Dict[str, Any]:
+                      run_required: bool, semantics: Optional[Dict[str, Any]] = None,
+                      frame: Any = None) -> Dict[str, Any]:
     """Stamp the channel-neutral analytical metadata onto the envelope.
 
     Additive only — every pre-existing React key is left exactly as the adapter
@@ -161,6 +166,146 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     envelope.setdefault("warnings", [])
     envelope.setdefault("diagnostics", [])
     envelope.setdefault("sourceNotes", [])
+    _stamp_semantic_coverage(envelope, question=req.question,
+                             semantics=semantics, frame=frame)
+    return _enforce_model_availability(_enforce_semantic_coverage(envelope))
+
+
+def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
+                             semantics: Optional[Dict[str, Any]],
+                             frame: Any) -> None:
+    """Record which governed concepts the question stated, and their disposition.
+
+    THE ONE SEAM. Both return paths — routed and point-in-time — pass through
+    `_governed_context`, so this sees every answer the service emits without a
+    per-route call and without a route deciding anything about coverage.
+
+    DISCLOSE ONLY. It publishes `metadata.semanticCoverage` and changes nothing:
+    no route, no answer, no refusal. The enforcement that reads it is a separate
+    change, deliberately, because the ledger's first measurement is what tells
+    us whether enforcement is safe to switch on.
+
+    Never raises into a request. A ledger that cannot be built is absent, which
+    reads as "not measured" rather than "clean" — the standing F3 rule.
+    """
+    if semantics is None:
+        return
+    try:
+        from question_interpretation import completeness as _coverage
+
+        envelope["metadata"]["semanticCoverage"] = _coverage.coverage_report(
+            question, envelope, semantics,
+            available_values=_book_values(frame, semantics) if frame is not None else None,
+            available_columns=set(frame.columns) if frame is not None else None,
+            frame=frame)
+    except Exception as exc:  # noqa: BLE001 - coverage must never cost an answer
+        logger.info("semantic coverage unavailable: %s: %s", type(exc).__name__, exc)
+
+
+#: The words a refusal uses for a concept the answer did not account for. No
+#: implementation vocabulary reaches the reader: "coverage", "ledger" and
+#: "unaccounted" are ours, not theirs.
+_COVERAGE_REFUSAL = (
+    "I understood that you asked about %s, but I could not confirm it was "
+    "applied to this calculation. I have not answered over a wider population "
+    "instead.")
+
+
+def _enforce_semantic_coverage(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """Refuse an answer that lost a governed concept the question stated.
+
+    THE INVARIANT this whole build exists for. Opus may recover more or less of
+    a sentence from run to run; what it may never do is change the analytical
+    meaning silently. A concept it drops now costs ANSWERABILITY — a refusal
+    naming the concept — and never a widened population.
+
+    It fires only on `UNACCOUNTED`. A concept the estate declined and said so is
+    `UNSUPPORTED` and keeps its existing governed behaviour; a concept nothing
+    named was never in the ledger. There is no confidence score here, nothing is
+    guessed, and no field is chosen: the rule is that a stated concept with no
+    disposition may not be answered over.
+
+    Applied to SUCCESSFUL answers only. A refusal is already a refusal, and
+    re-refusing it would replace a specific governed reason with a general one.
+    """
+    if not envelope.get("ok"):
+        return envelope
+    from question_interpretation import completeness as _coverage
+
+    missing = _coverage.unaccounted_concepts(
+        (envelope.get("metadata") or {}).get("semanticCoverage"))
+    if not missing:
+        return envelope
+    named = sorted({str(m.get("term") or m.get("value") or m.get("field"))
+                    for m in missing})
+    message = _COVERAGE_REFUSAL % _join_terms(named)
+    envelope["ok"] = False
+    envelope["error"] = message
+    envelope["answer"] = message
+    envelope["artifacts"] = []
+    envelope.setdefault("warnings", []).append(message)
+    return envelope
+
+
+def _join_terms(terms: List[str]) -> str:
+    if len(terms) == 1:
+        return terms[0]
+    return "%s and %s" % (", ".join(terms[:-1]), terms[-1])
+
+
+#: The words an availability refusal uses. It says what happened and what was
+#: NOT done, in the reader's vocabulary: no model name, no arm, no proposal.
+_AVAILABILITY_REFUSAL = (
+    "I could not complete the language-understanding step for this question, so "
+    "I have not answered it. Answering from the partial reading alone risks "
+    "answering a narrower question than the one you asked. Please try again.")
+
+
+def _enforce_model_availability(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """An unavailable augmentation call refuses; it does not quietly narrow.
+
+    THE SECOND HALF OF THE INVARIANT. Coverage catches a concept the estate can
+    NAME and execution did not carry. This catches the case coverage cannot see:
+    the augmentation arm was switched on, its call did not happen or could not
+    be read, and the deterministic reading — which may be narrower than the
+    sentence — would otherwise be executed and published as though the whole
+    question had been understood.
+
+    Measured, on this build: with the arm on and the credit exhausted, twenty of
+    twenty runs of one product-scoped question returned a whole-book answer.
+    Availability changed the meaning of the answer. It may change whether Trakt
+    answers; it may not change what it answers.
+
+    The rule fires on the arm's OWN status and nothing else. A successful call
+    that validly proposes no concepts reports `no_change` and is untouched — it
+    is a different event from a call that did not happen, and the arm never
+    infers one from the other. An arm that is switched off publishes no evidence
+    and is likewise untouched.
+
+    Successful answers only, and after coverage: where both would refuse, the
+    coverage refusal names the concept, which is the more useful sentence.
+
+    NO EXCEPTION IS ADMITTED. The estate has no completeness proof independent
+    of the deterministic parse — the coverage ledger and the execution receipt
+    are both built from the same owners, so neither can certify a reading whose
+    gap is a term no owner names. "Size" is exactly such a term. Until an
+    independent proof exists, unavailability refuses.
+    """
+    if not envelope.get("ok"):
+        return envelope
+    from . import concept_merge_arm as _arm
+
+    evidence = (envelope.get("metadata") or {}).get("conceptMerge")
+    if not isinstance(evidence, dict):
+        return envelope
+    if evidence.get("status") != _arm.PROPOSAL_UNAVAILABLE:
+        return envelope
+    envelope["ok"] = False
+    envelope["error"] = _AVAILABILITY_REFUSAL
+    envelope["answer"] = _AVAILABILITY_REFUSAL
+    envelope["artifacts"] = []
+    envelope["controlledRefusal"] = True
+    envelope.setdefault("warnings", []).append(_AVAILABILITY_REFUSAL)
     return envelope
 
 
@@ -258,11 +403,15 @@ def execute_governed_mi_query(
     started_at = datetime.now(timezone.utc).isoformat()
     t0 = time.monotonic()
 
-    view = workspace_mod.resolve_active_view(
-        request.question,
-        request.dataset_context
-        or (request.context.get("activeView") or request.context.get("datasetContext")
-            if isinstance(request.context, dict) else None))
+    # THE DATASET IS THE QUESTION'S, NOT THE TAB'S.
+    #
+    # This used to fold `request.dataset_context` (the active React tab) in as
+    # the fallback, so the same sentence was served from a different dataset
+    # depending on which tab it was typed on — including
+    # "the balance by seasoning segment excluding pipeline cases", served from
+    # the pipeline on the pipeline tab. The tab still selects what the UI
+    # DISPLAYS; it no longer decides what a question MEANS.
+    view = workspace_mod.resolve_dataset(request.question)
     policy = PolicyState(runtime_mode=deps.runtime_mode)
     requested_portfolio = request.effective_portfolio_id()
 
@@ -418,6 +567,36 @@ def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
         logger.info("routed scope stamping skipped: %s", exc)
 
 
+def _book_values(frame, semantics):
+    """The book's governed category values, or ``None`` if they cannot be read.
+
+    Never fatal: a catalogue that cannot be built leaves the parser exactly as
+    it was before it existed.
+    """
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+        return receipt_mod.book_values(frame, semantics)
+    except Exception:  # noqa: BLE001 - a missing catalogue is not an error
+        logger.info("book value catalogue unavailable", exc_info=True)
+        return None
+
+
+def _owned_question(question: Optional[str], available_values) -> str:
+    """``question`` with spans a governed categorical VALUE has claimed blanked.
+
+    Delegation only — `mi_agent.categorical_spans` owns the rule. With no
+    catalogue the sentence comes back unchanged.
+    """
+    if not question or not available_values:
+        return question or ""
+    try:
+        from mi_agent.categorical_spans import mask_value_spans
+
+        return mask_value_spans(question, available_values)
+    except Exception:  # noqa: BLE001 - the owner missing must not change a reading
+        return question
+
+
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     """Map an engine-reported failure onto a stable code.
 
@@ -519,8 +698,20 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
     refused: the requested category is present and no single figure is being
     passed off as the narrow one. Never refuses on an unprovable facet, so a
     working governed route cannot be disabled by this check.
+
+    It runs on a CONTROLLED NON-DELIVERY too, and for the same reason
+    `_guard_unresolved_scope` does: the route said it could not produce the
+    analysis, and a facet owner may have a more specific reason than the one the
+    route reached for. Measured — "Show funded balance evolution by month for
+    London" came back as "No reporting periods are available to build a funded
+    balance trend" once that envelope stopped being success-shaped, in place of
+    the geographic-scope refusal that names what the reader actually asked for.
+    An execution FAILURE is still excluded: a route that broke has adjudicated
+    nothing.
     """
-    if not isinstance(routed, dict) or not routed.get("ok"):
+    if not isinstance(routed, dict):
+        return routed
+    if not routed.get("ok") and not _is_controlled_non_delivery(routed):
         return routed
     try:
         from mi_agent import execution_receipt as receipt_mod
@@ -564,7 +755,9 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
             facets, getattr(parsed, "spec", None) or {}, semantics,
             receipt_mod.book_columns(frame),
             question=question, settle_unresolved=False)
-        granularity = receipt_mod.granularity_facets(question, route)
+        # The ROUTE'S OWN grain declaration, so the receipt adjudicates against
+        # what was published rather than an assertion made about the route.
+        granularity = receipt_mod.granularity_facets(question, route, routed)
         # P1L: the material row population the spec carries. Raised from the
         # governed spec, proven from execution evidence the route reports — a
         # route that reports nothing leaves these LOST and the answer refuses,
@@ -701,7 +894,7 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
 
 
 def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
-                            view: str) -> Dict[str, Any]:
+                            view: str, available_values=None) -> Dict[str, Any]:
     """§7 THE FAIL-CLOSED SAFETY RULE.
 
     A materially analytical question that no governed route claimed has reached
@@ -735,7 +928,12 @@ def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
     try:
         from mi_workflows.analytical import intent as intent_mod
 
-        reading = intent_mod.classify(question)
+        # GOVERNED SPAN OWNERSHIP. The intent vocabulary owns no book field, so
+        # a family word found inside a span the book has already claimed as a
+        # categorical VALUE belongs to the value. Measured: brokers called
+        # "Growth Partners" and "Completion Network" made every question about
+        # them refuse — one as a movement question, one as a pipeline question.
+        reading = intent_mod.classify(_owned_question(question, available_values))
         if not reading.materially_analytical:
             return result
         spec = result.get("spec") if isinstance(result.get("spec"), dict) else {}
@@ -788,6 +986,211 @@ def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
     return result
 
 
+def _guard_temporal_honouring(envelope: Dict[str, Any], *, question: str,
+                              semantics: Dict[str, Any], frame
+                              ) -> Dict[str, Any]:
+    """P0 — TEMPORAL HONOURING, enforced on the object that is about to ship.
+
+    Structural and post-execution, for the same reason `_fail_closed_analytical`
+    above is: the question is not what the answer was MEANT to be, it is what
+    the answer demonstrably carries.
+
+    WHY IT IS HERE AND NOT IN EITHER GUARD
+    --------------------------------------
+    The artifacts do not exist yet where the two semantic guards run. The
+    point-in-time guard runs inside `mi_agent_workflow` before the adapter
+    renders anything, and the routed guard runs before a route's envelope is
+    contextualised. A rule whose whole premise is "read the rendered rows"
+    cannot live where there are no rendered rows, and moving it earlier would
+    have forced it back onto the receipt — the one thing that cannot prove this.
+
+    So it runs LAST, on both paths, and the two call sites are enumerated in
+    `_run_analysis` immediately below. `test_both_paths_reach_the_temporal_guard`
+    is what keeps them at two.
+
+    Runs only on an answer that is about to STAND. An answer that already
+    refuses or clarifies has nothing to discard silently, and re-adjudicating it
+    would rewrite refusals this contract already gets right.
+    """
+    if not isinstance(envelope, dict) or not envelope.get("ok"):
+        return envelope
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+
+        # The book's own value map, so limb 2 costs no new vocabulary: the
+        # segment signal is two or more governed values named in one sentence.
+        # `dimension_values` is the existing owner of what values this book
+        # carries, and it is asked here rather than a word list being written.
+        facets = receipt_mod.temporal_honouring_facets(
+            question, envelope.get("artifacts"),
+            receipt_mod.dimension_values(frame, semantics)
+            if frame is not None else None)
+        if not facets:
+            return envelope
+        # THE REFUSAL SENTENCE IS NOT WRITTEN HERE. It is produced by `assess`
+        # from a receipt carrying the lost facet, so it is the same sentence the
+        # eighteen refusals this surface already gets right are written in. A
+        # second author of that wording would be the defect this programme
+        # spent seven consolidations removing.
+        receipt = receipt_mod.ExecutionReceipt(facets=list(facets))
+        verdict, message = receipt_mod.assess(receipt)
+        if verdict != receipt_mod.VERDICT_REFUSE or not message:
+            return envelope
+        envelope["ok"] = False
+        envelope["error"] = message
+        envelope["answer"] = message
+        envelope["artifacts"] = []
+        envelope["controlledRefusal"] = True
+        # The receipt and the guard must tell the SAME story as the answer, and
+        # the execution summary must not leave the very figure the refusal says
+        # it will not substitute sitting on the envelope for a channel to render.
+        envelope["executionSummary"] = None
+        envelope["semanticGuard"] = {
+            "verdict": verdict, "message": message,
+            "route": (envelope.get("metadata") or {}).get("route"),
+            "facets": [f.to_dict() for f in facets]}
+        envelope.setdefault("warnings", []).append(message)
+    except Exception:  # noqa: BLE001 - the guard must never break a governed route
+        logger.exception("temporal honouring guard failed for question=%r",
+                         question)
+    return envelope
+
+
+def _is_controlled_non_delivery(envelope: Dict[str, Any]) -> bool:
+    """A route said "I could not produce this" — not "here it is", not "it broke".
+
+    THE SCOPE DISCLOSURE OUTRANKS A DATA-AVAILABILITY MESSAGE. These guards used
+    to test `ok` alone, which was sound while a route that could not deliver
+    still returned `ok=True`: the guard ran, saw the unheld portfolio, and
+    replaced the generic message with the specific one. Once such an envelope
+    became the `ok:false` controlled refusal it always should have been, the
+    guard stopped running and the reader was told
+
+        "I can't build a funded balance bridge yet: at least two funded
+         reporting periods are needed for a bridge."
+
+    about a book this platform has never onboarded — true, and not the thing
+    they needed to know. So the precondition is now "was this DELIVERED, or was
+    it a controlled non-delivery whose reason a more specific owner can improve".
+
+    An execution FAILURE is deliberately excluded: `_execution_failure_envelope`
+    carries no `controlledUnsupported`, and a route that broke has not reasoned
+    about scope at all.
+    """
+    meta = envelope.get("metadata") or {}
+    return bool(meta.get("controlledUnsupported")) and not meta.get("executionFailure")
+
+
+def _guard_unknown_category(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """A category the question NAMED and no governed field carries.
+
+    The point-in-time workflow has refused this since it was written. A ROUTED
+    answer did not: the comparison recogniser collected the unresolved note and
+    published nothing, so "which region added the most balance last month for
+    Atlantis loans?" returned the UNFILTERED whole-book ranking with ok=true and
+    the dropped qualifier unmentioned. Which route happens to claim a question
+    is not a fact about whether its qualifier resolved — the same reasoning
+    `_guard_unresolved_scope` records for portfolio scope.
+
+    THE SENTENCE IS NOT WRITTEN HERE. `llm_query_parser.unknown_category_refusal`
+    owns it and the workflow calls the same function, so one obstacle cannot be
+    described two ways.
+    """
+    if not isinstance(envelope, dict) or not envelope.get("ok"):
+        return envelope
+    from mi_agent import llm_query_parser as _parser
+
+    notes = ((envelope.get("spec") or {}).get("unavailable_filters")) or []
+    message = _parser.unknown_category_refusal(notes)
+    if not message:
+        return envelope
+    envelope["ok"] = False
+    envelope["error"] = message
+    envelope["answer"] = message
+    envelope["artifacts"] = []
+    envelope["controlledRefusal"] = True
+    envelope.setdefault("warnings", []).append(message)
+    meta = envelope.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        meta["controlledRefusal"] = True
+        meta["controlledUnsupported"] = True
+    return envelope
+
+
+def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
+                            semantics: Dict[str, Any], frame) -> Dict[str, Any]:
+    """PHASE 1E. A portfolio the question NAMED and the registry does not hold.
+
+    Applied at BOTH answer sites, for the reason Phase 0 recorded as a
+    governance prerequisite: a receipt proof that holds only on the routed path
+    is not a proof. Measured with the routed guard alone in place:
+
+        "What is the funded balance by region for the Highgate Mortgages Book?"
+        -> ok=True, "Total Balance, grouped by Region, 12 groups, 11,035 loans"
+
+    — the whole book, under the name of a book this platform has never
+    onboarded, because the question fell through to the point-in-time path and
+    the routed guard never saw it. Which route happens to claim a question is
+    not a fact about whether its scope resolved.
+
+    THE REFUSAL SENTENCE IS NOT WRITTEN HERE. `unresolved_scope_facets` raises
+    the request as a LOST narrowing and `assess` produces the wording, so this
+    refusal reads exactly like every other dropped-narrowing refusal on this
+    surface. A second author of that sentence would be the defect this
+    programme spent seven consolidations removing.
+
+    The registry is built from THE FRAME THIS ANSWER WAS COMPUTED FROM, never
+    from the process-wide active dataset: `build_registry()` with no frame
+    calls `active_frame()`, which populates a TTL cache, and a disclosure step
+    has no business changing what the next request reads.
+    """
+    if not isinstance(envelope, dict):
+        return envelope
+    if not envelope.get("ok") and not _is_controlled_non_delivery(envelope):
+        return envelope
+    try:
+        from mi_agent import execution_receipt as receipt_mod
+
+        from . import portfolio_context as _ctx_registry
+
+        # The book's own value map, so a scope this tape carries as a VALUE
+        # ("the London book", "the South East book") is read as the population
+        # it is rather than as a portfolio nobody onboarded. The lens layer has
+        # no vocabulary for that; this guard does, and it is where the refusal
+        # is decided.
+        facets = receipt_mod.unresolved_scope_facets(
+            question, registry=_ctx_registry.build_registry(frame),
+            known_values=(receipt_mod.dimension_values(frame, semantics)
+                          if frame is not None else None))
+        if not facets:
+            return envelope
+        receipt = receipt_mod.ExecutionReceipt(facets=list(facets))
+        verdict, message = receipt_mod.assess(receipt)
+        if verdict != receipt_mod.VERDICT_REFUSE or not message:
+            return envelope
+        envelope["ok"] = False
+        envelope["error"] = message
+        envelope["answer"] = message
+        envelope["artifacts"] = []
+        envelope["controlledRefusal"] = True
+        # The receipt and the guard must tell the SAME story as the answer, and
+        # the execution summary must not leave the very figure the refusal says
+        # it will not substitute sitting on the envelope for a channel to render.
+        envelope["executionSummary"] = None
+        envelope["semanticGuard"] = {
+            "verdict": verdict, "message": message,
+            "route": (envelope.get("metadata") or {}).get("route"),
+            "facets": [f.to_dict() for f in facets]}
+        envelope.setdefault("warnings", []).append(message)
+        meta = envelope.setdefault("metadata", {})
+        if isinstance(meta, dict):
+            meta["controlledRefusal"] = True
+            meta["lensApplied"] = False
+    except Exception as exc:  # noqa: BLE001 - never break a governed answer
+        logger.info("unresolved-scope disclosure skipped: %s", exc)
+    return envelope
+
+
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
                   deps: CapabilityDependencies) -> Dict[str, Any]:
     """The analytical pipeline.
@@ -826,12 +1229,46 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         logger.info("request currency resolution skipped: %s", exc)
     with _perf.stage("mi_query.resolve_frame"):
         df, frame_error = _resolve_frame(ds, view, portfolio_id)
+        # GOVERNED SPAN OWNERSHIP for the DATASET, once the book can be read.
+        #
+        # The dataset is decided at the top of this request, before any
+        # authorisation and therefore before any tape can be opened, so the owner
+        # answers there without the one piece of evidence this rule needs: the
+        # book's own categorical values. Measured, a broker called "Pipeline
+        # Mortgage Club" served every question about it from the pipeline
+        # extract — 8 cases in place of its 63 funded loans.
+        #
+        # This is the SAME owner asked once more, with the evidence it lacked;
+        # it is not a second decision. It runs only where the first answer was
+        # NOT the default dataset, and it can only ever return to the default —
+        # a question that names a dataset outside every claimed span keeps its
+        # answer. The funded frame is loaded to read the catalogue and then used
+        # as the request's frame, so nothing is loaded twice.
+        if view != workspace_mod.DEFAULT_VIEW:
+            base_df, base_error = _resolve_frame(
+                ds, workspace_mod.DEFAULT_VIEW, portfolio_id)
+            # The masking is applied to the QUESTION, not handed to the owner:
+            # `resolve_dataset` takes one argument and a guard exists to keep it
+            # that way. Same owner, same signature, a sentence it is entitled to
+            # read.
+            owned_view = workspace_mod.resolve_dataset(_owned_question(
+                req.question,
+                _book_values(base_df, semantics) if base_df is not None else None))
+            if owned_view != view:
+                logger.info("dataset %r re-read as %r under span ownership",
+                            view, owned_view)
+                view, df, frame_error = owned_view, base_df, base_error
 
     try:
         with _perf.stage("mi_query.parse"):
             parsed = ParsedQuestion.parse(
                 req.question, semantics,
                 available_columns=set(df.columns) if df is not None else None,
+                # THE BOOK'S OWN CATEGORY VALUES. Without them the parser has
+                # no way to tell which governed field a named category belongs
+                # to, and bound every one to geography.
+                available_values=(_book_values(df, semantics)
+                                  if df is not None else None),
                 llm_enabled=llm_cfg.enabled, model=llm_cfg.model,
                 # Extension point: supply a Business Semantics Registry resolver
                 # here to attach governed business-term metadata to every parse.
@@ -917,6 +1354,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     except Exception as exc:  # noqa: BLE001 - routing must never break the chat
         logger.warning("chat routing failed; using point-in-time path: %s", exc)
         routed = None
+    # WHAT THE CONCEPT-MERGE ARM DID, on whichever envelope this request
+    # produces. The arm runs inside routing (it needs the interpretation, which
+    # routing builds) and carries its evidence out on the parse metadata,
+    # because the point-in-time path returns no routed envelope to stamp and
+    # executes the very spec the arm changed.
+    _concept_merge = (getattr(parsed, "meta", None) or {}).get("conceptMerge")
+
     if routed is not None:
         route = (routed.get("metadata") or {}).get("route") if isinstance(routed, dict) else None
         if isinstance(routed, dict):
@@ -924,12 +1368,23 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             if isinstance(rmeta, dict):
                 rmeta.setdefault("parserProvenance", _parser_provenance(
                     {"metadata": {"parse_metadata": dict(getattr(parsed, "meta", {}) or {})}}))
+                if _concept_merge is not None:
+                    rmeta["conceptMerge"] = _concept_merge
         _stamp_routed_scope(routed, req)
         routed = _guard_routed_answer(routed, question=req.question, route=route,
                                       semantics=semantics, frame=df,
                                       parsed=parsed)
+        # P0 SITE 1 OF 2 — temporal honouring, on the rendered routed envelope.
+        routed = _guard_temporal_honouring(routed, question=req.question,
+                                          semantics=semantics, frame=df)
+        # PHASE 1E SITE 1 OF 2 — an unresolved portfolio scope, on the same terms.
+        routed = _guard_unresolved_scope(routed, question=req.question,
+                                         semantics=semantics, frame=df)
+        # SITE 1 OF 2 — a named category this book does not carry.
+        routed = _guard_unknown_category(routed)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
-                                 view=view, run_required=_route_requires_run(route))
+                                 view=view, run_required=_route_requires_run(route),
+                                 semantics=semantics, frame=df)
 
     # ---- point-in-time: active governed dataset (or the selected run) ----- #
     if frame_error:
@@ -949,6 +1404,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             llm_enabled=llm_enabled, model=llm_model,
             extra_filters=req.filters or None,
             source_portfolio_lens=req.source_portfolio_lens or None,
+            # THE DATASET THIS FRAME CAME FROM. The receipt describes an
+            # unfiltered population, and with nothing to describe it WITH it
+            # said "entire funded portfolio" whatever had been read — so a
+            # pipeline figure was published under the funded book's name.
+            dataset=view,
             parsed=parsed)
         result = adapt_workflow_result(
             workflow, portfolio_id=portfolio_id, as_of=req.as_of_date)
@@ -970,6 +1430,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                              "model": llm_cfg.model if llm_cfg.available else None,
                              "status": llm_cfg.status}
         meta.setdefault("parserProvenance", _parser_provenance(workflow))
+        if _concept_merge is not None:
+            meta["conceptMerge"] = _concept_merge
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
     # Governed portfolio scope + coverage. The BACKEND states which portfolios
@@ -986,9 +1448,19 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         result.setdefault("warnings", []).extend(llm_cfg.warnings)
     # §7 — a materially analytical question must never leave here with a
     # confident current-position figure that answers something else.
-    result = _fail_closed_analytical(result, question=req.question, view=view)
+    result = _fail_closed_analytical(result, question=req.question, view=view,
+                                     available_values=_book_values(df, semantics)
+                                     if df is not None else None)
+    # P0 SITE 2 OF 2 — temporal honouring, on the rendered point-in-time result.
+    result = _guard_temporal_honouring(result, question=req.question,
+                                       semantics=semantics, frame=df)
+    # PHASE 1E SITE 2 OF 2 — an unresolved portfolio scope, on the same terms.
+    result = _guard_unknown_category(result)
+    result = _guard_unresolved_scope(result, question=req.question,
+                                     semantics=semantics, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
+                             semantics=semantics, frame=df,
                              view=view, run_required=bool(run_id))
 
 

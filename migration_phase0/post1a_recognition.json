@@ -1,0 +1,1536 @@
+{
+  "book": "alderbridge",
+  "bank": "combined",
+  "llm": false,
+  "rows": [
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "Show me balance by month",
+      "want": [],
+      "target": "none",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution.",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "balance over time",
+      "want": [],
+      "target": "none",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution.",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "How has the funded balance moved over time?",
+      "want": [],
+      "target": "none",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution.",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "total balance by reporting period",
+      "want": [],
+      "target": "none",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution.",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": true,
+      "shape": "T2",
+      "question": "Show me balance by month for loans over \u00a3150k",
+      "want": [],
+      "target": "threshold",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for balance over 150, but that could not be applied to the calculation (balance over 150 \u2014 this governed capability does not apply a value threshold, so the figure is not r",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T2",
+      "question": "balance over time for loans with LTV above 50%",
+      "want": [],
+      "target": "threshold",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for LTV over 50, but that could not be applied to the calculation (LTV over 50 \u2014 this governed capability does not apply a value threshold, so the figure is not restricted ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": false,
+      "shape": "T2",
+      "question": "How has balance moved over time for the front book?",
+      "want": [],
+      "target": "seasoning",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Funded balance over 3 period(s) (scoped to seasoning_segment = Front Book): latest \u00a3171.7m (down over the window).\n\nCalculated: Metric evolution.",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": true,
+      "shape": "T2",
+      "question": "balance by month where balance is above \u00a3150,000",
+      "want": [],
+      "target": "threshold",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for balance over 150,000, but that could not be applied to the calculation (balance over 150,000 \u2014 this governed capability does not apply a value threshold, so the figure ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "Show me balance by month by region",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "balance over time by region",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "How has balance moved over time, broken down by region?",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "balance by month split by LTV band",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "ltv_band",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for ltv band, but that could not be applied to the calculation (ltv band \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by ltv band). ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T4",
+      "question": "Show me balance by month by region for loans over \u00a3150k",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for balance over 150 and region, but that could not be applied to the calculation (balance over 150 \u2014 this governed capability does not apply a value threshold, so the figu",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T4",
+      "question": "balance over time by region for the front book",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "analytical_composition",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T4",
+      "question": "balance by month by LTV band for loans above \u00a3150,000",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "ltv_band",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for LTV over 150,000 and ltv band, but that could not be applied to the calculation (LTV over 150,000 \u2014 this governed capability does not apply a value threshold, so the fi",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T5",
+      "question": "Show me balance by month by region and LTV band",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "target": "region",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for a series by month, but that could not be applied to the calculation (a series by month \u2014 the answer that was produced carries no time axis; it reports a single position",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": false,
+      "shape": "T5",
+      "question": "balance over time by region and ticket size",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "target": "region",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood this as a movement trend question, but I have not answered it: this asks how something changed, which needs two governed reporting snapshots to compare. I have NOT substituted a current-p",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": true,
+      "shape": "T5",
+      "question": "balance by month broken down by LTV band and region",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "target": "region",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for a series by month, but that could not be applied to the calculation (a series by month \u2014 the answer that was produced carries no time axis; it reports a single position",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T6",
+      "question": "How has balance changed since last month by region?",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": true
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T6",
+      "question": "What moved between periods by region?",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T6",
+      "question": "month-on-month change in balance by region",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T6",
+      "question": "period on period movement by LTV band",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "ltv_band",
+      "route": "funded_bridge",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "funded_bridge",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for ltv band, but that could not be applied to the calculation (ltv band \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by ltv band). ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": false,
+      "shape": "T7",
+      "question": "Which region grew the most over the last three months?",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "You asked about the quarter, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter ",
+      "verdict": "WORDING"
+    },
+    {
+      "named_back": false,
+      "shape": "T7",
+      "question": "Which LTV band moved most between periods?",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "ltv_band",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I could not rank movement by ltv band: it is not a governed period-change dimension for this book. I have not ranked a different dimension instead.",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": true,
+      "shape": "T7",
+      "question": "Rank regions by balance growth over time",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for regions, but that could not be applied to the calculation (regions \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by regions). I h",
+      "verdict": "WORDING"
+    },
+    {
+      "named_back": true,
+      "shape": "T7",
+      "question": "Which region has grown fastest?",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "Between 31 May 2026 and 30 June 2026, ranked by percentage balance movement across Collateral Geography, North East increased the most: North East \u00a329.9m \u2192 \u00a330.5m (+\u00a3545k, +1.8%). Then South East \u00a3508",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T8",
+      "question": "How has the front book moved over time compared with the back book?",
+      "want": [
+        "seasoning",
+        "source_portfolio",
+        "provenance"
+      ],
+      "target": "seasoning",
+      "route": "analytical_composition",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Front Book (0-12 months): 1,282 loans at 2026-04-30 against 1,177 loans at 2026-06-30. Current Outstanding Balance \u00a3182.3m against \u00a3171.7m. These are rolling cohorts \u2014 membership is set by the origina",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T8",
+      "question": "Compare balance over time for direct and acquired",
+      "want": [
+        "seasoning",
+        "source_portfolio",
+        "provenance"
+      ],
+      "target": "source_split",
+      "route": "analytical_composition",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "cohort_progression",
+      "parser_confidence": "high",
+      "answer": "Across 2026-04-30 \u2192 2026-06-30, Direct, 7,126 loans: Current Outstanding Balance \u00a31.36bn \u2192 \u00a31.39bn (+\u00a321.5m). Across 2026-04-30 \u2192 2026-06-30, Acquired, 3,909 loans: Current Outstanding Balance \u00a3568.3m",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T8",
+      "question": "How have direct and acquired balances moved over the periods?",
+      "want": [
+        "seasoning",
+        "source_portfolio",
+        "provenance"
+      ],
+      "target": "source_split",
+      "route": "analytical_composition",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "cohort_progression",
+      "parser_confidence": "high",
+      "answer": "Across 2026-04-30 \u2192 2026-06-30, Direct, 7,126 loans: Current Outstanding Balance \u00a31.36bn \u2192 \u00a31.39bn (+\u00a321.5m). Across 2026-04-30 \u2192 2026-06-30, Acquired, 3,909 loans: Current Outstanding Balance \u00a3568.3m",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "what has the book done over the last few periods",
+      "want": [],
+      "target": "none",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": true,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "portfolio_summary",
+      "parser_confidence": "medium",
+      "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Count of loans \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+      "verdict": "WORDING"
+    },
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "give me the balance trend",
+      "want": [],
+      "target": "none",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution.",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "how is the loan book tracking month to month",
+      "want": [],
+      "target": "none",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unmapped",
+      "parser_confidence": "low",
+      "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size",
+      "verdict": "WORDING"
+    },
+    {
+      "named_back": false,
+      "shape": "T1",
+      "question": "outstanding balances by period",
+      "want": [],
+      "target": "none",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).\n\nCalculated: Metric evolution.",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T2",
+      "question": "how have the big loans moved over time",
+      "want": [],
+      "target": "none",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "'big loans' does not state a threshold I can apply. Give a bound (for example 'over 80') and I will filter on it; no unfiltered figure has been substituted. I haven't computed an answer, and I have no",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": false,
+      "shape": "T2",
+      "question": "balance trend for high LTV lending",
+      "want": [],
+      "target": "none",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "'high ltv' does not state a threshold I can apply. Give a bound (for example 'over 80') and I will filter on it; no unfiltered figure has been substituted. I haven't computed an answer, and I have not",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": false,
+      "shape": "T2",
+      "question": "how is the front book tracking over the periods",
+      "want": [],
+      "target": "seasoning",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "'tracking periods' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for ",
+      "verdict": "WORDING"
+    },
+    {
+      "named_back": true,
+      "shape": "T2",
+      "question": "trend for loans above 150k",
+      "want": [],
+      "target": "threshold",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "everything named was resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for over 150, but that could not be applied to the calculation (over 150 \u2014 this governed capability does not apply a value threshold, so the figure is not restricted to it)",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "how are the regions trending",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for regions, but that could not be applied to the calculation (regions \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by regions). I h",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "give me balances per region each month",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "regional balance trend",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for regional, but that could not be applied to the calculation (regional \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by regional). ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T3",
+      "question": "how has each region moved over the periods",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": false,
+      "shape": "T4",
+      "question": "how are the regions trending for the big loans",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "'big loans' does not state a threshold I can apply. Give a bound (for example 'over 80') and I will filter on it; no unfiltered figure has been substituted. I haven't computed an answer, and I have no",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": true,
+      "shape": "T4",
+      "question": "regional trend for the front book",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "seasoning",
+      "route": "analytical_composition",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for regional, but that could not be applied to the calculation (regional \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by regional). ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T4",
+      "question": "balances per region each month for loans above 150k",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for over 150 and region, but that could not be applied to the calculation (over 150 \u2014 this governed capability does not apply a value threshold, so the figure is not restri",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T4",
+      "question": "how has each LTV band moved for the acquired book",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "source_split",
+      "route": "cohort_progression",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "cohort_progression",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for ltv band, but that could not be applied to the calculation (ltv band \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by ltv band). ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": false,
+      "shape": "T5",
+      "question": "balances by region and LTV band each month",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "target": "region",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood this as a movement trend question, but I have not answered it: this asks how something changed, which needs two governed reporting snapshots to compare. I have NOT substituted a current-p",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": false,
+      "shape": "T5",
+      "question": "how have regions and ticket sizes moved over time",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "target": "ticket",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood this as a movement trend question, but I have not answered it: this asks how something changed, which needs two governed reporting snapshots to compare. I have NOT substituted a current-p",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": true,
+      "shape": "T5",
+      "question": "monthly balance split by region and band",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "target": "region",
+      "route": "evolution",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T5",
+      "question": "give me region by LTV band over the periods",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "target": "ltv_band",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for a series over the periods, but that could not be applied to the calculation (a series over the periods \u2014 the answer that was produced carries no time axis; it reports a",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T6",
+      "question": "what changed by region since last time",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T6",
+      "question": "region movement between the last two periods",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": false,
+      "shape": "T6",
+      "question": "how much did each region move last month",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": null,
+      "claimed_by_a_route": false,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "'move last month' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": true,
+      "shape": "T6",
+      "question": "movement by LTV band period on period",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "ltv_band",
+      "route": "funded_bridge",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "funded_bridge",
+      "parser_confidence": "high",
+      "answer": "I understood that you asked for ltv band, but that could not be applied to the calculation (ltv band \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by ltv band). ",
+      "verdict": "CAPABILITY"
+    },
+    {
+      "named_back": true,
+      "shape": "T7",
+      "question": "which regions are growing fastest",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "Between 31 May 2026 and 30 June 2026, ranked by percentage balance movement across Collateral Geography, North East increased the most: North East \u00a329.9m \u2192 \u00a330.5m (+\u00a3545k, +1.8%). Then South East \u00a3508",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": true,
+      "shape": "T7",
+      "question": "top growing regions",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "region",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": true
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "Between 31 May 2026 and 30 June 2026, ranked by absolute balance movement across Collateral Geography, South East increased the most: South East \u00a3508.4m \u2192 \u00a3516.2m (+\u00a37.8m, +1.5%). Then East of England",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T7",
+      "question": "who grew most over the periods",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "none",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": true
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "low",
+      "answer": "I can rank movement between two reporting dates, but I could not identify a governed dimension to rank. I have not ranked something else instead.",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": false,
+      "shape": "T7",
+      "question": "rank the LTV bands by movement",
+      "want": [
+        "region",
+        "geograph",
+        "ltv_bucket"
+      ],
+      "target": "ltv_band",
+      "route": "period_change_analysis",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": true
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "high",
+      "answer": "I could not rank movement by ltv bands: it is not a governed period-change dimension for this book. I have not ranked a different dimension instead.",
+      "verdict": "UNPARSED"
+    },
+    {
+      "named_back": false,
+      "shape": "T8",
+      "question": "direct and acquired balances side by side",
+      "want": [
+        "seasoning",
+        "source_portfolio",
+        "provenance"
+      ],
+      "target": "source_split",
+      "route": "portfolio_risk_comparison",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": true,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "time axis not resolved",
+      "parser_note": "",
+      "parser_confidence": "medium",
+      "answer": "Direct has higher observed Current Outstanding Balance than Acquired.\n\nCalculated: Total Current Outstanding Balance \u00b7 Direct vs Acquired.",
+      "verdict": "WORDING"
+    },
+    {
+      "named_back": true,
+      "shape": "T8",
+      "question": "how do the front and back books compare over the periods",
+      "want": [
+        "seasoning",
+        "source_portfolio",
+        "provenance"
+      ],
+      "target": "seasoning",
+      "route": "portfolio_risk_comparison",
+      "claimed_by_a_route": true,
+      "ok": false,
+      "rating": "ABSENT",
+      "delivered": false,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unmapped",
+      "parser_confidence": "low",
+      "answer": "I understood that you asked for back book, but that could not be applied to the calculation (back book \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by back book",
+      "verdict": "WORDING"
+    },
+    {
+      "named_back": false,
+      "shape": "T8",
+      "question": "acquired against direct, balance trend",
+      "want": [
+        "seasoning",
+        "source_portfolio",
+        "provenance"
+      ],
+      "target": "source_split",
+      "route": "analytical_composition",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": true,
+        "time": true,
+        "dimension": false
+      },
+      "cause": "dimension not resolved",
+      "parser_note": "cohort_progression",
+      "parser_confidence": "high",
+      "answer": "Across 2026-04-30 \u2192 2026-06-30, Direct, 7,126 loans: Current Outstanding Balance \u00a31.36bn \u2192 \u00a31.39bn (+\u00a321.5m). Across 2026-04-30 \u2192 2026-06-30, Acquired, 3,909 loans: Current Outstanding Balance \u00a3568.3m",
+      "verdict": "DELIVERED"
+    },
+    {
+      "named_back": false,
+      "shape": "T8",
+      "question": "front book and back book movement",
+      "want": [
+        "seasoning",
+        "source_portfolio",
+        "provenance"
+      ],
+      "target": "seasoning",
+      "route": "analytical_composition",
+      "claimed_by_a_route": true,
+      "ok": true,
+      "rating": "PROVEN",
+      "delivered": true,
+      "resolved": {
+        "metric": false,
+        "time": false,
+        "dimension": false
+      },
+      "cause": "metric not resolved",
+      "parser_note": "unresolved_metric",
+      "parser_confidence": "low",
+      "answer": "Front Book (0-12 months): 1,282 loans at 2026-04-30 against 1,177 loans at 2026-06-30. Current Outstanding Balance \u00a3182.3m against \u00a3171.7m. These are rolling cohorts \u2014 membership is set by the origina",
+      "verdict": "DELIVERED"
+    }
+  ]
+}

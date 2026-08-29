@@ -34,6 +34,27 @@ portfolios:
   - source_portfolio_id: direct_001
     source_portfolio_type: direct
     source_portfolio_label: ERE Direct Originations
+    # THE GOVERNED ASSET CLASS. Established once by onboarding; a fact about the
+    # BOOK, not about any loan, which is why it lives here and not on the tape.
+    #
+    # SUPPLY IT. Several governed dimensions and measures are declared in the
+    # Business Semantics Registry as applying to one asset class — broker /
+    # origination channel is `equity_release` only — and a book whose asset
+    # class is unidentified cannot use them. Measured: with no asset class,
+    # "which broker channel added the most balance since last month?" is
+    # refused ("not a governed period-change dimension for this book"); with
+    # `equity_release` supplied, the same question is answered and ranked. The
+    # refusal is correct in both cases — it is this line that is missing, not
+    # the policy that is wrong.
+    #
+    # Point-in-time questions over the same field ("balance by broker channel")
+    # answer either way; it is the governed period-change dimension set that
+    # applicability gates.
+    #
+    # BSR vocabulary: commercial_real_estate | corporate | equipment_leasing |
+    # equity_release | residential_mortgage | sme. Onboarding's longer dialect
+    # ("equity_release_mortgage") is normalised on the way in.
+    asset_class: equity_release
     # Does this book write new business? Drives Pipeline + origination forecast.
     originates: true
     # Is governed pipeline (pre-funded) data actually supplied for it? The

@@ -104,31 +104,26 @@ def has_rank_language(question: str) -> bool:
 
 
 def _detect_top_n(question: str) -> Optional[int]:
-    match = _TOP_N_RE.search(question or "")
-    if not match:
-        return None
-    digits = match.group("digits") or match.group("which_digits")
-    if digits:
-        try:
-            value = int(digits)
-        except ValueError:
-            return None
-        return value if value > 0 else None
-    word = match.group("word") or match.group("which_word") or ""
-    return _WORD_NUMBERS.get(word.lower())
+    """DELEGATED to `question_interpretation.lexical.ordering_limit`.
+
+    This owned its own number map, which stopped at three|four|five|ten, so
+    "which two regions grew the most" carried no limit and the planner ranked
+    every riser — silently wrong rather than refused.
+    """
+    from question_interpretation.lexical import ordering_limit
+    return ordering_limit(question)
 
 
 def _detect_basis(question: str) -> str:
-    q = question or ""
-    if _SHARE_RE.search(q):
-        return rk.BASIS_BALANCE_SHARE
-    if _PERCENT_RE.search(q):
-        return rk.BASIS_BALANCE_PERCENT
-    # A count basis needs the count noun to be what GREW, not just present:
-    # "which region grew the most" mentions no measure and means balance.
-    if _COUNT_RE.search(q) and not _BALANCE_RE.search(q):
-        return rk.BASIS_COUNT_ABSOLUTE
-    return rk.BASIS_BALANCE_ABSOLUTE
+    """DELEGATED. The contract's basis vocabulary, mapped back to the engine's."""
+    from question_interpretation.lexical import ordering_request
+    from question_interpretation.schema import (
+        ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT, ORDER_BASIS_SHARE)
+    basis = ordering_request(question).basis
+    return {ORDER_BASIS_SHARE: rk.BASIS_BALANCE_SHARE,
+            ORDER_BASIS_PERCENT: rk.BASIS_BALANCE_PERCENT,
+            ORDER_BASIS_COUNT: rk.BASIS_COUNT_ABSOLUTE}.get(
+                basis, rk.BASIS_BALANCE_ABSOLUTE)
 
 
 def detect_rank_request(question: str, dimension_term: Optional[str]

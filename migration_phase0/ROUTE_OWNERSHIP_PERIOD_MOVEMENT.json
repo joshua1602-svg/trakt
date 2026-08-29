@@ -1,0 +1,1340 @@
+{
+  "cases": [
+    {
+      "case": "M1",
+      "question": "What has changed since last month?",
+      "provenance": "movement+prior",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        }
+      }
+    },
+    {
+      "case": "M2",
+      "question": "What changed versus the prior month?",
+      "provenance": "movement+prior",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        }
+      }
+    },
+    {
+      "case": "M3",
+      "question": "How has the portfolio changed since the previous month?",
+      "provenance": "movement+prior",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        }
+      }
+    },
+    {
+      "case": "M4",
+      "question": "What has moved month on month?",
+      "provenance": "movement+prior",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (period on period)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (period on period)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (period on period)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        }
+      }
+    },
+    {
+      "case": "M5",
+      "question": "How has the book changed since last period?",
+      "provenance": "movement+prior",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (change over time)",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (change over time)",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (change over time)",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        }
+      }
+    },
+    {
+      "case": "S1",
+      "question": "What has changed since last month in the acquired book?",
+      "provenance": "scope",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        },
+        "direct": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a36.6m",
+          "answer": "Funded balances increased by \u00a36.6m during the month, with the largest contribution from the South East (+\u00a31.9m). Weighted-average LTV rose to 42.7%, while average borrower age increased slightly to 70.0 years.  Calculated: Month-on-month mo"
+        }
+      }
+    },
+    {
+      "case": "S2",
+      "question": "What has changed since last month in the direct book?",
+      "provenance": "scope",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        },
+        "acquired": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        }
+      }
+    },
+    {
+      "case": "S3",
+      "question": "What changed versus the prior month for the ALP Origination Book?",
+      "provenance": "named portfolio",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "cohort",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        },
+        "acquired": {
+          "scope": "cohort",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        },
+        "direct": {
+          "scope": "cohort",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a311.5m",
+          "answer": "Funded balances increased by \u00a311.5m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.4%, while average borrower age was unchanged at 72.2 years.  Calculated: Month-on-mo"
+        }
+      }
+    },
+    {
+      "case": "S4",
+      "question": "What has changed since last month in the funded book?",
+      "provenance": "funded",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        },
+        "acquired": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        },
+        "direct": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "explicit_user",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (last month)",
+              "applied"
+            ],
+            [
+              "granularity",
+              "month",
+              "applied"
+            ]
+          ],
+          "movement": "\u00a318.1m",
+          "answer": "Funded balances increased by \u00a318.1m during the month, primarily driven by completions in the South East. Weighted-average LTV remained broadly stable at 43.2%, while average borrower age increased slightly to 71.4 years. ALP Origination Boo"
+        }
+      }
+    },
+    {
+      "case": "W1",
+      "question": "What has changed since last month over the last 3 months",
+      "provenance": "span",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": 3,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 3,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place \u2014 tell me whic"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 3,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 3,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place \u2014 tell me whic"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 3,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 3,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place \u2014 tell me whic"
+        }
+      }
+    },
+    {
+      "case": "W2",
+      "question": "What has changed month on month this year?",
+      "provenance": "span",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": 12,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 12,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "You asked about this year, which spans 12 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place \u2014 tell me which perio"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 12,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 12,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "You asked about this year, which spans 12 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place \u2014 tell me which perio"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": 12,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 12,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "You asked about this year, which spans 12 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place \u2014 tell me which perio"
+        }
+      }
+    },
+    {
+      "case": "U1",
+      "question": "What has changed since last month in the acquired_001 book",
+      "provenance": "unresolvable",
+      "recogniserClaims": true,
+      "byDefault": {
+        "None": {
+          "scope": null,
+          "scopeState": "unresolvable",
+          "portfolioIds": [],
+          "provenance": "unresolved",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": true,
+          "verdict": "refuse",
+          "facets": [],
+          "movement": null,
+          "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 'acquired_001' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader"
+        },
+        "acquired": {
+          "scope": null,
+          "scopeState": "unresolvable",
+          "portfolioIds": [],
+          "provenance": "unresolved",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": true,
+          "verdict": "refuse",
+          "facets": [],
+          "movement": null,
+          "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 'acquired_001' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader"
+        },
+        "direct": {
+          "scope": null,
+          "scopeState": "unresolvable",
+          "portfolioIds": [],
+          "provenance": "unresolved",
+          "windowPeriods": 1,
+          "windowGoverned": false,
+          "ownerSpanPeriods": 1,
+          "route": "period_movement",
+          "ok": false,
+          "controlledRefusal": true,
+          "verdict": "refuse",
+          "facets": [],
+          "movement": null,
+          "answer": "I understood that you asked for acquired_001, but that could not be applied to the calculation (acquired_001 \u2014 'acquired_001' is not a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader"
+        }
+      }
+    },
+    {
+      "case": "X1",
+      "question": "Summarise the portfolio",
+      "provenance": "no change marker",
+      "recogniserClaims": false,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional "
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 70.0 years. The largest"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "portfolio_summary",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-borrower age is 72.2 years. The largest r"
+        }
+      }
+    },
+    {
+      "case": "X2",
+      "question": "How has the funded balance evolved over time?",
+      "provenance": "evolution",
+      "recogniserClaims": false,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "evolution",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).  Calculated: Metric evolution."
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "evolution",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).  Calculated: Metric evolution."
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "evolution",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "Funded balance over 3 period(s): latest \u00a31.96bn (up over the window).  Calculated: Metric evolution."
+        }
+      }
+    },
+    {
+      "case": "X3",
+      "question": "Compare June 2026 with May 2026",
+      "provenance": "temporal_compare",
+      "recogniserClaims": false,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_change_analysis",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "The requested start date is later than the requested end date."
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_change_analysis",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "The requested start date is later than the requested end date."
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_change_analysis",
+          "ok": false,
+          "controlledRefusal": false,
+          "verdict": null,
+          "facets": [],
+          "movement": null,
+          "answer": "The requested start date is later than the requested end date."
+        }
+      }
+    },
+    {
+      "case": "X4",
+      "question": "What has changed?",
+      "provenance": "no prior-period marker",
+      "recogniserClaims": false,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (change over time)",
+              "applied"
+            ]
+          ],
+          "movement": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 10 of 12 governed metrics could be compared across both snapshots. Largest observed movements measured in counts: Youngest Borrower Age +0 (71 \u2192 71); Number Of Days In Arrears +0 (0 \u2192 0). Largest observ"
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (change over time)",
+              "applied"
+            ]
+          ],
+          "movement": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 10 of 12 governed metrics could be compared across both snapshots. Largest observed movements measured in counts: Youngest Borrower Age +0 (70 \u2192 70); Number Of Days In Arrears +0 (0 \u2192 0). Largest observ"
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "comparison_period",
+              "comparison period (change over time)",
+              "applied"
+            ]
+          ],
+          "movement": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 10 of 12 governed metrics could be compared across both snapshots. Largest observed movements measured in counts: Youngest Borrower Age +0 (72 \u2192 72); Number Of Days In Arrears +0 (0 \u2192 0). Largest observ"
+        }
+      }
+    },
+    {
+      "case": "X5",
+      "question": "Show the balance by region",
+      "provenance": "point-in-time",
+      "recogniserClaims": false,
+      "byDefault": {
+        "None": {
+          "scope": "total",
+          "scopeState": "filled",
+          "portfolioIds": [],
+          "provenance": "default",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "grouping_dimension",
+              "region",
+              "applied"
+            ]
+          ],
+          "movement": null,
+          "answer": "Here is the bar for your query, covering 12 group(s).  Calculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+        },
+        "acquired": {
+          "scope": "acquired",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_acquired"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "grouping_dimension",
+              "region",
+              "applied"
+            ]
+          ],
+          "movement": null,
+          "answer": "Here is the bar for your query, covering 12 group(s).  Calculated: Total Balance \u00b7 Source Portfolio in alp_acquired \u00b7 grouped by Region \u00b7 12 groups \u00b7 3,909 loans \u00b7 as at 30 June 2026."
+        },
+        "direct": {
+          "scope": "direct",
+          "scopeState": "filled",
+          "portfolioIds": [
+            "alp_origination"
+          ],
+          "provenance": "caller_context",
+          "windowPeriods": null,
+          "windowGoverned": false,
+          "ownerSpanPeriods": null,
+          "route": null,
+          "ok": true,
+          "controlledRefusal": false,
+          "verdict": "ok",
+          "facets": [
+            [
+              "grouping_dimension",
+              "region",
+              "applied"
+            ]
+          ],
+          "movement": null,
+          "answer": "Here is the bar for your query, covering 12 group(s).  Calculated: Total Balance \u00b7 Source Portfolio in alp_origination \u00b7 grouped by Region \u00b7 12 groups \u00b7 7,126 loans \u00b7 as at 30 June 2026."
+        }
+      }
+    }
+  ]
+}

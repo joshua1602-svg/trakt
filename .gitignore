@@ -153,3 +153,8 @@ output/regulatory_watch/discovery_demo/stage1a/
 # Synthetic second book, rebuilt on demand by
 # question_interpretation/run_robustness_deterministic.py
 question_interpretation/.kestrelmoor_store/
+
+# MI compositional migration — raw pytest captures are transient intermediates.
+# The durable, reviewable artefact is migration_phase0/estate.json, which carries
+# every failing node id BY NAME (what abort condition A5 compares against).
+migration_phase0/*_full.txt

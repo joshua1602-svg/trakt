@@ -230,17 +230,38 @@ class TestRouting:
         assert chat_routing._is_period_movement(question) is False
 
     def test_the_movement_route_produces_a_reconciling_answer(self, frames):
+        """CONVERSION 2 changed this test's CALLING CONVENTION, by decision.
+
+        The same change, for the same reason, as Conversion 1 made to
+        `test_the_summary_route_names_the_governed_metrics` below. The route now
+        takes BOTH its semantic inputs — the population and the comparison
+        window — from the interpretation contract, so the contract is a required
+        input and a caller that supplies none gets a deferral. That is
+        deliberate: keeping the lens-resolved path as a fallback would leave
+        `_resolve_lens` and a second reading of the question reachable exactly
+        when the contract failed, which is the worst moment for two owners to
+        disagree.
+
+        In production the handler has one caller, the recogniser registry, and
+        it always supplies a contract. This test called the handler directly
+        with none, which is a convention production no longer uses, so it now
+        supplies one as production does. The assertions below are unchanged:
+        same route, same movement, same South East attribution, same artifacts.
+        """
         from mi_agent.mi_query_validator import load_mi_semantics
         from mi_agent.llm_query_parser import _deterministic_parse
+        from question_interpretation import projection
         from pathlib import Path
         semantics_path = (Path(__file__).resolve().parents[2]
                           / "mi_agent" / "mi_semantics_field_registry.yaml")
         semantics = load_mi_semantics(semantics_path)
         question = "What has changed versus the prior month?"
         spec, _ = _deterministic_parse(question, semantics)
+        interpretation = projection.project(question, semantics=semantics)
         out = chat_routing._route_period_movement(
             question, spec, spec.to_dict(), client_id="client", run_id=None,
-            output_root="blob://x", portfolio_id="client/2026-06-30", as_of=None)
+            output_root="blob://x", portfolio_id="client/2026-06-30", as_of=None,
+            interpretation=interpretation)
         assert out["ok"] is True
         assert out["metadata"]["route"] == "period_movement"
         assert "increased" in out["answer"]
@@ -250,17 +271,34 @@ class TestRouting:
         assert "kpi" in kinds and "chart" in kinds and "table" in kinds
 
     def test_the_summary_route_names_the_governed_metrics(self, frames):
+        """CONVERSION 1 changed this test's CALLING CONVENTION, by decision.
+
+        The route now plans its population from the interpretation contract, so
+        the contract is a required input and a caller that supplies none gets a
+        deferral — deliberately, because keeping the lens-resolved path as a
+        fallback would leave a second population owner reachable exactly when
+        the first one failed.
+
+        In production the handler has one caller, the recogniser registry, and
+        it always supplies one: measured at 54 of 54 owned renders. This test
+        called the handler directly with no contract, which is a convention
+        production no longer uses, so it now supplies one as production does.
+        The assertions below are unchanged.
+        """
         from mi_agent.mi_query_validator import load_mi_semantics
         from mi_agent.llm_query_parser import _deterministic_parse
+        from question_interpretation import projection
         from pathlib import Path
         semantics_path = (Path(__file__).resolve().parents[2]
                           / "mi_agent" / "mi_semantics_field_registry.yaml")
         semantics = load_mi_semantics(semantics_path)
         question = "Summarise the portfolio."
         spec, _ = _deterministic_parse(question, semantics)
+        interpretation = projection.project(question, semantics=semantics)
         out = chat_routing._route_portfolio_summary(
             question, spec, spec.to_dict(), client_id="client", run_id=None,
-            output_root="blob://x", portfolio_id="client/2026-06-30", as_of=None)
+            output_root="blob://x", portfolio_id="client/2026-06-30", as_of=None,
+            interpretation=interpretation)
         assert out is not None
         assert out["metadata"]["route"] == "portfolio_summary"
         assert "100 loans" in out["answer"]

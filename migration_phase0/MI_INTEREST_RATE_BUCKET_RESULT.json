@@ -1,0 +1,224 @@
+{
+ "base": "1062e43",
+ "change": [
+  "mi_agent/build_mi_semantics_registry.py::CURATION — one entry",
+  "mi_agent/mi_semantics_field_registry.yaml — regenerated",
+  "mi_agent/tests/test_mi_semantics_buckets.py — pinned counts + template coverage",
+  "migration_phase0/data_claim_audit.py — pre-registered false set emptied"
+ ],
+ "no_banding_code_added": true,
+ "builder_reproduces_committed_registry_before_change": true,
+ "predictions": {
+  "Q13A": {
+   "off": {
+    "before": "FALSE_REFUSAL",
+    "after": "CORRECT",
+    "dimensions": [
+     "ltv_bucket",
+     "interest_rate_bucket"
+    ],
+    "artefact_rows": [
+     30,
+     30
+    ],
+    "truth_cells": 30,
+    "truth_levels": {
+     "ltv_bucket": 6,
+     "interest_rate_bucket": 5
+    },
+    "grade_why": "cells 30 (artefact rows 30) found"
+   },
+   "merge": {
+    "before": "FALSE_REFUSAL",
+    "after": "CORRECT",
+    "dimensions": [
+     "ltv_bucket",
+     "interest_rate_bucket"
+    ],
+    "artefact_rows": [
+     30,
+     30
+    ],
+    "truth_cells": 30,
+    "truth_levels": {
+     "ltv_bucket": 6,
+     "interest_rate_bucket": 5
+    },
+    "grade_why": "cells 30 (artefact rows 30) found"
+   }
+  },
+  "Q13B": {
+   "off": {
+    "before": "FALSE_REFUSAL",
+    "after": "CORRECT",
+    "dimensions": [
+     "ltv_bucket",
+     "interest_rate_bucket"
+    ],
+    "artefact_rows": [
+     30,
+     30
+    ],
+    "truth_cells": 30,
+    "truth_levels": {
+     "ltv_bucket": 6,
+     "interest_rate_bucket": 5
+    },
+    "grade_why": "cells 30 (artefact rows 30) found"
+   },
+   "merge": {
+    "before": "FALSE_REFUSAL",
+    "after": "CORRECT",
+    "dimensions": [
+     "ltv_bucket",
+     "interest_rate_bucket"
+    ],
+    "artefact_rows": [
+     30,
+     30
+    ],
+    "truth_cells": 30,
+    "truth_levels": {
+     "ltv_bucket": 6,
+     "interest_rate_bucket": 5
+    },
+    "grade_why": "cells 30 (artefact rows 30) found"
+   }
+  },
+  "Q13C": {
+   "off": {
+    "before": "FALSE_REFUSAL",
+    "after": "CORRECT",
+    "dimensions": [
+     "ltv_bucket",
+     "interest_rate_bucket"
+    ],
+    "artefact_rows": [
+     30,
+     30
+    ],
+    "truth_cells": 30,
+    "truth_levels": {
+     "ltv_bucket": 6,
+     "interest_rate_bucket": 5
+    },
+    "grade_why": "cells 30 (artefact rows 30) found"
+   },
+   "merge": {
+    "before": "FALSE_REFUSAL",
+    "after": "CORRECT",
+    "dimensions": [
+     "ltv_bucket",
+     "interest_rate_bucket"
+    ],
+    "artefact_rows": [
+     30,
+     30
+    ],
+    "truth_cells": 30,
+    "truth_levels": {
+     "ltv_bucket": 6,
+     "interest_rate_bucket": 5
+    },
+    "grade_why": "cells 30 (artefact rows 30) found"
+   }
+  }
+ },
+ "arms": {
+  "off": {
+   "before": {
+    "CORRECT": 99,
+    "FALSE_REFUSAL": 25,
+    "NO_COMPUTABLE_TRUTH": 22,
+    "TRUE_REFUSAL": 15,
+    "WRONG": 5
+   },
+   "after": {
+    "CORRECT": 102,
+    "FALSE_REFUSAL": 22,
+    "NO_COMPUTABLE_TRUTH": 22,
+    "TRUE_REFUSAL": 15,
+    "WRONG": 5
+   },
+   "moved": [
+    "Q13A",
+    "Q13B",
+    "Q13C"
+   ],
+   "previously_correct_that_changed": [],
+   "cfo91_byte_identical": true,
+   "seasoning_families_Q01_Q07_Q08_byte_identical": true
+  },
+  "merge": {
+   "before": {
+    "CORRECT": 105,
+    "FALSE_REFUSAL": 24,
+    "NO_COMPUTABLE_TRUTH": 20,
+    "TRUE_REFUSAL": 15,
+    "WRONG": 2
+   },
+   "after": {
+    "CORRECT": 108,
+    "FALSE_REFUSAL": 21,
+    "NO_COMPUTABLE_TRUTH": 20,
+    "TRUE_REFUSAL": 15,
+    "WRONG": 2
+   },
+   "moved": [
+    "Q13A",
+    "Q13B",
+    "Q13C"
+   ],
+   "previously_correct_that_changed": [],
+   "cfo91_byte_identical": true,
+   "seasoning_families_Q01_Q07_Q08_byte_identical": true
+  }
+ },
+ "single_axis": {
+  "question": "Show balance by interest rate bucket.",
+  "groups": 5,
+  "tape_bands": {
+   "6-7%": 152,
+   "5-6%": 150,
+   "7-8%": 148,
+   "4-5%": 134,
+   ">=8%": 56
+  },
+  "tape_nulls": 0,
+  "bands_defined_in_config": 8,
+  "bands_populated": 5
+ },
+ "metric_sense_survives": {
+  "What is the weighted average interest rate?": "Weighted-average Interest Rate: 6.3% · 640 loans",
+  "What is the average coupon?": "Weighted-average Interest Rate: 6.3% · 640 loans"
+ },
+ "data_claim_audit": {
+  "questions": 226,
+  "claims_about_the_book": 9,
+  "FALSE_about_the_book_before": 3,
+  "FALSE_about_the_book_after": 0,
+  "TRUE_about_the_book": 4,
+  "TRUE_about_a_NAMED_FILTER": 3,
+  "QUOTES_A_MANGLED_PHRASE": 2,
+  "verdict": "AUDIT HOLDS",
+  "pre_registration_now": "empty — a name entering the set is the finding"
+ },
+ "registry": {
+  "field_count": "118 -> 119",
+  "core": "82 -> 83",
+  "dimensions": "56 -> 57",
+  "derived": "18 -> 19"
+ },
+ "tests": {
+  "modules": 278,
+  "failures_before": 85,
+  "failures_after": 85,
+  "new": [],
+  "fixed": [],
+  "note": "the one new failure was test_registry_field_count_and_tiers, a pinned count doing its job; the pin was updated and interest_rate_bucket added to DERIVED_BUCKETS so it answers the same template assertions as the other eight"
+ },
+ "model_calls": {
+  "successful_responses": 0,
+  "note": "merge arm replayed from recorded proposals with llm_query_parser._call_llm replaced by a tripwire; MI_AGENT_LLM_PARSER=off throughout (F2)"
+ }
+}

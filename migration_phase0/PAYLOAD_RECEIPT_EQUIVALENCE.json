@@ -1,0 +1,326 @@
+[
+  {
+    "case": "A1",
+    "question": "Please provide a portfolio summary",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "A1",
+    "question": "Please provide a portfolio summary",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "A1",
+    "question": "Please provide a portfolio summary",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "A2",
+    "question": "Give me a summary of the portfolio",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "A2",
+    "question": "Give me a summary of the portfolio",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "A2",
+    "question": "Give me a summary of the portfolio",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "A3",
+    "question": "Can you summarise the book for me?",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "A3",
+    "question": "Can you summarise the book for me?",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "A3",
+    "question": "Can you summarise the book for me?",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "A4",
+    "question": "portfolio summary",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "A4",
+    "question": "portfolio summary",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "A4",
+    "question": "portfolio summary",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "A5",
+    "question": "summarise the portfolio",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "A5",
+    "question": "summarise the portfolio",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "A5",
+    "question": "summarise the portfolio",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "A6",
+    "question": "overview of the portfolio",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "A6",
+    "question": "overview of the portfolio",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "A6",
+    "question": "overview of the portfolio",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "L1",
+    "question": "Summarise the acquired book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "L1",
+    "question": "Summarise the acquired book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "L1",
+    "question": "Summarise the acquired book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "L2",
+    "question": "Summarise the direct book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "L2",
+    "question": "Summarise the direct book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "L2",
+    "question": "Summarise the direct book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "L3",
+    "question": "portfolio summary for the acquired book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "L3",
+    "question": "portfolio summary for the acquired book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "L3",
+    "question": "portfolio summary for the acquired book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "P1",
+    "question": "portfolio summary across all portfolios",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "P1",
+    "question": "portfolio summary across all portfolios",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "P1",
+    "question": "portfolio summary across all portfolios",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "P2",
+    "question": "summarise the portfolio excluding the acquired book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "P2",
+    "question": "summarise the portfolio excluding the acquired book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "P2",
+    "question": "summarise the portfolio excluding the acquired book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "N1",
+    "question": "Summarise the ALP Origination Book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "N1",
+    "question": "Summarise the ALP Origination Book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "N1",
+    "question": "Summarise the ALP Origination Book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "N2",
+    "question": "Summarise the alp_acquired book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "N2",
+    "question": "Summarise the alp_acquired book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "N2",
+    "question": "Summarise the alp_acquired book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "N3",
+    "question": "Summarise the ALP Acquired Back Book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "N3",
+    "question": "Summarise the ALP Acquired Back Book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "N3",
+    "question": "Summarise the ALP Acquired Back Book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "Z1",
+    "question": "Summarise the spv1_sponsored portfolio",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "Z1",
+    "question": "Summarise the spv1_sponsored portfolio",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "Z1",
+    "question": "Summarise the spv1_sponsored portfolio",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "U1",
+    "question": "Summarise the acquired_001 book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "U1",
+    "question": "Summarise the acquired_001 book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "U1",
+    "question": "Summarise the acquired_001 book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "U2",
+    "question": "Summarise the Highgate Mortgages Book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "U2",
+    "question": "Summarise the Highgate Mortgages Book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "U2",
+    "question": "Summarise the Highgate Mortgages Book",
+    "default": "direct",
+    "differences": []
+  },
+  {
+    "case": "F1",
+    "question": "Summarise the funded book",
+    "default": null,
+    "differences": []
+  },
+  {
+    "case": "F1",
+    "question": "Summarise the funded book",
+    "default": "acquired",
+    "differences": []
+  },
+  {
+    "case": "F1",
+    "question": "Summarise the funded book",
+    "default": "direct",
+    "differences": []
+  }
+]

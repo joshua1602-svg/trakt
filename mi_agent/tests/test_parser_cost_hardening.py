@@ -21,7 +21,9 @@ import pytest
 from mi_agent.llm_query_parser import (
     _deterministic_parse,
     _price_for_model,
-    _supports_temperature,
+    _is_sampling_rejection,
+    _sampling_for,
+    _sdk_sampling_parameters,
     build_prompt,
     compact_catalogue,
     estimate_cost,
@@ -304,16 +306,96 @@ def test_opus_cost_uses_current_price_not_stale():
     assert opus["estimated_total_cost"] == pytest.approx(30.0, abs=1e-6)
 
 
-def test_temperature_gated_for_models_that_reject_it():
-    # Newer reasoning models 400 on temperature/top_p/top_k; older ones accept it.
-    assert _supports_temperature("claude-haiku-4-5-20251001") is True
-    assert _supports_temperature("claude-sonnet-4-6") is True
-    assert _supports_temperature("claude-opus-4-6") is True
-    assert _supports_temperature("claude-opus-4-8") is False
-    assert _supports_temperature("claude-opus-4-7") is False
-    assert _supports_temperature("claude-sonnet-5") is False
-    assert _supports_temperature("claude-fable-5") is False
-    assert _supports_temperature("claude-mythos-5") is False
+# --------------------------------------------------------------------------- #
+# SAMPLING PARAMETERS
+#
+# THIS TEST PREVIOUSLY ASSERTED THE DEFECT. It read:
+#
+#     assert _supports_temperature("claude-haiku-4-5-20251001") is True
+#
+# — the repository's own DEFAULT model — against a hardcoded allowlist of model
+# names, on an SDK whose `messages.create()` has no `temperature` parameter at
+# all. Every one of those eight assertions passed while a live LLM-enabled run
+# over 166 questions raised `TypeError` on every call before reaching the API
+# and was reported as a clean model comparison.
+#
+# The rater overlapped the decision under change: it could only ever confirm
+# that the list said what the list said. What is asserted now is the MECHANISM
+# — that the runtime is asked rather than assumed — which is a claim a model
+# release cannot invalidate and a stale list cannot satisfy.
+# --------------------------------------------------------------------------- #
+class _NoSamplingSDK:
+    """`anthropic` 1.x: no `temperature` parameter on `messages.create`."""
+
+    class messages:  # noqa: N801 - mirrors the SDK's own shape
+        @staticmethod
+        def create(*, model, max_tokens, system, messages):
+            raise AssertionError("not called in this test")
+
+
+class _SamplingSDK:
+    class messages:  # noqa: N801
+        @staticmethod
+        def create(*, model, max_tokens, system, messages, temperature=None,
+                   top_p=None):
+            raise AssertionError("not called in this test")
+
+
+class _OpaqueSDK:
+    class messages:  # noqa: N801
+        @staticmethod
+        def create(**kwargs):
+            raise AssertionError("not called in this test")
+
+
+def test_the_sdk_is_asked_which_sampling_parameters_it_takes():
+    assert _sdk_sampling_parameters(_NoSamplingSDK()) == frozenset()
+    assert _sdk_sampling_parameters(_SamplingSDK()) == frozenset({"temperature",
+                                                                  "top_p"})
+
+
+def test_an_sdk_taking_arbitrary_kwargs_defers_to_the_model():
+    """It cannot know what the API allows, so it must not claim to."""
+    assert "temperature" in _sdk_sampling_parameters(_OpaqueSDK())
+
+
+def test_no_sampling_is_sent_when_the_sdk_has_no_such_parameter():
+    """The defect, stated as the outcome rather than as a list membership: the
+    DEFAULT model must reach the API on the installed SDK."""
+    for model in ("claude-haiku-4-5-20251001", "claude-opus-5",
+                  "claude-opus-4-8", "claude-sonnet-4-6"):
+        assert _sampling_for(_NoSamplingSDK(), model) == {}
+
+
+def test_determinism_is_requested_where_the_runtime_allows_it():
+    assert _sampling_for(_SamplingSDK(), "claude-sonnet-4-6") == {"temperature": 0.0}
+
+
+def test_a_model_that_rejected_sampling_is_remembered(monkeypatch):
+    from mi_agent import llm_query_parser as parser
+
+    monkeypatch.setattr(parser, "_SAMPLING_REJECTED", {"claude-opus-9"})
+    assert _sampling_for(_SamplingSDK(), "claude-opus-9") == {}
+    assert _sampling_for(_SamplingSDK(), "claude-opus-8") == {"temperature": 0.0}
+
+
+def test_both_shapes_of_the_same_rejection_are_recognised():
+    """A `TypeError` from the SDK and a 400 from the API are one fact told two
+    ways. The old code caught neither on the call that mattered."""
+    assert _is_sampling_rejection(
+        TypeError("Messages.create() got an unexpected keyword argument "
+                  "'temperature'"))
+    assert _is_sampling_rejection(
+        RuntimeError("Error code: 400 - temperature is not supported"))
+    assert _is_sampling_rejection(
+        RuntimeError("invalid_request_error: top_p is unsupported"))
+
+
+def test_an_unrelated_failure_is_not_read_as_a_sampling_rejection():
+    """Downgrading on everything would hide a real outage behind a retry."""
+    assert not _is_sampling_rejection(RuntimeError("Error code: 529 - overloaded"))
+    assert not _is_sampling_rejection(TypeError("missing 'messages'"))
+    assert not _is_sampling_rejection(RuntimeError("Error code: 401 - api key"))
 
 
 def test_llm_metadata_includes_tokens_when_usage_returned(df, semantics):

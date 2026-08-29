@@ -126,6 +126,17 @@ KIND_STATISTIC = "requested_statistic"
 #: honour raised nothing at all and nothing downstream could act on it.
 KIND_GRANULARITY = "granularity"
 
+#: P0 — AN AXIS THE QUESTION ASKED THE ANSWER TO VARY OVER, ABSENT FROM THE
+#: OBJECT THAT SHIPPED.
+#:
+#: Distinct from KIND_GRANULARITY, which is the LEVEL a series is reported at
+#: and presupposes a series. This kind records that there is no series: the
+#: sentence asked for movement and the rendered rows carry a single position.
+#: Distinct from KIND_GROUPING, whose field_key is resolved against a registry —
+#: a time axis has no registry field, which is why the facet layer raised
+#: nothing for one across twenty-four time-series probes.
+KIND_SERIES_AXIS = "series_axis"
+
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
 #: The dataset does not carry the field the facet needs. Disclosable.
@@ -174,6 +185,21 @@ class RequestedFacet:
     #: None wherever the facet was not produced by matching the question text.
     #: ADDITIVE and read by nothing today.
     span: Optional[Tuple[int, int]] = None
+    #: THE READER'S WORDING, where it differs from `label`.
+    #:
+    #: `label` is machine-shaped on purpose for a population facet: it is built
+    #: from `Predicate.describe()` and therefore leads with the FIELD KEY and
+    #: carries the OPERATOR CODE — "the population current_loan_to_value gt
+    #: 50.0" — and `question_interpretation.b5_reachability` proves a guard
+    #: unreachable precisely BECAUSE the label leads with the field name. So the
+    #: label may not become prose. This carries the prose beside it, and only
+    #: user-facing text reads it.
+    spoken: Optional[str] = None
+
+    @property
+    def speech(self) -> str:
+        """What to put in a sentence a customer reads."""
+        return self.spoken or self.label
 
     def satisfied_by(self) -> Tuple[str, ...]:
         """Every field key that counts as honouring this facet."""
@@ -198,7 +224,8 @@ class RequestedFacet:
         which field their book would need to carry to get an answer. A refusal
         that cannot be acted on is only half a refusal.
         """
-        label = self.label
+        # The READER'S wording where one was carried; see `spoken`.
+        label = self.speech
         if self.field_key and semantics:
             name = _business_name(self.field_key, semantics)
             if name and name.strip().lower() != str(label).strip().lower():
@@ -353,6 +380,47 @@ def geographic_values(frame, semantics: dict, *, max_cardinality: int = 60
     return out
 
 
+def book_values(frame, semantics: Mapping[str, Any],
+                max_values: int = 200) -> Dict[str, Dict[str, str]]:
+    """The governed categorical DIMENSION values this book actually carries.
+
+    ``{field_key: {value, ...}}``, lower-cased.
+
+    THE VALUES COME FROM THE BOOK, NOT FROM A LIST. A parser that has to know
+    what "lump sum" means needs a catalogue, and every catalogue written in code
+    is a vocabulary that drifts from the data it claims to describe. The book
+    already holds its own values; this hands them over so a named category can
+    be resolved to the field that actually holds it — the same shape
+    `book_columns` established for the schema question.
+
+    Only fields the registry marks as dimensions are offered, and only where the
+    column's cardinality is small enough to be a category rather than an
+    identifier — a loan reference is not a population a reader names.
+    """
+    out: Dict[str, Dict[str, str]] = {}
+    columns = getattr(frame, "columns", None)
+    if columns is None:
+        return out
+    present = set(columns)
+    for key, entry in ((semantics or {}).get("fields") or {}).items():
+        if (entry or {}).get("role") != "dimension":
+            continue
+        column = (entry or {}).get("canonical_field", key)
+        if column not in present:
+            continue
+        try:
+            values = frame[column].dropna().unique().tolist()
+        except Exception:  # noqa: BLE001 - a column that cannot be read has no values
+            continue
+        if not values or len(values) > max_values:
+            continue
+        # lower-cased key -> the book's OWN spelling, so a resolved value is
+        # rendered as the book writes it rather than as the reader typed it.
+        out[key] = {str(v).strip().lower(): str(v).strip()
+                    for v in values if str(v).strip()}
+    return out
+
+
 def book_columns(frame) -> Set[str]:
     """The columns of the BOOK this frame reports on. THE schema answer, once.
 
@@ -454,6 +522,7 @@ def dimension_values(frame, semantics: dict, *, max_cardinality: int = 60
             token = name.strip().lower()
             if token:
                 named_by.setdefault(token, set()).add(key)
+    claimed: Dict[str, Set[str]] = {}
     for key, entry in fields.items():
         if (entry or {}).get("role") != "dimension":
             continue
@@ -470,8 +539,76 @@ def dimension_values(frame, semantics: dict, *, max_cardinality: int = 60
             token = str(value).strip().lower()
             if len(token) < 4 or (named_by.get(token, set()) - {key}):
                 continue
-            out.setdefault(token, key)
+            claimed.setdefault(token, set()).add(key)
+    for token, keys in claimed.items():
+        winner = _value_owner(token, keys, fields)
+        if winner is not None:
+            out[token] = winner
     return out
+
+
+def _value_owner(token: str, keys: Set[str], fields: Mapping[str, Any]
+                 ) -> Optional[str]:
+    """Which field owns a value TWO governed fields both carry.
+
+    THE SEGMENTATION KEY WINS. Not a preference, and not a list: it is read from
+    what the registry already declares about the two fields, so a client whose
+    book collides on a different word is decided by the same rule with nothing
+    added here.
+
+    Measured, and it is why this exists. `direct` is 146 rows of
+    `origination_channel` and 441 rows of `source_portfolio_type` — the only
+    value collision on the shipped book, established by enumerating every
+    governed value the tape carries. This map was built with `setdefault`, so
+    the winner was **whichever field the registry happened to iterate first**.
+    `origination_channel` precedes `source_portfolio_type`, so a bare `direct`
+    resolved to the channel: the field with a third of the rows, chosen by file
+    order, disclosed to nobody. `_detect_lost_narrowing` then refused with
+    *"Direct (Origination Channel) — this narrowing was not applied"*, naming a
+    field the reader had not asked about.
+
+    Worse than the wrong answer was the disagreement: `categorical_spans.
+    value_field` REFUSES the same token as ambiguous, by design — "an ambiguous
+    narrowing must be disclosed, never resolved by preference". Two owners of the
+    same word, one refusing and one silently picking the losing field. That is
+    indefensible whichever sense is right, and it is what this closes.
+
+    THE DOMAIN RULING it implements: a lender saying "direct" means the
+    ORIGINATED book — provenance — not the origination channel. The channel sense
+    takes a qualifier ("direct channel", "direct-to-consumer"). The registry
+    already separates the two fields twice over, so the ruling needs no new key
+    and no new binder:
+
+        origination_channel     source_criteria: [curated]
+        source_portfolio_type   source_criteria: [segmentation_key]
+
+    A `segmentation_key` is, by declaration, a field the book is SEGMENTED BY —
+    which is precisely the question "whose value is this bare word?" asks.
+
+    IT RECOVERS NO QUESTIONS, and that is not the reason to do it. Measured over
+    the 166-question review pack on both arms and 98 further provenance/channel
+    questions in two fixtures: three refusals stop naming the wrong field, no
+    answer changes, no population changes, nothing degrades. The gain is a
+    receipt that no longer says something untrue about which field it means.
+
+    DELIBERATELY NOT ALSO IN `categorical_spans.value_field`. `source_portfolio_type`
+    is a scope-owned field, and narrowing it is `portfolio_lens`'s job. Applying
+    the ruling in the filter binder as well was measured: it adds a redundant
+    `source_portfolio_type` predicate alongside the scope owner's cohort filter —
+    harmless on a book with one direct cohort, an undeclared empty intersection
+    on a book with two. One declaration, one reader; the other defers.
+
+    Between fields of EQUAL standing the value stays ambiguous and is dropped, so
+    a collision this rule cannot decide is still not decided by iteration order.
+    """
+    if len(keys) == 1:
+        return next(iter(keys))
+    segmentation = {k for k in keys
+                    if "segmentation_key" in ((fields.get(k) or {})
+                                              .get("source_criteria") or ())}
+    if len(segmentation) == 1:
+        return next(iter(segmentation))
+    return None
 
 
 #: Words that say the question COMPARES two things rather than narrowing to one.
@@ -758,12 +895,25 @@ _PROJECTION_RE = re.compile(
     r"\bforecast\b|\bextrapolat", re.I)
 
 #: A comparison between two named cohorts rather than across time.
+#: A COHORT comparison NAMES A BOOK. Both arms below require one.
+#:
+#: A third arm used to match bare ``how does the … compare with …``, with no
+#: book anywhere in it, and it claimed *"How does the current month compare with
+#: the previous month?"* — a PERIOD comparison — as a comparison between two
+#: books, then refused it for not having compared them. The refusal named a
+#: concept the reader had not mentioned.
+#:
+#: Removing it loses no cohort guard, and that is measured rather than argued:
+#: `_COHORT_COMPARISON_FRAMING_RE` already contains a SUPERSET of that arm
+#: (``how does … compare``), and the caller raises the facet on that regex
+#: whenever `cohort_concepts_named` finds a cohort. Over the estate's 848
+#: corpus questions, exactly ONE question reached the facet through the third
+#: arm and through nothing else — the month-on-month question above.
 _COHORT_COMPARISON_RE = re.compile(
     r"\b(?:direct|acquired|new|back)\s+book\b[^?]{0,60}\b(?:vs\.?|versus|compared with|"
     r"compared to|against|better or worse than)\b|"
     r"\b(?:vs\.?|versus|compared with|compared to|better or worse than)\b[^?]{0,60}"
-    r"\b(?:direct|acquired|back)\s+book\b|"
-    r"\bhow does the\b[^?]{0,40}\bcompare with\b", re.I)
+    r"\b(?:direct|acquired|back)\s+book\b", re.I)
 
 #: Grouping keys that split the platform into its constituent books. Grouping by
 #: one of these IS a cohort comparison, even on the point-in-time path.
@@ -1107,11 +1257,47 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
             _p = Predicate(_field, "eq", _condition)
         seasoning_population.append(RequestedFacet(
             kind=KIND_POPULATION, label="the population %s" % _p.describe(),
+            spoken="loans where %s" % _p.spoken(semantics),
             field_key=_field))
+    # GOVERNED SPAN OWNERSHIP. A span already claimed as a governed categorical
+    # VALUE may not create a SECOND semantic claim from the tokens inside it.
+    # Measured: a broker called "London Bridge Loans" made every question about
+    # it refuse citing a geographic scope of *London* — the place resolver read
+    # one word out of the middle of somebody's name. `geo_owned` excludes the
+    # geography owner's OWN fields, because a value of one of those IS the
+    # geographic reading rather than a competing claim. Masking preserves
+    # offsets, so every facet span below still points at the right characters.
+    _values_for_ownership = None
+    if frame is not None:
+        try:
+            _values_for_ownership = book_values(frame, semantics)
+        except Exception:  # noqa: BLE001 - no catalogue leaves the old reading
+            _values_for_ownership = None
+
+    def _owned(text: str, exclude_fields=()) -> str:
+        if not _values_for_ownership:
+            return text
+        try:
+            from .categorical_spans import mask_value_spans
+        except Exception:  # noqa: BLE001
+            return text
+        return mask_value_spans(text, _values_for_ownership,
+                                exclude_fields=exclude_fields)
+
+    _geo_map = geographic_values(frame, semantics)
+    _geo_q = _owned(q, set(_geo_map.values()))
+    #: For the detectors whose vocabulary belongs to NO governed field — a
+    #: comparison period, a ranking, a stress, a threshold, a relationship. None
+    #: of them owns a book value, so every one of their words found inside a
+    #: claimed span belongs to the value, not to them. Measured: a broker called
+    #: "Growth Partners" raised a comparison-period facet on every question
+    #: about it, and the answer refused for not having compared two periods.
+    _foreign_q = _owned(q)
+
     facets: List[RequestedFacet] = []
-    facets.extend(_detect_stress(q))
-    facets.extend(_detect_thresholds(q))
-    facets.extend(_detect_geographic_scope(q, geographic_values(frame, semantics)))
+    facets.extend(_detect_stress(_foreign_q))
+    facets.extend(_detect_thresholds(_foreign_q))
+    facets.extend(_detect_geographic_scope(_geo_q, _geo_map))
     # B16a. The same idea on every OTHER dimension, and it needs the sentence's
     # mark where geography does not: geography values do not collide with
     # dimension words and general dimension values do — `Broker` is a value of
@@ -1154,12 +1340,12 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
     facets.extend(_detect_lost_narrowing(
         q, dimension_values(frame, semantics),
         taken=set(_predicate or ()) | set(resolved_filters or ()) | {
-            f.field_key for f in _detect_geographic_scope(
-                q, geographic_values(frame, semantics)) if f.field_key}))
-    facets.extend(_detect_comparison_period(q))
-    facets.extend(_detect_ranking(q, list(requested_dimensions or [])))
-    facets.extend(_detect_contribution(q))
-    if _RELATIONSHIP_RE.search(q):
+            f.field_key for f in _detect_geographic_scope(_geo_q, _geo_map)
+            if f.field_key}))
+    facets.extend(_detect_comparison_period(_foreign_q))
+    facets.extend(_detect_ranking(_foreign_q, list(requested_dimensions or [])))
+    facets.extend(_detect_contribution(_foreign_q))
+    if _RELATIONSHIP_RE.search(_foreign_q):
         facets.append(RequestedFacet(
             kind=KIND_RELATIONSHIP,
             label="one measure relative to another"))
@@ -1296,6 +1482,12 @@ class ExecutionReceipt:
     #: "entire funded portfolio" default, which would misdescribe (say) a
     #: two-book comparison as a whole-book aggregate.
     routed: bool = False
+    #: WHICH GOVERNED DATASET the figure came from. The unfiltered-population
+    #: phrase used to be the literal "entire funded portfolio" whatever had been
+    #: computed, so "what is the pipeline balance?" returned the right number —
+    #: £3.6m over 8 cases — described as the funded book. The number was never
+    #: wrong; the sentence naming its population was.
+    dataset: Optional[str] = None
 
     # -- derived views ---------------------------------------------------- #
     def not_applied(self) -> List[RequestedFacet]:
@@ -1325,8 +1517,10 @@ class ExecutionReceipt:
             parts.extend(self.filters)
         elif self.measure and not self.dimensions and not self.routed:
             # State the population explicitly so an unfiltered answer can never
-            # be mistaken for a filtered one.
-            parts.append("entire funded portfolio")
+            # be mistaken for a filtered one — and name the DATASET it came
+            # from, because "unfiltered" is a different fact from "funded".
+            parts.append("entire pipeline" if (self.dataset or "") == "pipeline"
+                         else "entire funded portfolio")
         if self.dimensions:
             parts.append(("ranked by " if self.ranking else "grouped by ")
                          + _join(self.dimensions))
@@ -1466,6 +1660,11 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # A substituted statistic IS the number. There is no version of "here is the
     # weighted average, you asked for the median" that is a partial answer.
     KIND_STATISTIC,
+    # An axis the answer was asked to vary over, absent from what shipped. A
+    # single position presented for a question about movement is the same
+    # substitution as a whole-book figure presented for a narrowed question:
+    # the number is confident, it is not wrong, and it answers something else.
+    KIND_SERIES_AXIS,
     # A narrowing the sentence asked for and execution did not apply changes
     # WHICH ROWS were counted, exactly as a population does. Answering over the
     # whole book and disclosing it underneath is the substitution this contract
@@ -2068,6 +2267,7 @@ def _split_named_dimension_roles(facets: Sequence[RequestedFacet], spec,
         out.append(RequestedFacet(
             kind=KIND_POPULATION,
             label="the population %s" % predicate.describe(),
+            spoken="loans where %s" % predicate.spoken(semantics),
             field_key=filter_key, alt_keys=facet.alt_keys,
             concepts=facet.concepts, status=facet.status, reason=facet.reason,
             span=facet.span))
@@ -2465,6 +2665,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
                   parser_confidence: Optional[str] = None,
                   period: Optional[str] = None,
                   comparison_period: Optional[str] = None,
+                  dataset: Optional[str] = None,
                   scenario: Optional[str] = None) -> ExecutionReceipt:
     """The receipt for one executed point-in-time query."""
     meta = getattr(query_result, "metadata", None) or {}
@@ -2496,6 +2697,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         population_total=int(total) if total is not None else None,
         group_count=group_count,
         narrowed=narrowed,
+        dataset=dataset,
         period=period,
         comparison_period=comparison_period,
         scenario=scenario,
@@ -2571,7 +2773,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     if blocking:
         detail = "; ".join(f.disclosure(semantics) for f in blocking)
         return VERDICT_REFUSE, (
-            f"I understood that you asked for {_join([f.label for f in blocking])}, "
+            f"I understood that you asked for {_join([f.speech for f in blocking])}, "
             f"but that could not be applied to the calculation ({detail}). "
             "I have not substituted a broader figure.")
 
@@ -2594,7 +2796,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     if unresolved:
         return VERDICT_CLARIFY, (
             "I could not tell how you meant "
-            f"{_join([f.label for f in unresolved])}. Did you want the book "
+            f"{_join([f.speech for f in unresolved])}. Did you want the book "
             "split by it, or narrowed to one value of it? I have not answered "
             "over the whole book in the meantime.")
 
@@ -2912,6 +3114,7 @@ def population_facets(spec: Optional[Dict[str, Any]],
     for predicate in material_predicates((spec or {}).get("filters"), semantics):
         facet = RequestedFacet(kind=KIND_POPULATION,
                                label=f"the population {predicate.describe()}",
+                               spoken=f"loans where {predicate.spoken(semantics)}",
                                field_key=predicate.field)
         out.append(facet)
     return out
@@ -2980,7 +3183,7 @@ def population_applied(facet: RequestedFacet, *,
              for k in list(keys)}
     if keys & {str(f) for f in (applied_fields or ())}:
         return True
-    declared = {str(a).split(" ")[0] for a in ((ledger or {}).get("applied") or ())}
+    declared = declared_population_fields(ledger)
     if keys & declared:
         return True
     if envelope is not None and _analytical_population_satisfies(envelope, facet):
@@ -2996,6 +3199,21 @@ def population_ledger(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         return {}
     ledger = (envelope.get("metadata") or {}).get("populationApplied")
     return ledger if isinstance(ledger, dict) else {}
+
+
+def declared_population_fields(ledger: Optional[Mapping[str, Any]]) -> Set[str]:
+    """The FIELD NAMES a route's `populationApplied` ledger declares it narrowed on.
+
+    The ledger's `applied` entries are field-named prose — "erm_product_type",
+    "source_portfolio_type (applied within each period)" — so the field is the
+    leading token. That parsing rule is a contract between the routes that write
+    the ledger and every reader of it, and it now has two readers: this module's
+    `_population_satisfied` and the semantic coverage adapter. Written once,
+    here, beside the ledger accessor, because a second copy of a format rule is
+    the shape of defect this estate has now been bitten by four times.
+    """
+    return {str(a).split(" ")[0] for a in ((ledger or {}).get("applied") or ())
+            if str(a).strip()}
 
 
 def drill_population_facets(extra_filters: Optional[Mapping[str, Any]],
@@ -3035,6 +3253,7 @@ def drill_population_facets(extra_filters: Optional[Mapping[str, Any]],
         out.append(RequestedFacet(
             kind=KIND_POPULATION,
             label=f"the population {predicate.describe()}",
+            spoken=f"loans where {predicate.spoken(semantics)}",
             field_key=predicate.field))
     return out
 
@@ -3116,6 +3335,58 @@ def answer_axis_keys(envelope: Optional[Dict[str, Any]]) -> Set[str]:
     return out
 
 
+def threshold_execution_proven(envelope: Optional[Dict[str, Any]],
+                               semantics: Optional[dict],
+                               threshold_count: int) -> bool:
+    """Does execution evidence prove the requested threshold(s) actually ran?
+
+    The threshold facet is detected from the QUESTION and carries no field,
+    operator or value structurally — `field_key` is None for every comparator
+    form. `metadata.populationApplied` carries the field and neither the
+    operator nor the value. So the two cannot be matched against each other, and
+    a rule that tried would be parsing `label` — the receipt reading the
+    question back to itself, which is what `_ROUTE_GRANULARITY` and the P1K
+    silent errors exist to warn against.
+
+    The proof comes from an invariant of the executor instead.
+    `mi_query_executor._apply_filters` applies EVERY entry in `spec.filters` or
+    raises `_require_column`, and appends each field it actually narrowed on to
+    the ledger after the column is confirmed. So when every governed material
+    predicate the spec carries appears in `applied`, and none is `unavailable`,
+    every narrowing the question expressed did run — including the one this
+    threshold facet is the lexical twin of.
+
+    Deliberately fail-closed at every gap: no ledger, no predicates, a predicate
+    the ledger does not name, anything unavailable, or fewer predicates than
+    thresholds (one bound resolved and another did not) all return False and
+    leave the facet LOST. Spec presence alone is never evidence — the spec says
+    what was asked, the ledger says what ran, and only the second certifies.
+    """
+    if not isinstance(envelope, dict) or threshold_count <= 0:
+        return False
+    ledger = (envelope.get("metadata") or {}).get("populationApplied")
+    if not isinstance(ledger, Mapping):
+        return False
+    if ledger.get("unavailable"):
+        return False
+    applied = {str(a).split(" ")[0] for a in (ledger.get("applied") or [])}
+    if not applied:
+        return False
+
+    from .population import material_predicates
+
+    filters = ((envelope.get("spec") or {}).get("filters")) or {}
+    predicates = list(material_predicates(filters, semantics))
+    if not predicates:
+        return False
+    # Every predicate proven, and at least as many predicates as thresholds: a
+    # question naming two bounds where only one resolved must not have the
+    # unresolved one certified by the resolved one's evidence.
+    if len(predicates) < threshold_count:
+        return False
+    return all(p.field in applied for p in predicates)
+
+
 def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional[str],
                             semantics: dict,
                             available_columns: Optional[Iterable[str]] = None,
@@ -3129,6 +3400,9 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
     to. A claim that does not match the question is not accepted.
     """
     columns = set(available_columns or ())
+    # Counted before the loop: a threshold is proven only when the spec carries
+    # at least as many governed predicates as the question named bounds.
+    _threshold_count = sum(1 for f in facets if f.kind == KIND_THRESHOLD)
     ranked = ranking_evidence(envelope)
     compared = comparison_evidence(envelope)
     analytical = analytical_evidence(envelope)
@@ -3231,9 +3505,17 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.reason = "the geographic scope was not applied to the calculation"
 
         elif facet.kind == KIND_THRESHOLD:
-            facet.status = LOST
-            facet.reason = ("this governed capability does not apply a value "
-                            "threshold, so the figure is not restricted to it")
+            # Was unconditionally LOST, consulting nothing — on the same path
+            # where a sibling KIND_POPULATION facet for the SAME predicate is
+            # stamped APPLIED from `populationApplied`. Funded evolution narrows
+            # correctly per period, publishes the narrowing, and the answer
+            # refused anyway.
+            if threshold_execution_proven(envelope, semantics, _threshold_count):
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = LOST
+                facet.reason = ("this governed capability does not apply a value "
+                                "threshold, so the figure is not restricted to it")
 
         elif facet.kind == KIND_STRESS:
             if route in SCENARIO_ROUTES:
@@ -3503,14 +3785,22 @@ _ROUTE_GRANULARITY = {"geo_exposure": ("postcode", "ITL3 area")}
 # --------------------------------------------------------------------------- #
 # The TIME axis, as an axis in its own right
 # --------------------------------------------------------------------------- #
-#: The grain each series-publishing route reports at. Every one of these reads
-#: the governed month-end funded snapshots, so every one publishes MONTHS, and
-#: a question asking for weeks or days receives months.
+#: The grain each series-publishing route reports at WHEN THE ANSWER DOES NOT SAY.
 #:
-#: Declared here rather than inferred from the answer, for the same reason
-#: `_ROUTE_GRANULARITY` is: a route's reporting grain is a property of the
-#: capability, and reading it back out of the prose would be the receipt
-#: checking the question against itself.
+#: This began as a flat assertion that every one of these reads the governed
+#: month-end funded snapshots and so publishes MONTHS. That was never true of
+#: three of them: the origination funnel and the by-stage series are keyed on
+#: the weekly pipeline extract date, and the single-metric series is weekly
+#: whenever the pipeline producer supplied it. The assertion and the data agreed
+#: only where they happened to coincide, and where they did not, this map won —
+#: refusing a correct weekly answer as monthly, and passing a weekly answer to a
+#: monthly question with nothing disclosed.
+#:
+#: A grain is therefore read from the ANSWER'S OWN DECLARATION first
+#: (`declared_series_grain`), which is execution evidence, not prose. This map
+#: remains the fallback for the seven routes that declare nothing, and it is
+#: still not inferred from the answer text — that would be the receipt checking
+#: the question against itself, which is what `_ROUTE_GRANULARITY` avoids too.
 _ROUTE_TIME_GRAIN = {
     "evolution": "month",
     "evolution_funnel": "month",
@@ -3530,7 +3820,22 @@ def route_time_grain(route: Optional[str]) -> Optional[str]:
     return _ROUTE_TIME_GRAIN.get(route or "")
 
 
-def time_axis_disclosure(unit: Optional[str], route: Optional[str]
+def declared_series_grain(envelope: Optional[Mapping[str, Any]]) -> Optional[str]:
+    """The grain the ROUTE says it published, or None if it said nothing.
+
+    Read from the route's own declaration on the envelope, which is the route
+    reporting what it did — never from the prose, for the same reason
+    `declared_series_periods` is not read from the prose. A route that declares
+    nothing returns None and falls back to `_ROUTE_TIME_GRAIN`.
+    """
+    if not isinstance(envelope, Mapping):
+        return None
+    grain = (envelope.get("metadata") or {}).get("seriesGrain")
+    return str(grain) if grain else None
+
+
+def time_axis_disclosure(unit: Optional[str], route: Optional[str],
+                         envelope: Optional[Mapping[str, Any]] = None
                          ) -> Optional[RequestedFacet]:
     """A facet for the TIME grain a question named, or None.
 
@@ -3554,14 +3859,93 @@ def time_axis_disclosure(unit: Optional[str], route: Optional[str]
     """
     if not unit:
         return None
-    grain = route_time_grain(route)
+    grain = declared_series_grain(envelope) or route_time_grain(route)
     if not grain:
         return None
     return RequestedFacet(kind=KIND_GRANULARITY, label=unit,
                           concepts=(unit, grain))
 
 
-def granularity_facets(question: str, route: Optional[str]
+#: The head nouns `portfolio_lens` uses to recognise a book NAME. Stripped
+#: before a requested scope is compared against the book's own values, so
+#: "the London book" is tested as `london`.
+_SCOPE_HEAD_NOUNS = ("book", "portfolio", "books", "portfolios")
+
+
+def _names_a_governed_value(requested: str, known_values: Mapping[str, str]) -> bool:
+    """Whether a requested scope is really a VALUE this book carries.
+
+    "London Book" -> `london`, a value of `collateral_geography`; "South East
+    Book" -> `south east`, likewise. "Highgate Mortgages Book" -> `highgate
+    mortgages`, which no dimension carries, so it stays a book name.
+    """
+    text = " ".join(str(requested or "").lower().split())
+    for noun in _SCOPE_HEAD_NOUNS:
+        if text.endswith(" " + noun):
+            text = text[: -(len(noun) + 1)].strip()
+            break
+    return bool(text) and text in known_values
+
+
+def unresolved_scope_facets(question: Optional[str], *, registry=None,
+                            known_values: Optional[Mapping[str, str]] = None
+                            ) -> List[RequestedFacet]:
+    """A facet for a portfolio scope the question NAMED and nothing resolves.
+
+    PHASE 1E, and a safety correction rather than a capability.
+
+    Measured before it: `resolve_scope` falls back to Total for a portfolio the
+    registry does not hold, `_resolve_lens` keeps the lens NAME and takes the
+    EMPTY filters, and the answer prints the requested scope's label against
+    whole-book figures with `lensApplied=True` and nothing disclosed
+    (docs/mi_phase1c_report.md).
+
+    This raises the request as a facet so the mechanism that already exists
+    adjudicates it. The facet is LOST — the status that fails closed — and
+    `reconcile_routed_facets` promotes a narrowing facet only on execution
+    evidence, which a scope that resolved to nothing cannot produce. The answer
+    therefore refuses and quotes the wording back, instead of widening.
+
+    Returns [] whenever the scope resolves, so a question naming a portfolio
+    that EXISTS is untouched.
+    """
+    if not question or registry is None:
+        return []
+    try:
+        from . import portfolio_lens as _lens_owner
+
+        lens = _lens_owner.resolve_lens(question, registry=registry)
+    except Exception:  # noqa: BLE001 - disclosure must never break an answer
+        return []
+    if getattr(lens, "name", None) != _lens_owner.LENS_UNRESOLVED:
+        return []
+    requested = lens.label or "that portfolio"
+    # A NAME THIS BOOK CARRIES AS A VALUE IS A POPULATION, NOT A PORTFOLIO.
+    #
+    # Measured: "For the London book, give me balance, number of loans,
+    # weighted-average LTV and average borrower age" is a governed CFO question
+    # in this estate's own golden bank, and the lens layer — which has no
+    # vocabulary for what values the tape carries — reads "London Book" as a
+    # book name it cannot find. Refusing it would be a FALSE refusal on a
+    # question the system answers correctly, which is a worse failure than the
+    # widening this facet exists to stop.
+    #
+    # `dimension_values` is the existing owner of what values this book carries,
+    # built from the LOADED BOOK, so the check is the profiled-allowlist
+    # discipline rather than a word list maintained here. Callers with no frame
+    # pass nothing and the facet is raised as before.
+    if known_values and _names_a_governed_value(requested, known_values):
+        return []
+    return [RequestedFacet(
+        kind=KIND_LOST_NARROWING, label=requested,
+        field_key="source_portfolio_id",
+        status=LOST,
+        reason=("%r is not a governed portfolio for this book, so the answer "
+                "was not narrowed to it" % (requested,)))]
+
+
+def granularity_facets(question: str, route: Optional[str],
+                       envelope: Optional[Mapping[str, Any]] = None
                        ) -> List[RequestedFacet]:
     """Every reporting GRAIN this question names, spatial and temporal.
 
@@ -3585,7 +3969,7 @@ def granularity_facets(question: str, route: Optional[str]
     if spatial is not None:
         out.append(spatial)
     temporal = time_axis_disclosure(_period_request.requested_unit(question),
-                                    route)
+                                    route, envelope)
     if temporal is not None:
         out.append(temporal)
     return out
@@ -3915,6 +4299,269 @@ def check_period_grain(facets: Sequence[RequestedFacet],
 _SUPERLATIVE_RE = re.compile(
     r"\b(?:largest|biggest|highest|greatest|smallest|lowest|maximum|minimum|"
     r"max|min)\b", re.I)
+
+
+# --------------------------------------------------------------------------- #
+# P0 — TEMPORAL HONOURING. Proof from the ARTIFACT, never from the receipt.
+# --------------------------------------------------------------------------- #
+# THE PROPERTY
+#
+#     When the sentence asks the answer to vary over time, the rendered object
+#     that ships must prove that variation from its own rows. Where the rows do
+#     not prove it, the answer does not ship.
+#
+# Stated as a property rather than as route fixes on purpose. The two measured
+# instances arrive by different causes — one falls through to the generic
+# point-in-time executor and never had a time axis to lose, the other is claimed
+# by a route that tracks the whole book — and a rule shaped to those two would
+# be a pair of route fixes wearing a property's clothes. Written this way it
+# also closes instances nobody has found, and it found one while being written:
+# `geo_exposure` answering "regional concentration evolution over time" with a
+# current concentration table.
+#
+# WHY THE RECEIPT CANNOT BE THE PROOF
+#
+# The receipt was TRUTHFUL in the case that matters most. "Show me balance by
+# month by region and LTV band" returned an 88-group heatmap whose
+# `dimensionsApplied` read ['Region','LTV Bucket'] — exactly what the answer
+# did. It was simply silent about time. A guard reading `dimensionsApplied`
+# passes it unchanged. So nothing below reads `executionSummary`,
+# `dimensionsApplied`, `filtersApplied`, `notApplied` or the guard verdict.
+# It opens the rows.
+#
+# TWO FORMS OF PROOF, AND WHY THERE ARE TWO
+#
+# A series expresses its points as ROWS; a movement table expresses the same two
+# points as a COLUMN PAIR. Accepting only the first would refuse three answers
+# that are correct today — `period_change_analysis` returning
+# rank/category/start_value/end_value/movement, and `analytical_composition`
+# returning measure/population/period/prior/current/change. Both are the
+# rendered object the reader sees, not a claim about it, so both are proof.
+
+#: Column-name fragments that mean "this column is the TIME axis". Matched as
+#: fragments because routes name their columns for a reader.
+_ARTIFACT_TIME_FRAGMENTS: Tuple[str, ...] = (
+    "period", "month", "quarter", "week", "date", "as_of", "asof",
+    "reporting", "snapshot", "vintage_year",
+)
+
+#: Column-name pairs that name the two ENDS of a movement.
+#:
+#: `prior`/`current` and `start`/`end` were observed LIVE on shipped envelopes —
+#: `analytical_composition` renders measure/population/period/prior/current/change
+#: and `period_change_analysis` renders rank/category/start_value/end_value/…
+#: `opening`/`closing` and `previous`/`latest` are declared from column names
+#: this repository already renders elsewhere (`opening_balance`,
+#: `closing_balance`, `latest`), and NOT from a live envelope. The distinction
+#: is recorded rather than smoothed over: an accepted form that no answer
+#: produces is a hole in the wrong direction, and
+#: `test_every_end_pair_is_reachable` proves each is reachable while
+#: `docs/mi_p0_temporal_honouring_prediction.md` states which are evidenced.
+_ARTIFACT_END_PAIRS: Tuple[Tuple[str, str], ...] = (
+    ("prior", "current"), ("start", "end"), ("opening", "closing"),
+    ("previous", "latest"),
+)
+
+
+def _artifact_rows(artifacts: Optional[Iterable[Mapping[str, Any]]]
+                   ) -> List[List[Mapping[str, Any]]]:
+    """Every non-empty row set the answer shipped, in order."""
+    out: List[List[Mapping[str, Any]]] = []
+    for art in artifacts or ():
+        if not isinstance(art, Mapping):
+            continue
+        rows = art.get("rows")
+        if isinstance(rows, list) and rows and isinstance(rows[0], Mapping):
+            out.append(rows)
+    return out
+
+
+def _distinct_values(rows: Sequence[Mapping[str, Any]], key: str) -> int:
+    return len({str(r.get(key)) for r in rows if r.get(key) is not None})
+
+
+def _names_end(column: str, end: str) -> bool:
+    """Is this column one END of a movement pair?
+
+    Whole word, prefix or suffix — `prior`, `start_value`, `balance_opening` —
+    but never a substring, so `current_outstanding_balance` matches `current`
+    and `recurrent_fees` does not.
+    """
+    col = str(column or "").lower()
+    return col == end or col.startswith(end + "_") or col.endswith("_" + end)
+
+
+def _time_points(rows: Sequence[Mapping[str, Any]]
+                 ) -> Optional[Tuple[str, int]]:
+    """``(evidence, whole_book_rows)`` for one row set, or ``None``.
+
+    ``whole_book_rows`` is how many rows an answer of this SHAPE would carry if
+    it were not cut at all, which is what makes the segment test structural:
+
+      * a series puts each point in its own row, so an uncut one has as many
+        rows as it has points;
+      * a movement table puts its two points in a COLUMN PAIR, so an uncut one
+        has exactly one row — one row is one entity's movement.
+
+    Getting the second of those wrong is not academic. With both shapes read as
+    "as many rows as points", the two `analytical_composition` answers that
+    correctly track front book against back book — two rows, prior and current —
+    were refused for not being cut, which is the opposite of true.
+    """
+    columns = [str(c) for c in rows[0].keys()]
+    for column in columns:
+        if any(frag in column.lower() for frag in _ARTIFACT_TIME_FRAGMENTS):
+            count = _distinct_values(rows, column)
+            if count > 1:
+                return "%d distinct values in %s" % (count, column), count
+    for first, second in _ARTIFACT_END_PAIRS:
+        if (any(_names_end(c, first) for c in columns)
+                and any(_names_end(c, second) for c in columns)):
+            return "columns naming %s and %s" % (first, second), 1
+    return None
+
+
+def artifact_time_axis(artifacts: Optional[Iterable[Mapping[str, Any]]]
+                       ) -> Optional[str]:
+    """The evidence that the SHIPPED ROWS carry more than one point in time.
+
+    Returns a short human statement of what proved it, or ``None``. Reads the
+    rendered object only.
+    """
+    for rows in _artifact_rows(artifacts):
+        seen = _time_points(rows)
+        if seen:
+            return seen[0]
+    return None
+
+
+def artifact_segment_cut(artifacts: Optional[Iterable[Mapping[str, Any]]]
+                         ) -> Optional[str]:
+    """The evidence that the series which shipped was cut into more than one.
+
+    STRUCTURAL, and deliberately carries no vocabulary at all.
+
+        a whole-book series has ONE row per point in time;
+        a segmented one has one row per (segment, point).
+
+    So the proof is that the row set carrying the time axis has more rows than
+    an UNCUT answer of its shape would. `_time_points` owns that count, because
+    the two shapes differ: a series carries one row per point, a movement table
+    carries one row full stop.
+
+    The first draft of this asked whether any column that was neither a time nor
+    a measure varied, against a list of measure words. It reported a cut on the
+    exact answer it exists to catch: `cohort_progression` ships a second table
+    carrying `wa_ltv` and `wa_interest_rate` beside the whole-book series, and
+    neither word was on the list. A blacklist of measure words can never be
+    complete, and the SHAPE of the rendered object does not need one.
+
+    WHAT THIS PROVES, AND WHAT IT DOES NOT
+    --------------------------------------
+    It proves the answer was cut. It does NOT prove it was cut by the segments
+    the sentence named — routes label their columns for a reader (`population`,
+    `category`, `area`) and never by canonical field, which is why D7 removed
+    the rung that guessed a field from a display column. Matching VALUES instead
+    would refuse answers that are correct today: "direct and acquired" is
+    honoured by a `population` column reading "Direct"/"Acquired" on one route
+    and "ALP Origination Book"/"ALP Acquired Back Book" on another.
+
+    So the bar is the P0 bar and no higher: nothing is silently discarded. "Cut
+    by the right thing" belongs to the grouping-evidence owner, and where that
+    owner cannot see a route's axis the residue is the segmented-series backlog,
+    which this stage does not open.
+    """
+    for rows in _artifact_rows(artifacts):
+        seen = _time_points(rows)
+        if not seen:
+            continue
+        _evidence, whole_book_rows = seen
+        if len(rows) > whole_book_rows:
+            return "%d rows where an uncut answer of this shape carries %d" % (
+                len(rows), whole_book_rows)
+    return None
+
+
+def segments_named_in(question: Optional[str],
+                      values: Optional[Mapping[str, str]]) -> List[str]:
+    """The governed values this sentence names, longest first, deduped by span.
+
+    LIMB 2 ASKS THE BOOK RATHER THAN A VOCABULARY, and that is the whole design.
+    "How have direct and acquired balances moved over the periods?" raises
+    nothing from any existing facet detector, and both refusals are correct:
+    `selector_mark` says the pair is a SUBJECT and not a selector, and
+    `_COMPARISON_MARKERS` finds no comparison verb. Adding a reading to either
+    would have changed what they mean everywhere else. `dimension_values`
+    already knows this book carries `direct` on `origination_channel` and
+    `acquired` on `source_portfolio_type`, so the segment signal costs no new
+    words at all: two or more distinct governed values named in one sentence.
+
+    Longest first with span exclusion, as `_detect_lost_narrowing` does, so
+    "east" inside "south east" is not counted a second time.
+    """
+    if not values:
+        return []
+    text = " %s " % str(question or "").lower()
+    taken: List[Tuple[int, int]] = []
+    found: List[Tuple[int, str]] = []
+    for value in sorted(values, key=len, reverse=True):
+        for match in re.finditer(r"\b" + re.escape(value) + r"\b", text):
+            span = (match.start(), match.end())
+            if any(s <= span[0] and span[1] <= e for s, e in taken):
+                continue
+            taken.append(span)
+            found.append((span[0], value))
+    # Matched longest-first so a contained value is excluded, but RETURNED in
+    # the order the sentence says them, so a refusal quotes "direct and
+    # acquired" the way it was asked rather than alphabetically.
+    return [value for _start, value in sorted(found)]
+
+
+def temporal_honouring_facets(question: Optional[str],
+                              artifacts: Optional[Iterable[Mapping[str, Any]]],
+                              values: Optional[Mapping[str, str]] = None
+                              ) -> List[RequestedFacet]:
+    """Every axis this sentence asked the answer to vary over and did not get.
+
+    Empty when nothing was asked for, when nothing was shipped, or when the
+    rows prove it. An answer that ships NO rendered object is out of scope by
+    construction: "completions by month" replies "no weekly Completed extracts
+    are available yet" with no artifact and no figure, and refusing that would
+    replace an honest statement of incapacity with a refusal that says less.
+    If you ship an object, the object must prove the axis.
+    """
+    from question_interpretation.lexical import time_axis_request
+
+    wording = time_axis_request(question)
+    if not wording:
+        return []
+    if not (artifacts or ()):
+        return []
+    if not artifact_time_axis(artifacts):
+        return [RequestedFacet(
+            kind=KIND_SERIES_AXIS, label="a series %s" % wording,
+            # No em-dash in the reason: `disclosure()` already joins the label
+            # to it with one, and a sentence carrying two reads as three
+            # clauses.
+            reason=("the answer that was produced carries no time axis; it "
+                    "reports a single position and cannot show movement"))]
+    # LIMB 2. The axis is proven; the SEGMENTS the sentence asked to see it for
+    # may still have gone. A whole-book series returned for a segmented request
+    # is the same substitution as a whole-book figure returned for a narrowed
+    # one — "how have direct and acquired balances moved" answered "Funded
+    # balance for Total: tracked across 3 reporting period(s)".
+    named = list(dict.fromkeys(segments_named_in(question, values)))
+    if len(named) < 2:
+        return []
+    if artifact_segment_cut(artifacts):
+        return []
+    return [RequestedFacet(
+        kind=KIND_SERIES_AXIS,
+        # Title-cased as `_detect_lost_narrowing` renders a governed value, so
+        # the reader sees "Direct and Acquired" and not a lowercased key.
+        label="%s tracked separately" % _join([v.title() for v in named]),
+        reason=("the answer that was produced is a single whole-book series; it "
+                "is not split by the segments you named"))]
 
 
 def detect_unranked_superlative(question: str, *, spec, query_result) -> Optional[str]:

@@ -25,18 +25,30 @@ Sources consulted, and what each supplies:
     answer_type.asked                       operation type, independently
     period_request.requested_unit/span      time grain and window
     population / seasoning                  population concepts
+    portfolio_lens.resolve_lens             source-portfolio scope (Phase 1A)
 """
 from __future__ import annotations
 
 import re
 from typing import Any, Dict, List, Optional
 
+from . import lexical as _LEX
 from .schema import (
-    AMOUNT, AVERAGE, BOUND, COUNT, EMPTY, FIELD, FILLED, FILTER, FORWARD,
-    GRAINS, GROUPING, MOVEMENT, NEUTRAL, RANKING, ROLE_UNATTRIBUTED, STATED,
+    AMOUNT, ANALYTIC_CONCENTRATION, AVERAGE,
+    BASE_ACQUIRED, BASE_DIRECT, BASE_FUNDED, BOUND, COUNT,
+    EMPTY, FIELD, FILLED, FILTER, FORWARD,
+    GRAINS, GROUPING, MOVEMENT, NEUTRAL,
+    PROV_CALLER_CONTEXT, PROV_DEFAULT, PROV_EXPLICIT_USER, PROV_UNRESOLVED,
+    RANKING, ROLE_UNATTRIBUTED,
+    SCOPE_ACQUIRED, SCOPE_COHORT, SCOPE_DIRECT, SCOPE_TOTAL, SOURCE_SCOPES,
+    STATED,
     UNRESOLVABLE, UNRESOLVED_ROLE, WORDING, DimensionClaim, FilterClaim,
-    OperationClaim, PopulationClaim, QuestionInterpretation, Slot, Span,
-    SubjectClaim, TargetClaim, TimeClaim,
+    ORDER_BASIS_ABSOLUTE, ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT,
+    ORDER_BASIS_SHARE, ORDER_DECREASE, ORDER_DIRECTIONS, ORDER_EITHER,
+    ORDER_INCREASE, ORDER_OF_LEVEL, ORDER_OF_MOVEMENT,
+    OperationClaim, PopulationClaim, QuestionInterpretation, RowPredicateClaim, Slot,
+    SourceScopeClaim, Span, SubjectClaim, TargetClaim, TimeClaim,
+    DatasetClaim, DATASET_FUNDED,
 )
 
 #: How the parser's aggregation reads as an operation type. `coverage` has no
@@ -74,7 +86,9 @@ def _span_of(question: str, needle: Optional[str]) -> Optional[Span]:
 
 
 def from_parts(question: str, *, spec, facets, dim_terms,
-               semantics: dict) -> QuestionInterpretation:
+               semantics: dict, registry=None,
+               caller_scope=None, caller_dataset=None,
+               available_values=None) -> QuestionInterpretation:
     """Assemble the object from interpreter output that ALREADY EXISTS.
 
     This is the Stage 2 entry point. It re-interprets nothing: the spec and the
@@ -93,13 +107,16 @@ def from_parts(question: str, *, spec, facets, dim_terms,
     qi = QuestionInterpretation(question=question)
     facet_kinds = {f.kind for f in facets}
 
-    _operation(qi, spec, facet_kinds, AT)
+    _operation(qi, spec, facet_kinds, AT, dim_terms)
     _subject(qi, spec)
     _dimensions(qi, spec, dim_terms, facets)
     _filters(qi, spec, facets)
     _time(qi, spec, PR)
     _target(qi, spec, facets)
     _population(qi, spec, facets)
+    _row_predicates(qi, spec, semantics)
+    _source_scope(qi, registry, caller_scope, available_values)
+    _dataset(qi, caller_dataset, available_values)
     _note_join_state(qi)
     return qi
 
@@ -124,7 +141,9 @@ def _note_join_state(qi: QuestionInterpretation) -> None:
         % (len(wording), located, len(binding)))
 
 
-def project(question: str, *, semantics: dict, frame=None) -> QuestionInterpretation:
+def project(question: str, *, semantics: dict, frame=None,
+            registry=None, caller_scope=None,
+            caller_dataset=None, available_values=None) -> QuestionInterpretation:
     """Build a QuestionInterpretation by asking the existing interpreters.
 
     The read-only Stage 1 path: runs the interpreters itself, then assembles.
@@ -138,32 +157,136 @@ def project(question: str, *, semantics: dict, frame=None) -> QuestionInterpreta
     dim_terms = R.requested_dimension_terms(question, semantics, cols)
     facets = R.detect_requested_facets(question, semantics, frame=frame,
                                        requested_dimensions=dim_terms)
+    if available_values is None and frame is not None:
+        try:
+            available_values = R.book_values(frame, semantics)
+        except Exception:  # noqa: BLE001 - no catalogue leaves the old reading
+            available_values = None
     return from_parts(question, spec=spec, facets=facets, dim_terms=dim_terms,
-                      semantics=semantics)
+                      semantics=semantics, registry=registry,
+                      caller_scope=caller_scope, caller_dataset=caller_dataset,
+                      available_values=available_values)
 
 
 # --------------------------------------------------------------------------- #
-def _operation(qi, spec, facet_kinds, AT) -> None:
+#: How the ranking engine's own basis names read as contract bases. The engine
+#: is the OWNER and keeps its vocabulary; this is the mapping, in one place, and
+#: it adds no basis the engine does not already implement.
+_RANK_BASIS_TO_CONTRACT = {
+    "balance_absolute": ORDER_BASIS_ABSOLUTE,
+    "balance_percent": ORDER_BASIS_PERCENT,
+    "balance_share": ORDER_BASIS_SHARE,
+    "count_share": ORDER_BASIS_SHARE,
+    "count_absolute": ORDER_BASIS_COUNT,
+}
+
+#: The engine spells "either direction" as `movement`; the contract spells it
+#: `either`, because in the contract `movement` already means something else —
+#: whether the quantity is a change rather than a level. Mapping rather than
+#: reusing the word keeps `ordering_direction` and `ordering_of` from colliding.
+_RANK_DIRECTION_TO_CONTRACT = {
+    "increase": ORDER_INCREASE, "decrease": ORDER_DECREASE,
+    "movement": ORDER_EITHER,
+}
+
+
+def _ordering_values(question, spec, dim_terms) -> dict:
+    """The four ordering facts, from the SINGLE OWNER. No new reading.
+
+    `lexical.ordering_request` owns direction, basis and limit for the whole
+    estate; `lexical.is_movement_question` owns level versus movement. This
+    carries their answers and decides nothing.
+
+    It no longer needs a resolved dimension term. The reader it replaced
+    (`rank_request.detect_rank_request`) returned None without one, so a
+    question that named an ordering but whose dimension did not resolve carried
+    NO ordering at all — 15 of 97 ranking questions could not be planned for
+    that reason, and losing two facts to explain a third is not a contract.
+    """
+    from question_interpretation import lexical as _lex
+
+    out = {}
+    order = _lex.ordering_request(question)
+    if order.requested:
+        if order.direction in ORDER_DIRECTIONS:
+            out["ordering_direction"] = order.direction
+        out["ordering_basis"] = order.basis
+        if isinstance(order.limit, int) and order.limit > 0:
+            out["ordering_limit"] = order.limit
+    # LEVEL or MOVEMENT, from the same owner. The parser's own facts are kept
+    # as a SECOND path to MOVEMENT: a question the parser has already resolved
+    # into a period pair is a movement whatever its wording.
+    out["ordering_of"] = (
+        ORDER_OF_MOVEMENT
+        if (_lex.is_movement_question(question)
+            or getattr(spec, "compare_periods", None)
+            or getattr(spec, "temporal_mode", None) == "compare"
+            or getattr(spec, "bridge_query", False))
+        else ORDER_OF_LEVEL)
+    return out
+
+
+def _named_analytic(question):
+    """``(analytic, reason)`` from the OWNER of the concentration vocabulary.
+
+    One call, to the module that already decides this for the concentration
+    route. Nothing here matches a phrase and no vocabulary lives in this module:
+    if the owner widens what it recognises, this widens with it.
+
+    The PRECEDENCE-FREE reading is asked for deliberately. `is_concentration_
+    question` answers "does the concentration ROUTE own this", which folds in
+    who else might; the contract needs "did the reader name a concentration
+    analytic", because deciding who owns it is what the contract is for.
+    """
+    try:
+        from mi_workflows.concentration_analysis import (
+            names_a_concentration_analytic,
+        )
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        return None, None
+    try:
+        reason = names_a_concentration_analytic(question)
+    except Exception:  # noqa: BLE001
+        return None, None
+    return (ANALYTIC_CONCENTRATION, reason) if reason else (None, None)
+
+
+def _operation(qi, spec, facet_kinds, AT, dim_terms=()) -> None:
     asked = AT.asked(qi.question)
     qi.notes.append("answer_type.asked=%s" % asked)
+    analytic, analytic_reason = _named_analytic(qi.question)
 
     if facet_kinds & _FORWARD_FACETS or getattr(spec, "forecast_question", None):
         qi.operation = OperationClaim(state=FILLED, type=FORWARD,
+                                      analytic=analytic,
+                                      analytic_reason=analytic_reason,
                                       source="parser.forecast/facet.projection")
         return
     if facet_kinds & _RANKING_FACETS or getattr(spec, "ranking_mode", None):
-        qi.operation = OperationClaim(state=FILLED, type=RANKING,
-                                      source="parser.ranking_mode/facet.ranking")
+        qi.operation = OperationClaim(
+            state=FILLED, type=RANKING,
+            analytic=analytic, analytic_reason=analytic_reason,
+            source="parser.ranking_mode/facet.ranking",
+            **_ordering_values(qi.question, spec, dim_terms))
         return
     if getattr(spec, "compare_periods", None) or \
             getattr(spec, "temporal_mode", None) == "compare" or \
             getattr(spec, "bridge_query", False):
         qi.operation = OperationClaim(state=FILLED, type=MOVEMENT,
+                                      analytic=analytic,
+                                      analytic_reason=analytic_reason,
                                       source="parser.compare/bridge")
         return
     mapped = _AGG_TO_OPERATION.get(getattr(spec, "aggregation", None))
     if mapped is None:
         qi.notes.append("operation: no source supplies it")
+        if analytic is not None:
+            # A NAMED ANALYTIC IS A CLAIM even where no operation type is. The
+            # slot would otherwise be EMPTY for "show geographic exposure",
+            # dropping the one fact that separates it from a ranking.
+            qi.operation = OperationClaim(
+                state=FILLED, analytic=analytic, analytic_reason=analytic_reason,
+                source="mi_workflows.analytical.concentration_analysis")
         return
     # The two independent readings, recorded when they differ. Not reconciled:
     # reconciling here would hide the disagreement Stage 1 exists to report.
@@ -172,6 +295,8 @@ def _operation(qi, spec, facet_kinds, AT) -> None:
         qi.notes.append("operation DISAGREEMENT parser=%s answer_type=%s"
                         % (mapped, from_answer_type))
     qi.operation = OperationClaim(state=FILLED, type=mapped,
+                                  analytic=analytic,
+                                  analytic_reason=analytic_reason,
                                   source="parser.aggregation")
 
 
@@ -189,9 +314,14 @@ def _subject(qi, spec) -> None:
 
     metric = getattr(spec, "metric", None)
     if metric:
-        qi.subject = SubjectClaim(state=FILLED, candidate_concept=metric,
-                                  raw_text=raw, span=span,
-                                  source="parser.metric")
+        # THE PARSER SAYS WHETHER IT CHOSE THE MEASURE OR THE READER DID. The
+        # contract carries that answer rather than re-deriving it, so nothing
+        # downstream has to look at the sentence to find out.
+        qi.subject = SubjectClaim(
+            state=FILLED, candidate_concept=metric, raw_text=raw, span=span,
+            source="parser.metric",
+            provenance=(PROV_DEFAULT if getattr(spec, "metric_defaulted", False)
+                        else PROV_EXPLICIT_USER))
         return
     if getattr(spec, "aggregation", None) in ("count", "count_distinct"):
         qi.subject = SubjectClaim(state=FILLED, candidate_concept="loan_count",
@@ -215,14 +345,40 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
     parser_groups = [d for d in ([getattr(spec, "dimension", None)]
                                  + list(getattr(spec, "dimensions", None) or [])) if d]
     parser_filters = set((getattr(spec, "filters", None) or {}).keys())
+    # The parser's OWN bridge attribution axis. `spec.bridge_dimension` is a
+    # governed field key, populated only on bridge questions, and it IS the
+    # grouping the waterfall attributes movement by — so the projection must
+    # carry that role rather than emit `unresolved` for a fact the parser already
+    # settled. This is projection, not reinterpretation: no raw text is read, the
+    # match below is governed-key to governed-key, and it fires for exactly the
+    # one claim whose key equals `spec.bridge_dimension`.
+    bridge_dim = getattr(spec, "bridge_dimension", None)
 
     seen = set()
+
+
     for key, term, _alt in dim_terms:
         if key in seen:
+            continue
+        if key == _LEX.PIPELINE_STAGE_FIELD:
+            # YIELDED TO ITS OWNER, below. This loop can only say `unresolved`
+            # for a key the parser did not put in `spec.dimension`, and
+            # `lexical.pipeline_stage_request` supplies the ROLE — narrowing to
+            # one stage, or splitting by the axis. Measured when the loop
+            # claimed it first: `seen` suppressed the owner's claim,
+            # `governed_stage` read no axis, and "show pipeline evolution by
+            # stage" fell off `evolution_pipeline_stage` and refused. Measured
+            # when the owner's block was simply moved ABOVE this loop instead:
+            # it also reads "declined" as the WITHDRAWN stage, so a
+            # period-change question about a region was ranked by
+            # `pipeline_stage` — the canary caught it. Order is preserved for
+            # every other key; only this one is the owner's.
             continue
         seen.add(key)
         if key in parser_groups:
             role, src = GROUPING, "parser.dimension"
+        elif bridge_dim is not None and key == bridge_dim:
+            role, src = GROUPING, "parser.bridge_dimension"
         elif key in parser_filters:
             role, src = FILTER, "parser.filters"
         else:
@@ -232,6 +388,13 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
         qi.dimensions.append(DimensionClaim(
             state=FILLED, raw_text=term, span=_span_of(qi.question, term),
             role=role, candidate_concept=key, source=src,
+            # THE ALTERNATES, carried instead of discarded. `dim_terms` has
+            # always been a triple and this loop always threw the third element
+            # away as `_alt`; the resolver computes it precisely so an
+            # availability difference is not read as a substitution, and the
+            # contract dropping it is why "which region grew the most" could be
+            # refused as ungoverned on a book carrying the alternate.
+            alternate_concepts=tuple(_alt or ()),
             # CORRECTION 5: an unresolved role must say WHY.
             reason=ROLE_UNATTRIBUTED if role == UNRESOLVED_ROLE else None))
 
@@ -243,6 +406,34 @@ def _dimensions(qi, spec, dim_terms, facets) -> None:
                 state=FILLED, raw_text=None, role=GROUPING,
                 candidate_concept=key, source="parser.dimension(no facet term)"))
             qi.notes.append("dimension %s: parser only, no raw text available" % key)
+
+
+
+    # THE PIPELINE STAGE AXIS.
+    #
+    # `pipeline_stage` is a governed dimension in the pipeline field contract and
+    # a categorical stratification over `total_pipeline`, and the facet layer
+    # still never named it — so nothing above can raise it, and the one consumer
+    # that needs it re-read the raw sentence instead. This raises it from the
+    # single governed reader, into the SAME claim every other dimension uses.
+    #
+    # The role is the distinction the reader deliberately does not make: a
+    # question naming one stage is NARROWING to it, and one naming only the axis
+    # is SPLITTING by it. Naming both narrows — "offer-stage cases" asks about
+    # offers, not for a split across all five.
+    #
+    # This runs AFTER the loop and the loop yields the key to it — see the note
+    # there. Position matters: this reader also reads "declined" as WITHDRAWN,
+    # so claiming ahead of the loop would let a spurious stage outrank a
+    # genuine dimension.
+    stage, names_axis = _LEX.pipeline_stage_request(qi.question)
+    if (stage or names_axis) and _LEX.PIPELINE_STAGE_FIELD not in seen:
+        seen.add(_LEX.PIPELINE_STAGE_FIELD)
+        qi.dimensions.append(DimensionClaim(
+            state=FILLED, raw_text=None,
+            role=FILTER if stage else GROUPING,
+            candidate_concept=_LEX.PIPELINE_STAGE_FIELD,
+            source="lexical.pipeline_stage_request"))
 
 
 def _filters(qi, spec, facets) -> None:
@@ -295,6 +486,16 @@ def _filters(qi, spec, facets) -> None:
         qi.notes.append("filter on %s: parser supplies the field and bound, no "
                         "raw text" % key)
 
+    # The stage a question narrows to, as a governed categorical value. Canonical
+    # (`OFFER`, not "offer issued") because the reader normalises through the one
+    # authoritative stage map, so a consumer never has to spell-match.
+    stage, _axis = _LEX.pipeline_stage_request(qi.question)
+    if stage and _LEX.PIPELINE_STAGE_FIELD not in parser_filters:
+        qi.filters.append(FilterClaim(
+            state=FILLED, raw_text=None, categorical_value=stage,
+            provides=(FIELD, BOUND),
+            source="lexical.pipeline_stage_request"))
+
 
 def _time(qi, spec, PR) -> None:
     unit = PR.requested_unit(qi.question)
@@ -310,10 +511,20 @@ def _time(qi, spec, PR) -> None:
     if span is not None:
         qi.time.trend_window = Slot(state=FILLED, raw_text=getattr(span, "label", None),
                                     source="period_request.requested_span")
+        # TARGET-STATE CLOSURE. The MAGNITUDE, not only the wording. The slot
+        # above says a window was named; these say which one, and without them
+        # `chat_routing._route_period_movement` had to ask the owner again.
+        qi.time.window_periods = getattr(span, "periods", None)
+        qi.time.window_governed = bool(getattr(span, "governed", False))
     if getattr(spec, "compare_periods", None):
+        periods = tuple(str(p) for p in spec.compare_periods)
         qi.time.comparison_period = Slot(
-            state=FILLED, raw_text=", ".join(str(p) for p in spec.compare_periods),
+            state=FILLED, raw_text=", ".join(periods),
             source="parser.compare_periods")
+        # THE VALUES, not only the wording. The slot above says a comparison was
+        # named; this says which periods, so a consumer never has to split the
+        # display join back into structure. Same owner, same call, one read.
+        qi.time.comparison_periods = periods
 
     grain_on_spec = getattr(spec, "trend_grain", None)
     if qi.time.grain and not grain_on_spec:
@@ -334,6 +545,284 @@ def _target(qi, spec, facets) -> None:
     # an interpreter supplies it.
 
 
+def _governed_ids(scope_name, lens, registry):
+    """The governed portfolio IDs a resolved scope selects.
+
+    PHASE 1G §10. A CATEGORY is resolved through the registry to the ids it
+    currently contains, so "the acquired book" carries every acquired portfolio
+    and cannot collapse onto whichever one happens to exist first. A NAMED
+    portfolio carries exactly itself.
+
+    `total` carries no ids on purpose: the complete funded population is
+    UNRESTRICTED, not an enumeration, and listing today's members would make a
+    newly onboarded portfolio silently absent from a question that asked for the
+    whole book. `base_population` is what says which population it is.
+
+    Never `resolve_scope`'s fallback list: that returns EVERY id with
+    `fell_back_to_total=True` for a scope it could not resolve, and taking it
+    here is precisely the widening the claim exists to prevent.
+    """
+    if registry is None or scope_name == SCOPE_TOTAL:
+        return ()
+    if scope_name == SCOPE_COHORT:
+        ids = tuple(getattr(lens, "cohort_ids", ()) or ())
+        if not ids and getattr(lens, "cohort_id", None):
+            ids = (lens.cohort_id,)
+        return tuple(i for i in ids if registry.get(i) is not None)
+    try:
+        return tuple(p.portfolio_id for p in registry.of_type(scope_name))
+    except Exception:  # noqa: BLE001 - a registry that cannot answer carries none
+        return ()
+
+
+#: Which BROAD POPULATION a resolved scope is about. A named portfolio sits
+#: inside the funded population; its category belongs to the portfolio, not to
+#: the request (§8).
+_BASE_FOR_SCOPE = {SCOPE_TOTAL: BASE_FUNDED, SCOPE_DIRECT: BASE_DIRECT,
+                   SCOPE_ACQUIRED: BASE_ACQUIRED, SCOPE_COHORT: BASE_FUNDED}
+
+
+def _source_scope(qi, registry=None, caller_scope=None,
+                  available_values=None) -> None:
+    """Carry `mi_agent.portfolio_lens`'s reading. It stays the single owner.
+
+    One call, to the resolver that already decides this for every route today.
+    Nothing here matches a phrase, and no vocabulary lives in this module or
+    downstream of it: if the owner widens what it recognises, this widens with
+    it, and if the owner is unavailable the claim is UNRESOLVABLE rather than
+    silently Total.
+
+    `resolve_lens` returns a resolved `total` lens when it reads the question and
+    finds no source narrowing, so Total arrives as a POSITIVE reading. That is
+    what lets a consumer tell "explicitly the whole book" from "nobody looked",
+    which the empty `population` list could not.
+
+    PHASE 1E — ``registry``. Handed a governed :class:`PortfolioRegistry`, the
+    owner resolves a book NAMED in the question to its governed id, and says
+    UNRESOLVED for a name it does not hold. Both readings are what make the
+    claim's identity canonical: without a registry the owner can only recognise
+    the storage convention, so `portfolio_ids` would carry a storage folder name
+    that the governed model does not key on (Phase 1D). The registry is PASSED
+    IN rather than discovered here — this module reaches into no application
+    state, and that is what keeps it a transport object.
+    """
+    try:
+        from mi_agent import portfolio_lens as _lens_owner
+    except Exception as exc:  # noqa: BLE001 - the claim records the gap
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
+            reason="the source-portfolio lens owner is unavailable: %s" % exc)
+        return
+    try:
+        # PHASE 1G. The owner is asked TWO things, both of them its own:
+        # what the question resolves to, and whether the question named a scope
+        # at all. The second is the fact Phase 1F stopped for, and asking the
+        # owner for it is what keeps this module free of a second reader of the
+        # question — no phrase list is introduced here and none may be.
+        # PHASE — GOVERNED SPAN OWNERSHIP. The book's own category values are
+        # handed to the owner so a span already claimed as a categorical VALUE
+        # is not read a second time as a scope. The rule and its vocabulary live
+        # in `mi_agent.categorical_spans`; this module still matches nothing.
+        # `available_values=None` — every pre-existing caller — is the reading
+        # this had before, unchanged.
+        try:
+            stated = bool(
+                _lens_owner.mentions_portfolio(qi.question,
+                                               available_values=available_values)
+                or _lens_owner.names_governed_portfolio(qi.question, registry))
+        except TypeError:                       # pre-ownership signature
+            stated = bool(_lens_owner.mentions_portfolio(qi.question)
+                          or _lens_owner.names_governed_portfolio(qi.question,
+                                                                  registry))
+        try:
+            lens = _lens_owner.resolve_lens(qi.question, registry=registry,
+                                            available_values=available_values)
+        except TypeError:                       # pre-ownership signature
+            lens = (_lens_owner.resolve_lens(qi.question, registry=registry)
+                    if registry is not None else _lens_owner.resolve_lens(qi.question))
+    except Exception as exc:  # noqa: BLE001
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
+            reason="the source-portfolio lens could not be resolved: %s" % exc)
+        return
+
+    # PRECEDENCE, applied once, here, from the owner's own reading:
+    #   the question named a scope   -> it wins, whatever the caller supplied
+    #   it did not, a caller did     -> the caller's selection
+    #   neither                      -> the complete funded population
+    # The rule is not re-decided downstream; the claim records the outcome AND
+    # which of the three happened, so no consumer has to re-derive it.
+    provenance = PROV_EXPLICIT_USER if stated else PROV_DEFAULT
+    if not stated and caller_scope is not None:
+        try:
+            supplied = _lens_owner.lens_from_selection(caller_scope,
+                                                       registry=registry)
+        except TypeError:                       # pre-1G signature
+            supplied = _lens_owner.lens_from_selection(caller_scope)
+        if supplied is not None and supplied.name != _lens_owner.LENS_TOTAL:
+            lens, provenance = supplied, PROV_CALLER_CONTEXT
+
+    name = getattr(lens, "name", None)
+    # PHASE 1E. The owner NAMED a scope and could not resolve it. That is the
+    # contract's UNRESOLVABLE, stated as such and carrying the wording that
+    # asked — never `total`, which is the widening this whole phase closes.
+    if name == getattr(_lens_owner, "LENS_UNRESOLVED", "unresolved"):
+        requested = getattr(lens, "label", None)
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, raw_text=requested,
+            span=_span_of(qi.question, requested),
+            source="mi_agent.portfolio_lens",
+            provenance=PROV_UNRESOLVED,
+            reason="the question names %r, which is not a governed portfolio "
+                   "for this book" % (requested,))
+        return
+    if name not in SOURCE_SCOPES:
+        # A lens kind this contract has no member for. Recorded as unresolvable
+        # rather than mapped onto the nearest one — a substitution here would be
+        # invisible downstream.
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, source="mi_agent.portfolio_lens",
+            reason="the owner resolved a lens this contract cannot carry: %r"
+                   % (name,))
+        return
+
+    ids = _governed_ids(name, lens, registry)
+    if not ids and name == SCOPE_COHORT:
+        ids = tuple(getattr(lens, "cohort_ids", ()) or ())
+        if not ids and getattr(lens, "cohort_id", None):
+            ids = (lens.cohort_id,)
+    label = getattr(lens, "label", None)
+    # Only a NARROWING has wording in the question to point at; `total` is the
+    # absence of a scope phrase, so it carries no raw_text and no span.
+    raw = None if name == SCOPE_TOTAL else label
+    span = _span_of(qi.question, raw)
+    # PHASE 1E. With a registry, `label` is the GOVERNED display label, which is
+    # frequently not the wording that asked — "the alp_acquired book" resolves
+    # to "ALP Acquired Back Book". Carry both, and do not pretend the governed
+    # label was the wording: when it is not a substring of the question there is
+    # no span, and `raw_text` falls back to the id that WAS named.
+    portfolio_label = label if name == SCOPE_COHORT else None
+    if name == SCOPE_COHORT and span is None:
+        named = next((pid for pid in ids
+                      if _span_of(qi.question, pid) is not None), None)
+        if named is not None:
+            raw, span = named, _span_of(qi.question, named)
+    if name == SCOPE_COHORT and not ids:
+        # A cohort reading with no governed id is not something this contract
+        # can carry as FILLED (the schema refuses it), and inventing one would
+        # be the substitution the claim exists to prevent.
+        qi.source_scope = SourceScopeClaim(
+            state=UNRESOLVABLE, raw_text=label,
+            span=_span_of(qi.question, label),
+            source="mi_agent.portfolio_lens",
+            reason="the owner read a named book (%r) but resolved no governed "
+                   "portfolio id for it" % (label,))
+        return
+    qi.source_scope = SourceScopeClaim(
+        state=FILLED, raw_text=raw, span=span,
+        scope=name, portfolio_ids=ids, portfolio_label=portfolio_label,
+        base_population=_BASE_FOR_SCOPE.get(name),
+        provenance=provenance,
+        source="mi_agent.portfolio_lens")
+
+
+def _dataset(qi, caller_dataset=None, available_values=None) -> None:
+    """Carry the ONE governed dataset decision onto the contract.
+
+    `mi_agent_api.workspace.resolve_dataset` is the single semantic owner and
+    this is the handoff: everything downstream reads `qi.dataset` rather than
+    re-deciding from the sentence.
+
+    ``caller_dataset`` is ACCEPTED AND IGNORED, and its retirement is the point
+    of this function's current shape. It used to be the fallback when the
+    question named no view — which meant the active workspace tab decided what
+    a question MEANT, so "the balance by seasoning segment excluding pipeline
+    cases" was served from the pipeline on the pipeline tab: the sentence ruled
+    the pipeline out and the tab put it back. Natural-language MI is
+    self-contained. The question decides; the tab displays.
+
+    Provenance follows from that. There are now two cases and not three:
+    the QUESTION named the dataset, or the governed DEFAULT applied.
+    `PROV_CALLER_CONTEXT` is no longer reachable for this axis, which is a
+    property worth being able to assert rather than merely believe.
+    """
+    try:
+        from mi_agent_api.workspace import resolve_dataset, view_named_by_question
+    except Exception as exc:  # noqa: BLE001 - the claim records the gap
+        qi.dataset = DatasetClaim(
+            state=UNRESOLVABLE, source="mi_agent_api.workspace",
+            reason="the dataset owner is unavailable: %s" % exc)
+        return
+    try:
+        # GOVERNED SPAN OWNERSHIP, applied to the SENTENCE before the owner
+        # reads it — the owner takes one argument and a guard keeps it that way.
+        # `mi_agent.categorical_spans` owns the rule; nothing is decided here.
+        question = qi.question
+        if available_values:
+            try:
+                from mi_agent.categorical_spans import mask_value_spans
+
+                question = mask_value_spans(qi.question, available_values)
+            except Exception:  # noqa: BLE001 - no owner, the old reading
+                question = qi.question
+        dataset = resolve_dataset(question)
+        named = view_named_by_question(question)
+    except Exception as exc:  # noqa: BLE001
+        qi.dataset = DatasetClaim(
+            state=UNRESOLVABLE, source="mi_agent_api.workspace",
+            reason="the dataset could not be resolved: %s" % exc)
+        return
+
+    # A question that named a view outright, and one that named a pre-funding
+    # artefact, are both the USER stating the dataset. Only the fall-through to
+    # `funded` is the governed default. `raw_text` carries the view name when
+    # there was one, because that is the span the reader can point at.
+    if named is not None:
+        provenance, raw = PROV_EXPLICIT_USER, named
+    elif dataset != DATASET_FUNDED:
+        provenance, raw = PROV_EXPLICIT_USER, None
+    else:
+        provenance, raw = PROV_DEFAULT, None
+    qi.dataset = DatasetClaim(
+        state=FILLED, dataset=dataset, provenance=provenance, raw_text=raw,
+        span=_span_of(qi.question, raw),
+        source="mi_agent_api.workspace.resolve_dataset")
+
+
+def _row_predicates(qi, spec, semantics) -> None:
+    """Carry the predicates the parser already RESOLVED into the contract.
+
+    `llm_query_parser._filter_field_of` binds a clause to its governed field
+    once, upstream of every route — measured, `chat_routing` calls neither it nor
+    `_resolve_subject` nor the subject vocabulary. `spec.filters` therefore
+    arrives ALREADY keyed by governed field, and the only reason a compositional
+    plan cannot read it is that the projection wrote that key into a provenance
+    STRING — `source="parser.filters[current_loan_to_value]"` — rather than a
+    structure.
+
+    This reads it structurally, through the SAME call the population ledger
+    already makes. `material_predicates` is the one normaliser: it turns a
+    numeric `{"op": "gt", "value": 50.0}`, a bare categorical value and a list
+    into one `Predicate(field, op, value)` shape, and it excludes
+    `source_portfolio_id` by name because that phrase family is SCOPE and travels
+    on `source_scope`.
+
+    Nothing is re-derived and no wording is read. A question with no governed
+    predicate contributes nothing, which is a legitimate empty and not a failure.
+    """
+    from mi_agent.population import material_predicates
+
+    filters = dict(getattr(spec, "filters", None) or {})
+    if not filters:
+        return
+    for predicate in material_predicates(filters, semantics):
+        qi.row_predicates.append(RowPredicateClaim(
+            state=FILLED, raw_text=None,
+            field_key=predicate.field, operator=predicate.op,
+            value=predicate.value,
+            source="parser.filters via population.material_predicates"))
+
+
 def _population(qi, spec, facets) -> None:
     for f in facets:
         if f.kind not in ("row_population", "cohort_comparison"):
@@ -341,3 +830,25 @@ def _population(qi, spec, facets) -> None:
         qi.population.append(PopulationClaim(
             state=FILLED, raw_text=f.label, span=_span_of(qi.question, f.label),
             concept=f.field_key, source="facet.%s" % f.kind))
+
+    # PHASE 1G §13 — the ORIGINATION VINTAGE, carried from the owner that
+    # already reads it. `cohort_vintage` is set by the deterministic parser; it
+    # was simply never projected, so a question naming both a portfolio and a
+    # vintage arrived carrying only the portfolio.
+    #
+    # A SEPARATE CLAIM, not a source scope. Vintage is WHEN a loan was written
+    # and portfolio identity is WHERE IT CAME FROM: "the 2025 vintage for SPV2"
+    # is one of each, and neither implies the other. Collapsing them would
+    # recreate the hierarchy this phase exists to remove — a scope value per
+    # vintage, per portfolio.
+    #
+    # NOT NEW CAPABILITY: nothing here reads the question, and the point-in-time
+    # drop Phase 1D recorded (`cohort_vintage` is only set when the question
+    # also carries a progression marker) is unchanged and still open. This
+    # carries what the owner supplies, no more.
+    vintage = getattr(spec, "cohort_vintage", None)
+    if vintage:
+        qi.population.append(PopulationClaim(
+            state=FILLED, raw_text=str(vintage),
+            span=_span_of(qi.question, str(vintage)),
+            concept="cohort_vintage", source="parser.cohort_vintage"))

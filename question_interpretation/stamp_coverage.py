@@ -121,6 +121,24 @@ DESIGNED_HOLES: Dict[str, str] = {
         "and returns a clarification; the facet's STATUS is never consulted, so "
         "having no reconciler branch costs nothing. Only raised under the "
         "clarify variant."),
+    # P0 — declared AFTER this instrument reported it, and declared with a
+    # proof rather than an assertion. `test_no_reconciler_ever_receives_one`
+    # exercises the real raiser and requires that no series_axis facet reaches
+    # either reconciler; if that ever stops being true, this entry stops being
+    # a designed hole and the instrument is right again.
+    #
+    # The declaration does NOT weaken the instrument. Its own criterion for a
+    # designed hole is "a kind constructed with a status and a reason already
+    # set, which the detector has finished adjudicating" — and that is exactly
+    # what this is.
+    "KIND_SERIES_AXIS": (
+        "raised only AFTER execution, by `temporal_honouring_facets`, from the "
+        "rendered artifact's own rows — which is the whole point of the P0 "
+        "property: T5's receipt was TRUE and merely silent about time, so a "
+        "reconciler reading declared evidence would pass it. The facet arrives "
+        "LOST with its reason already set, goes straight to `assess`, and never "
+        "enters either reconciler. A branch would have nothing to read that the "
+        "rows have not already settled."),
 }
 
 

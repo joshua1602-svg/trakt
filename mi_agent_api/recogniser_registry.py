@@ -69,7 +69,7 @@ a change to it.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from trakt_core.portfolio import REASON_NO_PORTFOLIOS_IN_SCOPE
@@ -101,6 +101,9 @@ class RouteRequest:
     spec: Any
     spec_dict: Dict[str, Any]
     semantics: Mapping[str, Any]
+    #: The governed DATASET this question is about, as
+    #: `mi_agent_api.workspace.resolve_dataset` decided it. Named `view` for
+    #: history; it is no longer the workspace tab and no longer varies with it.
     view: str
     client_id: str
     run_id: Optional[str]
@@ -139,6 +142,92 @@ class RouteRequest:
     #: otherwise-identical requests still compare equal.
     _history_memo: Dict[str, Any] = field(
         default_factory=dict, repr=False, compare=False)
+    #: PHASE 1G. Builds this request's :class:`QuestionInterpretation` on demand.
+    #:
+    #: Phase 1F found that the routed path constructs no interpretation at all —
+    #: the single production construction site is on the point-in-time path, and
+    #: a routed question never reaches it. A compositional plan must be built
+    #: from the contract and nothing else, so the contract has to BE here.
+    #:
+    #: A provider rather than an eager value, the same shape `history_model`
+    #: uses and for the same reason: assembling it detects the request's facets,
+    #: which reads the frame. Recognition never touches it; only a handler that
+    #: needs it pays.
+    interpretation_provider: Optional[Callable[[], Any]] = None
+    #: Memo for :meth:`resolve_interpretation`.
+    _interpretation_memo: Dict[str, Any] = field(
+        default_factory=dict, repr=False, compare=False)
+    #: PRE-CLAIM WORKING, carried forward. A recogniser reads the question by
+    #: design — that is what recognition IS — and several of them build a rich
+    #: reading in the process and then throw it away, leaving the handler to
+    #: rebuild it from the sentence AFTER the route has been claimed. Measured:
+    #: `period_change` ran its recogniser twice per request, and the second run
+    #: was the route's single largest post-claim raw-question read.
+    #:
+    #: Generic on purpose. It is a place to put a value, not a slot named after
+    #: any route or concept, so nothing here knows what a period change is.
+    _recognition_memo: Dict[str, Any] = field(
+        default_factory=dict, repr=False, compare=False)
+    #: GOVERNED SPAN OWNERSHIP. The book's own categorical values, in the shape
+    #: `mi_agent.execution_receipt.book_values` produces. Supplied, RECOGNITION
+    #: reads a question with those spans blanked — see :meth:`for_recognition`.
+    #: Handlers keep the raw sentence: the rule is about who may CLAIM a span,
+    #: not about what an answer may quote.
+    available_values: Optional[Mapping[str, Any]] = None
+
+    def for_recognition(self) -> "RouteRequest":
+        """This request as RECOGNITION should read it.
+
+        A recogniser matches its own vocabulary against the raw sentence, which
+        is what recognition IS — and which is why a broker called "London Bridge
+        Loans" was routed to the funded BRIDGE, and one called "Growth Partners"
+        to period-change analysis. Neither word was the reader's; both were
+        inside a span the book had already claimed as one value of one field.
+
+        Blanking preserves offsets, so a recogniser reading positions still sees
+        the sentence it expects. With no catalogue this returns ``self``, so
+        every existing caller is byte-for-byte unaffected.
+        """
+        if not self.available_values or not self.question:
+            return self
+        try:
+            from mi_agent.categorical_spans import mask_value_spans
+
+            owned = mask_value_spans(self.question, self.available_values)
+        except Exception:  # noqa: BLE001 - the owner missing must not change routing
+            return self
+        if owned == self.question:
+            return self
+        return replace(self, question=owned)
+
+    def remember_recognition(self, key: str, value: Any) -> Any:
+        """Keep a recogniser's own pre-claim reading for its handler to consume."""
+        self._recognition_memo[key] = value
+        return value
+
+    def recalled_recognition(self, key: str) -> Optional[Any]:
+        """The pre-claim reading stored under ``key``, or ``None``."""
+        return self._recognition_memo.get(key)
+
+    def resolve_interpretation(self) -> Optional[Any]:
+        """This request's governed interpretation contract, built on first use.
+
+        THE SEMANTIC HANDOFF. A handler that plans from this must not also read
+        `self.question` for meaning: two readers of one sentence is the defect
+        this programme has spent its length removing.
+
+        Memoised per request. A provider that raises yields ``None`` rather than
+        failing the request — a plan that cannot be built must refuse on the
+        contract's own terms, not by losing the answer to an exception.
+        """
+        if self.interpretation_provider is None:
+            return None
+        if "value" not in self._interpretation_memo:
+            try:
+                self._interpretation_memo["value"] = self.interpretation_provider()
+            except Exception:  # noqa: BLE001 - the plan refuses; the request lives
+                self._interpretation_memo["value"] = None
+        return self._interpretation_memo["value"]
 
     def resolve_history_model(self) -> Optional[Mapping[str, Any]]:
         """The historical completion model for this request, built on first use.
@@ -278,9 +367,14 @@ class RecogniserRegistry:
         to take the whole chat path down.
         """
         scored: List[Tuple[float, int, int, Recogniser, Recognition]] = []
+        # THE CLAIM BOUNDARY, applied to the SENTENCE as well as to the reading.
+        # Recognition sees the question with spans the book has already claimed
+        # as categorical values blanked; the handler is given the original
+        # request, so nothing an answer quotes or re-reads changes.
+        recognition_request = request.for_recognition()
         for index, rec in sorted(self._items.values(), key=lambda e: (e[1].priority, e[0])):
             try:
-                verdict = _as_recognition(rec.recognise(request))
+                verdict = _as_recognition(rec.recognise(recognition_request))
             except Exception as exc:  # noqa: BLE001 - one bad recogniser must not break routing
                 logger.warning("recogniser %s raised during recognition: %s", rec.name, exc)
                 continue

@@ -9,7 +9,7 @@ the deterministic bridge) used only for view breakdowns / queries.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 
@@ -18,6 +18,96 @@ from mi_agent import portfolio_lens as lens_mod
 
 VIEWS = ("funded", "pipeline", "forecast")
 DEFAULT_VIEW = "funded"
+
+#: The DATA ROOT a caller read, mapped to the dataset that root holds. The map
+#: is the derivation: a route names the root it consumed, not the answer.
+_ROOT_DATASET = (("output_root", "funded"), ("pipeline_root", "pipeline"))
+
+
+def datasets_read(**roots: Any) -> Tuple[str, ...]:
+    """The datasets a caller actually read, from the ROOTS it actually consumed.
+
+    THE POINT IS THAT IT IS DERIVED. Five routes in `chat_routing` used to write
+    ``{"dataset": "funded", ...}`` as a literal at their own return site, and
+    three of them were wrong: `_route_portfolio_summary`, `_route_risk` and
+    `_route_bridge` answered "Summarise the current pipeline" and its siblings
+    from the funded book while `metadata.datasetContext` said `pipeline`. A
+    constant cannot be wrong about itself in any detectable way, and a route that
+    cannot say what it read cannot be checked against what it was asked for.
+
+    Pass the root you read and the name follows. A route that later reads the
+    pipeline extract passes `pipeline_root` and says so without anyone
+    remembering to edit a string — which is the whole difference between a
+    derivation and a re-typed constant.
+
+    Order follows `_ROOT_DATASET`, so a composition reads `funded+pipeline`
+    rather than depending on keyword order at the call site.
+    """
+    out: List[str] = []
+    for key, dataset in _ROOT_DATASET:
+        if roots.get(key) is not None and dataset not in out:
+            out.append(dataset)
+    return tuple(out)
+
+
+def reconciliation_for(datasets: Iterable[str], **extra: Any) -> Dict[str, Any]:
+    """The reconciliation block naming the datasets an answer was computed from.
+
+    ONE IMPLEMENTATION, ADOPTED — not a sixth. `mi_workflows.analytical.route.
+    _reconciliation` already derived this correctly, from the capabilities that
+    ran, and its docstring already said why: *"an offer-stage question reads the
+    pipeline and nothing else, and reporting it as a full-coverage funded answer
+    would misdescribe what was measured."* That was right, and it was the only
+    site doing it. This is that logic, lifted so both callers share it; the
+    alternative — five sites each deriving their own way — is the disease rather
+    than the cure.
+
+    Full coverage is claimed only where the funded book is among the datasets,
+    which is the contract the analytical route already applied.
+    """
+    names = [str(d) for d in datasets if d]
+    funded = any(n.startswith(DEFAULT_VIEW) for n in names)
+    out: Dict[str, Any] = {
+        "dataset": "+".join(names) or DEFAULT_VIEW,
+        "coverage_by_balance_pct": 100.0 if funded else None,
+    }
+    # Extras pass through UNFILTERED, including None. Dropping a None-valued
+    # `reporting_date` would change the envelope shape for the routes adopting
+    # this, and a consolidation that quietly alters its callers' output is not a
+    # consolidation.
+    out.update(extra)
+    return out
+
+#: The PRE-FUNDING ARTEFACTS. A question naming one of these is about the
+#: pipeline tape even though it names no view: nobody asks how many "pipeline"
+#: they have, they ask how many APPLICATIONS.
+#:
+#: Not a new vocabulary. This is `chat_routing._PIPELINE_WORDS` moved to the
+#: owner, minus `pipeline` itself (which :data:`VIEWS` already covers) and minus
+#: `case`. It lived in a route for as long as it did because that route was the
+#: only consumer that needed it — which is precisely what made it a second
+#: owner.
+#:
+#: WHY `case` IS NOT HERE, measured rather than assumed. The retired second
+#: owner listed it, but it was reachable only from the compare and evolution
+#: routes, so its ambiguity never surfaced. Read by the ONE owner it decides
+#: every question, and in this estate a bare `case` means a FUNDED LOAN at
+#: least as often as a pipeline case:
+#:
+#:     "Which region gained the most cases since last month?"
+#:
+#: is filed in the P1C golden bank under `# -- loan count --`, beside "Which
+#: region added the most loans month-on-month?", and expects a ranked FUNDED
+#: movement. Classifying it as pipeline turns that answer into a refusal.
+#:
+#: The evidence for dropping it rather than keeping it: across the 882 distinct
+#: corpus questions, NOT ONE reaches the pipeline through `case`. Every
+#: artefact-driven movement comes from `application`, `kfi` or `offer`, all of
+#: which are unambiguous. `case` bought nothing and cost a golden-bank answer.
+#:
+#: A question that means the pipeline case still says so — "how many PIPELINE
+#: cases are there?" resolves through the view name, unaffected.
+PIPELINE_ARTEFACTS = ("kfi", "application", "offer")
 
 # Unqualified "amount"/"balance" resolves to this column per view. The pipeline
 # prepared dataset and the forecast frame both carry the view's primary metric
@@ -38,31 +128,121 @@ _SHARED_DIMS = [
 ]
 
 
-def resolve_active_view(question: str, dataset_context: Optional[str]) -> str:
-    """The dataset/view a query runs against. Explicit wording in the question
-    overrides the active tab; otherwise the tab (``dataset_context``) wins.
+def view_named_by_question(question: str) -> Optional[str]:
+    """The view the QUESTION itself names, or ``None`` if it names none.
 
-    Priority of explicit wording: forecast > pipeline > funded (so "forecast
-    funded balance" routes to forecast, not funded).
+    The VIEW-NAME half of :func:`resolve_dataset`, which is the owner. Exposed
+    separately because a caller sometimes needs to know whether the question
+    named a view OUTRIGHT or fell through to a governed step — and because a
+    second copy of this vocabulary is the defect B21 fixed.
 
-    B21 — A DISCLAIMED VIEW WORD DOES NOT CHOOSE THE FRAME. This was a bare
-    substring test, so the clause RULING OUT a view was what selected it:
-    "the balance by vintage, ignoring the forecast" loaded the forecast frame,
-    which carries 12 of the funded book's 71 columns, and the question died at
-    prepared-data validation on a column the funded book has. The
-    undisclaimed-mention test is `portfolio_lens`'s, not a second copy — the
-    lens resolver already had to decide whether a word was ruling a scope out,
-    and this is the same decision over a different vocabulary.
-
-    Substring semantics are unchanged for every mention the sentence does not
-    rule out, which on this corpus is all 697 of them.
+    Historically this was extracted from `resolve_active_view`, which folded the
+    question and the workspace tab together so that a caller could not recover
+    which of the two had decided. The tab is no longer an input to anything
+    here, so there is nothing left to disentangle. `funded` is returned like any other view: it is the
+    default AND a thing a question can name outright, and collapsing those two
+    is how an explicit "the funded book" becomes indistinguishable from silence.
     """
     q = (question or "").lower()
     for view in ("forecast", "pipeline", "funded"):
         if lens_mod.undisclaimed_mention(q, view):
             return view
-    ctx = (dataset_context or "").strip().lower()
-    return ctx if ctx in VIEWS else DEFAULT_VIEW
+    return None
+
+
+#: GOVERNED SPAN OWNERSHIP is applied to the QUESTION BEFORE it reaches this
+#: module, never by adding an input here.
+#:
+#: This module's vocabulary — forecast / pipeline / funded, and the pre-funding
+#: artefacts — belongs to no book field, so any of those words found inside a
+#: span the book has already claimed as one value of one field belongs to the
+#: value. Measured: a broker called "Pipeline Mortgage Club" served every
+#: question about it from the pipeline extract — 8 cases in place of its 63
+#: funded loans, with the broker narrowing gone and nothing said.
+#:
+#: The masking is `mi_agent.categorical_spans`' and the caller's to apply:
+#: `resolve_dataset` takes ONE argument and `test_dataset_ownership::
+#: test_the_resolver_cannot_be_handed_a_tab` exists to keep it that way — "not
+#: 'it ignores the tab', it has nowhere to put one". A second parameter here
+#: would be a place to put one.
+
+
+def resolve_dataset(question: Optional[str]) -> str:
+    """**THE** dataset a natural-language MI question is about.
+
+    ``FUNDED`` | ``PIPELINE`` | ``FORECAST``, decided by the QUESTION and by
+    nothing else. This is the single semantic owner. There is no second one, and
+    the caller's workspace tab is deliberately not a parameter — a parameter it
+    does not have cannot quietly become an input again.
+
+    Why the tab is gone
+    -------------------
+    Natural-language MI is self-contained: the user should not have to know
+    which tab they are on to ask a correct question. Measured before this
+    change, six of fourteen probe questions were TAB-SENSITIVE — the same
+    sentence was served from a different dataset depending on the tab. Two of
+    them are worth naming:
+
+        "How many cases are there?"
+            funded tab -> the funded book, pipeline tab -> the pipeline
+        "the balance by seasoning segment excluding pipeline cases"
+            pipeline tab -> the pipeline. The question rules the pipeline out
+            in words and the tab put it back.
+
+    The tab still selects what the UI DISPLAYS. It no longer decides what a
+    question MEANS. Those are different responsibilities.
+
+    Precedence
+    ----------
+    ``forecast`` > ``pipeline`` > ``funded`` > pre-funding artefact > default.
+
+    The first three are :func:`view_named_by_question` unchanged, so nothing it
+    already decided can move. The artefact step fires ONLY where it returned
+    ``None``, which is exactly the gap `chat_routing._dataset_for` was covering
+    alone — and covering with the opposite precedence, testing its tape
+    vocabulary BEFORE any forecast reading, so "Forecast application volumes
+    next quarter" was `pipeline` to it. Forecast wins here.
+
+    Population is a different axis
+    ------------------------------
+    Direct / Acquired / a named SPV never appear above. They select a POPULATION
+    WITHIN a dataset and are `portfolio_lens`'s to resolve. "The acquired funded
+    balance" is the funded dataset, acquired population, and conflating the two
+    axes is how a scope word could have chosen a tape.
+
+    Vocabulary choice, measured
+    ---------------------------
+    `mi_workflows.analytical.intent` expresses these concepts structurally, as
+    ``REQ_PIPELINE_DATASET`` / ``REQ_FORECAST``, and was the obvious candidate
+    to own this. It was censused rather than assumed and it is the wrong tool:
+    those requirements decide whether a question is REFUSABLE and are checked
+    AGAINST a dataset, not used to select one, so their vocabularies are much
+    wider. Over the 882 distinct corpus questions they move **59 (6.7%)**,
+    including "top brokers by expected funded amount" to forecast. The rule
+    below moves **5 (0.6%)**, and all five name a pre-funding artefact.
+    """
+    named = view_named_by_question(question)
+    if named is not None:
+        return named
+    low = (question or "").lower()
+    if any(lens_mod.undisclaimed_mention(low, w) for w in PIPELINE_ARTEFACTS):
+        return "pipeline"
+    return DEFAULT_VIEW
+
+
+def resolve_active_view(question: str, dataset_context: Optional[str] = None) -> str:
+    """Retained caller-facing name for :func:`resolve_dataset`.
+
+    ``dataset_context`` is ACCEPTED AND IGNORED. It used to be the fallback when
+    the question named no view, and that fallback is the tab dependence this
+    change removes. The parameter survives only so existing callers keep
+    working; it has no semantic effect and
+    `test_dataset_ownership.py::test_the_tab_argument_is_inert` pins that.
+
+    Prefer :func:`resolve_dataset` in new code, which does not offer the
+    parameter at all.
+    """
+    return resolve_dataset(question)
 
 
 def build_forecast_view_frame(funded_df: Optional[pd.DataFrame],

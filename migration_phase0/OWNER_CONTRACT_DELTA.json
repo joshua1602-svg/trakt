@@ -1,0 +1,1095 @@
+[
+  {
+    "question": "what is the largest loan",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "show me the biggest loan",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "largest single loan by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 10 regions by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 brokers by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 10 products by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which region has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which broker has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which product type has the highest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "highest average LTV regions",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which region has the highest average LTV",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "smallest region by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "largest loans",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "show the largest loans",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "highest LTV loans",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 10 loans by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "biggest 20 loans",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 region by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 broker by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 10 product type by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 3 age bucket by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 account status by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which broker has the highest average LTV",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which product type has the highest average LTV",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which borrower type has the highest average LTV",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top brokers by expected funded amount",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "largest regional concentration",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What is the largest loan?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What is the smallest loan?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans where current balance is above \u00a3200,000.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans where current balance is below \u00a350,000.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with interest rate above 10%.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with interest rate below 7%.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans where valuation is above \u00a3500,000.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans where valuation is below \u00a3200,000.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which broker has the highest funded balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which broker has the highest average loan balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which broker has the most loans?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which broker has the highest WA LTV?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which broker has the highest WA interest rate?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which region has the highest funded balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which region has the highest average LTV?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which region has the highest interest rate?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which LTV bucket has the highest balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which age bucket has the highest balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What are the top 10 brokers by funded balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What are the top 10 regions by funded balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What are the top 10 loans by balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What are the top 10 loans by LTV?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What are the highest interest rate loans?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What is the top 5 broker concentration?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What is the top 10 broker concentration?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What is the largest broker concentration?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What is the largest regional concentration?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What percentage of the book is in the top 5 brokers?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "What percentage of the book is in the top 3 regions?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with LTV above 50%.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with LTV above 60%.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans where borrower age is above 80.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans in the South East.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans for Equity Release Supermarket Limited.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans for the largest broker.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans in the highest LTV bucket.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans in the highest age bucket.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with balance above \u00a3200,000.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with balance below \u00a350,000.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which vintage has the highest balance?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which vintage has the highest WA LTV?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show funded balance evolution from October to November.",
+    "diffs": {
+      "contract.operation.source": [
+        "parser.aggregation",
+        "parser.compare/bridge"
+      ],
+      "contract.time.comparison_period.source": [
+        null,
+        "parser.compare_periods"
+      ],
+      "contract.time.comparison_period.state": [
+        "empty",
+        "filled"
+      ],
+      "spec.intent": [
+        "chart",
+        "summary"
+      ],
+      "spec.compare_periods": [
+        "[]",
+        "[\"October\", \"November\"]"
+      ],
+      "contract.time.comparison_period.raw_text": [
+        null,
+        "October, November"
+      ],
+      "contract.time.comparison_periods": [
+        "[]",
+        "[\"October\", \"November\"]"
+      ],
+      "spec.temporal_mode": [
+        null,
+        "compare"
+      ],
+      "contract.operation.type": [
+        "amount",
+        "movement"
+      ]
+    }
+  },
+  {
+    "question": "Which broker has the largest pipeline?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Which stage has the largest pipeline?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show pipeline growth from October to November.",
+    "diffs": {
+      "contract.operation.source": [
+        "parser.aggregation",
+        "parser.compare/bridge"
+      ],
+      "contract.subject.candidate_concept": [
+        "loan_count",
+        null
+      ],
+      "contract.subject.source": [
+        "parser.aggregation=count",
+        "lexical.subject_side_span"
+      ],
+      "contract.time.comparison_period.source": [
+        null,
+        "parser.compare_periods"
+      ],
+      "contract.time.comparison_period.state": [
+        "empty",
+        "filled"
+      ],
+      "spec.compare_periods": [
+        "[]",
+        "[\"October\", \"November\"]"
+      ],
+      "contract.time.comparison_period.raw_text": [
+        null,
+        "October, November"
+      ],
+      "contract.subject.state": [
+        "filled",
+        "empty"
+      ],
+      "spec.aggregation": [
+        "count",
+        "sum"
+      ],
+      "contract.time.comparison_periods": [
+        "[]",
+        "[\"October\", \"November\"]"
+      ],
+      "spec.temporal_mode": [
+        null,
+        "compare"
+      ],
+      "contract.operation.type": [
+        "count",
+        "movement"
+      ]
+    }
+  },
+  {
+    "question": "What is the largest geographic concentration versus limit?",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show the single largest loan against the large-loan limit.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show defaulted loans with LTV above 50%.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with NNEG and LTV above 50%.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "Show loans with NNEG and borrower age above 80.",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Account Status by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Age Bucket by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Borrower Type by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Broker by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Product Type by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Obligor Region (NUTS3) by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Rate Type by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 LTV Bucket by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Occupancy Type by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Origination Channel by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Term Bucket by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "top 5 Ticket Size by balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Account Status has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Account Status has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Age Bucket has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Age Bucket has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Borrower Type has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Borrower Type has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Broker has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Broker has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Product Type has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Product Type has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Obligor Region (NUTS3) has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Obligor Region (NUTS3) has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Rate Type has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Rate Type has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which LTV Bucket has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which LTV Bucket has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Occupancy Type has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Occupancy Type has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Origination Channel has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Origination Channel has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Term Bucket has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Term Bucket has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Ticket Size has the largest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  },
+  {
+    "question": "which Ticket Size has the smallest balance",
+    "diffs": {
+      "contract.operation.ordering_of": [
+        null,
+        "level"
+      ]
+    }
+  }
+]

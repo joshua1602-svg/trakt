@@ -1,0 +1,1452 @@
+[
+  {
+    "q": "what is the largest loan",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "show me the biggest loan",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "largest single loan by balance",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 10 regions by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 10,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 brokers by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 10 products by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 10,
+    "dims": [
+      [
+        "erm_product_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which region has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which broker has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which product type has the highest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "erm_product_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "regions with the most loans",
+    "of": null,
+    "blocked": [],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "highest average LTV regions",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "which region has the highest average LTV",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "smallest region by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "largest loans",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "show the largest loans",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "highest LTV loans",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "top 10 loans by balance",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "biggest 20 loans",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 region by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 broker by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 10 product type by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 10,
+    "dims": [
+      [
+        "erm_product_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 3 age bucket by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 3,
+    "dims": [
+      [
+        "age_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 account status by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "account_status",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which broker has the highest average LTV",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "which product type has the highest average LTV",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "erm_product_type",
+        []
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "which borrower type has the highest average LTV",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "borrower_type",
+        []
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "top brokers by expected funded amount",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "largest regional concentration",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What is the largest loan?",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What is the smallest loan?",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which broker has the highest funded balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which broker has the highest average loan balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which broker has the most loans?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "count",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which broker has the highest WA LTV?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "Which broker has the highest WA interest rate?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_interest_rate"
+  },
+  {
+    "q": "Which region has the highest funded balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which region has the highest average LTV?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "Which region has the highest interest rate?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_interest_rate"
+  },
+  {
+    "q": "Which LTV bucket has the highest balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "ltv_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which age bucket has the highest balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "age_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What are the top 10 brokers by funded balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 10,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What are the top 10 regions by funded balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 10,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What are the top 10 loans by balance?",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What are the top 10 loans by LTV?",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [
+      [
+        "ltv_bucket",
+        []
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "What are the highest interest rate loans?",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_interest_rate"
+  },
+  {
+    "q": "What is the top 5 broker concentration?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What is the top 10 broker concentration?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 10,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What is the largest broker concentration?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What is the largest regional concentration?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What percentage of the book is in the top 5 brokers?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "percent",
+    "limit": 5,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What percentage of the book is in the top 3 regions?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "percent",
+    "limit": 3,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Show loans for the largest broker.",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "count",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Show loans in the highest LTV bucket.",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "count",
+    "limit": null,
+    "dims": [
+      [
+        "ltv_bucket",
+        []
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "Show loans in the highest age bucket.",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "count",
+    "limit": null,
+    "dims": [
+      [
+        "age_bucket",
+        []
+      ]
+    ],
+    "metric": "youngest_borrower_age"
+  },
+  {
+    "q": "Which vintage has the highest balance?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "vintage_year",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which vintage has the highest WA LTV?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "vintage_year",
+        []
+      ]
+    ],
+    "metric": "current_loan_to_value"
+  },
+  {
+    "q": "Which broker has the largest pipeline?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which stage has the largest pipeline?",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [
+      [
+        "pipeline_stage",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "What is the largest geographic concentration versus limit?",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        [
+          "geographic_region_obligor"
+        ]
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Show the single largest loan against the large-loan limit.",
+    "of": "level",
+    "blocked": [
+      "no contract field: operation.ordering_direction / ordering_basis"
+    ],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Account Status by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "account_status",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Age Bucket by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "age_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Borrower Type by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "borrower_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Broker by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Product Type by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "erm_product_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Obligor Region (NUTS3) by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "geographic_region_obligor",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Rate Type by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "interest_rate_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 LTV Bucket by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "ltv_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Occupancy Type by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "occupancy_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Origination Channel by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "origination_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Term Bucket by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "term_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "top 5 Ticket Size by balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": 5,
+    "dims": [
+      [
+        "ticket_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Account Status has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "account_status",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Account Status has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "account_status",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Age Bucket has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "age_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Age Bucket has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "age_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Borrower Type has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "borrower_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Borrower Type has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "borrower_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Broker has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Broker has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "broker_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Product Type has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "erm_product_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Product Type has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "erm_product_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Obligor Region (NUTS3) has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "geographic_region_obligor",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Obligor Region (NUTS3) has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "geographic_region_obligor",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Rate Type has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "interest_rate_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Rate Type has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "interest_rate_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which LTV Bucket has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "ltv_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which LTV Bucket has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "ltv_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Occupancy Type has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "occupancy_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Occupancy Type has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "occupancy_type",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Origination Channel has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "origination_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Origination Channel has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "origination_channel",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Term Bucket has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "term_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Term Bucket has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "term_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Ticket Size has the largest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "ticket_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "which Ticket Size has the smallest balance",
+    "of": "level",
+    "blocked": [],
+    "dir": "increase",
+    "basis": "absolute",
+    "limit": null,
+    "dims": [
+      [
+        "ticket_bucket",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  },
+  {
+    "q": "Which of our limits are currently most at risk?",
+    "of": null,
+    "blocked": [],
+    "dir": null,
+    "basis": null,
+    "limit": null,
+    "dims": [
+      [
+        "collateral_geography",
+        []
+      ]
+    ],
+    "metric": "current_outstanding_balance"
+  }
+]

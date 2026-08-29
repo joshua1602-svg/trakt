@@ -1,0 +1,138 @@
+{
+  "registry": [
+    "alp_origination",
+    "alp_acquired",
+    "nbs_acquired"
+  ],
+  "rows": [
+    {
+      "case": "funded category",
+      "question": "Summarise the funded book",
+      "target": "alp_origination,alp_acquired,nbs_acquired",
+      "ok": true,
+      "lensName": "total",
+      "contextId": "total",
+      "ids": [
+        "alp_origination",
+        "alp_acquired",
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false
+    },
+    {
+      "case": "direct category",
+      "question": "Summarise the direct book",
+      "target": "alp_origination",
+      "ok": true,
+      "lensName": "direct",
+      "contextId": "direct",
+      "ids": [
+        "alp_origination"
+      ],
+      "fellBackToTotal": false
+    },
+    {
+      "case": "acquired category",
+      "question": "Summarise the acquired book",
+      "target": "alp_acquired,nbs_acquired",
+      "ok": true,
+      "lensName": "acquired",
+      "contextId": "acquired",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false
+    },
+    {
+      "case": "named direct",
+      "question": "Summarise the ALP Origination Book",
+      "target": "alp_origination",
+      "ok": true,
+      "lensName": "cohort",
+      "contextId": "alp_origination",
+      "ids": [
+        "alp_origination"
+      ],
+      "fellBackToTotal": false
+    },
+    {
+      "case": "named acquired A",
+      "question": "Summarise the ALP Acquired Back Book",
+      "target": "alp_acquired",
+      "ok": true,
+      "lensName": "cohort",
+      "contextId": "alp_acquired",
+      "ids": [
+        "alp_acquired"
+      ],
+      "fellBackToTotal": false
+    },
+    {
+      "case": "named acquired B",
+      "question": "Summarise the NBS Acquired Book",
+      "target": "nbs_acquired",
+      "ok": true,
+      "lensName": "cohort",
+      "contextId": "nbs_acquired",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false
+    },
+    {
+      "case": "governed id",
+      "question": "Summarise the nbs_acquired book",
+      "target": "nbs_acquired",
+      "ok": true,
+      "lensName": "cohort",
+      "contextId": "nbs_acquired",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false
+    },
+    {
+      "case": "unknown label",
+      "question": "Summarise the Highgate Mortgages Book",
+      "target": "lens UNRESOLVED",
+      "ok": true,
+      "lensName": "unresolved",
+      "contextId": "Highgate Mortgages Book",
+      "ids": [
+        "alp_origination",
+        "alp_acquired",
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": true
+    },
+    {
+      "case": "storage id",
+      "question": "Summarise the acquired_001 book",
+      "target": "lens UNRESOLVED",
+      "ok": true,
+      "lensName": "unresolved",
+      "contextId": "acquired_001",
+      "ids": [
+        "alp_origination",
+        "alp_acquired",
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": true
+    },
+    {
+      "case": "no scope named",
+      "question": "Please provide a portfolio summary",
+      "target": "alp_origination,alp_acquired,nbs_acquired",
+      "ok": true,
+      "lensName": "total",
+      "contextId": "total",
+      "ids": [
+        "alp_origination",
+        "alp_acquired",
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false
+    }
+  ]
+}

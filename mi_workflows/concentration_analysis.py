@@ -120,6 +120,23 @@ _MIX_RE = re.compile(
 #: Deliberately narrow: "balance by broker" and every other "<metric> by X"
 #: stays with the point-in-time stratification path.
 _EXPOSURE_BY_RE = re.compile(r"\bexposures?\s+by\s+\w")
+
+#: "<family> exposure" and "most/least exposed" — the EXPOSURE construction, in
+#: the same shape as `_MIX_RE` and over the same governed dimension families.
+#:
+#: "Show geographic exposure." and "Where are we most exposed geographically?"
+#: are exposure analytics that name no dimension after a "by", so neither
+#: `_EXPOSURE_BY_RE` nor `_CONCENTRATION_TERMS` read them. Bounded to a family
+#: word exactly as the mix construction is, so "what is our exposure to Wales?"
+#: — exposure TO a value, not exposure OF a family — is untouched and stays with
+#: the point-in-time path.
+_EXPOSURE_FAMILY = (
+    r"product|products|geographic|geography|regional|region|broker|brokers|"
+    r"originator|origination|channel|industry|sector|collateral|currency|"
+    r"customer|tenure|occupancy|rating|portfolio")
+_FAMILY_EXPOSURE_RE = re.compile(
+    r"\b(?:" + _EXPOSURE_FAMILY + r")\s+exposures?\b|"
+    r"\bmost\s+exposed\b|\bleast\s+exposed\b")
 _DISTRIBUTION_BY_RE = re.compile(r"\bdistribution\s+(?:of\s+exposures?\s+)?by\s+\w")
 
 #: "largest exposures" / "top 10 loans" / "biggest borrowers" — single-name or
@@ -225,24 +242,61 @@ def rejection_reason(question: str, spec: Any = None) -> Optional[str]:
     return None
 
 
+def names_a_concentration_analytic(question: str) -> Optional[str]:
+    """THE ANALYTIC READING, with no route precedence in it. Reason, or ``None``.
+
+    THIS MODULE IS THE OWNER of "does the reader want a concentration /
+    exposure analysis?", and `is_concentration_question` below has always been
+    two questions welded together: the analytic reading, and whether a more
+    specific ROUTE owns the question anyway. Welded, the analytic reading could
+    not be consulted by anything that needed it BEFORE route precedence — which
+    is exactly what the governed contract needs, because precedence is what the
+    contract is supposed to decide.
+
+    Measured, and the reason this split exists: every geographic concentration
+    question was rejected by `rejection_reason` as "owned by the ITL3 geographic
+    exposure capability" before its concentration language was ever read. So the
+    only fact that separates
+
+        "Which region has the largest balance?"      (a ranked stratification)
+        "Show geographic exposure."                  (a concentration analytic)
+
+    was unreachable, and route ownership fell back to wording tests inside the
+    routing layer.
+
+    Nothing here mentions geography, or any other dimension family in
+    particular: the four tests are the ones this module already used, over the
+    vocabulary it already owned.
+
+    `is_concentration_question` is unchanged in behaviour — it applies
+    precedence first and then asks this.
+    """
+    q = f" {str(question or '').strip().lower()} "
+    if any(t in q for t in _CONCENTRATION_TERMS):
+        return "concentration / diversification language"
+    if _MIX_RE.search(q):
+        return "composition (mix) language over a governed dimension family"
+    if _EXPOSURE_BY_RE.search(q) or _DISTRIBUTION_BY_RE.search(q):
+        return "exposure / distribution by a dimension"
+    if _FAMILY_EXPOSURE_RE.search(q):
+        return "exposure of a governed dimension family"
+    if _TOP_EXPOSURE_RE.search(q):
+        return "largest / top exposure language"
+    return None
+
+
 def is_concentration_question(question: str, spec: Any = None) -> Tuple[bool, str]:
     """``(matched, reason)`` — pure recognition for the chat recogniser.
 
     Matches concentration / composition / diversification language over one
     portfolio scope; defers everything owned by a more specific route.
     """
-    q = f" {str(question or '').strip().lower()} "
     rejection = rejection_reason(question, spec)
     if rejection is not None:
         return False, rejection
-    if any(t in q for t in _CONCENTRATION_TERMS):
-        return True, "concentration / diversification language"
-    if _MIX_RE.search(q):
-        return True, "composition (mix) language over a governed dimension family"
-    if _EXPOSURE_BY_RE.search(q) or _DISTRIBUTION_BY_RE.search(q):
-        return True, "exposure / distribution by a dimension"
-    if _TOP_EXPOSURE_RE.search(q):
-        return True, "largest / top exposure language"
+    reason = names_a_concentration_analytic(question)
+    if reason is not None:
+        return True, reason
     return False, "no concentration language"
 
 
@@ -280,9 +334,24 @@ def requested_concept(question: str) -> Optional[str]:
 #: Single-name language → the identifier kind it names. Checked in order;
 #: bare "largest/top exposures" defaults to loan-level exposure.
 _SINGLE_NAME_LANGUAGE: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
-    ("borrower", ("borrower",)),
+    # "SINGLE NAME" IS A BORROWER, AND THE GOVERNING DOCUMENT SAYS SO.
+    # Schedule 8 §6.1 reads "the aggregate Current Balance attributable to any
+    # single Borrower (or group of connected Borrowers)", and the risk-limits
+    # engine already binds that limit to `borrower_largest_share`. This table
+    # read the same phrase as the LOAN kind, so "our largest single-name
+    # exposure" answered with the largest single LOAN — £449k, 0.26% of the
+    # book — against a limit written about borrowers. A book with several loans
+    # to one borrower would understate the true single-name exposure without
+    # anything in the answer saying so.
+    #
+    # Nothing else moves: "largest 10 loan exposures" still names the loan, and
+    # a bare "largest exposures" still falls through to the loan default below.
+    # Where no borrower identifier is on the tape, `_single_name_result`
+    # already declines and records why, which is the correct answer to a
+    # question this book cannot support.
+    ("borrower", ("borrower", "single name", "single-name")),
     ("obligor", ("obligor",)),
-    ("loan", ("loan", "single name", "single-name", "exposure")),
+    ("loan", ("loan", "exposure")),
 )
 
 #: A superlative over NAMES ("largest exposures", "top 10 borrowers") — note
@@ -353,12 +422,38 @@ def _dimension_decision(entry: SemanticEntry, *, declared_asset: Optional[str],
                                      f"not applicable to asset class "
                                      f"'{declared_asset}'")
     if multi_portfolio_scope and entry.portfolio_comparability != COMPARABLE:
+        # The registry's comparability CODE stays out of the sentence: it is an
+        # internal flag, and a reader told "requires_scale_alignment" learns
+        # nothing they can act on.
+        #
+        # WHAT THE LIMITATION IS ABOUT. This said "combining them would compare
+        # unlike categories", which reads as "these categories cannot be added
+        # up" — and that is not what the platform does. Measured on this book:
+        # "which product type has the largest share of the book?" and "what
+        # share of the book is drawdown?" both aggregate this very dimension
+        # across both portfolios and answer. `portfolio_comparability` is
+        # declared in `metadata.taxonomy` and read by exactly two consumers,
+        # both cross-portfolio: this workflow and `portfolio_risk_comparison`,
+        # whose own wording is "no COMPARISON is made".
+        #
+        # So the limit is THIS METHODOLOGY's, not arithmetic's: a concentration
+        # figure is published as a governed exposure share per category, and a
+        # book-level one over an originator-specific vocabulary would present
+        # unaligned categories as a single exposure. Ordinary reporting by the
+        # same dimension is unaffected, and the sentence now says so instead of
+        # leaving the reader with a false general statement and no next step.
         return DimensionDecision(entry, False,
-                                 "originator-specific vocabulary "
-                                 f"({entry.portfolio_comparability}) and the "
-                                 "scope spans several portfolios — categories "
-                                 "would mix vocabularies (no heuristic mapping "
-                                 "is created)")
+                                 "the concentration methodology publishes each "
+                                 "category as a governed exposure share, and "
+                                 "the registry declares this dimension's "
+                                 "categories originator-specific — so a "
+                                 "book-level concentration over it would "
+                                 "present unaligned categories as one exposure, "
+                                 "and no mapping between them is invented. "
+                                 "Ordinary reporting by this dimension is "
+                                 "unaffected: ask for balance or loan count by "
+                                 "it, or for its concentration within a single "
+                                 "portfolio")
     if entry.source_field not in columns:
         return DimensionDecision(entry, False, "field not present on the tape")
     return DimensionDecision(entry, True, "governed concentration dimension")
@@ -424,11 +519,34 @@ def resolve_single_reporting_date(frame: pd.DataFrame, as_of: Optional[str]
     return (dates[0] if dates else as_of), None, warnings
 
 
-def _declared_asset_class(frame: pd.DataFrame) -> Optional[str]:
-    if ASSET_CLASS_FIELD not in frame.columns:
+def _declared_asset_class(frame: pd.DataFrame, *, registry=None,
+                          portfolio_ids: Optional[Sequence[str]] = None
+                          ) -> Optional[str]:
+    """The single asset class this scope is, or ``None`` if it is not one.
+
+    THE TAPE FIRST, then THE REGISTRY. A tape that carries the column states
+    what is actually in the frame and keeps exactly the reading it had. A tape
+    that does not carry it used to leave the scope UNDECLARED, so every
+    asset-specific concentration dimension was excluded and "show product
+    concentration" refused — on a book whose governed registry declares
+    ``asset_class: equity_release`` for every portfolio in scope, and whose
+    product-type breakdown the same request already renders elsewhere.
+
+    `PortfolioRegistry.asset_classes` is asked rather than the config read here,
+    because it already carries the rule that matters: it returns nothing at all
+    when ANY selected book has not declared one, so a partially-declared scope
+    still reads as undeclared.
+    """
+    if ASSET_CLASS_FIELD in frame.columns:
+        classes = tuple(v.lower() for v in _distinct(frame[ASSET_CLASS_FIELD]))
+        return classes[0] if len(classes) == 1 else None
+    if registry is None:
         return None
-    classes = tuple(v.lower() for v in _distinct(frame[ASSET_CLASS_FIELD]))
-    return classes[0] if len(classes) == 1 else None
+    try:
+        declared = registry.asset_classes(portfolio_ids)
+    except Exception:  # noqa: BLE001 - an unreadable registry declares nothing
+        return None
+    return declared[0].lower() if len(declared) == 1 else None
 
 
 def _portfolio_count(frame: pd.DataFrame) -> int:
@@ -512,6 +630,29 @@ def _share_pct(value: Optional[float]) -> str:
     return f"{pct:.2g}%"
 
 
+@dataclass(frozen=True)
+class ConcentrationReading:
+    """What THIS WORKFLOW reads from a question, read once and carried.
+
+    Both fields name framings the governed contract does not carry a concept
+    for — an analytical concept in this workflow's own vocabulary, and whether
+    the question asks about single names rather than a dimension. They are
+    genuinely specialist, so they stay this module's to read; what changes is
+    WHEN. `read_question` is called by the RECOGNISER, before the route claims
+    the question, and the result travels to the handler. Nothing downstream of
+    the claim reads the sentence.
+    """
+
+    concept: Optional[str] = None
+    single_name_kind: Optional[str] = None
+
+
+def read_question(question: str) -> ConcentrationReading:
+    """This workflow's pre-claim reading of one question."""
+    return ConcentrationReading(concept=requested_concept(question),
+                                single_name_kind=requested_single_name_kind(question))
+
+
 def run_concentration_analysis(
         df: pd.DataFrame, *,
         question: str,
@@ -522,22 +663,41 @@ def run_concentration_analysis(
         as_of: Optional[str] = None,
         spec: Any = None,
         parse_meta: Optional[Mapping[str, Any]] = None,
-        context_id: Optional[str] = None) -> Dict[str, Any]:
+        context_id: Optional[str] = None,
+        reading: Optional["ConcentrationReading"] = None) -> Dict[str, Any]:
     """Run the workflow over one governed frame. Returns the result contract.
 
-    ``context_id`` is the pre-resolved workspace scope (question text wins over
-    a workspace selection — the adapter applies that precedence); when omitted
-    the scope named in the question resolves through the same governed
-    registry every other channel uses. Never raises for an analytical reason:
-    every non-answer is a controlled result with ``available: False`` and an
-    explanation.
+    ``context_id`` is the pre-resolved workspace scope. ``reading`` is this
+    question's PRE-CLAIM reading — the concept and the single-name kind, read
+    once by the recogniser before the route was claimed and carried in.
+
+    THE QUESTION IS NO LONGER INTERPRETED HERE. It used to be: this function
+    called `requested_concept(question)` and `requested_single_name_kind(
+    question)` after the route had already claimed the question, and resolved a
+    portfolio lens from the wording when no context arrived. Three semantic
+    decisions taken downstream of interpretation, in a workflow with eleven
+    vocabularies of its own. The deterministic concentration calculation below
+    is unchanged and stays here — it is genuinely specialist. Reading the
+    sentence is not.
+
+    Never raises for an analytical reason: every non-answer is a controlled
+    result with ``available: False`` and an explanation.
     """
+    if reading is None:
+        # NO READING, NO ANSWER FROM THIS WORKFLOW. Falling back to
+        # `read_question(question)` here would leave the interpreter reachable
+        # exactly when the caller forgot to supply one — one owner, or none,
+        # the rule Conversion 1 set for the population.
+        return _controlled_failure(
+            "the question was not read before this workflow ran",
+            question=question, bsr=bsr, as_of=as_of)
     reg = registry if registry is not None else registry_for_frame(df, client_id=client_id)
 
     # ---- scope: ONE governed portfolio scope ------------------------------ #
+    # THE SCOPE ARRIVES RESOLVED. The fallback that read it from the wording is
+    # gone: a second population owner reachable exactly when the first one
+    # failed is the worst moment for two owners to disagree.
     requested_context = context_id
-    if requested_context is None:
-        requested_context = _lens_mod.context_id(_lens_mod.resolve_lens(question))
     scope = resolve_scope(reg, requested_context)
     if scope.fell_back_to_total and scope.requested_context_id:
         available = ", ".join(reg.ids()) or "none"
@@ -579,7 +739,8 @@ def run_concentration_analysis(
     exposure_field = EXPOSURE_FIELD if exposure_ok else None
 
     # ---- dimension selection: registry-governed --------------------------- #
-    declared_asset = _declared_asset_class(frame)
+    declared_asset = _declared_asset_class(
+        frame, registry=reg, portfolio_ids=getattr(scope, "portfolio_ids", None))
     multi_portfolio = _portfolio_count(frame) > 1
     columns = tuple(df.columns)
     top_n = getattr(spec, "top_n", None) if spec is not None else None
@@ -589,7 +750,7 @@ def run_concentration_analysis(
                                    multi_portfolio_scope=multi_portfolio,
                                    columns=columns)
 
-    single_name_kind = requested_single_name_kind(question)
+    single_name_kind = reading.single_name_kind
 
     #: The parse's dimension counts only when the user actually named it —
     #: the deterministic parser substitutes a default dimension for generic
@@ -620,7 +781,7 @@ def run_concentration_analysis(
                              if e.analytical_concept == requested_entry.analytical_concept
                              and e.source_field != parsed_dimension)
     else:
-        concept = requested_concept(question)
+        concept = reading.concept
         if explicit_dimension and parsed_dimension and bsr.get(parsed_dimension) is None:
             limitations.append(
                 f"'{parsed_dimension}' is not governed by the Business "
@@ -642,6 +803,28 @@ def run_concentration_analysis(
     dimension_results: List[Dict[str, Any]] = []
     evidence: List[Dict[str, Any]] = []
     selected = [d for d in decisions if d.selected]
+    # A GOVERNED DIMENSION THIS BOOK CARRIES AND THIS METHODOLOGY WILL NOT
+    # MEASURE IS SAID SO, in every mode.
+    #
+    # `requested_dimension` mode already recorded it. Overview and concept mode
+    # did not, so "show broker concentration" — which loses its axis to the
+    # qualifier rule upstream and arrives here as an overview — refused with
+    # nothing but "not broken down by broker" and the reader never learnt that
+    # the registry declares broker categories originator-specific. Four
+    # governed concentration dimensions are excluded this way on this registry,
+    # so this is a bounded disclosure, not a running commentary.
+    for decision in decisions:
+        if decision.selected:
+            continue
+        entry = decision.entry
+        if not (multi_portfolio and entry.portfolio_comparability != COMPARABLE):
+            continue
+        if entry.source_field not in columns:
+            continue
+        note = (f"'{entry.source_field}' cannot be analysed here: "
+                f"{decision.reason}")
+        if note not in limitations:
+            limitations.append(note)
     for decision in selected:
         result = _dimension_result(decision.entry, frame, basis=basis,
                                    exposure_field=exposure_field,

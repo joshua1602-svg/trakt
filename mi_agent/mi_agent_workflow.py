@@ -21,7 +21,8 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
-from .mi_dataset_profile import profile_dataset, validate_query_data
+from .mi_dataset_profile import (display_hint_for, profile_dataset,
+                                  to_display_points, validate_query_data)
 from .parsed_question import ParsedQuestion
 from .mi_chart_factory import MIChartError, MIChartResult, create_mi_chart
 from .mi_query_executor import (
@@ -30,6 +31,7 @@ from .mi_query_executor import (
     execute_mi_query,
 )
 from .mi_query_spec import MIQuerySpec
+from . import llm_query_parser as _parser_mod
 from .mi_query_validator import load_mi_semantics, recover_chart_spec, validate_mi_query
 from . import portfolio_lens as _portfolio_lens
 from . import portfolio_scope as _portfolio_registry
@@ -75,16 +77,17 @@ def _validation_refusal(errors: List[str], semantics: dict) -> str:
     if named:
         if len(named) == 1:
             label, canonical = named[0]
-            return (f"'{label}' is not available in this dataset. The MI book for "
-                    f"this client does not include {canonical}. This field is not "
-                    "reported, so the question cannot be answered from the current "
-                    "data (no value was fabricated).")
+            # THE READER'S NAME FOR THE FIELD, not the column's. The canonical
+            # identifier told the reader nothing they could act on and read as
+            # an internal leak in a customer-facing refusal.
+            del canonical
+            return (f"'{label}' is not available in this dataset. This book does "
+                    "not report it, so the question cannot be answered from the "
+                    "current data (no value was fabricated).")
         labels = ", ".join(f"'{l}'" for l, _ in named)
-        columns = ", ".join(c for _, c in named)
-        return (f"{labels} are not available in this dataset. The MI book for this "
-                f"client does not include {columns}. These fields are not reported, "
-                "so the question cannot be answered from the current data (no value "
-                "was fabricated).")
+        return (f"{labels} are not available in this dataset. This book does not "
+                "report them, so the question cannot be answered from the current "
+                "data (no value was fabricated).")
     refusal = _statistic_refusal(errors, semantics)
     if refusal:
         return refusal
@@ -181,6 +184,11 @@ _AGG_LABEL = {
 }
 
 
+#: The governed pipeline-stage field, named once. The VALUE and whether a
+#: sentence carries one are `question_interpretation.lexical`'s to decide.
+_STAGE_FIELD = "pipeline_stage"
+
+
 def _bn(semantics: dict, key: Optional[str]) -> Optional[str]:
     if not key:
         return None
@@ -259,9 +267,10 @@ def _detect_unsupported_concept(question, semantics, available_columns):
         return {
             "concept": concept,
             "missing_fields": candidate_fields,
-            "message": (f"'{concept}' is not available in this dataset. The MI book "
-                        f"for this client does not include {', '.join(candidate_fields)}. "
-                        "This field is not reported, so the question cannot be answered "
+            # `missing_fields` above keeps the canonical keys for machines; the
+            # MESSAGE names the concept the reader used and nothing else.
+            "message": (f"'{concept}' is not available in this dataset. This book "
+                        "does not report it, so the question cannot be answered "
                         "from the current data (no value was fabricated)."),
         }
     return None
@@ -349,8 +358,17 @@ def _capability_explanation(question: str, frame, history_periods: int = 1
 
 
 #: How each governed format reads in a management answer.
-def _format_measure_value(value, fmt: str) -> str:
-    """One measure, formatted the way a reader expects to see it."""
+def _format_measure_value(value, fmt: str, scale: Optional[str] = None) -> str:
+    """One measure, formatted the way a reader expects to see it.
+
+    FORMATTING IS THIS FUNCTION'S; SCALE IS THE DATASET'S. Prose and a KPI tile
+    may legitimately round a figure differently, but they may not disagree about
+    whether the stored column holds 0.556 or 55.6 — that is a fact about the
+    data, decided once by the profile. Reading only the registry's `format` and
+    never the profile's `scale` is how one weighted-average LTV was published
+    from a single executed row as "55.6%" in the tile and "0.56%" in the
+    sentence beside it.
+    """
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -361,13 +379,14 @@ def _format_measure_value(value, fmt: str) -> str:
                 return f"£{number / cut:,.2f}{suffix}"
         return f"£{number:,.2f}"
     if fmt == "percent":
-        return f"{number:.2f}%"
+        return f"{to_display_points(number, scale):.2f}%"
     if fmt == "integer":
         return f"{number:,.1f}" if number % 1 else f"{int(number):,}"
     return f"{number:,.2f}"
 
 
-def _multi_measure_answer(spec, qres, semantics: dict) -> Optional[str]:
+def _multi_measure_answer(spec, qres, semantics: dict,
+                          profile: Optional[dict] = None) -> Optional[str]:
     """A CFO-readable answer for a governed multi-measure request.
 
     One request, several measures, ONE population — so the answer reads as a
@@ -397,8 +416,11 @@ def _multi_measure_answer(spec, qres, semantics: dict) -> Optional[str]:
                 label = f"Weighted-average {label}"
             elif measure.get("aggregation") == "avg":
                 label = f"Average {label}"
+            # The SAME hint the KPI renderer reads, suffix-aware, so the two
+            # renderings of one executed figure cannot disagree.
+            hint = display_hint_for(profile or {}, column)
             lines.append(f"{label}: "
-                         f"{_format_measure_value(row[column], entry.get('format'))}")
+                         f"{_format_measure_value(row[column], entry.get('format'), hint.get('scale'))}")
         if not lines:
             return None
         unavailable = (getattr(qres, "metadata", None) or {}).get(
@@ -540,6 +562,21 @@ def run_mi_agent_query(
 
     available_columns = _receipt_schema.book_columns(df)
 
+    # THE BOOK'S OWN CATEGORY VALUES, resolved ONCE per request and shared by
+    # both readers of them. The categorical parser uses them to resolve a named
+    # value to the field that holds it; the portfolio lens uses them to know
+    # which spans that resolution has already claimed (GOVERNED SPAN OWNERSHIP,
+    # `mi_agent.categorical_spans`). Computing them twice, or for one reader and
+    # not the other, is how the two halves of one rule read different books: the
+    # lens would stand down from a span the parser never claimed, and the
+    # narrowing would vanish from BOTH — a silent widening in place of a wrong
+    # narrowing. The API path already passed this catalogue to its parse; this
+    # is the same catalogue, for callers that parse here.
+    try:
+        available_values = _receipt_schema.book_values(df, semantics)
+    except Exception:  # noqa: BLE001 - no catalogue leaves the old reading
+        available_values = None
+
     # ---- controlled-unsupported guard -------------------------------------
     # If the question asks for a governed concept whose field is NOT in this
     # dataset (e.g. arrears / default / NNEG / credit score on an ERE pack that
@@ -563,6 +600,7 @@ def run_mi_agent_query(
         if parsed is None:
             parsed = ParsedQuestion.parse(
                 question, semantics, available_columns=available_columns,
+                available_values=available_values,
                 llm_enabled=effective_llm, model=model,
                 max_attempts=max_repair_attempts, llm_callable=llm_callable,
                 provider=provider, catalog_mode=catalog_mode,
@@ -623,8 +661,20 @@ def run_mi_agent_query(
             "measure was used."]
         return result
 
+    # AN UNRESOLVED CATEGORY IS NOT AN UNMAPPED QUESTION. Where the reader
+    # named a qualifier no governed field claims, the question mapped perfectly
+    # well — a count of a subset — and the only thing missing is the subset.
+    # Told through this guard it reads "I couldn't map this question to a
+    # governed analytic"; through the unknown-category refusal below it reads
+    # "No loans in this book match that filter ('platinum')", which is the
+    # actual obstacle and the same sentence the PREPOSITIONAL phrasing of the
+    # same question already gets.
+    _unknown_category = any(
+        str(n).startswith(_parser_mod.UNKNOWN_CATEGORY_PREFIX)
+        for n in (getattr(spec, "unavailable_filters", None) or []))
     if (result["parser_mode"] == "deterministic"
             and parse_meta.get("note") == "unmapped"
+            and not _unknown_category
             and not _portfolio_lens.mentions_portfolio(question)):
         # Sprint 2.5E wired the capability explanation only into the
         # `unresolved_metric` branch. Tracing the real path in the close-out
@@ -666,7 +716,14 @@ def run_mi_agent_query(
     if "source_portfolio_id" in available_columns or "source_portfolio_type" in available_columns:
         _default_lens = (_portfolio_lens.lens_from_selection(source_portfolio_lens)
                          if source_portfolio_lens is not None else None)
-        _lens = _portfolio_lens.resolve_lens_with_default(question, _default_lens)
+        # GOVERNED SPAN OWNERSHIP. The book's own category values go in, so a
+        # span already claimed as one of them cannot ALSO be read as a portfolio
+        # scope. Measured without it, a broker called "Gamma Direct" answered
+        # 104 of its 147 loans, because "Direct loans" was read a second time as
+        # the direct book. `mi_agent.categorical_spans` owns the rule; the
+        # catalogue is the one the parse above was handed, not a second reading.
+        _lens = _portfolio_lens.resolve_lens_with_default(
+            question, _default_lens, available_values=available_values)
         # The lens names the scope; the GOVERNED REGISTRY resolves what that
         # scope means. "direct" is every portfolio currently typed direct, so
         # onboarding direct_002 widens the answer with no code change — and the
@@ -692,6 +749,33 @@ def run_mi_agent_query(
                 f"({', '.join(_portfolio_scope.portfolio_ids) or 'no portfolios'}) "
                 "rather than the requested scope.")
 
+    # ---- the governed PIPELINE STAGE, carried into execution ---------------
+    #
+    # `lexical.pipeline_stage_request` is THE single reader of a stage in a
+    # sentence, and the contract already carries its answer as a FilterClaim.
+    # The ROUTED pipeline paths consume it through `analytical_plan.
+    # governed_stage_step`; the point-in-time path had no such step, so the
+    # narrowing reached the receipt as a REQUEST and never reached the
+    # calculation:
+    #
+    #     "What is the balance of offer stage cases?"
+    #        "Offer (Pipeline Stage) — this narrowing was not applied"
+    #
+    # — a refusal over a tape carrying `pipeline_stage` with five values. The
+    # owner is asked, not re-read: the canonical value comes back from it
+    # (OFFER, not "offer issued"), and it is applied only where the loaded
+    # dataset actually carries the column, so a funded question is untouched.
+    if _STAGE_FIELD in available_columns and _STAGE_FIELD not in (spec.filters or {}):
+        try:
+            from question_interpretation.lexical import pipeline_stage_request
+            _stage, _axis = pipeline_stage_request(question)
+        except Exception:  # noqa: BLE001 - no owner, no claim
+            _stage = None
+        if _stage:
+            spec.filters = dict(spec.filters or {})
+            spec.filters[_STAGE_FIELD] = _stage
+            warnings.append(f"pipeline stage applied: {_stage}")
+
     # ---- merge drill-through filters into the parsed spec -----------------
     # Additive: caller-supplied filters (e.g. a UI drill into one region/broker/
     # year/SPV/stage) combine with any the parser inferred. They are validated +
@@ -712,8 +796,38 @@ def run_mi_agent_query(
     # Predicates the user asked for that could not be applied (e.g. a joint-borrower
     # filter when no borrower-structure field exists) are surfaced as warnings —
     # never silently dropped. They also flow into the API query-audit panel.
+    unknown_categories = [
+        n for n in (getattr(spec, "unavailable_filters", None) or [])
+        if str(n).startswith(_parser_mod.UNKNOWN_CATEGORY_PREFIX)]
     for note in getattr(spec, "unavailable_filters", None) or []:
+        if note in unknown_categories:
+            continue
         warnings.append(f"Filter not applied (field unavailable): {note}")
+    if unknown_categories:
+        # THE READER NAMED A CATEGORY THIS BOOK DOES NOT CARRY.
+        #
+        # A warning is not enough here. The question narrowed to something, no
+        # governed field claims it, and answering anyway returns the WHOLE BOOK
+        # under a question about a subset of it — "what is the average LTV in
+        # Atlantis" reporting the platform average. This is the same refusal a
+        # narrowing that selected no rows gets, for the same reason: there is
+        # nothing to calculate and no broader figure is substituted.
+        # THE SENTENCE COMES FROM ITS OWNER, so the routed guard and this path
+        # cannot drift into describing one obstacle two ways.
+        message = _parser_mod.unknown_category_refusal(unknown_categories)
+        result["error"] = message
+        result["answer"] = message
+        result["controlled_refusal"] = True
+        result["ok"] = False
+        result["spec_obj"] = spec
+        result["spec"] = spec.to_dict()
+        result["validation"] = {"ok": False,
+                                "errors": ["unknown_category: "
+                       + ", ".join(_parser_mod.unknown_category_names(
+                           unknown_categories))],
+                                "warnings": [], "resolved_fields": {}}
+        result["warnings"] = _dedupe(warnings + [message])
+        return result
 
     # ---- validate (with recovery) -----------------------------------------
     # The validator is also a RECOVERY/control layer: when a spec fails only
@@ -911,6 +1025,9 @@ def run_mi_agent_query(
     _recon = (qres.metadata or {}).get("reconciliation") or {}
     if spec.filters and _recon.get("records_after_filters") == 0:
         applied = ", ".join(str(k) for k in (spec.filters or {}))
+        # The PROSE names the fields as the registry names them for a reader;
+        # `validation.errors` below keeps the canonical keys for machines.
+        spoken = ", ".join(str(_bn(semantics, k) or k) for k in (spec.filters or {}))
         val = result.get("validation") or {"ok": True, "errors": [], "warnings": [],
                                             "resolved_fields": {}}
         val["ok"] = False
@@ -920,7 +1037,7 @@ def run_mi_agent_query(
         if isinstance(result.get("interpreted"), dict):
             result["interpreted"]["Validation"] = "Failed"
         result["error"] = (
-            f"No loans in this book match that filter ({applied}), so there is "
+            f"No loans in this book match that filter ({spoken}), so there is "
             "nothing to calculate. I have not returned a whole-book figure in "
             "its place.")
         result["answer"] = result["error"]
@@ -956,7 +1073,7 @@ def run_mi_agent_query(
     # P1E: a multi-measure request gets a management answer naming every figure.
     if qres is not None and (getattr(qres, "metadata", None) or {}).get(
             "measures_executed"):
-        line = _multi_measure_answer(spec, qres, semantics)
+        line = _multi_measure_answer(spec, qres, semantics, profile)
         if line:
             result["answer"] = line
 
@@ -1030,6 +1147,7 @@ def run_mi_agent_query(
         receipt = _receipt_mod.build_receipt(
             spec=spec, query_result=qres, semantics=semantics, facets=_facets,
             parser_confidence=(parse_meta or {}).get("parser_confidence"),
+            dataset=dataset,
             period=_reporting_date_label(df))
         verdict, message = _receipt_mod.assess(
             receipt, substitution=_substitution, semantics=semantics)

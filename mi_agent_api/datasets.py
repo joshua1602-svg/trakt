@@ -802,40 +802,69 @@ def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
     return frame, None
 
 
-def _mi_llm_config() -> SimpleNamespace:
-    """LLM-parser configuration for the MI Agent query path.
+#: What the environment ASKS for, kept separate from what serving does.
+#: ``requested`` on the returned config is this; ``enabled`` is the boundary's
+#: answer, and for the free-form arm the answer is always no. See
+#: :func:`_mi_llm_config`.
+_FREE_FORM_ARM_STATUS = "withdrawn_unsafe_boundary"
 
-    Returns an object with ``enabled`` (the parser should attempt the LLM),
-    ``available`` (it can actually run — a key is present), ``model``, a
-    human-readable ``status``, and any ``warnings``. The LLM is the FALLBACK for
-    questions the deterministic parser can't resolve (``zero_cost_first`` keeps
-    easy questions free — no LLM call). It is enabled by default whenever an
-    ``ANTHROPIC_API_KEY`` is configured; with no key the parser stays
-    deterministic-only (never crashes). Operators can force it with
-    ``MI_AGENT_LLM_PARSER=on|off|auto`` and override the model with
-    ``MI_AGENT_LLM_MODEL``.
+
+def _mi_llm_config() -> SimpleNamespace:
+    """The production LLM boundary for the MI Agent query path.
+
+    Returns ``enabled`` (serving may run the free-form LLM parser),
+    ``available``, ``requested`` (what the environment asked for), ``model``, a
+    human-readable ``status`` and any ``warnings``.
+
+    ``enabled`` IS ALWAYS FALSE, and that is the point of this function.
+
+    The free-form arm asks the model for a whole governed ``MIQuerySpec`` and
+    executes what comes back. Measured against the deterministic arm, it chose
+    periods and metrics the reader never gave, dropped concepts the book cannot
+    express instead of refusing them, bound "lump sum" and "drawdown" to the
+    wrong governed fields, degraded an interest-rate BUCKET to the raw rate,
+    turned correct refusals into confident answers and correct answers into
+    refusals. None of that is a prompt defect: a model that emits the contract
+    owns the semantics, and every guard downstream reads the contract.
+
+    So the arm is withdrawn from serving rather than tuned. Its replacement is
+    already in the estate and runs the other way round —
+
+        question -> semantic proposal -> deterministic binding/merge
+                 -> the same governed contract -> the same guards
+
+    — in :mod:`mi_agent_api.concept_merge_arm`, where the model proposes
+    concepts in registered vocabulary, the REGISTRY binds them to fields, and
+    the merge may only fill a slot that was empty. It has its own flag
+    (``MI_AGENT_CONCEPT_MERGE``) and a key alone does not turn it on.
+
+    ``MI_AGENT_LLM_PARSER`` is still read, and still reported as ``requested``,
+    because an operator who set it is owed the truth about what happened to it.
+    It no longer reaches serving. The offline A/B harnesses that MEASURE the
+    free-form arm are unaffected: they call ``parse_with_repair`` directly with
+    ``llm_enabled=True``, which is a measurement, not a request path.
     """
     mode = os.environ.get("MI_AGENT_LLM_PARSER", "auto").strip().lower()
     has_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
     if mode in ("off", "0", "false", "no"):
-        enabled = False
+        requested = False
     elif mode in ("on", "1", "true", "yes"):
-        enabled = True
-    else:  # auto
-        enabled = has_key
+        requested = True
+    else:  # auto — a key alone used to be consent, and that is F2
+        requested = has_key
     model = os.environ.get("MI_AGENT_LLM_MODEL") or None
-    available = bool(enabled and has_key)
     warnings: List[str] = []
-    if enabled and not has_key:
-        status = "unavailable_no_api_key"
-        warnings.append("LLM parser requested but ANTHROPIC_API_KEY is not set; "
-                        "using the deterministic parser.")
-    elif enabled:
-        status = "enabled"
-    else:
-        status = "disabled"
-    return SimpleNamespace(enabled=enabled, model=model, available=available,
-                           status=status, warnings=warnings)
+    if requested:
+        warnings.append(
+            "The free-form LLM parser is withdrawn from serving: it emits the "
+            "governed contract itself, which no downstream guard can check. "
+            "Questions are parsed deterministically. Semantic augmentation is "
+            "available through MI_AGENT_CONCEPT_MERGE, which proposes concepts "
+            "and lets the registry bind them.")
+    return SimpleNamespace(enabled=False, model=model, available=False,
+                           requested=requested,
+                           status=_FREE_FORM_ARM_STATUS if requested else "disabled",
+                           warnings=warnings)
 
 
 _CLIENT_CURRENCY_CACHE: Dict[str, str] = {}

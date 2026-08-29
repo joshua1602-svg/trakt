@@ -67,6 +67,77 @@ NEUTRAL = "neutral"
 #: exists to prevent. Re-add it when a question demands it, with the question.
 OPERATION_TYPES = (COUNT, AMOUNT, AVERAGE, MOVEMENT, RANKING, FORWARD, NEUTRAL)
 
+# --------------------------------------------------------------------------- #
+# THE ANALYTIC the question asks for, where it asks for a NAMED one.
+#
+# `type` says what KIND of answer is wanted — a count, an amount, a ranking.
+# It does not say whether the reader asked for a named ANALYSIS of how the book
+# is distributed. Measured, that is the difference between two questions the
+# contract could not tell apart at all:
+#
+#     "Which region has the largest balance?"        type=ranking  analytic=None
+#     "What is the largest geographic area
+#      concentration?"                               type=ranking  analytic=concentration
+#
+# Every other governed field was identical on those two — the four ordering
+# values, `modifiers`, the subject claim, the dimension claims and `residue` —
+# so route ownership fell back to wording tests inside the routing layer, and a
+# plain ranked stratification of a governed dimension was claimed by a
+# specialist capability it did not ask for.
+#
+# GENERIC BY CONSTRUCTION. `concentration` names a SHAPE OF ANALYSIS — how the
+# book distributes across a governed dimension family — and says nothing about
+# which family. It is the reading of
+# `mi_workflows.concentration_analysis.names_a_concentration_analytic`, which
+# owns that vocabulary; nothing here matches a phrase, and no geography, product
+# or broker word appears in this module.
+#
+# `None` is not "not a concentration": it is "no analytic was NAMED", which is
+# the ordinary case and must stay distinguishable from a named one.
+ANALYTIC_CONCENTRATION = "concentration"
+ANALYTICS = (ANALYTIC_CONCENTRATION,)
+
+# --------------------------------------------------------------------------- #
+# THE ORDERING FACTS — the third application of the closure pattern.
+#
+# `OperationClaim.type == RANKING` says a ranking was NAMED. It does not say
+# what to rank, which way, on what basis, or how many — and measured over the 97
+# corpus questions that carry ranking language, `modifiers` is EMPTY on every
+# one of them. Every one of those four facts is resolved downstream from raw
+# English by `mi_agent.period_change.rank_request`, which is a second reading of
+# a sentence the contract has already claimed.
+#
+# That is the same shape the contract has closed twice before, and these fields
+# are the same remedy:
+#
+#     trend_window     (wording)  ->  window_periods       (the magnitude)
+#     comparison_period(wording)  ->  comparison_periods   (the values)
+#     type == RANKING  (wording)  ->  ordering_*           (the values)
+#
+# `ordering_of` is the one that is not merely carriage. It separates "which
+# region has the largest balance" from "which region grew the most" — a ranking
+# of a LEVEL from a ranking of a MOVEMENT. Nothing in the contract could express
+# that difference before, and a question that asks which region GREW has been
+# answered with which region IS, disclosed nowhere.
+ORDER_INCREASE = "increase"
+ORDER_DECREASE = "decrease"
+ORDER_EITHER = "either"
+ORDER_DIRECTIONS = (ORDER_INCREASE, ORDER_DECREASE, ORDER_EITHER)
+
+#: What the ordering is measured ON. Mirrors the governed bases the ranking
+#: engine already implements; naming them here does not add a basis.
+ORDER_BASIS_ABSOLUTE = "absolute"
+ORDER_BASIS_PERCENT = "percent"
+ORDER_BASIS_SHARE = "share"
+ORDER_BASIS_COUNT = "count"
+ORDER_BASES = (ORDER_BASIS_ABSOLUTE, ORDER_BASIS_PERCENT, ORDER_BASIS_SHARE,
+               ORDER_BASIS_COUNT)
+
+#: Whether the quantity ordered is a LEVEL at one date or a MOVEMENT between two.
+ORDER_OF_LEVEL = "level"
+ORDER_OF_MOVEMENT = "movement"
+ORDER_SUBJECTS = (ORDER_OF_LEVEL, ORDER_OF_MOVEMENT)
+
 #: The SYNTACTIC role a named dimension plays in this sentence. Not a semantic
 #: judgement about the registry: both `region` and `borrower type` are
 #: dimensions; in "balance by region for joint borrowers" their roles differ.
@@ -105,6 +176,89 @@ UNSUPPLIED_TARGET_SOURCES = (CONFIGURED,)
 
 #: Time grains a question can name.
 GRAINS = ("day", "week", "month", "quarter", "year")
+
+#: Which SOURCE PORTFOLIO(s) a question scopes to.
+#:
+#: PHASE 1A. Added because the compositional plan layer could not be built
+#: without it: `mi_agent.portfolio_lens.resolve_lens` resolved
+#: `source_portfolio_type=acquired` for "Summarise the acquired book" while this
+#: object emitted nothing, so a downstream plan could not tell Total from
+#: Acquired and an empty `population` list had to be read as "we do not know".
+#:
+#: `mi_agent.portfolio_lens` REMAINS THE SINGLE OWNER of this reading. The claim
+#: below carries that owner's answer; it never re-derives one, and there is no
+#: vocabulary here for a planner to match against.
+SCOPE_TOTAL = "total"
+SCOPE_DIRECT = "direct"
+SCOPE_ACQUIRED = "acquired"
+#: One or more named books (an SPV, a cohort id) chosen explicitly.
+SCOPE_COHORT = "cohort"
+SOURCE_SCOPES = (SCOPE_TOTAL, SCOPE_DIRECT, SCOPE_ACQUIRED, SCOPE_COHORT)
+
+#: PHASE 1G — the BROAD BUSINESS POPULATION, kept separate from the specific
+#: portfolio selection.
+#:
+#: The two are different concepts and conflating them is what produced the
+#: hard-coded hierarchy this phase removes: Funded -> Acquired -> Acquired Book
+#: 1 -> SPV1 -> ... . A request is instead a base population, optionally
+#: narrowed to specific governed portfolios:
+#:
+#:     "the funded book"      base=funded    portfolios=()          (unrestricted)
+#:     "the acquired book"    base=acquired  portfolios=(every acquired id)
+#:     "SPV2"                 base=funded    portfolios=('spv2',)
+#:
+#: `SPV2` is NOT `base=acquired`: which category a named portfolio belongs to is
+#: a property of the PORTFOLIO, held by the registry, not a property of the
+#: request. Reading it as its category is the widening §8 forbids.
+BASE_FUNDED = "funded"
+BASE_DIRECT = "direct"
+BASE_ACQUIRED = "acquired"
+BASE_POPULATIONS = (BASE_FUNDED, BASE_DIRECT, BASE_ACQUIRED)
+
+#: PHASE 1G — WHERE the resolved scope came from.
+#:
+#: Phase 1F stopped because the contract could not answer this. It carried WHICH
+#: scope was resolved and not WHETHER THE USER ASKED FOR IT, and those are
+#: different facts: "portfolio summary" and "portfolio summary across all
+#: portfolios" both resolve to `total`, and production answers them differently
+#: when the workspace carries a selection — the first defers to it, the second
+#: overrides it. Measured across the owned surface, a plan that could not tell
+#: them apart widened 14 of 54 (question, caller) combinations.
+#:
+#:     explicit_user   the QUESTION named this scope. It wins over any caller
+#:                     context — that is the whole reason this value exists.
+#:     caller_context  the question said nothing; this is the workspace
+#:                     selection the caller supplied.
+#:     default         the question said nothing and no caller context was
+#:                     supplied, so the complete funded population applies.
+#:     unresolved      the question NAMED a scope and it could not be resolved.
+#:                     Never Funded — see `UNRESOLVABLE`.
+#:     model_inferred  the question said something the deterministic grammar
+#:                     could not reach, and a MODEL proposed the concept a
+#:                     governed owner then bound. A FOURTH kind of authority,
+#:                     added to this vocabulary rather than given one of its
+#:                     own, because "did the reader choose this, or did we?" is
+#:                     the same question with one more possible answer.
+#:
+#:                     IT IS NOT `explicit_user`, AND NOTHING MAY TREAT IT AS
+#:                     ONE. The Opus run walked straight through the guards
+#:                     that make "What changed?" and "Show me the trend."
+#:                     refuse, because those guards fire on a RECORDED DEFAULT
+#:                     and the model had supplied the missing element itself,
+#:                     so no default was ever recorded. `stated_by_user` is
+#:                     False for this value on every claim that exposes it,
+#:                     which is the whole reason it lives here.
+PROV_EXPLICIT_USER = "explicit_user"
+PROV_CALLER_CONTEXT = "caller_context"
+PROV_MODEL_INFERRED = "model_inferred"
+PROV_DEFAULT = "default"
+PROV_UNRESOLVED = "unresolved"
+SCOPE_PROVENANCES = (PROV_EXPLICIT_USER, PROV_CALLER_CONTEXT,
+                     PROV_MODEL_INFERRED, PROV_DEFAULT, PROV_UNRESOLVED)
+
+#: The provenances a HUMAN is behind. Precedence, guards and disclosure all
+#: turn on this distinction and not on membership of the tuple above.
+CHOSEN_BY_A_PERSON = (PROV_EXPLICIT_USER, PROV_CALLER_CONTEXT)
 
 
 @dataclass(frozen=True)
@@ -177,15 +331,63 @@ class Slot:
 class OperationClaim(Slot):
     type: Optional[str] = None
     modifiers: Tuple[str, ...] = ()
+    #: THE ORDERING VALUES. See the vocabulary block above for why these are
+    #: typed fields rather than strings in `modifiers`: encoding them as
+    #: "basis:absolute" would make every consumer split a serialisation back
+    #: into structure, which is the defect `comparison_periods` was added to
+    #: close and is not going to be reintroduced here.
+    #:
+    #: All four are None when the question named no ordering. `ordering_of` is
+    #: None when a ranking was named but the question does not say whether it
+    #: ranks a level or a movement — which a consumer must distinguish from
+    #: "it ranks a level", and so the field never defaults.
+    ordering_direction: Optional[str] = None
+    ordering_basis: Optional[str] = None
+    ordering_limit: Optional[int] = None
+    ordering_of: Optional[str] = None
+    #: THE NAMED ANALYTIC, or None when the question named none. See the
+    #: vocabulary block above. Orthogonal to `type`: a question may ask for a
+    #: concentration analytic AND rank it, and both facts have to survive.
+    analytic: Optional[str] = None
+    #: Why the analytic reading came out as it did, in the OWNER's words.
+    #: Carried so a consumer can attribute the decision rather than re-derive it.
+    analytic_reason: Optional[str] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.type is not None and self.type not in OPERATION_TYPES:
             raise ValueError("unknown operation type %r" % (self.type,))
+        if self.analytic is not None and self.analytic not in ANALYTICS:
+            raise ValueError("unknown analytic %r" % (self.analytic,))
+        for value, allowed, label in (
+                (self.ordering_direction, ORDER_DIRECTIONS, "ordering direction"),
+                (self.ordering_basis, ORDER_BASES, "ordering basis"),
+                (self.ordering_of, ORDER_SUBJECTS, "ordering subject")):
+            if value is not None and value not in allowed:
+                raise ValueError("unknown %s %r" % (label, value))
+        if self.ordering_limit is not None and self.ordering_limit < 1:
+            raise ValueError("an ordering limit must be at least 1, not %r"
+                             % (self.ordering_limit,))
+
+    @property
+    def orders_a_movement(self) -> bool:
+        """True only when the contract SAYS the ordering is over a movement.
+
+        Deliberately not "not a level": an unstated subject is unknown, and a
+        consumer that treats unknown as level is the substitution this field
+        exists to prevent.
+        """
+        return self.ordering_of == ORDER_OF_MOVEMENT
 
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
-        d.update({"type": self.type, "modifiers": list(self.modifiers)})
+        d.update({"type": self.type, "modifiers": list(self.modifiers),
+                  "analytic": self.analytic,
+                  "analytic_reason": self.analytic_reason,
+                  "ordering_direction": self.ordering_direction,
+                  "ordering_basis": self.ordering_basis,
+                  "ordering_limit": self.ordering_limit,
+                  "ordering_of": self.ordering_of})
         return d
 
 
@@ -196,10 +398,28 @@ class SubjectClaim(Slot):
     #: belongs to ResolvedConcept, and a candidate may turn out to resolve to
     #: nothing in this portfolio.
     candidate_concept: Optional[str] = None
+    #: Where the candidate came from. `SCOPE_PROVENANCES` is reused rather than
+    #: a second vocabulary invented, exactly as `DatasetClaim` reuses it: the
+    #: question "did the reader choose this, or did we?" is the same question
+    #: for a measure as for a scope, and it deserves the same answer set.
+    #:
+    #: A `PROV_DEFAULT` subject is a real claim carrying a real value — the
+    #: series still plots the governed balance. What it adds is that a consumer
+    #: can tell the two apart, which nothing could before: "show me the trend"
+    #: and "show me the balance trend" produced identical contracts.
+    provenance: Optional[str] = None
+
+    def __post_init__(self) -> None:  # noqa: D105
+        parent = getattr(super(), "__post_init__", None)
+        if parent is not None:
+            parent()
+        if self.provenance is not None and self.provenance not in SCOPE_PROVENANCES:
+            raise ValueError("unknown subject provenance %r" % (self.provenance,))
 
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
         d["candidate_concept"] = self.candidate_concept
+        d["provenance"] = self.provenance
         return d
 
 
@@ -207,15 +427,42 @@ class SubjectClaim(Slot):
 class DimensionClaim(Slot):
     role: str = UNRESOLVED_ROLE
     candidate_concept: Optional[str] = None
+    #: THE OTHER GOVERNED FIELDS THE SAME TERM RESOLVES TO once the book's
+    #: columns are known.
+    #:
+    #: `execution_receipt.requested_dimension_terms` already computes these, and
+    #: its own docstring says why: a generic term resolves to different concrete
+    #: fields depending on what the dataset carries, and carrying the
+    #: alternatives is how an availability difference is never mistaken for a
+    #: substitution. Nothing carried them, so they were dropped at the contract
+    #: boundary and every consumer saw one candidate.
+    #:
+    #: Measured: "Which region grew the most?" resolves to `collateral_geography`
+    #: with `geographic_region_obligor` as an alternate. On a book carrying the
+    #: second and not the first, the reader was told region "is not a governed
+    #: period-change dimension for this book" — a false statement about a
+    #: dimension the book carries. That is canary defect D1, and the contract
+    #: could not express the fact that would have prevented it.
+    alternate_concepts: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if self.role not in DIMENSION_ROLES:
             raise ValueError("unknown dimension role %r" % (self.role,))
+        self.alternate_concepts = tuple(
+            str(c) for c in (self.alternate_concepts or ()))
+
+    @property
+    def candidate_concepts(self) -> Tuple[str, ...]:
+        """Every governed field this claim could bind to, best first."""
+        first = (self.candidate_concept,) if self.candidate_concept else ()
+        return first + tuple(c for c in self.alternate_concepts
+                             if c != self.candidate_concept)
 
     def as_dict(self) -> Dict[str, Any]:
         d = super().as_dict()
-        d.update({"role": self.role, "candidate_concept": self.candidate_concept})
+        d.update({"role": self.role, "candidate_concept": self.candidate_concept,
+                  "alternate_concepts": list(self.alternate_concepts)})
         return d
 
 
@@ -301,16 +548,104 @@ class TimeClaim:
     trend_window: Slot = field(default_factory=Slot)
     #: The grain value itself, when requested_grain is filled.
     grain: Optional[str] = None
+    #: TARGET-STATE CLOSURE. How many governed reporting periods the window
+    #: reaches back — 1 for month-on-month, 12 for "this year".
+    #:
+    #: `trend_window` carried the WORDING and not the MAGNITUDE, so a consumer
+    #: that needed the number had to ask the owner again. Measured:
+    #: `chat_routing._route_period_movement` calls
+    #: `period_request.requested_span(question)` for exactly this, which is a
+    #: second read of the sentence for a fact the contract had already claimed.
+    window_periods: Optional[int] = None
+    #: True when the question named a VAGUE recency ("recently", "lately") and a
+    #: governed convention settled the window. The answer owes the reader a
+    #: disclosure in that case, and the two are not distinguishable from the
+    #: period count alone.
+    window_governed: bool = False
+    #: THE PERIODS THEMSELVES, in the order the question named them.
+    #:
+    #: The same closure `window_periods` made for `trend_window`, made again for
+    #: `comparison_period`: the slot carried the WORDING and not the VALUES. Its
+    #: `raw_text` is `", ".join(...)`, a DISPLAY JOIN, so a consumer that needed
+    #: the pair had to split a rendered string back into structure — which is
+    #: re-parsing a serialisation, not reading a field, and it silently breaks
+    #: on any period label that contains the separator.
+    #:
+    #: Measured before this field existed: 0 of 26 readings of the
+    #: `temporal_compare` surface carried the pair structurally.
+    #:
+    #: `comparison_period` is unchanged and still carries the wording, because
+    #: it is what a reader is shown. This says which periods they are.
+    comparison_periods: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.grain is not None and self.grain not in GRAINS:
             raise ValueError("unknown grain %r" % (self.grain,))
+        if self.window_periods is not None and self.window_periods < 1:
+            raise ValueError("a window must reach at least one period back, "
+                             "not %r" % (self.window_periods,))
+        self.comparison_periods = tuple(
+            str(p) for p in (self.comparison_periods or ()))
 
     def as_dict(self) -> Dict[str, Any]:
         return {"comparison_period": self.comparison_period.as_dict(),
                 "requested_grain": self.requested_grain.as_dict(),
                 "trend_window": self.trend_window.as_dict(),
-                "grain": self.grain}
+                "grain": self.grain,
+                "window_periods": self.window_periods,
+                "window_governed": self.window_governed,
+                "comparison_periods": list(self.comparison_periods)}
+
+
+#: TARGET-STATE CLOSURE — which governed DATASET the answer is built from.
+#:
+#: Not the same axis as the source portfolio, and conflating them is how "the
+#: balance by seasoning segment excluding pipeline cases" reached a route with
+#: `dataset='pipeline'` — narrowed to the very thing it excluded. A question
+#: selects a TAPE (funded loans, pipeline cases, the derived forecast view) and
+#: separately a PORTFOLIO SCOPE within it.
+#:
+#: `mi_agent_api.workspace.resolve_active_view` is the owner. It was already the
+#: single owner of the reading; what was missing is that nothing carried its
+#: answer, so `chat_routing._dataset_for` re-derived it over a wider vocabulary
+#: — a duplicate its own docstring names "THE SECOND OWNER".
+DATASET_FUNDED = "funded"
+DATASET_PIPELINE = "pipeline"
+DATASET_FORECAST = "forecast"
+DATASETS = (DATASET_FUNDED, DATASET_PIPELINE, DATASET_FORECAST)
+
+
+@dataclass
+class DatasetClaim(Slot):
+    """Which governed dataset the question is about, and who chose it.
+
+    Provenance matters here for the same reason it does for source scope: an
+    explicitly named tape overrides the workspace tab, and a tab-derived one
+    does not override anything. Reusing `SCOPE_PROVENANCES` rather than
+    inventing a parallel vocabulary — it is the same distinction.
+    """
+
+    dataset: Optional[str] = None
+    provenance: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.dataset is not None and self.dataset not in DATASETS:
+            raise ValueError("unknown dataset %r" % (self.dataset,))
+        if self.provenance is not None and self.provenance not in SCOPE_PROVENANCES:
+            raise ValueError("unknown dataset provenance %r" % (self.provenance,))
+        if self.state == FILLED and self.dataset is None:
+            raise ValueError("a filled dataset claim must name a dataset")
+
+    @property
+    def stated_by_user(self) -> bool:
+        return self.provenance == PROV_EXPLICIT_USER
+
+    def as_dict(self) -> Dict[str, Any]:
+        d = super().as_dict()
+        d.update({"dataset": self.dataset, "provenance": self.provenance,
+                  "stated_by_user": self.stated_by_user})
+        return d
 
 
 @dataclass
@@ -340,6 +675,126 @@ class TargetClaim(Slot):
 
 
 @dataclass
+class SourceScopeClaim(Slot):
+    """Which source portfolio(s) the question scopes to, as its OWNER read it.
+
+    Separate from `population` deliberately, and the separation is the point:
+
+    * a source-portfolio lens and a seasoning segment are DIFFERENT AXES. "the
+      front book" is a seasoning population; "the acquired book" is a source
+      lens; a question can name both, and neither implies the other.
+    * `population` is a LIST of narrowings, and `total` is not a narrowing.
+      Putting "no source narrowing" in a list of narrowings is how absence and
+      Total become indistinguishable, which is exactly the ambiguity this claim
+      exists to remove.
+
+    THE FIVE STATES A CONSUMER MUST BE ABLE TO TELL APART:
+
+        state=FILLED, scope=total      the owner READ the question and found no
+                                       source narrowing. Explicitly unrestricted.
+        state=FILLED, scope=direct     the direct book
+        state=FILLED, scope=acquired   the acquired book
+        state=FILLED, scope=cohort     named book(s); `portfolio_ids` carries them
+        state=EMPTY                    the owner was NOT consulted. NOT Total.
+        state=UNRESOLVABLE             consulted and could not resolve; `reason`
+                                       says why. NOT Total.
+
+    PHASE 1E adds the case that made the last state load-bearing: a question
+    that NAMES a book the governed registry does not hold ("the Highgate
+    Mortgages Book", "acquired_001"). That is UNRESOLVABLE — the owner was
+    consulted, read a scope, and could not resolve it — and it is emphatically
+    not `scope=total`. Before the owner could tell the two apart, such a
+    question was answered for every book under the name of one.
+
+    A consumer that treats EMPTY as Total has widened a population the question
+    may have narrowed — the P1L defect. `state` is what distinguishes them, and
+    `scope` is meaningful only when `state` is FILLED.
+    """
+
+    scope: Optional[str] = None
+    #: The explicitly named book ids, when `scope` is `cohort`. Empty otherwise.
+    #:
+    #: PHASE 1E — these are GOVERNED PORTFOLIO IDS, the identity the registry
+    #: keys on, and they are the only identity a consumer may filter or join on.
+    #: Phase 1D established that MI's text side used to recognise the STORAGE
+    #: convention (`acquired_001`, a blob folder name) and nothing else, so a
+    #: consumer that treated whatever wording arrived here as an id would have
+    #: been filtering on a name the governed model does not hold.
+    portfolio_ids: Tuple[str, ...] = ()
+    #: PHASE 1E. The governed DISPLAY LABEL for `portfolio_ids`, when the owner
+    #: could supply one — the name React renders in its selector.
+    #:
+    #: Separate from `raw_text` on purpose, and the separation is the point:
+    #: `raw_text` is THE WORDING THAT ASKED ("the alp_acquired book"), and this
+    #: is WHAT IT RESOLVED TO ("ALP Acquired Back Book"). They are frequently
+    #: different, and a reader owed an explanation of what was answered needs
+    #: the second while an audit of what was asked needs the first. Collapsing
+    #: them loses one of the two.
+    portfolio_label: Optional[str] = None
+    #: PHASE 1G. The broad business population this request is about, kept
+    #: separate from `portfolio_ids`. See `BASE_POPULATIONS`.
+    base_population: Optional[str] = None
+    #: PHASE 1G. Where the resolved scope came from. See `SCOPE_PROVENANCES`.
+    #: This is the fact Phase 1F stopped for.
+    provenance: Optional[str] = None
+
+    @property
+    def stated_by_user(self) -> bool:
+        """Whether the QUESTION named this scope.
+
+        The precedence fact, exposed as one boolean so a consumer never has to
+        re-derive it by comparing strings. True also for an unresolved scope: a
+        name MI cannot find is still a name the user said, and forgetting that
+        is how it becomes Total.
+        """
+        return self.provenance in (PROV_EXPLICIT_USER, PROV_UNRESOLVED)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.scope is not None and self.scope not in SOURCE_SCOPES:
+            raise ValueError("unknown source scope %r" % (self.scope,))
+        if (self.base_population is not None
+                and self.base_population not in BASE_POPULATIONS):
+            raise ValueError("unknown base population %r" % (self.base_population,))
+        if self.provenance is not None and self.provenance not in SCOPE_PROVENANCES:
+            raise ValueError("unknown scope provenance %r" % (self.provenance,))
+        # A resolved scope with no provenance is the Phase 1F blocker in object
+        # form: a consumer reading it cannot tell a stated scope from a defaulted
+        # one, and the two require opposite precedence. Refused rather than
+        # allowed to default, because defaulting it here would pick a side.
+        if self.state == FILLED and self.provenance is None:
+            raise ValueError("a filled source-scope claim must carry provenance")
+        if self.state == FILLED and self.scope is None:
+            raise ValueError("a filled source-scope claim must name a scope")
+        # PHASE 1E. A cohort claim with no id names nothing resolvable. Allowing
+        # it would let `narrows` be True with nothing to narrow BY, and the
+        # honest reading of that state is UNRESOLVABLE, which the owner is
+        # required to state rather than leave to be inferred here.
+        if self.state == FILLED and self.scope == SCOPE_COHORT and not self.portfolio_ids:
+            raise ValueError("a filled cohort claim must carry at least one "
+                             "governed portfolio id")
+
+    @property
+    def narrows(self) -> bool:
+        """Whether this claim narrows the population at all.
+
+        `total` is a resolved reading AND not a narrowing; both are true and a
+        consumer usually needs the second.
+        """
+        return self.state == FILLED and self.scope != SCOPE_TOTAL
+
+    def as_dict(self) -> Dict[str, Any]:
+        d = super().as_dict()
+        d.update({"scope": self.scope, "portfolio_ids": list(self.portfolio_ids),
+                  "portfolio_label": self.portfolio_label,
+                  "base_population": self.base_population,
+                  "provenance": self.provenance,
+                  "stated_by_user": self.stated_by_user,
+                  "narrows": self.narrows})
+        return d
+
+
+@dataclass
 class PopulationClaim(Slot):
     """A governed population the question names — "the back book", "new lending".
 
@@ -359,6 +814,48 @@ class PopulationClaim(Slot):
 
 
 @dataclass
+class RowPredicateClaim(Slot):
+    """A row predicate the governed parser RESOLVED: field, operator, value.
+
+    THE RESOLVED CHANNEL, and deliberately a third thing.
+
+    `FilterClaim` is what the question SAID — a clause, its operator and its
+    value, sometimes only half of one, with the field explicitly absent because
+    "identifying that a clause exists is a different job from resolving what it
+    binds". `PopulationClaim` is a population named by INTENT — "the back book" —
+    kept separate from its resolution on purpose. Putting a resolved field on
+    either would collapse a distinction each of them exists to hold.
+
+    This carries the third fact: what the parser bound the clause to. It is not a
+    new resolution — `llm_query_parser._filter_field_of` already did it, once,
+    upstream of every route, and `population.material_predicates` already
+    normalises the result across numeric and categorical shapes into
+    `Predicate(field, op, value)`. This claim is how that crosses into the
+    contract, so a compositional plan can read `current_loan_to_value gt 50.0`
+    without a route re-deriving it.
+
+    `source_portfolio_id` never appears here. `mi_agent.population` excludes it
+    by name — the P1I-A ruling governs that phrase family as SCOPE, and it
+    travels on `source_scope`. The two channels stay apart.
+    """
+
+    #: The governed semantic field key, as the parser resolved it.
+    field_key: Optional[str] = None
+    #: The comparison, normalised by `material_predicates`: gt/lt/eq/in/between.
+    operator: Optional[str] = None
+    #: The bound. Numeric for a threshold, a string for a categorical value, a
+    #: list for membership.
+    value: Any = None
+
+    def as_dict(self) -> Dict[str, Any]:
+        d = super().as_dict()
+        d["field_key"] = self.field_key
+        d["operator"] = self.operator
+        d["value"] = self.value
+        return d
+
+
+@dataclass
 class QuestionInterpretation:
     """One question, interpreted lexically. Carried, not acted on."""
 
@@ -370,6 +867,18 @@ class QuestionInterpretation:
     time: TimeClaim = field(default_factory=TimeClaim)
     target: TargetClaim = field(default_factory=TargetClaim)
     population: List[PopulationClaim] = field(default_factory=list)
+    #: The RESOLVED row predicates — field + operator + value — as the governed
+    #: parser bound them. Additive: `filters` still carries what the question
+    #: said, and this carries what it resolved to.
+    row_predicates: List[RowPredicateClaim] = field(default_factory=list)
+    #: PHASE 1A. Which source portfolio(s) the question scopes to, carried from
+    #: `mi_agent.portfolio_lens`. Single-valued: a question has at most one.
+    source_scope: SourceScopeClaim = field(default_factory=SourceScopeClaim)
+    #: TARGET-STATE CLOSURE. Which governed dataset the answer is built from,
+    #: carried from `mi_agent_api.workspace.resolve_active_view`. A DIFFERENT
+    #: AXIS from `source_scope`: a question picks a tape and, within it, a
+    #: portfolio scope.
+    dataset: DatasetClaim = field(default_factory=DatasetClaim)
     #: Wording no interpreter claimed. Never folded into the subject.
     residue: List[str] = field(default_factory=list)
     #: Stage 1 diagnostics: which interpreters were consulted, and what they
@@ -386,6 +895,9 @@ class QuestionInterpretation:
             "time": self.time.as_dict(),
             "target": self.target.as_dict(),
             "population": [p.as_dict() for p in self.population],
+            "row_predicates": [p.as_dict() for p in self.row_predicates],
+            "source_scope": self.source_scope.as_dict(),
+            "dataset": self.dataset.as_dict(),
             "residue": list(self.residue),
             "notes": list(self.notes),
         }
@@ -398,7 +910,7 @@ class QuestionInterpretation:
 
     def unresolvable_slots(self) -> List[Tuple[str, Slot]]:
         out: List[Tuple[str, Slot]] = []
-        for name in ("operation", "subject", "target"):
+        for name in ("operation", "subject", "target", "source_scope"):
             slot = getattr(self, name)
             if slot.state == UNRESOLVABLE:
                 out.append((name, slot))

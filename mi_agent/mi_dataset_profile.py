@@ -269,6 +269,29 @@ def _profile_dataset_uncached(df: pd.DataFrame, semantics: dict) -> Dict[str, An
     return {"fields": fields, "display_hints": display_hints}
 
 
+def to_display_points(value, scale: Optional[str]):
+    """A stored percent, in the points a reader sees. THE ONE CONVERSION.
+
+    The storage scale is a fact about the column, decided once by
+    `percent_storage_scale` and published in `display_hints` — not a
+    presentation choice each renderer may hold its own opinion about. Three
+    renderers held one anyway: the KPI tile and the snapshot formatter both
+    applied it, and the prose composer did not, so one governed weighted-average
+    LTV was published twice from the same executed row, as "55.6%" in the tile
+    and "0.56%" in the sentence beside it.
+
+    Formatting stays the caller's — prose and a KPI tile may legitimately round
+    differently. The scale does not.
+    """
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return value
+    return number * 100.0 if scale == PERCENT_FRACTION else number
+
+
 def display_hint_for(profile: Dict[str, Any], column: str) -> Dict[str, Any]:
     """The {format, scale} hint for an emitted result column, stripping the common
     aggregation suffixes so ``current_loan_to_value_weighted_avg`` resolves to the

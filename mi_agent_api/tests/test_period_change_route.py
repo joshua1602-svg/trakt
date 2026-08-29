@@ -78,11 +78,58 @@ def ask(question: str, **kw):
     from mi_agent.llm_query_parser import _deterministic_parse
     from mi_agent.mi_query_validator import load_mi_semantics
 
+    from mi_agent.period_change.recognition import recognise
+
     semantics = load_mi_semantics(SEMANTICS_PATH)
-    spec, _meta = _deterministic_parse(question, semantics)
+    # PARSE THE WAY PRODUCTION PARSES — with the book's own value catalogue.
+    #
+    # Without it, `_parse_categorical_filter` falls back to binding an
+    # unrecognised phrase to the geography field, so "What changed in credit
+    # quality?" came out of this harness carrying
+    # `collateral_geography = "Credit Quality"`. Nothing applied that filter,
+    # so the harness answered anyway; once the route began applying the
+    # governed population to every snapshot it compares, the invented predicate
+    # selected nothing and the question failed. Production never parses without
+    # the catalogue — it is exactly what stops a geography being invented — so
+    # this stand-in for the router now supplies it too.
+    _values = None
+    try:
+        from mi_agent import execution_receipt as _r
+        from mi_agent_api import evolution as _evo
+        _frames = _evo.funded_frames("blob://x", "client", None) or []
+        _df = next((f.get("df") for f in _frames if f.get("df") is not None), None)
+        if _df is not None:
+            _values = _r.book_values(_df, semantics)
+    except Exception:  # noqa: BLE001 - no frames yet, parse as before
+        _values = None
+    spec, _meta = _deterministic_parse(question, semantics,
+                                       available_values=_values)
     params = dict(client_id="client", run_id=None, output_root="blob://x",
                   portfolio_id="client/2026-06-30", as_of=None)
     params.update(kw)
+    # THE PRE-CLAIM STEP, as the registry performs it. The route no longer
+    # recognises inside its own handler, so a direct caller does what the
+    # registry does: recognise first, then hand the reading in. No assertion
+    # below changes — this harness is standing in for the router, not for a
+    # recogniser the route used to hide.
+    params.setdefault("recognition",
+                      recognise(question, spec=spec,
+                                view=params.get("view", "funded"),
+                                semantics_context=params.get("semantics_context")))
+    # AND THE CONTRACT, likewise as the registry supplies it. The route reads
+    # its source scope from `interpretation.source_scope` instead of resolving a
+    # lens from the sentence, so a caller that supplies no contract now defers —
+    # Conversion 1's "no contract, no answer from this route", applied here.
+    if params.get("interpretation") is None:
+        from mi_agent import execution_receipt as _receipt
+        from question_interpretation import projection as _proj
+
+        _terms = _receipt.requested_dimension_terms(question, semantics, None)
+        _facets = _receipt.detect_requested_facets(
+            question, semantics, frame=None, requested_dimensions=_terms)
+        params["interpretation"] = _proj.from_parts(
+            question, spec=spec, facets=list(_facets), dim_terms=_terms,
+            semantics=semantics)
     return pcr.route_period_change(question, spec, spec.to_dict(), **params)
 
 

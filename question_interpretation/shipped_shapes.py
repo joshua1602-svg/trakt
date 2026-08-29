@@ -76,6 +76,20 @@ def bank() -> Dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # The shipped path
 # --------------------------------------------------------------------------- #
+def questions_from(path: str) -> List[Tuple[str, str]]:
+    """`[(id, question)]` from a plain text file — one question per line.
+
+    Blank lines and `#` comments are skipped. Deliberately the dumbest possible
+    format: a person pastes the questions they actually want to ask.
+    """
+    out: List[Tuple[str, str]] = []
+    for n, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            out.append(("q%03d" % (len(out) + 1), line))
+    return out
+
+
 def _client():
     """`execute_governed_mi_query`, routing exactly as shipped.
 
@@ -84,24 +98,62 @@ def _client():
     same path without a serialisation round trip in the way, which keeps the
     artifacts inspectable as objects rather than as JSON the runner discards.
     """
-    from demo_platform import config as cfg
-    os.environ.update(cfg.mi_env(period_role="current"))
-    os.environ["MI_AGENT_LLM_PARSER"] = "off"
-    os.environ["MI_AGENT_LLM_ENABLED"] = "0"
+    _apply_env()
     import logging
     logging.disable(logging.WARNING)
 
     from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
     from trakt_core.context import ExecutionContext
 
-    ctx = ExecutionContext.for_internal(cfg.CLIENT_ID)
+    ctx = ExecutionContext.for_internal(_CLIENT_ID or "mylender")
     return lambda q: (execute_governed_mi_query(
         MiQueryRequest(question=q), ctx).result or {})
 
 
+#: Set by `--csv` / `--llm`. Module-level so `_client` and `_book` agree about
+#: which book is loaded — the two used to configure the environment separately,
+#: which is how a run could grade one book while reporting another.
+_CSV: Optional[str] = None
+_LLM: bool = False
+_CLIENT_ID: Optional[str] = None
+
+
+def _apply_env() -> None:
+    """Point the service at a book, and set the model switch. ONE place.
+
+    With `--csv`, `MI_AGENT_DATA_CSV` names the file explicitly. Without it the
+    bundled demo book is used. That distinction matters more than it looks:
+    misconfigured environment variables do NOT fail — the service falls back to
+    a synthetic demo book and answers plausibly from the wrong data. `--verify`
+    prints the source it actually loaded so a reader can check before trusting
+    a number.
+    """
+    global _CLIENT_ID
+    if _CSV:
+        os.environ["MI_AGENT_DATA_CSV"] = str(Path(_CSV).resolve())
+        os.environ.setdefault("TRAKT_RUNTIME_MODE", "test")
+        _CLIENT_ID = _CLIENT_ID or "mylender"
+    else:
+        from demo_platform import config as cfg
+        os.environ.update(cfg.mi_env(period_role="current"))
+        _CLIENT_ID = cfg.CLIENT_ID
+    os.environ["MI_AGENT_LLM_PARSER"] = "on" if _LLM else "off"
+    os.environ["MI_AGENT_LLM_ENABLED"] = "1" if _LLM else "0"
+
+
+def describe_source() -> Dict[str, Any]:
+    """What the service ACTUALLY loaded — kind, label, path, rows, columns."""
+    _apply_env()
+    from mi_agent_api import data_source
+    frame = data_source.get_dataframe()
+    info = dict(data_source.data_source_info())
+    info["rows"] = int(len(frame))
+    info["columns"] = int(len(frame.columns))
+    return info
+
+
 def _book():
-    from demo_platform import config as cfg
-    os.environ.update(cfg.mi_env(period_role="current"))
+    _apply_env()
     from mi_agent_api import data_source
     return data_source.get_dataframe()
 
@@ -560,6 +612,42 @@ def self_test() -> int:
     return 1 if failures else 0
 
 
+def ask(paths_questions: List[Tuple[str, str]]) -> int:
+    """Run questions and PRINT what came back. No grading, deliberately.
+
+    A grade needs a declared expectation; these questions have none. Reporting
+    them as correct or wrong would be inventing a verdict, which is the defect
+    this whole programme has been closing. What is printed is what the service
+    did: the route, the measure, the filters and dimensions it applied, the
+    population it covered, and the answer a reader would see.
+    """
+    src = describe_source()
+    print("=" * 78)
+    print("BOOK IN USE — check this before trusting any answer below")
+    print("=" * 78)
+    print("  kind    : %s" % src.get("kind"))
+    print("  label   : %s" % src.get("label"))
+    print("  path    : %s" % src.get("path"))
+    print("  rows    : %s        columns: %s" % (src.get("rows"), src.get("columns")))
+    if src.get("kind") == "synthetic_demo":
+        print("  *** THIS IS THE BUNDLED SYNTHETIC DEMO BOOK, NOT YOUR FILE. ***")
+        print("  *** A misconfigured path does not fail; it falls back here. ***")
+    print("  parser  : %s" % ("LLM enabled" if _LLM else "deterministic only"))
+    print()
+    a = _client()
+    for cid, question in paths_questions:
+        seen = observe(a, question)
+        print("-" * 78)
+        print("%s  %s" % (cid, question))
+        print("   ok=%s  route=%s  verdict=%s" % (seen["ok"], seen["route"], seen["verdict"]))
+        print("   measure=%s (%s)  population=%s  groups=%s"
+              % (seen["measure"], seen["aggregation"], seen["population"], seen["group_count"]))
+        print("   filters=%s  dimensions=%s" % (seen["filters_applied"] or [], seen["dimensions_applied"] or []))
+        for line in (seen["answer"] or "(empty)").splitlines():
+            print("   | %s" % line)
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--json", metavar="PATH", help="write the full record")
@@ -567,9 +655,33 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="print only the wrong answers, in full")
     ap.add_argument("--self-test", action="store_true",
                     help="probe the graders, not the product")
+    ap.add_argument("--questions", metavar="FILE",
+                    help="run YOUR questions (one per line, # comments ok) "
+                         "instead of the graded bank")
+    ap.add_argument("--csv", metavar="PATH",
+                    help="a canonical_typed.csv to query; omit for the demo book")
+    ap.add_argument("--llm", choices=("on", "off"), default="off",
+                    help="the LLM parser (default off). `on` needs ANTHROPIC_API_KEY")
+    ap.add_argument("--verify", action="store_true",
+                    help="print the book actually loaded and exit")
     args = ap.parse_args(argv)
+
+    global _CSV, _LLM
+    _CSV, _LLM = args.csv, (args.llm == "on")
+
+    if args.verify:
+        src = describe_source()
+        for k in ("kind", "label", "path", "rows", "columns"):
+            print("%-8s %s" % (k, src.get(k)))
+        if src.get("kind") == "synthetic_demo" and args.csv:
+            print("\nWARNING: --csv was given but the SYNTHETIC DEMO book loaded.")
+            return 1
+        return 0
+
     if args.self_test:
         return self_test()
+    if args.questions:
+        return ask(questions_from(args.questions))
 
     result = run()
     if args.json:

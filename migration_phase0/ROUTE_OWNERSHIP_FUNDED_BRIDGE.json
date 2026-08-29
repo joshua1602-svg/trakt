@@ -1,0 +1,436 @@
+{
+  "cases": [
+    {
+      "case": "B1",
+      "question": "funded balance bridge",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m).\n\nCalculated: Fun"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South East (+\u00a38.2m).\n\nCalculated: Fun"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South East (+\u00a32.9m).\n\nCalculated: F"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South Ea"
+      }
+    },
+    {
+      "case": "B2",
+      "question": "Show me the funded balance bridge",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m).\n\nCalculated: Fun"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South East (+\u00a38.2m).\n\nCalculated: Fun"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South East (+\u00a32.9m).\n\nCalculated: F"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South Ea"
+      }
+    },
+    {
+      "case": "B3",
+      "question": "What drove the change in funded balance?",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m).\n\nCalculated: Fun"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South East (+\u00a38.2m).\n\nCalculated: Fun"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South East (+\u00a32.9m).\n\nCalculated: F"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South Ea"
+      }
+    },
+    {
+      "case": "B4",
+      "question": "waterfall of funded balance change",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m).\n\nCalculated: Fun"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South East (+\u00a38.2m).\n\nCalculated: Fun"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South East (+\u00a32.9m).\n\nCalculated: F"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South Ea"
+      }
+    },
+    {
+      "case": "D1",
+      "question": "Funded balance bridge by region",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have"
+        }
+      },
+      "handler": {
+        "dimensionKey": "collateral_geography",
+        "dimensionLabel": "Region",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Region bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m)."
+      }
+    },
+    {
+      "case": "D2",
+      "question": "Bridge the funded balance by product",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for product, but that could not be applied to the calculation (product \u2014 field is unavailable in this dataset). I have not substituted a broader figure."
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for product, but that could not be applied to the calculation (product \u2014 field is unavailable in this dataset). I have not substituted a broader figure."
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for product, but that could not be applied to the calculation (product \u2014 field is unavailable in this dataset). I have not substituted a broader figure."
+        }
+      },
+      "handler": {
+        "dimensionKey": "erm_product_type",
+        "dimensionLabel": "Product Type",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Product Type bridge (Total): funded balance moved from \u00a30 in 2026-04 to \u00a30 at 2026-06 (latest) \u2014 a net change of +\u00a30 (flat)."
+      }
+    },
+    {
+      "case": "D3",
+      "question": "balance bridge by LTV band",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for ltv band, but that could not be applied to the calculation (ltv band \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by ltv band). "
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for ltv band, but that could not be applied to the calculation (ltv band \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by ltv band). "
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for ltv band, but that could not be applied to the calculation (ltv band \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by ltv band). "
+        }
+      },
+      "handler": {
+        "dimensionKey": "ltv_bucket",
+        "dimensionLabel": "LTV Bucket",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "LTV Bucket bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: 50-60% (+\u00a322.9m)."
+      }
+    },
+    {
+      "case": "D4",
+      "question": "Bridge the funded balance by region since March 2026",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have"
+        }
+      },
+      "handler": {
+        "dimensionKey": "collateral_geography",
+        "dimensionLabel": "Region",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Region bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m)."
+      }
+    },
+    {
+      "case": "S1",
+      "question": "Funded balance bridge for the acquired book",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South East (+\u00a32.9m).\n\nCalculated: F"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South East (+\u00a32.9m).\n\nCalculated: F"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South East (+\u00a32.9m).\n\nCalculated: F"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Acquired): funded balance moved from \u00a3568.3m in 2026-04 to \u00a3579.4m at 2026-06 (latest) \u2014 a net change of +\u00a311.1m (up). Largest mover: South"
+      }
+    },
+    {
+      "case": "S2",
+      "question": "Funded balance bridge for the direct book",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South East (+\u00a38.2m).\n\nCalculated: Fun"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South East (+\u00a38.2m).\n\nCalculated: Fun"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": true,
+          "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South East (+\u00a38.2m).\n\nCalculated: Fun"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Direct): funded balance moved from \u00a31.36bn in 2026-04 to \u00a31.39bn at 2026-06 (latest) \u2014 a net change of +\u00a321.5m (up). Largest mover: South E"
+      }
+    },
+    {
+      "case": "S3",
+      "question": "Funded balance bridge for the ALP Origination Book",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for Alp Origination Book, but that could not be applied to the calculation (Alp Origination Book \u2014 this narrowing was not applied, so the figure covers the whole book rathe"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for Alp Origination Book, but that could not be applied to the calculation (Alp Origination Book \u2014 this narrowing was not applied, so the figure covers the whole book rathe"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for Alp Origination Book, but that could not be applied to the calculation (Alp Origination Book \u2014 this narrowing was not applied, so the figure covers the whole book rathe"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South Ea"
+      }
+    },
+    {
+      "case": "R1",
+      "question": "Funded balance bridge for the Highgate Mortgages Book",
+      "ownedByBridge": true,
+      "expectedOther": null,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book"
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book"
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": false,
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book"
+        }
+      },
+      "handler": {
+        "dimensionKey": "geographic_region_obligor",
+        "dimensionLabel": "Obligor Region (NUTS3)",
+        "ok": true,
+        "declaresGroupedBy": null,
+        "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South Ea"
+      }
+    },
+    {
+      "case": "X1",
+      "question": "Show the balance by region",
+      "ownedByBridge": false,
+      "expectedOther": "an ordinary stratification",
+      "byScope": {
+        "None": {
+          "route": null,
+          "ok": true,
+          "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026."
+        },
+        "direct": {
+          "route": null,
+          "ok": true,
+          "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_origination \u00b7 grouped by Region \u00b7 12 groups \u00b7 7,126 loans \u00b7 as at 30 June 2026."
+        },
+        "acquired": {
+          "route": null,
+          "ok": true,
+          "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_acquired \u00b7 grouped by Region \u00b7 12 groups \u00b7 3,909 loans \u00b7 as at 30 June 2026."
+        }
+      },
+      "handler": {}
+    },
+    {
+      "case": "X2",
+      "question": "What is the geographic exposure?",
+      "ownedByBridge": false,
+      "expectedOther": "geo_exposure",
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure."
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure."
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure."
+        }
+      },
+      "handler": {}
+    },
+    {
+      "case": "X3",
+      "question": "Summarise the portfolio",
+      "ownedByBridge": false,
+      "expectedOther": "portfolio_summary",
+      "byScope": {
+        "None": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower "
+        },
+        "direct": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "answer": "At 30 June 2026 the portfolio (Direct) holds 7,126 loans with a funded balance of \u00a31.39bn. Weighted-average current LTV is 43.4%, the weighted-average interest rate is 0.06% and the average youngest-b"
+        },
+        "acquired": {
+          "route": "portfolio_summary",
+          "ok": true,
+          "answer": "At 30 June 2026 the portfolio (Acquired) holds 3,909 loans with a funded balance of \u00a3579.4m. Weighted-average current LTV is 42.7%, the weighted-average interest rate is 0.07% and the average youngest"
+        }
+      },
+      "handler": {}
+    }
+  ]
+}

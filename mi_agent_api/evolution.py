@@ -150,6 +150,13 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
             "metrics": {
                 "funded_balance": _bal_sum(df),
                 "loan_count": int(len(df)),
+                # AVERAGE BALANCE PER LOAN. Derived from the two figures either
+                # side of it, so it cannot disagree with them. Without it,
+                # "show average balance over time" resolved to `funded_balance`
+                # and returned the TOTAL series — byte-identical to "show funded
+                # balance over time", with nothing saying the measure had
+                # changed.
+                "avg_balance": (_bal_sum(df) / len(df)) if len(df) else None,
                 # Fractions, per the contract on _pct_fraction. This route used
                 # the raw weighted average, so it emitted whatever the tape
                 # stored while the cohort routes emitted fractions — the same
@@ -260,25 +267,43 @@ def _period_label(fr: Dict[str, Any]) -> str:
     return str(rd)[:7] if rd else str(fr.get("run_id"))
 
 
-def _scope_frame_lens(df, lens_filters):
+def _scope_frame_lens(df, lens_filters, *, evidence_out=None):
     """Narrow a funded frame to a source-portfolio scope.
 
     A governed scope resolves to a LIST of portfolio ids (a group is the sum of
     its current members), so list values are matched with membership; a single
     value still matches by equality. Case/whitespace-insensitive; a filter on an
-    absent column is a no-op."""
+    absent column is a no-op.
+
+    ``evidence_out``, when given, receives what this narrowing actually did —
+    the fields narrowed on and the row counts either side. A route that narrows
+    and publishes nothing is indistinguishable from one that narrowed nothing,
+    and that indistinguishability is what let a whole-book movement be reported
+    under the Direct label with a receipt no consumer could challenge. Optional,
+    so no existing caller changes behaviour by not passing it.
+    """
     if not lens_filters or df is None:
         return df
     work = df
+    rows_before = len(work)
+    applied = []
     for col, val in lens_filters.items():
         if col not in work.columns:
             continue
+        applied.append(col)
         norm = work[col].astype(str).str.strip().str.casefold()
         if isinstance(val, (list, tuple, set)):
             wanted = {str(v).strip().casefold() for v in val}
             work = work[norm.isin(wanted)]
         else:
             work = work[norm == str(val).strip().casefold()]
+    if evidence_out is not None and applied:
+        evidence_out.append({"fields": tuple(applied),
+                             "detail": ", ".join(
+                                 sorted(str(v) for val in lens_filters.values()
+                                        for v in (val if isinstance(val, (list, tuple, set))
+                                                  else [val]))),
+                             "rows_before": rows_before, "rows_after": len(work)})
     return work
 
 
@@ -298,6 +323,7 @@ def _group_balance(df, col: str) -> Dict[str, float]:
 
 def funded_bridge(output_root: str | os.PathLike, client_id: str,
                   dimension_col, *, start_period: Optional[str] = None,
+                  window_periods: Optional[int] = None,
                   to_run_id: Optional[str] = None,
                   lens_filters: Optional[Dict[str, str]] = None,
                   lens_label: str = "Total", top_n: int = 8) -> Dict[str, Any]:
@@ -319,11 +345,22 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
         return {"available": False, "lens": lens_label,
                 "reason": "at least two funded reporting periods are needed for a bridge"}
 
-    # Resolve the dimension column data-aware from the candidate(s).
+    # Resolve the dimension column data-aware from the candidate(s): the first
+    # candidate ACTUALLY PRESENT in the data. Never a candidate that is absent —
+    # a bridge grouped on a column the tape does not carry groups nothing,
+    # `_group_balance` returns {} on both sides, and the waterfall reports
+    # £0 → £0 (net £0) for a book that moved materially. That valid-looking zero
+    # is a wrong answer, so a requested-but-absent dimension FAILS CLOSED here,
+    # which is not the same as a book that did not move.
     candidates = [dimension_col] if isinstance(dimension_col, str) else list(dimension_col or [])
     present_cols = set().union(*[set(f["df"].columns) for f in scoped]) if scoped else set()
-    col = next((c for c in candidates if c in present_cols), candidates[0] if candidates else None)
+    col = next((c for c in candidates if c in present_cols), None)
     if not col:
+        if candidates:
+            return {"available": False, "lens": lens_label,
+                    "reason": ("the requested attribution dimension is not "
+                               "available in the funded data"),
+                    "requestedDimension": [str(c) for c in candidates]}
         return {"available": False, "lens": lens_label,
                 "reason": "no attribution dimension is available in the funded data"}
 
@@ -332,6 +369,16 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
     if start_period:
         sp = str(start_period)[:7]
         start = next((f for f in scoped if _period_label(f) == sp), None)
+    if start is None and window_periods:
+        # A STATED WINDOW OPENS THE BRIDGE. "last month" names no start period
+        # but does say how far back it reaches, and the plan declares that as
+        # `window_periods`. Without this the bridge fell to the earliest
+        # snapshot below and reported five months of movement for a question
+        # about one. Clamped to the history that exists — a window reaching
+        # further back than the tape opens at the earliest period, which is the
+        # same governed behaviour as before for that case.
+        index = max(0, len(scoped) - 1 - int(window_periods))
+        start = scoped[index]
     if start is None or _period_label(start) == _period_label(end):
         start = scoped[0]                  # default: earliest available period
     if _period_label(start) == _period_label(end):

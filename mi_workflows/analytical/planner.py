@@ -138,13 +138,37 @@ def resolve_population_pair(question: str, frame=None, semantics=None
     if len(lenses) >= 2:
         return (pops.provenance_population(lenses[0].name),
                 pops.provenance_population(lenses[1].name))
-    if _is_comparative(text):
-        has_direct = _portfolio_lens._contains_any(text, _portfolio_lens._DIRECT_TERMS)
-        has_acquired = _portfolio_lens._contains_any(text,
-                                                     _portfolio_lens._ACQUIRED_TERMS)
-        if has_direct and has_acquired:
-            return (pops.provenance_population(_portfolio_lens.LENS_DIRECT),
-                    pops.provenance_population(_portfolio_lens.LENS_ACQUIRED))
+    # NAMING BOTH VALUES OF ONE GOVERNED DIMENSION *IS* THE COMPARISON. A
+    # comparison VERB is not additionally required, and requiring one made this
+    # layer disagree with the guard that reads the same sentence.
+    #
+    # "How have direct and acquired balances moved over the periods?" carries no
+    # verb in `_COMPARISON_TERMS`, so this strategy declined, no composite plan
+    # was built, and the question fell through to `cohort_progression` — which
+    # returned a whole-book series. `execution_receipt.segments_named_in` then
+    # read the SAME sentence against the SAME governed values, found `direct`
+    # and `acquired`, and refused: "Direct and Acquired tracked separately …
+    # could not be applied to the calculation."
+    #
+    # That statement was true of the route and FALSE of the product: "Compare
+    # balance over time for direct and acquired" — the identical request with a
+    # comparison verb — composes and answers completely. Two mechanisms were
+    # deciding "did the user ask for these split?" by different logic, and the
+    # weaker one (a verb vocabulary) gated the route while the stronger one
+    # (governed value matching) drove the refusal.
+    #
+    # This does NOT weaken the P0 guard. The guard still refuses a whole-book
+    # series returned for a segmented request; it stops firing here because the
+    # route now produces the segmented series it was protecting. The two P0
+    # time-axis refusals ("by region and LTV band") name no provenance value at
+    # all, so they cannot reach this branch: they coordinate two DIMENSIONS,
+    # not two VALUES of one dimension, and remain refusals.
+    has_direct = _portfolio_lens._contains_any(text, _portfolio_lens._DIRECT_TERMS)
+    has_acquired = _portfolio_lens._contains_any(text,
+                                                 _portfolio_lens._ACQUIRED_TERMS)
+    if has_direct and has_acquired:
+        return (pops.provenance_population(_portfolio_lens.LENS_DIRECT),
+                pops.provenance_population(_portfolio_lens.LENS_ACQUIRED))
 
     # 2. Seasoning — the governed lending windows, of which the binary
     #    front/back partition is two. Ordered by position in the question, so
@@ -247,6 +271,68 @@ ALL_INTENTS: Tuple[str, ...] = (
 )
 
 
+#: Governed requirements a PLAN can be judged on before it runs, and the
+#: capability declaration that satisfies each.
+#:
+#: `produces` is the existing declaration — `concentration_limits` produces
+#: `limit`, `funded_balance_forecast` produces `forecast`. Nothing is added here.
+#:
+#: THE OTHER REQUIREMENTS ARE DELIBERATELY ABSENT, and measurement is why.
+#: `intent.unmet_requirements` judges what was ACTUALLY EXECUTED — its `dataset`,
+#: `periods`, `grouping` and `populations` keys describe a finished answer. Applied
+#: to a plan they over-decline: measured over 1,446 corpus questions, six
+#: legitimate funded-balance-forecast plans read `funded+pipeline` and failed a
+#: `dataset != "pipeline"` string test, and two pipeline plans failed a period
+#: count no plan carries. Those requirements stay where they already work, on the
+#: executed answer in `mi_service._fail_closed_analytical`.
+_REQUIREMENT_PROVIDED_BY: Dict[str, str] = {
+    intent_mod.REQ_LIMIT_EVIDENCE: "limit",
+    intent_mod.REQ_FORECAST: "forecast",
+}
+
+
+def _unprovided_requirements(plan: AnalyticalPlan, reading, registry
+                             ) -> List[str]:
+    """Governed requirements this plan does not produce.
+
+    THE INVARIANT: a plan may claim a question only if it satisfies every
+    governed requirement the intent owner emitted. **Partial coverage declines;
+    it does not substitute the part it can do.**
+
+    Measured, and this is the defect it closes. *"Based on the current book and
+    forward pipeline, which concentration tests are we at risk of breaching?"*
+    emits `requirements=('limit_evidence', 'forecast')`. The planner could supply
+    `forecast` — `funded_balance_forecast` + `pipeline_completion_forecast` — and
+    so it claimed the question, and answered *"Current funded balance is £172.1m…
+    Forecast funded balance: £173.4m."* Truthful, honestly reconciled against
+    `funded+pipeline`, and about BALANCE, to a reader who asked which
+    concentration TESTS are at risk. Half the requirement was met and the other
+    half was quietly dropped.
+
+    `limit_evidence` means evidence against the approved concentration-test
+    schedule, which only `concentration_limits` produces. A funded-balance
+    forecast, a pipeline contribution and a generic concentration share are none
+    of them that.
+
+    Not a word test, no question exception, no new family and no new capability:
+    the requirement comes from the governed intent owner and the answer from each
+    capability's own `produces` declaration. A capability that later produces
+    limit evidence satisfies it with no edit here.
+
+    Measured blast radius: over 1,446 corpus questions, 55 build a plan and
+    exactly ONE declines — the case above. The other 54 are unchanged.
+    """
+    produced = set()
+    for call in plan.calls:
+        capability = registry.get(call.capability)
+        if capability is not None:
+            produced.update(capability.produces or ())
+    return [requirement
+            for requirement in (getattr(reading, "requirements", ()) or ())
+            if requirement in _REQUIREMENT_PROVIDED_BY
+            and _REQUIREMENT_PROVIDED_BY[requirement] not in produced]
+
+
 def plan_for(question: str, *, spec: Any = None, frame=None,
              semantics: Optional[Mapping[str, Any]] = None,
              registry: CapabilityRegistry = CAPABILITIES
@@ -275,6 +361,10 @@ def plan_for(question: str, *, spec: Any = None, frame=None,
             errors = validate(plan, registry)
             if errors:  # a deterministic plan that fails its own contract is a bug
                 raise AssertionError("; ".join(errors))
+            if _unprovided_requirements(plan, reading, registry):
+                # PARTIAL COVERAGE DECLINES. It does not substitute the part it
+                # can do. See `_unprovided_requirements`.
+                return None
             return plan
     return None
 
@@ -415,6 +505,12 @@ def _forecast_route_owns(question, spec, reading) -> bool:
         return False
 
 
+#: How far ahead the open-pipeline composition can honestly speak. The governed
+#: pipeline extract carries cases in flight; beyond a quarter it is projecting
+#: business that does not exist yet, which this plan does not model.
+PIPELINE_OUTLOOK_HORIZON_MONTHS = 3
+
+
 def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
                                  ) -> Optional[AnalyticalPlan]:
     """Q: given the pipeline, what is the forecast funded balance?"""
@@ -427,6 +523,21 @@ def _plan_funded_balance_outlook(question, text, spec, frame, semantics, reading
     if _any(text, ("run rate", "run-rate")):
         return None  # the run-rate route owns this
     if _forecast_route_owns(question, spec, reading):
+        return None
+    # A STATED HORIZON THIS PLAN CANNOT REACH IS NOT THIS PLAN'S QUESTION.
+    #
+    # This composition projects the OPEN PIPELINE — the cases already in flight
+    # and when they are expected to complete. It says nothing about where the
+    # book lands in a year, still less in five. Measured before this guard:
+    # "in five years", "in 12 months" and "in 5 years" all returned the same
+    # open-pipeline composition, with the horizon named nowhere in the answer.
+    #
+    # Declining is pre-claim and generic: the horizon is read by the governed
+    # owner, compared against what this plan can honour, and no route name or
+    # duration is written here.
+    from question_interpretation.lexical import forecast_horizon_months
+    horizon = forecast_horizon_months(question)
+    if horizon is not None and horizon > PIPELINE_OUTLOOK_HORIZON_MONTHS:
         return None
     return AnalyticalPlan(
         intent=INTENT_FUNDED_BALANCE_OUTLOOK,

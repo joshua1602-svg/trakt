@@ -1,0 +1,1492 @@
+{
+  "rows": [
+    {
+      "case": "A1",
+      "question": "Compare April and May funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "May"
+      ],
+      "periodsContractRawText": "April, May",
+      "periodsContractStructural": [
+        "April",
+        "May"
+      ]
+    },
+    {
+      "case": "A1",
+      "question": "Compare April and May funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "May"
+      ],
+      "periodsContractRawText": "April, May",
+      "periodsContractStructural": [
+        "April",
+        "May"
+      ]
+    },
+    {
+      "case": "A2",
+      "question": "Compare May and June funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A2",
+      "question": "Compare May and June funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A3",
+      "question": "Compare April and June funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "June"
+      ],
+      "periodsContractRawText": "April, June",
+      "periodsContractStructural": [
+        "April",
+        "June"
+      ]
+    },
+    {
+      "case": "A3",
+      "question": "Compare April and June funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "April",
+        "June"
+      ],
+      "periodsContractRawText": "April, June",
+      "periodsContractStructural": [
+        "April",
+        "June"
+      ]
+    },
+    {
+      "case": "A4",
+      "question": "Compare May and June loan count.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A4",
+      "question": "Compare May and June loan count.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A5",
+      "question": "Compare May and June WA current LTV.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A5",
+      "question": "Compare May and June WA current LTV.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A6",
+      "question": "Compare May and June average interest rate.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A6",
+      "question": "Compare May and June average interest rate.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A7",
+      "question": "Compare May and June borrower age.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
+      ],
+      "measureContract": [
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A7",
+      "question": "Compare May and June borrower age.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
+      ],
+      "measureContract": [
+        "avg_borrower_age",
+        "Average borrower age",
+        "decimal"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A8",
+      "question": "Compare May and June case count.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "A8",
+      "question": "Compare May and June case count.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "May",
+        "June"
+      ],
+      "periodsContractRawText": "May, June",
+      "periodsContractStructural": [
+        "May",
+        "June"
+      ]
+    },
+    {
+      "case": "V2",
+      "question": "Compare this month and last month funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "last month"
+      ],
+      "periodsContractRawText": "latest, last month",
+      "periodsContractStructural": [
+        "latest",
+        "last month"
+      ]
+    },
+    {
+      "case": "V2",
+      "question": "Compare this month and last month funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "last month"
+      ],
+      "periodsContractRawText": "latest, last month",
+      "periodsContractStructural": [
+        "latest",
+        "last month"
+      ]
+    },
+    {
+      "case": "O1",
+      "question": "Compare October and November WA LTV.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "O1",
+      "question": "Compare October and November WA LTV.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "O2",
+      "question": "Compare latest pipeline with prior pipeline.",
+      "tab": "funded",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "prior pipeline"
+      ],
+      "periodsContractRawText": "latest, prior pipeline",
+      "periodsContractStructural": [
+        "latest",
+        "prior pipeline"
+      ]
+    },
+    {
+      "case": "O2",
+      "question": "Compare latest pipeline with prior pipeline.",
+      "tab": "pipeline",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "prior pipeline"
+      ],
+      "periodsContractRawText": "latest, prior pipeline",
+      "periodsContractStructural": [
+        "latest",
+        "prior pipeline"
+      ]
+    },
+    {
+      "case": "T1",
+      "question": "Compare October and November funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "T1",
+      "question": "Compare October and November funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "T2",
+      "question": "Compare September and October funded balance",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "September",
+        "October"
+      ],
+      "periodsContractRawText": "September, October",
+      "periodsContractStructural": [
+        "September",
+        "October"
+      ]
+    },
+    {
+      "case": "T2",
+      "question": "Compare September and October funded balance",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "September",
+        "October"
+      ],
+      "periodsContractRawText": "September, October",
+      "periodsContractStructural": [
+        "September",
+        "October"
+      ]
+    },
+    {
+      "case": "T3",
+      "question": "Compare the funded balance in October and November.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "T3",
+      "question": "Compare the funded balance in October and November.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "T4",
+      "question": "Compare October and November loan count.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "T4",
+      "question": "Compare October and November loan count.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "M1",
+      "question": "Compare October and November WA current LTV.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "M1",
+      "question": "Compare October and November WA current LTV.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_ltv",
+        "WA current LTV",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "M2",
+      "question": "Compare October and November average interest rate.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "M2",
+      "question": "Compare October and November average interest rate.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureContract": [
+        "wa_interest_rate",
+        "WA interest rate",
+        "percent"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P1",
+      "question": "Compare October and November pipeline amount.",
+      "tab": "funded",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P1",
+      "question": "Compare October and November pipeline amount.",
+      "tab": "pipeline",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P2",
+      "question": "How did the pipeline amount change from last week?",
+      "tab": "funded",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "last week"
+      ],
+      "periodsContractRawText": "latest, last week",
+      "periodsContractStructural": [
+        "latest",
+        "last week"
+      ]
+    },
+    {
+      "case": "P2",
+      "question": "How did the pipeline amount change from last week?",
+      "tab": "pipeline",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureContract": [
+        "pipeline_amount",
+        "Pipeline amount",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "latest",
+        "last week"
+      ],
+      "periodsContractRawText": "latest, last week",
+      "periodsContractStructural": [
+        "latest",
+        "last week"
+      ]
+    },
+    {
+      "case": "P3",
+      "question": "Compare October and November case count.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P3",
+      "question": "Compare October and November case count.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureContract": [
+        "loan_count",
+        "Loan count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P4",
+      "question": "Compare October and November KFI count.",
+      "tab": "funded",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureContract": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P4",
+      "question": "Compare October and November KFI count.",
+      "tab": "pipeline",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureContract": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P5",
+      "question": "Compare October and November application count.",
+      "tab": "funded",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureContract": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "P5",
+      "question": "Compare October and November application count.",
+      "tab": "pipeline",
+      "resolvedView": "pipeline",
+      "datasetProduction": "pipeline",
+      "datasetContractToday": "pipeline",
+      "datasetContractViewWired": "pipeline",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureContract": [
+        "pipeline_case_count",
+        "Pipeline case count",
+        "count"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "D1",
+      "question": "Compare October and November balance, excluding pipeline cases.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "D1",
+      "question": "Compare October and November balance, excluding pipeline cases.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "November"
+      ],
+      "periodsContractRawText": "October, November",
+      "periodsContractStructural": [
+        "October",
+        "November"
+      ]
+    },
+    {
+      "case": "R1",
+      "question": "Compare October and December funded balance.",
+      "tab": "funded",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "December"
+      ],
+      "periodsContractRawText": "October, December",
+      "periodsContractStructural": [
+        "October",
+        "December"
+      ]
+    },
+    {
+      "case": "R1",
+      "question": "Compare October and December funded balance.",
+      "tab": "pipeline",
+      "resolvedView": "funded",
+      "datasetProduction": "funded",
+      "datasetContractToday": "funded",
+      "datasetContractViewWired": "funded",
+      "datasetDisagreesToday": false,
+      "datasetDisagreesWired": false,
+      "measureProduction": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureContract": [
+        "funded_balance",
+        "Funded balance",
+        "gbp"
+      ],
+      "measureDisagrees": false,
+      "periodsProduction": [
+        "October",
+        "December"
+      ],
+      "periodsContractRawText": "October, December",
+      "periodsContractStructural": [
+        "October",
+        "December"
+      ]
+    }
+  ]
+}

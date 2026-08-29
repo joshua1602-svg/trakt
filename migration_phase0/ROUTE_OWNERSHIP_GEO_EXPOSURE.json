@@ -1,0 +1,1022 @@
+{
+  "cases": [
+    {
+      "case": "G1",
+      "question": "What is the geographic exposure?",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "G2",
+      "question": "Where is the book concentrated geographically?",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "G3",
+      "question": "Which region has the largest exposure?",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "G4",
+      "question": "Funded exposure by ITL3 area",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "G5",
+      "question": "Where are we most exposed geographically?",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "G6",
+      "question": "What is the largest geographic concentration?",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "G7",
+      "question": "Which area has the biggest exposure?",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "G8",
+      "question": "geographic exposure",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "S1",
+      "question": "Geographic exposure for the acquired book",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "S2",
+      "question": "Geographic exposure for the direct book",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a357.1m (4.1% of Direct) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "S3",
+      "question": "Where is the acquired book most exposed geographically?",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a326.3m (4.5% of Acquired) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "R1",
+      "question": "Geographic exposure for the Highgate Mortgages Book",
+      "expectedOther": null,
+      "ownedByGeo": true,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "geo_exposure",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book, so the answer was ",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": []
+        },
+        "direct": {
+          "route": "geo_exposure",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book, so the answer was ",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": []
+        },
+        "acquired": {
+          "route": "geo_exposure",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": false,
+          "answer": "I understood that you asked for Highgate Mortgages Book, but that could not be applied to the calculation (Highgate Mortgages Book \u2014 'Highgate Mortgages Book' is not a governed portfolio for this book, so the answer was ",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0
+          },
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "X1",
+      "question": "Show the balance by region",
+      "expectedOther": "an ordinary stratification, not the ITL3 concentration engine",
+      "ownedByGeo": false,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": null,
+          "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 12 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+          "reconciliation": {
+            "dataset": null,
+            "run_id": null,
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "filters_applied": false,
+            "filters": {},
+            "records_after_filters": 11035,
+            "balance_after_filters": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "missing_dimension_policy": "bucket",
+            "missing_dimension_fields": [
+              "collateral_geography"
+            ],
+            "missing_measure_fields": [],
+            "records_missing_measure": 0,
+            "balance_missing_measure": null,
+            "coverage_by_balance_pct": 100.0,
+            "balance_field": "current_outstanding_balance"
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": null,
+          "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_origination \u00b7 grouped by Region \u00b7 12 groups \u00b7 7,126 loans \u00b7 as at 30 June 2026.",
+          "reconciliation": {
+            "dataset": null,
+            "run_id": null,
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "filters_applied": true,
+            "filters": {
+              "source_portfolio_id": [
+                "alp_origination"
+              ]
+            },
+            "records_after_filters": 7126,
+            "balance_after_filters": 1385508582.98,
+            "records_included": 7126,
+            "balance_included": 1385508582.98,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "missing_dimension_policy": "bucket",
+            "missing_dimension_fields": [
+              "collateral_geography"
+            ],
+            "missing_measure_fields": [],
+            "records_missing_measure": 0,
+            "balance_missing_measure": null,
+            "coverage_by_balance_pct": 70.5,
+            "balance_field": "current_outstanding_balance"
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": null,
+          "answer": "Here is the bar for your query, covering 12 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_acquired \u00b7 grouped by Region \u00b7 12 groups \u00b7 3,909 loans \u00b7 as at 30 June 2026.",
+          "reconciliation": {
+            "dataset": null,
+            "run_id": null,
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "filters_applied": true,
+            "filters": {
+              "source_portfolio_id": [
+                "alp_acquired"
+              ]
+            },
+            "records_after_filters": 3909,
+            "balance_after_filters": 579377675.23,
+            "records_included": 3909,
+            "balance_included": 579377675.23,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "missing_dimension_policy": "bucket",
+            "missing_dimension_fields": [
+              "collateral_geography"
+            ],
+            "missing_measure_fields": [],
+            "records_missing_measure": 0,
+            "balance_missing_measure": null,
+            "coverage_by_balance_pct": 29.5,
+            "balance_field": "current_outstanding_balance"
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "X2",
+      "question": "Which region grew the most over the last three months?",
+      "expectedOther": "period change \u2014 a comparison this route would silently drop",
+      "ownedByGeo": false,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "period_change",
+          "ok": false,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "You asked about the quarter, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place ",
+          "reconciliation": null,
+          "artifactKinds": []
+        },
+        "direct": {
+          "route": "period_change",
+          "ok": false,
+          "controlledRefusal": null,
+          "lensApplied": false,
+          "answer": "You asked about the quarter, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place ",
+          "reconciliation": null,
+          "artifactKinds": []
+        },
+        "acquired": {
+          "route": "period_change",
+          "ok": false,
+          "controlledRefusal": null,
+          "lensApplied": false,
+          "answer": "You asked about the quarter, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place ",
+          "reconciliation": null,
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "X3",
+      "question": "Show top 5 regions by balance",
+      "expectedOther": "a grouped ranking",
+      "ownedByGeo": false,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": null,
+          "answer": "Here is the bar for your query, covering 5 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Region \u00b7 5 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+          "reconciliation": {
+            "dataset": null,
+            "run_id": null,
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "filters_applied": false,
+            "filters": {},
+            "records_after_filters": 11035,
+            "balance_after_filters": 1964886258.21,
+            "records_included": 11035,
+            "balance_included": 1964886258.21,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "missing_dimension_policy": "bucket",
+            "missing_dimension_fields": [
+              "collateral_geography"
+            ],
+            "missing_measure_fields": [],
+            "records_missing_measure": 0,
+            "balance_missing_measure": null,
+            "coverage_by_balance_pct": 100.0,
+            "balance_field": "current_outstanding_balance"
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": null,
+          "answer": "Here is the bar for your query, covering 5 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_origination \u00b7 grouped by Region \u00b7 5 groups \u00b7 7,126 loans \u00b7 as at 30 June 2026.",
+          "reconciliation": {
+            "dataset": null,
+            "run_id": null,
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "filters_applied": true,
+            "filters": {
+              "source_portfolio_id": [
+                "alp_origination"
+              ]
+            },
+            "records_after_filters": 7126,
+            "balance_after_filters": 1385508582.98,
+            "records_included": 7126,
+            "balance_included": 1385508582.98,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "missing_dimension_policy": "bucket",
+            "missing_dimension_fields": [
+              "collateral_geography"
+            ],
+            "missing_measure_fields": [],
+            "records_missing_measure": 0,
+            "balance_missing_measure": null,
+            "coverage_by_balance_pct": 70.5,
+            "balance_field": "current_outstanding_balance"
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": null,
+          "answer": "Here is the bar for your query, covering 5 group(s).\n\nCalculated: Total Balance \u00b7 Source Portfolio in alp_acquired \u00b7 grouped by Region \u00b7 5 groups \u00b7 3,909 loans \u00b7 as at 30 June 2026.",
+          "reconciliation": {
+            "dataset": null,
+            "run_id": null,
+            "total_records": 11035,
+            "total_balance": 1964886258.21,
+            "filters_applied": true,
+            "filters": {
+              "source_portfolio_id": [
+                "alp_acquired"
+              ]
+            },
+            "records_after_filters": 3909,
+            "balance_after_filters": 579377675.23,
+            "records_included": 3909,
+            "balance_included": 579377675.23,
+            "records_excluded_missing": 0,
+            "balance_excluded_missing": 0.0,
+            "missing_dimension_policy": "bucket",
+            "missing_dimension_fields": [
+              "collateral_geography"
+            ],
+            "missing_measure_fields": [],
+            "records_missing_measure": 0,
+            "balance_missing_measure": null,
+            "coverage_by_balance_pct": 29.5,
+            "balance_field": "current_outstanding_balance"
+          },
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "X4",
+      "question": "Funded balance bridge by region",
+      "expectedOther": "the bridge route",
+      "ownedByGeo": false,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "funded_bridge",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have not substituted a b",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0,
+            "reporting_date": "2026-06-30"
+          },
+          "artifactKinds": []
+        },
+        "direct": {
+          "route": "funded_bridge",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have not substituted a b",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0,
+            "reporting_date": "2026-06-30"
+          },
+          "artifactKinds": []
+        },
+        "acquired": {
+          "route": "funded_bridge",
+          "ok": false,
+          "controlledRefusal": true,
+          "lensApplied": true,
+          "answer": "I understood that you asked for region, but that could not be applied to the calculation (region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by region). I have not substituted a b",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0,
+            "reporting_date": "2026-06-30"
+          },
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "X5",
+      "question": "Which regions breached the concentration limit?",
+      "expectedOther": "risk limits",
+      "ownedByGeo": false,
+      "asExpected": true,
+      "byScope": {
+        "None": {
+          "route": "risk_limits",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": true,
+          "answer": "geographic concentration: 4 passed, 0 warning(s), 0 breach(es), 0 need review, 0 unavailable. Nearest to limit: Largest other region (South West) (2.9 pp headroom). Largest concentration: South East at 26.3%.\n\nCalculated",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0,
+            "reporting_date": "2026-06-30"
+          },
+          "artifactKinds": [
+            "risk",
+            "table"
+          ]
+        },
+        "direct": {
+          "route": "risk_limits",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": false,
+          "answer": "geographic concentration: 4 passed, 0 warning(s), 0 breach(es), 0 need review, 0 unavailable. Nearest to limit: Largest other region (South West) (2.9 pp headroom). Largest concentration: South East at 26.3%.\n\nCalculated",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0,
+            "reporting_date": "2026-06-30"
+          },
+          "artifactKinds": [
+            "risk",
+            "table"
+          ]
+        },
+        "acquired": {
+          "route": "risk_limits",
+          "ok": true,
+          "controlledRefusal": null,
+          "lensApplied": false,
+          "answer": "geographic concentration: 4 passed, 0 warning(s), 0 breach(es), 0 need review, 0 unavailable. Nearest to limit: Largest other region (South West) (2.9 pp headroom). Largest concentration: South East at 26.3%.\n\nCalculated",
+          "reconciliation": {
+            "dataset": "funded",
+            "coverage_by_balance_pct": 100.0,
+            "reporting_date": "2026-06-30"
+          },
+          "artifactKinds": [
+            "risk",
+            "table"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -243,6 +243,21 @@ figure trebled**. One grader read no figures; the other read every figure; both
 called a wrong answer correct, because matching against a haystack is not
 checking a claim. That attempt was discarded.
 
+**A test-failure count is not portable, and 60 was never quoted with its
+environment.** The estate's standing count of 60 failures was recorded on a box
+carrying `lxml`, `python-pptx` and `pyarrow`. On a box lacking all three the same
+suite reports 189 failed and 43 collection errors, because the missing imports
+take out the Annex 2 XML, XSD, PowerPoint and parquet suites wholesale. Neither
+figure is wrong; they are **not measurements of the same thing**, and a count
+quoted without naming the environment that produced it cannot be compared to
+anything.
+
+What is portable is the **set of failing test names**, compared between two
+trees in one environment. Every stage from P0 onward is held to that: a failure
+at the stage head must also fail, by name, at the commit the stage started from.
+A count moving is not evidence of a regression, and a count holding is not
+evidence against one.
+
 **Constructed coverage.** Several ratings above rest on cases written for the
 measurement rather than on corpus questions. Where a corpus result is clean, that
 means *the change did not reach the corpus* — not that the corpus proves the

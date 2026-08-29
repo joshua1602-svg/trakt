@@ -20,6 +20,11 @@ mi_agent_api          # the API itself
 mi_agent              # query parsing, workflow, chart factory
 mi_agent_pptx         # investor deck rendering (deck-generation route)
 mi_workflows          # governed business semantics resolver
+question_interpretation  # the single lexical owner — time-axis vocabulary,
+                      # subject-side split, metric slot, selector marks.
+                      # Imported at MODULE level by mi_agent.llm_query_parser
+                      # and mi_agent.execution_receipt, so its absence fails
+                      # the App Service at STARTUP, not on first request.
 analytics_lib         # buckets, cohorts, the analytic primitives
 engine                # orchestrator/transformation/validation agents
 apps                  # apps.blob_trigger_app: storage, pptx_stage, layout

@@ -1,0 +1,1125 @@
+{
+  "depth": 2,
+  "rows": [
+    {
+      "answer": "The largest single-loan exposure is \u00a3296k, representing 2.2% of exposure. Top 5 loans account for 10.6% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 64 loans \u00b7 as at 2026-06-30.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "what is the largest loan",
+      "route": "concentration_analysis",
+      "rows": 10
+    },
+    {
+      "answer": "The largest single-loan exposure is \u00a3296k, representing 2.2% of exposure. Top 5 loans account for 10.6% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 64 loans \u00b7 as at 2026-06-30.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "show me the biggest loan",
+      "route": "concentration_analysis",
+      "rows": 10
+    },
+    {
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "largest single loan by balance",
+      "route": null,
+      "rows": 10
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 10 regions by balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 brokers by balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 10 products by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "which region has the largest balance",
+      "route": "geo_exposure",
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which broker has the largest balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which product type has the highest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "highest average LTV regions",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which region has the highest average LTV",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "smallest region by balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "The largest single-loan exposure is \u00a3296k, representing 2.2% of exposure. Top 5 loans account for 10.6% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 64 loans \u00b7 as at 2026-06-30.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "largest loans",
+      "route": "concentration_analysis",
+      "rows": 10
+    },
+    {
+      "answer": "The largest single-loan exposure is \u00a3296k, representing 2.2% of exposure. Top 5 loans account for 10.6% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 64 loans \u00b7 as at 2026-06-30.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "show the largest loans",
+      "route": "concentration_analysis",
+      "rows": 10
+    },
+    {
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Current LTV \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "highest LTV loans",
+      "route": null,
+      "rows": 10
+    },
+    {
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 10 loans by balance",
+      "route": null,
+      "rows": 10
+    },
+    {
+      "answer": "The largest single-loan exposure is \u00a3296k, representing 2.2% of exposure. Top 5 loans account for 10.6% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 64 loans \u00b7 as at 2026-06-30.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "biggest 20 loans",
+      "route": "concentration_analysis",
+      "rows": 10
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 region by balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 broker by balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 10 product type by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 3 age bucket by balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 5 account status by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which broker has the highest average LTV",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which product type has the highest average LTV",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which borrower type has the highest average LTV",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "I understood this as a forecast projection question, but I have not answered it: this asks for a forward-looking figure, which needs a governed forecast rather than a current position. I have NOT substituted a current-position figure, because that would answer a different question from the one you a",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top brokers by expected funded amount",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "I understood this as a forecast projection question, but I have not answered it: this asks for a forward-looking figure, which needs a governed forecast rather than a current position. I have NOT substituted a current-position figure, because that would answer a different question from the one you a",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "compare current funded balance to expected funded",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "largest regional concentration",
+      "route": "geo_exposure",
+      "rows": 0
+    },
+    {
+      "answer": "The largest single-loan exposure is \u00a3296k, representing 2.2% of exposure. Top 5 loans account for 10.6% of exposure.\n\nCalculated: Largest single-loan current exposure \u00b7 share of total current exposure \u00b7 64 loans \u00b7 as at 2026-06-30.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What is the largest loan?",
+      "route": "concentration_analysis",
+      "rows": 10
+    },
+    {
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What is the smallest loan?",
+      "route": null,
+      "rows": 10
+    },
+    {
+      "answer": "Here is the result for your query, covering 40 group(s).\n\nCalculated: Loan-level Balance \u00b7 Balance > 200000 \u00b7 40 groups \u00b7 40 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans where current balance is above \u00a3200,000.",
+      "route": null,
+      "rows": 40
+    },
+    {
+      "answer": "No loans in this book match that filter (current_outstanding_balance), so there is nothing to calculate. I have not returned a whole-book figure in its place.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans where current balance is below \u00a350,000.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "No loans in this book match that filter (current_interest_rate), so there is nothing to calculate. I have not returned a whole-book figure in its place.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans with interest rate above 10%.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the result for your query, covering 50 group(s).\n\nCalculated: Loan-level Balance \u00b7 Interest Rate < 7 \u00b7 50 groups \u00b7 50 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans with interest rate below 7%.",
+      "route": null,
+      "rows": 50
+    },
+    {
+      "answer": "No loans in this book match that filter (current_outstanding_balance), so there is nothing to calculate. I have not returned a whole-book figure in its place.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans where valuation is above \u00a3500,000.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the result for your query, covering 24 group(s).\n\nCalculated: Loan-level Balance \u00b7 Balance < 200000 \u00b7 24 groups \u00b7 24 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans where valuation is below \u00a3200,000.",
+      "route": null,
+      "rows": 24
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which broker has the highest funded balance?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Average Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which broker has the highest average loan balance?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which broker has the most loans?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which broker has the highest WA LTV?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Interest Rate \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which broker has the highest WA interest rate?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Which region has the highest funded balance?",
+      "route": "geo_exposure",
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which region has the highest average LTV?",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "I could not answer this as asked: the answer reports balance, but the question asked about rate. I have not returned the substituted breakdown.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Which region has the highest interest rate?",
+      "route": "geo_exposure",
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which LTV bucket has the highest balance?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Which age bucket has the highest balance?",
+      "route": null,
+      "rows": 6
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What are the top 10 brokers by funded balance?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What are the top 10 regions by funded balance?",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Balance \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What are the top 10 loans by balance?",
+      "route": null,
+      "rows": 10
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What are the top 10 loans by LTV?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the result for your query, covering 10 group(s).\n\nCalculated: Loan-level Interest Rate \u00b7 entire funded portfolio \u00b7 10 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What are the highest interest rate loans?",
+      "route": null,
+      "rows": 10
+    },
+    {
+      "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by broker). I have not substituted a broader figure.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "What is the top 5 broker concentration?",
+      "route": "concentration_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by broker). I have not substituted a broader figure.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "What is the top 10 broker concentration?",
+      "route": "concentration_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by broker). I have not substituted a broader figure.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "What is the largest broker concentration?",
+      "route": "concentration_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "What is the largest regional concentration?",
+      "route": "geo_exposure",
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What percentage of the book is in the top 5 brokers?",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.\n\nCalculated: Geographic exposure.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "What percentage of the book is in the top 3 regions?",
+      "route": "geo_exposure",
+      "rows": 0
+    },
+    {
+      "answer": "Here is the result for your query, covering 12 group(s).\n\nCalculated: Loan-level Balance \u00b7 Current LTV > 50 \u00b7 12 groups \u00b7 12 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans with LTV above 50%.",
+      "route": null,
+      "rows": 12
+    },
+    {
+      "answer": "No loans in this book match that filter (current_loan_to_value), so there is nothing to calculate. I have not returned a whole-book figure in its place.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans with LTV above 60%.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the result for your query, covering 17 group(s).\n\nCalculated: Loan-level Balance \u00b7 Borrower Age > 80 \u00b7 17 groups \u00b7 17 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans where borrower age is above 80.",
+      "route": null,
+      "rows": 17
+    },
+    {
+      "answer": "Here is the result for your query, covering 20 group(s).\n\nCalculated: Loan-level Balance \u00b7 South East \u00b7 20 groups \u00b7 20 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans in the South East.",
+      "route": null,
+      "rows": 20
+    },
+    {
+      "answer": "No loans in this book match that filter (geographic_region_obligor), so there is nothing to calculate. I have not returned a whole-book figure in its place.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans for Equity Release Supermarket Limited.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans for the largest broker.",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans in the highest LTV bucket.",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Average Borrower Age \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans in the highest age bucket.",
+      "route": null,
+      "rows": 6
+    },
+    {
+      "answer": "Here is the result for your query, covering 40 group(s).\n\nCalculated: Loan-level Balance \u00b7 Balance > 200000 \u00b7 40 groups \u00b7 40 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show loans with balance above \u00a3200,000.",
+      "route": null,
+      "rows": 40
+    },
+    {
+      "answer": "No loans in this book match that filter (current_outstanding_balance), so there is nothing to calculate. I have not returned a whole-book figure in its place.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans with balance below \u00a350,000.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Vintage' is not available in this dataset. The MI book for this client does not include vintage_year. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Which vintage has the highest balance?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Vintage' is not available in this dataset. The MI book for this client does not include vintage_year. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Which vintage has the highest WA LTV?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "The requested end date 2026-11-30 is 153 days from the nearest usable governed snapshot (2026-06-30), beyond the 45-day limit for this portfolio. The comparison is not performed rather than answered about a different period.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show funded balance evolution from October to November.",
+      "route": "period_change_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "I can't compare October and November for funded balance: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Compare October and November funded balance.",
+      "route": "temporal_compare",
+      "rows": 0
+    },
+    {
+      "answer": "I can't compare October and November for loan count: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Compare October and November loan count.",
+      "route": "temporal_compare",
+      "rows": 0
+    },
+    {
+      "answer": "I can't compare October and November for wa current ltv: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Compare October and November WA LTV.",
+      "route": "temporal_compare",
+      "rows": 0
+    },
+    {
+      "answer": "No governed pipeline data is available for the pipeline view.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Which broker has the largest pipeline?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "No governed pipeline data is available for the pipeline view.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Which stage has the largest pipeline?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "I can't compare October and November for pipeline amount: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Compare October and November pipeline amount.",
+      "route": "temporal_compare",
+      "rows": 0
+    },
+    {
+      "answer": "I can't compare prior pipeline and latest for pipeline amount: requested period(s) unavailable: prior pipeline, latest. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+      "grade": "EMPTY",
+      "ok": true,
+      "question": "Compare latest pipeline with prior pipeline.",
+      "route": "temporal_compare",
+      "rows": 0
+    },
+    {
+      "answer": "No governed pipeline data is available for the pipeline view.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show pipeline growth from October to November.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Current weighted pipeline forecast adds \u2014 (point-in-time \u2192 \u00a313.7m); the completion run-rate extrapolation projects ~\u00a31.7m/month (\u00a320.9m/year) forward. Downside/base/upside are indicative scenario bands, not statistically validated confidence intervals.\n\nCalculated: Run-rate extrapolation.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Compare current weighted pipeline forecast with run-rate extrapolation.",
+      "route": "forecast_extrapolation",
+      "rows": 19
+    },
+    {
+      "answer": "2 passed, 0 warning(s), 8 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-42.6 pp headroom). Largest concentration: Top 3 brokers at 87.6%.\n\nCalculated: Concentration limits vs the governing document.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "What is the largest geographic concentration versus limit?",
+      "route": "risk_limits",
+      "rows": 14
+    },
+    {
+      "answer": "2 passed, 0 warning(s), 8 breach(es), 1 need review, 3 unavailable. Nearest to limit: Top 3 brokers (-42.6 pp headroom). Largest concentration: Top 3 brokers at 87.6%.\n\nCalculated: Concentration limits vs the governing document.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Show the single largest loan against the large-loan limit.",
+      "route": "risk_limits",
+      "rows": 14
+    },
+    {
+      "answer": "'default' is not available in this dataset. The MI book for this client does not include default_amount. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show defaulted loans with LTV above 50%.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'NNEG' is not available in this dataset. The MI book for this client does not include nneg_flag. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans with NNEG and LTV above 50%.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'NNEG' is not available in this dataset. The MI book for this client does not include nneg_flag. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Show loans with NNEG and borrower age above 80.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 5 Account Status by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 5 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 5 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 Age Bucket by balance",
+      "route": null,
+      "rows": 5
+    },
+    {
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 5 Borrower Type by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 Broker by balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 5 Product Type by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 Obligor Region (NUTS3) by balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "'Rate Type' is not available in this dataset. The MI book for this client does not include interest_rate_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 5 Rate Type by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 LTV Bucket by balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Occupancy Type' is not available in this dataset. The MI book for this client does not include occupancy_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 5 Occupancy Type by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Origination Channel \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 Origination Channel by balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "top 5 Term Bucket by balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "top 5 Ticket Size by balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Account Status has the largest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Account Status' is not available in this dataset. The MI book for this client does not include account_status. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Account Status has the smallest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Age Bucket has the largest balance",
+      "route": null,
+      "rows": 6
+    },
+    {
+      "answer": "Here is the bar for your query, covering 6 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 6 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Age Bucket has the smallest balance",
+      "route": null,
+      "rows": 6
+    },
+    {
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Borrower Type has the largest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Borrower Type' is not available in this dataset. The MI book for this client does not include borrower_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Borrower Type has the smallest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Broker has the largest balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Broker \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Broker has the smallest balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Product Type has the largest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Product Type' is not available in this dataset. The MI book for this client does not include erm_product_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Product Type has the smallest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "I understood that you asked for obligor region, but that could not be applied to the calculation (obligor region \u2014 this answer covers the whole population; it is neither narrowed to nor broken down by obligor region). I have not substituted a broader figure.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Obligor Region (NUTS3) has the largest balance",
+      "route": "geo_exposure",
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Obligor Region (NUTS3) \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Obligor Region (NUTS3) has the smallest balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "'Rate Type' is not available in this dataset. The MI book for this client does not include interest_rate_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Rate Type has the largest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Rate Type' is not available in this dataset. The MI book for this client does not include interest_rate_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Rate Type has the smallest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which LTV Bucket has the largest balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which LTV Bucket has the smallest balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Occupancy Type' is not available in this dataset. The MI book for this client does not include occupancy_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Occupancy Type has the largest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Occupancy Type' is not available in this dataset. The MI book for this client does not include occupancy_type. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Occupancy Type has the smallest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Origination Channel \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Origination Channel has the largest balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "Here is the bar for your query, covering 4 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Origination Channel \u00b7 4 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Origination Channel has the smallest balance",
+      "route": null,
+      "rows": 4
+    },
+    {
+      "answer": "'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Term Bucket has the largest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'Term Bucket' is not available in this dataset. The MI book for this client does not include term_bucket. This field is not reported, so the question cannot be answered from the current data (no value was fabricated).",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "which Term Bucket has the smallest balance",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Ticket Size has the largest balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "Here is the bar for your query, covering 3 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size \u00b7 3 groups \u00b7 64 loans \u00b7 as at 30 June 2026.",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "which Ticket Size has the smallest balance",
+      "route": null,
+      "rows": 3
+    },
+    {
+      "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How has the profile of our new lending changed over the last few months?",
+      "route": "period_change",
+      "rows": 0
+    },
+    {
+      "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a sc",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Are we originating different types of loans now compared with a few months ago?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a sc",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How does recent lending compare with what we were originating earlier in the year?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Has the risk and borrower profile of new business changed recently?",
+      "route": "period_change",
+      "rows": 0
+    },
+    {
+      "answer": "'compare older lending risk perspective' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a governed measure \u2014 e.g. balance, LTV, interest rate, borrower age or propert",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How does the front book compare with our older lending from a risk perspective?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'different risk versus' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a governed measure \u2014 e.g. balance, LTV, interest rate, borrower age or property value \u2014 optiona",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How different is the risk profile of recent originations versus the back book?",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "'compare credit' is not a governed measure in this dataset; no substitute was used. I haven't computed an answer, and I have not substituted a different measure for the one you asked about. Ask for a governed measure \u2014 e.g. balance, LTV, interest rate, borrower age or property value \u2014 optionally by ",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Compare the credit profile of the front book with our seasoned loans.",
+      "route": null,
+      "rows": 0
+    },
+    {
+      "answer": "Across 2026-05-31 \u2192 2026-06-30, Direct, 64 loans: Current Outstanding Balance \u00a312.0m \u2192 \u00a313.7m (+\u00a31.7m). Across 2026-05-31 \u2192 2026-06-30, Acquired, 64 loans: Current Outstanding Balance \u00a312.0m \u2192 \u00a313.7m (+\u00a31.7m). Direct against Acquired (64 vs 64 loans): Current Outstanding Balance \u00a313.7m vs \u00a313.7m (+\u00a3",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "How has lending to direct changed compared with acquired?",
+      "route": "analytical_composition",
+      "rows": 2
+    },
+    {
+      "answer": "Across 2026-05-31 \u2192 2026-06-30, Direct, 64 loans: Current Outstanding Balance \u00a312.0m \u2192 \u00a313.7m (+\u00a31.7m). Across 2026-05-31 \u2192 2026-06-30, Acquired, 64 loans: Current Outstanding Balance \u00a312.0m \u2192 \u00a313.7m (+\u00a31.7m). Direct against Acquired (64 vs 64 loans): Current Outstanding Balance \u00a313.7m vs \u00a313.7m (+\u00a3",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "How has the balance of direct loans moved relative to acquired loans?",
+      "route": "analytical_composition",
+      "rows": 2
+    },
+    {
+      "answer": "Across 2026-05-31 \u2192 2026-06-30, Direct, 64 loans: Current Outstanding Balance \u00a312.0m \u2192 \u00a313.7m (+\u00a31.7m). Across 2026-05-31 \u2192 2026-06-30, Acquired, 64 loans: Current Outstanding Balance \u00a312.0m \u2192 \u00a313.7m (+\u00a31.7m). Direct against Acquired (64 vs 64 loans): Current Outstanding Balance \u00a313.7m vs \u00a313.7m (+\u00a3",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Compare how the direct and acquired books have changed over the last few months.",
+      "route": "analytical_composition",
+      "rows": 2
+    },
+    {
+      "answer": "I understood that you asked for a comparison by how long the loans have been on the book and front book, but that could not be applied to the calculation (a comparison by how long the loans have been on the book \u2014 the two books were not compared separately; front book \u2014 field is unavailable in this ",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How has lending to the front book changed compared with the back book?",
+      "route": "period_change_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "I understood that you asked for one measure relative to another and front book, but that could not be applied to the calculation (one measure relative to another \u2014 this governed capability returns a single measure, so the full question was not expressed; front book \u2014 field is unavailable in this dat",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How has the balance of the front book loans moved relative to the back book loans?",
+      "route": "period_change_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Compare how the the front book and the back book books have changed over the last few months.",
+      "route": "period_change",
+      "rows": 0
+    },
+    {
+      "answer": "Across 2026-05-31 \u2192 2026-06-30, Obligor Region (NUTS3) South East, 20 loans: Current Outstanding Balance \u00a33.4m \u2192 \u00a34.2m (+\u00a3799k). Across 2026-05-31 \u2192 2026-06-30, Obligor Region (NUTS3) London, 24 loans: Current Outstanding Balance \u00a34.6m \u2192 \u00a35.2m (+\u00a3550k). Obligor Region (NUTS3) South East against Obli",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "How has lending to South East changed compared with London?",
+      "route": "analytical_composition",
+      "rows": 2
+    },
+    {
+      "answer": "Across 2026-05-31 \u2192 2026-06-30, Obligor Region (NUTS3) South East, 20 loans: Current Outstanding Balance \u00a33.4m \u2192 \u00a34.2m (+\u00a3799k). Across 2026-05-31 \u2192 2026-06-30, Obligor Region (NUTS3) London, 24 loans: Current Outstanding Balance \u00a34.6m \u2192 \u00a35.2m (+\u00a3550k). Obligor Region (NUTS3) South East against Obli",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "How has the balance of South East loans moved relative to London loans?",
+      "route": "analytical_composition",
+      "rows": 2
+    },
+    {
+      "answer": "Across 2026-05-31 \u2192 2026-06-30, Obligor Region (NUTS3) South East, 20 loans: Current Outstanding Balance \u00a33.4m \u2192 \u00a34.2m (+\u00a3799k). Across 2026-05-31 \u2192 2026-06-30, Obligor Region (NUTS3) London, 24 loans: Current Outstanding Balance \u00a34.6m \u2192 \u00a35.2m (+\u00a3550k). Obligor Region (NUTS3) South East against Obli",
+      "grade": "DELIVERED",
+      "ok": true,
+      "question": "Compare how the South East and London books have changed over the last few months.",
+      "route": "analytical_composition",
+      "rows": 2
+    },
+    {
+      "answer": "No governed pipeline source is available for this book, so a forecast funded balance cannot be produced. The current funded balance above is not a forecast. No governed pipeline source is configured for this book. I have not substituted the figures that did compute for the ones you asked for.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "What do we expect the funded book to grow to based on the current pipeline?",
+      "route": "analytical_composition",
+      "rows": 0
+    },
+    {
+      "answer": "I understood that you asked for Scotland, but that could not be applied to the calculation (Scotland \u2014 the geographic scope was not applied to the calculation). I have not substituted a broader figure.",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How has lending to North West changed compared with Scotland?",
+      "route": "period_change_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "I understood that you asked for Scotland and one measure relative to another, but that could not be applied to the calculation (Scotland \u2014 the geographic scope was not applied to the calculation; one measure relative to another \u2014 this governed capability returns a single measure, so the full questio",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "How has the balance of North West loans moved relative to Scotland loans?",
+      "route": "period_change_analysis",
+      "rows": 0
+    },
+    {
+      "answer": "I understood that you asked for Scotland and comparison period (over the stated period), but that could not be applied to the calculation (Scotland \u2014 the geographic scope was not applied to the calculation; comparison period (over the stated period) \u2014 the answer is a single point in time; no period ",
+      "grade": "REFUSED",
+      "ok": false,
+      "question": "Compare how the North West and Scotland books have changed over the last few months.",
+      "route": "portfolio_risk_comparison",
+      "rows": 0
+    }
+  ]
+}

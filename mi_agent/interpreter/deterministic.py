@@ -154,8 +154,12 @@ def interpret(question: str,
                       ctx)
 
     # ---- Temporal: compare to last month / what changed ------------------- #
-    if _has(q, "compare") or _has(q, "since last month") \
-            or (_has(q, "changed") and "month" in q):
+    # DELEGATED to the single LEVEL/MOVEMENT owner. This branch used to carry
+    # its own three-clause rule, which is how the estate came to have five
+    # readers of one distinction.
+    from question_interpretation.lexical import is_movement_question
+
+    if is_movement_question(q):
         state = _state_of(q) or "total_funded"
         return _build(question, {**base, "state": state, "temporal_mode": "compare",
                                  "baseline_date": ctx.prev_period,

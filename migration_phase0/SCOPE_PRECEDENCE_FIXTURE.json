@@ -1,0 +1,1563 @@
+{
+  "registry": "fixture",
+  "portfolios": [
+    "alp_origination",
+    "spv2",
+    "alp_acquired",
+    "nbs_acquired",
+    "spv1"
+  ],
+  "rows": [
+    {
+      "question_id": "q_none",
+      "question": "Please provide a portfolio summary",
+      "questionMeans": null,
+      "caller": null,
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "default",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "neither",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_none",
+      "question": "Please provide a portfolio summary",
+      "questionMeans": null,
+      "caller": "total",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "default",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "neither",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_none",
+      "question": "Please provide a portfolio summary",
+      "questionMeans": null,
+      "caller": "direct",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "direct",
+      "effectiveLabel": "Direct",
+      "basePopulation": "direct",
+      "provenance": "caller_context",
+      "ids": [
+        "alp_origination",
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "caller",
+      "target": "direct",
+      "targetIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_none",
+      "question": "Please provide a portfolio summary",
+      "questionMeans": null,
+      "caller": "acquired",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "acquired",
+      "effectiveLabel": "Acquired",
+      "basePopulation": "acquired",
+      "provenance": "caller_context",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "caller",
+      "target": "acquired",
+      "targetIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_none",
+      "question": "Please provide a portfolio summary",
+      "questionMeans": null,
+      "caller": "spv1",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "spv1",
+      "basePopulation": "funded",
+      "provenance": "caller_context",
+      "ids": [
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "caller",
+      "target": "spv1",
+      "targetIds": [
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_none",
+      "question": "Please provide a portfolio summary",
+      "questionMeans": null,
+      "caller": "alp_acquired",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "alp_acquired",
+      "basePopulation": "funded",
+      "provenance": "caller_context",
+      "ids": [
+        "alp_acquired"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "caller",
+      "target": "alp_acquired",
+      "targetIds": [
+        "alp_acquired"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_funded",
+      "question": "Summarise the funded book",
+      "questionMeans": "funded",
+      "caller": null,
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_funded",
+      "question": "Summarise the funded book",
+      "questionMeans": "funded",
+      "caller": "total",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_funded",
+      "question": "Summarise the funded book",
+      "questionMeans": "funded",
+      "caller": "direct",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_funded",
+      "question": "Summarise the funded book",
+      "questionMeans": "funded",
+      "caller": "acquired",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_funded",
+      "question": "Summarise the funded book",
+      "questionMeans": "funded",
+      "caller": "spv1",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_funded",
+      "question": "Summarise the funded book",
+      "questionMeans": "funded",
+      "caller": "alp_acquired",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_total",
+      "question": "portfolio summary across all portfolios",
+      "questionMeans": "funded",
+      "caller": null,
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_total",
+      "question": "portfolio summary across all portfolios",
+      "questionMeans": "funded",
+      "caller": "total",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_total",
+      "question": "portfolio summary across all portfolios",
+      "questionMeans": "funded",
+      "caller": "direct",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_total",
+      "question": "portfolio summary across all portfolios",
+      "questionMeans": "funded",
+      "caller": "acquired",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_total",
+      "question": "portfolio summary across all portfolios",
+      "questionMeans": "funded",
+      "caller": "spv1",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_total",
+      "question": "portfolio summary across all portfolios",
+      "questionMeans": "funded",
+      "caller": "alp_acquired",
+      "questionScope": "total",
+      "questionLabel": "Total",
+      "effectiveScope": "total",
+      "effectiveLabel": null,
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "funded",
+      "targetIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_direct",
+      "question": "Summarise the direct book",
+      "questionMeans": "direct",
+      "caller": null,
+      "questionScope": "direct",
+      "questionLabel": "Direct",
+      "effectiveScope": "direct",
+      "effectiveLabel": "Direct",
+      "basePopulation": "direct",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_origination",
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "direct",
+      "targetIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_direct",
+      "question": "Summarise the direct book",
+      "questionMeans": "direct",
+      "caller": "total",
+      "questionScope": "direct",
+      "questionLabel": "Direct",
+      "effectiveScope": "direct",
+      "effectiveLabel": "Direct",
+      "basePopulation": "direct",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_origination",
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "direct",
+      "targetIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_direct",
+      "question": "Summarise the direct book",
+      "questionMeans": "direct",
+      "caller": "direct",
+      "questionScope": "direct",
+      "questionLabel": "Direct",
+      "effectiveScope": "direct",
+      "effectiveLabel": "Direct",
+      "basePopulation": "direct",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_origination",
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "direct",
+      "targetIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_direct",
+      "question": "Summarise the direct book",
+      "questionMeans": "direct",
+      "caller": "acquired",
+      "questionScope": "direct",
+      "questionLabel": "Direct",
+      "effectiveScope": "direct",
+      "effectiveLabel": "Direct",
+      "basePopulation": "direct",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_origination",
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "direct",
+      "targetIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_direct",
+      "question": "Summarise the direct book",
+      "questionMeans": "direct",
+      "caller": "spv1",
+      "questionScope": "direct",
+      "questionLabel": "Direct",
+      "effectiveScope": "direct",
+      "effectiveLabel": "Direct",
+      "basePopulation": "direct",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_origination",
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "direct",
+      "targetIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_direct",
+      "question": "Summarise the direct book",
+      "questionMeans": "direct",
+      "caller": "alp_acquired",
+      "questionScope": "direct",
+      "questionLabel": "Direct",
+      "effectiveScope": "direct",
+      "effectiveLabel": "Direct",
+      "basePopulation": "direct",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_origination",
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "direct",
+      "targetIds": [
+        "alp_origination",
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_acquired",
+      "question": "Summarise the acquired book",
+      "questionMeans": "acquired",
+      "caller": null,
+      "questionScope": "acquired",
+      "questionLabel": "Acquired",
+      "effectiveScope": "acquired",
+      "effectiveLabel": "Acquired",
+      "basePopulation": "acquired",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "acquired",
+      "targetIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_acquired",
+      "question": "Summarise the acquired book",
+      "questionMeans": "acquired",
+      "caller": "total",
+      "questionScope": "acquired",
+      "questionLabel": "Acquired",
+      "effectiveScope": "acquired",
+      "effectiveLabel": "Acquired",
+      "basePopulation": "acquired",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "acquired",
+      "targetIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_acquired",
+      "question": "Summarise the acquired book",
+      "questionMeans": "acquired",
+      "caller": "direct",
+      "questionScope": "acquired",
+      "questionLabel": "Acquired",
+      "effectiveScope": "acquired",
+      "effectiveLabel": "Acquired",
+      "basePopulation": "acquired",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "acquired",
+      "targetIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_acquired",
+      "question": "Summarise the acquired book",
+      "questionMeans": "acquired",
+      "caller": "acquired",
+      "questionScope": "acquired",
+      "questionLabel": "Acquired",
+      "effectiveScope": "acquired",
+      "effectiveLabel": "Acquired",
+      "basePopulation": "acquired",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "acquired",
+      "targetIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_acquired",
+      "question": "Summarise the acquired book",
+      "questionMeans": "acquired",
+      "caller": "spv1",
+      "questionScope": "acquired",
+      "questionLabel": "Acquired",
+      "effectiveScope": "acquired",
+      "effectiveLabel": "Acquired",
+      "basePopulation": "acquired",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "acquired",
+      "targetIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_acquired",
+      "question": "Summarise the acquired book",
+      "questionMeans": "acquired",
+      "caller": "alp_acquired",
+      "questionScope": "acquired",
+      "questionLabel": "Acquired",
+      "effectiveScope": "acquired",
+      "effectiveLabel": "Acquired",
+      "basePopulation": "acquired",
+      "provenance": "explicit_user",
+      "ids": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "acquired",
+      "targetIds": [
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named",
+      "question": "Show SPV2",
+      "questionMeans": "spv2",
+      "caller": null,
+      "questionScope": "cohort",
+      "questionLabel": "SPV2",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "SPV2",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "spv2",
+      "targetIds": [
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named",
+      "question": "Show SPV2",
+      "questionMeans": "spv2",
+      "caller": "total",
+      "questionScope": "cohort",
+      "questionLabel": "SPV2",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "SPV2",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "spv2",
+      "targetIds": [
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named",
+      "question": "Show SPV2",
+      "questionMeans": "spv2",
+      "caller": "direct",
+      "questionScope": "cohort",
+      "questionLabel": "SPV2",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "SPV2",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "spv2",
+      "targetIds": [
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named",
+      "question": "Show SPV2",
+      "questionMeans": "spv2",
+      "caller": "acquired",
+      "questionScope": "cohort",
+      "questionLabel": "SPV2",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "SPV2",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "spv2",
+      "targetIds": [
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named",
+      "question": "Show SPV2",
+      "questionMeans": "spv2",
+      "caller": "spv1",
+      "questionScope": "cohort",
+      "questionLabel": "SPV2",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "SPV2",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "spv2",
+      "targetIds": [
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named",
+      "question": "Show SPV2",
+      "questionMeans": "spv2",
+      "caller": "alp_acquired",
+      "questionScope": "cohort",
+      "questionLabel": "SPV2",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "SPV2",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "spv2"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "spv2"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "spv2",
+      "targetIds": [
+        "spv2"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named2",
+      "question": "Summarise the NBS Acquired Book",
+      "questionMeans": "nbs_acquired",
+      "caller": null,
+      "questionScope": "cohort",
+      "questionLabel": "NBS Acquired Book",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "NBS Acquired Book",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "nbs_acquired",
+      "targetIds": [
+        "nbs_acquired"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named2",
+      "question": "Summarise the NBS Acquired Book",
+      "questionMeans": "nbs_acquired",
+      "caller": "total",
+      "questionScope": "cohort",
+      "questionLabel": "NBS Acquired Book",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "NBS Acquired Book",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "nbs_acquired",
+      "targetIds": [
+        "nbs_acquired"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named2",
+      "question": "Summarise the NBS Acquired Book",
+      "questionMeans": "nbs_acquired",
+      "caller": "direct",
+      "questionScope": "cohort",
+      "questionLabel": "NBS Acquired Book",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "NBS Acquired Book",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "nbs_acquired",
+      "targetIds": [
+        "nbs_acquired"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named2",
+      "question": "Summarise the NBS Acquired Book",
+      "questionMeans": "nbs_acquired",
+      "caller": "acquired",
+      "questionScope": "cohort",
+      "questionLabel": "NBS Acquired Book",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "NBS Acquired Book",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "nbs_acquired",
+      "targetIds": [
+        "nbs_acquired"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named2",
+      "question": "Summarise the NBS Acquired Book",
+      "questionMeans": "nbs_acquired",
+      "caller": "spv1",
+      "questionScope": "cohort",
+      "questionLabel": "NBS Acquired Book",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "NBS Acquired Book",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "nbs_acquired",
+      "targetIds": [
+        "nbs_acquired"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_named2",
+      "question": "Summarise the NBS Acquired Book",
+      "questionMeans": "nbs_acquired",
+      "caller": "alp_acquired",
+      "questionScope": "cohort",
+      "questionLabel": "NBS Acquired Book",
+      "effectiveScope": "cohort",
+      "effectiveLabel": "NBS Acquired Book",
+      "basePopulation": "funded",
+      "provenance": "explicit_user",
+      "ids": [
+        "nbs_acquired"
+      ],
+      "state": "filled",
+      "legacyIds": [
+        "nbs_acquired"
+      ],
+      "fellBackToTotal": false,
+      "wonBy": "question",
+      "target": "nbs_acquired",
+      "targetIds": [
+        "nbs_acquired"
+      ],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_unknown",
+      "question": "Summarise SPV9",
+      "questionMeans": "unresolved",
+      "caller": null,
+      "questionScope": "unresolved",
+      "questionLabel": "SPV9",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "SPV9",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_unknown",
+      "question": "Summarise SPV9",
+      "questionMeans": "unresolved",
+      "caller": "total",
+      "questionScope": "unresolved",
+      "questionLabel": "SPV9",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "SPV9",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_unknown",
+      "question": "Summarise SPV9",
+      "questionMeans": "unresolved",
+      "caller": "direct",
+      "questionScope": "unresolved",
+      "questionLabel": "SPV9",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "SPV9",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_unknown",
+      "question": "Summarise SPV9",
+      "questionMeans": "unresolved",
+      "caller": "acquired",
+      "questionScope": "unresolved",
+      "questionLabel": "SPV9",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "SPV9",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_unknown",
+      "question": "Summarise SPV9",
+      "questionMeans": "unresolved",
+      "caller": "spv1",
+      "questionScope": "unresolved",
+      "questionLabel": "SPV9",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "SPV9",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_unknown",
+      "question": "Summarise SPV9",
+      "questionMeans": "unresolved",
+      "caller": "alp_acquired",
+      "questionScope": "unresolved",
+      "questionLabel": "SPV9",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "SPV9",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_storage",
+      "question": "Summarise the acquired_001 book",
+      "questionMeans": "unresolved",
+      "caller": null,
+      "questionScope": "unresolved",
+      "questionLabel": "acquired_001",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "acquired_001",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_storage",
+      "question": "Summarise the acquired_001 book",
+      "questionMeans": "unresolved",
+      "caller": "total",
+      "questionScope": "unresolved",
+      "questionLabel": "acquired_001",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "acquired_001",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_storage",
+      "question": "Summarise the acquired_001 book",
+      "questionMeans": "unresolved",
+      "caller": "direct",
+      "questionScope": "unresolved",
+      "questionLabel": "acquired_001",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "acquired_001",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_storage",
+      "question": "Summarise the acquired_001 book",
+      "questionMeans": "unresolved",
+      "caller": "acquired",
+      "questionScope": "unresolved",
+      "questionLabel": "acquired_001",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "acquired_001",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_storage",
+      "question": "Summarise the acquired_001 book",
+      "questionMeans": "unresolved",
+      "caller": "spv1",
+      "questionScope": "unresolved",
+      "questionLabel": "acquired_001",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "acquired_001",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    },
+    {
+      "question_id": "q_storage",
+      "question": "Summarise the acquired_001 book",
+      "questionMeans": "unresolved",
+      "caller": "alp_acquired",
+      "questionScope": "unresolved",
+      "questionLabel": "acquired_001",
+      "effectiveScope": "unresolved",
+      "effectiveLabel": "acquired_001",
+      "basePopulation": null,
+      "provenance": "unresolved",
+      "ids": [],
+      "state": "unresolvable",
+      "legacyIds": [
+        "alp_origination",
+        "spv2",
+        "alp_acquired",
+        "nbs_acquired",
+        "spv1"
+      ],
+      "fellBackToTotal": true,
+      "wonBy": "question",
+      "target": "unresolved",
+      "targetIds": [],
+      "verdict": "ok"
+    }
+  ]
+}

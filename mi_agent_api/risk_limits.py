@@ -90,6 +90,14 @@ def _from_run_config(config: Dict[str, Any], client_id: str) -> Dict[str, Any]:
                         source_file=config.get("source_file"))
 
 
+#: The repository's committed configuration tree, located from THIS FILE.
+#: The same `Path(__file__).resolve().parents[1] / "config"` mi_agent's
+#: business_semantics and portfolio_metadata use, so every governed config in
+#: this estate is found the same way and none of them depends on the process
+#: working directory.
+_CONFIG_ROOT = Path(__file__).resolve().parents[1] / "config"
+
+
 def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] = None,
                           run_config_path: Optional[Any] = None) -> Dict[str, Any]:
     """Load the governed limits for a client, with an explicit production SOURCE.
@@ -142,7 +150,23 @@ def load_extracted_limits(client_id: str, *, search_roots: Optional[List[str]] =
                             is_placeholder=False, source_file=str(doc))
 
     # 3 — committed config fallback.
-    cfg = Path("config") / "clients" / client_id / "risk_limits_extracted.yaml"
+    #
+    # RESOLVED AGAINST THE REPOSITORY, NOT THE WORKING DIRECTORY. This was
+    # `Path("config") / ...`, a relative path, so whether a client was told
+    # their concentration limits exist depended on where the process happened
+    # to be started. Same commit, same portfolio, same question: from the
+    # repository root "Are any of our concentration limits at risk?" is
+    # answered from the 15 committed limits; from anywhere else it is refused
+    # with "extraction required" — a false statement about the book, made
+    # silently and in the safe-looking direction, which is why it survived a
+    # full acceptance run undetected.
+    #
+    # `Path(__file__).resolve().parents[1] / "config"` is how
+    # `business_semantics` and `portfolio_metadata` already locate the same
+    # config tree; this is that mechanism, not a new one. No CWD candidate is
+    # kept alongside it — one would reintroduce exactly the dependency this
+    # removes.
+    cfg = _CONFIG_ROOT / "clients" / client_id / "risk_limits_extracted.yaml"
     if cfg.exists():
         try:
             data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}

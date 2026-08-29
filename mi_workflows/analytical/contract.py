@@ -95,6 +95,22 @@ class PopulationRef:
     #: counts also move between snapshots, but only because loans are originated
     #: or exit — which is genuine book movement, and reads correctly as such.
     time_relative: bool = False
+    #: The governed ``(field, value)`` pairs this population narrowed on that
+    #: ``predicate`` does not name a field for.
+    #:
+    #: ``predicate`` is written for a READER, and one narrowing this layer
+    #: applies is written in a form no reader of the contract can parse: a
+    #: portfolio lens describes itself as ``"portfolio lens = Direct
+    #: (direct_001)"``, which names a lens and never the field the lens scopes.
+    #: Every other predicate here arrives from ``mi_agent.population`` already
+    #: field-named, so every other narrowing is legible downstream and that one
+    #: was not — the plan performed it, and no consumer could see that it had.
+    #:
+    #: This is the machine-readable twin, not a second narrowing: it records
+    #: what the SAME filter scoped the rows to. A consumer reconciling "was this
+    #: answer narrowed to Direct?" reads it here; nothing is re-derived, and the
+    #: reader-facing predicate is unchanged.
+    narrowed_on: Tuple[Tuple[str, str], ...] = ()
 
     @property
     def membership_changed(self) -> bool:

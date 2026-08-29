@@ -1,0 +1,1966 @@
+{
+  "rows": [
+    {
+      "id": "F1.a",
+      "family": "F1",
+      "family_name": "narrative_versus_dimension",
+      "question": "Which drivers grew the most since last month?",
+      "declares": [
+        "RANK",
+        "DIRECTION",
+        "SPAN"
+      ],
+      "grades": {
+        "RANK": "UNEVIDENCED",
+        "DIRECTION": "UNEVIDENCED",
+        "SPAN": "UNEVIDENCED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
+    },
+    {
+      "id": "F1.b",
+      "family": "F1",
+      "family_name": "narrative_versus_dimension",
+      "question": "Show me the drivers that grew the most since last month.",
+      "declares": [
+        "RANK",
+        "DIRECTION",
+        "SPAN"
+      ],
+      "grades": {
+        "RANK": "UNEVIDENCED",
+        "DIRECTION": "UNEVIDENCED",
+        "SPAN": "UNEVIDENCED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
+    },
+    {
+      "id": "F1.c",
+      "family": "F1",
+      "family_name": "narrative_versus_dimension",
+      "question": "Which movements grew the most since last month?",
+      "declares": [
+        "RANK",
+        "DIRECTION",
+        "SPAN"
+      ],
+      "grades": {
+        "RANK": "UNEVIDENCED",
+        "DIRECTION": "UNEVIDENCED",
+        "SPAN": "UNEVIDENCED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
+    },
+    {
+      "id": "F1.d",
+      "family": "F1",
+      "family_name": "narrative_versus_dimension",
+      "question": "Show me the movements that grew the most since last month.",
+      "declares": [
+        "RANK",
+        "DIRECTION",
+        "SPAN"
+      ],
+      "grades": {
+        "RANK": "UNEVIDENCED",
+        "DIRECTION": "UNEVIDENCED",
+        "SPAN": "UNEVIDENCED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
+    },
+    {
+      "id": "F2.a",
+      "family": "F2",
+      "family_name": "declared_dimension_the_book_carries",
+      "question": "Which geographic region obligor grew the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F2.b",
+      "family": "F2",
+      "family_name": "declared_dimension_the_book_carries",
+      "question": "Which region grew the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank region by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F2.c",
+      "family": "F2",
+      "family_name": "declared_dimension_the_book_carries",
+      "question": "Which geographic region obligors grew the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F2.d",
+      "family": "F2",
+      "family_name": "declared_dimension_the_book_carries",
+      "question": "Which underwriter grew the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can report what changed, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F3.a",
+      "family": "F3",
+      "family_name": "movement_versus_level",
+      "question": "Which geographic region obligor grew the most balance?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT",
+        "MEASURE"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED",
+        "MEASURE": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F3.b",
+      "family": "F3",
+      "family_name": "movement_versus_level",
+      "question": "Which geographic region obligor added the most balance?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT",
+        "MEASURE"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED",
+        "MEASURE": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F3.c",
+      "family": "F3",
+      "family_name": "movement_versus_level",
+      "question": "Which geographic region obligor increased its balance the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT",
+        "MEASURE"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED",
+        "MEASURE": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F4.a",
+      "family": "F4",
+      "family_name": "top_n_and_number_collision",
+      "question": "Which three geographic region obligors grew the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "TOP_N",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "TOP_N": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F4.b",
+      "family": "F4",
+      "family_name": "top_n_and_number_collision",
+      "question": "Which 3 geographic region obligors grew the most over the last 6 months?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "TOP_N",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "TOP_N": "DISCLOSED",
+        "SPAN": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "You asked about the last 6 months, which spans 6 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded."
+    },
+    {
+      "id": "F4.c",
+      "family": "F4",
+      "family_name": "top_n_and_number_collision",
+      "question": "Show me the top 2 geographic region obligors by growth over the last 3 months.",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "TOP_N",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "TOP_N": "DISCLOSED",
+        "SPAN": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded."
+    },
+    {
+      "id": "F5.a",
+      "family": "F5",
+      "family_name": "basis_collision",
+      "question": "Which geographic region obligor added the most loans?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "BASIS": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F5.b",
+      "family": "F5",
+      "family_name": "basis_collision",
+      "question": "Which geographic region obligor grew fastest?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "BASIS": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F5.c",
+      "family": "F5",
+      "family_name": "basis_collision",
+      "question": "Which geographic region obligor increased its share the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "BASIS": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F5.d",
+      "family": "F5",
+      "family_name": "basis_collision",
+      "question": "Which geographic region obligor added the most loan balance?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "BASIS": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F6.a",
+      "family": "F6",
+      "family_name": "direction_and_absence",
+      "question": "Which geographic region obligor declined the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F6.b",
+      "family": "F6",
+      "family_name": "direction_and_absence",
+      "question": "Which geographic region obligor shrank the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F6.c",
+      "family": "F6",
+      "family_name": "direction_and_absence",
+      "question": "Which geographic region obligor changed the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F7.a",
+      "family": "F7",
+      "family_name": "scope_and_dimension_collision",
+      "question": "Which geographic region obligor grew the most in the Direct book?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "SCOPE",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "SCOPE": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F7.b",
+      "family": "F7",
+      "family_name": "scope_and_dimension_collision",
+      "question": "Which geographic region obligor grew the most for the acquired portfolio?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "SCOPE",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "SCOPE": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F7.c",
+      "family": "F7",
+      "family_name": "scope_and_dimension_collision",
+      "question": "Which portfolio grew the most in the acquired book?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "SCOPE",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "SCOPE": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": null,
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I understood this as a movement trend question, but I have not answered it: this asks how something changed, which needs two governed reporting snapshots to compare. I have NOT substituted a current-position figure, because that would answer a different question from the one you asked. Ask for the governed analytic directly \u2014 for example the concentration limit tests, the completion run-rate, the "
+    },
+    {
+      "id": "F8.a",
+      "family": "F8",
+      "family_name": "measure_overridden_by_dimension",
+      "question": "How did LTV change since last month?",
+      "declares": [
+        "MEASURE",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "MEASURE": "UNEVIDENCED",
+        "SPAN": "UNEVIDENCED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%). Against the registry's directionality, 1 metric(s) moved in the improving direction and 0 in the deteriorating direction. No governed materiality threshold is configured for this portfolio"
+    },
+    {
+      "id": "F8.b",
+      "family": "F8",
+      "family_name": "measure_overridden_by_dimension",
+      "question": "Which geographic region obligor grew the most by LTV?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MEASURE",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MEASURE": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank geographic region obligor by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F8.c",
+      "family": "F8",
+      "family_name": "measure_overridden_by_dimension",
+      "question": "Which LTV band grew the most?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "I can rank ltv band by movement, but this question names no period to compare over, and I have not chosen one for you. Tell me the window \u2014 for example \u201csince last month\u201d, \u201cover the last 3 months\u201d, or two named months."
+    },
+    {
+      "id": "F9.a",
+      "family": "F9",
+      "family_name": "saturated_compound",
+      "question": "Which three geographic region obligors added the most balance in the Direct book over the last 3 months?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "TOP_N",
+        "SCOPE",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "BASIS": "DISCLOSED",
+        "TOP_N": "DISCLOSED",
+        "SCOPE": "DISCLOSED",
+        "SPAN": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded."
+    },
+    {
+      "id": "F9.b",
+      "family": "F9",
+      "family_name": "saturated_compound",
+      "question": "Which two geographic region obligors lost the most share in the acquired book over the last 6 months?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "TOP_N",
+        "SCOPE",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "DISCLOSED",
+        "DIMENSION": "DISCLOSED",
+        "DIRECTION": "DISCLOSED",
+        "BASIS": "DISCLOSED",
+        "TOP_N": "DISCLOSED",
+        "SCOPE": "DISCLOSED",
+        "SPAN": "DISCLOSED",
+        "MOVEMENT": "DISCLOSED"
+      },
+      "route": "period_change",
+      "ok": false,
+      "delivers_rows": false,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "You asked about the last 6 months, which spans 6 reporting period(s). This book carries 2 governed reporting period(s), so the furthest back I can compare is 1 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded."
+    },
+    {
+      "id": "F9.c",
+      "family": "F9",
+      "family_name": "saturated_compound",
+      "question": "Which geographic region obligor grew fastest in the Direct book since last month?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "SCOPE",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "HONOURED",
+        "DIMENSION": "HONOURED",
+        "DIRECTION": "HONOURED",
+        "BASIS": "HONOURED",
+        "SCOPE": "HONOURED",
+        "SPAN": "HONOURED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": true,
+      "ranked_field": "geographic_region_obligor",
+      "ranked_basis": "balance_percent",
+      "ranked_direction": "increase",
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, ranked by percentage balance movement across Geographic Region Obligor, South East increased the most: South East \u00a31.7m \u2192 \u00a35.6m (+\u00a33.9m, +228.9%). Then Scotland \u00a35.5m \u2192 \u00a35.7m (+\u00a3201k, +3.6%). 1 further category did not increase on this basis and is not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region Obligor \u00b7 percentage balance movem"
+    },
+    {
+      "id": "F10.a",
+      "family": "F10",
+      "family_name": "period_order",
+      "question": "How did the book change since last month?",
+      "declares": [
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "SPAN": "UNEVIDENCED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
+    },
+    {
+      "id": "F10.b",
+      "family": "F10",
+      "family_name": "period_order",
+      "question": "How did LTV change since last month?",
+      "declares": [
+        "MEASURE",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "MEASURE": "UNEVIDENCED",
+        "SPAN": "UNEVIDENCED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%). Against the registry's directionality, 1 metric(s) moved in the improving direction and 0 in the deteriorating direction. No governed materiality threshold is configured for this portfolio"
+    },
+    {
+      "id": "F10.c",
+      "family": "F10",
+      "family_name": "period_order",
+      "question": "How did the book change between April and May?",
+      "declares": [
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "SPAN": "UNEVIDENCED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": false,
+      "ranked_field": null,
+      "ranked_basis": null,
+      "ranked_direction": null,
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, 3 of 3 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a33.9m (\u00a312.2m \u2192 \u00a316.1m). Largest observed movements measured in percentage points: Current Loan To Value \u22120.85 pp (37.38% \u2192 36.53%); Current Interest Rate +0.24 pp (5.29% \u2192 5.53%). Against the registry's directionality"
+    },
+    {
+      "id": "F11.a",
+      "family": "F11",
+      "family_name": "ranked_movement_with_a_stated_period",
+      "question": "Which geographic region obligor grew the most since last month?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "HONOURED",
+        "DIMENSION": "HONOURED",
+        "DIRECTION": "HONOURED",
+        "SPAN": "HONOURED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": true,
+      "ranked_field": "geographic_region_obligor",
+      "ranked_basis": "balance_absolute",
+      "ranked_direction": "increase",
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, ranked by absolute balance movement across Geographic Region Obligor, South East increased the most: South East \u00a31.7m \u2192 \u00a35.6m (+\u00a33.9m, +228.9%). Then Scotland \u00a35.5m \u2192 \u00a35.7m (+\u00a3201k, +3.6%). 1 further category did not increase on this basis and is not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region Obligor \u00b7 absolute balance movement,"
+    },
+    {
+      "id": "F11.b",
+      "family": "F11",
+      "family_name": "ranked_movement_with_a_stated_period",
+      "question": "Which geographic region obligor declined the most since last month?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "HONOURED",
+        "DIMENSION": "HONOURED",
+        "DIRECTION": "HONOURED",
+        "SPAN": "HONOURED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": true,
+      "ranked_field": "geographic_region_obligor",
+      "ranked_basis": "balance_absolute",
+      "ranked_direction": "decrease",
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, ranked by absolute balance movement across Geographic Region Obligor, London decreased the most: London \u00a35.0m \u2192 \u00a34.8m (\u2212\u00a3166k, -3.3%). 2 further categories did not decrease on this basis and are not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region Obligor \u00b7 absolute balance movement, largest decreases first \u00b7 2026-04-30 \u2192 2026-05-31."
+    },
+    {
+      "id": "F11.c",
+      "family": "F11",
+      "family_name": "ranked_movement_with_a_stated_period",
+      "question": "Which two geographic region obligors added the most balance since last month?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "TOP_N",
+        "SPAN",
+        "MEASURE",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "HONOURED",
+        "DIMENSION": "HONOURED",
+        "DIRECTION": "HONOURED",
+        "TOP_N": "HONOURED",
+        "SPAN": "HONOURED",
+        "MEASURE": "HONOURED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": true,
+      "ranked_field": "geographic_region_obligor",
+      "ranked_basis": "balance_absolute",
+      "ranked_direction": "increase",
+      "ranked_top_n": 2,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, ranked by absolute balance movement across Geographic Region Obligor, South East increased the most: South East \u00a31.7m \u2192 \u00a35.6m (+\u00a33.9m, +228.9%). Then Scotland \u00a35.5m \u2192 \u00a35.7m (+\u00a3201k, +3.6%). Showing the top 2 of 3 categories. 1 further category did not increase on this basis and is not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region O"
+    },
+    {
+      "id": "F11.d",
+      "family": "F11",
+      "family_name": "ranked_movement_with_a_stated_period",
+      "question": "Which geographic region obligor grew fastest in balance since last month?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "BASIS",
+        "SPAN",
+        "MEASURE",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "HONOURED",
+        "DIMENSION": "HONOURED",
+        "DIRECTION": "HONOURED",
+        "BASIS": "HONOURED",
+        "SPAN": "HONOURED",
+        "MEASURE": "HONOURED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": true,
+      "ranked_field": "geographic_region_obligor",
+      "ranked_basis": "balance_percent",
+      "ranked_direction": "increase",
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, ranked by percentage balance movement across Geographic Region Obligor, South East increased the most: South East \u00a31.7m \u2192 \u00a35.6m (+\u00a33.9m, +228.9%). Then Scotland \u00a35.5m \u2192 \u00a35.7m (+\u00a3201k, +3.6%). 1 further category did not increase on this basis and is not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region Obligor \u00b7 percentage balance movem"
+    },
+    {
+      "id": "F11.e",
+      "family": "F11",
+      "family_name": "ranked_movement_with_a_stated_period",
+      "question": "Which region grew the most since last month?",
+      "declares": [
+        "RANK",
+        "DIMENSION",
+        "DIRECTION",
+        "SPAN",
+        "MOVEMENT"
+      ],
+      "grades": {
+        "RANK": "HONOURED",
+        "DIMENSION": "HONOURED",
+        "DIRECTION": "HONOURED",
+        "SPAN": "HONOURED",
+        "MOVEMENT": "HONOURED"
+      },
+      "route": "period_change_analysis",
+      "ok": true,
+      "delivers_rows": true,
+      "ranked_applied": true,
+      "ranked_field": "geographic_region_obligor",
+      "ranked_basis": "balance_absolute",
+      "ranked_direction": "increase",
+      "ranked_top_n": null,
+      "period_order_breach": null,
+      "answer": "Between 30 April 2026 and 31 May 2026, ranked by absolute balance movement across Geographic Region Obligor, South East increased the most: South East \u00a31.7m \u2192 \u00a35.6m (+\u00a33.9m, +228.9%). Then Scotland \u00a35.5m \u2192 \u00a35.7m (+\u00a3201k, +3.6%). 1 further category did not increase on this basis and is not listed.\n\nCalculated: Governed period change \u00b7 ranked by Geographic Region Obligor \u00b7 absolute balance movement,"
+    }
+  ],
+  "bank": {
+    "version": 1,
+    "frozen_at": "2026-08-25",
+    "frozen_at_commit": "174d14d",
+    "frozen_before": "C7 period_change conversion \u2014 no C7 production code changed at freeze time",
+    "invariants": {
+      "I1_honour_or_disclose": "For every element a question declares, the delivered answer must either honour it \u2014 visibly, in machine-readable evidence \u2014 or disclose that it was not honoured. Silently dropping a declared element is a defect.\n",
+      "I2_no_silent_substitution": "Where a declared element cannot be honoured, the answer must not quietly honour a DIFFERENT element in its place: not a different dimension, not a different direction, not a different measure, not a different period, and not a level where a movement was asked for.\n",
+      "I3_composition_preserves_parts": "Adding an element to a question must not un-honour an element that was honoured without it. If Q honours {A} and Q+B declares {A,B}, then Q+B must still honour A, or disclose why it no longer can. This is compositionality stated as a testable property, and it is the architectural thesis under test.\n",
+      "I4_phrasing_is_not_meaning": "Two questions declaring the SAME elements must reach the same honouring outcome. A synonym, a plural, or a different verb for the same operation may change the wording of an answer; it must not change which question was answered, nor which route answered it in a way the reader can perceive.\n",
+      "I5_refusal_reason_is_true": "A stated refusal reason must be a true statement about the book. Refusing a dimension the book carries, on the grounds that the book does not carry it, is a wrong refusal \u2014 the mirror of C6's wrong delivery, and equally invisible.\n",
+      "I7_period_order_is_chronological": "An answer that reports a change must report it from the earlier reporting date to the later one. Reversing the pair inverts the sign of every movement in it, and the prose still reads as a confident answer.\n",
+      "I6_no_vacuous_pass": "A canary answered by a refusal on every case proves nothing. Each family must contain at least one case that DELIVERS, or the family is reported UNEXERCISED and its evidence is not counted.\n"
+    },
+    "elements": {
+      "RANK": {
+        "evidence": "metadata.rankedMovement.applied"
+      },
+      "DIMENSION": {
+        "evidence": "metadata.rankedMovement.canonicalField"
+      },
+      "DIRECTION": {
+        "evidence": "metadata.rankedMovement.direction"
+      },
+      "BASIS": {
+        "evidence": "metadata.rankedMovement.basis"
+      },
+      "TOP_N": {
+        "evidence": "metadata.rankedMovement.topN"
+      },
+      "SPAN": {
+        "evidence": "metadata.rankedMovement.openingPeriod + answer period prose"
+      },
+      "SCOPE": {
+        "evidence": "metadata.lensApplied + governance.scope"
+      },
+      "MOVEMENT": {
+        "evidence": "route answers a CHANGE between two dates, not a level at one"
+      },
+      "MEASURE": {
+        "evidence": "metadata.rankedMovement.canonicalField / answer basis prose"
+      }
+    },
+    "families": [
+      {
+        "id": "F1",
+        "name": "narrative_versus_dimension",
+        "hazard": "`period_change_route._NARRATIVE_RANK_SUBJECTS` (36 nouns) decides that a question is \"the governed narrative\" rather than a ranking, and it is reached only through `_RANK_SUBJECT_LEAD_RE` (which|what|rank|order). A question that means the same thing but opens differently never reaches the guard. Two phrasings of one question, two different meanings \u2014 I4.\n",
+        "cases": [
+          {
+            "id": "F1.a",
+            "question": "Which drivers grew the most since last month?",
+            "declares": [
+              "RANK",
+              "DIRECTION",
+              "SPAN"
+            ]
+          },
+          {
+            "id": "F1.b",
+            "question": "Show me the drivers that grew the most since last month.",
+            "declares": [
+              "RANK",
+              "DIRECTION",
+              "SPAN"
+            ]
+          },
+          {
+            "id": "F1.c",
+            "question": "Which movements grew the most since last month?",
+            "declares": [
+              "RANK",
+              "DIRECTION",
+              "SPAN"
+            ]
+          },
+          {
+            "id": "F1.d",
+            "question": "Show me the movements that grew the most since last month.",
+            "declares": [
+              "RANK",
+              "DIRECTION",
+              "SPAN"
+            ]
+          }
+        ],
+        "paraphrase_sets": [
+          [
+            "F1.a",
+            "F1.b"
+          ],
+          [
+            "F1.c",
+            "F1.d"
+          ]
+        ]
+      },
+      {
+        "id": "F2",
+        "name": "declared_dimension_the_book_carries",
+        "hazard": "`requested_dimension_terms` returns a PRIMARY key plus `alt_fields`, and its own docstring says the alts exist \"so an availability difference is never read as a substitution\". The route passes only the primary into the analysis. Where the primary is absent and an alt is present, the reader is told the dimension is not governed for this book \u2014 which is false. I5.\n",
+        "cases": [
+          {
+            "id": "F2.a",
+            "question": "Which geographic region obligor grew the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT"
+            ],
+            "note": "the canonical field, named exactly \u2014 the control"
+          },
+          {
+            "id": "F2.b",
+            "question": "Which region grew the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT"
+            ],
+            "note": "the natural term for the same field"
+          },
+          {
+            "id": "F2.c",
+            "question": "Which geographic region obligors grew the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT"
+            ],
+            "note": "the same field, pluralised"
+          },
+          {
+            "id": "F2.d",
+            "question": "Which underwriter grew the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT"
+            ],
+            "note": "a dimension no registry carries \u2014 must refuse, and refuse truthfully"
+          }
+        ],
+        "paraphrase_sets": [
+          [
+            "F2.a",
+            "F2.b",
+            "F2.c"
+          ]
+        ]
+      },
+      {
+        "id": "F3",
+        "name": "movement_versus_level",
+        "hazard": "A question declaring a CHANGE between periods can be routed to a single-period grouped chart, which answers a level. The reader asked what moved and is shown what is. Nothing discloses the substitution. I2.\n",
+        "cases": [
+          {
+            "id": "F3.a",
+            "question": "Which geographic region obligor grew the most balance?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT",
+              "MEASURE"
+            ]
+          },
+          {
+            "id": "F3.b",
+            "question": "Which geographic region obligor added the most balance?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT",
+              "MEASURE"
+            ]
+          },
+          {
+            "id": "F3.c",
+            "question": "Which geographic region obligor increased its balance the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT",
+              "MEASURE"
+            ]
+          }
+        ],
+        "paraphrase_sets": [
+          [
+            "F3.a",
+            "F3.b",
+            "F3.c"
+          ]
+        ]
+      },
+      {
+        "id": "F4",
+        "name": "top_n_and_number_collision",
+        "hazard": "`rank_request._TOP_N_RE` reads \"which <n>\" as a Top N, and `period_request._N_MONTHS_RE` reads \"<n> months\" as a span. A question carrying both numbers must bind each to the right element, and a declared Top N must be honoured or disclosed rather than dropped.\n",
+        "cases": [
+          {
+            "id": "F4.a",
+            "question": "Which three geographic region obligors grew the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "TOP_N",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F4.b",
+            "question": "Which 3 geographic region obligors grew the most over the last 6 months?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "TOP_N",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F4.c",
+            "question": "Show me the top 2 geographic region obligors by growth over the last 3 months.",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "TOP_N",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "F5",
+        "name": "basis_collision",
+        "hazard": "`rank_request._detect_basis` picks ONE basis from four competing regexes over the raw question. A question naming both a count noun and a balance noun declares one measure and can be given the other. I2.\n",
+        "cases": [
+          {
+            "id": "F5.a",
+            "question": "Which geographic region obligor added the most loans?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F5.b",
+            "question": "Which geographic region obligor grew fastest?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F5.c",
+            "question": "Which geographic region obligor increased its share the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F5.d",
+            "question": "Which geographic region obligor added the most loan balance?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "MOVEMENT"
+            ],
+            "note": "count noun and balance noun in one phrase \u2014 deliberately ambiguous"
+          }
+        ]
+      },
+      {
+        "id": "F6",
+        "name": "direction_and_absence",
+        "hazard": "Where nothing moved in the declared direction, \"no region declined\" IS the answer. Answering with the increases instead is the substitution `_unrankable_message` exists to prevent. I2.\n",
+        "cases": [
+          {
+            "id": "F6.a",
+            "question": "Which geographic region obligor declined the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F6.b",
+            "question": "Which geographic region obligor shrank the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F6.c",
+            "question": "Which geographic region obligor changed the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "MOVEMENT"
+            ]
+          }
+        ],
+        "paraphrase_sets": [
+          [
+            "F6.a",
+            "F6.b"
+          ]
+        ]
+      },
+      {
+        "id": "F7",
+        "name": "scope_and_dimension_collision",
+        "hazard": "`_explicit_dimensions` masks governed SCOPE phrases because \"for the acquired portfolio\" names a population and was being grouped by `acquired_portfolio_id`. The mask is a route-independent semantic decision; a question that declares both a scope and a dimension must get both, and the scope must not consume the dimension. I3.\n",
+        "cases": [
+          {
+            "id": "F7.a",
+            "question": "Which geographic region obligor grew the most in the Direct book?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "SCOPE",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F7.b",
+            "question": "Which geographic region obligor grew the most for the acquired portfolio?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "SCOPE",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F7.c",
+            "question": "Which portfolio grew the most in the acquired book?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "SCOPE",
+              "MOVEMENT"
+            ],
+            "note": "the dimension and the scope name the same noun"
+          }
+        ]
+      },
+      {
+        "id": "F8",
+        "name": "measure_overridden_by_dimension",
+        "hazard": "When ranking is requested the route sets `mode = MODE_REQUESTED_METRIC` and `requested_fields = (rank_intent.field,)` \u2014 the ranked DIMENSION becomes the requested METRIC. A question declaring both a measure and a dimension has one of them overwritten by the other. I1.\n",
+        "cases": [
+          {
+            "id": "F8.a",
+            "question": "How did LTV change since last month?",
+            "declares": [
+              "MEASURE",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F8.b",
+            "question": "Which geographic region obligor grew the most by LTV?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MEASURE",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F8.c",
+            "question": "Which LTV band grew the most?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "MOVEMENT"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "F9",
+        "name": "saturated_compound",
+        "hazard": "Every element at once. If the architecture is compositional, saturation is unremarkable; if meaning is assembled by route-shaped special cases, saturation is where they run out. I3.\n",
+        "cases": [
+          {
+            "id": "F9.a",
+            "question": "Which three geographic region obligors added the most balance in the Direct book over the last 3 months?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "TOP_N",
+              "SCOPE",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F9.b",
+            "question": "Which two geographic region obligors lost the most share in the acquired book over the last 6 months?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "TOP_N",
+              "SCOPE",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F9.c",
+            "question": "Which geographic region obligor grew fastest in the Direct book since last month?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "SCOPE",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "F10",
+        "name": "period_order",
+        "hazard": "\"since last month\" declares a direction in time: the earlier date opens and the later one closes. An answer that reports the pair in the other order inverts the sign of the movement and reads as confident. Found by this bank during its own construction, on a route C7 does not own.\n",
+        "period_order_checked": true,
+        "cases": [
+          {
+            "id": "F10.a",
+            "question": "How did the book change since last month?",
+            "declares": [
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F10.b",
+            "question": "How did LTV change since last month?",
+            "declares": [
+              "MEASURE",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F10.c",
+            "question": "How did the book change between April and May?",
+            "declares": [
+              "SPAN",
+              "MOVEMENT"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "F11",
+        "name": "ranked_movement_with_a_stated_period",
+        "hazard": "ADDED, not edited. The governed ruling is that a movement question naming no period is CLARIFIED rather than answered over an invented window. That ruling is right, and it made most of this bank's ranked cases refuse \u2014 F3, F5, F6 and F7 became unexercised, so the bank's zero breaches became a zero measured over refusals, which is the vacuity I6 exists to catch. These cases carry a period, so ranking is exercised again. Every existing case is untouched: the bank may grow, it may not shrink.\n",
+        "cases": [
+          {
+            "id": "F11.a",
+            "question": "Which geographic region obligor grew the most since last month?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F11.b",
+            "question": "Which geographic region obligor declined the most since last month?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "SPAN",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F11.c",
+            "question": "Which two geographic region obligors added the most balance since last month?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "TOP_N",
+              "SPAN",
+              "MEASURE",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F11.d",
+            "question": "Which geographic region obligor grew fastest in balance since last month?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "BASIS",
+              "SPAN",
+              "MEASURE",
+              "MOVEMENT"
+            ]
+          },
+          {
+            "id": "F11.e",
+            "question": "Which region grew the most since last month?",
+            "declares": [
+              "RANK",
+              "DIMENSION",
+              "DIRECTION",
+              "SPAN",
+              "MOVEMENT"
+            ],
+            "note": "the natural term \u2014 D1's alternate must bind"
+          }
+        ],
+        "paraphrase_sets": [
+          [
+            "F11.a",
+            "F11.e"
+          ]
+        ]
+      }
+    ],
+    "lattices": [
+      {
+        "id": "L1",
+        "base": "F2.a",
+        "steps": [
+          {
+            "case": "F6.a",
+            "adds": "DIRECTION_DECREASE"
+          },
+          {
+            "case": "F7.a",
+            "adds": "SCOPE"
+          },
+          {
+            "case": "F9.c",
+            "adds": [
+              "BASIS",
+              "SPAN"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "L2",
+        "base": "F2.a",
+        "steps": [
+          {
+            "case": "F4.a",
+            "adds": "TOP_N"
+          },
+          {
+            "case": "F4.b",
+            "adds": "SPAN"
+          }
+        ]
+      },
+      {
+        "id": "L3",
+        "base": "F3.a",
+        "steps": [
+          {
+            "case": "F5.d",
+            "adds": "BASIS_AMBIGUITY"
+          },
+          {
+            "case": "F9.a",
+            "adds": [
+              "TOP_N",
+              "SCOPE",
+              "SPAN"
+            ]
+          }
+        ]
+      }
+    ],
+    "freeze_observations": {
+      "method": "Two governed funded snapshots (mi_2026_04, mi_2026_05) carrying geographic_region_obligor and broker_channel, executed through the live /mi/query path. Written by migration_phase0/compound_canary.py.\n",
+      "known_defects_at_freeze": [
+        {
+          "id": "D1",
+          "canaries": [
+            "F2.b",
+            "F2.c"
+          ],
+          "breaches": "I5_refusal_reason_is_true",
+          "statement": "\"Which region grew the most?\" is refused with \"region ... is not a governed period-change dimension for this book\". The book carries geographic_region_obligor, which IS a governed cross-asset period-change dimension, and requested_dimension_terms already returned it as an alt. The route passes only the primary (collateral_geography, absent) into the analysis, so the alt is never computed. The refusal reason is false.\n"
+        },
+        {
+          "id": "D2",
+          "canaries": [
+            "F3.b",
+            "F4.a",
+            "F4.b"
+          ],
+          "breaches": "I2_no_silent_substitution",
+          "statement": "\"Which geographic region obligor added the most balance?\" leaves the period-change route entirely and is answered by a single-period grouped bar chart \u2014 \"Total Balance grouped by Obligor Region, as at 31 May 2026\". A declared movement is answered with a level. Nothing discloses it.\n"
+        },
+        {
+          "id": "D3",
+          "canaries": [
+            "F3.a",
+            "F3.b"
+          ],
+          "breaches": "I4_phrasing_is_not_meaning",
+          "statement": "\"grew the most balance\" and \"added the most balance\" declare the same thing. The first is answered by the governed period-change route with a ranked movement; the second by a different route with a level. The verb, not the meaning, selects the route.\n"
+        },
+        {
+          "id": "D4",
+          "canaries": [
+            "F10.a",
+            "F10.b"
+          ],
+          "breaches": "I7_period_order_is_chronological",
+          "statement": "\"How did LTV change since last month?\" is answered \"WA current LTV moved from 36.5% in 2026-05 to 37.4% in 2026-04 \u2014 a change of 0.9% (+2.33%, up)\". The pair is reversed: May opens and April closes. LTV fell from 37.4% in April to 36.5% in May, and the answer reports it as a rise. The route is temporal_compare (C5), not period_change \u2014 this is a finding about the converted estate, not about the C7 candidate.\n"
+        }
+      ]
+    },
+    "authorised_movements": [
+      {
+        "id": "M1",
+        "date": "2026-08-26",
+        "defect": "D4",
+        "kind": "authorised defect correction",
+        "breaches_before": 9,
+        "breaches_after": 7,
+        "cleared": [
+          "I7_period_order_is_chronological \u00b7 F10.a \u00b7 SPAN",
+          "I7_period_order_is_chronological \u00b7 F10.b \u00b7 SPAN"
+        ],
+        "new_breaches": 0,
+        "grade_movements": 0,
+        "statement": "`llm_query_parser._compare_recognizer` built the comparison pair as [\"latest\", <relative>] when a question named a relative period but no explicit month. `latest` IS the closing period, so the comparison opened at the close: the sign of every movement inverted, and `pct = abs/va` then divided by the closing value, so the magnitude was wrong too. A book that grew \u00a318.87m -> \u00a321.10m was reported as a 10.57% fall; it is now reported as a 11.81% rise. Pre-registered in docs/mi_d4_comparison_direction_preregistration.md before the change, and the movement matched that registration exactly: two I7 breaches cleared, ZERO grade movements, zero new breaches.\n",
+        "scope": "Only the branch that INVENTS an order. Where the reader names both periods the stated order is honoured unchanged \u2014 8 explicit-pair questions are byte-identical before and after, and they are the control.\n"
+      },
+      {
+        "id": "M2",
+        "date": "2026-08-26",
+        "defect": "D3",
+        "kind": "authorised capability movement",
+        "breaches_before": 7,
+        "breaches_after": 7,
+        "cleared": [],
+        "new_breaches": 0,
+        "grade_movements": 0,
+        "statement": "One generic owner for LEVEL versus MOVEMENT (question_interpretation.lexical.temporal_aspect) replaced five independent inferrers that disagreed on 30 of 882 corpus questions with no reader a superset of any other. NO GRADE MOVED and no breach changed, but THREE canary questions changed route \u2014 F8.a, F10.a and F10.b moved from temporal_compare to period_change_analysis, because the retired reader missed the bare verb in \"how did X change\" and the owner does not. Economics are identical on the shared metric (+\u00a33.9m, \u00a312.2m -> \u00a316.1m; LTV 37.4% -> 36.5% falling) and both routes report the pair chronologically, so this is a movement in which answer is given, not in what is true.\n",
+        "scope": "Recorded here because a route change that leaves every grade identical is exactly the movement a grade-level detector cannot see. D3 \u2014 \"the verb, not the meaning, selects the route\" \u2014 is the defect this narrows: the verb no longer selects the route through five different vocabularies, though route PRECEDENCE still decides which of two eligible routes answers, and that is not closed.\n"
+      },
+      {
+        "id": "M3",
+        "date": "2026-08-26",
+        "defect": "D1",
+        "kind": "authorised defect correction and governed-refusal activation",
+        "breaches_before": 7,
+        "breaches_after": 0,
+        "cleared": [
+          "I1_honour_or_disclose \u00b7 F3.b \u00b7 MOVEMENT",
+          "I1_honour_or_disclose \u00b7 F5.d \u00b7 MOVEMENT",
+          "I3_composition_preserves_parts \u00b7 F3.a -> F5.d \u00b7 MOVEMENT",
+          "I4_phrasing_is_not_meaning \u00b7 F1.a / F1.b",
+          "I4_phrasing_is_not_meaning \u00b7 F1.c / F1.d",
+          "I4_phrasing_is_not_meaning \u00b7 F2.a / F2.b / F2.c",
+          "I4_phrasing_is_not_meaning \u00b7 F3.a / F3.b / F3.c"
+        ],
+        "new_breaches": 0,
+        "grade_movements": 70,
+        "statement": "C7 reduction. The route's ranking vocabulary \u2014 _rank_subject and three word lists \u2014 was deleted and the route now reads the contract's ordering_direction, ordering_basis, ordering_limit and the dimension claim's candidate_concepts. D1 is closed at the route: \"which region grew the most\" binds geographic_region_obligor instead of falsely reporting that the book carries no such dimension. A governed no-implicit-period guard was added: a ranked movement naming no window is now CLARIFIED, not answered over an invented latest-versus-previous pair.\n",
+        "scope": "THE ZERO IS NOT A CLEAN BILL. Clearing all seven breaches came with 70 grade movements, and most of this bank's ranked cases name no period, so under the new ruling they refuse: F3, F5, F6 and F7 joined F4 as UNEXERCISED. Zero breaches measured over refusals is the vacuity I6 exists to catch, and it is reported as such rather than as success. Family F11 was ADDED \u2014 never edited \u2014 with five period-carrying ranked movement cases, all of which honour every element they declare, so ranking is exercised again on evidence that did not exist before.\n"
+      }
+    ]
+  },
+  "breaches": [],
+  "unexercised_families": [
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7"
+  ],
+  "unevidenced": [
+    {
+      "case": "F1.a",
+      "route": "period_change_analysis",
+      "elements": [
+        "DIRECTION",
+        "RANK",
+        "SPAN"
+      ]
+    },
+    {
+      "case": "F1.b",
+      "route": "period_change_analysis",
+      "elements": [
+        "DIRECTION",
+        "RANK",
+        "SPAN"
+      ]
+    },
+    {
+      "case": "F1.c",
+      "route": "period_change_analysis",
+      "elements": [
+        "DIRECTION",
+        "RANK",
+        "SPAN"
+      ]
+    },
+    {
+      "case": "F1.d",
+      "route": "period_change_analysis",
+      "elements": [
+        "DIRECTION",
+        "RANK",
+        "SPAN"
+      ]
+    },
+    {
+      "case": "F8.a",
+      "route": "period_change_analysis",
+      "elements": [
+        "MEASURE",
+        "SPAN"
+      ]
+    },
+    {
+      "case": "F10.a",
+      "route": "period_change_analysis",
+      "elements": [
+        "SPAN"
+      ]
+    },
+    {
+      "case": "F10.b",
+      "route": "period_change_analysis",
+      "elements": [
+        "MEASURE",
+        "SPAN"
+      ]
+    },
+    {
+      "case": "F10.c",
+      "route": "period_change_analysis",
+      "elements": [
+        "SPAN"
+      ]
+    }
+  ],
+  "refreeze_history": [
+    {
+      "commit_topic": "Final Zero-Blast Commercial Closure",
+      "baseline": "7cadf04",
+      "rows_moved": 1,
+      "attribution": [
+        {
+          "case": "F2.d",
+          "question": "Which underwriter grew the most?",
+          "from": {
+            "RANK": "UNEVIDENCED",
+            "DIMENSION": "UNEVIDENCED",
+            "DIRECTION": "UNEVIDENCED",
+            "MOVEMENT": "HONOURED"
+          },
+          "to": {
+            "RANK": "DISCLOSED",
+            "DIMENSION": "DISCLOSED",
+            "DIRECTION": "DISCLOSED",
+            "MOVEMENT": "DISCLOSED"
+          },
+          "cause": "The no-implicit-comparison-period rule was gated on rank_intent.requested, so the NARRATIVE half of period_change kept inventing the latest-versus-previous window the ranked half was forbidden to invent. 'underwriter' is not a governed dimension term, so this question was never treated as a ranking and fell to that narrative half \u2014 where, naming no period, it was answered with a whole-book movement summary. It now refuses and says which element is missing.",
+          "direction": "SAFER. This bank's own note for F2.d reads 'a dimension no registry carries \u2014 must refuse, and refuse truthfully'. Verified at 7cadf04 in a worktree: the question ANSWERED there. It refuses now.",
+          "not_a_bank_edit": "No expectation was changed to agree with the code. The bank's cases, families, declared elements and invariants are untouched; only the recorded READING moved, and every moved line is attributed above."
+        }
+      ],
+      "coverage_cost": {
+        "unexercised_families": {
+          "from": [
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7"
+          ],
+          "to": [
+            "F2",
+            "F3",
+            "F4",
+            "F5",
+            "F6",
+            "F7"
+          ]
+        },
+        "why": "F2 is 'Which X grew the most?' with no period in any of its four cases. F2.a/b/c already refused, disclosing the missing period; F2.d was the only case in the family that delivered, and it delivered a whole-book narrative for a question about underwriters. Making it refuse is right and costs the family its one delivering case. THIS IS A REAL LOSS OF EVIDENCE, recorded rather than absorbed: F2's elements are now unverifiable either way, and a period-bearing variant should be added to the bank to restore coverage.",
+        "not_fixed_here": "Adding cases to a frozen adversarial bank mid-sprint would change the denominator this sprint is measured against. It is carried to the real-data handoff instead."
+      },
+      "invariant_breaches": 0
+    }
+  ]
+}

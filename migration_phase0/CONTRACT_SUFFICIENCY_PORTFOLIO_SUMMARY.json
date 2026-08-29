@@ -1,0 +1,1294 @@
+{
+  "rows": [
+    {
+      "case": "A1",
+      "question": "Please provide a portfolio summary",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "default",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A1",
+      "question": "Please provide a portfolio summary",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A1",
+      "question": "Please provide a portfolio summary",
+      "default": "direct",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A2",
+      "question": "Give me a summary of the portfolio",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "default",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A2",
+      "question": "Give me a summary of the portfolio",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A2",
+      "question": "Give me a summary of the portfolio",
+      "default": "direct",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A3",
+      "question": "Can you summarise the book for me?",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "default",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A3",
+      "question": "Can you summarise the book for me?",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A3",
+      "question": "Can you summarise the book for me?",
+      "default": "direct",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A4",
+      "question": "portfolio summary",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "default",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A4",
+      "question": "portfolio summary",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A4",
+      "question": "portfolio summary",
+      "default": "direct",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A5",
+      "question": "summarise the portfolio",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "default",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A5",
+      "question": "summarise the portfolio",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A5",
+      "question": "summarise the portfolio",
+      "default": "direct",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A6",
+      "question": "overview of the portfolio",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "default",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A6",
+      "question": "overview of the portfolio",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "caller_context",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "A6",
+      "question": "overview of the portfolio",
+      "default": "direct",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "caller_context",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L1",
+      "question": "Summarise the acquired book",
+      "default": null,
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L1",
+      "question": "Summarise the acquired book",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L1",
+      "question": "Summarise the acquired book",
+      "default": "direct",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L2",
+      "question": "Summarise the direct book",
+      "default": null,
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L2",
+      "question": "Summarise the direct book",
+      "default": "acquired",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L2",
+      "question": "Summarise the direct book",
+      "default": "direct",
+      "shippedScope": "direct",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "direct",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "direct",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "direct",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L3",
+      "question": "portfolio summary for the acquired book",
+      "default": null,
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L3",
+      "question": "portfolio summary for the acquired book",
+      "default": "acquired",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "L3",
+      "question": "portfolio summary for the acquired book",
+      "default": "direct",
+      "shippedScope": "acquired",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "acquired",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "acquired",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "acquired",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "P1",
+      "question": "portfolio summary across all portfolios",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "P1",
+      "question": "portfolio summary across all portfolios",
+      "default": "acquired",
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "P1",
+      "question": "portfolio summary across all portfolios",
+      "default": "direct",
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "P2",
+      "question": "summarise the portfolio excluding the acquired book",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "P2",
+      "question": "summarise the portfolio excluding the acquired book",
+      "default": "acquired",
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "P2",
+      "question": "summarise the portfolio excluding the acquired book",
+      "default": "direct",
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N1",
+      "question": "Summarise the ALP Origination Book",
+      "default": null,
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N1",
+      "question": "Summarise the ALP Origination Book",
+      "default": "acquired",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N1",
+      "question": "Summarise the ALP Origination Book",
+      "default": "direct",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_origination"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_origination"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_origination"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N2",
+      "question": "Summarise the alp_acquired book",
+      "default": null,
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N2",
+      "question": "Summarise the alp_acquired book",
+      "default": "acquired",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N2",
+      "question": "Summarise the alp_acquired book",
+      "default": "direct",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N3",
+      "question": "Summarise the ALP Acquired Back Book",
+      "default": null,
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N3",
+      "question": "Summarise the ALP Acquired Back Book",
+      "default": "acquired",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "N3",
+      "question": "Summarise the ALP Acquired Back Book",
+      "default": "direct",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "alp_acquired"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "alp_acquired"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "alp_acquired"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "Z1",
+      "question": "Summarise the spv1_sponsored portfolio",
+      "default": null,
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "spv1_sponsored"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "spv1_sponsored"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "spv1_sponsored"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "Z1",
+      "question": "Summarise the spv1_sponsored portfolio",
+      "default": "acquired",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "spv1_sponsored"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "spv1_sponsored"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "spv1_sponsored"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "Z1",
+      "question": "Summarise the spv1_sponsored portfolio",
+      "default": "direct",
+      "shippedScope": "cohort",
+      "shippedFilters": {
+        "source_portfolio_id": [
+          "spv1_sponsored"
+        ]
+      },
+      "contractScope": "cohort",
+      "contractIds": [
+        "spv1_sponsored"
+      ],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "cohort",
+        "ids": [
+          "spv1_sponsored"
+        ],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": true
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "U1",
+      "question": "Summarise the acquired_001 book",
+      "default": null,
+      "shippedScope": "unresolved",
+      "shippedFilters": {},
+      "contractScope": null,
+      "contractIds": [],
+      "contractBlocked": "no interpretation-contract field carries this: source_scope is 'unresolvable' (the question names 'acquired_001', which is not a governed portfolio for this book). Absence of a resolved scope is NOT Total.",
+      "claim": {
+        "state": "unresolvable",
+        "scope": null,
+        "ids": [],
+        "provenance": "unresolved",
+        "base": null,
+        "narrows": false
+      },
+      "verdict": "BLOCKED"
+    },
+    {
+      "case": "U1",
+      "question": "Summarise the acquired_001 book",
+      "default": "acquired",
+      "shippedScope": "unresolved",
+      "shippedFilters": {},
+      "contractScope": null,
+      "contractIds": [],
+      "contractBlocked": "no interpretation-contract field carries this: source_scope is 'unresolvable' (the question names 'acquired_001', which is not a governed portfolio for this book). Absence of a resolved scope is NOT Total.",
+      "claim": {
+        "state": "unresolvable",
+        "scope": null,
+        "ids": [],
+        "provenance": "unresolved",
+        "base": null,
+        "narrows": false
+      },
+      "verdict": "BLOCKED"
+    },
+    {
+      "case": "U1",
+      "question": "Summarise the acquired_001 book",
+      "default": "direct",
+      "shippedScope": "unresolved",
+      "shippedFilters": {},
+      "contractScope": null,
+      "contractIds": [],
+      "contractBlocked": "no interpretation-contract field carries this: source_scope is 'unresolvable' (the question names 'acquired_001', which is not a governed portfolio for this book). Absence of a resolved scope is NOT Total.",
+      "claim": {
+        "state": "unresolvable",
+        "scope": null,
+        "ids": [],
+        "provenance": "unresolved",
+        "base": null,
+        "narrows": false
+      },
+      "verdict": "BLOCKED"
+    },
+    {
+      "case": "U2",
+      "question": "Summarise the Highgate Mortgages Book",
+      "default": null,
+      "shippedScope": "unresolved",
+      "shippedFilters": {},
+      "contractScope": null,
+      "contractIds": [],
+      "contractBlocked": "no interpretation-contract field carries this: source_scope is 'unresolvable' (the question names 'Highgate Mortgages Book', which is not a governed portfolio for this book). Absence of a resolved scope is NOT Total.",
+      "claim": {
+        "state": "unresolvable",
+        "scope": null,
+        "ids": [],
+        "provenance": "unresolved",
+        "base": null,
+        "narrows": false
+      },
+      "verdict": "BLOCKED"
+    },
+    {
+      "case": "U2",
+      "question": "Summarise the Highgate Mortgages Book",
+      "default": "acquired",
+      "shippedScope": "unresolved",
+      "shippedFilters": {},
+      "contractScope": null,
+      "contractIds": [],
+      "contractBlocked": "no interpretation-contract field carries this: source_scope is 'unresolvable' (the question names 'Highgate Mortgages Book', which is not a governed portfolio for this book). Absence of a resolved scope is NOT Total.",
+      "claim": {
+        "state": "unresolvable",
+        "scope": null,
+        "ids": [],
+        "provenance": "unresolved",
+        "base": null,
+        "narrows": false
+      },
+      "verdict": "BLOCKED"
+    },
+    {
+      "case": "U2",
+      "question": "Summarise the Highgate Mortgages Book",
+      "default": "direct",
+      "shippedScope": "unresolved",
+      "shippedFilters": {},
+      "contractScope": null,
+      "contractIds": [],
+      "contractBlocked": "no interpretation-contract field carries this: source_scope is 'unresolvable' (the question names 'Highgate Mortgages Book', which is not a governed portfolio for this book). Absence of a resolved scope is NOT Total.",
+      "claim": {
+        "state": "unresolvable",
+        "scope": null,
+        "ids": [],
+        "provenance": "unresolved",
+        "base": null,
+        "narrows": false
+      },
+      "verdict": "BLOCKED"
+    },
+    {
+      "case": "F1",
+      "question": "Summarise the funded book",
+      "default": null,
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "F1",
+      "question": "Summarise the funded book",
+      "default": "acquired",
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    },
+    {
+      "case": "F1",
+      "question": "Summarise the funded book",
+      "default": "direct",
+      "shippedScope": "total",
+      "shippedFilters": {},
+      "contractScope": "total",
+      "contractIds": [],
+      "contractBlocked": null,
+      "claim": {
+        "state": "filled",
+        "scope": "total",
+        "ids": [],
+        "provenance": "explicit_user",
+        "base": "funded",
+        "narrows": false
+      },
+      "verdict": "match"
+    }
+  ]
+}

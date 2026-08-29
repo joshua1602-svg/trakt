@@ -18,7 +18,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 # Technical diagnostics that are useful for engineers but must NOT appear in the
 # normal user-facing MI card. They are retained in API metadata/diagnostics and
@@ -148,12 +148,37 @@ def _infer_col_format(col: str, resolved: Dict[str, Any]) -> str:
 
 
 def _kpi_label(key: str, resolved: Dict[str, Any]) -> str:
-    base = key
-    for suffix in ("_sum", "_avg", "_weighted_avg", "_median", "_count", "_count_distinct"):
+    """The headline label for one executed measure — INCLUDING what was computed.
+
+    The aggregation suffix was stripped and thrown away, so the KPI for
+    `youngest_borrower_age_avg` read "Youngest Borrower Age: 74" beside a
+    provenance line that correctly said "Average Borrower Age" and a rawValue
+    of 74.33 — the portfolio AVERAGE, headlined as though it were the youngest
+    borrower in the book. The number and the calculation are untouched; what
+    changes is that the label now describes the calculation that produced it.
+
+    The aggregation words come from `execution_receipt._MEASURE_AGG_WORDS`, the
+    vocabulary the receipt already renders that provenance line from, so the
+    headline and the receipt cannot say two different things about one figure.
+    """
+    # LONGEST SUFFIX FIRST. `_avg` matched before `_weighted_avg`, so
+    # `current_loan_to_value_weighted_avg` lost only "_avg" and read
+    # "Average Current Loan To Value Weighted".
+    base, agg = key, ""
+    for suffix in sorted(("_sum", "_avg", "_weighted_avg", "_median",
+                          "_count", "_count_distinct"), key=len, reverse=True):
         if base.endswith(suffix):
-            base = base[: -len(suffix)]
+            base, agg = base[: -len(suffix)], suffix[1:]
             break
-    return base.replace("_", " ").title()
+    try:
+        from mi_agent.execution_receipt import _MEASURE_AGG_WORDS
+        prefix = _MEASURE_AGG_WORDS.get(agg, "")
+    except Exception:  # noqa: BLE001 - no owner, the label is as it was
+        prefix = ""
+    # The FIELD's governed business name where the resolver knows one, so the
+    # headline reads as the registry spells it rather than as the column is
+    # keyed. Same helper the chart series labels already use.
+    return f"{prefix}{_label_for(base, resolved)}".strip()
 
 
 def _format_kpi_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
@@ -171,10 +196,8 @@ def _format_kpi_value(value: Any, fmt: str, scale: Optional[str] = None) -> str:
     if fmt == "pct":
         # Apply the storage scale from the dataset contract: a fraction (0.51)
         # displays as 51.0%, points (51) display as 51.0%. Never guessed.
-        v = float(value)
-        if scale == "percent_fraction":
-            v *= 100.0
-        return f"{v:.1f}%"
+        from mi_agent.mi_dataset_profile import to_display_points
+        return f"{to_display_points(float(value), scale):.1f}%"
     if fmt == "decimal":
         return f"{float(value):.2f}"
     return f"{value:,.0f}" if isinstance(value, (int, float)) else str(value)
@@ -502,7 +525,9 @@ def _interpreted_string(interpreted: Any) -> str:
     return ""
 
 
-def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional[str]) -> str:
+def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional[str],
+            hints: Optional[Dict[str, Any]] = None,
+            spec: Optional[Mapping[str, Any]] = None) -> str:
     """A short, plain-English lead for the chat.
 
     Deliberately does NOT echo the parser interpretation (metric / dimension /
@@ -510,12 +535,170 @@ def _answer(interpreted: Any, qr: Optional[Dict[str, Any]], chart_type: Optional
     ``interpreted`` field, surfaced only behind the UI's collapsed Query Logic
     disclosure. The React response-presenter produces the grounded, data-aware
     sentence; this is a safe neutral fallback for any other API consumer.
+
+    THE SINGLE-FIGURE CASE SAYS THE FIGURE. "What is the total balance for Wales
+    loans?" answered *"Here is the result for your query, covering 1 group(s)"*
+    and then a receipt that names the population and the loan count but not the
+    money — so the headline number of the answer appeared nowhere in the prose,
+    only inside the KPI artifact a text-first channel does not render. "1
+    group(s)" is also not a sentence a lender writes.
+
+    The figures come from the SAME row and the SAME formatter the KPI artifact
+    uses, so the prose and the artifact cannot disagree; this adds a rendering,
+    not a second calculation.
     """
+    rows = (qr.get("data") or []) if qr else []
     n = qr.get("row_count") if qr else None
+    if len(rows) == 1 and chart_type in (None, "none"):
+        line = _scalar_line(rows[0], (qr or {}).get("resolved_fields") or {}, hints,
+                            spec)
+        if line:
+            return line
+    ranked = _ranked_lead(rows, (qr or {}).get("resolved_fields") or {}, hints, spec)
+    if ranked:
+        return ranked
+    # A SINGLE ROW IS A SINGLE FIGURE, whatever chart was chosen for it.
+    #
+    # "What is the balance of offer stage cases?" narrows to one governed stage
+    # and is rendered as a bar, so the scalar branch above — gated on
+    # chart_type — was skipped and the reader got "Here is the bar for your
+    # query, covering 1 group." The money was in the KPI artifact and nowhere
+    # in the prose, which is the same defect that branch was added to fix, one
+    # chart type further along.
+    #
+    # Purely additive and rendering-only: it is reached only where the next
+    # line would have said "covering 1 group", it comes AFTER the ranked lead
+    # so no ranked answer changes, and it uses the same row, labels and
+    # formatters as the KPI artifact — a rendering, not a second calculation.
+    if len(rows) == 1:
+        line = _scalar_line(rows[0], (qr or {}).get("resolved_fields") or {},
+                            hints, spec)
+        if line:
+            return line
     noun = "result" if chart_type in (None, "none") else chart_type
     if n is not None:
-        return f"Here is the {noun} for your query, covering {n} group(s)."
+        groups = "1 group" if n == 1 else f"{n:,} groups"
+        return f"Here is the {noun} for your query, covering {groups}."
     return "Here is the result for your query."
+
+
+def _ranked_lead(rows, resolved: Mapping[str, Any],
+                 hints: Optional[Dict[str, Any]],
+                 spec: Optional[Mapping[str, Any]]) -> str:
+    """"Scotland has the highest Total Balance: £28.9MM (7 groups)."
+
+    A RANKING QUESTION IS ANSWERED BY NAMING THE GROUP. "Which region has the
+    largest balance?" led with *"Here is the bar for your query, covering 7
+    groups"* — true, and not the answer to the question asked. The reader has to
+    read the chart to find out which region, and the same sentence appeared
+    whether they asked for the largest or the smallest.
+
+    Reads the FIRST row of the executed result and nothing else: the executor
+    has already ordered it in the direction the spec asked for, so this states
+    the ordering rather than deciding it. No new calculation, and the value goes
+    through the same formatter the KPI and table artifacts use.
+    """
+    if not rows or not isinstance(spec, Mapping):
+        return ""
+    if not (spec.get("sort_by") or spec.get("ranking_mode") == "grouped"):
+        return ""                       # a plain breakdown is not a ranking
+    dimension = spec.get("dimension")
+    if not dimension:
+        return ""
+    row = rows[0]
+    if dimension not in row:
+        return ""
+    label = str(row.get(dimension) or "").strip()
+    if not label:
+        return ""
+    # The ranked measure as the row spells it: "<metric>_<agg>", else the first
+    # numeric column that is not the loan count.
+    metric = spec.get("sort_by") or spec.get("metric") or ""
+    keys = [k for k in row
+            if k != dimension and isinstance(row.get(k), (int, float))
+            and not isinstance(row.get(k), bool)]
+    ranked_key = next((k for k in keys if metric and str(k).startswith(str(metric))),
+                      next((k for k in keys if not str(k).endswith(("_count", "_pct"))),
+                           None))
+    if ranked_key is None:
+        return ""
+    h = _hint(hints, ranked_key)
+    shown = _format_kpi_value(row.get(ranked_key),
+                              h.get("format") or _infer_col_format(ranked_key, resolved),
+                              h.get("scale"))
+    superlative = ("lowest" if str(spec.get("sort_direction") or "desc").lower() == "asc"
+                   else "highest")
+    measure = _kpi_label(ranked_key, resolved)
+    groups = "1 group" if len(rows) == 1 else f"{len(rows):,} groups"
+    return f"{label} has the {superlative} {measure}: {shown} ({groups})."
+
+
+def _scalar_line(row: Mapping[str, Any], resolved: Mapping[str, Any],
+                 hints: Optional[Dict[str, Any]],
+                 spec: Optional[Mapping[str, Any]] = None) -> str:
+    """"Total Balance: £24.3MM · 93 loans." — the single-figure answer, in words.
+
+    Built from the row the KPI artifact is built from, through the same label
+    and value formatters, so there is one rendering of a figure and not two.
+    """
+    # THE MEASURE THE QUESTION ASKED FOR COMES FIRST, and the SPEC says which
+    # one that is. The row's own order is the executor's, so a balance question
+    # led with a loan count and a count question led with a balance — each
+    # answering with the other's figure. Everything else follows in row order,
+    # so nothing is dropped and the reader still gets the coverage.
+    wanted = ""
+    _grouped = False
+    if isinstance(spec, Mapping):
+        _grouped = bool(spec.get("dimension") or spec.get("dimensions"))
+        if str(spec.get("aggregation") or "").lower() == "count":
+            wanted = "_count"
+        elif spec.get("metric"):
+            wanted = str(spec.get("metric"))
+
+    def _rank(key: str) -> int:
+        key = str(key)
+        # A SHARE answers a share question with the share. The share row also
+        # carries its numerator, its denominator and the population total, and
+        # a lead sentence that opens with "Current Outstanding Balance
+        # Numerator: 5,835,756" buries the 3.4% the reader asked for. All four
+        # stay in the KPI artifact and on the receipt; the sentence leads with
+        # the figure and keeps the coverage.
+        if key.endswith("_share_pct") or key.endswith("_pct"):
+            # ...but a share OF ONE GROUP is not the share anyone asked for.
+            # A grouped result carries a per-group concentration column, so
+            # once this branch also served grouped answers "what is the
+            # balance of offer stage cases?" led with "Concentration Pct:
+            # 100.0%" — the share of the only group, which is 100% by
+            # construction and reads like a finding. The share leads where the
+            # share IS the answer: an ungrouped question about the book.
+            return 0 if not _grouped else 3
+        if key.endswith(("_numerator", "_denominator")) or key == "population_total":
+            return 4
+        if wanted == "_count":
+            return 1 if key.endswith("_count") else 2
+        if wanted and key.startswith(wanted):
+            return 1
+        return 2 if not key.endswith("_count") else 3
+
+    # THREE FIGURES IS A SENTENCE; five is a dump. Ranked first, so what is kept
+    # is what the question asked for.
+    items = sorted((row or {}).items(), key=lambda kv: _rank(kv[0]))[:3]
+    parts = []
+    for key, value in items:
+        h = _hint(hints, key)
+        fmt = h.get("format") or _infer_col_format(key, resolved)
+        shown = _format_kpi_value(value, fmt, h.get("scale"))
+        if shown in (None, ""):
+            continue
+        label = _kpi_label(key, resolved)
+        # A count reads as a count: "93 loans", not "Loan: 93".
+        if str(key).endswith("_count") or fmt == "count":
+            noun = (label or "record").strip().lower()
+            parts.append(f"{shown} {noun}" if noun.endswith("s")
+                         else f"{shown} {noun}s")
+        else:
+            parts.append(f"{label}: {shown}")
+    return " · ".join(parts) + "." if parts else ""
 
 
 def _with_receipt(answer: str, workflow: Dict[str, Any]) -> str:
@@ -719,7 +902,7 @@ def adapt_workflow_result(
         "answer": _with_receipt(
             workflow.get("answer")
             or (workflow.get("error") if refused else None)
-            or _answer(workflow.get("interpreted"), qr, chart_type),
+            or _answer(workflow.get("interpreted"), qr, chart_type, hints, spec),
             workflow),
         # P0: the machine-derived statement of what was ACTUALLY executed —
         # measure, aggregation, filters that really narrowed the frame,

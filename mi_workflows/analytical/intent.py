@@ -44,6 +44,8 @@ the question to the governed route or capability that already owns it.
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
@@ -178,6 +180,27 @@ _LIMIT_TERMS: Tuple[str, ...] = (
 )
 
 #: A question is a FORECAST when it asks about a state that has not happened.
+#: "at risk of BREACHING" is a forward breach, not a current ranking.
+#:
+#: Scoped to limits questions and to this exact construction, deliberately.
+#: `_LIMIT_HEADROOM_TERMS` already contains " at risk ", which is right for
+#: "which limits are most at risk?" — a ranking of today's headroom. But
+#: "at risk of breaching" names a breach that has NOT happened, which is the same
+#: thing "do we expect to breach" and "are any limits projected to breach" name,
+#: and those two already carry FORECAST_PROJECTION + FORECAST_BREACH. Measured
+#: before this: "which concentration tests are we at risk of breaching?"
+#: classified LIMITS_CONCENTRATION only, matching just ('breaching',), and was
+#: answered with today's risk-limit status — the CURRENT-STATE SUBSTITUTION the
+#: frozen bank recorded against Q25A/B/C.
+#:
+#: NOT added to `_FORECAST_TERMS`. That vocabulary is read by every family, and
+#: a phrase that means "forward" only in front of a breach would widen
+#: forecasting across the whole classifier.
+_AT_RISK_OF_BREACH_TERMS: Tuple[str, ...] = (
+    " at risk of breach ", " at risk of breaching ",
+)
+
+
 _FORECAST_TERMS: Tuple[str, ...] = (
     " forecast ", " forecasts ", " forecast to ", " forecasting ",
     " project ", " projected ", " projection ", " projections ",
@@ -213,10 +236,31 @@ _RISK_PROFILE_TERMS: Tuple[str, ...] = (
 #: PIPELINE names the pre-funding dataset — applications, offers and the
 #: transition into funded. Deliberately excludes bare "funded"/"fund", which
 #: name the book itself rather than the flow into it.
+#:
+#: AND IT EXCLUDES A BARE `case`/`cases`, which it used to contain. That word is
+#: DATASET-NEUTRAL in this estate: it names a pipeline case and a funded loan
+#: about equally often, and the P1C golden bank uses it for the second —
+#:
+#:     "Which region gained the most cases since last month?"
+#:
+#: is filed there under `# -- loan count --`, beside "Which region added the
+#: most loans month-on-month?", and expects a ranked FUNDED movement. This
+#: layer read it as PIPELINE and so asserted `REQ_PIPELINE_DATASET` for it,
+#: which `unmet_requirements` then tests against a funded dataset and finds
+#: unmet. `workspace.resolve_dataset` — the authoritative dataset owner — does
+#: not read the bare word, so the two disagreed about the same sentence.
+#:
+#: Removing it costs this layer nothing measurable: all 7 corpus questions
+#: containing `case`/`cases` ALSO say "pipeline" outright, so every one of them
+#: still reaches this family through `" pipeline "` above. `caseload` stays —
+#: it is a different word and names the pipeline unambiguously.
+#:
+#: Explicit pipeline context still makes a case a pipeline case. That is the
+#: house rule, and it is the same one the dataset owner applies.
 _PIPELINE_TERMS: Tuple[str, ...] = (
     " pipeline ", " pipelines ", " application ", " applications ", " kfi ",
-    " kfis ", " offer ", " offers ", " offered ", " at offer ", " case ",
-    " cases ", " caseload ", " in flight ", " in-flight ", " underwriting ",
+    " kfis ", " offer ", " offers ", " offered ", " at offer ",
+    " caseload ", " in flight ", " in-flight ", " underwriting ",
     " decision in principle ", " dip ",
 )
 
@@ -229,6 +273,59 @@ _COMPLETION_TERMS: Tuple[str, ...] = (
     " converting ", " conversion ", " conversions ", " drawdown ",
     " drawdowns ", " draw down ", " drawn down ", " fund out ", " funding out ",
 )
+
+#: Population nouns. A completion term standing immediately before one of these
+#: is describing WHICH LOANS, not an event.
+#:
+#: "drawdown" is a pipeline→funded transition AND, in equity release, a governed
+#: LOAN TYPE. Read only as the event, "how many drawdown loans do we have?" —
+#: a plain count of 244 loans on the funded book — was declined as a pipeline
+#: question the funded executor structurally cannot answer.
+#:
+#: The rule is generic and names no term: a governed category used as an
+#: adjective in front of a population noun is a qualifier. "How many loans are
+#: we drawing down at the moment?" has no population noun after the term and
+#: stays the flow question it is.
+_POPULATION_NOUNS: Tuple[str, ...] = (
+    "loan", "loans", "case", "cases", "mortgage", "mortgages",
+    "account", "accounts", "book", "balance", "balances",
+)
+
+_QUALIFIER_RE = re.compile(
+    r"\b(" + "|".join(t.strip() for t in (
+        " complete ", " completes ", " completing ", " completed ",
+        " completion ", " completions ", " convert ", " converts ",
+        " converting ", " conversion ", " conversions ", " drawdown ",
+        " drawdowns ", " draw down ", " drawn down ")) + r")\s+(?:"
+    + "|".join(_POPULATION_NOUNS) + r")\b", re.I)
+
+
+#: The same rule in the COPULAR form. A completion term PREDICATED OF a
+#: population — "what share of the book IS DRAWDOWN?" — is describing which
+#: loans just as surely as the attributive form is, and it carries no population
+#: noun after the term for `_QUALIFIER_RE` to anchor on.
+#:
+#: Still generic and still names no term. The verb must be followed IMMEDIATELY
+#: by the term, so "how many loans are we drawing down at the moment?" — verb,
+#: then a subject — stays the flow question it is.
+_COMPLEMENT_RE = re.compile(
+    r"\b(?:" + "|".join(_POPULATION_NOUNS) + r")\b[^?.!]{0,24}?"
+    r"\b(?:is|are|was|were)\s+(" + "|".join(t.strip() for t in (
+        " complete ", " completes ", " completing ", " completed ",
+        " completion ", " completions ", " convert ", " converts ",
+        " converting ", " conversion ", " conversions ", " drawdown ",
+        " drawdowns ", " draw down ", " drawn down ")) + r")\b", re.I)
+
+
+def _is_population_qualifier(text: str) -> bool:
+    """True when every completion term in the text qualifies a population."""
+    hits = [t.strip() for t in _COMPLETION_TERMS if t in text]
+    if not hits:
+        return False
+    qualified = {m.group(1).lower() for m in _QUALIFIER_RE.finditer(text)}
+    qualified |= {m.group(1).lower() for m in _COMPLEMENT_RE.finditer(text)}
+    return all(h.lower() in qualified for h in hits)
+
 
 _VINTAGE_TERMS: Tuple[str, ...] = (
     " vintage ", " vintages ", " cohort ", " cohorts ", " seasoning ",
@@ -430,7 +527,44 @@ def is_comparative(question: Optional[str]) -> bool:
     vocabulary — which is how the same question came to resolve two different
     ways depending on which of the two lists happened to contain its wording.
     """
-    return _any(normalise(question), _COMPARISON_TERMS)
+    text = normalise(question)
+    return _any(text, _COMPARISON_TERMS) or names_both_sides_of_a_pair(text)
+
+
+def names_both_sides_of_a_pair(text: str) -> bool:
+    """Whether the sentence names BOTH values of one governed binary dimension.
+
+    NAMING BOTH SIDES *IS* THE COMPARISON. A comparison verb adds nothing to
+    "direct and acquired" — there is no other thing two values of one dimension
+    coordinated by "and" could be asking for once a measure is attached.
+
+    Requiring a verb made this layer disagree with the guard that reads the same
+    sentence. "How have direct and acquired balances moved over the periods?"
+    carries no verb in `_COMPARISON_TERMS`, so no comparison signal was raised,
+    `_plan_population_movement_comparison` declined, and the question fell
+    through to a route returning a whole-book series —
+    `execution_receipt.segments_named_in` then read the SAME sentence against
+    the SAME governed values, found `direct` and `acquired`, and refused
+    "Direct and Acquired tracked separately … could not be applied". True of
+    the route, false of the product: the identical request with the word
+    "compare" in it composes and answers.
+
+    Deliberately narrow. It asks only about the two GOVERNED BINARY dimensions
+    whose vocabularies are owned elsewhere — the portfolio lens (direct /
+    acquired) and seasoning (front book / back book). It says nothing about two
+    DIMENSIONS coordinated by "and": "balance by month by region and LTV band"
+    names no value of either pair, raises no signal here, and keeps its P0
+    refusal.
+    """
+    try:
+        from mi_agent import portfolio_lens as _lens
+    except Exception:  # noqa: BLE001 - recognition must never break on an import
+        return False
+    both_provenance = (_lens._contains_any(text, _lens._DIRECT_TERMS)
+                       and _lens._contains_any(text, _lens._ACQUIRED_TERMS))
+    if both_provenance:
+        return True
+    return " front book " in text and " back book " in text
 
 
 # --------------------------------------------------------------------------- #
@@ -544,7 +678,11 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     matched: List[str] = []
     signals: List[str] = []
 
-    comparative = _any(text, _COMPARISON_TERMS)
+    # Through the SHARED definition, not a second copy of the vocabulary —
+    # which is the drift `is_comparative`'s own docstring warns about, and which
+    # is how this line and the planner came to answer the same question two
+    # different ways.
+    comparative = _any(text, _COMPARISON_TERMS) or names_both_sides_of_a_pair(text)
     changing = _any(text, _CHANGE_TERMS)
     # A comparison against a PAST period is a change question, whether or not
     # the sentence contains a change verb.
@@ -556,6 +694,13 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     rating = _any(text, _RUN_RATE_TERMS)
     limiting = _any(text, _LIMIT_TERMS)
     forecasting = _any(text, _FORECAST_TERMS) or _spec_forecast(spec)
+    # A LIMIT question asking about the risk of BREACHING is forward, and is
+    # classified with the other forward-breach phrasings rather than as a
+    # ranking of today's headroom. Gated on `limiting` so the phrase cannot
+    # widen any other family.
+    if limiting and _any(text, _AT_RISK_OF_BREACH_TERMS):
+        forecasting = True
+        matched += _hits(text, _AT_RISK_OF_BREACH_TERMS)
 
     if comparative:
         signals.append(SIGNAL_COMPARISON); matched += _hits(text, _COMPARISON_TERMS)
@@ -572,7 +717,8 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     windows = tuple(_seasoning.lending_windows_named(question))
 
     profiling = _any(text, _PROFILE_TERMS) or _any(text, _RISK_PROFILE_TERMS)
-    completing = _any(text, _COMPLETION_TERMS)
+    completing = (_any(text, _COMPLETION_TERMS)
+                  and not _is_population_qualifier(text))
     pipelining = _any(text, _PIPELINE_TERMS) or completing
     vintaging = _any(text, _VINTAGE_TERMS) or bool(windows)
 

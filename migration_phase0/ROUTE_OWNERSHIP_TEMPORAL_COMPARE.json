@@ -1,0 +1,890 @@
+{
+  "cases": [
+    {
+      "case": "A1",
+      "question": "Compare April and May funded balance.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.95bn in 2026-05 \u2014 a change of \u00a314.5m (+0.75%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.95bn in 2026-05 \u2014 a change of \u00a314.5m (+0.75%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "A2",
+      "question": "Compare May and June funded balance.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.95bn in 2026-05 to \u00a31.96bn in 2026-06 \u2014 a change of \u00a318.1m (+0.93%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.95bn in 2026-05 to \u00a31.96bn in 2026-06 \u2014 a change of \u00a318.1m (+0.93%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "A3",
+      "question": "Compare April and June funded balance.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn in 2026-06 \u2014 a change of \u00a332.6m (+1.69%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn in 2026-06 \u2014 a change of \u00a332.6m (+1.69%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "A4",
+      "question": "Compare May and June loan count.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Loan count moved from 11,013 in 2026-05 to 11,035 in 2026-06 \u2014 a change of 22 (+0.2%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Loan count moved from 11,013 in 2026-05 to 11,035 in 2026-06 \u2014 a change of 22 (+0.2%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "A5",
+      "question": "Compare May and June WA current LTV.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "WA current LTV moved from 42.9% in 2026-05 to 43.2% in 2026-06 \u2014 a change of 0.3% (+0.65%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "WA current LTV moved from 42.9% in 2026-05 to 43.2% in 2026-06 \u2014 a change of 0.3% (+0.65%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "A6",
+      "question": "Compare May and June average interest rate.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "WA interest rate moved from 6.6% in 2026-05 to 6.6% in 2026-06 \u2014 a change of 0.0% (+0.0%, flat).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "WA interest rate moved from 6.6% in 2026-05 to 6.6% in 2026-06 \u2014 a change of 0.0% (+0.0%, flat).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "A7",
+      "question": "Compare May and June borrower age.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Average borrower age moved from 71.34 in 2026-05 to 71.40 in 2026-06 \u2014 a change of 0.06 (+0.08%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Average borrower age moved from 71.34 in 2026-05 to 71.40 in 2026-06 \u2014 a change of 0.06 (+0.08%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "A8",
+      "question": "Compare May and June case count.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Loan count moved from 11,013 in 2026-05 to 11,035 in 2026-06 \u2014 a change of 22 (+0.2%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Loan count moved from 11,013 in 2026-05 to 11,035 in 2026-06 \u2014 a change of 22 (+0.2%, up).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "V2",
+      "question": "Compare this month and last month funded balance.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.96bn in 2026-06 to \u00a31.95bn in 2026-05 \u2014 a change of \u00a318.1m (-0.92%, down).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Funded balance moved from \u00a31.96bn in 2026-06 to \u00a31.95bn in 2026-05 \u2014 a change of \u00a318.1m (-0.92%, down).\n\nCalculated: Governed period comparison.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "O1",
+      "question": "Compare October and November WA LTV.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa current ltv: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa current ltv: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "O2",
+      "question": "Compare latest pipeline with prior pipeline.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare latest and prior pipeline for pipeline amount: requested period(s) unavailable: latest, prior pipeline. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare latest and prior pipeline for pipeline amount: requested period(s) unavailable: latest, prior pipeline. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "T1",
+      "question": "Compare October and November funded balance.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for funded balance: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for funded balance: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "T2",
+      "question": "Compare September and October funded balance",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare September and October for funded balance: requested period(s) unavailable: September, October.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare September and October for funded balance: requested period(s) unavailable: September, October.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "T3",
+      "question": "Compare the funded balance in October and November.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for funded balance: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for funded balance: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "T4",
+      "question": "Compare October and November loan count.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for loan count: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for loan count: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "M1",
+      "question": "Compare October and November WA current LTV.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa current ltv: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa current ltv: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "M2",
+      "question": "Compare October and November average interest rate.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa interest rate: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for wa interest rate: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "P1",
+      "question": "Compare October and November pipeline amount.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for pipeline amount: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for pipeline amount: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "P2",
+      "question": "How did the pipeline amount change from last week?",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": null,
+          "answer": "I understood that you asked for week, but that could not be applied to the calculation (week \u2014 this answer is reported at month level, not by week). I have not substituted a broader figure.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": null,
+          "answer": "I understood that you asked for week, but that could not be applied to the calculation (week \u2014 this answer is reported at month level, not by week). I have not substituted a broader figure.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "P3",
+      "question": "Compare October and November case count.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for loan count: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for loan count: requested period(s) unavailable: October, November.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "P4",
+      "question": "Compare October and November KFI count.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for pipeline case count: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for pipeline case count: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "P5",
+      "question": "Compare October and November application count.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for pipeline case count: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and November for pipeline case count: requested period(s) unavailable: October, November. Only one reporting period is available.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "D1",
+      "question": "Compare October and November balance, excluding pipeline cases.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": null,
+          "answer": "I understood that you asked for excluding pipeline cases, but that could not be applied to the calculation (excluding pipeline cases \u2014 this was asked for alongside measures that were calculated, but it is not a governed ",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": null,
+          "answer": "I understood that you asked for excluding pipeline cases, but that could not be applied to the calculation (excluding pipeline cases \u2014 this was asked for alongside measures that were calculated, but it is not a governed ",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "R1",
+      "question": "Compare October and December funded balance.",
+      "expectedOther": null,
+      "ownedByTemporalCompare": true,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and December for funded balance: requested period(s) unavailable: October, December.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "temporal_compare",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "I can't compare October and December for funded balance: requested period(s) unavailable: October, December.\n\nCalculated: Governed period comparison.",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "X1",
+      "question": "What is the funded balance?",
+      "expectedOther": "a point-in-time question, no periods",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+          "artifactKinds": [
+            "kpi"
+          ]
+        },
+        "pipeline": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+          "artifactKinds": [
+            "kpi"
+          ]
+        }
+      }
+    },
+    {
+      "case": "X2",
+      "question": "How has the funded balance moved?",
+      "expectedOther": "period movement \u2014 the governed composite, which sits earlier",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a318.1m (\u00a31.95bn \u2192 \u00a31.96bn). No governed",
+          "artifactKinds": [
+            "kpi",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a318.1m (\u00a31.95bn \u2192 \u00a31.96bn). No governed",
+          "artifactKinds": [
+            "kpi",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "X3",
+      "question": "Show the funded balance trend over the last six months",
+      "expectedOther": "evolution \u2014 a series, not a pair",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "evolution",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": "funded",
+          "answer": "I understood that you asked for comparison period (over the stated period), but that could not be applied to the calculation (comparison period (over the stated period) \u2014 you asked about the last 6 months, which spans 6 ",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "evolution",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": "funded",
+          "answer": "I understood that you asked for comparison period (over the stated period), but that could not be applied to the calculation (comparison period (over the stated period) \u2014 you asked about the last 6 months, which spans 6 ",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "X4",
+      "question": "What is the geographic exposure?",
+      "expectedOther": "geo_exposure",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "geo_exposure",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Largest geographic concentration: Westminster and City of London at \u00a383.4m (4.2% of the book) across 172 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "X5",
+      "question": "Funded balance bridge from October to November",
+      "expectedOther": "the funded bridge route",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "funded_bridge",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m).\n\nCalculated: Funded balance bridge.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "funded_bridge",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": "funded",
+          "answer": "Obligor Region (NUTS3) bridge (Total): funded balance moved from \u00a31.93bn in 2026-04 to \u00a31.96bn at 2026-06 (latest) \u2014 a net change of +\u00a332.6m (up). Largest mover: South East (+\u00a311.1m).\n\nCalculated: Funded balance bridge.",
+          "artifactKinds": [
+            "chart",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "X6",
+      "question": "Compare October and November forecast balance.",
+      "expectedOther": "analytical_composition claims it first \u2014 the third view never reaches this route by this phrasing, so `forecast` is NOT on the owned surface",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "analytical_composition",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": null,
+          "answer": "No governed pipeline source is available for this book, so a forecast funded balance cannot be produced. The current funded balance above is not a forecast. No governed pipeline source is configured for this book. I have",
+          "artifactKinds": []
+        },
+        "pipeline": {
+          "route": "analytical_composition",
+          "ok": false,
+          "controlledRefusal": true,
+          "datasetInReconciliation": null,
+          "answer": "No governed pipeline source is available for this book, so a forecast funded balance cannot be produced. The current funded balance above is not a forecast. No governed pipeline source is configured for this book. I have",
+          "artifactKinds": []
+        }
+      }
+    },
+    {
+      "case": "X8",
+      "question": "Compare the latest funded balance with the prior period.",
+      "expectedOther": "period_change_analysis claims it first, at priority 85",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a318.1m (\u00a31.95bn \u2192 \u00a31.96bn). No governed",
+          "artifactKinds": [
+            "kpi",
+            "table"
+          ]
+        },
+        "pipeline": {
+          "route": "period_change_analysis",
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Between 31 May 2026 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a318.1m (\u00a31.95bn \u2192 \u00a31.96bn). No governed",
+          "artifactKinds": [
+            "kpi",
+            "table"
+          ]
+        }
+      }
+    },
+    {
+      "case": "X7",
+      "question": "Compare Narnia and November funded balance.",
+      "expectedOther": "no route at all: an unresolvable period token leaves `compare_periods` short of two, so the recogniser never fires",
+      "ownedByTemporalCompare": false,
+      "asExpected": true,
+      "byDataset": {
+        "funded": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+          "artifactKinds": [
+            "kpi"
+          ]
+        },
+        "pipeline": {
+          "route": null,
+          "ok": true,
+          "controlledRefusal": null,
+          "datasetInReconciliation": null,
+          "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Total Balance \u00b7 entire funded portfolio \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+          "artifactKinds": [
+            "kpi"
+          ]
+        }
+      }
+    }
+  ]
+}

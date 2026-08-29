@@ -1,0 +1,1372 @@
+{
+  "truth": {
+    "loan_count": 11035,
+    "total_balance": 1964886258.21,
+    "ltv_whole_simple": 40.26894497250826,
+    "ltv_whole_weighted": 43.14883694960241,
+    "big_count": 5857,
+    "big_balance": 1444994437.49,
+    "ltv_big_simple": 44.320798767544524,
+    "ltv_big_weighted": 45.39733899235538,
+    "ltv_buckets": 9,
+    "ticket_buckets": 7,
+    "cross_cells": 50,
+    "cross_total": 1964886258.21
+  },
+  "rows": [
+    {
+      "shape": "A",
+      "shape_name": "portfolio summary",
+      "id": "A1",
+      "question": "Please provide a portfolio summary",
+      "outcome": "correct",
+      "note": "states 11035 loans and \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": "portfolio_summary",
+        "view": "funded",
+        "verdict": null,
+        "facets": [],
+        "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+        "measure": "Governed analysis",
+        "aggregation": null,
+        "filters_applied": [],
+        "dimensions_applied": [],
+        "population": null,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Portfolio summary \u2014 30 June 2026",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": null,
+                "value": "11,035",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "\u00a31.96bn",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "43.2%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "0.07%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "71.4 years",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "30 June 2026",
+                "rawValue": null
+              }
+            ],
+            "sample": []
+          },
+          {
+            "type": "chart",
+            "title": "Funded balance by region",
+            "rows": 8,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "region": "South East",
+                "value": 516214136.58,
+                "share": 0.26272
+              },
+              {
+                "region": "London",
+                "value": 413804467.49,
+                "share": 0.2106
+              },
+              {
+                "region": "South West",
+                "value": 237410495.59,
+                "share": 0.120827
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Funded balance by source portfolio",
+            "rows": 2,
+            "columns": [
+              "portfolio",
+              "balance"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "portfolio": "ALP Origination Book",
+                "balance": 1385508582.98
+              },
+              {
+                "portfolio": "ALP Acquired Back Book",
+                "balance": 579377675.23
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "A",
+      "shape_name": "portfolio summary",
+      "id": "A2",
+      "question": "Give me a summary of the portfolio",
+      "outcome": "correct",
+      "note": "states 11035 loans and \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": "portfolio_summary",
+        "view": "funded",
+        "verdict": null,
+        "facets": [],
+        "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+        "measure": "Governed analysis",
+        "aggregation": null,
+        "filters_applied": [],
+        "dimensions_applied": [],
+        "population": null,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Portfolio summary \u2014 30 June 2026",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": null,
+                "value": "11,035",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "\u00a31.96bn",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "43.2%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "0.07%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "71.4 years",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "30 June 2026",
+                "rawValue": null
+              }
+            ],
+            "sample": []
+          },
+          {
+            "type": "chart",
+            "title": "Funded balance by region",
+            "rows": 8,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "region": "South East",
+                "value": 516214136.58,
+                "share": 0.26272
+              },
+              {
+                "region": "London",
+                "value": 413804467.49,
+                "share": 0.2106
+              },
+              {
+                "region": "South West",
+                "value": 237410495.59,
+                "share": 0.120827
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Funded balance by source portfolio",
+            "rows": 2,
+            "columns": [
+              "portfolio",
+              "balance"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "portfolio": "ALP Origination Book",
+                "balance": 1385508582.98
+              },
+              {
+                "portfolio": "ALP Acquired Back Book",
+                "balance": 579377675.23
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "A",
+      "shape_name": "portfolio summary",
+      "id": "A3",
+      "question": "Can you summarise the book for me?",
+      "outcome": "correct",
+      "note": "states 11035 loans and \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": "portfolio_summary",
+        "view": "funded",
+        "verdict": null,
+        "facets": [],
+        "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+        "measure": "Governed analysis",
+        "aggregation": null,
+        "filters_applied": [],
+        "dimensions_applied": [],
+        "population": null,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Portfolio summary \u2014 30 June 2026",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": null,
+                "value": "11,035",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "\u00a31.96bn",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "43.2%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "0.07%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "71.4 years",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "30 June 2026",
+                "rawValue": null
+              }
+            ],
+            "sample": []
+          },
+          {
+            "type": "chart",
+            "title": "Funded balance by region",
+            "rows": 8,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "region": "South East",
+                "value": 516214136.58,
+                "share": 0.26272
+              },
+              {
+                "region": "London",
+                "value": 413804467.49,
+                "share": 0.2106
+              },
+              {
+                "region": "South West",
+                "value": 237410495.59,
+                "share": 0.120827
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Funded balance by source portfolio",
+            "rows": 2,
+            "columns": [
+              "portfolio",
+              "balance"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "portfolio": "ALP Origination Book",
+                "balance": 1385508582.98
+              },
+              {
+                "portfolio": "ALP Acquired Back Book",
+                "balance": 579377675.23
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "A",
+      "shape_name": "portfolio summary",
+      "id": "A4",
+      "question": "What are the headline numbers for the portfolio?",
+      "outcome": "correct",
+      "note": "states 11035 loans and \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": "portfolio_summary",
+        "view": "funded",
+        "verdict": null,
+        "facets": [],
+        "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+        "measure": "Governed analysis",
+        "aggregation": null,
+        "filters_applied": [],
+        "dimensions_applied": [],
+        "population": null,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Portfolio summary \u2014 30 June 2026",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": null,
+                "value": "11,035",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "\u00a31.96bn",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "43.2%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "0.07%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "71.4 years",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "30 June 2026",
+                "rawValue": null
+              }
+            ],
+            "sample": []
+          },
+          {
+            "type": "chart",
+            "title": "Funded balance by region",
+            "rows": 8,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "region": "South East",
+                "value": 516214136.58,
+                "share": 0.26272
+              },
+              {
+                "region": "London",
+                "value": 413804467.49,
+                "share": 0.2106
+              },
+              {
+                "region": "South West",
+                "value": 237410495.59,
+                "share": 0.120827
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Funded balance by source portfolio",
+            "rows": 2,
+            "columns": [
+              "portfolio",
+              "balance"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "portfolio": "ALP Origination Book",
+                "balance": 1385508582.98
+              },
+              {
+                "portfolio": "ALP Acquired Back Book",
+                "balance": 579377675.23
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "A",
+      "shape_name": "portfolio summary",
+      "id": "A5",
+      "question": "Tell me the basics about this book",
+      "outcome": "correct",
+      "note": "states 11035 loans and \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": "portfolio_summary",
+        "view": "funded",
+        "verdict": null,
+        "facets": [],
+        "answer": "At 30 June 2026 the portfolio holds 11,035 loans with a funded balance of \u00a31.96bn. Weighted-average current LTV is 43.2%, the weighted-average interest rate is 0.07% and the average youngest-borrower age is 71.4 years. The largest regional exposures are South East (\u00a3516.2m, 26.3%), London (\u00a3413.8m, 21.1%) and South West (\u00a3237.4m, 12.1%). By source portfolio: ALP Origination Book \u00a31.39bn and ALP Acquired Back Book \u00a3579.4m.\n\nCalculated: Governed analysis.",
+        "measure": "Governed analysis",
+        "aggregation": null,
+        "filters_applied": [],
+        "dimensions_applied": [],
+        "population": null,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Portfolio summary \u2014 30 June 2026",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": null,
+                "value": "11,035",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "\u00a31.96bn",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "43.2%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "0.07%",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "71.4 years",
+                "rawValue": null
+              },
+              {
+                "field": null,
+                "value": "30 June 2026",
+                "rawValue": null
+              }
+            ],
+            "sample": []
+          },
+          {
+            "type": "chart",
+            "title": "Funded balance by region",
+            "rows": 8,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "region": "South East",
+                "value": 516214136.58,
+                "share": 0.26272
+              },
+              {
+                "region": "London",
+                "value": 413804467.49,
+                "share": 0.2106
+              },
+              {
+                "region": "South West",
+                "value": 237410495.59,
+                "share": 0.120827
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Funded balance by source portfolio",
+            "rows": 2,
+            "columns": [
+              "portfolio",
+              "balance"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "portfolio": "ALP Origination Book",
+                "balance": 1385508582.98
+              },
+              {
+                "portfolio": "ALP Acquired Back Book",
+                "balance": 579377675.23
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "B",
+      "shape_name": "a value in a filter position",
+      "id": "B1",
+      "question": "What is the LTV for loan tickets above \u00a3150k?",
+      "outcome": "correct",
+      "note": "states the LTV of the 5857 loans over \u00a3150k",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "threshold",
+            "applied"
+          ],
+          [
+            "row_population",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 Balance > 150000 \u00b7 5,857 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
+        "measure": "Current LTV",
+        "aggregation": "weighted_avg",
+        "filters_applied": [
+          "Balance > 150000"
+        ],
+        "dimensions_applied": [],
+        "population": 5857,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Summary",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": "loan_count",
+                "value": "5,857",
+                "rawValue": 5857.0
+              },
+              {
+                "field": "current_loan_to_value_weighted_avg",
+                "value": "45.4%",
+                "rawValue": 45.4035771703
+              }
+            ],
+            "sample": []
+          }
+        ],
+        "kpi_values": [
+          5857.0,
+          45.4035771703
+        ],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "B",
+      "shape_name": "a value in a filter position",
+      "id": "B2",
+      "question": "What is the average LTV on loans over \u00a3150k?",
+      "outcome": "correct",
+      "note": "states the LTV of the 5857 loans over \u00a3150k",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "threshold",
+            "applied"
+          ],
+          [
+            "requested_statistic",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 Balance > 150000 \u00b7 5,857 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
+        "measure": "Current LTV",
+        "aggregation": "weighted_avg",
+        "filters_applied": [
+          "Balance > 150000"
+        ],
+        "dimensions_applied": [],
+        "population": 5857,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Summary",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": "loan_count",
+                "value": "5,857",
+                "rawValue": 5857.0
+              },
+              {
+                "field": "current_loan_to_value_weighted_avg",
+                "value": "45.4%",
+                "rawValue": 45.4035771703
+              }
+            ],
+            "sample": []
+          }
+        ],
+        "kpi_values": [
+          5857.0,
+          45.4035771703
+        ],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "B",
+      "shape_name": "a value in a filter position",
+      "id": "B3",
+      "question": "Show me the LTV for loans with a balance above \u00a3150,000",
+      "outcome": "correct",
+      "note": "loan-level over the 5857 loans over \u00a3150k, carrying the LTV column",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "threshold",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the result for your query, covering 50 group(s).\n\nCalculated: Loan-level Current LTV \u00b7 Balance > 150000 \u00b7 50 groups \u00b7 5,857 loans \u00b7 as at 30 June 2026.",
+        "measure": "Current LTV",
+        "aggregation": "loan_level",
+        "filters_applied": [
+          "Balance > 150000"
+        ],
+        "dimensions_applied": [],
+        "population": 5857,
+        "group_count": 50,
+        "artifacts": [
+          {
+            "type": "table",
+            "title": "Result",
+            "rows": 50,
+            "columns": [
+              "loan_identifier",
+              "current_outstanding_balance",
+              "current_principal_balance",
+              "current_loan_to_value",
+              "original_loan_to_value",
+              "youngest_borrower_age",
+              "current_interest_rate",
+              "geographic_region_obligor",
+              "origination_channel"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "loan_identifier": "ALP_ACQUIRED-003014",
+                "current_outstanding_balance": 227662.8,
+                "current_principal_balance": 227662.8,
+                "current_loan_to_value": 86.3797051243,
+                "original_loan_to_value": 30.5579399142,
+                "youngest_borrower_age": 76,
+                "current_interest_rate": 8.261,
+                "geographic_region_obligor": "TLC42",
+                "origination_channel": "Broker"
+              },
+              {
+                "loan_identifier": "ALP_ACQUIRED-002390",
+                "current_outstanding_balance": 455343.91,
+                "current_principal_balance": 455343.91,
+                "current_loan_to_value": 85.7822016252,
+                "original_loan_to_value": 42.5213675214,
+                "youngest_borrower_age": 87,
+                "current_interest_rate": 7.116,
+                "geographic_region_obligor": "TLI35",
+                "origination_channel": "Broker"
+              },
+              {
+                "loan_identifier": "ALP_ACQUIRED-002188",
+                "current_outstanding_balance": 167816.69,
+                "current_principal_balance": 167816.69,
+                "current_loan_to_value": 85.7131511094,
+                "original_loan_to_value": 26.6860465116,
+                "youngest_borrower_age": 73,
+                "current_interest_rate": 6.893,
+                "geographic_region_obligor": "TLK51",
+                "origination_channel": "Broker"
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "B",
+      "shape_name": "a value in a filter position",
+      "id": "B4",
+      "question": "For tickets larger than \u00a3150k, what is the LTV?",
+      "outcome": "correct",
+      "note": "states the LTV of the 5857 loans over \u00a3150k",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "threshold",
+            "applied"
+          ],
+          [
+            "row_population",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 Balance > 150000 \u00b7 5,857 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
+        "measure": "Current LTV",
+        "aggregation": "weighted_avg",
+        "filters_applied": [
+          "Balance > 150000"
+        ],
+        "dimensions_applied": [],
+        "population": 5857,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Summary",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": "loan_count",
+                "value": "5,857",
+                "rawValue": 5857.0
+              },
+              {
+                "field": "current_loan_to_value_weighted_avg",
+                "value": "45.4%",
+                "rawValue": 45.4035771703
+              }
+            ],
+            "sample": []
+          }
+        ],
+        "kpi_values": [
+          5857.0,
+          45.4035771703
+        ],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "B",
+      "shape_name": "a value in a filter position",
+      "id": "B5",
+      "question": "What LTV are we running on loans bigger than \u00a3150k?",
+      "outcome": "correct",
+      "note": "states the LTV of the 5857 loans over \u00a3150k",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "threshold",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the result for your query, covering 1 group(s).\n\nCalculated: Weighted-average Current LTV \u00b7 Balance > 150000 \u00b7 5,857 loans \u00b7 as at 30 June 2026. Interpretation confidence: medium \u2014 check the scope above matches your question.",
+        "measure": "Current LTV",
+        "aggregation": "weighted_avg",
+        "filters_applied": [
+          "Balance > 150000"
+        ],
+        "dimensions_applied": [],
+        "population": 5857,
+        "group_count": null,
+        "artifacts": [
+          {
+            "type": "kpi",
+            "title": "Summary",
+            "rows": 0,
+            "columns": [],
+            "kpis": [
+              {
+                "field": "loan_count",
+                "value": "5,857",
+                "rawValue": 5857.0
+              },
+              {
+                "field": "current_loan_to_value_weighted_avg",
+                "value": "45.4%",
+                "rawValue": 45.4035771703
+              }
+            ],
+            "sample": []
+          }
+        ],
+        "kpi_values": [
+          5857.0,
+          45.4035771703
+        ],
+        "table_total": null,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "C",
+      "shape_name": "two groupings at once",
+      "id": "C1",
+      "question": "Show me balance by LTV by ticket size",
+      "outcome": "correct",
+      "note": "both dimensions applied, 50 cells, reconciles to \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the heatmap for your query, covering 50 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket and Ticket Size \u00b7 50 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "measure": "Balance",
+        "aggregation": "sum",
+        "filters_applied": [],
+        "dimensions_applied": [
+          "LTV Bucket",
+          "Ticket Size"
+        ],
+        "population": 11035,
+        "group_count": 50,
+        "artifacts": [
+          {
+            "type": "chart",
+            "title": "Show me balance by LTV by ticket size",
+            "rows": 50,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Show me balance by LTV by ticket size",
+            "rows": 50,
+            "columns": [
+              "ltv_bucket",
+              "ticket_bucket",
+              "current_outstanding_balance_sum",
+              "concentration_pct"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": 1964886258.2099998,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "C",
+      "shape_name": "two groupings at once",
+      "id": "C2",
+      "question": "Balance broken down by LTV band and ticket size",
+      "outcome": "correct",
+      "note": "both dimensions applied, 50 cells, reconciles to \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the heatmap for your query, covering 50 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket and Ticket Size \u00b7 50 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "measure": "Balance",
+        "aggregation": "sum",
+        "filters_applied": [],
+        "dimensions_applied": [
+          "LTV Bucket",
+          "Ticket Size"
+        ],
+        "population": 11035,
+        "group_count": 50,
+        "artifacts": [
+          {
+            "type": "chart",
+            "title": "Balance broken down by LTV band and ticket size",
+            "rows": 50,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Balance broken down by LTV band and ticket size",
+            "rows": 50,
+            "columns": [
+              "ltv_bucket",
+              "ticket_bucket",
+              "current_outstanding_balance_sum",
+              "concentration_pct"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": 1964886258.2099998,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "C",
+      "shape_name": "two groupings at once",
+      "id": "C3",
+      "question": "What is the balance by ticket size and LTV bucket?",
+      "outcome": "correct",
+      "note": "both dimensions applied, 50 cells, reconciles to \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the heatmap for your query, covering 50 group(s).\n\nCalculated: Total Balance \u00b7 grouped by Ticket Size and LTV Bucket \u00b7 50 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "measure": "Balance",
+        "aggregation": "sum",
+        "filters_applied": [],
+        "dimensions_applied": [
+          "Ticket Size",
+          "LTV Bucket"
+        ],
+        "population": 11035,
+        "group_count": 50,
+        "artifacts": [
+          {
+            "type": "chart",
+            "title": "What is the balance by ticket size and LTV bucket?",
+            "rows": 50,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "ticket_bucket": "200-300k",
+                "ltv_bucket": "40-50%",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ticket_bucket": "200-300k",
+                "ltv_bucket": "30-40%",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ticket_bucket": "300-500k",
+                "ltv_bucket": "40-50%",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "What is the balance by ticket size and LTV bucket?",
+            "rows": 50,
+            "columns": [
+              "ticket_bucket",
+              "ltv_bucket",
+              "current_outstanding_balance_sum",
+              "concentration_pct"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "ticket_bucket": "200-300k",
+                "ltv_bucket": "40-50%",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ticket_bucket": "200-300k",
+                "ltv_bucket": "30-40%",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ticket_bucket": "300-500k",
+                "ltv_bucket": "40-50%",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": 1964886258.2099998,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "C",
+      "shape_name": "two groupings at once",
+      "id": "C4",
+      "question": "Give me a breakdown of balance across LTV and ticket size",
+      "outcome": "correct",
+      "note": "both dimensions applied, 50 cells, reconciles to \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the heatmap for your query, covering 50 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket and Ticket Size \u00b7 50 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "measure": "Balance",
+        "aggregation": "sum",
+        "filters_applied": [],
+        "dimensions_applied": [
+          "LTV Bucket",
+          "Ticket Size"
+        ],
+        "population": 11035,
+        "group_count": 50,
+        "artifacts": [
+          {
+            "type": "chart",
+            "title": "Give me a breakdown of balance across LTV and ticket size",
+            "rows": 50,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Give me a breakdown of balance across LTV and ticket size",
+            "rows": 50,
+            "columns": [
+              "ltv_bucket",
+              "ticket_bucket",
+              "current_outstanding_balance_sum",
+              "concentration_pct"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": 1964886258.2099998,
+        "controlled_refusal": false
+      }
+    },
+    {
+      "shape": "C",
+      "shape_name": "two groupings at once",
+      "id": "C5",
+      "question": "Show balance split by LTV bucket, then by ticket size",
+      "outcome": "correct",
+      "note": "both dimensions applied, 50 cells, reconciles to \u00a31964886258.21",
+      "seen": {
+        "ok": true,
+        "route": null,
+        "view": "funded",
+        "verdict": "ok",
+        "facets": [
+          [
+            "grouping_dimension",
+            "applied"
+          ],
+          [
+            "grouping_dimension",
+            "applied"
+          ]
+        ],
+        "answer": "Here is the heatmap for your query, covering 50 group(s).\n\nCalculated: Total Balance \u00b7 grouped by LTV Bucket and Ticket Size \u00b7 50 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+        "measure": "Balance",
+        "aggregation": "sum",
+        "filters_applied": [],
+        "dimensions_applied": [
+          "LTV Bucket",
+          "Ticket Size"
+        ],
+        "population": 11035,
+        "group_count": 50,
+        "artifacts": [
+          {
+            "type": "chart",
+            "title": "Show balance split by LTV bucket, then by ticket size",
+            "rows": 50,
+            "columns": [],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          },
+          {
+            "type": "table",
+            "title": "Show balance split by LTV bucket, then by ticket size",
+            "rows": 50,
+            "columns": [
+              "ltv_bucket",
+              "ticket_bucket",
+              "current_outstanding_balance_sum",
+              "concentration_pct"
+            ],
+            "kpis": [],
+            "sample": [
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 241232481.20999998,
+                "concentration_pct": 12.2771727983
+              },
+              {
+                "ltv_bucket": "30-40%",
+                "ticket_bucket": "200-300k",
+                "current_outstanding_balance_sum": 179500793.42000002,
+                "concentration_pct": 9.1354292224
+              },
+              {
+                "ltv_bucket": "40-50%",
+                "ticket_bucket": "300-500k",
+                "current_outstanding_balance_sum": 171486220.69,
+                "concentration_pct": 8.7275393155
+              }
+            ]
+          }
+        ],
+        "kpi_values": [],
+        "table_total": 1964886258.2099998,
+        "controlled_refusal": false
+      }
+    }
+  ]
+}

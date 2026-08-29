@@ -1,0 +1,782 @@
+[
+ {
+  "id": "CFO60",
+  "question": "Show product concentration.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "concentration_analysis",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for product, but that could not be applied to the calculation (product — this answ",
+  "CR": "CR5",
+  "why": "the concentration route measures a GOVERNED dimension set; the sibling 'Show origination channel concentration.' answers, 'product' is not in the set. Extending it changes governed concentration configuration."
+ },
+ {
+  "id": "CFO61",
+  "question": "Show broker concentration.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "concentration_analysis",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for broker, but that could not be applied to the calculation (broker — this answer",
+  "CR": "CR5",
+  "why": "as CFO60: 'broker' is not in the governed concentration dimension set."
+ },
+ {
+  "id": "CFO71",
+  "question": "What is the value of outstanding offers?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [
+   "PIPELINE"
+  ],
+  "requirements": [
+   "pipeline_dataset"
+  ],
+  "operations": [
+   "STOCK"
+  ],
+  "plan": null,
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "'value' could mean more than one governed measure in this dataset (Balance or Valuation). Say which one and I ",
+  "CR": "CR5",
+  "why": "not a capability gap — a CORRECT ambiguity refusal: \"'value' could mean Balance or Valuation\". The sibling 'Show the pipeline by stage.' proves the pipeline analytic works."
+ },
+ {
+  "id": "Q01B",
+  "question": "How many loans have a borrower older than 55 and an LTV greater than 50%?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q01A"
+  ],
+  "correct_sibling_merge": [
+   "Q01A",
+   "Q01C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for an ltv greater than 50%, but that could not be applied to the calculation (an ",
+  "CR": "CR4",
+  "why": "sibling Q01A answers the same case correctly"
+ },
+ {
+  "id": "Q01C",
+  "question": "Count the loans where borrower age is above 55 and current LTV is over 50%.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "CORRECT",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q01A"
+  ],
+  "correct_sibling_merge": [
+   "Q01A"
+  ],
+  "merge_fixes_it": true,
+  "answer": "I understood that you asked for LTV over 55 and LTV over 50, but that could not be applied to the calculation ",
+  "CR": "CR4",
+  "why": "the merge arm answers it; the deterministic wording fails before capability selection"
+ },
+ {
+  "id": "Q02B",
+  "question": "How much outstanding balance do we have where borrower age exceeds 75 and LTV is over 40%?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "CORRECT",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q02A",
+   "Q02C"
+  ],
+  "correct_sibling_merge": [
+   "Q02A",
+   "Q02C"
+  ],
+  "merge_fixes_it": true,
+  "answer": "I understood that you asked for LTV over 40, but that could not be applied to the calculation (LTV over 40 — t",
+  "CR": "CR4",
+  "why": "the merge arm answers it; the deterministic wording fails before capability selection"
+ },
+ {
+  "id": "Q03A",
+  "question": "How many drawdown loans have LTV above 50%?",
+  "grade_off": "WRONG",
+  "grade_merge": "CORRECT",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q03B"
+  ],
+  "correct_sibling_merge": [
+   "Q03B",
+   "Q03C"
+  ],
+  "merge_fixes_it": true,
+  "answer": "144 loans · Current Outstanding Balance: £37.1MM.\n\nCalculated: Count of loans · Current LTV > 50 · 144 loans ·",
+  "CR": "CR4",
+  "why": "the merge arm answers it; the deterministic wording fails before capability selection"
+ },
+ {
+  "id": "Q03C",
+  "question": "Count drawdown cases where current LTV exceeds 50%.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "CORRECT",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q03B"
+  ],
+  "correct_sibling_merge": [
+   "Q03A",
+   "Q03B"
+  ],
+  "merge_fixes_it": true,
+  "answer": "I understood that you asked for LTV over 50, but that could not be applied to the calculation (LTV over 50 — t",
+  "CR": "CR4",
+  "why": "the merge arm answers it; the deterministic wording fails before capability selection"
+ },
+ {
+  "id": "Q04A",
+  "question": "What is the balance of Direct-book loans in London to borrowers over 75?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q04B"
+  ],
+  "correct_sibling_merge": [
+   "Q04B"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for London and Direct, but that could not be applied to the calculation (London (O",
+  "CR": "CR4",
+  "why": "sibling Q04B answers the same case correctly"
+ },
+ {
+  "id": "Q04C",
+  "question": "Show total outstanding balance for London loans in the Direct book with borrower age above 75.",
+  "grade_off": "WRONG",
+  "grade_merge": "WRONG",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q04B"
+  ],
+  "correct_sibling_merge": [
+   "Q04B"
+  ],
+  "merge_fixes_it": false,
+  "answer": "Here is the result for your query, covering 24 groups.\n\nCalculated: Loan-level Balance · London · Borrower Age",
+  "CR": "CR4",
+  "why": "sibling Q04B answers the same case correctly"
+ },
+ {
+  "id": "Q05B",
+  "question": "For Direct-book lump sum loans, what is the weighted average current LTV?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q05A"
+  ],
+  "correct_sibling_merge": [
+   "Q05A",
+   "Q05C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Source Portf",
+  "CR": "CR4",
+  "why": "sibling Q05A answers the same case correctly"
+ },
+ {
+  "id": "Q05C",
+  "question": "Give me WA LTV for lump sum lending in the Direct portfolio.",
+  "grade_off": "WRONG",
+  "grade_merge": "CORRECT",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q05A"
+  ],
+  "correct_sibling_merge": [
+   "Q05A"
+  ],
+  "merge_fixes_it": true,
+  "answer": "Weighted-average Current LTV: 36.2% · 441 loans.\n\nCalculated: Weighted-average Current LTV · Source Portfolio ",
+  "CR": "CR4",
+  "why": "the merge arm answers it; the deterministic wording fails before capability selection"
+ },
+ {
+  "id": "Q07B",
+  "question": "How do the Direct and Acquired portfolios differ?",
+  "grade_off": "WRONG",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q07A",
+   "Q07C"
+  ],
+  "correct_sibling_merge": [
+   "Q07A",
+   "Q07C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "640 loans · Current Outstanding Balance: £172.1MM.\n\nCalculated: Count of loans · 640 loans · as at 30 June 202",
+  "CR": "CR4",
+  "why": "sibling Q07A answers the same case correctly"
+ },
+ {
+  "id": "Q10C",
+  "question": "What does the current pipeline look like?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [
+   "PIPELINE"
+  ],
+  "requirements": [
+   "pipeline_dataset"
+  ],
+  "operations": [
+   "STOCK"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q10B"
+  ],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Tr",
+  "CR": "CR4",
+  "why": "sibling Q10B answers the same case correctly"
+ },
+ {
+  "id": "Q12C",
+  "question": "Plot portfolio balance across LTV buckets and borrower-age buckets.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q12A",
+   "Q12B"
+  ],
+  "correct_sibling_merge": [
+   "Q12A",
+   "Q12B"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for age buckets, but that could not be applied to the calculation (age buckets (Ag",
+  "CR": "CR4",
+  "why": "sibling Q12A answers the same case correctly"
+ },
+ {
+  "id": "Q15B",
+  "question": "Break Direct-book balance down by both broker channel and loan type.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q15A"
+  ],
+  "correct_sibling_merge": [
+   "Q15A"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for Break Direct- book, but that could not be applied to the calculation (Break Di",
+  "CR": "CR4",
+  "why": "sibling Q15A answers the same case correctly"
+ },
+ {
+  "id": "Q15C",
+  "question": "Give me a broker-by-product balance table for the Direct portfolio.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q15A"
+  ],
+  "correct_sibling_merge": [
+   "Q15A"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I could not tell how you meant broker. Did you want the book split by it, or narrowed to one value of it? I ha",
+  "CR": "CR4",
+  "why": "sibling Q15A answers the same case correctly"
+ },
+ {
+  "id": "Q16B",
+  "question": "Break drawdown balance down by both geography and LTV band.",
+  "grade_off": "WRONG",
+  "grade_merge": "CORRECT",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q16A",
+   "Q16C"
+  ],
+  "correct_sibling_merge": [
+   "Q16A",
+   "Q16C"
+  ],
+  "merge_fixes_it": true,
+  "answer": "Here is the heatmap for your query, covering 42 groups.\n\nCalculated: Total Balance · grouped by Obligor Region",
+  "CR": "CR4",
+  "why": "the merge arm answers it; the deterministic wording fails before capability selection"
+ },
+ {
+  "id": "Q17B",
+  "question": "Give me a table of Direct-book balance split by LTV band, ticket-size band and age band.",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q17A"
+  ],
+  "correct_sibling_merge": [
+   "Q17A",
+   "Q17C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for Direct, but that could not be applied to the calculation (Direct (Source Portf",
+  "CR": "CR4",
+  "why": "sibling Q17A answers the same case correctly"
+ },
+ {
+  "id": "Q17C",
+  "question": "Break Direct portfolio balance down across LTV, ticket size and borrower age.",
+  "grade_off": "WRONG",
+  "grade_merge": "CORRECT",
+  "route": "(point-in-time)",
+  "families": [],
+  "requirements": [],
+  "operations": [],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q17A"
+  ],
+  "correct_sibling_merge": [
+   "Q17A"
+  ],
+  "merge_fixes_it": true,
+  "answer": "Here is the bar for your query, covering 5 groups.\n\nCalculated: Balance · Average Borrower Age · Source Portfo",
+  "CR": "CR4",
+  "why": "the merge arm answers it; the deterministic wording fails before capability selection"
+ },
+ {
+  "id": "Q19A",
+  "question": "How did the Direct book change last month?",
+  "grade_off": "WRONG",
+  "grade_merge": "WRONG",
+  "route": "cohort_progression",
+  "families": [
+   "MOVEMENT_TREND"
+  ],
+  "requirements": [
+   "period_comparison"
+  ],
+  "operations": [
+   "DELTA"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q19B",
+   "Q19C"
+  ],
+  "correct_sibling_merge": [
+   "Q19B",
+   "Q19C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "Funded balance for Direct: tracked across 5 reporting period(s) (2026-02 → 2026-06) down.\n\nCalculated: Cohort ",
+  "CR": "CR4",
+  "why": "sibling Q19B answers the same case correctly"
+ },
+ {
+  "id": "Q20B",
+  "question": "What changed in the drawdown book since last month?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "period_movement",
+  "families": [
+   "MOVEMENT_TREND"
+  ],
+  "requirements": [
+   "period_comparison"
+  ],
+  "operations": [
+   "DELTA"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q20A",
+   "Q20C"
+  ],
+  "correct_sibling_merge": [
+   "Q20A",
+   "Q20C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for loans where Product Type is drawdown, but that could not be applied to the cal",
+  "CR": "CR4",
+  "why": "sibling Q20A answers the same case correctly"
+ },
+ {
+  "id": "Q21B",
+  "question": "For loans over 50% LTV, which region contributed the most balance growth since last month?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "period_change_analysis",
+  "families": [
+   "MOVEMENT_TREND"
+  ],
+  "requirements": [
+   "period_comparison"
+  ],
+  "operations": [
+   "DELTA"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q21A"
+  ],
+  "correct_sibling_merge": [
+   "Q21A"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for LTV over 50, but that could not be applied to the calculation (LTV over 50 — t",
+  "CR": "CR4",
+  "why": "sibling Q21A answers the same case correctly"
+ },
+ {
+  "id": "Q21C",
+  "question": "Among loans with current LTV above 50%, where did balance increase the most over the last month?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "period_change_analysis",
+  "families": [
+   "MOVEMENT_TREND"
+  ],
+  "requirements": [
+   "period_comparison"
+  ],
+  "operations": [
+   "DELTA"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q21A"
+  ],
+  "correct_sibling_merge": [
+   "Q21A"
+  ],
+  "merge_fixes_it": false,
+  "answer": "No loans in this book match that filter ('among'), so there is nothing to calculate. I have not returned a who",
+  "CR": "CR4",
+  "why": "sibling Q21A answers the same case correctly"
+ },
+ {
+  "id": "Q22B",
+  "question": "Did Direct or Acquired add more balance during the last month?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "analytical_composition",
+  "families": [
+   "MOVEMENT_TREND"
+  ],
+  "requirements": [
+   "period_comparison"
+  ],
+  "operations": [
+   "DELTA",
+   "RANKING",
+   "ATTRIBUTION"
+  ],
+  "plan": [
+   "period_movement",
+   "period_movement"
+  ],
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for direct or acquired, but that could not be applied to the calculation (direct o",
+  "CR": "CR6",
+  "why": "a plan builds; a downstream guard refuses"
+ },
+ {
+  "id": "Q22C",
+  "question": "Which of the Direct and Acquired books drove more of the month-on-month balance increase?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "analytical_composition",
+  "families": [
+   "MOVEMENT_TREND"
+  ],
+  "requirements": [
+   "period_comparison"
+  ],
+  "operations": [
+   "DELTA",
+   "RANKING",
+   "ATTRIBUTION"
+  ],
+  "plan": [
+   "period_movement",
+   "period_movement"
+  ],
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I understood that you asked for Direct, but that could not be applied to the calculation (Direct — this narrow",
+  "CR": "CR6",
+  "why": "a plan builds; a downstream guard refuses"
+ },
+ {
+  "id": "Q23A",
+  "question": "When will we reach £100m of funded loans?",
+  "grade_off": "CORRECT",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "forecast_extrapolation",
+  "families": [
+   "FORECAST_PROJECTION"
+  ],
+  "requirements": [
+   "forecast"
+  ],
+  "operations": [
+   "MILESTONE",
+   "HORIZON"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q23C"
+  ],
+  "correct_sibling_merge": [
+   "Q23C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "The book has already reached £100.0m (current funded balance £172.1m).\n\nCalculated: Run-rate extrapolation.",
+  "CR": "CR4",
+  "why": "sibling Q23C answers the same case correctly"
+ },
+ {
+  "id": "Q23B",
+  "question": "At the current trajectory, when do we get to £100 million?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [
+   "FORECAST_PROJECTION",
+   "MOVEMENT_TREND"
+  ],
+  "requirements": [
+   "forecast",
+   "period_comparison"
+  ],
+  "operations": [
+   "MILESTONE",
+   "HORIZON",
+   "DELTA",
+   "TREND"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q23A",
+   "Q23C"
+  ],
+  "correct_sibling_merge": [
+   "Q23C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Tr",
+  "CR": "CR4",
+  "why": "sibling Q23A answers the same case correctly"
+ },
+ {
+  "id": "Q24B",
+  "question": "When are we expected to get to £250 million of funded loans?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [
+   "FORECAST_PROJECTION"
+  ],
+  "requirements": [
+   "forecast"
+  ],
+  "operations": [
+   "MILESTONE",
+   "HORIZON"
+  ],
+  "plan": null,
+  "correct_sibling_off": [
+   "Q24A",
+   "Q24C"
+  ],
+  "correct_sibling_merge": [
+   "Q24A",
+   "Q24C"
+  ],
+  "merge_fixes_it": false,
+  "answer": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Tr",
+  "CR": "CR4",
+  "why": "sibling Q24A answers the same case correctly"
+ },
+ {
+  "id": "Q25A",
+  "question": "Do we expect to breach any concentration tests?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [
+   "LIMITS_CONCENTRATION",
+   "FORECAST_PROJECTION"
+  ],
+  "requirements": [
+   "limit_evidence",
+   "forecast"
+  ],
+  "operations": [
+   "STATUS",
+   "FORECAST_BREACH",
+   "CONCENTRATION",
+   "PROJECT_VALUE"
+  ],
+  "plan": null,
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I understood this as a limits concentration, forecast projection question, but I have not answered it: this as",
+  "CR": "CR5",
+  "why": "forward approved-limit methodology does not exist (protected)"
+ },
+ {
+  "id": "Q25B",
+  "question": "Are any concentration limits likely to be breached as the book grows?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [
+   "LIMITS_CONCENTRATION",
+   "FORECAST_PROJECTION"
+  ],
+  "requirements": [
+   "limit_evidence",
+   "forecast"
+  ],
+  "operations": [
+   "STATUS",
+   "FORECAST_BREACH",
+   "CONCENTRATION",
+   "PROJECT_VALUE"
+  ],
+  "plan": null,
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I understood this as a limits concentration, forecast projection question, but I have not answered it: this as",
+  "CR": "CR5",
+  "why": "forward approved-limit methodology does not exist (protected)"
+ },
+ {
+  "id": "Q25C",
+  "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
+  "grade_off": "FALSE_REFUSAL",
+  "grade_merge": "FALSE_REFUSAL",
+  "route": "(point-in-time)",
+  "families": [
+   "PIPELINE",
+   "LIMITS_CONCENTRATION",
+   "FORECAST_PROJECTION"
+  ],
+  "requirements": [
+   "pipeline_dataset",
+   "forecast",
+   "limit_evidence"
+  ],
+  "operations": [
+   "STOCK",
+   "EXPECTED_COMPLETION",
+   "STATUS",
+   "HEADROOM",
+   "RANKING",
+   "FORECAST_BREACH",
+   "CONCENTRATION",
+   "PROJECT_VALUE"
+  ],
+  "plan": null,
+  "correct_sibling_off": [],
+  "correct_sibling_merge": [],
+  "merge_fixes_it": false,
+  "answer": "I understood this as a pipeline, limits concentration, forecast projection question, but I have not answered i",
+  "CR": "CR5",
+  "why": "forward approved-limit methodology does not exist (protected)"
+ }
+]

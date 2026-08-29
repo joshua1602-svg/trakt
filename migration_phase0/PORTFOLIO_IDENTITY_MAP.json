@@ -1,0 +1,143 @@
+{
+  "defaultContextId": "total",
+  "rows": [
+    {
+      "reactLabel": "Total",
+      "contextId": "total",
+      "contextKind": "total",
+      "governedIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "rows": 11035,
+      "balance": 1964886258.21,
+      "question": "Summarise the Total",
+      "miLensName": "total",
+      "miContextId": "total",
+      "miGovernedIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "miRows": 11035,
+      "miBalance": 1964886258.21,
+      "miFellBackToTotal": false,
+      "miResolvesToTheSamePopulation": true
+    },
+    {
+      "reactLabel": "Direct",
+      "contextId": "direct",
+      "contextKind": "type",
+      "governedIds": [
+        "alp_origination"
+      ],
+      "rows": 7126,
+      "balance": 1385508582.98,
+      "question": "Summarise the Direct",
+      "miLensName": "total",
+      "miContextId": "total",
+      "miGovernedIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "miRows": 11035,
+      "miBalance": 1964886258.21,
+      "miFellBackToTotal": false,
+      "miResolvesToTheSamePopulation": false
+    },
+    {
+      "reactLabel": "ALP Origination Book",
+      "contextId": "alp_origination",
+      "contextKind": "portfolio",
+      "governedIds": [
+        "alp_origination"
+      ],
+      "rows": 7126,
+      "balance": 1385508582.98,
+      "question": "Summarise the ALP Origination Book",
+      "miLensName": "total",
+      "miContextId": "total",
+      "miGovernedIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "miRows": 11035,
+      "miBalance": 1964886258.21,
+      "miFellBackToTotal": false,
+      "miResolvesToTheSamePopulation": false
+    },
+    {
+      "reactLabel": "Acquired",
+      "contextId": "acquired",
+      "contextKind": "type",
+      "governedIds": [
+        "alp_acquired"
+      ],
+      "rows": 3909,
+      "balance": 579377675.23,
+      "question": "Summarise the Acquired",
+      "miLensName": "total",
+      "miContextId": "total",
+      "miGovernedIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "miRows": 11035,
+      "miBalance": 1964886258.21,
+      "miFellBackToTotal": false,
+      "miResolvesToTheSamePopulation": false
+    },
+    {
+      "reactLabel": "ALP Acquired Back Book",
+      "contextId": "alp_acquired",
+      "contextKind": "portfolio",
+      "governedIds": [
+        "alp_acquired"
+      ],
+      "rows": 3909,
+      "balance": 579377675.23,
+      "question": "Summarise the ALP Acquired Back Book",
+      "miLensName": "acquired",
+      "miContextId": "acquired",
+      "miGovernedIds": [
+        "alp_acquired"
+      ],
+      "miRows": 3909,
+      "miBalance": 579377675.23,
+      "miFellBackToTotal": false,
+      "miResolvesToTheSamePopulation": true
+    },
+    {
+      "reactLabel": "spv1_sponsored",
+      "contextId": "spv1_sponsored",
+      "contextKind": "portfolio",
+      "governedIds": [
+        "spv1_sponsored"
+      ],
+      "rows": 0,
+      "balance": 0.0,
+      "question": "Summarise the spv1_sponsored",
+      "miLensName": "total",
+      "miContextId": "total",
+      "miGovernedIds": [
+        "alp_origination",
+        "alp_acquired",
+        "spv1_sponsored"
+      ],
+      "miRows": 11035,
+      "miBalance": 1964886258.21,
+      "miFellBackToTotal": false,
+      "miResolvesToTheSamePopulation": false
+    }
+  ],
+  "unresolvableLabels": [
+    "Direct",
+    "ALP Origination Book",
+    "Acquired",
+    "spv1_sponsored"
+  ]
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "case": "the disclaimer",
+    "question": "The balance by seasoning segment excluding pipeline cases",
+    "asksFor": "funded",
+    "viewNamedByQuestion": null,
+    "resolveActiveView": "funded",
+    "chatRoutingDatasetFor": "funded",
+    "contractDataset": "funded",
+    "contractProvenance": "default",
+    "route": null,
+    "ok": true,
+    "controlledRefusal": false,
+    "answer": "Here is the bar for your query, covering 2 group(s).  Calculated: Total Balance \u00b7 grouped by Seasoning Segment \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+    "honoured": true
+  },
+  {
+    "case": "control: no mention",
+    "question": "The balance by seasoning segment",
+    "asksFor": "funded",
+    "viewNamedByQuestion": null,
+    "resolveActiveView": "funded",
+    "chatRoutingDatasetFor": "funded",
+    "contractDataset": "funded",
+    "contractProvenance": "default",
+    "route": null,
+    "ok": true,
+    "controlledRefusal": false,
+    "answer": "Here is the bar for your query, covering 2 group(s).  Calculated: Total Balance \u00b7 grouped by Seasoning Segment \u00b7 2 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+    "honoured": true
+  },
+  {
+    "case": "control: asks for it",
+    "question": "The pipeline balance by seasoning segment",
+    "asksFor": "pipeline",
+    "viewNamedByQuestion": "pipeline",
+    "resolveActiveView": "pipeline",
+    "chatRoutingDatasetFor": "pipeline",
+    "contractDataset": "pipeline",
+    "contractProvenance": "explicit_user",
+    "route": null,
+    "ok": false,
+    "controlledRefusal": false,
+    "answer": "No governed pipeline data is available for the pipeline view.",
+    "honoured": true
+  },
+  {
+    "case": "control: other disclaimer",
+    "question": "The balance by vintage, ignoring the forecast",
+    "asksFor": "funded",
+    "viewNamedByQuestion": null,
+    "resolveActiveView": "funded",
+    "chatRoutingDatasetFor": "funded",
+    "contractDataset": "funded",
+    "contractProvenance": "default",
+    "route": null,
+    "ok": true,
+    "controlledRefusal": false,
+    "answer": "Here is the bar for your query, covering 13 group(s).  Calculated: Total Balance \u00b7 grouped by Vintage \u00b7 13 groups \u00b7 11,035 loans \u00b7 as at 30 June 2026.",
+    "honoured": true
+  }
+]

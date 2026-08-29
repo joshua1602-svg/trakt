@@ -1,0 +1,101 @@
+{
+  "rows": [
+    {
+      "conversion": "C1",
+      "route": "portfolio_summary",
+      "handler": "_route_portfolio_summary",
+      "module": "chat_routing.py",
+      "recogniser": "_is_portfolio_summary(question, spec)",
+      "recogniser_reads": "raw question + spec",
+      "K0": 1,
+      "K1": [],
+      "K2": []
+    },
+    {
+      "conversion": "C2",
+      "route": "period_movement",
+      "handler": "_route_period_movement",
+      "module": "chat_routing.py",
+      "recogniser": "_is_period_movement(question)",
+      "recogniser_reads": "raw question",
+      "K0": 1,
+      "K1": [],
+      "K2": []
+    },
+    {
+      "conversion": "C3",
+      "route": "geo_exposure",
+      "handler": "_route_geo",
+      "module": "chat_routing.py",
+      "recogniser": "_is_geo_exposure(question, spec, view)",
+      "recogniser_reads": "raw question + spec + view",
+      "K0": 1,
+      "K1": [],
+      "K2": []
+    },
+    {
+      "conversion": "C4",
+      "route": "funded_bridge",
+      "handler": "_route_bridge",
+      "module": "chat_routing.py",
+      "recogniser": "spec.bridge_query and not _is_aggregate_contribution_question(question)",
+      "recogniser_reads": "raw question + spec",
+      "K0": 1,
+      "K1": [],
+      "K2": []
+    },
+    {
+      "conversion": "C5",
+      "route": "temporal_compare",
+      "handler": "_route_compare",
+      "module": "chat_routing.py",
+      "recogniser": "spec.temporal_mode == 'compare'",
+      "recogniser_reads": "CONTRACT ONLY",
+      "K0": 0,
+      "K1": [],
+      "K2": []
+    },
+    {
+      "conversion": "C6",
+      "route": "evolution (+_funnel, +_pipeline_stage)",
+      "handler": "_route_evolution",
+      "module": "chat_routing.py",
+      "recogniser": "_is_evolution(question, spec)",
+      "recogniser_reads": "raw question + spec",
+      "K0": 1,
+      "K1": [],
+      "K2": []
+    },
+    {
+      "conversion": "C7",
+      "route": "period_change_analysis",
+      "handler": "route_period_change",
+      "module": "period_change_route.py",
+      "recogniser": "recognise_request -> recognise(question, spec, view, semantics)",
+      "recogniser_reads": "raw question + spec + view",
+      "K0": 1,
+      "K1": [
+        {
+          "line": 302,
+          "callee": "recognise",
+          "decides": "route shape",
+          "concept": "other analytical meaning"
+        },
+        {
+          "line": 372,
+          "callee": "requested_span",
+          "decides": "time window",
+          "concept": "time"
+        },
+        {
+          "line": 307,
+          "callee": "_resolve_lens",
+          "decides": "source scope + caller precedence",
+          "concept": "population"
+        }
+      ],
+      "K2": []
+    }
+  ],
+  "stale_vocabulary": []
+}

@@ -23,7 +23,8 @@ the answer it got before this layer existed, not a page of blanks.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import (Any, Callable, Dict, Iterable, List, Mapping, Optional,
+                    Sequence, Tuple)
 
 from .contract import (
     Finding,
@@ -230,6 +231,52 @@ _COHORT_CONCEPT_BY_POPULATION_KIND = {
 }
 
 
+def narrowed_entries(findings: Iterable[Any]) -> List[Dict[str, Any]]:
+    """The row predicates a plan's findings ACTUALLY narrowed to, field-named.
+
+    THE channel every downstream reader consults to answer "was this answer
+    scoped to X?" — reconciled against this, never against route identity.
+
+    Two sources, because a population declares its narrowing in two forms and
+    only one of them is parseable:
+
+      * ``predicate`` — the reader-facing text, field-named for everything
+        ``mi_agent.population`` produces and split back apart here;
+      * ``narrowed_on`` — the field-named twin for narrowings whose predicate
+        text names no field. A portfolio lens reads "portfolio lens = Direct
+        (direct_001)", and parsing that yields the field "portfolio lens",
+        which is not a field. It was therefore skipped, and a lens narrowing
+        that HAD run left no trace any consumer could read: the two questions
+        asking which of Direct and Acquired grew more were measured correctly,
+        both populations, and then refused on the ground that neither had been
+        applied.
+
+    A population that narrowed to nothing (``rows`` falsy) contributes nothing:
+    a predicate that selected no rows has not scoped the answer to anything.
+    ``is_total`` populations are excluded for the same reason in reverse — the
+    whole book is not a narrowing.
+    """
+    out: List[Dict[str, Any]] = []
+    for finding in findings:
+        ref = getattr(finding, "population", None)
+        if ref is None or ref.is_total or not ref.rows:
+            continue
+        pairs: List[Tuple[str, str]] = []
+        for part in str(ref.predicate or "").split(";"):
+            piece = part.strip()
+            if " = " not in piece or piece.startswith("portfolio lens"):
+                continue
+            field, _, value = piece.partition(" = ")
+            pairs.append((field.strip(), value.strip()))
+        pairs.extend((str(f), str(v)) for f, v in (ref.narrowed_on or ()))
+        for field, value in pairs:
+            entry = {"field": field, "value": value,
+                     "rows": ref.rows, "dataset": ref.dataset}
+            if entry not in out:
+                out.append(entry)
+    return out
+
+
 def composition_evidence(result: orchestrator_mod.AnalyticalResult
                          ) -> Dict[str, Any]:
     """What this plan ACTUALLY computed, for the execution receipt.
@@ -261,23 +308,7 @@ def composition_evidence(result: orchestrator_mod.AnalyticalResult
         if finding.metric and finding.metric not in measures:
             measures.append(finding.metric)
 
-    # The row predicates the plan ACTUALLY narrowed to, from the findings that
-    # were produced. A facet asking whether the answer was scoped to a place or
-    # a category is reconciled against this, not against route identity.
-    narrowed: List[Dict[str, Any]] = []
-    for finding in result.findings:
-        ref = finding.population
-        if ref is None or ref.is_total or not ref.predicate or not ref.rows:
-            continue
-        for part in str(ref.predicate).split(";"):
-            piece = part.strip()
-            if " = " not in piece or piece.startswith("portfolio lens"):
-                continue
-            field, _, value = piece.partition(" = ")
-            entry = {"field": field.strip(), "value": value.strip(),
-                     "rows": ref.rows, "dataset": ref.dataset}
-            if entry not in narrowed:
-                narrowed.append(entry)
+    narrowed = narrowed_entries(result.findings)
 
     cohort_concept: Optional[str] = None
     for call in result.plan.calls:
@@ -316,17 +347,22 @@ def _reconciliation(result: orchestrator_mod.AnalyticalResult) -> Dict[str, Any]
     reads the pipeline and nothing else, and reporting it as a full-coverage
     funded answer would misdescribe what was measured.
     """
+    from mi_agent_api import workspace as _workspace
+
     datasets: List[str] = []
     for call in result.plan.calls:
         capability = CAPABILITIES.get(call.capability)
         for name in (capability.datasets if capability else ()):
             if name not in datasets:
                 datasets.append(name)
-    funded = any(d.startswith("funded") for d in datasets)
-    return {"dataset": "+".join(datasets) or "funded",
-            # Full coverage is claimed only for the funded book, which every
-            # governed population here is measured over in full.
-            "coverage_by_balance_pct": 100.0 if funded else None}
+    # THE SHARED PRIMITIVE, not a local copy. This function was the only site in
+    # the estate deriving its reconciliation rather than asserting a literal, and
+    # five routes in `chat_routing` have now adopted it. Keeping a second
+    # implementation here — even the original — would make the consolidation a
+    # duplication. `workspace.reconciliation_for` carries the coverage rule that
+    # was written here: full coverage is claimed only where the funded book is
+    # among the datasets.
+    return _workspace.reconciliation_for(datasets)
 
 
 def build_envelope(result: orchestrator_mod.AnalyticalResult, request: Any

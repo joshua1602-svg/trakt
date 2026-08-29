@@ -1,0 +1,186 @@
+{
+  "rows": [
+    {
+      "question": "Compare October and November funded balance.",
+      "periods": [
+        "October",
+        "November"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "October",
+        "November"
+      ],
+      "relative": null,
+      "in_corpus": true,
+      "reversed": false
+    },
+    {
+      "question": "Compare October and November loan count.",
+      "periods": [
+        "October",
+        "November"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "October",
+        "November"
+      ],
+      "relative": null,
+      "in_corpus": true,
+      "reversed": false
+    },
+    {
+      "question": "Compare October and November WA LTV.",
+      "periods": [
+        "October",
+        "November"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "October",
+        "November"
+      ],
+      "relative": null,
+      "in_corpus": true,
+      "reversed": false
+    },
+    {
+      "question": "Compare October and November pipeline amount.",
+      "periods": [
+        "October",
+        "November"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "October",
+        "November"
+      ],
+      "relative": null,
+      "in_corpus": true,
+      "reversed": false
+    },
+    {
+      "question": "Compare latest pipeline with prior pipeline.",
+      "periods": [
+        "prior pipeline",
+        "latest"
+      ],
+      "branch": "latest_plus_relative",
+      "explicit": [],
+      "relative": "prior pipeline",
+      "in_corpus": true,
+      "reversed": false
+    },
+    {
+      "question": "How did the book change since last month?",
+      "periods": [
+        "last month",
+        "latest"
+      ],
+      "branch": "latest_plus_relative",
+      "explicit": [],
+      "relative": "last month",
+      "in_corpus": false,
+      "reversed": false
+    },
+    {
+      "question": "How did LTV change since last month?",
+      "periods": [
+        "last month",
+        "latest"
+      ],
+      "branch": "latest_plus_relative",
+      "explicit": [],
+      "relative": "last month",
+      "in_corpus": false,
+      "reversed": false
+    },
+    {
+      "question": "How did the book change compared to the prior month?",
+      "periods": [
+        "prior month",
+        "latest"
+      ],
+      "branch": "latest_plus_relative",
+      "explicit": [],
+      "relative": "prior month",
+      "in_corpus": false,
+      "reversed": false
+    },
+    {
+      "question": "Compare October and November.",
+      "periods": [
+        "October",
+        "November"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "October",
+        "November"
+      ],
+      "relative": null,
+      "in_corpus": false,
+      "reversed": false
+    },
+    {
+      "question": "Compare November and October.",
+      "periods": [
+        "November",
+        "October"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "November",
+        "October"
+      ],
+      "relative": null,
+      "in_corpus": false,
+      "reversed": false
+    },
+    {
+      "question": "How did the book change from October to November?",
+      "periods": [
+        "October",
+        "November"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "October",
+        "November"
+      ],
+      "relative": null,
+      "in_corpus": false,
+      "reversed": false
+    },
+    {
+      "question": "How did the book change from November to October?",
+      "periods": [
+        "November",
+        "October"
+      ],
+      "branch": "explicit_pair",
+      "explicit": [
+        "November",
+        "October"
+      ],
+      "relative": null,
+      "in_corpus": false,
+      "reversed": false
+    },
+    {
+      "question": "Compare October to last month.",
+      "periods": [
+        "October",
+        "last month"
+      ],
+      "branch": "explicit_plus_relative",
+      "explicit": [
+        "October"
+      ],
+      "relative": "last month",
+      "in_corpus": false,
+      "reversed": false
+    }
+  ]
+}

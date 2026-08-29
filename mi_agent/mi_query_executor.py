@@ -466,6 +466,179 @@ def _apply_numeric_op(col: pd.Series, op: str, value: Any) -> pd.Series:
         "applied")
 
 
+#: The three ways a governed predicate can be executed. Named because
+#: ``_apply_filters`` reports each of them with different warning wording, and
+#: the caller has to be able to reproduce that from the result alone.
+PREDICATE_MEMBERSHIP = "membership"
+PREDICATE_NUMERIC = "numeric"
+PREDICATE_CATEGORICAL = "categorical"
+PREDICATE_IDENTITY = "identity"
+
+
+@dataclass(frozen=True)
+class PredicateExecution:
+    """What executing one governed predicate produced."""
+
+    #: The boolean row mask. Never contains NA.
+    mask: pd.Series
+    #: The value actually compared — after percent rescaling, if any. The
+    #: executor's own warning quotes this, not the value the reader typed.
+    normalised_value: Any
+    #: Field keys that provably narrowed: the semantic key, plus the canonical
+    #: column when it differs. Execution evidence, not spec echo.
+    applied_keys: Tuple[str, ...]
+    #: Which of the executions ran.
+    kind: str
+    #: The operator after alias folding — ">" and "above" both arrive here as
+    #: "gt". The executor's warning quotes this, not what the reader wrote.
+    resolved_op: str
+
+
+def governed_predicate_mask(work: pd.DataFrame, field_key: str, op: Any, value: Any,
+                            semantics: dict,
+                            warnings: Optional[List[str]] = None) -> PredicateExecution:
+    """THE governed meaning of one ``Predicate(field, op, value)``.
+
+    The single owner. Both the point-in-time executor (``_apply_filters``) and
+    the reusable population executor (``mi_agent.population.apply_population``)
+    run predicates through this and nothing else, so the two cannot disagree
+    about what "LTV over 50" selects.
+
+    Before this existed they did disagree, in five distinct ways, and only two
+    were visible in the corpus: `apply_population` reimplemented the COMPARATOR
+    (by delegating to ``_apply_numeric_op``) while reimplementing none of the
+    RESOLUTION or NORMALISATION around it. It had no percent rescaling, no
+    operator aliases, no value-domain resolution and no field resolution, and it
+    answered an unappliable predicate with the whole book.
+
+    Raises ``MIQueryExecutionError`` — a controlled validation failure, never a
+    500 — for a predicate that cannot be executed: an unknown semantic field, a
+    column the book does not carry, or a value the operator cannot compare. A
+    caller that cannot honour a predicate must not answer as though it had.
+
+    The ``eq``/``ne`` dispatch is on the VALUE TYPE, not on the shape the spec
+    happened to use. RULED: a bare categorical value and an explicit equality
+    predicate are semantically identical, and the input shape carries no
+    intended business meaning. ``_apply_filters`` used to send
+    ``{"op": "eq", "value": "Joint"}`` through the numeric comparator (which
+    raises for a categorical value) and a bare ``"Joint"`` through the
+    categorical branch, so one Predicate had two shipped meanings. The shape is
+    therefore normalised away rather than carried: no shape or provenance state
+    is added to ``Predicate``.
+
+    Note what this does NOT do. It recognises no product vocabulary — there is
+    no "Joint", no "Single", no borrower-type knowledge here. It tests the
+    OPERAND'S TYPE. Which field a phrase binds to remains settled upstream, in
+    ``llm_query_parser._filter_field_of``, before any executor sees it.
+    """
+    # 1. FIELD RESOLUTION. A drill-through filter may arrive keyed by the
+    #    artifact's own data column (already canonical); tolerate that when the
+    #    column exists. An unknown key that is neither re-raises.
+    try:
+        entry = resolve_semantic_field(field_key, semantics)
+        canonical = entry.get("canonical_field", field_key)
+    except MIQueryExecutionError:
+        if field_key in work.columns:
+            entry, canonical = {}, field_key
+        else:
+            raise
+    _require_column(work, canonical, field_key)
+    col = work[canonical]
+    applied_keys = ((field_key,) if canonical == field_key
+                    else (field_key, canonical))
+
+    # 2. OPERATOR. Aliases fold here so an operator spelled correctly in English
+    #    is not silently downgraded to equality by the default.
+    resolved_op = _OP_ALIASES.get(str(op if op is not None else "eq").strip().lower(), "eq")
+
+    # 3. MEMBERSHIP. Categorical membership (the "Other" bar bucket drills as
+    #    NOT IN the shown top-N categories, so the underlying rows are
+    #    recovered).
+    if resolved_op in ("in", "not_in"):
+        members = value if isinstance(value, (list, tuple, set)) else [value]
+        wanted = [str(v).strip().casefold() for v in members]
+        hit = col.astype(str).str.strip().str.casefold().isin(wanted)
+        mask = ~hit if resolved_op == "not_in" else hit
+        return PredicateExecution(mask.fillna(False), list(members), applied_keys,
+                                  PREDICATE_MEMBERSHIP, resolved_op)
+
+    # 4. CATEGORICAL. A string operand is a category name, whatever shape the
+    #    spec used to say so.
+    if resolved_op in ("eq", "ne") and isinstance(value, str):
+        target = value.strip().casefold()
+        same = col.astype(str).str.strip().str.casefold() == target
+        if not same.any():
+            # VALUE RESOLUTION. The exact match reached nothing, which is not
+            # the same as there being nothing to reach: "London" matches no row
+            # on a book whose region column holds TLI43. The executor does not
+            # know what a region is; it asks the semantics what domain the
+            # field's values are drawn from, and the domain resolves the term.
+            resolved = _resolve_domain_value(entry.get("value_domain"), value, col)
+            if resolved:
+                wanted = {str(v).strip().casefold() for v in resolved}
+                same = col.astype(str).str.strip().str.casefold().isin(wanted)
+                if warnings is not None:
+                    warnings.append(
+                        f"filter {field_key}: "
+                        + _describe_domain_value(entry.get("value_domain"),
+                                                 value, resolved))
+        mask = ~same if resolved_op == "ne" else same
+        return PredicateExecution(mask.fillna(False), value, applied_keys,
+                                  PREDICATE_CATEGORICAL, resolved_op)
+
+    from .mi_dataset_profile import PERCENT_FRACTION, percent_storage_scale
+
+    # 5. NUMERIC / DATE, scale-aware. A percent threshold ("ltv over 80") is
+    #    compared in the column's own storage scale. If the column stores
+    #    fractions (0.51) but the threshold reads as points (80), convert once
+    #    here — the single percent-scale source of truth, never re-guessed
+    #    downstream. Handles a scalar bound and both ends of a `between` range.
+    raw = value
+    if entry.get("format") == "percent" and percent_storage_scale(col) == PERCENT_FRACTION:
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool) and abs(raw) > 1.5:
+            raw = raw / 100.0
+        elif (isinstance(raw, (list, tuple))
+              and all(isinstance(x, (int, float)) for x in raw)
+              and any(abs(float(x)) > 1.5 for x in raw)):
+            raw = [float(x) / 100.0 for x in raw]
+
+    if resolved_op in ("eq", "ne") and not _comparable(raw):
+        # The shipped fall-through for an operand that is neither a category, a
+        # number nor a date: raw equality against the column as stored.
+        same = col == raw
+        mask = ~same if resolved_op == "ne" else same
+        return PredicateExecution(_boolean(mask), raw, applied_keys,
+                                  PREDICATE_IDENTITY, resolved_op)
+
+    return PredicateExecution(_boolean(_apply_numeric_op(col, resolved_op, raw)),
+                              raw, applied_keys, PREDICATE_NUMERIC, resolved_op)
+
+
+def _comparable(value: Any) -> bool:
+    """Can ``_apply_numeric_op`` compare this operand at all?
+
+    Asked so that an operand it could NOT compare falls through to the shipped
+    raw-equality branch instead of raising — the executor's own behaviour for a
+    value that is neither a category, a number nor a date.
+    """
+    if isinstance(value, (list, tuple, set)):
+        return len(value) == 2 and all(_comparable(v) for v in value)
+    try:
+        float(value)
+        return True
+    except (TypeError, ValueError):
+        pass
+    try:
+        return not pd.isna(pd.to_datetime(value, errors="coerce"))
+    except Exception:  # noqa: BLE001 - an operand pandas cannot even parse
+        return False
+
+
+def _boolean(mask: pd.Series) -> pd.Series:
+    """A mask with no NA, so indexing with it can never raise."""
+    return mask.fillna(False).astype(bool)
+
+
 #: Filter-value resolvers by declared ``value_domain``. A field says which
 #: domain its values are drawn from; the domain says what a user term means.
 #: Nothing here knows about any particular domain's contents.
@@ -506,102 +679,28 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
     """
     if not spec.filters:
         return work
-    from .mi_dataset_profile import PERCENT_FRACTION, percent_storage_scale
+    from .population import predicate_of
+
     for field_key, value in spec.filters.items():
-        # Resolve a semantic field key to its canonical column. A drill-through
-        # filter may instead arrive keyed by the artifact's own data column
-        # (already canonical); tolerate that when the column exists, so the UI can
-        # pass either the semantic key or the column name. An unknown key that is
-        # neither re-raises -> controlled validation failure (never a 500).
-        try:
-            entry = resolve_semantic_field(field_key, semantics)
-            canonical = entry.get("canonical_field", field_key)
-        except MIQueryExecutionError:
-            if field_key in work.columns:
-                entry, canonical = {}, field_key
-            else:
-                raise
-        _require_column(work, canonical, field_key)
+        predicate = predicate_of(field_key, value)
         before = len(work)
-        col = work[canonical]
-        # Recorded HERE, after the column is confirmed and before the branch
-        # split, so every filter shape counts once and none is missed by a
-        # branch added later. `_require_column` raises for an absent column, so
-        # reaching this line means the predicate ran against a real column.
+        execution = governed_predicate_mask(work, field_key, predicate.op,
+                                            predicate.value, semantics, warnings)
+        # Recorded after the column is confirmed and the mask is built, so every
+        # filter shape counts once and none is missed by a branch added later.
         if applied is not None:
-            applied.append(field_key)
-            if canonical != field_key:
-                applied.append(canonical)
-        if isinstance(value, dict) and ("op" in value or "value" in value
-                                        or "min" in value or "max" in value):
-            # Structured numeric comparison filter: {"op": ">", "value": 70}.
-            op = _OP_ALIASES.get(str(value.get("op", "eq")).strip().lower(), "eq")
-            raw = value.get("value", value.get("min", value.get("max")))
-            # Categorical membership (the "Other" bar bucket drills as NOT IN the
-            # shown top-N categories, so the underlying rows are recovered).
-            if op in ("in", "not_in"):
-                members = raw if isinstance(raw, (list, tuple, set)) else [raw]
-                vals = [str(v).strip().casefold() for v in members]
-                member_mask = col.astype(str).str.strip().str.casefold().isin(vals)
-                work = work[member_mask if op == "in" else ~member_mask]
-                warnings.append(f"filter {field_key} {op} {list(members)!r} kept {len(work)}/{before} rows")
-                continue
-            # Scale-aware: a percent threshold (e.g. "ltv over 80") is compared in
-            # the column's own storage scale. If the column stores fractions
-            # (0.51) but the threshold reads as points (80), convert once here —
-            # the single percent-scale source of truth, never re-guessed downstream.
-            # Handles both a scalar threshold and a two-element ``between`` range
-            # (e.g. "ltv between 60 and 80" -> [0.6, 0.8]); the range bounds live
-            # in ``raw`` (the "value" key), so they must be rescaled here too.
-            if entry.get("format") == "percent" \
-                    and percent_storage_scale(col) == PERCENT_FRACTION:
-                if isinstance(raw, (int, float)) and abs(raw) > 1.5:
-                    raw = raw / 100.0
-                elif (isinstance(raw, (list, tuple))
-                      and all(isinstance(x, (int, float)) for x in raw)
-                      and any(abs(float(x)) > 1.5 for x in raw)):
-                    raw = [float(x) / 100.0 for x in raw]
-            mask = _apply_numeric_op(col, op, raw)
-            work = work[mask.fillna(False)]
-            warnings.append(f"filter {field_key} {op} {raw!r} kept {len(work)}/{before} rows")
-        elif isinstance(value, (list, tuple, set)):
-            vals = [str(v).strip().casefold() for v in value]
-            work = work[col.astype(str).str.strip().str.casefold().isin(vals)]
-            warnings.append(f"filter {field_key} in {list(value)!r} kept {len(work)}/{before} rows")
-        elif isinstance(value, str):
-            # Case-/whitespace-insensitive categorical match so a normalised
-            # value ("South West") matches the prepared dimension value robustly.
-            target = value.strip().casefold()
-            mask = col.astype(str).str.strip().str.casefold() == target
-            if not mask.any():
-                # VALUE RESOLUTION. The exact match reached nothing, which is
-                # not the same as there being nothing to reach: "London" matches
-                # no row on a book whose region column holds TLI43. A raw loan
-                # tape does not generally carry ITL codes at all — it carries a
-                # partial postcode, a county, or the lender's own grouping — and
-                # the code is DERIVED by the canonical transformation. So the
-                # value is resolved through the same governed mapping that
-                # transformation used, against the values this column actually
-                # holds.
-                #
-                # The executor does not know what a region is. It asks the
-                # semantics what domain the field's values are drawn from, and
-                # the domain resolves the term. Adding a second domain is a
-                # registry entry and a resolver, not a change here.
-                resolved = _resolve_domain_value(
-                    entry.get("value_domain"), value, col)
-                if resolved:
-                    wanted = {str(v).strip().casefold() for v in resolved}
-                    mask = col.astype(str).str.strip().str.casefold().isin(wanted)
-                    warnings.append(
-                        f"filter {field_key}: "
-                        + _describe_domain_value(entry.get("value_domain"),
-                                                 value, resolved))
-            work = work[mask]
-            warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
+            applied.extend(execution.applied_keys)
+        work = work[execution.mask]
+        raw = execution.normalised_value
+        if execution.kind == PREDICATE_MEMBERSHIP:
+            warnings.append(f"filter {field_key} {execution.resolved_op} {list(raw)!r}"
+                            f" kept {len(work)}/{before} rows")
+        elif execution.kind == PREDICATE_NUMERIC:
+            warnings.append(f"filter {field_key} {execution.resolved_op} {raw!r}"
+                            f" kept {len(work)}/{before} rows")
         else:
-            work = work[col == value]
-            warnings.append(f"filter {field_key}={value!r} kept {len(work)}/{before} rows")
+            warnings.append(f"filter {field_key}={raw!r}"
+                            f" kept {len(work)}/{before} rows")
     return work.copy()
 
 
@@ -1204,7 +1303,22 @@ def _execute_grouped(spec, work, semantics, warnings, balance_col,
     if sort_for_date and date_group:
         out = out.sort_values(group_cols, kind="mergesort").reset_index(drop=True)
     else:
-        out = out.sort_values(metric_col, ascending=False,
+        # THE DIRECTION THE QUESTION ASKED FOR, when it asked for one.
+        #
+        # This was hard-coded descending, so a grouped ranking that had already
+        # resolved `sort_direction='asc'` was served largest-first: "which region
+        # has the SMALLEST balance?" returned the same seven rows as "which
+        # region has the largest balance?", led by the largest. The loan-level
+        # ranking path and `_apply_top_n` both honour the field; only this one
+        # did not.
+        #
+        # `sort_direction` defaults to "desc", so this is a no-op for every spec
+        # that did not explicitly ask to ascend — a plain "balance by region"
+        # breakdown is presented exactly as before. `concentration_pct` below is
+        # a per-row share of the total and does not depend on row order.
+        ascending = str(getattr(spec, "sort_direction", None)
+                        or "desc").strip().lower() == "asc"
+        out = out.sort_values(metric_col, ascending=ascending,
                               kind="mergesort").reset_index(drop=True)
 
     out = _maybe_concentration(out, metric_col, work, group_cols, agg,

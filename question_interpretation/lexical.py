@@ -27,7 +27,15 @@ did not have.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import Optional, Tuple
+
+# The contract's controlled ordering vocabulary. Imported rather than restated:
+# a second copy of `increase`/`decrease`/`absolute` here would be exactly the
+# duplication this module exists to end.
+from question_interpretation.schema import (  # noqa: E402
+    ORDER_BASIS_ABSOLUTE, ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT,
+    ORDER_BASIS_SHARE, ORDER_DECREASE, ORDER_EITHER, ORDER_INCREASE)
 
 #: Clause openers that introduce a CONDITION.
 #:
@@ -64,6 +72,89 @@ def condition_cut(text: str) -> Optional[int]:
         if _DIGIT_RE.search(text[match.end():]):
             return match.start()
         match = _CONDITION_RE.search(text, match.end())
+    return None
+
+
+def condition_span(text: str) -> Optional[Tuple[int, int]]:
+    """(start, end) of the first CONDITION clause, or None.
+
+    `condition_cut` gives only the START, which is all a caller needs when the
+    condition is stated LAST — everything before it is the subject. Stated
+    FIRST it is not enough: truncating at the start throws away the subject,
+    because the subject is what follows the condition.
+
+    The end is the next clause boundary, or the end of the text. Punctuation is
+    a boundary (see `_CLAUSE_PUNCTUATION`), which is what gives a leading
+    condition an end at all.
+    """
+    body = text or ""
+    match = _CONDITION_RE.search(body)
+    while match:
+        if _DIGIT_RE.search(body[match.end():]):
+            break
+        match = _CONDITION_RE.search(body, match.end())
+    if match is None:
+        return None
+    # THE CLAUSE ENDS AFTER ITS BOUND, not at the next connective.
+    #
+    # An opener is followed by the connective that introduces its own body —
+    # "for loans" then "with" — so searching for a boundary from the end of the
+    # opener finds one INSIDE the condition and reports a two-word clause.
+    # Measured: (0, 10), "for loans ", for a question whose condition runs to
+    # the comma. A condition only counts when a numeric bound follows it
+    # (`condition_cut`'s own rule), so the bound is where the clause's content
+    # ends and the search for its boundary begins.
+    bound = _DIGIT_RE.search(body, match.end())
+    if bound is None:
+        return None
+    boundary = _CLAUSE_SPLIT_RE.search(body, bound.end())
+    return (match.start(), boundary.start() if boundary else len(body))
+
+
+#: WORDS THAT NAME A FORWARD HORIZON. One governed reader, because a forward
+#: question that states how far ahead it looks and is answered over a different
+#: horizon has had a declared element replaced — the same defect class as a
+#: replaced period, one tense along. Measured before this existed: "what will
+#: the book be worth in five years?", "…in 12 months?" and "…in 5 years?" all
+#: returned the identical open-pipeline composition, with the horizon named
+#: nowhere in the answer.
+_HORIZON_UNITS: Tuple[Tuple[str, int], ...] = (
+    ("year", 12), ("yr", 12), ("quarter", 3), ("month", 1), ("week", 0))
+
+_HORIZON_WORDS = {
+    "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12,
+    "eighteen": 18, "twenty": 20, "next": 1,
+}
+
+_HORIZON_RE = re.compile(
+    r"\b(?:in|over|within|across|after|for)\s+(?:the\s+)?(?:next\s+)?"
+    r"([0-9]+|" + "|".join(_HORIZON_WORDS) + r")\s*"
+    r"(year|yr|quarter|month|week)s?\b", re.I)
+
+_HORIZON_NEXT_RE = re.compile(r"\bnext\s+(year|quarter|month)\b", re.I)
+
+
+def forecast_horizon_months(question: Optional[str]) -> Optional[int]:
+    """How many months ahead the question looks, or ``None``.
+
+    Returns MONTHS so a consumer compares one number against its own projection
+    horizon. A week-scale horizon returns 0 — stated, and shorter than a month —
+    rather than None, because "none stated" and "very short" are different facts.
+    """
+    text = (question or "").lower()
+    match = _HORIZON_RE.search(text)
+    if match:
+        token, unit = match.group(1), match.group(2)
+        count = (int(token) if token.isdigit()
+                 else _HORIZON_WORDS.get(token))
+        if count is None:
+            return None
+        factor = dict(_HORIZON_UNITS).get(unit, 1)
+        return int(count * factor)
+    bare = _HORIZON_NEXT_RE.search(text)
+    if bare:
+        return dict(_HORIZON_UNITS).get(bare.group(1), 1)
     return None
 
 
@@ -283,10 +374,22 @@ def metric_slot(text: str) -> str:
     compositions, and a single fused function could serve only one of them.
     """
     head = text or ""
-    cut = condition_cut(head)
-    if cut is not None and head[:cut].strip():
-        return head[:cut].strip()
-    return head.strip()
+    span = condition_span(head)
+    if span is None:
+        return head.strip()
+    start, end = span
+    if head[:start].strip():
+        # CONDITION STATED LAST — everything before it is the subject, which is
+        # what this has always returned.
+        return head[:start].strip()
+    # CONDITION STATED FIRST. Truncating at its start leaves nothing, and the
+    # old code then handed the WHOLE question to the detector — so "for loans
+    # with LTV above 50%, balance by region" resolved its measure to LTV, the
+    # field named inside the condition, while the same question with the
+    # condition last resolved correctly to balance. The clause is REMOVED
+    # instead, leaving the subject on the other side of it.
+    remainder = (head[:start] + " " + head[end:]).strip()
+    return remainder or head.strip()
 
 
 # --------------------------------------------------------------------------- #
@@ -365,6 +468,141 @@ def finer_than(requested: Optional[str], available: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# P0 — "does this sentence ask the answer to VARY OVER TIME?"
+# --------------------------------------------------------------------------- #
+# THE ONE OWNER of that question, and deliberately a COMPOSITION rather than a
+# new vocabulary. Two readings already exist and both are already owned here:
+#
+#   AXIS_MARKER_RE   where a grouping clause starts ("by", "per", "across",
+#                    "split by", "broken down by", "grouped by")
+#   requested_unit   what counts as a time unit (day / week / month / quarter /
+#                    year), including B11's exclusion of the age compounds
+#
+# "By month" is the first followed immediately by the second. Writing a fresh
+# list of unit words here would have been the twelfth interpreter this contract
+# exists to prevent, and it would have gone wrong in a specific, checkable way:
+# a hand-written list drafted for this rule included `vintage` and `snapshot`,
+# which would have fired on rt_017 ("forecast run rate by vintage") and rt_028
+# ("balance by vintage, ignoring the forecast") — two routed-surface answers
+# that are correct today. A vintage is a loan ATTRIBUTE, the grouping owner
+# already handles it, and `requested_unit` had always said so. Asking the owner
+# instead of retyping its vocabulary is what excluded them.
+#
+# What is genuinely new is the grain-agnostic phrasing: "over time" names no
+# unit at all, so no unit vocabulary could ever hold it, and nothing else owned
+# it either. That list — and only that list — is declared below.
+
+#: Series wordings that name a time axis WITHOUT naming a grain. No existing
+#: vocabulary can hold these, because there is no unit in them to hold.
+SERIES_PHRASES: Tuple[str, ...] = (
+    "over time", "through time", "time series",
+    "over the period", "over the periods",
+    "across periods", "across the periods",
+    "over successive periods",
+    "month by month", "quarter by quarter", "period by period",
+    # LENDER VOICE. Each added with a phrasing from the measured banks that
+    # needed it — no term here without evidence. See
+    # docs/mi_time_axis_vocabulary_prediction.md for the evidence table.
+    #
+    # "x to x" and "x on x" are the same series request as "x by x", which was
+    # already held; only the preposition differs.
+    "month to month", "month on month", "month-on-month",
+    "quarter to quarter", "quarter on quarter", "quarter-on-quarter",
+    "year on year", "year-on-year",
+    "period to period", "period on period", "period-on-period",
+    # A DISTRIBUTIVE determiner over a time noun names the axis: "balances per
+    # region each month". `_AXIS_FILLER_RE` already treats each/every as
+    # transparent AFTER an axis marker ("by each month"); these are the same
+    # words with no marker in front, which is how a lender writes it.
+    "each month", "every month", "each quarter", "every quarter",
+    "each period", "every period",
+    # "between periods" names two ends of one axis. Kept to the PLURAL: "between
+    # January and March" is a span, not a series request, and must not match.
+    "between periods", "between the periods", "between reporting periods",
+    # THE EVOLUTION FAMILY, minus the noun. "How has the pipeline EVOLVED?"
+    # names a time axis and no grain, which is exactly what this list is for.
+    # Evidence: the frozen CFO bank refused it as unmapped, while "show pipeline
+    # EVOLUTION by stage" answered — the routing layer carried the NOUN in a
+    # marker list of its own and this owner carried none of the family, so one
+    # inflection of one word decided whether a time axis existed.
+    #
+    # "evolution" itself is deliberately NOT added. It is already carried by the
+    # parser's legacy trend words, so adding it here changes nothing about which
+    # questions are a series — but it does change which WORDING this function
+    # returns, and a refusal quotes that wording back: "Show regional
+    # concentration EVOLUTION OVER TIME" would be quoted as "evolution" rather
+    # than the phrase the reader's own axis request used. The verbs carry no
+    # such conflict.
+    "evolved", "evolving", "evolve", "evolves",
+)
+
+_SERIES_PHRASE_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(p) for p in
+                        sorted(SERIES_PHRASES, key=len, reverse=True)) + r")\b",
+    re.I)
+
+#: Determiners and qualifiers that may sit between an axis marker and its noun
+#: without changing what the noun is: "by each month", "by the reporting period".
+_AXIS_FILLER_RE = re.compile(r"^(?:the|each|every|a|calendar|governed)\s+", re.I)
+
+#: "period" is a time axis word that is NOT a unit — it names the axis while
+#: leaving its grain to the book. `UNIT_PATTERNS` correctly does not carry it
+#: (there is no `UNIT_ORDER` position for "whatever the book reports at"), so it
+#: is matched separately rather than by widening a vocabulary that means
+#: something else.
+_PERIOD_NOUN_RE = re.compile(r"^(?:reporting\s+|governed\s+)?periods?\b", re.I)
+
+
+def time_axis_request(question: Optional[str]) -> Optional[str]:
+    """The wording by which this sentence asked the answer to vary over time.
+
+    Returns the matched wording — "by month", "over the periods" — so a refusal
+    can quote the reader's own words back, or ``None``.
+
+    Two forms, and the asymmetry between them is the point:
+
+    * a SERIES PHRASE names the axis and no grain ("balance over time");
+    * an AXIS MARKER followed by a time unit names both ("balance by month").
+
+    The unit must be the very next word after the marker, allowing only
+    determiners. That adjacency is what separates "balance by month" from
+    "balance by region for loans under 12 months old" — the second names a
+    month, but not as an axis, and reading a unit from anywhere in the sentence
+    would have turned a filter into a series request.
+    """
+    q = str(question or "")
+    match = _SERIES_PHRASE_RE.search(q)
+    if match:
+        return match.group(0)
+    for marker in AXIS_MARKER_RE.finditer(q):
+        rest = q[marker.end():]
+        offset = len(rest) - len(rest.lstrip())
+        tail = rest.lstrip()
+        while True:
+            filler = _AXIS_FILLER_RE.match(tail)
+            if not filler:
+                break
+            offset += filler.end()
+            tail = tail[filler.end():]
+        period = _PERIOD_NOUN_RE.match(tail)
+        if period:
+            return q[marker.start():marker.end() + offset + period.end()]
+        word = re.match(r"[A-Za-z]+", tail)
+        if not word:
+            continue
+        # THE OWNER IS ASKED ABOUT THE MARKER AND THE NOUN TOGETHER, not about
+        # the noun alone. `UNIT_PATTERNS` holds `day` as PHRASES — "by day",
+        # "per day", "daily" — and never as the bare word, because "the day the
+        # loan completed" is not a reporting grain. Handing it "day" therefore
+        # returned None and "balance by day" read as no time axis at all.
+        # Handing it the whole candidate span is both correct and the only form
+        # that keeps this a composition rather than a second unit vocabulary.
+        if requested_unit("%s %s" % (marker.group(0), word.group(0))):
+            return q[marker.start():marker.end() + offset + word.end()]
+    return None
+
+
+# --------------------------------------------------------------------------- #
 # Clause splitting.
 #
 # "<age> 70+ with LTV above 50" is two independent thresholds, and a threshold
@@ -388,9 +626,28 @@ CLAUSE_CONNECTIVES: Tuple[str, ...] = ("and", "with", "where", "whose", "having"
 CLAUSE_AND_EXCEPTIONS: Tuple[str, ...] = (
     "over", "above", "older", "under", "below", "younger", "more", "less")
 
+#: PUNCTUATION IS A CLAUSE BOUNDARY, and its absence was a defect.
+#:
+#: The connectives alone could not end a clause, so a filter stated FIRST ran to
+#: the end of the sentence: "for loans with LTV above 50%, balance by region"
+#: split at "with" and produced one clause — " ltv above 50%, balance by region"
+#: — which swallowed the measure and the dimension. The field was then resolved
+#: from the swallowed words, so the predicate landed on `balance` instead of
+#: `ltv`, and "borrower age above 70, balance by region" produced a threshold of
+#: seventy BILLION. Stated last, the same filter parsed correctly, because there
+#: the clause genuinely does run to the end.
+#:
+#: A comma with digits on BOTH sides is a thousands separator, not a boundary,
+#: so "over 1,500,000" stays one number. Guarding on either side alone was
+#: wrong and measured wrong: "above 70, balance by region" has a digit before
+#: the comma, so a lookbehind-only guard refused to split exactly the clause
+#: this fix exists to end.
+_CLAUSE_PUNCTUATION = r"(?:(?<![0-9])[,;]|[,;](?![0-9]))"
+
 _CLAUSE_SPLIT_RE = re.compile(
     r"\band\b(?!\s+(?:" + "|".join(CLAUSE_AND_EXCEPTIONS) + r")\b)"
-    r"|" + "|".join(r"\b%s\b" % c for c in CLAUSE_CONNECTIVES if c != "and"))
+    r"|" + "|".join(r"\b%s\b" % c for c in CLAUSE_CONNECTIVES if c != "and")
+    + r"|" + _CLAUSE_PUNCTUATION)
 
 
 def _overlaps_any(start: int, end: int,
@@ -620,3 +877,472 @@ def threshold_subject_kind(text: "Optional[str]",
             if best is None or match.start() > best[0]:
                 best = (match.start(), kind)
     return best[1] if best else None
+
+
+# --------------------------------------------------------------------------- #
+# THE PIPELINE STAGE AXIS — a governed concept with no reader until now
+# --------------------------------------------------------------------------- #
+#: The governed field key. `config/mi/pipeline_field_contract.yaml` already
+#: declares `pipeline_stage` with `role: dimension` and
+#: `semantic_registry_field: pipeline_stage`, and
+#: `config/mi/stratification_catalogue.yaml` already declares it categorical over
+#: `total_pipeline`. The dimension was governed on the DATA side the whole time;
+#: what did not exist was any way for a QUESTION to name it, which is why
+#: `_route_evolution` re-read the raw sentence to choose its sub-route.
+PIPELINE_STAGE_FIELD = "pipeline_stage"
+
+#: Matches the stage AXIS itself ("by stage", "stage migration", "stage
+#: balances"). Whole-word, so "stagecoach" and "staged" do not qualify.
+_STAGE_AXIS_RE = re.compile(r"\bstages?\b", re.IGNORECASE)
+
+_STAGE_VOCAB_CACHE: "Optional[Dict[str, str]]" = None
+
+
+def pipeline_stage_vocabulary() -> "Dict[str, str]":
+    """Question-side spellings of the governed stages -> canonical stage.
+
+    Derived from the ONE authoritative normalisation map,
+    `pipeline_prep._STAGE_CANON`, never redeclared here. Two adjustments, both
+    rules rather than hand-lists:
+
+    A data-value normalisation map is not a question vocabulary. `_STAGE_CANON`
+    maps ``"funded" -> COMPLETED``, which is right for a tape cell and wrong for
+    a sentence, where *funded* names the governed DATASET. Every spelling that
+    collides with a governed view name is therefore dropped, read from the view
+    registry so a newly registered view cannot silently reintroduce the clash.
+    Without this, *"Show funded balance evolution by month"* — the most ordinary
+    question in the corpus — would acquire a COMPLETED stage.
+
+    The import is deferred because `question_interpretation` is imported by the
+    parser that `mi_agent_api` itself imports; at module scope this is a cycle.
+    """
+    global _STAGE_VOCAB_CACHE
+    if _STAGE_VOCAB_CACHE is not None:
+        return _STAGE_VOCAB_CACHE
+    from mi_agent_api.pipeline_prep import _STAGE_CANON
+    from mi_agent_api.workspace import VIEWS
+    collides = {str(v).lower() for v in (VIEWS or ())}
+    kept = {k: v for k, v in _STAGE_CANON.items() if k.lower() not in collides}
+
+    # A truncation of a longer spelling for the SAME stage is a word fragment,
+    # not a stage noun, and fragments are where the false positives live:
+    # `complete` (a prefix of `completed`/`completion`) matched *"How complete is
+    # interest rate?"* — five corpus questions about DATA COMPLETENESS acquiring a
+    # COMPLETED stage — and `app` (a prefix of `application`) is the same shape.
+    # Dropped by that rule rather than by a hand-list, so the exclusion cannot
+    # drift from the map it is derived from. The canonical token itself is always
+    # kept: `offer` is a prefix of `offer issued` and IS the stage.
+    _STAGE_VOCAB_CACHE = {
+        k: v for k, v in kept.items()
+        if k.lower() == v.lower()
+        or not any(o != k and o.startswith(k) and kept[o] == v for o in kept)
+    }
+    return _STAGE_VOCAB_CACHE
+
+
+def canonical_pipeline_stages() -> "Tuple[str, ...]":
+    """The governed stage set, in funnel order, from the governed bucket map."""
+    from mi_agent_api.pipeline_prep import _STAGE_BUCKET
+    order = {"early": 0, "mid": 1, "late": 2, "completed": 3, "withdrawn": 4}
+    return tuple(sorted(_STAGE_BUCKET, key=lambda s: order.get(_STAGE_BUCKET[s], 9)))
+
+
+def pipeline_stage_request(question: "Optional[str]"
+                           ) -> "Tuple[Optional[str], bool]":
+    """What this question says about the pipeline stage axis.
+
+    Returns ``(canonical_stage, names_the_axis)``:
+
+      ``canonical_stage`` a specific governed stage the question names, or None
+      ``names_the_axis``  whether it names the stage DIMENSION ("by stage")
+
+    THE ONE PLACE A STAGE IS READ FROM A QUESTION. `_route_evolution` currently
+    holds two more — a membership test against `_FUNNEL_KEYWORDS` and a
+    substring test against three hard-coded phrases — and those are the duplicate
+    owners this exists to retire. It is deliberately a reader and not a policy:
+    it says what the sentence names, and leaves to the projection what role that
+    plays.
+
+    Both halves are needed and they are not the same question. *"Show pipeline
+    amount by stage over time"* names the axis and no stage; *"Show the KFI
+    trend"* names a stage and not the axis; *"How have offer-stage cases
+    changed?"* names both, and a specific stage beats the axis because the
+    question asks about one stage rather than for a split across all of them.
+
+    Longest spelling first, so ``offer issued`` is not read as ``offer``, and
+    ``undisclaimed_mention`` so a stage every occurrence of which the sentence
+    rules out does not select — the same bar the dataset owner already uses.
+    """
+    text = str(question or "")
+    if not text:
+        return None, False
+    from mi_agent.portfolio_lens import undisclaimed_mention
+
+    # Funnel order, so a sentence naming two stages resolves to the EARLIER one
+    # — *"How much is sitting at offer today and how much will complete?"* is a
+    # question about the offer stage with a completion verb in it, and the
+    # shipped handler already resolves it that way. The order is read from the
+    # governed bucket map, not asserted here.
+    order = {st: i for i, st in enumerate(canonical_pipeline_stages())}
+    stage: "Optional[str]" = None
+    vocab = pipeline_stage_vocabulary()
+    for spelling in sorted(vocab, key=lambda k: (order.get(vocab[k], 9), -len(k))):
+        # Plural allowed on the trailing word: "How many KFIs have we issued?"
+        # names a stage, and a reader that missed it would UNDER-reach where the
+        # handler it replaces reaches, which is the one direction a replacement
+        # may not fail in.
+        if not re.search(r"\b%s(?:e?s)?\b" % re.escape(spelling), text,
+                         re.IGNORECASE):
+            continue
+        if not undisclaimed_mention(text, spelling):
+            continue
+        stage = vocab[spelling]
+        break
+
+    # The bare word "stage" is ordinary English — *"What stage is the
+    # securitisation at?"* is not a pipeline question — so unlike a canonical
+    # stage NAME it is not self-evidencing. It names the axis only where the
+    # sentence puts it in an axis position ("by stage", "per stage"), or where
+    # the governed dataset owner has already decided this is a pipeline
+    # question. That is the asymmetry: a stage name is its own evidence, the
+    # word "stage" needs some.
+    axis = False
+    match = _STAGE_AXIS_RE.search(text)
+    if match:
+        before = text[max(0, match.start() - SELECTOR_WINDOW):match.start()]
+        if AXIS_MARKER_RE.search(before):
+            axis = True
+        else:
+            from mi_agent_api.workspace import resolve_dataset
+            axis = resolve_dataset(text) == "pipeline"
+    return stage, axis
+
+
+# --------------------------------------------------------------------------- #
+# LEVEL versus MOVEMENT — the single owner
+# --------------------------------------------------------------------------- #
+# THE QUESTION THIS ANSWERS, and nothing else:
+#
+#     Is the quantity asked for a LEVEL at one point in time, or a CHANGE
+#     between two points in time?
+#
+# It lives here because it is a reading of the QUESTION's vocabulary, which is
+# what this module owns, and because it must not live in any route: the estate
+# had FIVE components inferring it independently and they disagreed on 30 of 882
+# corpus questions, with no reader a superset of any other —
+#
+#     A  period_change.recognition.has_change_language      17
+#     B  llm_query_parser._COMPARE_TRIGGER_RE               21
+#     C  spec.temporal_mode == "compare"                     5
+#     D  interpreter.deterministic's compare branch         20
+#     E  concentration_query's compare_concentration gate    0
+#     union                                                 30
+#
+# — and each missed part of the union (A 13, B 9, C 25, D 10, E 30). Reader A
+# missed "How did the balance change since last month?", the most canonical
+# movement question in the estate, because CHANGE_MARKERS carried "changed",
+# "change in" and "has changed" but not the bare verb.
+#
+# TWO THINGS THAT ARE NOT A MOVEMENT, and the reason each is excluded:
+#
+#   comparing two POPULATIONS  "how does the front book compare with our older
+#                              lending" contrasts two slices of one snapshot.
+#                              Reader B called it a movement because its trigger
+#                              is a bare "compare" with no period requirement.
+#   comparing against a PLAN   "compare current funded balance to expected",
+#                              "the largest concentration versus limit" — the
+#                              second operand is a forecast or a threshold, not
+#                              an earlier date.
+#
+# So every construction below requires a PERIOD on both sides, or an explicit
+# change verb. A bare "compare" is not evidence of anything temporal.
+#
+# A SERIES IS NOT A TWO-POINT MOVEMENT either. "balance by month" is a sequence
+# of levels; the estate already treats it as a separate decline reason
+# (DECLINE_TREND_SERIES) and folding it in here would claim a movement wherever
+# a time axis appears.
+
+LEVEL = "level"
+MOVEMENT = "movement"
+TEMPORAL_ASPECTS = (LEVEL, MOVEMENT)
+
+#: Verbs and nouns that name a change. Superset of the estate's readers: the
+#: bare conjugations `change`, `changing`, `declined`, `dropped` and `growing`
+#: were missing from the widest of them.
+CHANGE_WORDS: Tuple[str, ...] = (
+    # "added"/"gained"/"lost" were MISSING, and the omission was not cosmetic:
+    # "which region added the most balance?" read as a LEVEL, so a question
+    # about a movement was answered with a position. That is defect D2
+    # reoccurring through the owner that exists to prevent it.
+    "added", "add", "adds", "adding", "gained", "gain", "gains", "lost",
+    "change", "changed", "changes", "changing",
+    "movement", "movements", "moved", "moves", "move",
+    "increase", "increased", "increasing", "decrease", "decreased", "decreasing",
+    "grew", "grow", "grown", "growing", "growth",
+    "declined", "decline", "declining", "dropped", "drop", "dropping",
+    "shrank", "shrunk", "shrinking", "rose", "risen", "rising",
+    "fell", "fallen", "falling",
+    "improved", "improvement", "deteriorated", "deterioration",
+    "worsened", "shifted", "shift",
+)
+_CHANGE_WORD_RE = re.compile(
+    r"\b(?:" + "|".join(sorted(CHANGE_WORDS, key=len, reverse=True)) + r")\b",
+    re.IGNORECASE)
+
+#: Phrases that name a period-over-period comparison outright.
+COMPARISON_PERIOD_WORDS: Tuple[str, ...] = (
+    "month on month", "month-on-month", " mom ", "quarter on quarter",
+    "quarter-on-quarter", " qoq ", "year on year", "year-on-year", " yoy ",
+    "year to date", "year-to-date", " ytd ",
+    "current versus previous", "current vs previous",
+    "versus the previous", "versus the prior", "vs the previous", "vs the prior",
+    "with the previous", "with the prior",
+    "since the previous", "since the prior", "since the last",
+)
+
+#: What counts as naming a period. A construction only reads as temporal when a
+#: period stands on BOTH sides of it — that is the whole difference between
+#: comparing two dates and comparing two books.
+_PERIOD = (r"(?:\d{4}-\d{2}(?:-\d{2})?|\d{4}|q[1-4]|h[12]|"
+           r"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+           r"jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|"
+           r"dec(?:ember)?|"
+           r"(?:last|previous|prior|next|this|current|latest)\s+"
+           r"(?:day|week|month|quarter|year|run|pipeline|period)|"
+           # Relative recency. A reader says "now compared with a few months
+           # ago" and means two dates as plainly as "October versus November";
+           # without these the owner read that as a level.
+           r"(?:a\s+few\s+|\d+\s+|a\s+|several\s+)?"
+           r"(?:days?|weeks?|months?|quarters?|years?)\s+ago|"
+           r"earlier\s+(?:in\s+the\s+)?(?:year|quarter|month|period)|"
+           r"latest|today|yesterday|now|recent(?:ly)?)")
+
+#: Seasoning SEGMENTS are not periods. "the front book", "our seasoned loans"
+#: and "the back book" name cohorts of the CURRENT book, so a question
+#: contrasting two of them is cross-sectional however comparative its wording.
+#: The estate has a `seasoning` owner for exactly that axis, and the difference
+#: between it and this one is the difference between "what we hold" and "what
+#: moved".
+
+_BETWEEN_PERIODS_RE = re.compile(
+    rf"\bbetween\s+{_PERIOD}\s+and\s+{_PERIOD}", re.IGNORECASE)
+_FROM_TO_PERIODS_RE = re.compile(
+    rf"\bfrom\s+{_PERIOD}\s+(?:to|until|through)\s+{_PERIOD}", re.IGNORECASE)
+_PERIOD_VERSUS_RE = re.compile(
+    rf"{_PERIOD}\s+(?:versus|vs\.?|against|compared\s+(?:to|with))\s+"
+    rf"{_PERIOD}", re.IGNORECASE)
+#: "compare October AND November". A bare `and` between two periods is NOT
+#: enough on its own — "show pipeline by stage for October and November" asks
+#: for two LEVELS side by side, not their difference — so the connective only
+#: counts when an explicit comparison verb governs it.
+_COMPARE_PERIODS_RE = re.compile(
+    rf"\bcompar\w*\b[^.?!]{{0,40}}?{_PERIOD}\s+(?:and|with|to|versus|vs\.?)\s+"
+    rf"{_PERIOD}", re.IGNORECASE)
+#: Two DISTINCT periods anywhere, joined by a comparison word. The shape
+#: "how does recent lending compare with what we were originating earlier in the
+#: year" puts the periods too far from the connective for the patterns above.
+_COMPARE_WORD_RE = re.compile(
+    r"\b(?:compare[ds]?|comparing|versus|vs\.?|against|different|difference)\b",
+    re.IGNORECASE)
+_PERIOD_TOKEN_RE = re.compile(_PERIOD, re.IGNORECASE)
+_SINCE_PERIOD_RE = re.compile(rf"\bsince\s+{_PERIOD}", re.IGNORECASE)
+#: "how did/has X change" — the shape reader A missed entirely.
+_HOW_CHANGED_RE = re.compile(
+    r"\bhow\s+(?:did|has|have|is|are)\b.{0,60}?\b(?:chang|mov|grow|grew|"
+    r"declin|f[ae]ll|drop|increas|decreas|shift)", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class TemporalAspect:
+    """Whether the question asks for a level or a change, and what said so."""
+
+    verdict: str
+    evidence: Tuple[str, ...] = ()
+
+    @property
+    def is_movement(self) -> bool:
+        return self.verdict == MOVEMENT
+
+
+def temporal_aspect(question: str) -> TemporalAspect:
+    """LEVEL or MOVEMENT, with the signals that decided it.
+
+    MOVEMENT requires POSITIVE evidence. Absence of evidence is LEVEL, because
+    a question that names no change is asking what the position is — which is
+    what every route in the estate already assumes, and saying so explicitly is
+    what lets a consumer stop guessing.
+
+    The evidence is returned so a receipt can show WHY a question was read as a
+    change. A verdict with no evidence is a level, and that is checkable.
+    """
+    text = f" {str(question or '').strip().lower()} "
+    evidence: list = []
+    if _CHANGE_WORD_RE.search(text):
+        evidence.append("change_word")
+    if any(w in text for w in COMPARISON_PERIOD_WORDS):
+        evidence.append("comparison_period_phrase")
+    if _BETWEEN_PERIODS_RE.search(text):
+        evidence.append("between_periods")
+    if _FROM_TO_PERIODS_RE.search(text):
+        evidence.append("from_period_to_period")
+    if _PERIOD_VERSUS_RE.search(text):
+        evidence.append("period_versus_period")
+    if _COMPARE_PERIODS_RE.search(text):
+        evidence.append("compare_period_and_period")
+    if (_COMPARE_WORD_RE.search(text)
+            and len({m.group(0).strip().lower()
+                     for m in _PERIOD_TOKEN_RE.finditer(text)}) >= 2):
+        evidence.append("two_periods_and_a_comparison")
+    if _SINCE_PERIOD_RE.search(text):
+        evidence.append("since_period")
+    if _HOW_CHANGED_RE.search(text):
+        evidence.append("how_did_it_change")
+    return TemporalAspect(MOVEMENT if evidence else LEVEL, tuple(evidence))
+
+
+def is_movement_question(question: str) -> bool:
+    """The boolean form, for a caller that does not need the evidence."""
+    return temporal_aspect(question).is_movement
+
+
+# --------------------------------------------------------------------------- #
+# ORDERING — the single owner of direction, basis and limit
+# --------------------------------------------------------------------------- #
+# The same argument as LEVEL versus MOVEMENT above, and the same remedy. The
+# vocabulary lived in `mi_agent.period_change.rank_request`, inside a ROUTE
+# package, and the contract had to import a route to learn what the reader
+# asked to order by. It also required a resolved dimension term before it would
+# answer at all, so a question that named an ordering but no dimension carried
+# no ordering on the contract — 15 of 97 ranking questions could not be planned
+# for that reason alone.
+#
+# Direction, basis and limit are properties of the QUESTION, not of the
+# dimension, so they are read here and the dimension is bound separately.
+
+ORDER_LIMIT_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twenty": 20,
+}
+#: The rank words that can govern a count. `bottom`/`worst`/`smallest` carry a
+#: DIRECTION as well, which is why they appear in both maps.
+_TOP_WORDS = r"top|first|best|largest|biggest|greatest|highest|leading"
+#: `last` is NOT here. It matched "since last month" and made every
+#: month-relative question read as a bottom-N ranking with a decreasing
+#: direction — the ordering owner inventing an ordering out of a period.
+_BOTTOM_WORDS = r"bottom|worst|smallest|lowest|least"
+_ORDER_WORDS = f"{_TOP_WORDS}|{_BOTTOM_WORDS}"
+_WORDNUM = "|".join(ORDER_LIMIT_WORDS)
+
+#: How many results the reader asked for. Deliberately bounded shapes, so a
+#: number meaning something else — "the 3 months to June", "over 85", "LTV above
+#: 50%" — is never read as a limit.
+#:
+#:     "top 3", "bottom five"       a rank word immediately before a number
+#:     "three largest"              a number immediately before a rank word
+#:     "which two regions"          "which" + a number opening the question
+_ORDER_LIMIT_RE = re.compile(
+    rf"\b(?:{_ORDER_WORDS})\s+(?P<a_digits>\d+)\b|"
+    rf"\b(?:{_ORDER_WORDS})\s+(?P<a_word>{_WORDNUM})\b|"
+    rf"\b(?P<b_word>{_WORDNUM})\s+(?:{_ORDER_WORDS})\b|"
+    rf"\bwhich\s+(?P<c_word>{_WORDNUM})\b|"
+    rf"\bwhich\s+(?P<c_digits>\d+)\b", re.I)
+
+#: DIRECTION COMES FROM THE VERB, NOT FROM THE SUPERLATIVE.
+#:
+#: `most`, `largest`, `top` are RANK words: they say an ordering was asked for,
+#: and say nothing about which way. Putting them in the increase set made
+#: "which region saw the LARGEST FALL" read as increase-and-decrease-at-once,
+#: which resolves to `either` — an ordering by magnitude that would have ranked
+#: a riser top of a question about falls.
+_ORDER_DECREASE_RE = re.compile(
+    rf"\b(?:{_BOTTOM_WORDS})\b|\b(?:declin\w*|f[ae]ll\w*|drop\w*|decreas\w*|"
+    rf"shr(?:ank|unk|ink\w*)|reduc\w*|lost|los(?:e|ing)|down)\b", re.I)
+_ORDER_INCREASE_RE = re.compile(
+    r"\b(?:grew|grow|grown|growth|increas\w*|ris(?:e|en|ing)|gain\w*|"
+    r"expand\w*|added|add|up)\b", re.I)
+_ORDER_ANY_RE = re.compile(r"\bmovement\b|\bmoved\b|\bchang(?:e|ed|es)\b", re.I)
+
+_ORDER_SHARE_RE = re.compile(
+    r"\bshare\b|\bproportion\b|\bcomposition\b|\bmix\b", re.I)
+_ORDER_PERCENT_RE = re.compile(
+    r"\bfastest\b|\bin percentage terms\b|\bpercentage\b|\bpercent\b|\b%\b|"
+    r"\brelative growth\b", re.I)
+_ORDER_COUNT_RE = re.compile(
+    r"\b(?:loan|loans|case|cases|account|accounts|number of)\b", re.I)
+_ORDER_AMOUNT_RE = re.compile(
+    r"\bbalance\b|\bexposure\b|\bbook\b|\bvalue\b|£", re.I)
+
+#: A superlative or explicit rank instruction. Without one, no ordering.
+_ORDER_REQUESTED_RE = re.compile(
+    rf"\b(?:most|least|{_ORDER_WORDS}|fastest|rank|order)\b", re.I)
+
+
+@dataclass(frozen=True)
+class OrderingRequest:
+    """What the question asked to order by, if anything."""
+
+    requested: bool
+    direction: Optional[str] = None
+    basis: Optional[str] = None
+    limit: Optional[int] = None
+
+
+def ordering_limit(question: str) -> Optional[int]:
+    """How many results the question asked for, or None.
+
+    "which TWO regions", "top 3", "bottom five". The word map used to stop at
+    three|four|five|ten, so "which two regions grew the most" carried no limit
+    and the planner ranked every riser — silently wrong rather than refused.
+    """
+    match = _ORDER_LIMIT_RE.search(f" {str(question or '').strip().lower()} ")
+    if not match:
+        return None
+    digits = match.group("a_digits") or match.group("c_digits")
+    if digits:
+        try:
+            value = int(digits)
+        except ValueError:
+            return None
+        return value if value > 0 else None
+    word = (match.group("a_word") or match.group("b_word")
+            or match.group("c_word") or "")
+    return ORDER_LIMIT_WORDS.get(word.lower())
+
+
+def ordering_request(question: str) -> OrderingRequest:
+    """Direction, basis and limit — WITHOUT needing a resolved dimension.
+
+    Requiring one was the old reader's mistake: a question orders by a
+    direction and a basis whether or not the dimension it names resolves, and
+    withholding the ordering because the dimension did not resolve loses two
+    facts to explain one.
+    """
+    text = f" {str(question or '').strip().lower()} "
+    if not _ORDER_REQUESTED_RE.search(text):
+        return OrderingRequest(requested=False)
+
+    down = bool(_ORDER_DECREASE_RE.search(text))
+    up = bool(_ORDER_INCREASE_RE.search(text))
+    if down and not up:
+        direction = ORDER_DECREASE
+    elif up and not down:
+        direction = ORDER_INCREASE
+    elif _ORDER_ANY_RE.search(text) or (up and down):
+        # Both named, or the question says "movement" — order by magnitude
+        # rather than guess which the reader meant.
+        direction = ORDER_EITHER
+    else:
+        # A bare rank instruction with no verb is a descending ranking.
+        direction = ORDER_INCREASE
+
+    if _ORDER_SHARE_RE.search(text):
+        basis = ORDER_BASIS_SHARE
+    elif _ORDER_PERCENT_RE.search(text):
+        basis = ORDER_BASIS_PERCENT
+    elif _ORDER_COUNT_RE.search(text) and not _ORDER_AMOUNT_RE.search(text):
+        basis = ORDER_BASIS_COUNT
+    else:
+        basis = ORDER_BASIS_ABSOLUTE
+
+    return OrderingRequest(requested=True, direction=direction, basis=basis,
+                           limit=ordering_limit(question))

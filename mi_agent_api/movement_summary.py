@@ -194,6 +194,22 @@ def _completions_balance(df: pd.DataFrame, reporting_date: str,
 # --------------------------------------------------------------------------- #
 # Portfolio summary (current period)
 # --------------------------------------------------------------------------- #
+def cohort_balances(df) -> Dict[str, float]:
+    """Funded balance per source portfolio, keyed by governed id.
+
+    EXTRACTED, NOT COPIED. `portfolio_summary` computed this inline and the
+    compositional path needs the same numbers; a second copy would be a second
+    owner of one calculation, which is the defect this programme removes rather
+    than adds. Both callers now reach this.
+    """
+    if df is None or _PORTFOLIO_ID not in df.columns or _BALANCE not in df.columns:
+        return {}
+    ids = df[_PORTFOLIO_ID].astype(str).str.strip()
+    return {c["id"]: round(float(_num(df.loc[ids == c["id"], _BALANCE])
+                                 .fillna(0.0).sum()), 2)
+            for c in _cohorts(df)}
+
+
 def portfolio_summary(output_root, client_id: str, *,
                       to_run_id: Optional[str] = None,
                       lens_filters: Optional[Dict[str, str]] = None,
@@ -227,12 +243,7 @@ def portfolio_summary(output_root, client_id: str, *,
         "regionColumn": region_col,
         "topRegions": _regional_exposure(df, region_col) if region_col else [],
         "cohorts": _cohorts(df),
-        "cohortBalances": (
-            {c["id"]: round(float(_num(
-                df.loc[df[_PORTFOLIO_ID].astype(str).str.strip() == c["id"], _BALANCE]
-            ).fillna(0.0).sum()), 2) for c in _cohorts(df)}
-            if _PORTFOLIO_ID in df.columns and _BALANCE in df.columns else {}
-        ),
+        "cohortBalances": cohort_balances(df),
         "periodCount": len(periods),
         "sourceFiles": [f.get("source") for f in frames],
     }
@@ -256,8 +267,13 @@ def period_movement(output_root, client_id: str, *,
     """
     frames = evolution_mod.funded_frames(output_root, client_id, to_run_id)
     scoped = []
+    # WHAT THE LENS DID, CARRIED OUT. The route publishes it; without that the
+    # answer that applied the Direct scope and the answer that dropped it are
+    # the same envelope.
+    scope_evidence: List[Dict[str, Any]] = []
     for f in frames:
-        d = evolution_mod._scope_frame_lens(f.get("df"), lens_filters)
+        d = evolution_mod._scope_frame_lens(f.get("df"), lens_filters,
+                                            evidence_out=scope_evidence)
         if d is not None and len(d):
             scoped.append({**f, "df": d})
     span = max(1, int(span_periods or 1))
@@ -278,6 +294,12 @@ def period_movement(output_root, client_id: str, *,
                 "reason": (f"the requested span of {span} reporting period(s) "
                            f"reaches further back than this book's "
                            f"{len(periods)} governed reporting period(s)")}
+
+    _scope_applied = ({"detail": scope_evidence[-1]["detail"],
+                       "rowsBefore": scope_evidence[-1]["rows_before"],
+                       "rowsAfter": scope_evidence[-1]["rows_after"],
+                       "snapshots": len(scope_evidence)}
+                      if scope_evidence else None)
 
     cur_p, pri_p = periods[-1], periods[-1 - span]
     cur_m, pri_m = _metrics(cur_p), _metrics(pri_p)
@@ -363,6 +385,7 @@ def period_movement(output_root, client_id: str, *,
     return {
         "available": True,
         "lens": lens_label,
+        "scopeApplied": _scope_applied,
         "currentPeriod": cur_p.get("period"),
         "priorPeriod": pri_p.get("period"),
         "currentReportingDate": cur_p.get("reporting_date"),

@@ -84,9 +84,29 @@ FAILURE_ERROR_CODES: Dict[str, str] = {
 # --------------------------------------------------------------------------- #
 # Snapshot supply — the EXISTING governed per-period frame service
 # --------------------------------------------------------------------------- #
+class PopulationNotApplied(Exception):
+    """A governed row predicate could not be applied to every snapshot.
+
+    Raised, never returned, and never swallowed into an unnarrowed frame: a
+    comparison whose population failed on one of its two dates is not a
+    comparison with a missing filter, it is no comparison at all. The same
+    fail-closed shape `_filtered_funded_evo` already raises for the funded
+    series, for the same reason.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(detail)
+        self.detail = detail
+
+
 def build_snapshots(output_root: Optional[str], client_id: str, *,
                     to_run_id: Optional[str] = None,
-                    lens: Any = None) -> Tuple[SnapshotFrame, ...]:
+                    lens: Any = None,
+                    population: Sequence[Any] = (),
+                    semantics: Optional[Dict[str, Any]] = None,
+                    evidence_out: Optional[List[Any]] = None,
+                    scope_evidence_out: Optional[List[Any]] = None,
+                    ) -> Tuple[SnapshotFrame, ...]:
     """Governed portfolio snapshots, oldest → newest, for a client and lens.
 
     ``lens`` is a RESOLVED portfolio lens (``chat_routing._resolve_lens``), whose
@@ -94,19 +114,69 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
     same ``_apply_lens_filter`` the funded-bridge and movement routes use, so a
     period-change answer covers exactly the portfolios every other routed answer
     would cover for the same lens.
+
+    ``population`` are the governed `Predicate` objects the compositional plan
+    selected — `SELECT_POPULATION(kind=row_predicates)` from `RowPredicateClaim`,
+    the same objects `_filtered_funded_evo` receives. THE POPULATION IS APPLIED
+    HERE, in the one place every snapshot this route compares is built, so a
+    predicate cannot reach one date and miss the other. Applying it in the
+    caller, per date, is how a filtered comparison comes to open on one
+    population and close on another.
+
+    Execution goes through `population.apply_population` — the single governed
+    meaning of a predicate — and FAILS CLOSED on any snapshot it cannot narrow.
+
+    THE LENS NOW FAILS CLOSED TOO. It did not, and the difference was a wrong
+    number: a contract-derived lens carrying ``source_portfolio_type`` rather
+    than the registry's id list narrowed nothing, five snapshots came through
+    unchanged, and "the Direct book" was answered with the whole book's £22.6m
+    against its real £12.4m. ``scope_evidence_out`` receives what the lens
+    actually did, per snapshot, so that answer and this one can never again
+    publish the same receipt.
     """
     from . import chat_routing
+    from . import contract_scope as _scope
     from . import evolution as evolution_mod
     from mi_agent import portfolio_scope as scope_mod
 
     frames = evolution_mod.funded_frames(output_root, client_id, to_run_id)
     snapshots: List[SnapshotFrame] = []
+    empty_snapshots: List[str] = []
     for frame in frames:
         source_df = frame.get("df")
         if source_df is None:
             continue
-        df = (chat_routing._apply_lens_filter(source_df, lens)
+        # THE LENS IS APPLIED PER SNAPSHOT, AND WHAT IT DID IS RECORDED.
+        # `_apply_lens_filter` now raises rather than widening, so a scope this
+        # route cannot apply stops the answer instead of retitling it.
+        _scope_ev: List[Any] = []
+        df = (chat_routing._apply_lens_filter(source_df, lens,
+                                              evidence_out=_scope_ev)
               if lens is not None else source_df)
+        if _scope_ev and scope_evidence_out is not None:
+            scope_evidence_out.append((str(frame.get("run_id")), _scope_ev[-1]))
+        if population:
+            from mi_agent import population as _population
+
+            df, evidence = _population.apply_population(df, population, semantics)
+            if df is None or not evidence.is_usable:
+                raise PopulationNotApplied(
+                    "; ".join(evidence.unavailable
+                              or [evidence.blocked_reason or "unknown reason"]))
+            if int(len(df)) == 0:
+                # A POPULATION THAT SELECTS NOTHING IS NOT A COMPARISON.
+                # Left to run, the workflow reports "no governed field tagged
+                # for period-change analysis is available in both snapshots" —
+                # a true sentence about empty frames and a misleading one about
+                # the book, which carries those fields perfectly well. The
+                # obstacle is the population, so the refusal names it.
+                empty_snapshots.append(str(frame.get("run_id")))
+            if evidence_out is not None:
+                # KEYED BY SNAPSHOT, because the receipt publishes counts for
+                # the TWO snapshots the comparison resolved to, not for every
+                # snapshot the book has. An unkeyed list would pair a filtered
+                # count for two dates with unfiltered counts for five.
+                evidence_out.append((str(frame.get("run_id")), evidence))
         source = frame.get("source")
         snapshots.append(SnapshotFrame(
             snapshot_id=str(frame.get("run_id")),
@@ -121,6 +191,10 @@ def build_snapshots(output_root: Optional[str], client_id: str, *,
             # the lens selected but that this reporting date never contained
             # must be reported as absent, not as a snapshot full of nulls.
             portfolio_ids=_portfolio_ids(source_df, scope_mod)))
+    if population and snapshots and len(empty_snapshots) == len(snapshots):
+        raise PopulationNotApplied(
+            "no rows in this book match the requested population at any of the "
+            "snapshots compared (" + ", ".join(empty_snapshots) + ")")
     return tuple(snapshots)
 
 
@@ -273,12 +347,27 @@ def analyse_period_change(*, client_id: str, output_root: Optional[str],
 # --------------------------------------------------------------------------- #
 # Recognition — reads the SINGLE parse on the route request
 # --------------------------------------------------------------------------- #
+#: The key this route's pre-claim reading is carried under.
+RECOGNITION_KEY = "period_change"
+
+
 def recognise_request(req: Any) -> Any:
-    """``Recognition`` for the governed recogniser registry."""
+    """``Recognition`` for the governed recogniser registry.
+
+    THE READING IS KEPT. This is the one place the question is read to decide
+    whether the route owns it, and the `PeriodChangeIntent` it produces carries
+    the mode, the requested fields and the period request the handler needs.
+    It used to be discarded and rebuilt inside the handler from the same
+    sentence — the same function, run twice, the second time after the route
+    had already claimed the question.
+    """
     from .recogniser_registry import Recognition
 
     intent = recognise(req.question, spec=req.spec, view=req.view,
                        semantics_context=req.semantics_context)
+    remember = getattr(req, "remember_recognition", None)
+    if remember is not None:
+        remember(RECOGNITION_KEY, intent)
     if not intent.matched:
         return Recognition.no(intent.reason)
     return Recognition.yes(reason=f"{intent.reason}:{intent.mode}")
@@ -293,20 +382,95 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                         portfolio_id: Optional[str], as_of: Optional[str],
                         source_lens: Any = None,
                         semantics_context: Optional[Dict[str, Any]] = None,
+                        semantics: Optional[Dict[str, Any]] = None,
                         view: str = "funded",
-                        lens: Any = None) -> Optional[Dict[str, Any]]:
-    """The governed period-change answer, or ``None`` to defer to the next route."""
-    from . import chat_routing
+                        lens: Any = None,
+                        interpretation: Any = None,
+                        recognition: Any = None) -> Optional[Dict[str, Any]]:
+    """The governed period-change answer, or ``None`` to defer to the next route.
 
-    intent = recognise(question, spec=spec, view=view,
-                       semantics_context=semantics_context)
-    if not intent.matched:
+    `recognition` is THIS ROUTE'S OWN PRE-CLAIM READING, produced by
+    `recognise_request` before the registry entered the handler and carried in
+    on the request. It is not recomputed here: once the registry has claimed
+    the question, the handler does not go back to the sentence to find out what
+    it owns.
+
+    NO READING, NO ANSWER FROM THIS ROUTE — the rule Conversion 1 set for the
+    population and Conversion 2 for the window. A caller that skipped
+    recognition gets a deferral, not a second recogniser hidden in the handler.
+    """
+    from . import chat_routing
+    from . import contract_scope as _scope
+
+    intent = recognition
+    if intent is None or not intent.matched:
         return None
 
-    resolved_lens = lens if lens is not None else chat_routing._resolve_lens(
-        question, source_lens)
-    snapshots = build_snapshots(output_root, client_id, to_run_id=run_id,
-                                lens=resolved_lens)
+    # THE POPULATION COMES FROM THE CONTRACT. This called
+    # `chat_routing._resolve_lens(question, source_lens)` — a second reading of
+    # the sentence for a scope the contract had already claimed, and the last
+    # population owner left downstream of interpretation in this estate.
+    # Measured over 882 corpus questions before the switch, and again with a
+    # workspace selection present so caller precedence was actually exercised:
+    # the contract-derived lens and the resolver agree every time.
+    resolved_lens = (lens if lens is not None
+                     else _scope.lens_from_contract(interpretation))
+    if resolved_lens is None:
+        # NO SCOPE CLAIM, NO ANSWER FROM THIS ROUTE. Conversion 1's rule, and
+        # for its reason: keeping the resolver here as a fallback would leave a
+        # second population owner reachable exactly when the first one failed.
+        return None
+    # THE POPULATION THE READER STATED, PLANNED FROM THE CONTRACT.
+    #
+    # Same chain the funded evolution route uses and the same objects:
+    # `RowPredicateClaim` -> `SELECT_POPULATION(kind=row_predicates)` ->
+    # `Predicate` -> `governed_predicate_mask`. This route reads no filter
+    # meaning of its own; it asks the plan what rows the question selected, and
+    # a route-local reading of `spec.filters` would be a second owner of the
+    # answer the contract already carries.
+    from . import analytical_plan as _plan
+
+    _population = _plan.row_predicates(_plan.row_predicate_step(interpretation))
+    _pop_evidence: List[Any] = []
+    _scope_evidence: List[Any] = []
+    try:
+        snapshots = build_snapshots(output_root, client_id, to_run_id=run_id,
+                                    lens=resolved_lens,
+                                    population=_population,
+                                    # THE MI SEMANTICS, not `semantics_context`.
+                                    # `governed_predicate_mask` resolves the
+                                    # field, its domain and its scale from this
+                                    # dict; handed the registry context (empty
+                                    # today) it compares a stored LTV RATIO
+                                    # against 50 and narrows every snapshot to
+                                    # nothing. Same object the funded evolution
+                                    # route passes to the same call.
+                                    semantics=semantics,
+                                    evidence_out=_pop_evidence,
+                                    scope_evidence_out=_scope_evidence)
+    except chat_routing.LensNotApplied as exc:
+        # THE SCOPE THE READER NAMED WAS NOT APPLIED, SO NOTHING IS ANSWERED.
+        # The alternative is the defect this guard exists for: a whole-book
+        # movement published under the label of one book.
+        message = (f"I understood the book you asked about, but this "
+                   f"comparison could not be narrowed to it ({exc.detail}). I "
+                   f"have not compared the whole book instead.")
+        return chat_routing._envelope(
+            ok=False, question=question, spec=spec_dict, artifacts=[],
+            answer=message, error=message, route="period_change",
+            warnings=[message])
+    except PopulationNotApplied as exc:
+        # THE REQUESTED POPULATION WAS NOT APPLIED, SO NOTHING IS ANSWERED.
+        # Naming it is the point: a reader who asked about one population must
+        # never be handed the whole book with the difference left unsaid.
+        message = (f"I understood the population you asked about, but it could "
+                   f"not be applied to both snapshots of this comparison "
+                   f"({exc.detail}). I have not compared the whole book "
+                   f"instead.")
+        return chat_routing._envelope(
+            ok=False, question=question, spec=spec_dict, artifacts=[],
+            answer=message, error=message, route="period_change",
+            warnings=[message])
     scope_ref = scope_ref_from_lens(
         resolved_lens, registry=_registry_for(snapshots, client_id))
 
@@ -319,17 +483,74 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # decides what the analysis must cover: asking "which region grew the most?"
     # and receiving an analysis that never looked at geography cannot produce a
     # ranked answer, and re-running afterwards would compute the book twice.
-    columns = set(snapshots[-1].frame.columns) if snapshots else None
-    rank_intent = resolve_rank_intent(question, columns=columns)
+    rank_intent = resolve_rank_intent(interpretation)
     if rank_intent.refusal is not None:
         return _rank_refusal_envelope(question, spec_dict, rank_intent)
+
+    # NO IMPLICIT COMPARISON PERIOD.
+    #
+    # A ranked MOVEMENT needs two dates. The recogniser will happily supply
+    # "latest versus previous" when the question names none, and while that
+    # default was masked by a false dimension refusal it never surfaced; with
+    # the refusal fixed it would have started answering "which region grew the
+    # most?" over a window the reader never asked for.
+    #
+    # The governed ruling is that a missing element is CLARIFIED, not invented.
+    # The contract says whether a period was named — `comparison_periods` for an
+    # explicit pair, `window_periods` for a span — and neither is guessed here.
+    #
+    # THE RULE IS THE ROUTE'S, NOT THE RANKED SUB-CASE'S. It was gated on
+    # `rank_intent.requested`, which left the NARRATIVE half of the same route
+    # inventing the same default: "What changed?" names no period, and the
+    # recogniser's latest-versus-previous silently became the reader's window.
+    # Every answer this route gives is a comparison between two dates, so the
+    # question of which two dates is never optional here. Nothing about the
+    # rule changes — only the false premise that it applied to ranking alone.
+    # ...and it applies to the narrative half only where the question names no
+    # MEASURE either. "What are the main drivers of the balance movement?"
+    # names its measure and its analysis and is missing only the window, which
+    # the bridge answers over its governed default; refusing it was this
+    # guard's first draft reaching past what it is for. "What changed?" and
+    # "Which underwriter grew the most?" name neither, and are exactly the
+    # questions the rule exists to stop being answered over a window nobody
+    # asked for.
+    # A NAMED CONCEPT IS A NAMED SUBJECT. "What changed in credit quality?"
+    # carries no `spec.metric` — the concept selects a SET of governed measures
+    # rather than one — but it plainly says what to analyse, and is missing only
+    # the window. Reading `intent.requested_concepts` is this route's own
+    # pre-claim reading, already computed above; it is not a second look at the
+    # sentence.
+    _named_subject = bool(getattr(spec, "metric", None)
+                          or intent.requested_concepts
+                          or intent.requested_fields)
+    if interpretation is not None and (rank_intent.requested
+                                       or not _named_subject):
+        _time = getattr(interpretation, "time", None)
+        _named = bool(getattr(_time, "comparison_periods", None)
+                      or getattr(_time, "window_periods", None))
+        if not _named:
+            message = (
+                (f"I can rank {rank_intent.term} by movement, but this question "
+                 if rank_intent.requested else
+                 "I can report what changed, but this question ")
+                + f"names no period to compare over, and I have not chosen one "
+                f"for you. Tell me the window — for example “since last month”, "
+                f"“over the last 3 months”, or two named months.")
+            return chat_routing._envelope(
+                ok=False, question=question, spec=spec_dict, artifacts=[],
+                answer=message, error=message, route="period_change",
+                warnings=[message])
 
     mode, requested_fields = intent.mode, intent.requested_fields
     if rank_intent.requested:
         # Requested-metric mode is the governed way to say "analyse THIS field".
         # The ranked dimension is exactly that: a field the reader named.
         mode = MODE_REQUESTED_METRIC
-        requested_fields = (rank_intent.field,)
+        # EVERY governed field the term could bind to, not the primary alone.
+        # Passing only the primary is what made a book carrying the ALTERNATE
+        # answer "region is not a governed period-change dimension for this
+        # book" — a false statement, and canary defect D1.
+        requested_fields = (rank_intent.field,) + tuple(rank_intent.alt_fields)
 
     # HONOUR THE STATED PERIOD, OR CLARIFY. A question naming "this year" that
     # is answered over the latest month has had a declared element replaced.
@@ -339,7 +560,13 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # they do not, the question is clarified and no shorter window is
     # substituted. The same code answers once more history is loaded.
     period_request = intent.period_request
-    span = _period_request.requested_span(question)
+    # THE SPAN COMES FROM THE CONTRACT. `TimeClaim.window_periods` exists for
+    # this exact read — its own docstring names `requested_span(question)` here
+    # as "a second read of the sentence for a fact the contract had already
+    # claimed". Conversion 2 closed against it; this route had not.
+    # Measured over 882 corpus questions before the switch: the two agree 882
+    # times and disagree none.
+    span = _period_request.span_from_claim(getattr(interpretation, "time", None))
     if span is not None and not (period_request.requested_start
                                  or period_request.requested_end):
         if len(snapshots) > span.periods:
@@ -386,8 +613,10 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                 refusal_reason="dimension_not_governed",
                 refusal=(f"I could not rank movement by {rank_intent.term}: it "
                          f"is not a governed period-change dimension for this "
-                         f"book. I have not ranked a different dimension "
-                         f"instead.")))
+                         f"book — none of "
+                         f"{', '.join((rank_intent.field,) + tuple(rank_intent.alt_fields))}"
+                         f" is eligible here. I have not ranked a different "
+                         f"dimension instead.")))
         return _failure_envelope(question, spec_dict, failure)
 
     # A ranked question is answered by RANKING the governed period-change
@@ -396,8 +625,45 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     if ranking.refusal is not None:
         return _rank_refusal_envelope(question, spec_dict, ranking)
 
-    return _render(result, question, spec_dict, portfolio_id, as_of,
-                   ranking=ranking)
+    # THE ONE EVIDENCE RECORD, built here because this is the only place where
+    # both the intent (which fields the term could have bound to) and the
+    # outcome (which one it did) are in scope. Everything downstream — prose,
+    # table, metadata — reads it. Nothing downstream re-derives it.
+    receipt = (movement_receipt_for(result, rank_intent, ranking,
+                                    population=_population,
+                                    pop_evidence=_pop_evidence)
+               if ranking.applied else None)
+    out = _render(result, question, spec_dict, portfolio_id, as_of,
+                  receipt=receipt)
+    if _scope_evidence:
+        # THE ROUTE DECLARES WHAT SCOPE IT APPLIED, on the same rule the
+        # population ledger follows: execution evidence only, and a silent
+        # route is treated as having covered everything. Silence here is what
+        # made a correct Direct answer and a wrong one indistinguishable.
+        _last_scope = _scope_evidence[-1][1]
+        out.setdefault("metadata", {})["scopeApplied"] = {
+            "context": _last_scope.get("context"),
+            "label": _last_scope.get("label"),
+            "detail": _last_scope.get("detail"),
+            "rowsBefore": _last_scope.get("rows_before"),
+            "rowsAfter": _last_scope.get("rows_after"),
+            "snapshots": len(_scope_evidence),
+        }
+    if _population and _pop_evidence:
+        # THE ROUTE DECLARES WHAT IT APPLIED. The population ledger accepts
+        # execution evidence only and treats a silent route as having widened,
+        # so an answer that genuinely narrowed every snapshot says so — in the
+        # same ledger shape, and with the same per-period wording, the funded
+        # evolution route already publishes.
+        _last = _pop_evidence[-1][1]
+        out.setdefault("metadata", {})["populationApplied"] = {
+            "applied": [f"{p.field} (applied to every snapshot compared)"
+                        for p in _population],
+            "unavailable": [],
+            "rowsBefore": _last.rows_before,
+            "rowsAfter": _last.rows_after,
+        }
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -414,29 +680,20 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
 # reader who asked "which region grew the most" and received a portfolio summary
 # has been answered a different question.
 
-#: Nouns that are the narrative itself rather than a dimension to rank.
-#: "What were the largest movements since last month?" already has a governed
-#: answer (the top movements per unit, across metrics); a question that names no
-#: dimension must keep it rather than be refused for lacking one.
-_NARRATIVE_RANK_SUBJECTS = frozenset({
-    "movement", "movements", "change", "changes", "driver", "drivers",
-    "shift", "shifts", "metric", "metrics", "mover", "movers", "factor",
-    "factors", "contributor", "contributors", "component", "components",
-    "increase", "increases", "decrease", "decreases", "growth", "decline",
-    "declines", "rise", "rises", "fall", "falls", "gain", "gains", "loss",
-    "losses",
-})
-
-#: The interrogative that introduces the thing to rank.
-_RANK_SUBJECT_LEAD_RE = re.compile(r"\b(?:which|what|rank|order)\b", re.I)
-#: Words between the interrogative and the noun: auxiliaries, articles, and the
-#: Top-N wording itself.
-_RANK_SUBJECT_SKIP = frozenset({
-    "were", "was", "are", "is", "has", "have", "had", "did", "do", "does",
-    "the", "a", "an", "me", "us", "of", "my", "our", "by",
-    "top", "first", "best", "three", "four", "five", "ten",
-    "largest", "biggest", "greatest", "smallest", "lowest", "highest", "most",
-})
+# THE ROUTE-LOCAL RANKING VOCABULARY IS DELETED.
+#
+# `_NARRATIVE_RANK_SUBJECTS` (36 nouns), `_RANK_SUBJECT_LEAD_RE` and
+# `_RANK_SUBJECT_SKIP` (30 words) lived here, and `_rank_subject` read the raw
+# question against them. `question_interpretation.lexical` now owns direction,
+# basis and limit for the whole estate and the contract carries its answers, so
+# this route reads a claim instead of a sentence.
+#
+# The narrative test went with them. It asked whether the noun after "which"
+# was one of 36 words; the contract answers the same question structurally —
+# a ranking with no dimension claim is the governed narrative, and one with a
+# dimension claim is a ranking of that dimension. That reading does not depend
+# on which interrogative opened the sentence, which is why
+# "show me the drivers that grew the most" used to miss the guard entirely.
 
 
 @dataclass(frozen=True)
@@ -470,24 +727,6 @@ class RankingOutcome:
         return bool(self.movement is not None and getattr(self.movement, "ok", False))
 
 
-def _rank_subject(question: str) -> Optional[str]:
-    """The noun the question asks to rank — "which five SEGMENTS grew the most".
-
-    Used for two decisions only: whether the question is about the governed
-    narrative rather than a dimension, and what to quote back when no governed
-    dimension resolves. It never selects the dimension — that is
-    ``requested_dimension_terms``' job, and having one resolver is the point.
-    """
-    lead = _RANK_SUBJECT_LEAD_RE.search(question or "")
-    if not lead:
-        return None
-    for word in re.findall(r"[a-z][a-z-]*", question[lead.end():].lower()):
-        if word in _RANK_SUBJECT_SKIP:
-            continue
-        return word
-    return None
-
-
 def _distribution_for(result: PeriodChangeResult, keys: Sequence[str]) -> Any:
     """The governed distribution whose field is one of ``keys``, or None."""
     wanted = [str(k) for k in keys if k]
@@ -498,50 +737,65 @@ def _distribution_for(result: PeriodChangeResult, keys: Sequence[str]) -> Any:
     return None
 
 
-def resolve_rank_intent(question: str, *, columns: Optional[Any] = None
-                        ) -> RankingOutcome:
-    """What the question asks to rank, resolved BEFORE the analysis runs.
+def resolve_rank_intent(interpretation: Any) -> RankingOutcome:
+    """What the question asks to rank, READ FROM THE CONTRACT.
 
-    Dimension resolution reuses ``execution_receipt.requested_dimension_terms``
-    — the SAME resolver the P0 guard uses to decide what the question asked for.
-    Sharing it is deliberate: if the route and the guard resolved "region"
-    differently, the guard would refuse every ranked answer, and a second
-    dimension vocabulary would be a second thing to keep in step.
+    The question is no longer a parameter, and that absence is the reduction's
+    real result: there is nothing left for this route to read from a sentence.
+    Direction, basis and limit arrive on `operation.ordering_*`; the dimension
+    and every governed field it could bind to arrive on the dimension claim.
 
-    Returns a ``RankingOutcome`` in one of three states: not requested, a
-    refusal, or a resolved ``field`` / ``term`` / ``request`` to rank on.
+    THE ALTERNATES ARE CARRIED THROUGH. The old reader resolved a primary plus
+    alternates and this route passed only the primary into the analysis, so a
+    book carrying the alternate was told it carried neither — canary defect D1.
+    `candidate_concepts` is the primary followed by every alternate, and all of
+    them go to the workflow.
     """
-    from mi_agent import execution_receipt as receipt_mod
-    from mi_agent.mi_query_validator import load_mi_semantics
+    op = getattr(interpretation, "operation", None)
+    if op is None or op.type != "ranking":
+        return RankingOutcome(requested=False)
+    if not (op.ordering_direction and op.ordering_basis):
+        # A ranking the contract cannot describe is not ranked here on a guess.
+        return RankingOutcome(requested=False)
+
+    dims = [d for d in (getattr(interpretation, "dimensions", None) or [])
+            if d.candidate_concept]
+    if not dims:
+        # No dimension claim: the governed narrative, which is the answer this
+        # route already gives for "what were the largest movements".
+        return RankingOutcome(requested=False)
+
+    claim = dims[0]
+    concepts = list(claim.candidate_concepts)
+    request = _rank_request_from_contract(op, claim.raw_text or concepts[0])
+    return RankingOutcome(requested=True, request=request, field=concepts[0],
+                          term=(claim.raw_text or concepts[0]),
+                          alt_fields=tuple(concepts[1:]))
+
+
+def _rank_request_from_contract(op: Any, term: str) -> Any:
+    """The engine's `RankRequest`, built from contract values only.
+
+    A mapping, not a decision: the contract's basis vocabulary is the governed
+    one and the engine's is its own, and translating between them in one place
+    is what stops a second basis vocabulary appearing here.
+    """
     from mi_agent.period_change import rank_request as rank_mod
-    from .data_source import semantics_path
+    from mi_agent.period_change import ranking as rk
+    from question_interpretation.schema import (
+        ORDER_BASIS_COUNT, ORDER_BASIS_PERCENT, ORDER_BASIS_SHARE,
+        ORDER_DECREASE, ORDER_EITHER)
 
-    if not rank_mod.has_rank_language(question):
-        return RankingOutcome(requested=False)
-
-    subject = _rank_subject(question)
-    if subject and subject in _NARRATIVE_RANK_SUBJECTS:
-        # "the largest movements" is the governed narrative, not a ranking of a
-        # dimension. Keep the answer this route already gives.
-        return RankingOutcome(requested=False)
-
-    semantics = load_mi_semantics(semantics_path())
-    terms = receipt_mod.requested_dimension_terms(
-        question, semantics, available_columns=columns)
-    if not terms:
-        return RankingOutcome(
-            requested=True, refusal_reason="dimension_not_resolved",
-            refusal=("I can rank movement between two reporting dates, but I "
-                     "could not identify a governed dimension to rank"
-                     + (f" from “{subject}”" if subject else "")
-                     + ". I have not ranked something else instead."))
-
-    key, term, alts = terms[0]
-    request = rank_mod.detect_rank_request(question, term)
-    if request is None:
-        return RankingOutcome(requested=False)
-    return RankingOutcome(requested=True, request=request, field=key, term=term,
-                          alt_fields=tuple(alts or ()))
+    basis = {ORDER_BASIS_SHARE: rk.BASIS_BALANCE_SHARE,
+             ORDER_BASIS_PERCENT: rk.BASIS_BALANCE_PERCENT,
+             ORDER_BASIS_COUNT: rk.BASIS_COUNT_ABSOLUTE}.get(
+                 op.ordering_basis, rk.BASIS_BALANCE_ABSOLUTE)
+    direction = {ORDER_DECREASE: rk.DIRECTION_DECREASE,
+                 ORDER_EITHER: rk.DIRECTION_ANY}.get(
+                     op.ordering_direction, rk.DIRECTION_INCREASE)
+    return rank_mod.RankRequest(basis=basis, direction=direction,
+                                top_n=op.ordering_limit,
+                                dimension_term=str(term).lower())
 
 
 def apply_ranking(intent: RankingOutcome, result: PeriodChangeResult
@@ -586,6 +840,85 @@ def apply_ranking(intent: RankingOutcome, result: PeriodChangeResult
 
     return RankingOutcome(requested=True, request=request, movement=movement,
                           distribution=distribution)
+
+
+def movement_receipt_for(result: PeriodChangeResult, intent: RankingOutcome,
+                         ranking: RankingOutcome,
+                         population: Sequence[Any] = (),
+                         pop_evidence: Sequence[Any] = ()) -> Any:
+    """The governed `MovementReceipt` for a delivered ranked movement.
+
+    EVERY FIGURE IS CARRIED, NONE IS RECOMPUTED. The ranking engine has already
+    stated each row's opening, closing, absolute and percentage movement and the
+    value it sorted on; this hands those to the receipt verbatim. Recomputing a
+    percentage here would create a second calculation of a published fact, and
+    the point of the receipt is that there is exactly one.
+
+    Nothing in this function reads the question, a chart column, an artifact
+    title or the route's own identity.
+    """
+    from .movement_receipt import (PopulationEvidence, RankedElement,
+                                   build_movement_receipt)
+
+    payload = result.to_dict()
+    period = payload["summary"]["period"]
+    distribution, movement = ranking.distribution, ranking.movement
+    provenance = list(payload.get("dataset_provenance") or [])
+    scope = payload.get("portfolio_scope") or {}
+    # Per-period row counts, from the governed provenance. WHERE THE ROUTE
+    # NARROWED BY ROW PREDICATE, THE RECEIPT SAYS SO AND SHOWS THE EFFECT.
+    #
+    # This block used to publish `predicates=()` unconditionally, on the stated
+    # ground that "this route selects a population by scope, not by row
+    # predicate". That was true of the route and is no longer: it now applies
+    # the contract's governed population to every snapshot it compares. An
+    # empty tuple would now assert that no narrowing happened while one did,
+    # which is the one thing a receipt must never do.
+    #
+    # Nothing is recomputed. The predicates are the SAME objects execution ran,
+    # and both row counts come from the evidence `population.apply_population`
+    # returned per snapshot: `rows_after` is what was measured, `rows_before`
+    # what it was measured out of. Where no predicate ran, the two are equal
+    # and the block states exactly what it always did.
+    counts = tuple(int(ref.get("row_count") or 0) for ref in provenance)
+    before_by_snapshot = {sid: e.rows_before for sid, e in (pop_evidence or ())
+                          if getattr(e, "rows_before", None) is not None}
+    unfiltered = tuple(int(before_by_snapshot[sid])
+                       for sid in (str(ref.get("snapshot_id")) for ref in provenance)
+                       if sid in before_by_snapshot)
+    population = PopulationEvidence(
+        dataset=(payload.get("request_interpretation") or {}).get("mode"),
+        portfolio_ids=tuple(str(p) for p in (scope.get("portfolio_ids") or ())),
+        predicates=tuple((p.field, p.op, p.value) for p in (population or ())),
+        row_counts=counts,
+        unfiltered_row_counts=(unfiltered if population and unfiltered else counts))
+    elements = tuple(
+        RankedElement(rank=position, group_value=str(row.category),
+                      start_value=row.start_value, end_value=row.end_value,
+                      absolute_movement=row.absolute_movement,
+                      percentage_movement=row.percent_movement,
+                      rank_value=row.rank_value, presence=row.presence,
+                      note=row.note)
+        for position, row in enumerate(movement.rows, start=1))
+    candidates = tuple(f for f in ((intent.field,) + tuple(intent.alt_fields)) if f)
+    # The aggregation as the GOVERNED RESULT publishes it for this dimension —
+    # not a word chosen here. A dimension the payload does not carry leaves it
+    # unstated rather than guessed.
+    published = next((d for d in (payload.get("distribution_changes") or [])
+                      if d.get("canonical_field") == distribution.field), {})
+    return build_movement_receipt(
+        measure=distribution.balance_field,
+        aggregation=published.get("aggregation"),
+        grouping_dimension=distribution.field,
+        grouping_display_name=distribution.display_name,
+        grouping_candidates=candidates,
+        periods=(period["start"], period["end"]),
+        levels=(), ranked=(), elements=elements,
+        analysed_groups=tuple(str(c.category) for c in distribution.categories),
+        basis=movement.basis, basis_label=movement.basis_label,
+        direction=movement.direction, limit=movement.top_n,
+        direction_excluded=movement.direction_excluded,
+        exclusions=tuple(movement.excluded), population=population)
 
 
 def _unrankable_message(result: PeriodChangeResult, term: str, movement: Any
@@ -665,88 +998,100 @@ def _share_pp(value: Optional[float]) -> str:
     return "—" if value is None else f"{float(value) * 100:.2f}%"
 
 
-def _rank_rows(ranking: RankingOutcome) -> List[Dict[str, Any]]:
-    basis = ranking.movement.basis
+def _rank_rows(receipt: Any) -> List[Dict[str, Any]]:
+    """The ranked table, read from the receipt.
+
+    THE POSITION IS READ, NOT RE-COUNTED. This used to number the rows with its
+    own `enumerate`, so the rank a reader saw in the table was a second
+    derivation of the rank the evidence recorded. They agreed only because the
+    same list was iterated twice.
+    """
+    basis = receipt.ranking_basis
     unit = _BASIS_UNITS.get(basis, UNIT_CURRENCY)
     share = basis in ("balance_share", "count_share")
     rows: List[Dict[str, Any]] = []
-    for index, row in enumerate(ranking.movement.rows, start=1):
+    for row in receipt.elements:
         rows.append({
-            "rank": index,
-            "category": row.category,
+            "rank": row.rank,
+            "category": row.group_value,
             "start_value": (_share_pp(row.start_value) if share
                             else _format_value(row.start_value, unit)),
             "end_value": (_share_pp(row.end_value) if share
                           else _format_value(row.end_value, unit)),
             "movement": (f"{row.absolute_movement * 100:+.2f} pp" if share
                          else _format_movement(row.absolute_movement, unit)),
-            "percent_movement": ("—" if row.percent_movement is None
-                                 else f"{row.percent_movement:+.1f}%"),
+            "percent_movement": ("—" if row.percentage_movement is None
+                                 else f"{row.percentage_movement:+.1f}%"),
             "presence": row.presence,
         })
     return rows
 
 
-def build_rank_answer(result: PeriodChangeResult,
-                      ranking: RankingOutcome) -> str:
-    """The ranked answer, stated from the ranked rows and nothing else."""
+def build_rank_answer(receipt: Any) -> str:
+    """The ranked answer, stated FROM THE RECEIPT and nothing else.
+
+    Every semantic fact this sentence asserts — which two dates, which
+    dimension, which basis, which direction, which group came first, and what
+    its opening and closing figures were — is read from the governed evidence
+    record. The result object, the ranking outcome and the question are not
+    parameters, so there is nothing here to re-derive them from.
+    """
     from . import chat_routing
 
-    movement, request = ranking.movement, ranking.request
-    period = (result.summary.get("period") or {})
-    start = chat_routing._date_label(period.get("start"))
-    end = chat_routing._date_label(period.get("end"))
-    dimension = ranking.distribution.display_name
-    basis = movement.basis_label
-    share = movement.basis in ("balance_share", "count_share")
-    unit = _BASIS_UNITS.get(movement.basis, UNIT_CURRENCY)
+    start = chat_routing._date_label(receipt.start_period)
+    end = chat_routing._date_label(receipt.end_period)
+    dimension = receipt.grouping_display_name
+    basis = receipt.basis_label
+    share = receipt.ranking_basis in ("balance_share", "count_share")
+    unit = _BASIS_UNITS.get(receipt.ranking_basis, UNIT_CURRENCY)
+    top_n = receipt.ordering_limit
 
     def _describe(row) -> str:
         if share:
             figure = (f"{_share_pp(row.start_value)} → {_share_pp(row.end_value)} "
                       f"({row.absolute_movement * 100:+.2f} pp)")
         else:
-            relative = ("" if row.percent_movement is None
-                        else f", {row.percent_movement:+.1f}%")
+            relative = ("" if row.percentage_movement is None
+                        else f", {row.percentage_movement:+.1f}%")
             figure = (f"{_format_value(row.start_value, unit)} → "
                       f"{_format_value(row.end_value, unit)} "
                       f"({_format_movement(row.absolute_movement, unit)}"
                       f"{relative})")
-        return f"{row.category} {figure}"
+        return f"{row.group_value} {figure}"
 
     direction_word = {"increase": "increased", "decrease": "decreased"}.get(
-        movement.direction, "moved")
-    lead = movement.rows[0]
+        receipt.ranking_direction, "moved")
+    lead = receipt.elements[0]
     parts = [f"Between {start} and {end}, ranked by {basis} across "
-             f"{dimension}, {lead.category} {direction_word} the most: "
+             f"{dimension}, {lead.group_value} {direction_word} the most: "
              f"{_describe(lead)}."]
 
     # Prose names the leader and a few runners-up; the full ranking is the table.
     # A twelve-category ranking read out as a sentence is not an answer anybody
     # can use, and truncating it silently would hide rows — so when the prose
     # stops short it says how many rows the table carries.
-    named = movement.rows[1:] if request is not None and request.top_n else \
-        movement.rows[1:_PROSE_RUNNERS_UP + 1]
+    rows = list(receipt.elements)
+    named = rows[1:] if top_n else rows[1:_PROSE_RUNNERS_UP + 1]
     if named:
         parts.append("Then " + "; ".join(_describe(r) for r in named) + ".")
-    if request is not None and request.top_n:
-        parts.append(f"Showing the top {request.top_n} of "
-                     f"{len(ranking.distribution.categories)} categories.")
-    elif len(movement.rows) > len(named) + 1:
-        parts.append(f"The full ranking of all {len(movement.rows)} ranked "
-                     f"{'category' if len(movement.rows) == 1 else 'categories'} "
+    if top_n:
+        parts.append(f"Showing the top {top_n} of "
+                     f"{receipt.groups_analysed} categories.")
+    elif len(rows) > len(named) + 1:
+        parts.append(f"The full ranking of all {len(rows)} ranked "
+                     f"{'category' if len(rows) == 1 else 'categories'} "
                      f"is in the table below.")
-    if movement.direction_excluded:
-        count = movement.direction_excluded
+    if receipt.direction_excluded:
+        count = receipt.direction_excluded
         moved = {"increase": "increase", "decrease": "decrease"}.get(
-            movement.direction, "move")
+            receipt.ranking_direction, "move")
         parts.append(f"{count} further "
                      f"{'category' if count == 1 else 'categories'} did not "
                      f"{moved} on this basis and "
                      f"{'is' if count == 1 else 'are'} not listed.")
-    if movement.excluded:
+    if receipt.exclusions:
         parts.append("Not ranked: " + "; ".join(
-            f"{category} ({reason})" for category, reason in movement.excluded)
+            f"{category} ({reason})" for category, reason in receipt.exclusions)
             + ".")
     return " ".join(parts)
 
@@ -1000,12 +1345,21 @@ def build_answer(result: PeriodChangeResult) -> str:
 
 def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any],
             portfolio_id: Optional[str], as_of: Optional[str],
-            ranking: Optional[RankingOutcome] = None) -> Dict[str, Any]:
+            receipt: Any = None) -> Dict[str, Any]:
+    """Render the governed answer.
+
+    THE RANKING OUTCOME IS NOT A PARAMETER. It used to be, and every ranked
+    fact in this function was read from it or from `result.summary` — so the
+    prose, the table and the metadata were three independent derivations that
+    happened to agree. `receipt` is the only ranked input now, which is what
+    makes "narration does not infer this independently" a structural property
+    rather than a promise.
+    """
     from . import chat_routing
 
     payload = result.to_dict()
     artifacts: List[Dict[str, Any]] = []
-    ranked = ranking is not None and ranking.applied
+    ranked = receipt is not None and bool(receipt.elements)
 
     summary = payload["summary"]
     kpis = [
@@ -1028,14 +1382,18 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
         # The ranking the question asked for leads, before the governed
         # narrative's own tables: the reader asked which category moved most,
         # and that answer must not be the fourth table down.
+        # Title, columns and description all state what the RECEIPT records.
+        # The table used to name its own dimension and dates from the result
+        # while the prose named them from the ranking outcome — two readings of
+        # one fact, in one answer.
         artifacts.append(chat_routing._table_artifact(
-            f"Ranked movement by {ranking.distribution.display_name}",
-            columns=_RANK_COLUMNS, rows=_rank_rows(ranking), spec=spec_dict,
+            f"Ranked movement by {receipt.grouping_display_name}",
+            columns=_RANK_COLUMNS, rows=_rank_rows(receipt), spec=spec_dict,
             portfolio_id=portfolio_id, as_of=as_of,
-            description=(f"Ranked on {ranking.movement.basis_label} between "
-                         f"{chat_routing._date_label(summary['period']['start'])} "
+            description=(f"Ranked on {receipt.basis_label} between "
+                         f"{chat_routing._date_label(receipt.start_period)} "
                          f"and "
-                         f"{chat_routing._date_label(summary['period']['end'])}"
+                         f"{chat_routing._date_label(receipt.end_period)}"
                          f", from the governed period-change result.")))
 
     metric_rows = _metric_rows(result)
@@ -1065,7 +1423,7 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
 
     envelope = chat_routing._envelope(
         ok=True, question=question,
-        answer=(build_rank_answer(result, ranking) if ranked
+        answer=(build_rank_answer(receipt) if ranked
                 else build_answer(result)),
         spec=spec_dict,
         artifacts=artifacts, route=ROUTE_NAME, lens_applied=True,
@@ -1093,20 +1451,33 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
         # on which basis, in which direction and over which two dates — so the
         # guard can prove the ranking the question asked for is the ranking that
         # ran, rather than taking the route's word for it.
+        #
+        # EVERY VALUE IS NOW A PROJECTION OF THE RECEIPT. The keys and the
+        # figures are unchanged, because the receipt carries the engine's own
+        # rows verbatim; what changed is that this dict no longer reads the
+        # ranking outcome and the result summary a second time. The receipt
+        # itself travels alongside it, additively, so a consumer can audit the
+        # answer without reconstructing it from these keys.
         meta["rankedMovement"] = {
             "applied": True,
-            "canonicalField": ranking.distribution.field,
-            "displayName": ranking.distribution.display_name,
-            "basis": ranking.movement.basis,
-            "basisLabel": ranking.movement.basis_label,
-            "direction": ranking.movement.direction,
-            "topN": ranking.movement.top_n,
-            "rankedCategories": len(ranking.movement.rows),
-            "categoriesAnalysed": len(ranking.distribution.categories),
+            "canonicalField": receipt.grouping_dimension,
+            "displayName": receipt.grouping_display_name,
+            "basis": receipt.ranking_basis,
+            "basisLabel": receipt.basis_label,
+            "direction": receipt.ranking_direction,
+            "topN": receipt.ordering_limit,
+            "rankedCategories": len(receipt.elements),
+            "categoriesAnalysed": receipt.groups_analysed,
             "excluded": [{"category": c, "reason": r}
-                         for c, r in ranking.movement.excluded],
-            "openingPeriod": summary["period"]["start"],
-            "closingPeriod": summary["period"]["end"],
-            "rows": [r.to_dict() for r in ranking.movement.rows],
+                         for c, r in receipt.exclusions],
+            "openingPeriod": receipt.start_period,
+            "closingPeriod": receipt.end_period,
+            "rows": [{"category": e.group_value, "start_value": e.start_value,
+                      "end_value": e.end_value,
+                      "absolute_movement": e.absolute_movement,
+                      "percent_movement": e.percentage_movement,
+                      "rank_value": e.rank_value, "presence": e.presence,
+                      "note": e.note} for e in receipt.elements],
         }
+        meta["movementReceipt"] = receipt.to_dict()
     return envelope

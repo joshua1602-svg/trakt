@@ -59,7 +59,20 @@ def _frame(**overrides) -> pd.DataFrame:
 
 
 def _run(df, question="Show product concentration", *, bsr, **kw):
+    """Run the workflow the way the ROUTER runs it.
+
+    The workflow no longer resolves a portfolio scope or a concept from the
+    question after the route is claimed — the recogniser reads the question
+    once, pre-claim, and the adapter hands the reading and the resolved scope
+    in. This harness stands in for the router and does the same two steps. No
+    assertion below changes; what changes is who reads the sentence.
+    """
+    from mi_agent import portfolio_lens as _lens_mod
+
     kw.setdefault("as_of", "2026-06-30")
+    if "context_id" not in kw:
+        kw["context_id"] = _lens_mod.context_id(_lens_mod.resolve_lens(question))
+    kw.setdefault("reading", ca.read_question(question))
     return ca.run_concentration_analysis(df, question=question, bsr=bsr, **kw)
 
 
@@ -166,7 +179,20 @@ class TestRecognition:
         assert ca.requested_single_name_kind("Show top exposures") == "loan"
         assert ca.requested_single_name_kind("largest borrower exposures") == "borrower"
         assert ca.requested_single_name_kind("top 10 obligors") == "obligor"
-        assert ca.requested_single_name_kind("single name concentration") == "loan"
+        # "SINGLE NAME" IS A BORROWER. This assertion used to read `== "loan"`,
+        # and that expectation was the defect: Schedule 8 6.1 writes the
+        # single-name limit about "any single Borrower (or group of connected
+        # Borrowers)", and the risk-limits engine binds it to
+        # `borrower_largest_share`. Reading the phrase as the loan kind answered
+        # "our largest single-name exposure" with the largest single LOAN,
+        # against a limit written about borrowers — and did so silently on a
+        # tape that carries no borrower identifier at all.
+        assert ca.requested_single_name_kind("single name concentration") == "borrower"
+        assert ca.requested_single_name_kind("largest single-name exposure") == "borrower"
+        # THE HOSTILE CONTROLS. A question that names the loan still gets the
+        # loan, and a bare superlative still falls through to the loan default.
+        assert ca.requested_single_name_kind("Show the largest 10 loan exposures.") == "loan"
+        assert ca.requested_single_name_kind("show me the largest exposures") == "loan"
         # "largest concentrations" is an overview, not a single-name ranking.
         assert ca.requested_single_name_kind("largest concentrations") is None
         assert ca.requested_single_name_kind("broker concentration") is None
@@ -298,7 +324,17 @@ class TestDimensionGovernance:
         assert _dimension(result, "erm_product_type") is None
         assert _dimension(result, "product_type") is not None
         excluded = {e["field"]: e for e in result["audit"]["dimensions_excluded"]}
-        assert "vocabulary" in excluded["erm_product_type"]["reason"]
+        # THE REASON MUST NAME THE ORIGINATOR-SPECIFIC CHARACTER of the
+        # categories. This matched the literal word "vocabulary", which was a
+        # proxy for that fact; the sentence now says "the registry declares
+        # this dimension's categories originator-specific" and adds what the
+        # limit actually is — the METHODOLOGY's, not arithmetic's, because the
+        # same dimension is legitimately aggregated by the share and ranking
+        # paths. Every structural guarantee this test makes is unchanged and
+        # still asserted above and below: erm_product_type excluded,
+        # product_type answering instead, the exclusion recorded in the audit,
+        # and a limitation emitted.
+        assert "originator" in excluded["erm_product_type"]["reason"]
         assert any("erm_product_type" in note for note in result["limitations"])
 
     def test_scale_aligned_vocabulary_is_allowed_within_one_portfolio(self, bsr):

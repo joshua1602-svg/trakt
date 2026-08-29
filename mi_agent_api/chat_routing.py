@@ -26,7 +26,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-from mi_agent.mi_query_executor import _apply_filters
+from mi_agent import population as _population
+from mi_agent.mi_query_executor import MIQueryExecutionError
 from mi_agent.parsed_question import ParsedQuestion
 
 from mi_agent import period_request as _period_request
@@ -38,11 +39,12 @@ from . import temporal_compare as compare_mod
 from . import currency as currency_mod
 from . import evolution as evolution_mod
 from . import forecast_extrapolation as fx_mod
-from . import geo as geo_mod
 from . import movement_summary as movement_mod
 from . import period_change_route as _period_change
+from . import analytical_plan as _plan
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
+from . import workspace as _workspace
 from .recogniser_registry import (
     REGISTRY,
     Recogniser,
@@ -70,6 +72,7 @@ _PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
 # Per evolution-metric display: (answer_style, chart valueFormat, chart scale).
 _METRIC_DISPLAY: Dict[str, Tuple[str, str, Optional[str]]] = {
     "funded_balance": ("gbp", "gbp", None),
+    "avg_balance": ("gbp", "gbp", None),
     "pipeline_amount": ("gbp", "gbp", None),
     "weighted_expected_funded_amount": ("gbp", "gbp", None),
     "loan_count": ("count", "number", None),
@@ -99,7 +102,20 @@ def _gbp(v: Optional[float]) -> str:
     return currency_mod.format_money(v, suffixes=("bn", "m", "k"))
 
 
-def _disp(value: Optional[float], metric_key: str) -> str:
+def _disp(value: Optional[float], metric_key: str,
+          decimals: Optional[int] = None) -> str:
+    """Render a metric in ITS OWN declared unit.
+
+    `_METRIC_DISPLAY` is the canonical statement of whether a metric is carried
+    as a FRACTION (0.0626) or as PERCENTAGE POINTS (36.26). A caller that picks
+    a formatter by eye has to remember which, and the portfolio summary did not:
+    it rendered `wa_interest_rate` — a fraction, so declared here — with the
+    points formatter and published **0.06%** for a book yielding **6.2644%**, a
+    hundredfold error in the first figure a reader sees.
+
+    Reading the declaration is what makes that unrepresentable, which is why the
+    fix is here and not a ×100 at the summary's call site.
+    """
     if value is None:
         return "—"
     style = _METRIC_DISPLAY.get(metric_key, ("decimal", "decimal", None))[0]
@@ -108,9 +124,9 @@ def _disp(value: Optional[float], metric_key: str) -> str:
     if style == "count":
         return f"{int(round(float(value))):,}"
     if style == "pct_fraction":
-        return f"{float(value) * 100:.1f}%"
+        return f"{float(value) * 100:.{1 if decimals is None else decimals}f}%"
     if style == "pct_points":
-        return f"{float(value):.2f}%"
+        return f"{float(value):.{2 if decimals is None else decimals}f}%"
     return f"{float(value):,.2f}"
 
 
@@ -157,6 +173,44 @@ def _envelope(*, ok: bool, question: str, answer: str, spec: Dict[str, Any],
     }
 
 
+def _undeliverable(**kwargs) -> Dict[str, Any]:
+    """THE governed "the analysis you asked for was not produced" envelope.
+
+    `ok: true` MEANS THE REQUESTED ANALYSIS WAS DELIVERED.
+
+    Twenty-three routed sites used to say `ok=True` with no artifacts and an
+    answer that explained an inability — "I can't build a geographic exposure
+    view for this book", "No weekly pipeline extracts are available", "I
+    couldn't resolve a dimension to attribute the bridge by". A caller reading
+    the envelope saw a success; a reader reading the prose saw a refusal. On the
+    API those are the same field, and it was telling them different things.
+
+    NO NEW PUBLIC TAXONOMY. This is the existing governed contract for "I will
+    not answer that": `ok:false` plus `metadata.controlledUnsupported`, which
+    `mi_service` classifies as `UNSUPPORTED_QUESTION` (HTTP 200, `ok:false`) —
+    the same shape `_capability_unavailable_envelope` already publishes.
+
+    A ZERO-ROW ANSWER IS NOT THIS. "There are no funded loans in the acquired
+    book" is an analysis that ran over an empty population, and it keeps
+    `ok=True`: turning an empty result into a failure would be the opposite
+    error. Three sites are deliberately left as they were — the two empty-scope
+    statements, and the run-rate branch that reports the current balance and
+    discloses that it could not extrapolate.
+    """
+    kwargs.pop("ok", None)
+    kwargs.pop("artifacts", None)
+    answer = kwargs.get("answer") or "This analysis could not be produced."
+    kwargs.setdefault("error", answer)
+    envelope = _envelope(ok=False, artifacts=[], **kwargs)
+    # THE ESTATE'S EXISTING MARKERS, all three, exactly as the portfolio
+    # comparison route already stamps them. A caller that recognised a
+    # controlled refusal by `controlledRefusal` must keep recognising it.
+    envelope["controlledRefusal"] = True
+    envelope["metadata"]["controlledRefusal"] = True
+    envelope["metadata"]["controlledUnsupported"] = True
+    return envelope
+
+
 # --------------------------------------------------------------------------- #
 # Artifact builders (existing artifact union — chart | table | risk)
 # --------------------------------------------------------------------------- #
@@ -195,29 +249,19 @@ def _table_artifact(title: str, *, columns: List[Dict[str, Any]],
 # --------------------------------------------------------------------------- #
 # Dataset / metric resolution
 # --------------------------------------------------------------------------- #
-#: The words that make a routed question a PIPELINE question. Kept as data
-#: because B21's disclaiming test is applied per term: "excluding pipeline
-#: cases" rules out `pipeline` AND `case` with one clause.
-_PIPELINE_WORDS = ("pipeline", "case", "kfi", "application", "offer")
-
-
-def _dataset_for(question: str, view: str, default: str = "funded") -> str:
-    """Which dataset a routed answer is built from.
-
-    B21 — THE SECOND OWNER, found by enumerating where the view decision arrives
-    rather than by a failing test. `resolve_active_view` picks the frame and
-    this picks the dataset, and both were bare substring tests over overlapping
-    vocabulary; fixing only the first would have left "the balance by seasoning
-    segment excluding pipeline cases" reaching the evolution route with
-    `dataset="pipeline"` — narrowed to the very thing it excluded, by a wider
-    word list than the one that was fixed. It reads the same disclaiming test.
-    """
-    q = question.lower()
-    if any(_portfolio_lens.undisclaimed_mention(q, w) for w in _PIPELINE_WORDS):
-        return "pipeline"
-    if view == "pipeline":
-        return "pipeline"
-    return default
+# THE SECOND OWNER IS GONE.
+#
+# `_dataset_for` used to live here. It read its own tape vocabulary
+# (`pipeline | case | kfi | application | offer`) and fell back to the resolved
+# view, which made it a second answer to "which dataset is this question
+# about?" — one that disagreed with the contract's on 3 of 26 readings of the
+# `temporal_compare` surface, and with the point-in-time path on 29 of the 882
+# corpus questions.
+#
+# Its vocabulary is now `workspace.PIPELINE_ARTEFACTS`, read by
+# `workspace.resolve_dataset`, which is the single owner. Routes ask that owner;
+# they do not re-decide. Converted routes will read `interpretation.dataset`,
+# which the same owner populates.
 
 
 def _split_portfolio(portfolio_id: Optional[str]) -> Tuple[str, Optional[str]]:
@@ -365,11 +409,28 @@ def _resolve_lens(question: str, source_lens) -> Any:
     """
     default_lens = (_portfolio_lens.lens_from_selection(source_lens)
                     if source_lens is not None else None)
-    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
+    # PHASE 1E. The governed registry is what React renders its portfolio
+    # selector from, so resolving against it is what makes a name the client can
+    # SEE a name MI can READ. Best-effort: if the registry is unavailable this
+    # falls back to exactly the pre-1E resolution rather than failing a route.
+    #
+    # Built ONCE and handed to `resolve_context` below, which would otherwise
+    # build its own. The scope a route discloses and the scope its lens resolved
+    # against are then the same object, not two registries that happen to agree.
+    registry = None
+    try:
+        from . import portfolio_context as _ctx_registry
+
+        registry = _ctx_registry.build_registry()
+    except Exception as exc:  # noqa: BLE001 - identity must never break routing
+        _logger.info("governed registry unavailable for lens resolution: %s", exc)
+    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens,
+                                                     registry=registry)
     try:
         from . import portfolio_context as _ctx
 
         scope = _ctx.resolve_context(_portfolio_lens.context_id(lens),
+                                     registry=registry,
                                      discover_pipeline=False).scope
         return _portfolio_lens.PortfolioLens(
             name=lens.name, label=lens.label, filters=dict(scope.filters),
@@ -379,24 +440,85 @@ def _resolve_lens(question: str, source_lens) -> Any:
         return lens
 
 
-def _apply_lens_filter(df, lens) -> Any:
+class LensNotApplied(RuntimeError):
+    """A lens named a scope, and this frame could not be narrowed to it.
+
+    Raised instead of returning the frame unchanged. See `_apply_lens_filter`.
+    """
+
+    def __init__(self, detail: str):
+        super().__init__(detail)
+        self.detail = detail
+
+
+def _apply_lens_filter(df, lens, *, evidence_out=None) -> Any:
     """Narrow a dataframe to the portfolio ids a RESOLVED lens carries.
 
-    ``_resolve_lens`` returns the registry-resolved id list (never a type
-    string), so this is the same narrowing the point-in-time executor performs —
-    a group is exactly the sum of its current members. Total carries no filter
-    and the frame is returned unchanged; a frame without provenance is likewise
-    unchanged (a single-portfolio deployment is already the whole scope).
+    This is the same narrowing the point-in-time executor performs — a group is
+    exactly the sum of its current members. Total carries no filter and the
+    frame is returned unchanged; a frame without provenance is likewise
+    unchanged, because a book that records no source portfolio holds exactly
+    one and IS the scope.
+
+    IT FAILS CLOSED. The docstring here used to state a PRECONDITION —
+    "``_resolve_lens`` returns the registry-resolved id list (never a type
+    string)" — and nothing enforced it. When `period_change_route` stopped
+    reading the sentence and began deriving its lens from the contract, that
+    precondition quietly stopped holding: `contract_scope.lens_from_contract`
+    returned ``{source_portfolio_type: "direct"}``, `ids` was empty, and this
+    function returned the whole frame. Five snapshots went in at 520, 545, 570,
+    600 and 640 rows and came out at 520, 545, 570, 600 and 640.
+
+    "Summarise the month-on-month movement in the Direct book" then answered
+    £22.6m — the whole book — for a book that moved £12.4m, and the receipt
+    declared `portfolioScope: direct` beside it. The same question through
+    `period_movement` answered £12.4m, and the two envelopes were identical in
+    every field a consumer can read. A wrong figure vouched for by its own
+    receipt is the outcome this estate ranks above every other, so the widening
+    is now an exception and not a return value.
+
+    ``evidence_out``, when given, receives the narrowing that was performed —
+    the same "execution evidence only" rule `metadata.populationApplied`
+    follows. A caller that narrows and stays silent is indistinguishable from
+    one that did not narrow at all, which is precisely how the defect above
+    survived being measured.
     """
-    ids = (lens.filters or {}).get(_portfolio_lens.SOURCE_ID_FIELD)
-    if df is None or not ids:
+    name = getattr(lens, "name", None) if lens is not None else None
+    if df is None or lens is None or name in (None, _portfolio_lens.LENS_TOTAL):
         return df
+    # THE IDS, WHEREVER THE LENS CARRIES THEM. A registry-resolved lens puts
+    # them in `filters`; `_selection_lens` — "several books chosen explicitly,
+    # exactly those, never their type" — puts them in `cohort_ids` and leaves
+    # `filters` empty. Reading only `filters` treated an explicit multi-book
+    # selection exactly as it treated the type lens that produced the wrong
+    # movement figure: no ids, frame returned whole.
+    ids = ((getattr(lens, "filters", None) or {}).get(_portfolio_lens.SOURCE_ID_FIELD)
+           or getattr(lens, "cohort_ids", None)
+           or getattr(lens, "cohort_id", None))
+    rows_before = len(df)
     if _portfolio_lens.SOURCE_ID_FIELD not in getattr(df, "columns", []):
+        # NO PROVENANCE COLUMN: the book records one source portfolio and is
+        # already the scope. Recorded as applied, because it is.
+        if evidence_out is not None:
+            evidence_out.append({
+                "context": name, "label": getattr(lens, "label", None),
+                "rows_before": rows_before, "rows_after": rows_before,
+                "detail": "this book records a single source portfolio"})
         return df
+    if not ids:
+        raise LensNotApplied(
+            "the %s scope resolved to no portfolio id, and this book records "
+            "provenance for more than one" % (getattr(lens, "label", None) or name))
     wanted = {str(i).strip().lower() for i in (ids if isinstance(ids, (list, tuple, set))
                                                else [ids])}
     col = df[_portfolio_lens.SOURCE_ID_FIELD].astype("string").str.strip().str.lower()
-    return df[col.isin(wanted)]
+    out = df[col.isin(wanted)]
+    if evidence_out is not None:
+        evidence_out.append({
+            "context": name, "label": getattr(lens, "label", None),
+            "rows_before": rows_before, "rows_after": len(out),
+            "detail": ", ".join(sorted(wanted))})
+    return out
 
 
 def _pct_points(value: Optional[float], decimals: int = 1) -> str:
@@ -430,20 +552,83 @@ def _summary_kpi_artifact(title: str, kpis: List[Dict[str, str]], *, spec, portf
     }
 
 
+def _summary_population(question, source_lens, interpretation, *, output_root,
+                        client_id, run_id) -> Tuple[Dict[str, Any], str, bool]:
+    """The governed headline position, and the scope it was computed over.
+
+    CONVERSION 1 — the switch point, and the whole of it.
+
+    The population is PLANNED from the interpretation contract: governed
+    portfolio ids, the base population, and the provenance that decides
+    precedence against a workspace selection. `mi_agent.portfolio_lens` is still
+    the only thing that decides what "the acquired book" MEANS; the contract
+    transports its answer, and this consumes the transported answer rather than
+    asking the resolver a second time.
+
+    `_resolve_lens` is deliberately NOT reachable from here. It remains the
+    owner for the five other routes that call it, untouched.
+
+    Returns ``(summary, scope label, narrowed)``. ``summary is None`` means the
+    route defers. No lens object escapes, so no consumer downstream can read a
+    second opinion off one.
+    """
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. It defers, which is the
+        # route's own pre-existing "I cannot answer this" behaviour and is what
+        # every portfolio-summary question did for the whole of Phase 1G, when
+        # the provider was raising and nobody noticed.
+        #
+        # The alternative — keeping the lens-resolved path here as a fallback —
+        # would leave `_resolve_lens` in this route as a SECOND POPULATION
+        # OWNER, reachable exactly when the first one failed, which is the worst
+        # moment for two owners to disagree. One owner, or none.
+        return None, "", False
+
+    summary = _plan.portfolio_summary(
+        output_root, client_id, interpretation=interpretation,
+        to_run_id=run_id)
+    scope = getattr(interpretation, "source_scope", None)
+    label = summary.get("lens") or "Total"
+    narrowed = bool(getattr(scope, "portfolio_ids", ()) or ())
+    return summary, label, narrowed
+
+
 def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
-                             output_root, portfolio_id, as_of, source_lens=None
-                             ) -> Optional[Dict[str, Any]]:
+                             output_root, portfolio_id, as_of, source_lens=None,
+                             interpretation=None) -> Optional[Dict[str, Any]]:
     """The current reporting period's governed headline position."""
-    lens = _resolve_lens(question, source_lens)
-    summary = movement_mod.portfolio_summary(
-        output_root, client_id, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label)
+    summary, _scope_label, _narrowed = _summary_population(
+        question, source_lens, interpretation, output_root=output_root,
+        client_id=client_id, run_id=run_id)
+    if summary is None:
+        return None  # no contract: defer to the existing point-in-time path
     if not summary.get("available"):
+        if _narrowed:
+            # PHASE 1E. Deferring here hands a NARROWING question to a path that
+            # cannot see the narrowing. Measured before this branch existed,
+            # "Summarise the spv1_sponsored portfolio" — a governed portfolio
+            # with no funded rows at this reporting date — came back with the
+            # whole book's 11,035 loans and £1.96bn, with the scope it was asked
+            # for mentioned nowhere. The scope was not unresolvable; it was
+            # resolved, found empty, and then dropped.
+            #
+            # An empty governed scope is a FACT about the book, so it is stated
+            # (the shape `geo_exposure` already uses for the same condition)
+            # rather than replaced by a broader population.
+            return _envelope(
+                ok=True, question=question, spec=spec_dict, artifacts=[],
+                answer=(f"There are no funded loans in {_scope_label} at the "
+                        f"current governed reporting date, so there is no "
+                        f"position to summarise for it. I have not answered "
+                        f"for the whole book instead."),
+                route="portfolio_summary", lens_applied=True,
+                warnings=[f"no rows in scope for {_scope_label}: "
+                          f"{summary.get('reason', 'scope is empty')}."])
         return None  # defer to the existing point-in-time summary path
 
     m = summary["metrics"]
     cut_off = _date_label(summary.get("reportingDate"))
-    scope = "" if lens.name == _portfolio_lens.LENS_TOTAL else f" ({lens.label})"
+    scope = "" if not _narrowed else f" ({_scope_label})"
 
     parts = [
         f"At {cut_off} the portfolio{scope} holds {_count(m['loan_count'])} loans "
@@ -454,7 +639,7 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
         detail.append(f"weighted-average current LTV is {_pct_points(m['wa_ltv_points'])}")
     if m["wa_interest_rate"] is not None:
         detail.append(f"the weighted-average interest rate is "
-                      f"{_pct_points(m['wa_interest_rate'], 2)}")
+                      f"{_disp(m['wa_interest_rate'], 'wa_interest_rate', 2)}")
     if m["avg_borrower_age"] is not None:
         detail.append(f"the average youngest-borrower age is "
                       f"{_years(m['avg_borrower_age'])}")
@@ -472,7 +657,7 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
 
     cohorts = summary.get("cohortBalances") or {}
     labels = {c["id"]: c["label"] for c in (summary.get("cohorts") or [])}
-    if len(cohorts) > 1 and lens.name == _portfolio_lens.LENS_TOTAL:
+    if len(cohorts) > 1 and not _narrowed:
         split = [f"{labels.get(cid, cid)} {_gbp(bal)}"
                  for cid, bal in sorted(cohorts.items(), key=lambda kv: -kv[1])]
         parts.append(f"By source portfolio: {_sentence_join(split)}.")
@@ -483,7 +668,8 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
         {"label": "Loans funded", "value": _count(m["loan_count"])},
         {"label": "Funded balance", "value": _gbp(m["funded_balance"])},
         {"label": "WA current LTV", "value": _pct_points(m["wa_ltv_points"])},
-        {"label": "WA interest rate", "value": _pct_points(m["wa_interest_rate"], 2)},
+        {"label": "WA interest rate",
+         "value": _disp(m["wa_interest_rate"], "wa_interest_rate", 2)},
         {"label": "Avg borrower age", "value": _years(m["avg_borrower_age"])},
         {"label": "Data cut-off", "value": cut_off},
     ]
@@ -492,7 +678,7 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
             f"Portfolio summary — {cut_off}", kpis, spec=spec_dict,
             portfolio_id=portfolio_id, as_of=as_of,
             description=f"Governed position at the {summary.get('period')} "
-                        f"reporting date ({lens.label}).")
+                        f"reporting date ({_scope_label}).")
     ]
     if regions:
         artifacts.append(_chart_artifact(
@@ -518,28 +704,42 @@ def _route_portfolio_summary(question, spec, spec_dict, *, client_id, run_id,
     notes = [{"field": "reporting_period",
               "note": f"{summary.get('period')} ({summary.get('reportingDate')}); "
                       f"{summary.get('periodCount')} governed period(s) available."}]
-    return _envelope(
+    _summary_env = _envelope(
         ok=True, question=question, answer=answer, spec=spec_dict,
         artifacts=artifacts,
-        reconciliation={"dataset": "funded", "coverage_by_balance_pct": 100.0,
-                        "missing_dimension_policy": "exclude"},
+        reconciliation=_workspace.reconciliation_for(
+            _workspace.datasets_read(output_root=output_root),
+            missing_dimension_policy="exclude"),
         source_notes=notes, route="portfolio_summary")
+    return _declare_lens_scope(_summary_env, interpretation, label=_scope_label,
+                               rows_after=m.get("loan_count"))
 
 
 def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
-                           output_root, portfolio_id, as_of, source_lens=None
-                           ) -> Optional[Dict[str, Any]]:
-    """Month-on-month movement across the governed metrics, with attribution."""
-    lens = _resolve_lens(question, source_lens)
-    # Honour the STATED period where the data covers it. A question that names
-    # "this year" and is answered over the latest month has had a declared
-    # element replaced, and disclosing the narrower window in the prose is not
-    # the same as honouring it.
-    span = _period_request.requested_span(question)
-    mv = movement_mod.period_movement(
-        output_root, client_id, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label,
-        span_periods=span.periods if span else 1)
+                           output_root, portfolio_id, as_of, source_lens=None,
+                           interpretation=None) -> Optional[Dict[str, Any]]:
+    """Month-on-month movement across the governed metrics, with attribution.
+
+    CONVERSION 2 — the switch point, and the whole of it.
+
+    Both semantic inputs this route used to re-read from the question now come
+    from the contract: the source scope (Phase 1G) and the STATED WINDOW's
+    magnitude (target-state closure). Honouring the stated period still matters
+    for the same reason it always did — a question that names "this year" and is
+    answered over the latest month has had a declared element replaced, and
+    disclosing the narrower window in the prose is not the same as honouring it
+    — but the window is now read once, upstream, and carried.
+    """
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. Same rule as Conversion 1:
+        # one population owner, or none. Keeping the lens-resolved path as a
+        # fallback would leave `_resolve_lens` reachable exactly when the
+        # contract failed.
+        return None
+
+    mv = _plan.period_movement(output_root, client_id,
+                               interpretation=interpretation, to_run_id=run_id)
+    span = _period_request.span_from_claim(interpretation.time)
     if not mv.get("available"):
         if span is not None and mv.get("spanRequested"):
             message = _period_request.clarification(
@@ -548,9 +748,8 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
                 ok=False, question=question, spec=spec_dict, artifacts=[],
                 answer=message, error=message, route="period_movement",
                 warnings=[message])
-        return _envelope(
-            ok=True, question=question, spec=spec_dict, artifacts=[],
-            answer=f"I can't compare against the prior month yet: "
+        return _undeliverable(
+            question=question, spec=spec_dict, answer=f"I can't compare against the prior month yet: "
                    f"{mv.get('reason', 'insufficient reporting periods')}.",
             route="period_movement",
             warnings=["insufficient-data: a month-on-month comparison needs two "
@@ -617,7 +816,7 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
         _summary_kpi_artifact(
             f"{mv['priorPeriod']} → {mv['currentPeriod']} movement", kpis,
             spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of,
-            description=f"Governed month-on-month movement ({lens.label}).")
+            description=f"Governed month-on-month movement ({mv['lens']}).")
     ]
 
     contributions = mv.get("regionContributions") or []
@@ -679,12 +878,14 @@ def _route_period_movement(question, spec, spec_dict, *, client_id, run_id,
                     + (f", of which {_gbp(mv.get('completionsBalanceInPrimaryRegion'))} "
                        f"is in the {primary['region']}." if primary else "."),
         })
-    return _envelope(
+    out = _envelope(
         ok=True, question=question, answer=answer, spec=spec_dict,
         artifacts=artifacts,
-        reconciliation={"dataset": "funded", "coverage_by_balance_pct": 100.0,
-                        "missing_dimension_policy": "exclude"},
+        reconciliation=_workspace.reconciliation_for(
+            _workspace.datasets_read(output_root=output_root),
+            missing_dimension_policy="exclude"),
         source_notes=notes, route="period_movement")
+    return _declare_scope(out, mv.get("scopeApplied"), label=mv.get("lens"))
 
 
 def _upper_first(text: str) -> str:
@@ -703,18 +904,37 @@ def _sentence_join(items: Sequence[str]) -> str:
     return f"{', '.join(vals[:-1])} and {vals[-1]}"
 
 
-def _route_compare(question, spec, spec_dict, *, client_id, run_id, output_root,
-                   pipeline_root, view, portfolio_id, as_of) -> Dict[str, Any]:
-    periods = list(spec.compare_periods or [])
-    if len(periods) < 2:
+def _route_compare(question, spec_dict, *, client_id, run_id, output_root,
+                   pipeline_root, portfolio_id, as_of, interpretation
+                   ) -> Dict[str, Any]:
+    """THE PARSE IS NO LONGER A PARAMETER.
+
+    `spec` is gone from this signature, and that absence is the conversion's
+    real result: there is nothing left for this route to read from it. The
+    period pair, the measure and the dataset all arrive on the contract, and a
+    route that cannot reach the parse cannot quietly re-decide any of them.
+
+    `spec_dict` stays. It is echoed into the envelope for the receipt layer and
+    is not consulted for any semantic fact.
+    """
+    # CONVERSION 5. Composed. Every semantic fact this route used to read from
+    # the question now arrives on the contract: the dataset (the ownership
+    # remediation made `workspace.resolve_dataset` the single owner and the
+    # contract carries its answer), the measure (`subject`), and the period pair
+    # (carried structurally by the time contract). The plan states all three and
+    # the deterministic executor runs them.
+    #
+    # The two-period guard moves INTO the plan, which blocks rather than
+    # defaults; the refusal below is unchanged in wording so the envelope, the
+    # receipt and the prose are identical for a question naming one period.
+    out = _plan.temporal_compare(output_root, pipeline_root, client_id, run_id,
+                                 interpretation=interpretation)
+    if out.get("planBlocked"):
         return _envelope(ok=False, question=question,
                          answer="I need two periods to compare.", spec=spec_dict,
                          artifacts=[], route="temporal_compare", error="missing periods")
-    dataset = _dataset_for(question, view)
-    out = compare_mod.run_temporal_compare(
-        output_root, pipeline_root, client_id, run_id, dataset=dataset,
-        metric=spec.metric, aggregation=spec.aggregation,
-        period_a=periods[0], period_b=periods[1])
+    periods = list(_plan.comparison_periods(interpretation))
+    dataset = out.get("dataset")
     metric_key = out.get("metric", "funded_balance")
     label = out.get("metricLabel", metric_key)
 
@@ -724,8 +944,8 @@ def _route_compare(question, spec, spec_dict, *, client_id, run_id, output_root,
                   f"{out.get('reason', 'a period is unavailable')}.")
         if len(avail) <= 1:
             answer += " Only one reporting period is available."
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[], route="temporal_compare",
+        return _undeliverable(question=question, answer=answer, spec=spec_dict,
+                         route="temporal_compare",
                          warnings=["insufficient-data: cross-period comparison needs two periods."])
 
     va, vb = out["valueA"], out["valueB"]
@@ -771,8 +991,106 @@ def _route_compare(question, spec, spec_dict, *, client_id, run_id, output_root,
 # --------------------------------------------------------------------------- #
 # B. Evolution / trend
 # --------------------------------------------------------------------------- #
-_FUNNEL_KEYWORDS = {"kfi": "KFI", "application": "APPLICATION", "offer": "OFFER",
-                    "completion": "COMPLETED", "completed": "COMPLETED"}
+def _declare_scope(envelope: Dict[str, Any], applied,
+                   *, context: Optional[str] = None,
+                   label: Optional[str] = None) -> Dict[str, Any]:
+    """Record the source-portfolio scope this answer was NARROWED to.
+
+    The same execution-evidence rule `populationApplied` and `_declare_grain`
+    follow: the route says what it did, and a route that says nothing is read
+    as having covered everything.
+
+    Saying nothing was the whole defect. `portfolioScope` publishes the scope a
+    request RESOLVED, and both a correct Direct answer and a whole-book answer
+    mislabelled Direct published `context_id: "direct"` beside figures of
+    £12.4m and £22.6m. Nothing else in either envelope differed. This is the
+    field that differs.
+    """
+    if not applied:
+        return envelope
+    envelope.setdefault("metadata", {})["scopeApplied"] = {
+        "context": context or applied.get("context"),
+        "label": label or applied.get("label"),
+        "detail": applied.get("detail"),
+        "rowsBefore": applied.get("rowsBefore"),
+        "rowsAfter": applied.get("rowsAfter"),
+        "snapshots": applied.get("snapshots"),
+    }
+    return envelope
+
+
+def _declare_lens_scope(envelope: Dict[str, Any], interpretation: Any,
+                        *, label: str, rows_after: Any = None,
+                        lens: Any = None) -> Dict[str, Any]:
+    """Declare the source-portfolio scope a route narrowed to, from the contract.
+
+    THE SAME PRIMITIVE the movement and period-change routes already use — this
+    assembles the evidence from `interpretation.source_scope` and hands it to
+    `_declare_scope` rather than composing a second `scopeApplied` dict. Two
+    producers of one execution fact is the pattern this estate has now been
+    bitten by three times.
+
+    Why it is needed at all: `portfolio_summary`, `funded_bridge`, `evolution`
+    and `cohort_progression` APPLY the lens correctly — "Summarise the acquired
+    book" answers over 199 loans, not the book's 640 — and publish no
+    machine-readable record of having done so. Nothing downstream can tell that
+    answer from a whole-book answer mislabelled Acquired, which is the exact
+    confusion `scopeApplied` was introduced to end.
+
+    Metadata only. It states what already happened and changes no row, route,
+    measure, grouping, filter or figure.
+    """
+    scope = getattr(interpretation, "source_scope", None)
+    ids = tuple(getattr(scope, "portfolio_ids", ()) or ())
+    if not ids:
+        # A ROUTE THAT HOLDS THE LENS AND NOT THE CONTRACT. `cohort_progression`
+        # resolves its own `PortfolioLens` from the question and narrows the
+        # cohort by `lens.filters`; it never receives an interpretation, so the
+        # branch above returned an unmarked envelope and "how has funded balance
+        # evolved for the direct book" answered the Direct book while declaring
+        # no scope at all. The filters ARE the realised scope — that is what the
+        # lens dataclass says they are — so they are the evidence here.
+        filters = dict(getattr(lens, "filters", None) or {})
+        if not filters:
+            return envelope
+        ctx = _portfolio_lens.context_id(lens)
+        ctx = ctx if isinstance(ctx, str) else ", ".join(str(c) for c in ctx)
+        return _declare_scope(envelope, {
+            "context": ctx,
+            "label": label,
+            "detail": "; ".join("%s = %s" % (k, v)
+                                for k, v in sorted(filters.items())),
+            "rowsAfter": rows_after,
+        }, context=ctx, label=label)
+    return _declare_scope(envelope, {
+        "context": getattr(scope, "context_id", None),
+        "label": label,
+        "detail": "source portfolio in %s" % ", ".join(str(i) for i in sorted(ids)),
+        "rowsAfter": rows_after,
+    }, context=getattr(scope, "context_id", None), label=label)
+
+
+def _declare_grain(envelope: Dict[str, Any], grain: str) -> Dict[str, Any]:
+    """Record the reporting grain this answer was actually published at.
+
+    The receipt owns a SECOND claim about grain — a static route -> grain map
+    asserting that every series route reports months, on the premise that they
+    all read the month-end funded snapshots. Three do not: the funnel and the
+    by-stage series have always been keyed on the weekly extract date, and the
+    single-metric series is weekly whenever the pipeline producer supplied it.
+
+    While the two claims agreed by accident nobody noticed. Once the series was
+    keyed correctly they disagreed, in both directions at once: a question asking
+    for weeks was refused on the ground that the answer was monthly, and one
+    asking for months was answered weekly with nothing disclosed.
+
+    So the route says what it did, and the receipt reads that rather than an
+    assertion made about the route elsewhere — the same execution-evidence rule
+    `populationApplied` and `declared_series_periods` already follow. A route
+    that declares nothing keeps the static fallback and is unaffected.
+    """
+    envelope.setdefault("metadata", {})["seriesGrain"] = grain
+    return envelope
 
 
 def _funded_metric_value(df, metric_key: str) -> Optional[float]:
@@ -794,12 +1112,25 @@ def _funded_metric_value(df, metric_key: str) -> Optional[float]:
     return None
 
 
-def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
+def _filtered_funded_evo(output_root, client_id, run_id, predicates, semantics,
                          metric_key: str) -> Dict[str, Any]:
-    """A funded single-metric series across reporting periods with the spec's
-    filter applied WITHIN each period (via the canonical executor filter, so the
-    scope matches a point-in-time filtered answer). Raises on an invalid filter so
-    the caller can defer to the controlled point-in-time validation path."""
+    """A funded single-metric series with the POPULATION applied within each period.
+
+    ``predicates`` are the governed `Predicate` objects the compositional plan
+    selected — `SELECT_POPULATION(kind=row_predicates)`, built from
+    `RowPredicateClaim` and nothing else. This function does not receive the
+    spec, so it cannot read a filter's meaning even by accident.
+
+    Execution goes through `population.apply_population`, which since the
+    predicate-parity work runs every predicate through
+    `mi_query_executor.governed_predicate_mask` — the same single owner
+    `_apply_filters` uses. That equivalence is what makes this substitution
+    row-for-row identical rather than merely similar, and it is measured at
+    119/119 by `migration_phase0.predicate_execution_parity`.
+
+    Raises on a predicate that cannot be applied, so the caller defers to the
+    controlled point-in-time validation path exactly as before.
+    """
     frames = evolution_mod.funded_frames(output_root, client_id, run_id)
     periods: List[Dict[str, Any]] = []
     sources: List[str] = []
@@ -807,7 +1138,14 @@ def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
         df = fr.get("df")
         if df is None:
             continue
-        fdf = _apply_filters(df, spec, semantics, [])  # may raise -> caller defers
+        fdf, evidence = _population.apply_population(df, predicates, semantics)
+        if fdf is None or not evidence.is_usable:
+            # FAIL CLOSED, and in the shape this caller already handles: a
+            # population that could not be applied is not a series with a
+            # missing filter, it is no series at all.
+            raise MIQueryExecutionError(
+                "the requested population could not be applied to this book: "
+                + "; ".join(evidence.unavailable or [evidence.blocked_reason or ""]))
         rd = fr.get("reporting_date") or fr.get("run_id")
         periods.append({
             "period": (str(rd)[:7] if rd else fr.get("run_id")),
@@ -820,25 +1158,92 @@ def _filtered_funded_evo(output_root, client_id, run_id, spec, semantics,
     return {"periods": periods, "sourceFiles": sources}
 
 
-def _filter_summary(spec) -> str:
-    """A short human description of the active spec filters for the answer/notes."""
-    parts: List[str] = []
-    for k, v in (getattr(spec, "filters", None) or {}).items():
-        if isinstance(v, dict):
-            op = v.get("op", "eq")
-            parts.append(f"{k} {op} {v.get('value', v.get('min', v.get('max')))}")
-        else:
-            parts.append(f"{k} = {v}")
-    return "; ".join(parts)
+def _filter_summary(predicates) -> str:
+    """A short human description of the applied population, for answer and notes.
+
+    Described from the governed `Predicate` rather than from the spec, through
+    `Predicate.describe()` — the same wording the population ledger and the
+    facet labels already use, so the prose, the evidence and the receipt cannot
+    say three different things about one narrowing.
+    """
+    return "; ".join(p.describe() for p in (predicates or ()))
 
 
 def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_root,
-                     pipeline_root, view, portfolio_id, as_of, semantics=None
-                     ) -> Optional[Dict[str, Any]]:
-    q = question.lower()
-    dataset = _dataset_for(question, view)
+                     pipeline_root, portfolio_id, as_of, semantics=None,
+                     interpretation=None) -> Optional[Dict[str, Any]]:
+    # THE DATASET, THE STAGE AND THE STAGE AXIS, ALL FROM THE CONTRACT.
+    #
+    # This route used to re-read the raw question three times for facts the
+    # interpretation layer had already settled: `resolve_dataset(question)` for
+    # the dataset, a five-substring `_FUNNEL_KEYWORDS` map for the stage, and
+    # `"by stage" in q` for the stage axis. Each was a second owner of a
+    # governed decision, and the substring readers were narrower than the
+    # governed vocabulary they shadowed — 21 spellings against 5.
+    dataset = _plan.evolution_dataset(interpretation)
+    if dataset is None:
+        # No contract, no plan. Deferring is the fail-safe: the point-in-time
+        # path validates and refuses, rather than this route guessing a dataset.
+        return None
+    funnel_stage, stage_axis = _plan.governed_stage(interpretation)
     is_count = spec.aggregation == "count"
-    filtered = bool(getattr(spec, "filters", None))
+
+    # NO IMPLICIT MEASURE. A series has to plot something, so the parser
+    # supplies the governed balance when the question names no measure — and
+    # for "show me the trend" that substitution WAS the answer: a funded
+    # balance series, chosen entirely by us, presented as though it had been
+    # asked for. The frozen acceptance bank has expected this to be refused
+    # since it was written.
+    #
+    # The test is the BARE case and nothing wider, read from the contract
+    # alone. A question that supplies any governed element the measure can be
+    # determined FROM is not bare and is untouched: an explicit dataset
+    # ("show pipeline evolution by stage" — the governed pipeline amount), a
+    # named analytic ("show regional concentration evolution over time"), or a
+    # dimension to break the series down by. Only a question that supplies
+    # none of them leaves the measure with no owner but us.
+    from question_interpretation.schema import PROV_DEFAULT as _PROV_DEFAULT
+
+    _subject = getattr(interpretation, "subject", None)
+    if (getattr(_subject, "provenance", None) == _PROV_DEFAULT
+            and not is_count
+            and not stage_axis
+            # A NAMED STAGE DETERMINES THE MEASURE just as the dataset does:
+            # "completions by month" is a pipeline question whose measure is
+            # the governed pipeline amount, not a question with no measure.
+            # Checking only the stage AXIS ("by stage") and not a named stage
+            # made this guard refuse it.
+            and not funnel_stage
+            and getattr(getattr(interpretation, "operation", None),
+                        "analytic", None) is None
+            and not _plan.grouping_concepts(interpretation)
+            and getattr(getattr(interpretation, "dataset", None),
+                        "provenance", None) == _PROV_DEFAULT):
+        message = (
+            "I can show a trend, but you have not said which metric. "
+            "For example: funded balance, loan count or weighted-average LTV. "
+            "No metric has been chosen for you.")
+        return _undeliverable(question=question, spec=spec_dict, artifacts=[],
+                              answer=message, error=message, route="evolution",
+                              warnings=[message])
+
+    # THE POPULATION, PLANNED FROM THE CONTRACT. `spec.filters` still answers
+    # "did the reader ask to narrow at all" — a gate, not a meaning — and every
+    # question of WHICH rows is answered by the plan step.
+    population_step = _plan.row_predicate_step(interpretation)
+    predicates = _plan.row_predicates(population_step)
+    requested = dict(getattr(spec, "filters", None) or {})
+    filtered = bool(predicates)
+
+    # A narrowing the plan does not carry must never be silently dropped. The
+    # keys the contract excludes by design are SCOPE and reporting-basis keys,
+    # which are not row predicates at all; if any remain, this route cannot
+    # honour the whole request and defers to the point-in-time path, which is
+    # the same fail-safe an invalid filter already takes. Measured on the
+    # corpus: 121 spec.filters entries, 121 material predicates, 0 excluded —
+    # so this defers on nothing that ships today.
+    if requested and len(predicates) != len(requested):
+        return None
 
     # Filtered trends are supported for the FUNDED single-metric series only
     # (applied per period below). A filtered pipeline / funnel / stage trend defers
@@ -846,16 +1251,15 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     if filtered and dataset != "funded":
         return None
 
-    # Funnel stage trend (KFI / Application / Offer / Completion by week).
-    funnel_stage = next((stage for kw, stage in _FUNNEL_KEYWORDS.items() if kw in q), None)
+    # Funnel stage trend, for whatever stage the governed vocabulary resolved.
     if funnel_stage:
         funnel = evolution_mod.pipeline_funnel_evolution(pipeline_root, client_id, run_id)
         pts = funnel.get("series", {}).get(funnel_stage, [])
         summ = funnel.get("summary", {}).get(funnel_stage, {})
         if not pts:
-            return _envelope(ok=True, question=question,
+            return _undeliverable(question=question,
                              answer=f"No weekly {funnel_stage.title()} extracts are available yet.",
-                             spec=spec_dict, artifacts=[], route="evolution_funnel",
+                             spec=spec_dict, route="evolution_funnel",
                              warnings=["insufficient-data: no weekly pipeline extracts."])
         flow_pts = funnel.get("flowSeries", {}).get(funnel_stage, [])
         # Weekly-flow rows (bars); fall back to the stock level only when no flow
@@ -885,19 +1289,32 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
                   f"{_gbp(summ.get('latestStockValue'))}.")
         notes = [{"field": "weekly_extracts",
                   "note": f"{funnel.get('uniqueWeeklyExtractsUsed') or len(rows)} governed weekly extract(s)."}]
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[chart, table],
-                         reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
-                         source_notes=notes, route="evolution_funnel")
+        out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                        artifacts=[chart, table],
+                        reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
+                        source_notes=notes, route="evolution_funnel")
+        # THE STAGE THIS TREND IS OF. The funnel series is built for exactly one
+        # governed pipeline stage, which is a narrowing of the pipeline by
+        # `pipeline_stage` however the series is assembled. It was declared
+        # nowhere, so "Show KFI trend by week." published a KFI-only answer that
+        # no reader could distinguish from a whole-pipeline one. Declared through
+        # the population ledger every other route narrows through.
+        from question_interpretation.lexical import PIPELINE_STAGE_FIELD
+        out.setdefault("metadata", {})["populationApplied"] = {
+            "applied": [f"{PIPELINE_STAGE_FIELD} (funnel stage "
+                        f"{summ.get('label', funnel_stage)})"],
+            "unavailable": [], "rowsBefore": None, "rowsAfter": None,
+        }
+        return _declare_grain(out, "week")
 
     # Pipeline amount by stage over time (multi-series).
-    if dataset == "pipeline" and ("by stage" in q or "stage over time" in q or "stage migration" in q):
+    if dataset == "pipeline" and stage_axis:
         pipe = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
         by_stage = pipe.get("byStage", [])
         if not by_stage:
-            return _envelope(ok=True, question=question,
+            return _undeliverable(question=question,
                              answer="No weekly pipeline extracts are available to build a stage trend.",
-                             spec=spec_dict, artifacts=[], route="evolution_pipeline_stage",
+                             spec=spec_dict, route="evolution_pipeline_stage",
                              warnings=["insufficient-data: no weekly pipeline extracts."])
         periods = sorted({r["period"] for r in by_stage})
         stages = sorted({r["stage"] for r in by_stage})
@@ -914,34 +1331,55 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
             value_format="gbp", spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
         answer = (f"Pipeline amount by stage across {len(periods)} period(s): "
                   f"stages {', '.join(stages)}.")
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[chart],
-                         reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
-                         route="evolution_pipeline_stage")
+        out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                        artifacts=[chart],
+                        reconciliation={"dataset": "pipeline", "coverage_by_balance_pct": 100.0},
+                        route="evolution_pipeline_stage")
+        # DECLARE THE AXIS IT ACTUALLY SPLIT BY. This branch builds one series
+        # per governed stage, so the answer IS broken down by `pipeline_stage` —
+        # and until the word "stage" resolved to that governed dimension,
+        # nothing raised a grouping facet for it and nothing had to say so.
+        # Now that it does, an undeclared axis reads as a request the route
+        # dropped, and the question was refused over a chart that had honoured
+        # it. Declared from the EXECUTED series, exactly as the bridge route
+        # declares `dimensionCol`.
+        from question_interpretation.lexical import PIPELINE_STAGE_FIELD
+
+        out.setdefault("metadata", {})["groupedBy"] = [PIPELINE_STAGE_FIELD]
+        return _declare_grain(out, "week")
 
     # Funded / pipeline single-metric evolution.
     metric_key, label, fmt = compare_mod.resolve_metric_key(dataset, spec.metric, spec.aggregation)
-    period_field = "period"
     if dataset == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
     elif filtered:
         # Filtered funded series: apply the filter within each period. On an invalid
         # filter, defer to the controlled point-in-time validation path.
         try:
-            evo = _filtered_funded_evo(output_root, client_id, run_id, spec, semantics or {}, metric_key)
+            evo = _filtered_funded_evo(output_root, client_id, run_id, predicates,
+                                       semantics or {}, metric_key)
         except Exception:  # noqa: BLE001 - invalid filter -> point-in-time path
             return None
     else:
         evo = evolution_mod.funded_evolution(output_root, client_id, run_id)
     periods = evo.get("periods", [])
     if not periods:
-        return _envelope(ok=True, question=question,
+        return _undeliverable(question=question,
                          answer=f"No reporting periods are available to build a {label.lower()} trend.",
-                         spec=spec_dict, artifacts=[], route="evolution",
+                         spec=spec_dict, route="evolution",
                          warnings=["insufficient-data: no governed reporting periods."])
+    # The observation identity is whatever the series publishes as its own grain.
+    # The pipeline producer publishes a day-level `week` per governed weekly
+    # extract; the funded producers publish only a monthly `period`. Keying every
+    # series on `period` collapsed five distinct weekly extracts onto one x-axis
+    # point, under a chart this route already titled "by week" — the label and the
+    # data disagreed, and the label was right. Read from what the producer returns
+    # rather than from the dataset name, so a series is keyed by the grain it
+    # actually carries.
+    period_field = "week" if any("week" in p for p in periods) else "period"
     rows = [{"period": p.get(period_field), "value": (p.get("metrics") or {}).get(metric_key)}
             for p in periods]
-    filter_txt = _filter_summary(spec) if filtered else ""
+    filter_txt = _filter_summary(predicates) if filtered else ""
     scope_suffix = f" — {filter_txt}" if filter_txt else ""
     disp = _METRIC_DISPLAY.get(metric_key, ("decimal", "decimal", None))
     chart = _chart_artifact(
@@ -983,6 +1421,12 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                     artifacts=[chart, table], reconciliation=last_recon,
                     source_notes=notes, warnings=warnings, route="evolution")
+    _declare_grain(out, "week" if period_field == "week" else "month")
+    # The lens this route narrowed each period by, declared through the same
+    # primitive the movement routes use. Metadata only.
+    _declare_lens_scope(out, interpretation,
+                        label=getattr(getattr(interpretation, "source_scope", None),
+                                      "label", None) or "scope")
     if filtered:
         # P1L: this route genuinely applies the population — per period, which is
         # what makes a filtered trend meaningful — so it DECLARES that it did.
@@ -994,8 +1438,8 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
         before = next((p.get("rows") or p.get("totalRows") for p in reversed(periods)
                        if (p.get("rows") or p.get("totalRows")) is not None), None)
         out.setdefault("metadata", {})["populationApplied"] = {
-            "applied": [f"{key} (applied within each period)"
-                        for key in (getattr(spec, "filters", None) or {})],
+            "applied": [f"{p.field} (applied within each period)"
+                        for p in predicates],
             "unavailable": [], "rowsBefore": before, "rowsAfter": last,
         }
     return out
@@ -1006,14 +1450,19 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
 # --------------------------------------------------------------------------- #
 def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root,
                     pipeline_root, history_model, portfolio_id, as_of) -> Dict[str, Any]:
+    # THE TARGET THE READER NAMED goes to the projector, so the milestone it
+    # answers from is the one asked about rather than the nearest round number
+    # the fixed ladder happens to carry.
+    _target = spec.forecast_target_value
     fx = fx_mod.build_extrapolation(output_root, pipeline_root, client_id, run_id,
-                                    history_model=history_model)
+                                    history_model=history_model,
+                                    extra_thresholds=([_target] if _target else ()))
     rr = fx.get("completionRunRateForecast", {})
     kfi = fx.get("kfiConversionForecast", {})
     weighted = fx.get("currentWeightedPipelineForecast", {})
     cur = fx.get("currentFundedBalance", 0.0)
     kind = spec.forecast_question or "extrapolation_curve"
-    target = spec.forecast_target_value
+    target = _target
     caveat = "Downside/base/upside are indicative scenario bands, not statistically validated confidence intervals."
     warnings = [caveat]
 
@@ -1034,16 +1483,32 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
     milestones = rr.get("milestones", [])
 
     def _ms(thr: float) -> Optional[Dict[str, Any]]:
+        """The milestone FOR THIS THRESHOLD, or the next one above it.
+
+        NEVER `milestones[-1]`. That fallback returned the largest milestone the
+        projection happened to carry whenever the requested threshold was beyond
+        it, and the caller then reported that milestone's state as the answer for
+        the threshold actually asked about. Measured: the milestone list tops out
+        at £75m — all reached — so "when do we reach £250m?" answered "the book
+        has already reached £250.0m" on a book holding £172.1m.
+        """
         exact = next((m for m in milestones if m["threshold"] == thr), None)
         if exact:
             return exact
         above = [m for m in milestones if m["threshold"] >= thr]
-        return above[0] if above else (milestones[-1] if milestones else None)
+        return above[0] if above else None
 
     if kind in ("reach_threshold",) and target:
         m = _ms(target)
-        if m and m.get("reached"):
+        # THE ARITHMETIC DECIDES, not a milestone flag. "Already reached" is a
+        # statement about the CURRENT balance and the REQUESTED target, and it is
+        # true exactly when one is at least the other.
+        if float(cur or 0) >= float(target):
             answer = f"The book has already reached {_gbp(target)} (current funded balance {_gbp(cur)})."
+        elif m and m.get("reached"):
+            answer = (f"Current funded balance is {_gbp(cur)}; {_gbp(target)} is "
+                      f"beyond the projection horizon, so I cannot say when it is "
+                      f"reached. {caveat}")
         elif m:
             answer = (f"At the current base completion run-rate (~{_gbp(base)}/month, "
                       f"{_gbp(ann)}/year), the book reaches {_gbp(target)} around "
@@ -1148,7 +1613,15 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
     notes = [{"field": "assumptions",
               "note": f"Base run-rate {_gbp(base)}/mo over {rr.get('observedMonths')} month(s); "
                       f"signal = month-on-month funded growth. {caveat}"}]
-    recon = {"dataset": "forecast", "coverage_by_balance_pct": 100.0}
+    # THE DATASETS THIS EXTRAPOLATION ACTUALLY READ, derived through the shared
+    # primitive rather than asserted. It read the funded runs and the pipeline
+    # extract; "forecast" is the analytic it produced, not a tape it opened, and
+    # naming the analytic here left a question that asked about the pipeline
+    # unable to show the pipeline had been read at all. Same correction, same
+    # primitive, as the five sites that adopted it before this one.
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root,
+                                 pipeline_root=pipeline_root))
     return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                      artifacts=artifacts, reconciliation=recon, source_notes=notes,
                      warnings=warnings, route="forecast_extrapolation")
@@ -1222,8 +1695,7 @@ def _route_scenario(question, spec, spec_dict, *, client_id, run_id, output_root
     rr = fx.get("completionRunRateForecast", {})
     cur = fx.get("currentFundedBalance", 0.0)
     if not rr.get("available"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=("I can't run a what-if on the completion run-rate yet: "
+        return _undeliverable(question=question, spec=spec_dict, answer=("I can't run a what-if on the completion run-rate yet: "
                                  f"{rr.get('caveat', 'insufficient completion history')}."),
                          route="scenario",
                          warnings=["insufficient-data: no run-rate to perturb."])
@@ -1262,8 +1734,14 @@ def _route_scenario(question, spec, spec_dict, *, client_id, run_id, output_root
                 {"key": "scenario", "label": f"Scenario ({change_txt})", "align": "right", "format": "text"},
             ], rows=trows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
 
-    if target is not None and res["baseTargetDate"] == "reached":
+    if target is not None and float(cur or 0) >= float(target):
         answer = f"The book has already reached {_gbp(target)} (current funded balance {_gbp(cur)})."
+    elif target is not None and res["baseTargetDate"] == "reached":
+        # The projection says "reached" for a threshold the book has NOT reached:
+        # the same substituted-milestone defect as above, seen from the scenario
+        # side. Say what is true rather than repeat the flag.
+        answer = (f"Current funded balance is {_gbp(cur)}; {_gbp(target)} is beyond "
+                  f"the projection horizon, so a scenario cannot be dated to it. {caveat}")
     elif target is not None and res["monthsSaved"] is None:
         answer = (f"Even with a {change_txt} completion run-rate (~{_gbp(res['scenarioMonthlyRunRate'])}/mo) "
                   f"the book doesn't reach {_gbp(target)} within the projection horizon. {caveat}")
@@ -1426,6 +1904,65 @@ def _route_concentration_tests(question, spec, spec_dict, *, client_id,
     return envelope_out
 
 
+def _names_another_dataset(question) -> bool:
+    """Does the question name a governed dataset this route cannot read?
+
+    A route that answers from `output_root` reads the FUNDED book and nothing
+    else. It has no pipeline or forecast frame, takes no parameter that could
+    carry one, and must not stand in for a route that does.
+
+    Measured before this gate: "Summarise the current pipeline." resolved
+    `pipeline`, loaded the 8-row pipeline frame, passed `view='pipeline'` to
+    `try_route` — and was answered *"the portfolio holds 640 loans with a funded
+    balance of £172.1m"*, from the funded book. The frozen readiness bank records
+    that as WRONG / SILENT on Q10A: *"answered from the FUNDED book; the question
+    named the pipeline dataset."*
+
+    Asks `workspace.resolve_dataset`, which is the single governed owner of what
+    dataset a question names — not a second reading of the sentence here, and not
+    a word test.
+
+    Fails OPEN: if the owner cannot be reached the route keeps its pre-existing
+    behaviour rather than declining a question it has always answered.
+    """
+    try:
+        from . import workspace as _ws
+
+        return _ws.resolve_dataset(question) != _ws.DEFAULT_VIEW
+    except Exception as exc:  # noqa: BLE001 - eligibility must never break a query
+        _logger.info("dataset-intent read unavailable for %r: %s", question, exc)
+        return False
+
+
+def _projects_forward(question, spec=None) -> bool:
+    """Does the GOVERNED INTENT OWNER read this sentence as forward-looking?
+
+    `mi_workflows.analytical.intent` already separates a current limits question
+    from a forward one — `FORECAST_PROJECTION` / `FORECAST_BREACH`, with
+    `requirements` naming `forecast`. This asks that owner rather than adding a
+    second reading of the sentence here, which is the rule this estate applies to
+    every other shared vocabulary.
+
+    Deliberately NOT a word test. "forecast", "risk" and "pipeline" all appear in
+    questions that are squarely current-state, and a word test would decline
+    them; the classifier reports the analytic and temporal intent instead.
+
+    Fails OPEN, and that is the safe direction here: if the classifier cannot be
+    reached, the route keeps its pre-existing behaviour rather than refusing a
+    question it has always answered.
+    """
+    try:
+        from mi_workflows.analytical.intent import (
+            FAMILY_FORECAST_PROJECTION, OP_FORECAST_BREACH, classify)
+
+        reading = classify(question, spec=spec)
+        return (FAMILY_FORECAST_PROJECTION in (reading.families or ())
+                or OP_FORECAST_BREACH in (reading.operations or ()))
+    except Exception as exc:  # noqa: BLE001 - eligibility must never break a query
+        _logger.info("forward-intent read unavailable for %r: %s", question, exc)
+        return False
+
+
 def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
                 portfolio_id, as_of) -> Dict[str, Any]:
     # The operator-APPROVED concentration-test configuration is the governed
@@ -1445,8 +1982,8 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
         answer = (f"Contractual risk limits are unavailable for this portfolio "
                   f"({rl.get('limitsReason', 'extraction required')}). "
                   "I can show observed concentrations once limits are provided.")
-        return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                         artifacts=[], route="risk_limits",
+        return _undeliverable(question=question, answer=answer, spec=spec_dict,
+                         route="risk_limits",
                          warnings=["limits unavailable / needs review."])
 
     # Scope to a single category when asked ("geographic concentration limits").
@@ -1458,9 +1995,8 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
             summ = risk_mod._summary(tests)
             cat_label = category.replace("_", " ") + ": "
         else:
-            return _envelope(
-                ok=True, question=question, spec=spec_dict, artifacts=[],
-                route="risk_limits",
+            return _undeliverable(
+                question=question, spec=spec_dict, route="risk_limits",
                 answer=(f"No {category.replace('_', ' ')} limits are configured for this "
                         "portfolio."),
                 warnings=[f"no tests in category '{category}'."])
@@ -1525,8 +2061,9 @@ def _route_risk(question, spec, spec_dict, *, client_id, run_id, output_root,
         ], rows=trows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of))
 
     notes = [{"field": "limit_source", "note": rl.get("limitsSource", "Schedule 8 extracted")}]
-    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
-             "reporting_date": rl.get("reportingDate")}
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root),
+        reporting_date=rl.get("reportingDate"))
     warnings = []
     if summ.get("unavailable"):
         warnings.append(f"{summ['unavailable']} test(s) unavailable (missing fields).")
@@ -1561,13 +2098,21 @@ _REGION_FAMILY = ("collateral_geography", "geographic_region_collateral",
                   "geographic_region_obligor")
 
 
-def _bridge_dimension(spec, semantics: Dict[str, Any]) -> Tuple[Optional[str], Any, str]:
+def _bridge_dimension(concept: Optional[str],
+                      semantics: Dict[str, Any]) -> Tuple[Optional[str], Any, str]:
     """(semantic_key, candidate_column(s), business_label) for the bridge
-    attribution dimension — the one named in the question, else a sensible
-    default. Region resolves to the whole family so the bridge picks whichever
-    geography column the funded tape actually carries."""
+    attribution dimension — the governed CONCEPT the caller resolved, else a
+    sensible default. Region resolves to the whole family so the bridge picks
+    whichever geography column the funded tape actually carries.
+
+    CONVERSION 4 changed this from reading `spec.bridge_dimension` itself to
+    taking the concept as an argument, so the DECISION of which dimension is the
+    axis moved to the interpretation contract while this kept its real job:
+    turning a governed concept into the column(s) and label this tape spells it
+    with. One owner of registry resolution, and it no longer owns the semantics.
+    """
     fields = semantics.get("fields", {})
-    key = spec.bridge_dimension
+    key = concept
     if not key or key not in fields:
         key = next((k for k in _BRIDGE_DEFAULT_DIMS if k in fields), None)
     if not key:
@@ -1582,7 +2127,8 @@ def _bridge_dimension(spec, semantics: Dict[str, Any]) -> Tuple[Optional[str], A
 
 
 def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
-                  portfolio_id, as_of, semantics, source_lens=None) -> Dict[str, Any]:
+                  portfolio_id, as_of, semantics, source_lens=None,
+                  interpretation=None) -> Optional[Dict[str, Any]]:
     """Governed funded-balance ATTRIBUTION bridge → a waterfall artifact.
 
     Opening balance (a named start period, else the earliest) → per-category
@@ -1590,24 +2136,33 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
     lens named in the question (or the active dropdown) scopes it — so a
     consolidated (Total) and cohort (direct / acquired / cohort id) bridge are
     both available. Deltas reconcile exactly to the net change."""
-    _key, dim_col, dim_label = _bridge_dimension(spec, semantics)
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. The rule Conversions 1-3
+        # settled: one population owner, or none. Keeping the lens-resolved path
+        # as a fallback would leave `resolve_lens_with_default` reachable from
+        # here exactly when the contract failed.
+        return None
+    # CONVERSION 4 — the switch point, and the whole of it.
+    #
+    # Every semantic fact this route read from the question now arrives on the
+    # contract: the source scope (Conversion 1), the attribution dimension (the
+    # `dimensions` axis, bridged here) and the named start period
+    # (`time.comparison_period`). `_bridge_dimension` keeps only the registry
+    # resolution — concept to column and label.
+    dim_key, dim_col, dim_label = _bridge_dimension(
+        (_plan.grouping_concepts(interpretation) or (None,))[0], semantics)
     if not dim_col:
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer="I couldn't resolve a dimension to attribute the bridge by.",
+        return _undeliverable(question=question, spec=spec_dict, answer="I couldn't resolve a dimension to attribute the bridge by.",
                          route="funded_bridge", warnings=["no attribution dimension resolved."])
 
-    default_lens = (_portfolio_lens.lens_from_selection(source_lens)
-                    if source_lens is not None else None)
-    lens = _portfolio_lens.resolve_lens_with_default(question, default_lens)
-    start_period = (spec.compare_periods or [None])[0]
-
-    br = evolution_mod.funded_bridge(
-        output_root, client_id, dim_col, start_period=start_period, to_run_id=run_id,
-        lens_filters=lens.filters or None, lens_label=lens.label)
+    br = _plan.funded_bridge(
+        output_root, client_id, interpretation=interpretation,
+        dimension_columns=dim_col, dimension_key=dim_key,
+        dimension_label=dim_label, to_run_id=run_id)
+    lens_label_text, lens_narrowed = br.get("lens") or "Total", None
 
     if not br.get("available"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=(f"I can't build a funded balance bridge yet: "
+        return _undeliverable(question=question, spec=spec_dict, answer=(f"I can't build a funded balance bridge yet: "
                                  f"{br.get('reason', 'insufficient reporting periods')}."),
                          route="funded_bridge",
                          warnings=["insufficient-data: a bridge needs two funded reporting periods."])
@@ -1620,7 +2175,7 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
         rows.append({"label": c["category"], "value": c["delta"], "type": "delta"})
     rows.append({"label": f"{end['period']} (latest)", "value": end["total"], "type": "total"})
 
-    lens_suffix = "" if lens.name == _portfolio_lens.LENS_TOTAL else f" — {lens.label}"
+    lens_suffix = "" if lens_label_text == "Total" else f" — {lens_label_text}"
     title = f"Funded balance bridge by {dim_label}{lens_suffix}"
     chart = _chart_artifact(
         title, chart_type="waterfall", x_key="label", rows=rows,
@@ -1636,7 +2191,7 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
         td = top["delta"]
         top_txt = (f" Largest mover: {top['category']} "
                    f"({'+' if td >= 0 else '−'}{_gbp(abs(td))}).")
-    answer = (f"{dim_label} bridge ({lens.label}): funded balance moved from "
+    answer = (f"{dim_label} bridge ({lens_label_text}): funded balance moved from "
               f"{_gbp(start['total'])} in {start['period']} to {_gbp(end['total'])} at "
               f"{end['period']} (latest) — a net change of "
               f"{'+' if net >= 0 else '−'}{_gbp(abs(net))} ({arrow}).{top_txt}")
@@ -1652,15 +2207,39 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
                "delta": c["delta"]} for c in br["contributions"]],
         spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
 
-    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
-             "reporting_date": end.get("reporting_date")}
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root),
+        reporting_date=end.get("reporting_date"))
     notes = [{"field": "bridge_periods",
               "note": f"Opening {start.get('reporting_date') or start['period']}; "
                       f"closing {end.get('reporting_date') or end['period']} (latest); "
                       f"attributed by {dim_label.lower()}; deltas reconcile to the net change."}]
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
-                     route="funded_bridge")
+    envelope = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                         artifacts=[chart, table], reconciliation=recon,
+                         source_notes=notes, route="funded_bridge")
+    # The lens this bridge narrowed to, through the shared primitive.
+    _declare_lens_scope(envelope, interpretation,
+                        label=getattr(getattr(interpretation, "source_scope", None),
+                                      "label", None) or "scope")
+    # D7: the route states the axis its bridge ACTUALLY attributed movement by,
+    # so `grouping_proven` can certify a requested grouping from execution
+    # evidence rather than from route identity. Without it this route declared
+    # nothing, `declared_group_fields` returned no registry field, and every
+    # question naming a dimension was refused with the grouping marked LOST —
+    # over a waterfall that had attributed by exactly that dimension.
+    #
+    # `dimensionCol` is what `evolution.funded_bridge` REPORTS IT GROUPED BY —
+    # the candidate it found present in the data, not the list it was offered
+    # and not the dimension the question asked for. Declaring the executed axis
+    # rather than the requested one is the safety property: a question naming a
+    # dimension the bridge could not use leaves its request correctly unproven
+    # and correctly refused. Reached only on a successful bridge, so an
+    # unavailable result certifies nothing — the same rule `risk_limits` follows
+    # for the tests that actually computed.
+    executed_dim = br.get("dimensionCol")
+    if executed_dim:
+        envelope.setdefault("metadata", {})["groupedBy"] = [str(executed_dim)]
+    return envelope
 
 
 # --------------------------------------------------------------------------- #
@@ -1710,8 +2289,7 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
 
     scope = lens.label + (f", {vintage} vintage" if vintage else "")
     if not prog.get("available"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=(f"I can't build a progression for {scope}: "
+        return _undeliverable(question=question, spec=spec_dict, answer=(f"I can't build a progression for {scope}: "
                                  f"{prog.get('reason', 'no matching loans')}."),
                          route="cohort_progression",
                          warnings=[f"insufficient-data: {prog.get('reason', 'no matching cohort')}"])
@@ -1763,12 +2341,18 @@ def _route_cohort_progression(question, spec, spec_dict, *, client_id, run_id,
     if prog.get("singlePeriod"):
         warnings.append("Only one reporting period has loans for this cohort — a "
                         "progression reads best with two or more periods.")
-    recon = {"dataset": "funded", "coverage_by_balance_pct": 100.0,
-             "reporting_date": (last or {}).get("reporting_date")}
+    recon = _workspace.reconciliation_for(
+        _workspace.datasets_read(output_root=output_root),
+        reporting_date=(last or {}).get("reporting_date"))
     notes = [{"field": "cohort", "note": prog["lineage"]["note"]}]
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
-                     warnings=warnings, route="cohort_progression")
+    out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                    artifacts=[chart, table], reconciliation=recon, source_notes=notes,
+                    warnings=warnings, route="cohort_progression")
+    # The lens this route narrowed the cohort by, through the same primitive
+    # every other lens route uses. Metadata only: it states what already
+    # happened and changes no row, period, metric or figure.
+    return _declare_lens_scope(out, None, label=lens.label, lens=lens,
+                               rows_after=(last or {}).get("loanCount"))
 
 
 # --------------------------------------------------------------------------- #
@@ -1832,8 +2416,60 @@ def _defers_to_period_change(question: str, *, spec: Any = None,
         return False
 
 
+def _is_a_generic_ranking(interpretation: Any) -> bool:
+    """The CONTRACT says: a ranked stratification, with NO analytic named.
+
+    ROUTE ENTITLEMENT, decided by the governed contract instead of by wording.
+
+    The specialist route's wording tests cannot separate these two, and that was
+    measured field by field before this existed — `OperationClaim.type`, all
+    four ordering values, `modifiers`, the subject claim, the dimension claims
+    and `residue` are identical on both:
+
+        "Which region has the largest balance?"                 generic
+        "What is the largest geographic area concentration?"    specialist
+
+    `OperationClaim.analytic` is the fact that separates them. It is
+    `mi_workflows.concentration_analysis`'s reading, carried on the contract —
+    the owner of that vocabulary, asked once, before precedence. A RANKING with
+    no analytic named is a measure ordered over an axis: the generic
+    compositional path answers it with the requested direction, limit, filters
+    and portfolio lens, none of which the ITL3 engine honours.
+
+    A question that names BOTH — "the largest geographic area CONCENTRATION" —
+    keeps the specialist route, because the analytic it named is the specialist
+    one.
+
+    The grouping dimension is required as well: a ranking with no axis is not a
+    stratification of anything, and the specialist route keeps that too.
+
+    ENTITLEMENT ONLY. This runs before any claim, so no handler has executed and
+    nothing is handed on after a failure — `tests/test_failclosed_route_
+    execution.py` is unchanged and still green.
+    """
+    if interpretation is None:
+        return False
+    try:
+        from question_interpretation.schema import FILLED, GROUPING, RANKING
+    except Exception:  # noqa: BLE001 - no contract vocabulary, no change
+        return False
+    operation = getattr(interpretation, "operation", None)
+    if operation is None:
+        return False
+    if getattr(operation, "analytic", None) is not None:
+        return False                      # a named analytic is the specialist's
+    if getattr(operation, "type", None) != RANKING:
+        return False
+    if getattr(operation, "state", None) != FILLED:
+        return False
+    return any(getattr(d, "role", None) == GROUPING
+               and getattr(d, "state", None) == FILLED
+               for d in (getattr(interpretation, "dimensions", None) or ()))
+
+
 def _is_geo_exposure(question: str, *, spec: Any = None,
-                     view: str = "funded") -> bool:
+                     view: str = "funded",
+                     interpretation_provider: Any = None) -> bool:
     q = f" {question.lower()} "
     if any(t in q for t in _RISK_LIMIT_TERMS):
         return False  # a limit/breach question is a risk-monitor question
@@ -1855,11 +2491,24 @@ def _is_geo_exposure(question: str, *, spec: Any = None,
         # mention geography — not a request for the ITL3 concentration view.
         # Routing it here discarded top_n, the metric and the lens.
         return False
-    return any(t in q for t in _GEO_TERMS) and any(m in q for m in _GEO_MARKERS)
+    if not (any(t in q for t in _GEO_TERMS) and any(m in q for m in _GEO_MARKERS)):
+        return False
+    # THE CONTRACT HAS THE LAST WORD, and is asked LAST on purpose: building it
+    # reads the frame and detects facets, so it is paid only for the handful of
+    # questions the wording tests have already brought this far — and for those
+    # it is memoised on the request, which this route's handler resolves anyway.
+    if interpretation_provider is not None:
+        try:
+            if _is_a_generic_ranking(interpretation_provider()):
+                return False
+        except Exception:  # noqa: BLE001 - a contract fault must not lose a route
+            logger.exception("geo entitlement contract check failed for %r", question)
+    return True
 
 
 def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
-               portfolio_id, as_of, source_lens=None) -> Dict[str, Any]:
+               portfolio_id, as_of, source_lens=None,
+               interpretation=None) -> Optional[Dict[str, Any]]:
     """Funded exposure by UK ITL3 area → a ranked bar + table, from the ITL3
     exposure engine (tape ITL3 field, else postcode-derived). Answers "largest
     geographic concentration / where is the book". Degrades honestly when the
@@ -1877,9 +2526,14 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
     platform. This route reads a dataframe, so it can honour a lens exactly as
     the point-in-time executor does; routes that read pre-aggregated run
     artefacts cannot, and disclose that instead (see ``try_route``)."""
+    if interpretation is None:
+        # NO CONTRACT, NO ANSWER FROM THIS ROUTE. The same rule Conversions 1
+        # and 2 settled: one population owner, or none. Keeping the
+        # lens-resolved path as a fallback would leave `_resolve_lens` reachable
+        # from here exactly when the contract failed.
+        return None
     if frame_resolver is None:
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer="I can't resolve the funded book for a geographic view here.",
+        return _undeliverable(question=question, spec=spec_dict, answer="I can't resolve the funded book for a geographic view here.",
                          route="geo_exposure", lens_applied=True,
                          warnings=["insufficient-data: no funded frame available."])
     try:
@@ -1888,31 +2542,58 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
         df = None
     if df is None or not len(df):
         scope = "this run" if run_id else "the active reporting dataset"
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=f"I couldn't load the funded book for {scope} to map exposure.",
+        return _undeliverable(question=question, spec=spec_dict, answer=f"I couldn't load the funded book for {scope} to map exposure.",
                          route="geo_exposure", lens_applied=True,
                          warnings=[f"insufficient-data: no funded frame for {scope}."])
 
-    # Narrow to the governed scope the caller is working in, using the SAME
-    # registry-resolved id list the point-in-time path filters on.
-    lens = _resolve_lens(question, source_lens)
-    lens_warnings: List[str] = []
-    if lens.filters:
-        df = _apply_lens_filter(df, lens)
-        if df is None or not len(df):
-            return _envelope(
-                ok=True, question=question, spec=spec_dict, artifacts=[],
-                answer=(f"There are no funded loans in {lens.label} to map, so I "
-                        "can't report a geographic concentration for it."),
-                route="geo_exposure", lens_applied=True,
-                warnings=[f"no rows in scope for {lens.label}."])
-        lens_warnings.append(f"portfolio scope applied: {lens.label}")
+    # CONVERSION 3 — the switch point, and the whole of it.
+    #
+    # The one semantic fact this route ever read from the question is the source
+    # scope, and it now comes from the contract. The plan narrows the frame with
+    # the SAME governed id list, through the plan's own filters rather than
+    # through a lens object — so `_apply_lens_filter` is no longer reachable
+    # from here and the compositional layer has one narrowing owner.
+    geo = _plan.geo_exposure(df, interpretation=interpretation)
+    scope_label, narrowed = geo["lens"], geo["narrowed"]
+    lens_warnings: List[str] = (
+        [f"portfolio scope applied: {scope_label}"] if narrowed else [])
+    if geo.get("empty_scope"):
+        return _envelope(
+            ok=True, question=question, spec=spec_dict, artifacts=[],
+            answer=(f"There are no funded loans in {scope_label} to map, so I "
+                    "can't report a geographic concentration for it."),
+            route="geo_exposure", lens_applied=True,
+            warnings=[f"no rows in scope for {scope_label}."])
 
-    result = geo_mod.exposure_by_itl3(df)
+    result = geo
     if not result.get("available"):
+        # DEFER, DON'T DECLINE ON EVERYONE'S BEHALF.
+        #
+        # This returned ok=True with "I can't build a geographic exposure view
+        # for this book" — a refusal wearing a success flag — and, because it
+        # had already claimed the question, nothing else got to answer. So
+        # "which region has the largest balance?" refused on a book whose very
+        # next question, "show balance by region", returns seven regions: this
+        # capability needs an ITL3 area or a property postcode, and the
+        # governed obligor-region breakdown needs neither.
+        #
+        # Returning None is the estate's own pre-claim deferral: this route
+        # cannot answer, so the next candidate may. A book that genuinely has
+        # no region at all still refuses, one route further on, on its terms.
+        # REVERTED, DELIBERATELY. An earlier pass had this defer so the generic
+        # path could answer "which region has the largest balance?" — which it
+        # does, completely and with disclosure. But that is exactly what
+        # `test_geographic_exposure_degrades_honestly_without_itl3_or_postcode`
+        # forbids: a specialist capability's failure handed to a different
+        # answer. The guard is not wrongly formulated, no contract field
+        # separates "where is the book concentrated" from "which region has the
+        # largest balance" (both carry a measure), and this task's scope rules
+        # out fixing a false refusal that its own change did not cause.
+        #
+        # So the route keeps the question and explains what it could not build.
+        # The cost is two false refusals, documented rather than traded away.
         reason = result.get("reason", "no ITL3 area or property postcode on the tape")
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=(f"I can't build a geographic exposure view for this book: "
+        return _undeliverable(question=question, spec=spec_dict, answer=(f"I can't build a geographic exposure view for this book: "
                                  f"{reason}."),
                          route="geo_exposure", lens_applied=True,
                          warnings=lens_warnings + [f"insufficient-data: {reason}"])
@@ -1937,7 +2618,7 @@ def _route_geo(question, spec_dict, *, client_id, run_id, frame_resolver,
             {"key": "share", "label": "Book share", "align": "right", "format": "text"},
         ], rows=rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
     top_name = top["itl3_name"] or top["itl3_code"]
-    book = "the book" if not lens.filters else lens.label
+    book = "the book" if not narrowed else scope_label
     answer = (f"Largest geographic concentration: {top_name} at {_gbp(top['balance'])} "
               f"({top['sharePct']:.1f}% of {book}) across {result.get('areaCount', len(areas))} "
               f"ITL3 area(s). Basis: {result.get('basis', 'tape')}; "
@@ -1986,8 +2667,7 @@ def _route_conversion(question, spec_dict, *, history_model, portfolio_id, as_of
     prog = model.get("cohortProgression")
     conv = model.get("cumulativeCohortConversion")
     if not prog or not prog.get("weeks"):
-        return _envelope(ok=True, question=question, spec=spec_dict, artifacts=[],
-                         answer=("I can't compute cumulative cohort conversion yet — it needs the "
+        return _undeliverable(question=question, spec=spec_dict, answer=("I can't compute cumulative cohort conversion yet — it needs the "
                                  "weekly pipeline snapshots that track KFI cases through to funding."),
                          route="cohort_conversion",
                          warnings=["insufficient-data: no cohort-tracked pipeline history."])
@@ -2045,7 +2725,26 @@ def _is_evolution(question: str, spec) -> bool:
     # A filter no longer forces the within-snapshot path: _route_evolution applies
     # the filter WITHIN each period for a funded series (and defers otherwise).
     q = question.lower()
-    return any(m in q for m in _EVOLUTION_MARKERS)
+    if any(m in q for m in _EVOLUTION_MARKERS):
+        return True
+    # THE AXIS QUESTION IS THE OWNER'S. `_EVOLUTION_MARKERS` above is a third
+    # copy of "did this sentence ask for a time axis?" — after
+    # `lexical.time_axis_request` (which owns it) and `llm_query_parser`'s
+    # `is_line` (which sets the chart type). Two of the three deciding
+    # differently is not academic: with only the chart type widened, "balance by
+    # period" became a line, failed THIS list, missed the evolution route, and
+    # was answered by the generic line executor as 13 VINTAGE YEARS — a cohort
+    # distribution, not a reporting-period series. The parser's own note at that
+    # path already warns a vintage "is a cohort label, not a point on a time
+    # axis".
+    #
+    # Consulting the owner here keeps the chart type and the route on one
+    # reading. See docs/mi_dual_mechanism_pattern.md.
+    try:
+        from question_interpretation.lexical import time_axis_request
+    except Exception:  # noqa: BLE001 - routing must never break on an import
+        return False
+    return bool(time_axis_request(question))
 
 
 # --------------------------------------------------------------------------- #
@@ -2178,9 +2877,9 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     """Adapter: collaborators in, workflow result out, envelope re-keying only."""
     route = prc_mod.WORKFLOW_ID
     if request.frame_resolver is None:
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I can't resolve the governed funded book to compare portfolios here.",
             warnings=["insufficient-data: no funded frame available."])
     try:
@@ -2188,18 +2887,18 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
         df = None
     if df is None or not len(df):
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I couldn't load the governed funded book to compare portfolios.",
             warnings=["insufficient-data: no funded frame available."])
     try:
         bsr = load_business_semantics()
     except Exception as exc:  # noqa: BLE001 - a controlled outcome, never a 500
         _logger.warning("business semantics registry unavailable: %s", exc)
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=("Portfolio comparison is unavailable: the Business "
                     "Semantics Registry could not be loaded, and comparison is "
                     "only performed over governed semantics."),
@@ -2219,9 +2918,9 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
     warnings.extend(f"limitation: {note}" for note in result.get("limitations") or [])
 
     if not result.get("available"):
-        envelope = _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        envelope = _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=f"I can't compare portfolios here: {result.get('reason')}.",
             warnings=warnings)
         envelope["workflow"] = result
@@ -2385,6 +3084,16 @@ def _route_portfolio_comparison(request: RouteRequest) -> Optional[Dict[str, Any
 # result contract into the chat envelope — it performs no calculations and
 # takes no decisions.
 # --------------------------------------------------------------------------- #
+#: The key this workflow's pre-claim reading is carried under.
+CONCENTRATION_READING_KEY = "concentration"
+
+
+def _lens_from_contract(interpretation):
+    """The source-portfolio lens the contract states. See `contract_scope`."""
+    from . import contract_scope as _scope
+    return _scope.lens_from_contract(interpretation)
+
+
 def _recognise_concentration(request: RouteRequest) -> Recognition:
     if _is_aggregate_contribution_question(request.question):
         # Concentration measures how exposure is DISTRIBUTED at one date; it
@@ -2392,6 +3101,16 @@ def _recognise_concentration(request: RouteRequest) -> Recognition:
         return Recognition.no("aggregate_contribution_question")
     matched, reason = conc_mod.is_concentration_question(
         request.question, request.spec)
+    if matched:
+        # THE READING IS KEPT. This recogniser already reads the question; the
+        # workflow used to read it AGAIN, after the route was claimed, for the
+        # concept and the single-name framing. Reading it once here and
+        # carrying the result is what removes those two post-claim decisions
+        # without inventing a governed concept for either.
+        remember = getattr(request, "remember_recognition", None)
+        if remember is not None:
+            remember(CONCENTRATION_READING_KEY,
+                     conc_mod.read_question(request.question))
     return (Recognition.yes(_WORKFLOW_CONFIDENCE, reason) if matched
             else Recognition.no(reason))
 
@@ -2462,9 +3181,9 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     """Adapter: collaborators in, workflow result out, envelope re-keying only."""
     route = conc_mod.WORKFLOW_ID
     if request.frame_resolver is None:
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I can't resolve the governed funded book to measure concentration here.",
             warnings=["insufficient-data: no funded frame available."])
     try:
@@ -2472,18 +3191,18 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     except Exception:  # noqa: BLE001 - a resolution hiccup degrades, never 500s
         df = None
     if df is None or not len(df):
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer="I couldn't load the governed funded book to measure concentration.",
             warnings=["insufficient-data: no funded frame available."])
     try:
         bsr = load_business_semantics()
     except Exception as exc:  # noqa: BLE001 - a controlled outcome, never a 500
         _logger.warning("business semantics registry unavailable: %s", exc)
-        return _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        return _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=("Concentration analysis is unavailable: the Business "
                     "Semantics Registry could not be loaded, and concentration "
                     "is only measured over governed semantics."),
@@ -2494,27 +3213,34 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     except Exception:  # noqa: BLE001 - the workflow builds its own from the frame
         registry = None
 
-    # The workspace scope, with question text taking precedence — the SAME
-    # lens precedence every other lens-aware route applies.
+    # THE SCOPE COMES FROM THE CONTRACT, not from a second reading of the
+    # sentence. `source_scope` already carries the owner's answer and the
+    # provenance that decides precedence against a workspace selection —
+    # measured equivalent to `_resolve_lens` on all 882 corpus questions, and
+    # again with a workspace selection present.
+    # UNRESOLVABLE IS NOT ABSENT. A book the registry does not hold must reach
+    # the workflow as the name the reader used, so it refuses by that name —
+    # not as "no scope", which is the whole book.
     try:
-        lens = _resolve_lens(request.question, request.source_lens)
-        context_id = _portfolio_lens.context_id(lens)
-    except Exception:  # noqa: BLE001 - the workflow falls back to question text
+        from . import contract_scope as _scope
+        context_id = _scope.requested_context_id(request.resolve_interpretation())
+    except Exception:  # noqa: BLE001 - an identity fault must not fail the route
         context_id = None
 
     result = conc_mod.run_concentration_analysis(
         df, question=request.question, bsr=bsr, mi_semantics=request.semantics,
         registry=registry, client_id=request.client_id, as_of=request.as_of,
         spec=request.spec, parse_meta=request.parse_meta,
-        context_id=context_id)
+        context_id=context_id,
+        reading=request.recalled_recognition(CONCENTRATION_READING_KEY))
 
     warnings = list(result.get("warnings") or [])
     warnings.extend(f"limitation: {note}" for note in result.get("limitations") or [])
 
     if not result.get("available"):
-        envelope = _envelope(
-            ok=True, question=request.question, spec=request.spec_dict,
-            artifacts=[], route=route, lens_applied=True,
+        envelope = _undeliverable(
+            question=request.question, spec=request.spec_dict,
+            route=route, lens_applied=True,
             answer=f"I can't measure concentration here: {result.get('reason')}.",
             warnings=warnings)
         envelope["workflow"] = result
@@ -2548,6 +3274,24 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
         spec=request.spec_dict, artifacts=artifacts, reconciliation=recon,
         source_notes=notes, route=route, warnings=warnings, lens_applied=True)
     envelope["workflow"] = result
+    # THE AXES THIS ANALYSIS ACTUALLY MEASURED, through the primitive every
+    # other grouping route already declares through.
+    #
+    # The concentration methodology governs which field carries a concept: it
+    # measures "product" on `product_type` and declines `erm_product_type` with
+    # a stated reason, and measures "broker" on `origination_channel` and
+    # declines `broker_channel` the same way. The receipt binds those words to
+    # the OTHER field, so with nothing declared it read a governed, delivered
+    # concentration table as a lost axis and refused it — two owners
+    # disagreeing about which field an axis is, with only one of them governed
+    # by the methodology that ran.
+    #
+    # Declaring what ran settles it the way `grouping_proven` already settles
+    # every other route: the axis a route DECLARES is the axis it grouped by.
+    axes = [d.get("field") for d in (result.get("dimension_results") or [])
+            if d.get("field")]
+    if axes:
+        envelope.setdefault("metadata", {})["groupedBy"] = axes
     # Structured evidence of a SINGLE-NAME analysis, so the receipt and the P0
     # share facet can be settled from what executed rather than from the answer
     # text. Reading a percentage out of prose proves only that prose mentions
@@ -2555,6 +3299,17 @@ def _route_concentration(request: RouteRequest) -> Optional[Dict[str, Any]]:
     single = _single_name_evidence(result)
     if single:
         envelope.setdefault("metadata", {})["concentration"] = single
+    # THE SCOPE THIS ANALYSIS WAS NARROWED TO, from the workflow's own record.
+    # It titles its table "— Direct" and reports 441 of 640 loans; until this
+    # was published, nothing a consumer could read said the narrowing had
+    # happened, which is the same silence that hid a wrong movement figure.
+    if scope.get("context_id") not in (None, _portfolio_lens.LENS_TOTAL):
+        _declare_scope(envelope,
+                       {"detail": ", ".join(scope.get("portfolio_ids") or ()),
+                        "rowsBefore": int(len(df)),
+                        "rowsAfter": scope.get("row_count")},
+                       context=scope.get("context_id"),
+                       label=scope.get("label"))
     return envelope
 
 
@@ -2670,6 +3425,37 @@ def _capability_unavailable_envelope(req: RouteRequest, recogniser,
     return envelope
 
 
+def _execution_failure_envelope(req: RouteRequest, recogniser) -> Dict[str, Any]:
+    """The governed 'this analysis failed' answer for a claimed route.
+
+    NO NEW PUBLIC TAXONOMY. An `ok:false` envelope that is neither
+    `controlledUnsupported` nor `unmappedQuestion` nor a no-rows case is already
+    classified `ErrorCode.CALCULATION_FAILED` by
+    `mi_service._classify_analytical_failure` — the existing governed code for
+    "the calculation broke", as distinct from "I will not answer that".
+
+    NOTHING INTERNAL REACHES THE READER. The exception class, its message and
+    its traceback are logged and never published; the caller is told which
+    analysis failed and that nothing was substituted for it. The claimed route
+    stays on `metadata.route`, so an answer produced by a different route after
+    this one failed is detectable rather than indistinguishable.
+    """
+    detail = ("I could not complete this analysis: it failed while running. I "
+              "have not answered your question with a different analysis "
+              "instead.")
+    envelope = _envelope(
+        ok=False, question=req.question, answer=detail, spec=req.spec_dict,
+        artifacts=[], route=recogniser.name, error=detail, lens_applied=True,
+        warnings=[f"execution failed in {recogniser.name}"])
+    meta = envelope["metadata"]
+    meta["executionFailure"] = True
+    meta["claimedRoute"] = recogniser.name
+    meta["claimBoundaryCrossed"] = True
+    if recogniser.capability:
+        meta["capability"] = recogniser.capability
+    return envelope
+
+
 def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserRegistry:
     """Declare the governed capability routes.
 
@@ -2741,7 +3527,8 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of, semantics=r.semantics,
-                source_lens=r.source_lens)),
+                source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
 
         # 5. Static-pool cohort progression.
         Recogniser(
@@ -2759,12 +3546,14 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         Recogniser(
             name="geo_exposure", priority=60, lens_aware=True,
             description="Funded exposure by UK ITL3 area.",
-            recognise=lambda r: _is_geo_exposure(r.question, spec=r.spec,
-                                                 view=r.view),
+            recognise=lambda r: _is_geo_exposure(
+                r.question, spec=r.spec, view=r.view,
+                interpretation_provider=r.resolve_interpretation),
             handle=lambda r: _route_geo(
                 r.question, r.spec_dict, client_id=r.client_id, run_id=r.run_id,
                 frame_resolver=r.frame_resolver, portfolio_id=r.portfolio_id,
-                as_of=r.as_of, source_lens=r.source_lens)),
+                as_of=r.as_of, source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
 
         # 6b. Portfolio Risk Comparison — the governed workflow layer's second
         #     workflow. Recognition, scope resolution and every calculation
@@ -2825,16 +3614,23 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
-                source_lens=r.source_lens)),
+                source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
         Recogniser(
             name="portfolio_summary", priority=80, lens_aware=True,
-            description="Current governed headline position.",
-            recognise=lambda r: _is_portfolio_summary(r.question, r.spec),
+            # THE FUNDED BOOK'S headline position. This route answers from
+            # `output_root` and has no pipeline or forecast frame, so a question
+            # naming another governed dataset is declined rather than answered
+            # from the one dataset it has. See `_names_another_dataset`.
+            description="Current governed headline position of the funded book.",
+            recognise=lambda r: (_is_portfolio_summary(r.question, r.spec)
+                                 and not _names_another_dataset(r.question)),
             handle=lambda r: _route_portfolio_summary(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
-                source_lens=r.source_lens)),
+                source_lens=r.source_lens,
+                interpretation=r.resolve_interpretation())),
 
         # 8b. Governed Period Change Analysis — the first workflow layer built on
         #     the Business Semantics Registry. It sits AFTER the two composite
@@ -2858,24 +3654,60 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 source_lens=r.source_lens,
                 semantics_context=dict(r.semantics_context or {}),
-                view=r.view)),
+                semantics=dict(r.semantics or {}),
+                view=r.view,
+                recognition=r.recalled_recognition(
+                    _period_change.RECOGNITION_KEY),
+                interpretation=r.resolve_interpretation())),
 
         # 9. Cross-period comparison.
         Recogniser(
             name="temporal_compare", priority=90,
             description="Governed comparison of two reporting periods.",
             recognise=lambda r: getattr(r.spec, "temporal_mode", None) == "compare",
+            # NO `view=`. The dataset is the question's, and the route asks
+            # `workspace.resolve_dataset` for it. Leaving the parameter here
+            # would be a live wire back to the tab.
             handle=lambda r: _route_compare(
-                r.question, r.spec, r.spec_dict, client_id=r.client_id,
+                r.question, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
-                pipeline_root=r.pipeline_root, view=r.view,
-                portfolio_id=r.portfolio_id, as_of=r.as_of)),
+                pipeline_root=r.pipeline_root,
+                portfolio_id=r.portfolio_id, as_of=r.as_of,
+                interpretation=r.resolve_interpretation())),
 
-        # 10. Contractual risk limits.
+        # 10. Contractual risk limits — CURRENT STATE ONLY.
+        #
+        # THIS ROUTE IS THE GOVERNED OWNER OF THE APPROVED CLIENT CONCENTRATION
+        # TESTS, EVALUATED ON TODAY'S FUNDED BOOK. It has no forward capability
+        # and must not stand in for one.
+        #
+        # Measured before this gate: "do we expect to breach any concentration
+        # limits?" and "which concentration tests are we at risk of breaching?"
+        # were answered with *"5 passed, 6 breach(es) … Nearest to limit: Top 3
+        # brokers (-31.5 pp headroom)"* — today's status, presented to a reader
+        # who asked what is COMING. The frozen readiness bank records that as
+        # CURRENT-STATE SUBSTITUTION on Q25A/B/C.
+        #
+        # The forward question is declined here rather than answered, and the
+        # existing forward-projection facet produces the refusal — no sentence is
+        # written at this site. `run_funded_vs_forecast` is deliberately NOT
+        # wired in: it forecasts group SHARES against placeholder RAG thresholds
+        # (amber 0.20 / red 0.30), carries no approved test name and no headroom,
+        # needs a caller-supplied dimension, and needs a SnapshotStore the MI
+        # path does not construct. Projected approved-limit testing is a separate
+        # capability that does not exist yet; see
+        # `migration_phase0/MI_CURRENT_VS_FORWARD_CONCENTRATION.md`.
+        #
+        # The test is the ANALYTIC INTENT, not the presence of a word: it asks
+        # the governed intent owner whether the sentence projects, so "which
+        # limits are most at risk?" — a ranking of today's headroom — is
+        # untouched, while "at risk of BREACHING" is not.
         Recogniser(
             name="risk_limits", priority=100, capability=CAP_RISK,
-            description="Contractual concentration limits and headroom tests.",
-            recognise=lambda r: bool(getattr(r.spec, "risk_limit_query", None)),
+            description="Contractual concentration limits and headroom tests "
+                        "on the current funded book.",
+            recognise=lambda r: (bool(getattr(r.spec, "risk_limit_query", None))
+                                 and not _projects_forward(r.question, r.spec)),
             handle=lambda r: _route_risk(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
@@ -2889,9 +3721,10 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
             handle=lambda r: _route_evolution(
                 r.question, r.spec, r.spec_dict, client_id=r.client_id,
                 run_id=r.run_id, output_root=r.output_root,
-                pipeline_root=r.pipeline_root, view=r.view,
+                pipeline_root=r.pipeline_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
-                semantics=r.semantics)),
+                semantics=r.semantics,
+                interpretation=r.resolve_interpretation())),
     ])
     return registry
 
@@ -2958,20 +3791,166 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
     # executor answered it with weighted average LTV by region. The family is the
     # same; only the phrasing differed. See
     # ``mi_workflows/analytical/intent.py`` for the six families.
+    # GOVERNED SPAN OWNERSHIP, resolved ONCE for everything on this path that
+    # reads the sentence for a vocabulary of its own. The book's categorical
+    # values are the same catalogue the parser was handed; a span already
+    # claimed as one of them may not create a second semantic claim from the
+    # tokens inside it. Measured on brokers named "Growth Partners" and "London
+    # Bridge Loans": one was read as a movement question, the other as a funded
+    # bridge, and both refused. `mi_agent.categorical_spans` owns the rule.
+    def _values_for_recognition() -> Any:
+        if "value" not in _ownership_memo:
+            from mi_agent import execution_receipt as _receipt
+
+            value = None
+            try:
+                frame = None
+                if base_frame_resolver is not None:
+                    frame = base_frame_resolver(view, portfolio_id)
+                elif frame_resolver is not None:
+                    frame = frame_resolver(view, portfolio_id)
+                if frame is not None:
+                    value = _receipt.book_values(frame, semantics)
+            except Exception as exc:  # noqa: BLE001 - no catalogue, old routing
+                _logger.info("book value catalogue unavailable: %s", exc)
+            _ownership_memo["value"] = value
+        return _ownership_memo["value"]
+
+    _ownership_memo: Dict[str, Any] = {}
+
+    def _owned_question() -> str:
+        values = _values_for_recognition()
+        if not values:
+            return question
+        try:
+            from mi_agent.categorical_spans import mask_value_spans
+
+            return mask_value_spans(question, values)
+        except Exception:  # noqa: BLE001
+            return question
+
     try:
-        analytical_reading, analytical_flags = analytical_intent.settle(question, spec)
+        # The INTENT boundary owns no book field: every family word it matches
+        # that lies inside a claimed value span belongs to the value.
+        analytical_reading, analytical_flags = analytical_intent.settle(
+            _owned_question(), spec)
     except Exception as exc:  # noqa: BLE001 - the boundary must never break routing
         _logger.warning("analytical intent boundary failed: %s", exc)
         analytical_reading, analytical_flags = None, {}
 
+    # PHASE 1G §9 — THE SEMANTIC HANDOFF for the routed path.
+    #
+    # Phase 1F found that a routed question never builds a
+    # `QuestionInterpretation`: the single production construction site is on
+    # the point-in-time path, which routing bypasses. A compositional plan may
+    # read the contract and nothing else, so the contract has to exist here
+    # before a handler can be converted onto it.
+    #
+    # Assembled from the SAME spec and facets the receipt layer already
+    # produces, and from the SAME owners — it re-interprets nothing and decides
+    # nothing. The registry and the caller's workspace selection go in, so the
+    # claim carries the governed identity and the provenance that decides
+    # precedence, rather than the pre-1E/pre-1G readings.
+    #
+    # NOTHING READS IT YET. It is carried so the first route conversion has a
+    # contract to plan from; every handler below is byte-for-byte unaffected.
+    def _build_interpretation() -> Any:
+        from question_interpretation.projection import from_parts as _qi_build
+
+        from mi_agent import execution_receipt as _receipt
+
+        frame = None
+        if base_frame_resolver is not None:
+            frame = base_frame_resolver(view, portfolio_id)
+        elif frame_resolver is not None:
+            frame = frame_resolver(view, portfolio_id)
+        # `frame.columns` is a pandas Index, and `Index or []` RAISES rather
+        # than falling back — "The truth value of a Index is ambiguous". The
+        # first cut of this wiring wrote exactly that, so the provider raised on
+        # every routed question and the try/except around it returned None
+        # silently: a construction site that never constructed. Tested only
+        # against a lambda, it looked wired. `test_the_routed_path_really_builds
+        # _a_contract` now exercises it against a real frame.
+        cols = getattr(frame, "columns", None)
+        columns = list(cols) if cols is not None else None
+        dim_terms = _receipt.requested_dimension_terms(question, semantics, columns)
+        facets = _receipt.detect_requested_facets(
+            question, semantics, frame=frame, requested_dimensions=dim_terms)
+        registry_for_scope = None
+        try:
+            from . import portfolio_context as _ctx
+
+            registry_for_scope = _ctx.build_registry(frame)
+        except Exception as exc:  # noqa: BLE001 - identity never breaks routing
+            _logger.info("governed registry unavailable for interpretation: %s", exc)
+        # GOVERNED SPAN OWNERSHIP — the book's own category values, so the
+        # contract's SourceScopeClaim cannot re-read a span already claimed as a
+        # categorical value. Same catalogue the parser was handed; the rule is
+        # `mi_agent.categorical_spans`'s, not this site's.
+        try:
+            values_for_scope = _receipt.book_values(frame, semantics)
+        except Exception as exc:  # noqa: BLE001 - no catalogue, old reading
+            _logger.info("book value catalogue unavailable for scope: %s", exc)
+            values_for_scope = None
+        return _qi_build(question, spec=spec, facets=list(facets),
+                         dim_terms=dim_terms, semantics=semantics,
+                         registry=registry_for_scope, caller_scope=source_lens,
+                         available_values=values_for_scope)
+
+    # THE CONCEPT-MERGE ARM, off by default and independent of the free-form
+    # parser. It runs HERE — after the deterministic contract exists and before
+    # any recogniser has seen the spec — so a concept the model recovers is
+    # routed on, rather than being added to a contract routing has already
+    # decided against. The interpretation it merges into is the DETERMINISTIC
+    # one, built from the spec before any fill.
+    concept_merge_evidence = None
+    try:
+        from . import concept_merge_arm as _merge_arm
+
+        if _merge_arm.enabled():
+            concept_merge_evidence = _merge_arm.apply(
+                question, spec, semantics,
+                interpretation=_build_interpretation(),
+                available_values=_values_for_recognition(),
+                available_columns=getattr(parsed, "available_columns", None))
+    except Exception as exc:  # noqa: BLE001 - the arm never fails a request
+        _logger.info("concept merge arm skipped: %s: %s", type(exc).__name__, exc)
+        # AND IT RECORDS THAT IT DID NOT RUN. `apply` reports its own failures,
+        # but everything around it — building the interpretation, gathering the
+        # recognisable values — could fail too, and leaving the evidence at
+        # `None` there is indistinguishable from the arm being switched off. The
+        # consumer would then read an augmented request that never reached the
+        # model as an unaugmented one, which is the inference this whole rule
+        # exists to forbid. Recorded only when the arm was actually enabled.
+        try:
+            from . import concept_merge_arm as _arm_state
+            if _arm_state.enabled():
+                concept_merge_evidence = {
+                    "status": _arm_state.PROPOSAL_UNAVAILABLE,
+                    "detail": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
+        except Exception:  # noqa: BLE001 - evidence never fails a request
+            pass
+    if concept_merge_evidence is not None:
+        # CARRIED ON THE PARSE METADATA, which is already the channel for "how
+        # was this contract arrived at". The point-in-time path returns no
+        # routed envelope to stamp, and the spec it executes is the same object
+        # this arm just changed — so the evidence has to travel with the parse,
+        # not with a route.
+        try:
+            parsed.meta["conceptMerge"] = concept_merge_evidence
+        except Exception:  # noqa: BLE001 - evidence never fails a request
+            pass
+
     request = RouteRequest(
         question=question, spec=spec, spec_dict=spec.to_dict(),
+        available_values=_values_for_recognition(),
         semantics=semantics, view=view, client_id=client_id, run_id=run_id,
         portfolio_id=portfolio_id, output_root=output_root,
         pipeline_root=pipeline_root, history_model=history_model,
         history_model_provider=history_model_provider, as_of=as_of,
         source_lens=source_lens, frame_resolver=frame_resolver,
         base_frame_resolver=base_frame_resolver,
+        interpretation_provider=_build_interpretation,
         parse_meta=parsed.meta, semantics_context=parsed.semantics_context)
 
     # The governed scope this request runs in, resolved lazily and AT MOST ONCE
@@ -3004,9 +3983,30 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
                     question, source_lens)
         try:
             envelope = recogniser.handle(request)
-        except Exception as exc:  # noqa: BLE001 - a broken route defers, never 500s
-            _logger.warning("route %s failed: %s", recogniser.name, exc)
-            continue
+        except Exception as exc:  # noqa: BLE001 - fails CLOSED, never 500s
+            # THE CLAIM BOUNDARY. This used to `continue`, so a route that broke
+            # partway through its own analysis handed the question to the next
+            # candidate, which answered it as a different analysis. Measured: a
+            # fault injected after `period_change_analysis` had already run the
+            # governed period-change produced a `temporal_compare` refusal about
+            # ranking, with no receipt and no trace that the claimed route had
+            # ever run.
+            #
+            # The distinction is the registry's own, not a list of route names.
+            # `recognise` is pre-claim and still fails open — a recogniser that
+            # raises is skipped inside `RecogniserRegistry.candidates`, and a
+            # route that does not apply says so by returning None from `handle`,
+            # which still falls through. Entering `handle` is the claim: the
+            # registry has selected this route to answer, so its failure is a
+            # failure of the answer, not an offer to let something else try.
+            #
+            # Measured before changing it: across all 882 corpus questions, zero
+            # handlers raise. Nothing on the normal path relies on this.
+            _logger.exception("route %s failed after claiming the question",
+                              recogniser.name)
+            return _disclose_lens_scope(
+                _execution_failure_envelope(request, recogniser), question,
+                source_lens)
         if envelope is not None:
             _stamp_analytical_intent(envelope, analytical_reading, analytical_flags)
             return _disclose_lens_scope(envelope, question, source_lens)
