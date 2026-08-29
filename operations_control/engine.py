@@ -28,6 +28,7 @@ import yaml
 from . import language
 from .adapters import (
     ACTION_PROVIDE_SOURCE_MAPPING,
+    _slug,
     APPROVED_DECISIONS_FILE,
     DECISIONS_FILE,
     GovernedAdapters,
@@ -71,6 +72,7 @@ from .contracts import (
     ST_READY,
     ST_RUNNING,
     ST_WAITING,
+    STAGE_ASSEMBLY,
     STAGE_DELIVERY_PREP,
     STAGE_MAPPING,
     STAGE_PROJECTION,
@@ -995,6 +997,97 @@ class OpsEngine:
         self._sync_decisions(run, gar)
         self.store.save_workflow(run)
 
+    def _park_regulatory(self, run: WorkflowRun, state, *, stage: str,
+                         summary: str, blockers, warnings=None, evidence=None,
+                         why: str = "") -> None:
+        """Stop the REGULATORY branch without discarding valid management data.
+
+        Management information and the ESMA Annex 2 delivery are two products of
+        one validated canonical, and they fail for different reasons. A property
+        type the regulator has no code for does not make the lender's own
+        balances wrong. So the regulatory stage is recorded blocked, an enum
+        translation is asked for where that is what is missing, and — when the
+        canonical has already passed Gates 1 to 3 and been assembled — MI is
+        offered for publication as usual.
+
+        The reverse is not true and must not be: nothing here can publish a
+        canonical that did not pass Gate 3, because this is only reached after
+        the orchestrator finished.
+        """
+        decisions = self._enum_translation_decisions(run, stage, evidence or [])
+        self._save_stage_gar(run, stage, ST_BLOCKED, summary, why=why,
+                             blockers=list(blockers or []),
+                             warnings=list(warnings or []),
+                             evidence=list(evidence or []),
+                             decisions=decisions)
+        mi_ready = (run.stage_status(STAGE_ASSEMBLY) == ST_COMPLETED
+                    and bool(getattr(state, "central_canonical_path", "")))
+        if not mi_ready:
+            self._park(run, RUN_BLOCKED)
+            return
+        self._prepare_publication(run, state)
+        self._save_stage_gar(
+            run, STAGE_PUBLICATION, ST_READY,
+            "The management report is prepared and waiting for your approval "
+            "to publish. The regulatory delivery is held separately.",
+            why="The regulatory problem above does not affect these figures; "
+                "nothing is shared until you approve it.",
+            decisions=[DecisionRequired(
+                decision_id=f"{run.workflow_id}_publish",
+                kind=KIND_PUBLICATION,
+                title="Approve publication",
+                question="Publish this management report as the latest "
+                         "official version? The Annex 2 delivery stays held.",
+                blocking=True,
+                options=[{"value": "publish", "label": "Publish"},
+                         {"value": "hold", "label": "Hold — not yet"}],
+                default_scope="file",
+                subject={"artefact": "publication"})])
+        self.store.append_audit(
+            run.client_id, "regulatory_branch_held", actor="system",
+            workflow_id=run.workflow_id,
+            detail={"stage": stage, "blockers": list(blockers or []),
+                    "management_information": "available for publication"})
+        self._park(run, RUN_NEEDS_REVIEW)
+
+    def _enum_translation_decisions(self, run: WorkflowRun, stage: str,
+                                    evidence) -> List[DecisionRequired]:
+        """Ask for the ESMA code a lender value should be reported as.
+
+        The canonical keeps the lender's word — "Probate - awaiting sale" stays
+        exactly that in MI. The regulator wants one of its own codes, so the
+        translation is a governed decision, recorded once and reused, and it
+        changes nothing about the management value it translates.
+        """
+        out: List[DecisionRequired] = []
+        for ev in evidence:
+            data = (ev or {}).get("data") or {}
+            field = str(data.get("field") or "").strip()
+            raw = str(data.get("values") or "").strip()
+            if not field or not raw:
+                continue
+            values = [v.strip().strip("'\"") for v in raw.split(",")]
+            for value in [v for v in values if v][:20]:
+                friendly = field.replace("_", " ")
+                out.append(DecisionRequired(
+                    decision_id=f"{run.workflow_id}_enum_{_slug(field)}_{_slug(value)}",
+                    kind="enum",
+                    title=f"How should '{value}' be reported to the regulator?",
+                    question=(f"'{value}' is how this book records {friendly}. "
+                              "The regulator only accepts its own codes, so "
+                              "Trakt needs to know which one this is. The "
+                              "management report keeps the original wording "
+                              "either way."),
+                    blocking=True, category="regulatory_enum",
+                    severity="blocking",
+                    observed_values=[value],
+                    allowed_scopes=["portfolio", "client"],
+                    default_scope="client",
+                    subject={"artefact": "regulatory_enum_translation",
+                             "field": field, "source_value": value,
+                             "stage": stage}))
+        return out
+
     def _park(self, run: WorkflowRun, status: str) -> None:
         if run.status != status:
             try:
@@ -1140,11 +1233,12 @@ class OpsEngine:
                         "blocking_codes": recon["blocking_codes"],
                         "mechanism_counts": recon["mechanism_counts"]})
             if not out.ok:
-                self._save_stage_gar(run, STAGE_PROJECTION, ST_BLOCKED,
-                                     out.summary, blockers=out.blockers,
-                                     warnings=out.warnings)
                 run.annex2 = a2
-                self._park(run, RUN_BLOCKED)
+                self._park_regulatory(run, state, stage=STAGE_PROJECTION,
+                                      summary=out.summary,
+                                      blockers=out.blockers,
+                                      warnings=out.warnings,
+                                      evidence=out.evidence)
                 return
             recon_warn = ([] if recon["blocking_count"] == 0
                           else [recon["summary_sentence"]])
@@ -1164,7 +1258,10 @@ class OpsEngine:
                 inputs=[state.central_canonical_path or ""],
                 outputs=[a2["projected_csv"]])
             if recon["blocking_count"]:
-                self._park(run, RUN_BLOCKED)
+                self._park_regulatory(
+                    run, state, stage=STAGE_PROJECTION, summary=out.summary,
+                    blockers=[recon["summary_sentence"]],
+                    warnings=out.warnings + recon_warn)
                 return
 
         # ---- Stage: delivery normalisation (I1 stage 1) ------------------ #
@@ -1182,15 +1279,13 @@ class OpsEngine:
                                     workflow_id=run.workflow_id,
                                     detail=audit_detail)
             if not out.ok:
-                self._save_stage_gar(
-                    run, STAGE_DELIVERY_PREP, ST_BLOCKED, out.summary,
+                run.annex2 = a2
+                self._park_regulatory(
+                    run, state, stage=STAGE_DELIVERY_PREP, summary=out.summary,
                     why="Publishing figures that fail the delivery checks "
                         "could mislead the regulator.",
                     warnings=out.warnings, blockers=out.blockers,
-                    evidence=out.evidence,
-                    inputs=[a2.get("projected_csv", "")])
-                run.annex2 = a2
-                self._park(run, RUN_BLOCKED)
+                    evidence=out.evidence)
                 return
             a2["delivery_ready_csv"] = out.artefacts.get("delivery_ready_csv", "")
             a2["delivery_metrics"] = out.metrics
@@ -1216,11 +1311,14 @@ class OpsEngine:
                         "xml_sha256": out.metrics.get("xml_sha256", ""),
                         "interventions": out.report.get("interventions", [])})
             if not out.ok:
-                self._save_stage_gar(run, STAGE_XML, ST_BLOCKED, out.summary,
-                                     blockers=out.blockers,
-                                     warnings=out.warnings)
+                # Includes an XML that fails XSD validation: the regulatory
+                # artefact is withheld, the management report is not.
                 run.annex2 = a2
-                self._park(run, RUN_BLOCKED)
+                self._park_regulatory(run, state, stage=STAGE_XML,
+                                      summary=out.summary,
+                                      blockers=out.blockers,
+                                      warnings=out.warnings,
+                                      evidence=out.evidence)
                 return
             a2.update({
                 "xml": out.artefacts.get("xml", ""),
@@ -1760,7 +1858,13 @@ class OpsEngine:
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
                            "That workflow could not be found.", 404)
-        if run.status != RUN_AWAITING_PUBLICATION:
+        # A run held on the REGULATORY branch sits at needs_review — the enum
+        # translations are still open — while its management report is prepared
+        # and its publication stage is ready. The precondition is therefore the
+        # publication stage, not the run status; a run whose publication stage
+        # is not ready still cannot publish, whatever its status says.
+        if (run.status != RUN_AWAITING_PUBLICATION
+                and run.stage_status(STAGE_PUBLICATION) != ST_READY):
             raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
                            "This workflow is not ready to publish.", 409)
         period = run.reporting_period or "unspecified"

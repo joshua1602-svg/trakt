@@ -199,26 +199,51 @@ class TestPreflight:
 
 
 class TestFailurePaths:
-    def test_normalisation_block_parks_workflow(self, store, source_registry,
-                                                delivery_dir):
+    """A regulatory failure withholds the regulatory artefact — and only that.
+
+    Management information and the Annex 2 delivery are two products of one
+    validated canonical and they fail for different reasons. These runs reached
+    the delivery chain, so the canonical already passed Gates 1 to 3; the
+    figures are sound and the regulator's own formatting is not. Destroying
+    valid MI over that would be a self-inflicted outage.
+    """
+
+    def test_normalisation_block_holds_the_delivery_not_the_report(
+            self, store, source_registry, delivery_dir):
         engine = make_engine(store, source_registry,
                              annex2_scenario="normalise_block")
         run = _annex2_run(engine, delivery_dir)
         final = start_and_wait(engine, run)
-        assert final.status == RUN_BLOCKED
         assert final.stage_status("delivery_prep") == "blocked"
+        assert not (final.annex2 or {}).get("xml")
+        # ...and the management report is offered for approval as usual.
+        assert final.status == RUN_NEEDS_REVIEW
+        assert final.stage_status("publication") == "ready"
         gar = store.load_result("client_a", run.workflow_id, "delivery_prep")
         from operations_control import language
         for text in (gar.summary, *gar.blockers):
             assert language.is_operator_safe(text), text
 
-    def test_xsd_failure_parks_workflow(self, store, source_registry,
-                                        delivery_dir):
+    def test_xsd_failure_holds_the_delivery_not_the_report(
+            self, store, source_registry, delivery_dir):
         engine = make_engine(store, source_registry, annex2_scenario="xsd_fail")
         run = _annex2_run(engine, delivery_dir)
         final = start_and_wait(engine, run)
-        assert final.status == RUN_BLOCKED
         assert final.stage_status("xml_delivery") == "blocked"
+        assert final.status == RUN_NEEDS_REVIEW
+        assert final.stage_status("publication") == "ready"
+
+    def test_publishing_after_a_regulatory_hold_carries_no_xml(
+            self, store, source_registry, delivery_dir):
+        """The published record must not imply a delivery that never happened."""
+        engine = make_engine(store, source_registry, annex2_scenario="xsd_fail")
+        run = _annex2_run(engine, delivery_dir)
+        final = start_and_wait(engine, run)
+        pub = engine.approve_publication(client_id="client_a",
+                                         workflow_id=final.workflow_id,
+                                         actor="Ops")
+        assert pub["status"] == "published"
+        assert not (pub.get("annex2") or {}).get("xml")
 
 
 class TestPopulationReconciliation:
