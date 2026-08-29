@@ -45,14 +45,25 @@ REGIME = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
 # Synthetic transformation package builder
 # --------------------------------------------------------------------------- #
 
+# Carries the full equity-release core_canonical set. Gate 3 enforces the
+# authoritative core contract (registry ``core_canonical: true``, scoped by
+# portfolio type), so a tape without it is legitimately not validation-complete —
+# the readiness assertions below are about the flags, not about tolerating an
+# economically incomplete canonical. maturity_date and the originator identity
+# fields are applicability-permitted absences for equity release.
 _TAPE_HEADER = [
     "unique_identifier", "loan_identifier", "current_principal_balance",
     "data_cut_off_date", "property_type", "recourse",
     "current_valuation_amount", "primary_income",
+    "account_status", "amortisation_type", "exposure_currency_denomination",
+    "current_interest_rate", "interest_rate_type",
+    "original_principal_balance", "origination_date",
 ]
 _TAPE_ROWS = [
-    ["LN0001", "LN0001", "177334.06", "2026-01-31", "RHOS", "N", "350000", "ND1"],
-    ["LN0002", "LN0002", "98000", "2026-01-31", "RFLT", "N", "250000", "ND1"],
+    ["LN0001", "LN0001", "177334.06", "2026-01-31", "RHOS", "N", "350000", "ND1",
+     "PERF", "OTHR", "GBP", "5.25", "FIXD", "160000", "2018-03-14"],
+    ["LN0002", "LN0002", "98000", "2026-01-31", "RFLT", "N", "250000", "ND1",
+     "PERF", "OTHR", "GBP", "4.90", "FIXD", "90000", "2019-07-02"],
 ]
 
 # transformation field contract rows (subset of columns the validator reads).

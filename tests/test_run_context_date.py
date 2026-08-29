@@ -296,8 +296,16 @@ class TestManagedServiceRunContext(unittest.TestCase):
 # Integration: handoff context -> transformation -> validation
 # --------------------------------------------------------------------------- #
 
-_TAPE_HEADER = ["unique_identifier", "loan_identifier", "current_principal_balance"]
-_TAPE_ROWS = [["LN0001", "LN0001", "1000"], ["LN0002", "LN0002", "2000"]]
+# The remaining equity-release core_canonical fields are carried so the tape is a
+# complete canonical: Gate 3 enforces the authoritative core contract, and this
+# test asserts a zero blocking count for reasons that are about the cut-off date,
+# not about tolerating an incomplete tape. (amortisation_type, interest_rate_type
+# and exposure_currency_denomination are materialised by the ERM asset defaults.)
+_TAPE_HEADER = ["unique_identifier", "loan_identifier", "current_principal_balance",
+                "account_status", "current_interest_rate",
+                "original_principal_balance", "origination_date"]
+_TAPE_ROWS = [["LN0001", "LN0001", "1000", "PERF", "5.25", "900", "2018-03-14"],
+              ["LN0002", "LN0002", "2000", "PERF", "4.90", "1800", "2019-07-02"]]
 
 
 def _write_handoff(root: Path, *, with_context_date: bool) -> Path:

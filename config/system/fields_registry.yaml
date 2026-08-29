@@ -3686,6 +3686,15 @@ fields:
         priority: Mandatory
     layer: core
     core_canonical: true
+    applicability:
+      equity_release:
+        allowed_missing: true
+        severity_if_missing: warning
+        reason: "Reporting-entity identity is supplied by the governed client
+          configuration and injected at projection (Gate 4); it is not carried on
+          the MI canonical tape. Its presence and ISO 17442 shape are enforced
+          for the regulatory delivery by the Annex 2 preflight
+          (operations_control/annex2/preflight.py), which blocks before projection."
   originator_name:
     allowed_values: null
     category: regulatory
@@ -3709,6 +3718,15 @@ fields:
         priority: Mandatory
     layer: core
     core_canonical: true
+    applicability:
+      equity_release:
+        allowed_missing: true
+        severity_if_missing: warning
+        reason: "Reporting-entity identity is supplied by the governed client
+          configuration and injected at projection (Gate 4); it is not carried on
+          the MI canonical tape. Its presence is enforced for the regulatory
+          delivery by the Annex 2 preflight
+          (operations_control/annex2/preflight.py), which blocks before projection."
   other_industry_code:
     allowed_values: null
     category: analytics

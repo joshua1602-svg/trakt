@@ -112,3 +112,30 @@ reporting_policy:
     amortisation_type:
       Bullet: OTHR
       "Interest roll-up": OTHR
+# ---------------------------------------------------------------------------
+# EQUIVALENT-FIELD FILL (transformations.copy_if_missing)
+# ---------------------------------------------------------------------------
+# {target: source} — a target canonical field is filled from the named source
+# field where the target is blank and the source is populated. Applied by the
+# Transformation Agent (Gate 2) AFTER typing and defaults; a real source value
+# for the target always wins, and nothing is copied when the source column is
+# itself absent, so the core_canonical contract still catches a tape carrying
+# neither field.
+#
+# Rationale (current_principal_balance): a UK equity release / lifetime mortgage
+# rolls interest up and repays at death or sale. The lender therefore reports a
+# SINGLE balance — the current outstanding balance, inclusive of rolled-up
+# interest — and no principal-only split exists to report. That outstanding
+# balance IS the principal exposure for this product, so the registry's
+# core_canonical `current_principal_balance` is satisfied from it rather than
+# being reported absent. MI weights exposure by current_outstanding_balance,
+# which is unaffected: this fills the regulatory concept, it does not redefine
+# the analytic one.
+#
+# This key has been declared in the estate's client configuration layer since
+# inception (config/client/config_client_*.yaml) but had no implementation, so
+# the relationship it states was never actually applied. It is declared HERE
+# because it is an asset-class truth, not a per-client preference.
+transformations:
+  copy_if_missing:
+    current_principal_balance: current_outstanding_balance

@@ -438,6 +438,16 @@ def build_transformation_package(
     # 7. Apply Gate 2 config-driven asset defaults (reuse) as a backstop fill.
     g2.apply_defaults(df, asset_defaults)
 
+    # 7b. Equivalent-field fill (``transformations.copy_if_missing``). Declared in
+    #     the estate's client configs since inception but never executed, so the
+    #     relationship it states was silently not applied. For equity release the
+    #     asset layer declares current_principal_balance <- current_outstanding_balance:
+    #     an ERM rolls interest up, so the lender reports ONE balance and a
+    #     principal-only split does not exist. Fills blanks only — a real source
+    #     value always wins — and copies nothing when the source is itself absent,
+    #     so a tape carrying neither balance still fails the core contract.
+    copy_results = _apply_copy_if_missing(df, asset_cfg, issues)
+
     # 8. Canonical enum normalisation (internal standardisation; not projection).
     enum_report = g2.normalize_enums(df, asset_cfg)
 
@@ -810,6 +820,50 @@ def _materialise_fields(
 # --------------------------------------------------------------------------- #
 # Operator-approved source-value normalisation
 # --------------------------------------------------------------------------- #
+
+def _apply_copy_if_missing(
+    df: pd.DataFrame, config: Optional[Dict[str, Any]], issues: _IssueLog,
+) -> Dict[str, Dict[str, Any]]:
+    """Fill a canonical field from a declared equivalent when it is blank.
+
+    Reads ``transformations.copy_if_missing`` — ``{target: source}`` — from the
+    supplied config layer. This states a genuine economic equivalence for the
+    asset class (an equity-release loan rolls interest up, so the outstanding
+    balance IS the exposure and no separate principal balance is reported).
+
+    Deliberately conservative: only blank target cells are filled, only from a
+    non-blank source cell, and a target with no source column present is left
+    untouched so the core-canonical contract still catches it.
+    """
+    rules = ((config or {}).get("transformations") or {}).get("copy_if_missing") or {}
+    results: Dict[str, Dict[str, Any]] = {}
+    for target, source in rules.items():
+        target, source = str(target).strip(), str(source).strip()
+        if not target or not source or source not in df.columns:
+            continue
+        if target not in df.columns:
+            df[target] = pd.NA
+        src = df[source]
+        blank_target = df[target].apply(_is_blank)
+        fill_mask = blank_target & ~src.apply(_is_blank)
+        filled = int(fill_mask.sum())
+        if not filled:
+            continue
+        df.loc[fill_mask, target] = src[fill_mask]
+        results[target] = {"transformation_status": TS_COPIED,
+                           "default_source": f"copy_if_missing:{source}",
+                           "rows_filled": filled}
+        issues.add(
+            severity="info", field=target, canonical_field=target, esma_code="",
+            issue_type="equivalent_field_copied",
+            source_value_sample=source,
+            description=f"{filled} row(s) filled from '{source}' "
+                        f"(transformations.copy_if_missing)",
+            blocking_for_validation=False, blocking_for_projection=False,
+            recommended_action="none — declared equivalence for this asset class",
+            downstream_owner=OWN_TRANSFORMATION)
+    return results
+
 
 def _apply_source_value_rules(
     df: pd.DataFrame, contract_rows: List[Dict[str, Any]], issues: _IssueLog,

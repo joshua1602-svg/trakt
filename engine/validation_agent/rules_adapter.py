@@ -369,6 +369,67 @@ def validate_uniqueness(df: pd.DataFrame, id_fields: List[str]) -> List[Dict[str
 # Cross-field business rules
 # --------------------------------------------------------------------------- #
 
+def validate_core_canonical_presence(
+    df: pd.DataFrame,
+    registry_fields: Dict[str, Any],
+    portfolio_type: str,
+) -> List[Dict[str, Any]]:
+    """Enforce the canonical core-field contract at Gate 3.
+
+    This does NOT define a second core-field list. It reuses the authoritative
+    definition that already lives in :mod:`engine.gate_3_validation.validate_canonical`
+    — ``core_canonical: true`` in the field registry, scoped to the run's
+    portfolio type by ``select_fields_for_portfolio`` and relaxed only by each
+    field's own ``applicability`` block — and translates its CORE001/CORE002
+    violations into the Validation Agent's result rows.
+
+    Before this, the authoritative validator was reachable only from the Gate 3
+    *CLI* and from the OCC Agent's rehearsal path, so the agentic chain could
+    return ``ready_for_validation_complete`` on a canonical with no balance at
+    all. An ``error`` violation is blocking for validation, which is what makes
+    readiness fail; a ``warning`` (an applicability-permitted absence) is not.
+    """
+    core_required = vc.get_core_required_fields(
+        vc.select_fields_for_portfolio({"fields": registry_fields}, portfolio_type))
+    violations = vc.validate_core_presence(
+        df, core_required, registry_fields, portfolio_type)
+
+    # One result row per (field, rule) — a CORE002 violation is raised per row by
+    # the authoritative validator, so collapse to a count rather than emitting
+    # thousands of rows for one empty column.
+    grouped: Dict[tuple, Dict[str, Any]] = {}
+    for v in violations:
+        key = (v.rule_id, v.field, v.severity)
+        entry = grouped.setdefault(key, {"count": 0, "messages": []})
+        entry["count"] += 1
+        if len(entry["messages"]) < 5:
+            entry["messages"].append(v.message)
+
+    results: List[Dict[str, Any]] = []
+    row_count = int(len(df))
+    checked: set = set()
+    for (rule_id, field, severity), entry in sorted(grouped.items()):
+        blocking = severity == "error"
+        checked.add(field)
+        results.append(_result(
+            f"{rule_id}-{field}", field, field, "", "core_canonical_presence",
+            "fail" if blocking else "warning", severity,
+            row_count, entry["count"] if blocking else 0,
+            0 if blocking else entry["count"],
+            entry["messages"], blocking, blocking,
+            notes=f"{rule_id}: authoritative core_canonical contract "
+                  f"(portfolio_type={portfolio_type or 'unscoped'})"))
+
+    # A passing row per clean core field, so the contract is visible in the
+    # validation results even when nothing is wrong.
+    for field in sorted(set(core_required) - checked):
+        results.append(_result(
+            f"CORE-OK-{field}", field, field, "", "core_canonical_presence",
+            "pass", "info", row_count, 0, 0, [], False, False,
+            notes="core_canonical field present and populated"))
+    return results
+
+
 def validate_business_rules(df: pd.DataFrame) -> List[Dict[str, Any]]:
     """Canonical, configurable cross-field business rules checkable at this stage.
 

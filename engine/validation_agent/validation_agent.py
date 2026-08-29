@@ -150,6 +150,19 @@ def _is_blank(v: Any) -> bool:
 # Validate the transformation manifest
 # --------------------------------------------------------------------------- #
 
+def _asset_class_from_config(asset_config_path: str) -> str:
+    """The asset class declared by the asset-layer config, or ``""``.
+
+    Never raises: an unreadable asset config leaves the core check unscoped,
+    which is the conservative direction (no applicability relaxations apply).
+    """
+    try:
+        doc = _read_yaml(Path(asset_config_path)) or {}
+    except Exception:  # noqa: BLE001 — configuration must not break validation
+        return ""
+    return str(doc.get("asset_class") or "").strip()
+
+
 def validate_transformation_manifest(manifest: dict) -> None:
     """Fail loudly unless the transformation package is ready for validation.
 
@@ -339,6 +352,13 @@ def build_validation_package(
 
     # config layers
     registry_fields = ra.load_registry_fields(registry_path)
+    # Asset class for the registry's applicability layer. The asset config
+    # declares it for exactly this purpose ("used to select the asset-specific
+    # registry applicability layer"); the transformation manifest may override.
+    portfolio_type = str(
+        tx_manifest.get("portfolio_type")
+        or _asset_class_from_config(asset_config_path)
+        or "").strip()
     enum_lib = ra.load_enum_lib(enum_config_dir)
     regime_cfg = _read_yaml(Path(regime_config_path)) or {}
 
@@ -389,6 +409,12 @@ def build_validation_package(
         results.extend(ra.validate_uniqueness(
             df, ["loan_identifier", "unique_identifier"]))
         results.extend(ra.validate_business_rules(df))
+        # The authoritative core_canonical contract. Enforced HERE so a canonical
+        # cannot reach ready_for_validation_complete without the economically
+        # essential fields; the definition itself stays in the registry and
+        # engine.gate_3_validation.validate_canonical (single source of truth).
+        results.extend(ra.validate_core_canonical_presence(
+            df, registry_fields, portfolio_type))
     except Exception as exc:  # uncontrolled parser/type/enum exception
         uncontrolled_error = f"{type(exc).__name__}: {exc}"
 
