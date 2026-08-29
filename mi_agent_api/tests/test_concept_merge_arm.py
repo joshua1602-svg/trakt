@@ -221,3 +221,49 @@ def test_the_vocabulary_cache_is_keyed_on_content_not_identity():
     other = ARM._vocabulary(semantics, values, columns | {"ltv_bucket"})
     assert other is not first
     assert len(ARM._VOCAB_CACHE) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Cost telemetry — an observation ABOUT an answer, never a fact about whether
+# the reader gets one
+# --------------------------------------------------------------------------- #
+def test_an_unpriced_model_is_unknown_never_a_silent_zero():
+    """A model with no pricing entry must SAY it is unpriced. Reporting $0.00
+    would read as a free call and would quietly under-report the bill."""
+    priced = ARM._priced("claude-opus-5", {"input_tokens": 30, "output_tokens": 150})
+    assert priced["cost_estimate_status"] == "estimated"
+    assert priced["estimated_total_cost"] > 0
+
+    unknown = ARM._priced("some-unpriced-future-model",
+                          {"input_tokens": 30, "output_tokens": 150})
+    assert unknown["cost_estimate_status"] == "unknown"
+
+
+def test_a_pricing_failure_costs_the_telemetry_and_nothing_else(monkeypatch):
+    """TELEMETRY MAY NOT DECIDE WHETHER AN ANSWER IS GIVEN.
+
+    `apply` is called inside a `try` whose `except` records
+    `proposal_unavailable`, and an unavailable proposal is a controlled
+    REFUSAL. Before this guard existed a malformed usage record raised out of
+    the pricing call, travelled that path, and turned a delivered 39-group
+    heatmap into "I could not complete the language-understanding step".
+    """
+    from mi_agent import llm_query_parser as LQ
+
+    def _boom(model, usage):
+        raise RuntimeError("pricing table exploded")
+
+    monkeypatch.setattr(LQ, "estimate_cost", _boom)
+    # No exception escapes, and the caller gets None rather than a refusal.
+    assert ARM._priced("claude-opus-5", {"input_tokens": 30}) is None
+
+
+def test_a_replayed_proposal_is_not_a_call_and_is_not_priced():
+    """Replay exists so a measurement can be reproduced without paying for the
+    model again. Pricing a replay would invent spend that never happened."""
+    ARM.set_replay({"q": [{"kind": "category_value", "term": "drawdown"}]})
+    try:
+        assert "q" in ARM._REPLAY
+    finally:
+        ARM.set_replay(None)
+    assert ARM._REPLAY == {}

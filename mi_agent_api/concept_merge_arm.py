@@ -227,5 +227,35 @@ def apply(question: str, spec: Any, semantics: Dict[str, Any], *,
         # Priced by `llm_query_parser.estimate_cost`, the estate's existing
         # owner of the pricing table, so there is no second opinion about what
         # a token costs. A replayed proposal is not a call and is not priced.
-        "cost": (LQ.estimate_cost(model_name(), usage) if not replayed else None),
+        "cost": _priced(model_name(), usage) if not replayed else None,
     }
+
+
+def _priced(model: str, usage: Any) -> Optional[Dict[str, Any]]:
+    """The cost of a call, or ``None``. NEVER RAISES INTO A REQUEST.
+
+    TELEMETRY MAY NOT DECIDE WHETHER AN ANSWER IS GIVEN. `apply` is called
+    inside a `try` whose `except` records `proposal_unavailable`, and an
+    unavailable proposal is a controlled REFUSAL. So an exception here — a
+    pricing table that cannot read a token count, a usage shape a future SDK
+    changes — would travel that path and turn a delivered analytical answer
+    into "I could not complete the language-understanding step". Measured
+    before this guard existed: a malformed usage record flipped a correct
+    39-group heatmap into a refusal.
+
+    That is the wrong trade in both directions. Cost is an observation ABOUT an
+    answer; it cannot be allowed to become a fact about whether the reader gets
+    one. A pricing failure costs the telemetry and nothing else.
+
+    `estimate_cost` already reports an unpriced model as status "unknown"
+    rather than a silent zero, and that path is untouched: it is a value, not a
+    failure.
+    """
+    from mi_agent import llm_query_parser as _LQ
+
+    try:
+        return _LQ.estimate_cost(model, usage)
+    except Exception as exc:  # noqa: BLE001 - an answer never fails for a price
+        logger.info("cost telemetry unavailable for model %r: %s: %s",
+                    model, type(exc).__name__, exc)
+        return None
