@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import pytest
 
+import re
+
 from trakt_mail import presentation as pres
 
 MARKDOWN = """# Onboarding — Northstar Lending
@@ -314,3 +316,87 @@ def test_every_question_the_real_pack_generates_reaches_the_client(tmp_path,
     assert rendered - generated == {
         row["label"] for row in
         built.artefacts.required + built.artefacts.optional}
+
+
+# --------------------------------------------------------------------------- #
+# Room to answer in
+# --------------------------------------------------------------------------- #
+
+def test_a_question_offers_the_client_room_to_write_an_answer():
+    """The mark against each question is a write-in area, not a tick box.
+
+    A checklist a client cannot answer in is a checklist they answer by email
+    instead, and the structure is lost. The area is a fixed rectangle wide
+    enough for a line of text and tall enough to write on, and the numbers are
+    asserted rather than described because "far too small" is exactly how this
+    was reported.
+    """
+    assert pres.ANSWER_HEIGHT >= 10, "no room to write a line"
+    assert pres.ANSWER_WIDTH >= 120, "not the width of the column"
+    # A tick box is roughly 4mm square. Whatever this is, it is not that.
+    assert pres.ANSWER_WIDTH / pres.ANSWER_HEIGHT > 5
+
+
+def test_the_answer_area_is_the_same_size_whatever_sits_above_it(doc):
+    """Two questions, one with help text and one without, both fit on a page
+    that renders — the area is nested, so it cannot inherit its row's height."""
+    pdf = pres.render_pdf(doc)
+    assert pdf.startswith(b"%PDF")
+    assert pdf_shows(pdf, "Legal entity name")      # carries help text
+    assert pdf_shows(pdf, "Trading name")           # carries none
+
+
+# --------------------------------------------------------------------------- #
+# Nothing the client reads may be raw markdown
+# --------------------------------------------------------------------------- #
+
+GROUPED = """# Onboarding — Northstar Lending
+
+Reference: ONB-2026-0007
+
+## What we need from you now
+
+### About your business
+
+#### Northstar Lending
+
+- [required] **Legal Entity Identifier**
+
+#### Contacts and distribution
+
+- [required] **Reporting email**
+"""
+
+
+def test_a_fourth_level_heading_is_a_heading_not_prose():
+    parsed = pres.parse_pack(GROUPED)
+    groups = [n.text for n in parsed.nodes if n.kind == "group"]
+    assert groups == ["Northstar Lending", "Contacts and distribution"]
+    assert not any(n.text.startswith("#") for n in parsed.nodes)
+
+
+def test_no_hash_marks_reach_the_printed_checklist():
+    """``pdf_shows`` reduces the page to its letters, so it cannot see a hash.
+    The drawn text is searched directly instead."""
+    pdf = pres.render_pdf(pres.parse_pack(GROUPED))
+    drawn = " ".join(re.findall(r"\((.*?)\)\s*Tj", pdf_text(pdf)))
+    assert "Contacts and distribution" in drawn
+    assert "#" not in drawn
+
+
+def test_no_hash_marks_reach_the_real_pack_either(tmp_path, monkeypatch):
+    monkeypatch.setenv("TRAKT_STORAGE_BACKEND", "file")
+    monkeypatch.setenv("TRAKT_LOCAL_BLOB_ROOT", str(tmp_path / "blob"))
+    from apps.blob_trigger_app.storage import Storage
+    from operations_control.occ_agent.service import OccAgentService
+
+    service = OccAgentService(Storage(tmp_path / "blob"),
+                              container="operations-control-synthetic",
+                              sandbox=tmp_path / "sandbox")
+    case = service.create_case(
+        tenant="client_a", initiating_user="Alice",
+        instruction="Onboard Northstar Lending. UK equity release. Monthly "
+                    "portfolio MI. Portfolio id direct_101.")
+    parsed = pres.parse_pack(service.build_pack(case).document())
+    for node in parsed.nodes:
+        assert not node.text.lstrip().startswith("#"), node.text

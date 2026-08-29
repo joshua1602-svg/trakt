@@ -5,6 +5,7 @@ import type {
   AgentClientForm,
   AgentChecklist,
   AgentMeta,
+  AgentMail,
   AgentPack,
   AgentPreview,
   AgentReadinessPackage,
@@ -12,6 +13,7 @@ import type {
   AgentStatus,
   AgentTurn,
   CaseSummary,
+  MailIngestOutcome,
 } from "./agentTypes";
 import type {
   AuditTrail,
@@ -242,6 +244,19 @@ export interface OpsClient {
   approveAgentPack(caseRef: string, reason?: string): Promise<AgentStatus>;
   /** Record the pack as issued. The receipt says whether anything was sent. */
   sendAgentPack(caseRef: string, to?: string[]): Promise<AgentStatus>;
+
+  // -- the client's reply ---------------------------------------------------- //
+  /** What is waiting in the OCC mailbox, and which case each message belongs
+   *  to. Read-only in both systems: nothing is written and nothing is marked
+   *  read, so an operator may look as often as they like. */
+  getAgentMail(caseRef: string): Promise<AgentMail>;
+  /** Take the named replies into this case. Attachments are registered through
+   *  the same governed route an upload uses; the client's WORDS are recorded
+   *  and never applied. */
+  ingestAgentMail(
+    caseRef: string,
+    messageIds: string[],
+  ): Promise<AgentStatus & { ingested: MailIngestOutcome[] }>;
 
   // -- review, approval and the confirmation gate --------------------------- //
   /** Assemble the review package and submit the case for review. */

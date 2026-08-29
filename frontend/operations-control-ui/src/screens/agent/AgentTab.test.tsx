@@ -145,8 +145,9 @@ describe("OCC Agent tab — case navigation", () => {
 
     // A Client Onboarding reference, not an identifier this feature invented.
     expect((await screen.findAllByText(/ONB-\d{4}-\d{4}/)).length).toBeGreaterThan(0);
-    // And Client Onboarding's own outstanding-for-client list.
-    const panel = (await screen.findByText(copy.agent.checklistHeading)).closest("section");
+    // And Client Onboarding's own outstanding-for-client list, in the one
+    // panel that both lists what the client owes and lets it be answered.
+    const panel = (await screen.findByText(copy.agent.questionsHeading)).closest("section");
     expect(
       within(panel as HTMLElement).getByText(/Legal Entity Identifier/),
     ).toBeInTheDocument();
@@ -366,6 +367,19 @@ describe("OCC Agent tab — the operating loop", () => {
     ).toBeInTheDocument();
   });
 
+  it("the mailbox is reachable from the case, and reads nothing on its own", async () => {
+    await runScenario("A — Clean onboarding");
+    const panel = (await screen.findByText(copy.agent.mailHeading)).closest("section");
+    expect(panel).not.toBeNull();
+    // Present, and inert: opening the case must not reach a mailbox.
+    expect(
+      within(panel as HTMLElement).getByText(copy.agent.mailClosed),
+    ).toBeInTheDocument();
+    expect(
+      within(panel as HTMLElement).queryByRole("button", { name: copy.agent.mailTake }),
+    ).not.toBeInTheDocument();
+  });
+
   it("the client is only asked what the client can answer", async () => {
     const client = new MockOpsClient();
     const created = await client.runAgentScenario("scenario_a_clean");
@@ -532,7 +546,7 @@ describe("OCC Agent tab — the client questions", () => {
    * already decided. Every capability existed and was tested; no screen
    * rendered any of them.
    */
-  async function openCase() {
+  async function createCase() {
     const user = userEvent.setup();
     renderApp("/agent");
     const box = await screen.findByLabelText(copy.agent.newCaseHeading);
@@ -543,6 +557,33 @@ describe("OCC Agent tab — the client questions", () => {
     await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
     await screen.findByText(copy.agent.conversationHeading);
     return user;
+  }
+
+  async function openCase() {
+    const user = await createCase();
+    await issuePack(user);
+    return user;
+  }
+
+  /**
+   * Walk the case to the stage where client answers are recorded.
+   *
+   * This is not scaffolding around the panel — it is the workflow the panel
+   * now belongs to. Recording a client's answers comes AFTER the request has
+   * gone out, so a test that reaches the form without issuing the pack would
+   * be asserting an order the screen no longer offers.
+   */
+  async function issuePack(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: copy.agent.packDraft }));
+    await user.click(await screen.findByRole("button", { name: copy.agent.packApprove }));
+    const to = await screen.findByLabelText(copy.agent.packRecipients);
+    await user.type(to, "ops@northstar.example");
+    await user.click(screen.getByRole("button", { name: copy.agent.packSend }));
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-stage="responses"][data-stage-status="current"]'),
+      ).not.toBeNull(),
+    );
   }
 
   it("lets an operator read every question the client is asked", async () => {
@@ -587,14 +628,69 @@ describe("OCC Agent tab — the client questions", () => {
     expect(submitted).not.toHaveBeenCalled();
   });
 
-  it("says nothing about already-known values when there are none", async () => {
-    const user = await openCase();
-    await user.click(await screen.findByRole("button", { name: copy.agent.questionsShow }));
-    await screen.findByLabelText(/Reporting email/);
+  /**
+   * Where recording an answer lives, pinned.
+   *
+   * It sat inside a timeline stage, and the predictable thing happened: the
+   * stage completed, collapsed, and the only place to record an answer went
+   * with it. Onboarding is not a linear pass — answers arrive by email, by
+   * phone, as a correction three stages later — so this is a reference view of
+   * the case, reachable at every stage, not a step an operator walks past.
+   */
+  it("can record an answer at any stage, before the pack and after it", async () => {
+    const user = await createCase();
+    expect(await screen.findByRole("button", { name: copy.agent.questionsShow }))
+      .toBeInTheDocument();
 
-    // A heading over an empty list is noise. Nothing is known until the pack
-    // has been built from the case.
-    expect(screen.queryByText(copy.agent.questionsKnownHeading)).not.toBeInTheDocument();
+    await issuePack(user);
+    expect(screen.getByRole("button", { name: copy.agent.questionsShow }))
+      .toBeInTheDocument();
+    // And it is NOT inside the stage that completes and collapses.
+    const stage = document.querySelector('[data-stage="responses"]') as HTMLElement;
+    expect(stage).not.toBeNull();
+    expect(within(stage).queryByRole("button", { name: copy.agent.questionsShow }))
+      .not.toBeInTheDocument();
+  });
+
+  /**
+   * The same eleven items used to render twice on one screen — as a checklist
+   * under the client questions, and as sentences under "Missing inputs".
+   */
+  it("does not repeat the client's outstanding items as the operator's", async () => {
+    await createCase();
+    const heading = await screen.findByText(copy.agent.questionsHeading);
+    const questions = heading.closest("section") as HTMLElement;
+    // Scoped to the panel: the agent's own opening turn also names what is
+    // outstanding, and that is the agent speaking rather than a second list.
+    expect(within(questions).getByText(/Legal Entity Identifier/))
+      .toBeInTheDocument();
+    // Everything outstanding on this case is the client's, so the panel that
+    // asks the OPERATOR for things has nothing to say and does not render.
+    expect(screen.queryByText(copy.agent.missingHeading)).not.toBeInTheDocument();
+  });
+
+  /**
+   * Nine criteria, always expanded, most of them "Blocked" only because the
+   * case has not reached them — the wall that made the agent's own answer to
+   * "what is pending" useless. The count stays; the table folds away.
+   */
+  it("folds the readiness table away until the case is at readiness", async () => {
+    await createCase();
+    const summary = await screen.findByText(copy.agent.criteriaHeading);
+    const panel = summary.closest("details") as HTMLDetailsElement;
+    expect(panel).not.toBeNull();
+    expect(panel.open).toBe(false);
+    expect(within(panel).getByText(/of \d+ criteria passed/)).toBeInTheDocument();
+  });
+
+  /** The timeline keeps the two things that ARE steps: receive, and chase. */
+  it("keeps receiving and chasing on the timeline", async () => {
+    const user = await createCase();
+    await issuePack(user);
+    const stage = document.querySelector('[data-stage="responses"]') as HTMLElement;
+    expect(within(stage).getByText(copy.agent.mailHeading)).toBeInTheDocument();
+    expect(within(stage).getByRole("button", { name: copy.agent.checklistAsk }))
+      .toBeInTheDocument();
   });
 
   it("surfaces a refused answer instead of swallowing it", async () => {

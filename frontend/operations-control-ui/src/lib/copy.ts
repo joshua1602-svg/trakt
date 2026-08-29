@@ -2,6 +2,27 @@
  * Every user-facing string used by the app chrome and labels.
  * Plain, calm, non-technical English only — a test enforces this.
  */
+/**
+ * How a reply was tied to a case, in words rather than in the correlator's own
+ * vocabulary. An operator reads "the conversation it belongs to", not
+ * "conversation" — and the distinction between evidence the mail system
+ * carries and a mere coincidence of address is what they need to see.
+ */
+function basisLabel(basis: string): string {
+  switch (basis) {
+    case "conversation":
+      return "the conversation it belongs to";
+    case "in_reply_to":
+      return "the message it replies to";
+    case "case_ref":
+      return "the reference in its subject";
+    case "sender":
+      return "the sender's address";
+    default:
+      return basis.replace(/_/g, " ");
+  }
+}
+
 export const copy = {
   appName: "Trakt Operations",
 
@@ -450,7 +471,6 @@ export const copy = {
     onboardingStageHeading: "Onboarding",
     onboardingHeading: "The onboarding",
     onboardingOpen: "Open it in the onboarding screens",
-    checklistHeading: "What the client still has to tell us",
     checklistEmpty: "Nothing outstanding from the client.",
     checklistAsk: "Ask the client for these",
     checklistRecord: "Record what came back",
@@ -469,7 +489,11 @@ export const copy = {
     gateActive: "Now",
     gateBlocked: "Blocked",
     gatePending: "Not started",
-    missingHeading: "Missing inputs",
+    missingHeading: "What Trakt still needs from you",
+    missingHelp:
+      "What the client owes is listed under the client questions. These are " +
+      "the ones nobody has asked them for, because they are not the client's " +
+      "to answer.",
     criteriaOnboarding: "The onboarding",
     criteriaExecution: "The practice run",
     criteriaBoundary: "The practice boundary",
@@ -513,10 +537,16 @@ export const copy = {
       "hold them.",
     questionsSave: "Save answers",
     questionsDiscard: "Discard changes",
-    questionsSaved: "Saved. The answers are on the case.",
+    questionsSaved:
+      "Saved. The answers are on the case, and any request that asked for them " +
+      "closes once every item in it is answered.",
     questionsHint:
       "Answers are recorded exactly as typed, against the same keys a client's own " +
       "submission would use.",
+    questionsOutstanding: (n: number) =>
+      n === 1
+        ? "1 answer still outstanding from the client."
+        : `${n} answers still outstanding from the client.`,
     questionsPending: (n: number) =>
       n === 1 ? "1 answer not yet saved" : `${n} answers not yet saved`,
     questionsRequired: "Required",
@@ -529,6 +559,43 @@ export const copy = {
       "conversation: the change is read, put to you, and recorded with who said it.",
     yes: "Yes",
     no: "No",
+    mailHeading: "What the client has sent back",
+    mailShow: "Check the mailbox",
+    mailHide: "Close",
+    mailClosed:
+      "Look in the onboarding mailbox for replies to this case. Nothing is read or " +
+      "changed until you ask.",
+    mailChecking: "Looking…",
+    mailRecheck: "Check again",
+    mailNone: "Nothing has arrived for this case.",
+    mailFrom: (who: string) => `From ${who}`,
+    mailUnnamed: "an unnamed sender",
+    mailMatchedOn: (bases: string[]) =>
+      `Matched on ${bases.map(basisLabel).join(", ")}.`,
+    mailTake: "Take this into the case",
+    mailTaking: "Taking it in…",
+    mailAlready: "Already taken in",
+    mailCannotRegister:
+      "This case is past the point where a file can be added to it. Take this reply in " +
+      "from a case that is still gathering files, or say what it changes in the " +
+      "conversation.",
+    mailNoAttachments: "No attachments",
+    mailOversize: "Too large for this deployment to read",
+    mailUnreadable: "Trakt could not read this file",
+    mailIngested: "Taken in. The files are on the case.",
+    mailNotApplied:
+      "The client's message is recorded on the case, not applied to it. Read it, then " +
+      "tell the agent in the conversation if it should change an answer — the change is " +
+      "put to you before anything is written.",
+    mailUnmatchedHeading: "In the mailbox, but not tied to this case",
+    mailUnmatchedHelp:
+      "Trakt will not record a reply against a case unless the mail itself says which " +
+      "one it is — the conversation it belongs to, the message it answers, or the " +
+      "reference in its subject. A sender's address alone is not enough: one contact " +
+      "can be on several onboardings. These need a person to look.",
+    mailMailbox: (mailbox: string, folder: string) =>
+      `Reading ${mailbox}${folder && folder !== "inbox" ? ` · ${folder}` : ""}`,
+
     packConfirmHeading: "Already known — check these are right",
     packConfirmNote:
       "Trakt worked these out or was told them. They are pre-populated, not asked again.",
@@ -619,6 +686,8 @@ export const copy = {
     readyStatus: "READY_FOR_EXECUTION",
     notReady: "Not ready yet",
     criteriaHeading: "Readiness criteria",
+    criteriaSummary: (passed: number, total: number) =>
+      `${passed} of ${total} criteria passed`,
     manifestHeading: "Machine-readable summary",
     downloadPackage: "Show the readiness package",
     hidePackage: "Hide the readiness package",
@@ -630,8 +699,8 @@ export const copy = {
       scope: "Confirm scope",
       pack_prepare: "Prepare onboarding pack",
       pack_review: "Review and approve the pack",
-      pack_issue: "Record or issue the request",
-      responses: "Receive client responses",
+      pack_issue: "Issue the request",
+      responses: "Receive and record client responses",
       artefacts: "Receive required artefacts",
       configure: "Generate configuration",
       config_review: "Review configuration",

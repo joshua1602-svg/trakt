@@ -51,7 +51,12 @@ from ..contracts import new_id, now_iso
 from ..engine import OpsError
 from ..onboarding.case import (
     APPROVED,
+    CHANGES_REQUIRED,
+    DRAFT,
+    IN_REVIEW,
+    INFORMATION_REQUESTED,
     NO_ACTIVE_CONFIGURATION,
+    READY_FOR_APPROVAL,
     STATUS_LABELS,
     TERMINAL,
     OnboardingCase,
@@ -116,6 +121,51 @@ from .run import (
 from .store import SyntheticRunStore, synthetic_ops_store
 
 logger = logging.getLogger("trakt.operations_control.occ_agent")
+
+#: Each lifecycle action in the words an operator would use for it. The state
+#: table names actions for the machine (``run_synthetic_onboarding``); an
+#: operator asking what they can do next should be told in their own language,
+#: and an action with no phrase here is rendered from its key rather than
+#: silently dropped.
+ACTION_PHRASES: Dict[str, str] = {
+    _states.ACTION_ANSWER: "answer an onboarding question",
+    _states.ACTION_REQUEST_INFORMATION: "ask the client for what is missing",
+    _states.ACTION_RECORD_RESPONSE: "record what the client sent back",
+    _states.ACTION_SUBMIT_FOR_APPROVAL: "submit the onboarding for approval",
+    _states.ACTION_APPROVE_ONBOARDING: "approve the onboarding",
+    _states.ACTION_REQUEST_CHANGES: "send the onboarding back for changes",
+    _states.ACTION_WITHDRAW: "withdraw the onboarding",
+    _states.ACTION_DRAFT_PACK: "draft the client pack",
+    _states.ACTION_APPROVE_PACK: "approve the pack to send",
+    _states.ACTION_SEND_PACK: "issue the pack to the client",
+    _states.ACTION_REGISTER_ARTEFACT: "provide a file",
+    _states.ACTION_RUN_ONBOARDING: "run the practice onboarding",
+    _states.ACTION_RESOLVE_DECISION: "settle an open decision",
+    _states.ACTION_ACKNOWLEDGE_EXCEPTION: "acknowledge an exception",
+    _states.ACTION_GENERATE_PLAN: "generate the orchestration plan",
+    _states.ACTION_APPROVE_EXECUTION: "approve readiness for execution",
+    _states.ACTION_REQUEST_ACTIVATION: "request activation",
+    _states.ACTION_APPROVE_ACTIVATION: "approve activation",
+    _states.ACTION_CONFIRM_ACTIVATION: "confirm activation",
+    _states.ACTION_CANCEL: "cancel the practice case",
+}
+
+#: Actions that exist but are never the answer to "what should I do next" —
+#: they undo or abandon, and offering them as the way forward is noise.
+_NOT_A_WAY_FORWARD = (_states.ACTION_CANCEL, _states.ACTION_WITHDRAW,
+                      _states.ACTION_REQUEST_CHANGES)
+
+
+def action_phrase(action: str) -> str:
+    return ACTION_PHRASES.get(action, str(action).replace("_", " "))
+
+
+def _join(parts: List[str]) -> str:
+    """"a", "a or b", "a, b or c" — a list a person would read aloud."""
+    parts = [p for p in parts if p]
+    if len(parts) <= 1:
+        return parts[0] if parts else ""
+    return ", ".join(parts[:-1]) + " or " + parts[-1]
 
 
 class ActionNotAllowed(OpsError):
@@ -866,6 +916,8 @@ class OccAgentService:
             case, sorted(plan.accepted), actor)
         if request_id:
             agent_case = self._close_request(agent_case, request_id, actor)
+        else:
+            agent_case = self._close_answered_requests(agent_case, actor)
         self._audit(agent_case.run, "client_response_submitted",
                     actor_type=ACTOR_HUMAN, actor=actor,
                     classification=EXEC_DETERMINISTIC,
@@ -920,6 +972,50 @@ class OccAgentService:
                                    f"{status}",
                     detail={"status": status, "reason": reason,
                             "response_chars": len(response_text)})
+        return agent_case
+
+    def _close_answered_requests(self, agent_case: AgentCase,
+                                 actor: str) -> AgentCase:
+        """Close every open request whose items are now all answered.
+
+        An information request is what an operator sends when they ask a client
+        for something; ``readiness()`` treats an open one as outstanding, and
+        refuses to submit the onboarding while any remains. So a request that is
+        never closed is a case that can never be approved — which is what
+        happened: the questions panel wrote the answers and left the request
+        that asked for them open, so a case moved from "waiting on the client"
+        to "waiting on nobody" and stopped.
+
+        Closing is derived, not asserted. A request is closed only when EVERY
+        item it covers has left the catalogue's own outstanding list, so a
+        partial response closes nothing and cannot make a case look complete
+        that is not. The close itself goes through the same governed path an
+        operator's own "record the response" takes — sent, responded, reviewed
+        — so the case history reads identically whichever route answered it.
+
+        Deliberately not conditional on WHO answered. A client's emailed reply
+        typed in by an operator, an operator answering from a phone call, and a
+        client's own submission are the same act as far as the request is
+        concerned: the thing that was asked for is now known.
+        """
+        case = agent_case.case
+        outstanding = {(row["section"], row["field"], row["index"])
+                       for row in self.onboarding.catalogue
+                       .outstanding_for_client(case.answers)}
+        for request in list(case.outstanding_requests):
+            items = [(i.get("section"), i.get("field"), i.get("index"))
+                     for i in request.items]
+            if not items or any(key in outstanding for key in items):
+                continue
+            agent_case = self._close_request(
+                agent_case, request.request_id, actor)
+            self._audit(agent_case.run, "client_request_answered",
+                        actor_type=ACTOR_HUMAN, actor=actor,
+                        classification=EXEC_DETERMINISTIC,
+                        input_reference=request.request_id,
+                        decision_basis="every item this request asked for is "
+                                       "now answered on the case",
+                        detail={"items": len(items)})
         return agent_case
 
     def _close_request(self, agent_case: AgentCase, request_id: str,
@@ -2073,6 +2169,214 @@ class OccAgentService:
                 lines.append(f"- {row['label']}")
         return "\n".join(lines)
 
+    def audit_mail_ingest(self, run: SyntheticRun, *, actor: str,
+                          message: Any, correlation: Any, result: Any) -> None:
+        """Record that a client's reply was taken into this case.
+
+        Classified as ``human_confirmed`` rather than ``deterministic``: an
+        operator asked for the mailbox to be read and chose this message, and
+        the audit should name the person who did rather than imply the system
+        decided on its own. The evidence the message was matched on is recorded
+        with it, so "why is this file on this case?" has an answer that does
+        not depend on anyone remembering.
+        """
+        self._audit(run, "client_reply_ingested", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=str(getattr(message, "internet_message_id",
+                                                "") or ""),
+                    decision_basis=("a reply in the OCC mailbox, matched to "
+                                    "this case on "
+                                    + ", ".join(getattr(correlation, "bases",
+                                                        []) or ["nothing"])),
+                    detail={"sender": getattr(message, "sender", ""),
+                            "subject": getattr(message, "subject", ""),
+                            "received_at": getattr(message, "received_at", ""),
+                            "registered": list(getattr(result, "registered",
+                                                       [])),
+                            "skipped": [s.get("name") for s in
+                                        getattr(result, "skipped", [])],
+                            "recorded_text": bool(
+                                getattr(result, "recorded_text", False))})
+
+    def available_actions(self, agent_case: AgentCase) -> List[str]:
+        """Every action an operator could take on this case right now.
+
+        The lifecycle table governs the run's own actions. Client Onboarding
+        governs its own, so those are asked of IT — a case whose information is
+        still incomplete cannot be submitted for approval however far the run
+        has got, and saying otherwise would send an operator to a button that
+        refuses them. The two sets are the same union the case screen renders
+        its buttons from; keeping the agent's spoken answer on the same rule is
+        the point, because "what can I do next" and "what buttons do I have"
+        must never be different questions.
+        """
+        run, case = agent_case.run, agent_case.case
+        onboarding = self.onboarding_readiness(agent_case)
+        actions = list(_states.spec(run.state).allowed_human_actions)
+        if onboarding.get("client_checklist"):
+            actions.append(_states.ACTION_REQUEST_INFORMATION)
+        if onboarding.get("outstanding_requests"):
+            actions.append(_states.ACTION_RECORD_RESPONSE)
+        if onboarding.get("ready"):
+            if case.status in (DRAFT, INFORMATION_REQUESTED, IN_REVIEW,
+                               CHANGES_REQUIRED):
+                actions.append(_states.ACTION_SUBMIT_FOR_APPROVAL)
+            if case.status in (READY_FOR_APPROVAL, IN_REVIEW):
+                actions.append(_states.ACTION_APPROVE_ONBOARDING)
+        seen: List[str] = []
+        for action in actions:
+            if action not in seen:
+                seen.append(action)
+        return seen
+
+    def pending(self, agent_case: AgentCase) -> Dict[str, Any]:
+        """What actually stands between this case and its next milestone.
+
+        Deliberately NOT the readiness table. Readiness lists the criteria for
+        the END of a rehearsal, and at the start of a case every one of them is
+        unmet — so reading it back as "what is pending" answers with a wall
+        whose remedies restate their own labels ("Onboarding approved: work the
+        onboarding through to approval"). True, and no use to anyone.
+
+        An operator asking what is pending is asking two things: who is this
+        waiting on, and what is the next thing I can do. Both are answered from
+        state Client Onboarding and the run already hold — the client
+        checklist, the case's own blocking problems, its open information
+        requests, the open decisions and the allowed actions. Nothing here is
+        inferred and nothing is invented.
+        """
+        case, run = agent_case.case, agent_case.run
+        onboarding = self.onboarding_readiness(agent_case)
+        checklist = [dict(row) for row in
+                     (onboarding.get("client_checklist") or [])]
+        # An item the client has already been ASKED for is still the client's,
+        # and the checklist alone does not know that: ``client_checklist``
+        # excludes anything sitting in an open information request, so pressing
+        # "ask the client" empties it. Reasoning from the checklist alone
+        # therefore flipped the whole list from "waiting on them" to "needs
+        # you" at the exact moment it became most true that we were waiting on
+        # them — and told an operator that seven things were theirs to supply
+        # while the request asking the client for those same seven was open.
+        #
+        # So what is outstanding ON THE CLIENT is the checklist plus the items
+        # of every open request that have not since been answered.
+        requested = [dict(item) for r in
+                     (onboarding.get("outstanding_requests") or [])
+                     for item in (r.get("items") or [])]
+        still_open = {(row["section"], row["field"], row["index"])
+                      for row in self.onboarding.catalogue
+                      .outstanding_for_client(case.answers)}
+        seen: set = {(row.get("section"), row.get("field"), row.get("index"))
+                     for row in checklist}
+        for item in requested:
+            key = (item.get("section"), item.get("field"), item.get("index"))
+            if key in seen or key not in still_open:
+                continue        # already listed, or answered since it was asked
+            seen.add(key)
+            checklist.append({**item, "asked": True})
+
+        # The client list and the case's blocking problems overlap almost
+        # entirely — every unanswered client field is both. Listing both in
+        # full is how an answer to "what is pending" became nine lines that say
+        # the same seven things twice, burying the two that were different. So
+        # the problems are reported only where they are NOT already above,
+        # which is precisely the set the operator has to supply themselves;
+        # that residue is the real answer to "why is this stuck".
+        yours = [str(p.get("message") or "")
+                 for p in (onboarding.get("blocking") or [])
+                 if p.get("message")
+                 and (p.get("section"), p.get("field"),
+                      p.get("index")) not in seen]
+        problems = [str(p.get("message") or "")
+                    for p in (onboarding.get("blocking") or [])
+                    if p.get("message")]
+        requests = [{"request_id": str(r.get("request_id") or ""),
+                     "items": len(r.get("items") or [])}
+                    for r in (onboarding.get("outstanding_requests") or [])]
+        decisions = [str(d.get("title") or d.get("question") or "")
+                     for d in run.blocking_decisions()]
+        issued = run.pack_status == _comms.SENT
+        # Waiting on the CLIENT only once something has actually been issued to
+        # them. Before that the questions are outstanding on Trakt, not on
+        # them, and telling an operator they are waiting for a client who has
+        # never been written to is the kind of false comfort that loses a week.
+        waiting_on = "client" if issued and checklist else "you"
+        actions = [a for a in self.available_actions(agent_case)
+                   if a not in _NOT_A_WAY_FORWARD]
+        nxt = [n for n in _states.spec(run.state).next_states
+               if n not in (_states.BLOCKED, _states.CANCELLED)]
+        return {
+            "waiting_on": waiting_on,
+            "issued": issued,
+            "client_name": str((case.answers.get("client") or {}).get(
+                "client_name") or ""),
+            "client": checklist,
+            "yours": yours,
+            "problems": problems,
+            "requests": requests,
+            "decisions": decisions,
+            "blockers": list(run.blockers or []),
+            "actions": actions,
+            "next_milestone": _states.spec_label(nxt[0]) if nxt else "",
+            "finished": not actions and not nxt,
+        }
+
+    def pending_sentences(self, agent_case: AgentCase) -> str:
+        """:meth:`pending`, in the words an operator would use."""
+        p = self.pending(agent_case)
+        who = p["client_name"] or "the client"
+        lines: List[str] = []
+
+        if p["waiting_on"] == "client":
+            lines.append(f"You are waiting on {who}. The pack has been issued "
+                         "and these answers have not come back yet.")
+        elif p["client"]:
+            lines.append(f"You are waiting on yourself, not on {who}: the "
+                         "questions below have not been put to them yet.")
+
+        if p["client"]:
+            lines.append("")
+            lines.append(f"Still needed from {who} "
+                         f"({len(p['client'])}):")
+            lines += [f"- {row['label']}" for row in p["client"]]
+
+        if p["yours"] or p["decisions"] or p["blockers"]:
+            lines.append("")
+            lines.append("Needs you, not the client "
+                         f"({len(p['yours'] + p['decisions'] + p['blockers'])}"
+                         "):")
+            lines += [f"- {m}" for m in
+                      p["yours"] + p["decisions"] + p["blockers"]]
+
+        if p["client"] or p["yours"]:
+            lines.append("")
+            lines.append("You do not have to wait for an email to move: type "
+                         "the answers into this chat as you get them, or fill "
+                         "them in under the client questions.")
+
+        if p["requests"]:
+            total = sum(r["items"] for r in p["requests"])
+            lines.append("")
+            lines.append(
+                f"{len(p['requests'])} information request"
+                f"{'s' if len(p['requests']) != 1 else ''} covering {total} "
+                "item(s) are still open, and the onboarding cannot be "
+                "submitted for approval while one is. Each closes itself once "
+                "every item it asked for has been answered.")
+
+        lines.append("")
+        if p["actions"]:
+            lines.append("What you can do now: " + _join(
+                [action_phrase(a) for a in p["actions"]]) + ".")
+        elif p["finished"]:
+            lines.append("This practice case is finished; there is nothing "
+                         "further to do.")
+        else:
+            lines.append("There is nothing you can do from here yet.")
+        if p["next_milestone"]:
+            lines.append(f"Next milestone: {p['next_milestone']}.")
+        return "\n".join(lines).strip()
+
     def answer(self, agent_case: AgentCase, question: str) -> str:
         """Answer from case state and the lifecycle table. Never invents."""
         lower = question.lower()
@@ -2084,7 +2388,7 @@ class OccAgentService:
                     f"{d.get('question', '')}\n"
                     f"{(d.get('evidence') or [{}])[0].get('detail', '')}").strip()
         # A question about the CLIENT is answered from the checklist; only a
-        # question about the case as a whole falls through to readiness.
+        # question about the case as a whole falls through.
         if "client" in lower and any(w in lower for w in
                                      ("ask", "need", "send", "outstanding",
                                       "waiting", "chase")):
@@ -2093,9 +2397,14 @@ class OccAgentService:
                 return "There is nothing outstanding from the client."
             return "The client still has to tell us:\n" + "\n".join(
                 f"- {row['label']}" for row in checklist)
-        if any(w in lower for w in ("what is left", "what remains", "still",
-                                    "outstanding", "before readiness",
-                                    "what's left")):
+        # "Readiness" is a named thing in this product — the criteria for
+        # READY_FOR_EXECUTION — so a question that names it gets the criteria.
+        # A question that does NOT name it is asking what to do next, and gets
+        # what is actually pending. Answering both from the criteria table is
+        # what once told an operator with an unissued pack that what remained
+        # was to "work the onboarding through to approval".
+        if "readiness" in lower or "ready for execution" in lower \
+                or "criteria" in lower:
             verdict = self._verdict(agent_case)
             if verdict.ready:
                 return ("Every readiness criterion is satisfied. Approve "
@@ -2103,14 +2412,14 @@ class OccAgentService:
             return "Still outstanding:\n" + "\n".join(
                 f"- {c.label}: {c.remedy or c.detail}"
                 for c in verdict.outstanding)
+        if any(w in lower for w in ("pending", "what is left", "what remains",
+                                    "still", "outstanding", "waiting",
+                                    "stuck", "blocked", "hold", "what's left",
+                                    "next", "can i", "what should",
+                                    "what now", "do now")):
+            return self.pending_sentences(agent_case)
         if "stage" in lower or "where" in lower or "status" in lower:
             return self.status_sentence(agent_case)
-        spec = _states.spec(run.state)
-        if "next" in lower or "can i" in lower or "what should" in lower:
-            return ("From here you can: " + ", ".join(
-                a.replace("_", " ") for a in spec.allowed_human_actions)
-                + ".") if spec.allowed_human_actions else \
-                "This practice case is finished; there is nothing further to do."
         return self.status_sentence(agent_case)
 
     def status_sentence(self, agent_case: AgentCase) -> str:

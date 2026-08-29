@@ -73,10 +73,15 @@ export interface CaseSummary {
 }
 
 export interface AgentMessage {
-  role: "operator" | "agent";
+  /** "client" is a turn that arrived from outside — a reply taken in from the
+   *  OCC mailbox. Kept distinct so no surface can present a client's sentence
+   *  as something Trakt said or an operator instructed. */
+  role: "operator" | "agent" | "client";
   text: string;
   at: string;
   refs: string[];
+  /** Who said it, when the role alone does not identify them. */
+  author?: string;
 }
 
 export interface SyntheticArtefact {
@@ -205,6 +210,10 @@ export interface SyntheticRunDoc {
   pack_status: string;
   pack_history: PackHistoryEntry[];
   pack_receipt: Record<string, unknown>;
+  /** Mailbox message ids already taken into this case. The run's own
+   *  memory of what it has ingested — mailbox read state is a hint, not
+   *  a record, because a person opening Outlook marks mail read too. */
+  ingested_mail?: string[];
   activation_intent: Record<string, unknown>;
   activation_result: Record<string, unknown>;
   approvals: Record<string, unknown>[];
@@ -371,6 +380,90 @@ export interface PackReceipt {
   subject: string;
   artefacts: { name?: string; ref?: string }[];
   content_hash: string;
+  statement: string;
+  /** How the mail system identifies the message this receipt is for. Empty
+   *  when nothing was sent, or when the send could not be read back — in both
+   *  cases the truth is "we do not know", and a blank says so. */
+  internet_message_id?: string;
+  conversation_id?: string;
+  graph_message_id?: string;
+}
+
+/** One file a client attached. The bytes never reach the browser. */
+export interface MailAttachment {
+  name: string;
+  content_type: string;
+  size: number;
+  inline: boolean;
+  /** Over the size this deployment will read. Reported, never hidden. */
+  oversize: boolean;
+  readable: boolean;
+}
+
+/**
+ * Which case a message belongs to, and on what evidence.
+ *
+ * `matched` is false whenever the only evidence is the sender's address. One
+ * contact sits on several onboardings and a shared address is one mailbox for
+ * a whole firm, so an address alone is a question for a person rather than an
+ * answer. `candidates` still names what it might be.
+ */
+export interface MailCorrelation {
+  case_ref: string;
+  tenant: string;
+  /** Any of "conversation" | "in_reply_to" | "case_ref" | "sender". */
+  bases: string[];
+  candidates: string[];
+  matched: boolean;
+  note: string;
+}
+
+/** One message waiting in the OCC mailbox. */
+export interface AgentMailMessage {
+  graph_id: string;
+  internet_message_id: string;
+  conversation_id: string;
+  subject: string;
+  sender: string;
+  sender_name: string;
+  received_at: string;
+  body_text: string;
+  has_attachments: boolean;
+  attachments: MailAttachment[];
+  correlation: MailCorrelation;
+  already_ingested: boolean;
+}
+
+/** What is in the mailbox, as the case workspace shows it. */
+export interface AgentMailView {
+  mailbox?: string;
+  folder?: string;
+  note?: string;
+  messages: AgentMailMessage[];
+  matched: number;
+  unmatched: number;
+  /** The subset matched to the case being looked at. */
+  for_this_case: AgentMailMessage[];
+}
+
+export interface AgentMail {
+  case_ref: string;
+  mail: AgentMailView;
+}
+
+/** What one ingest actually did. Never optimistic. */
+export interface MailIngestOutcome {
+  case_ref: string;
+  graph_id: string;
+  registered: string[];
+  skipped: { name: string; reason: string }[];
+  recorded_text: boolean;
+  /** Whether Trakt went on to READ the files it registered. A file held but
+   *  not read leaves open the questions reading it would have answered — the
+   *  file format among them — so this is never assumed. */
+  recognised: boolean;
+  recognition_note: string;
+  already: boolean;
   statement: string;
 }
 

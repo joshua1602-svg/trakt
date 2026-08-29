@@ -17,7 +17,8 @@ import type {
   ReadinessCriterion,
   StreamSummary,
 } from "@/api/agentTypes";
-import type { ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
+import type { CaseProblem, ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
+import { ClientMailPanel } from "./AgentClientMail";
 import { ClientQuestionsPanel } from "./AgentClientQuestions";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
@@ -73,6 +74,31 @@ function onboardingActions(status: AgentStatus): string[] {
     out.push("approve_onboarding");
   }
   return out;
+}
+
+/**
+ * The blocking problems that are the OPERATOR'S to solve.
+ *
+ * `onboarding.blocking` and the client's outstanding list overlap almost
+ * entirely — every unanswered client field is both — so rendering both in full
+ * printed the same eleven items twice on one screen, once as a checklist and
+ * once as sentences, and buried anything that was genuinely different. The
+ * residue is the real answer to "why is this stuck": what nobody has asked the
+ * client for, because it is not theirs to answer.
+ *
+ * The split is the SERVER'S, not this screen's: validation stamps every
+ * problem with `owner`, from whether the catalogue asks that field of a client
+ * at all. Deriving it here instead — "blocking items not in the checklist" —
+ * would have been wrong in a way that matters, because `client_checklist`
+ * excludes anything sitting in an open request, so pressing "ask the client"
+ * would have emptied the checklist and tipped the client's own items into this
+ * panel at the exact moment it became most true that we were waiting on them.
+ * That is the bug already fixed once in the agent's `pending()`; reading
+ * `owner` cannot reproduce it, because ownership does not depend on what has
+ * been asked.
+ */
+export function operatorBlocking(blocking: CaseProblem[]): CaseProblem[] {
+  return blocking.filter((problem) => problem.owner !== "client");
 }
 
 /** Which pack stage currently owns the pack panel, so it renders exactly once. */
@@ -164,6 +190,7 @@ export function AgentCaseScreen() {
   const stages = deriveStages(status);
   const current = stages.find((stage) => stage.status === "current");
   const packStage = packOwner(status);
+  const yours = operatorBlocking(onboarding.blocking);
   const openDecisions = status.open_decisions.filter((d) => d.status === "open");
 
   /** One stage's workflow content. Rendered under exactly one stage. */
@@ -178,46 +205,54 @@ export function AgentCaseScreen() {
       case "pack_issue":
         if (key !== packStage) return null;
         return (
-          <>
-            <PackPanel
-              status={status}
-              busy={busy}
-              caseId={caseId}
-              onDraft={() => void act(() => client.draftAgentPack(caseId))}
-              onApprove={() => void act(() => client.approveAgentPack(caseId))}
-              onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
-            />
-            {/* Beside the pack, not inside it: the pack is what goes OUT, and
-                this is the operator's own view of what it asks. */}
-            <div className="mt-4">
-              <ClientQuestionsPanel
-                caseId={caseId}
-                version={status.run.version}
-                confirmations={status.pack.confirmations ?? []}
-                busy={busy}
-                onSaved={() => void view.reload({ quiet: true })}
-              />
-            </div>
-          </>
+          <PackPanel
+            status={status}
+            busy={busy}
+            caseId={caseId}
+            onDraft={() => void act(() => client.draftAgentPack(caseId))}
+            onApprove={() => void act(() => client.approveAgentPack(caseId))}
+            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+          />
         );
       case "responses":
         return (
-          <ResponsesBlock
-            requests={onboarding.information_requests}
-            checklist={onboarding.client_checklist}
-            busy={busy}
-            canAsk={available.has("request_client_information")}
-            // Both buttons are gated. An action the state machine refuses used
-            // to render anyway, so clicking it could only produce an error —
-            // which reads as a broken button, not as a rule being enforced.
-            canGenerate={onboarding.client_checklist.length > 0}
-            onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
-            // Answers the outstanding questions. This panel used to call
-            // generateAgentResponse, which makes up the data FILES — so the
-            // call succeeded, the checklist was untouched, and the button
-            // looked broken.
-            onGenerate={() => void act(() => client.generateAgentAnswers(caseId))}
-          />
+          <>
+            {/* The stage reads in the order the work happens: what came back,
+                then what it answers, then what is still outstanding.
+
+                RECEIVE. A reply the client has already sent is the cheapest
+                way to answer the questions below it. */}
+            <ClientMailPanel
+              caseId={caseId}
+              busy={busy}
+              canRegister={available.has("register_synthetic_artefact")}
+              onIngested={() => void view.reload({ quiet: true })}
+            />
+            {/* CHASE. What is still outstanding and the way to ask again for
+                it. Recording the answers is NOT here: it is in the rail, where
+                it is reachable at every stage. This stage completes and
+                collapses, and a client's corrections do not stop arriving when
+                it does. */}
+            <div className="mt-4">
+              <ResponsesBlock
+                requests={onboarding.information_requests}
+                checklist={onboarding.client_checklist}
+                busy={busy}
+                canAsk={available.has("request_client_information")}
+                // Both buttons are gated. An action the state machine refuses
+                // used to render anyway, so clicking it could only produce an
+                // error — which reads as a broken button, not as a rule being
+                // enforced.
+                canGenerate={onboarding.client_checklist.length > 0}
+                onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
+                // Answers the outstanding questions. This panel used to call
+                // generateAgentResponse, which makes up the data FILES — so the
+                // call succeeded, the checklist was untouched, and the button
+                // looked broken.
+                onGenerate={() => void act(() => client.generateAgentAnswers(caseId))}
+              />
+            </div>
+          </>
         );
       case "artefacts":
         return (
@@ -454,9 +489,20 @@ export function AgentCaseScreen() {
                     "rounded-xl px-3 py-2 text-sm whitespace-pre-wrap",
                     message.role === "operator"
                       ? "bg-stone-100 text-stone-800"
-                      : "border border-stone-200 bg-white text-stone-700",
+                      : message.role === "client"
+                        // A client's own words, arrived from outside. Marked so
+                        // they can never be read as something Trakt said or an
+                        // operator instructed — which is the whole reason the
+                        // role exists rather than being folded into "agent".
+                        ? "border border-blue-200 bg-blue-50 text-stone-800"
+                        : "border border-stone-200 bg-white text-stone-700",
                   )}
                 >
+                  {message.role === "client" && (
+                    <p className="mb-1 text-xs font-semibold text-blue-800">
+                      {copy.agent.mailFrom(message.author || copy.agent.mailUnnamed)}
+                    </p>
+                  )}
                   {message.text}
                 </li>
               ))}
@@ -543,16 +589,24 @@ export function AgentCaseScreen() {
             )}
           </Panel>
 
-          <ClientPanel
+          <ClientQuestionsPanel
+            caseId={caseId}
+            version={status.run.version}
+            confirmations={status.pack.confirmations ?? []}
             checklist={onboarding.client_checklist}
             requests={onboarding.information_requests}
             busy={busy}
-            onAsk={() => void act(() => client.runAgentStep(caseId, "information-requests"))}
+            onSaved={() => void view.reload({ quiet: true })}
           />
 
-          <Panel title={copy.agent.criteriaHeading}>
-            <CriteriaList criteria={status.readiness.criteria} />
-          </Panel>
+          <CriteriaPanel
+            criteria={status.readiness.criteria}
+            /* Expanded once the case is at readiness, where the table is the
+               work. Before then most rows read "Blocked" only because the case
+               has not got there yet, which is not information — it is the wall
+               that made "what is pending" unanswerable. */
+            open={stages.find((stage) => stage.key === "readiness")?.status !== "future"}
+          />
 
           {/* The blocked banner at the top already lists these when the run is
               BLOCKED; this panel covers blockers recorded in any other state. */}
@@ -566,10 +620,11 @@ export function AgentCaseScreen() {
             </Panel>
           )}
 
-          {onboarding.blocking.length > 0 && (
+          {yours.length > 0 && (
             <Panel title={copy.agent.missingHeading}>
+              <p className="mb-2 text-xs text-stone-500">{copy.agent.missingHelp}</p>
               <ul className="list-disc space-y-1 pl-4 text-sm text-stone-600">
-                {onboarding.blocking.map((problem) => (
+                {yours.map((problem) => (
                   <li key={`${problem.section}-${problem.field}-${problem.index}`}>
                     {problem.message}
                   </li>
@@ -1493,66 +1548,34 @@ function ActivationPanel({
 }
 
 /**
- * What the client still has to answer, and what has already been asked.
+ * The readiness table, folded away until it is the work.
  *
- * The list is Client Onboarding's own — only fields a client can actually
- * answer — so this panel shows it rather than working anything out.
+ * Nine rows, always expanded, six of them "Blocked" purely because the case
+ * has not reached them — the same wall that made the agent's own answer to
+ * "what is pending" useless. The count is the part worth seeing at every
+ * stage; the table is one click from it, and open by default once the case is
+ * actually at readiness.
  */
-function ClientPanel({
-  checklist,
-  requests,
-  busy,
-  onAsk,
+function CriteriaPanel({
+  criteria,
+  open,
 }: {
-  checklist: ChecklistRow[];
-  requests: InformationRequest[];
-  busy: boolean;
-  onAsk: () => void;
+  criteria: ReadinessCriterion[];
+  open: boolean;
 }) {
+  const passed = criteria.filter((criterion) => criterion.passed).length;
   return (
-    <Panel title={copy.agent.checklistHeading}>
-      {checklist.length === 0 ? (
-        <p className="text-sm text-stone-500">{copy.agent.checklistEmpty}</p>
-      ) : (
-        <>
-          <ul className="list-disc space-y-1 pl-4 text-sm text-stone-700">
-            {checklist.map((row) => (
-              <li key={`${row.section}-${row.field}-${row.index}`}>{row.label}</li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onAsk}
-            className="mt-3 rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-          >
-            {copy.agent.checklistAsk}
-          </button>
-        </>
-      )}
-
-      {requests.length > 0 && (
-        <>
-          <p className="mt-4 text-xs uppercase tracking-wide text-stone-400">
-            {copy.agent.requestsHeading}
-          </p>
-          <ul className="mt-1 space-y-1 text-sm text-stone-600">
-            {requests.map((request) => (
-              <li key={request.request_id} className="flex justify-between gap-2">
-                <span>
-                  {request.items.length} item{request.items.length === 1 ? "" : "s"}
-                </span>
-                <span className="text-xs text-stone-500">
-                  {["open", "sent"].includes(request.status)
-                    ? copy.agent.requestOutstanding
-                    : copy.agent.requestAnswered}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </Panel>
+    <details open={open} className="rounded-2xl border border-stone-200 bg-white p-5">
+      <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-stone-900">
+        {copy.agent.criteriaHeading}
+        <span className="ml-auto shrink-0 text-xs font-medium text-stone-500">
+          {copy.agent.criteriaSummary(passed, criteria.length)}
+        </span>
+      </summary>
+      <div className="mt-3">
+        <CriteriaList criteria={criteria} />
+      </div>
+    </details>
   );
 }
 

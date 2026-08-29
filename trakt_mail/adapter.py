@@ -154,6 +154,13 @@ class GraphMailAdapter:
                 http_status=502 if exc.retryable else 409) from None
 
         receipt.sent = True
+        # Structured, not only narrated. These three used to appear solely
+        # inside the statement prose, which made them readable by a person and
+        # useless to the reply reader that has to match a client's answer back
+        # to this case.
+        receipt.internet_message_id = result.internet_message_id
+        receipt.conversation_id = result.conversation_id
+        receipt.graph_message_id = result.graph_message_id
         receipt.statement = _statement(self.config.mailbox, result, attached,
                                        actor)
         logger.info(

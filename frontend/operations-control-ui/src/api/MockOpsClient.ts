@@ -17,6 +17,8 @@ import type {
   AgentStatus,
   AgentTurn,
   CaseSummary,
+  AgentMail,
+  MailIngestOutcome,
 } from "./agentTypes";
 
 import type {
@@ -1892,6 +1894,19 @@ export class MockOpsClient implements OpsClient {
   async getAgentClassification(caseRef: string): Promise<AgentClassification> {
     await this.wait();
     return this.agent.classification(caseRef);
+  }
+
+  async getAgentMail(caseRef: string): Promise<AgentMail> {
+    await this.wait();
+    return this.agent.mail(caseRef);
+  }
+
+  async ingestAgentMail(
+    caseRef: string,
+    messageIds: string[],
+  ): Promise<AgentStatus & { ingested: MailIngestOutcome[] }> {
+    await this.wait();
+    return this.agent.ingestMail(caseRef, messageIds);
   }
 
   async draftAgentPack(caseRef: string): Promise<AgentStatus> {

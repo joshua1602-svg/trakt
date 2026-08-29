@@ -143,10 +143,15 @@ class Message:
     fields below; the transcript is a record of how it got there.
     """
 
-    role: str                              # operator | agent
+    role: str                              # operator | agent | client
     text: str
     at: str = field(default_factory=now_iso)
     refs: List[str] = field(default_factory=list)
+    #: Who said it, when the role alone does not identify them. An operator is
+    #: the person driving the case and an agent is Trakt; a CLIENT turn arrived
+    #: from outside, and a transcript that cannot say which of a client's people
+    #: wrote it is a transcript an auditor cannot use.
+    author: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

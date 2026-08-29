@@ -106,10 +106,12 @@ jobs:
         #                        with cwd = the package root
         #   apps/                blob_trigger_app storage / layout / persistence
         #   trakt_core/          governed context, errors, tenancy, policy
-        #   trakt_mail/          the Microsoft Graph outbound mail adapter, which
-        #                        operations_control/api/app.py imports when it
-        #                        mounts the OCC Agent. Absent, the import fails
-        #                        and the OCC Agent tab silently does not mount.
+        #   trakt_mail/          the Microsoft Graph mail integration — the
+        #                        outbound adapter operations_control/api/app.py
+        #                        imports when it mounts the OCC Agent, and the
+        #                        inbound reader the agent's /mail routes load
+        #                        lazily. Absent, the outbound import fails and
+        #                        the OCC Agent tab silently does not mount.
         #   mi_agent/            now a HARD dependency: api/app.py imports
         #                        concentration_routes at module level, which
         #                        reaches mi_agent.concentration_tests for the
@@ -130,6 +132,15 @@ jobs:
         #
         # The React frontend is deliberately EXCLUDED: nothing in the API's
         # import graph reaches frontend/, and the built UI is deployed separately.
+        #
+        # question_interpretation/ is required for the same reason it is in the
+        # Function App's archive, and here it is HARDER: concentration_routes is
+        # imported at module scope by operations_control/api/app.py, so without
+        # this the API does not start at all — no OCC, no OCC Agent, no routes.
+        #   api/app.py                      -> mi_agent.concentration_tests
+        #   mi_agent/__init__.py            -> .llm_query_parser
+        #   mi_agent/llm_query_parser.py:29 -> question_interpretation.lexical
+        # A top-level package, not a submodule, so shipping mi_agent/ misses it.
         run: |
           set -euo pipefail
           zip -r -q ops-api.zip \
@@ -139,6 +150,7 @@ jobs:
             trakt_core/ \
             trakt_mail/ \
             mi_agent/ \
+            question_interpretation/ \
             analytics_lib/ \
             config/ \
             requirements.txt \

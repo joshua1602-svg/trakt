@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useOpsClient } from "@/api/context";
 import type { ClientFormField, PackQuestion } from "@/api/agentTypes";
+import type { ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { useToast } from "@/components/Toast";
 import { copy } from "@/lib/copy";
@@ -8,13 +9,28 @@ import { errorMessage, useLoad } from "@/lib/useLoad";
 import { Empty, Panel } from "./shared";
 
 /**
- * What the client is being asked, and the ability to answer it here.
+ * What the client is being asked, what is still outstanding, and the ability
+ * to answer it here.
  *
  * The operator could see that a pack contained "22 questions" and could not
  * read them, could not change one, and could not correct a value Trakt had
  * already decided. Every capability needed existed and was tested —
  * `GET /form`, `POST /form`, `POST /steps` — and no screen rendered any of
  * them, so they were reachable only from a test file.
+ *
+ * This lives in the rail rather than in the timeline, and that is a claim
+ * about what it IS. Onboarding is not a linear pass: answers arrive by email,
+ * by phone, in a second pack, as a correction three stages later. "What is
+ * this client being asked, and what do we already know" is a reference view of
+ * the case, not a step in it — so it is reachable at every stage instead of
+ * being a step an operator can walk past. It sat inside a timeline stage
+ * before, and the predictable thing happened: the stage completed, collapsed,
+ * and the only place to record an answer went with it.
+ *
+ * The outstanding list and the form used to be two panels — Client Onboarding's
+ * checklist here, the answerable form somewhere else — so the list of what the
+ * client still owes was in one place and the way to satisfy it was in another.
+ * They are the same subject and are now one panel.
  *
  * Two populations, and the difference between them is the point:
  *
@@ -30,11 +46,16 @@ import { Empty, Panel } from "./shared";
  *             and confirmed with its provenance recorded. An input box that
  *             silently overwrote a derived value would lose the one thing that
  *             makes the record auditable — who said so, and on what basis.
+ *
+ * Asking the client is deliberately NOT here. Chasing a client is a step with
+ * a place in the sequence, and it stays on the timeline where the sequence is.
  */
 export function ClientQuestionsPanel({
   caseId,
   version,
   confirmations,
+  checklist,
+  requests,
   busy,
   onSaved,
 }: {
@@ -42,6 +63,9 @@ export function ClientQuestionsPanel({
   /** Bumped by the case's own version, so saving refreshes the form. */
   version: number;
   confirmations: PackQuestion[];
+  /** Client Onboarding's own list of what the client still owes. */
+  checklist: ChecklistRow[];
+  requests: InformationRequest[];
   busy: boolean;
   onSaved: () => void;
 }) {
@@ -101,8 +125,10 @@ export function ClientQuestionsPanel({
         </button>
       }
     >
+      <Outstanding checklist={checklist} open={open} />
+
       {!open ? (
-        <p className="text-sm text-stone-600">{copy.agent.questionsClosed}</p>
+        <p className="mt-2 text-sm text-stone-600">{copy.agent.questionsClosed}</p>
       ) : view.loading ? (
         <Loading />
       ) : view.error ? (
@@ -204,7 +230,62 @@ export function ClientQuestionsPanel({
           )}
         </>
       )}
+
+      <Requests requests={requests} />
     </Panel>
+  );
+}
+
+/**
+ * What the client still owes, in Client Onboarding's own words.
+ *
+ * Shown while the form is closed and withdrawn while it is open: open, the
+ * form itself lists every unanswered question, and the same list twice on one
+ * screen is noise an operator has to reconcile.
+ */
+function Outstanding({ checklist, open }: { checklist: ChecklistRow[]; open: boolean }) {
+  if (checklist.length === 0) {
+    return <p className="text-sm text-stone-500">{copy.agent.checklistEmpty}</p>;
+  }
+  return (
+    <>
+      <p className="text-sm text-stone-700">
+        {copy.agent.questionsOutstanding(checklist.length)}
+      </p>
+      {!open && (
+        <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-stone-600">
+          {checklist.map((row) => (
+            <li key={`${row.section}-${row.field}-${row.index}`}>{row.label}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
+/** What has been asked so far, and whether it came back. */
+function Requests({ requests }: { requests: InformationRequest[] }) {
+  if (requests.length === 0) return null;
+  return (
+    <>
+      <p className="mt-4 text-xs uppercase tracking-wide text-stone-400">
+        {copy.agent.requestsHeading}
+      </p>
+      <ul className="mt-1 space-y-1 text-sm text-stone-600">
+        {requests.map((request) => (
+          <li key={request.request_id} className="flex justify-between gap-2">
+            <span>
+              {request.items.length} item{request.items.length === 1 ? "" : "s"}
+            </span>
+            <span className="text-xs text-stone-500">
+              {["open", "sent"].includes(request.status)
+                ? copy.agent.requestOutstanding
+                : copy.agent.requestAnswered}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 
