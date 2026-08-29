@@ -265,6 +265,9 @@ def project_rules_to_client_memory(rules: List[RuleRecord], client_id: str,
                       f"({r.scope} scope)"))
             n += 1
         elif r.kind == "enum":
+            if (p or {}).get("layer") == "regulatory":
+                # Belongs to the Annex 2 boundary, not to the canonical.
+                continue
             store.save_entry(MemoryEntry(
                 client_id=client_id, decision_type=DECISION_ENUM_MAPPING,
                 source_column=p.get("field", ""),

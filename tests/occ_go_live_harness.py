@@ -176,6 +176,114 @@ def canonical_for(target_field: str) -> str:
     return _CODE_TO_FIELD.get(t, t)
 
 
+def answer_regulatory_sources(env, client_id: str, workflow_id: str, *,
+                              mapping: Dict[str, str],
+                              scope: str = "portfolio") -> List[Dict[str, Any]]:
+    """Point a regulatory field the regulator insists on at its source column."""
+    engine, store = env["engine"], env["store"]
+    answered: List[Dict[str, Any]] = []
+    for d in store.open_decisions(client_id, workflow_id):
+        subject = d.get("subject") or {}
+        if subject.get("artefact") != "regulatory_source":
+            continue
+        field = str(subject.get("canonical_field") or "")
+        column = mapping.get(field)
+        if not column:
+            continue
+        engine.resolve_decision(
+            client_id=client_id, decision_id=d["decision_id"], action="approve",
+            actor="Operator", value=column, scope=scope, actor_is_admin=True)
+        answered.append({"field": field, "esma_code": subject.get("esma_code"),
+                         "chose": column})
+    return answered
+
+
+def answer_enum_translations(env, client_id: str, workflow_id: str, *,
+                             translations: Dict[str, str],
+                             scope: str = "client") -> List[Dict[str, Any]]:
+    """Tell the regulator what each lender value means, from its own code list."""
+    engine, store = env["engine"], env["store"]
+    answered: List[Dict[str, Any]] = []
+    for d in store.open_decisions(client_id, workflow_id):
+        subject = d.get("subject") or {}
+        if subject.get("artefact") != "regulatory_enum_translation":
+            continue
+        value = str(subject.get("source_value") or "")
+        code = translations.get(value)
+        if not code:
+            continue
+        engine.resolve_decision(
+            client_id=client_id, decision_id=d["decision_id"], action="approve",
+            actor="Operator", value=code, scope=scope, actor_is_admin=True)
+        answered.append({"field": subject.get("field"), "value": value,
+                         "offered": [o["value"] for o in d["options"]],
+                         "chose": code})
+    return answered
+
+
+def answer_regulatory_constants(env, client_id: str, workflow_id: str, *,
+                                values: Dict[str, str],
+                                scope: str = "portfolio") -> List[Dict[str, Any]]:
+    """Record a pool-level fact the regulator wants and no loan row carries."""
+    engine, store = env["engine"], env["store"]
+    answered: List[Dict[str, Any]] = []
+    for d in store.open_decisions(client_id, workflow_id):
+        subject = d.get("subject") or {}
+        artefact = subject.get("artefact")
+        if artefact not in ("regulatory_constant", "regulatory_source"):
+            continue
+        field = str(subject.get("field") or subject.get("canonical_field") or "")
+        value = values.get(field)
+        if not value:
+            continue
+        # A source question is answered with a VALUE by amending it — "it is not
+        # in the files, it is this". A constant question is answered directly.
+        engine.resolve_decision(
+            client_id=client_id, decision_id=d["decision_id"],
+            action=("amend" if artefact == "regulatory_source" else "approve"),
+            actor="Operator", value=value, scope=scope, actor_is_admin=True)
+        answered.append({"field": field, "esma_code": subject.get("esma_code"),
+                         "chose": value})
+    return answered
+
+
+def answer_no_data_treatments(env, client_id: str, workflow_id: str, *,
+                              scope: str = "portfolio") -> List[Dict[str, Any]]:
+    """Approve the first permitted no-data treatment for each open question.
+
+    Returns what was asked and answered, so a test can assert that the choices
+    offered were the regulator's own and not something invented.
+    """
+    engine, store = env["engine"], env["store"]
+    answered: List[Dict[str, Any]] = []
+    for d in store.open_decisions(client_id, workflow_id):
+        if (d.get("subject") or {}).get("artefact") != "regulatory_no_data":
+            continue
+        pick = d["options"][0]["value"]
+        engine.resolve_decision(
+            client_id=client_id, decision_id=d["decision_id"], action="approve",
+            actor="Operator", value=pick, scope=scope, actor_is_admin=True)
+        answered.append({"field": (d["subject"] or {}).get("field"),
+                         "esma_code": (d["subject"] or {}).get("esma_code"),
+                         "offered": [o["value"] for o in d["options"]],
+                         "chose": pick})
+    return answered
+
+
+def wait_for_rerun(env, client_id: str, workflow_id: str, previous: int,
+                   timeout: int = 90):
+    """Approving a decision schedules a rerun on another thread; wait for it to
+    START before waiting for it to finish, or ``settle`` returns the old state."""
+    store = env["store"]
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        run = store.load_workflow(client_id, workflow_id)
+        if run and (run.rerun_count > previous or run.status == "running"):
+            break
+        time.sleep(0.25)
+    return settle(env, client_id, workflow_id)
+
+
 def answer_mapping_queue(env, client_id: str, workflow_id: str, *,
                          mapping: Dict[str, str],
                          static: Optional[Dict[str, str]] = None,
@@ -195,6 +303,12 @@ def answer_mapping_queue(env, client_id: str, workflow_id: str, *,
         if d["kind"] in ("publication", "enum"):
             continue
         subject = d.get("subject") or {}
+        if subject.get("artefact") in ("regulatory_no_data", "regulatory_source",
+                                      "regulatory_constant",
+                                      "regulatory_enum_translation"):
+            # "How should the regulator be told about X?" — answered from the
+            # regulator's own permitted codes, not from a data dictionary.
+            continue
         if subject.get("artefact") == "central_tape_gaps":
             # "Which column is the loan?" — answered with a column name, from the
             # same data dictionary, rather than with a treatment.
@@ -330,6 +444,8 @@ def alpha_tape(path: Path, period: str = "2025-11-30", rows: int = 30) -> Path:
 #: Client A's data dictionary, as an operator would read it.
 ALPHA_MAPPING = {
     "loan_identifier": "ACCT_REF",
+    "new_obligor_identifier": "CUST_ID",
+    "original_obligor_identifier": "CUST_ID",
     "unique_identifier": "ACCT_REF",
     "data_cut_off_date": "SNAPSHOT_DT",
     "account_status": "STATUS_CD",
@@ -390,6 +506,8 @@ def beta_tape(path: Path, period: str = "2026-01-31") -> Path:
 
 BETA_MAPPING = {
     "loan_identifier": "Policy Number",
+    "new_obligor_identifier": "Borrower Ref",
+    "original_obligor_identifier": "Borrower Ref",
     "unique_identifier": "Policy Number",
     "data_cut_off_date": "Reporting Month End",
     "account_status": "Policy Status",
@@ -410,3 +528,18 @@ BETA_MAPPING = {
     "arrears_balance": "Arrears",
     "currency": "Currency Code",
 }
+
+
+#: What Client B's servicing states mean in ESMA's own vocabulary. An operator
+#: reads these off the regulator's code list; nothing derives them.
+BETA_REGULATORY_STATUS = {
+    "Live": "PERF",
+    "Redeemed": "RDMD",
+    "Probate - awaiting sale": "OTHR",
+    "In possession": "OTHR",
+    "Moved to LTC": "OTHR",
+}
+
+
+#: Pool-level facts an operator states once for Client B's portfolio.
+BETA_REGULATORY_CONSTANTS = {"pool_addition_date": "2026-01-31"}

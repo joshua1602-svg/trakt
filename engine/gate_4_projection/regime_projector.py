@@ -298,6 +298,10 @@ def order_fields_by_priority(
 # ENUM MAPPING
 # ============================================================
 
+#: How a blank stringifies, across the dtypes a canonical column can carry.
+_BLANK_TOKENS = frozenset({"", "NAN", "NONE", "<NA>", "NAT", "NULL"})
+
+
 def apply_enum_mappings(
     df: pd.DataFrame,
     registry: Dict[str, Any],
@@ -366,8 +370,16 @@ def apply_enum_mappings(
         # Map values
         mapped = transformed.map(field_enum_map)
         
-        # Track unmapped values
-        unmapped_mask = mapped.isna() & transformed.notna() & (transformed != "") & (transformed != "NAN")
+        # Track unmapped values. A blank is not an unmapped VALUE — there is
+        # nothing to map — and how pandas stringifies one depends on the column's
+        # dtype: NaN gives "NAN", None gives "NONE", pandas' own singletons give
+        # "<NA>" and "NAT". Only "NAN" was excluded, so a regulatory column the
+        # lender does not supply was reported as data that fails the regulator's
+        # code list, and strict mode refused the whole return over it. An empty
+        # regulatory field is a no-data question, answered further down by
+        # apply_nd_defaults, not an enum failure.
+        unmapped_mask = (mapped.isna() & transformed.notna()
+                         & ~transformed.isin(_BLANK_TOKENS))
         if unmapped_mask.any():
             unmapped_values = original[unmapped_mask].unique().tolist()
             # Convert pandas NA to string for JSON serialization
@@ -421,22 +433,58 @@ def apply_nd_defaults(
     Returns:
         (transformed_df, nd_application_report)
     """
-    report: Dict[str, Any] = {"nd_defaults_applied": {}}
-    
+    report: Dict[str, Any] = {"nd_defaults_applied": {},
+                              "regulatory_constants_applied": {}}
+
+    # Pool-level facts the regulator asks for and a loan tape cannot carry — the
+    # date the pool was formed, say. Approved once and applied while building the
+    # RETURN, exactly like a no-data code and with the same boundary: the
+    # canonical is untouched, so management information never shows a value the
+    # lender did not supply.
+    constants = (config.get("defaults") or {}).get("regulatory_constants") or {}
+    for field_name, value in constants.items():
+        if str(value).strip() == "":
+            continue
+        applied = 0
+        if field_name not in df.columns:
+            df[field_name] = str(value).strip()
+            applied = int(len(df))
+        else:
+            blank = df[field_name].isna() | (
+                df[field_name].astype(str).str.strip() == "")
+            applied = int(blank.sum())
+            if applied:
+                df.loc[blank, field_name] = str(value).strip()
+        if applied:
+            report["regulatory_constants_applied"][field_name] = {
+                "value": str(value).strip(), "rows_applied": applied}
+
     nd_defaults = (config.get("defaults") or {}).get("nd_defaults") or {}
     if not nd_defaults:
         logging.info("No nd_defaults specified in client config")
         return df, report
     
     for field_name, regime_meta in fields_list:
-        if field_name not in df.columns:
-            continue
-        
         if field_name not in nd_defaults:
             continue
-        
+
         nd_code = nd_defaults[field_name]
-        
+
+        if field_name not in df.columns:
+            # The lender supplies no such column at all. That is the case a
+            # no-data code exists for — "not collected", "not applicable" — so
+            # an approved treatment must be able to answer it, not just fill
+            # gaps in a column that happens to exist. The column is created in
+            # the REGIME frame only; the canonical is untouched and goes on
+            # saying the lender does not supply this field.
+            df[field_name] = nd_code
+            report["nd_defaults_applied"][field_name] = {
+                "nd_code": nd_code,
+                "rows_applied": int(len(df)),
+                "reason": "field absent from canonical",
+            }
+            continue
+
         # Apply ND default only where field is blank/null
         blank_mask = df[field_name].isna() | (df[field_name].astype(str).str.strip() == "")
         blank_count = int(blank_mask.sum())
@@ -686,6 +734,15 @@ def apply_annex2_post_projection_guards(
         header_constants["RREL1"] = generated_rrel1
         report["header_constants_applied"]["RREL1_generated"] = generated_rrel1
 
+    # RREC1 is the collateral section's repeat of the report's unique
+    # identifier — the field map gives both it and RREL1 the canonical field
+    # `unique_identifier`, and the XML builder treats both as header fields. So
+    # it takes the same pool-level constant, deterministically, in the same way
+    # RREC2 is backfilled from RREL3 below. Without it the builder refuses a
+    # return whose every other field is present and correct.
+    if "RREL1" in header_constants and str(header_constants["RREL1"]).strip():
+        header_constants.setdefault("RREC1", header_constants["RREL1"])
+
     for code, const_val in header_constants.items():
         if code in df.columns and str(const_val).strip() != "":
             df[code] = str(const_val).strip()
@@ -714,6 +771,22 @@ def apply_annex2_post_projection_guards(
         if n_rrel3 > 0:
             df.loc[rrel3_fillable, "RREL3"] = df.loc[rrel3_fillable, "RREL2"]
         report["rrel3_backfilled_from_rrel2_rows"] = n_rrel3
+
+    # The ORIGINAL identifiers, from the NEW ones. Annex 2 pairs each identifier:
+    # original and new are the same value until the exposure or the obligor is
+    # replaced, and ESMA's instructions say to report the same value when it has
+    # not changed. The backfills below already fill new-from-original; a book
+    # that supplies only the current identifier — the ordinary case for a lender
+    # that has never restructured — needs the other direction too, and without
+    # it the builder refuses a return whose every other field is correct.
+    for new_code, original_code in (("RREL3", "RREL2"), ("RREL5", "RREL4")):
+        if new_code not in df.columns or original_code not in df.columns:
+            continue
+        fillable = _blank_mask(df[original_code]) & (~_blank_mask(df[new_code]))
+        n = int(fillable.sum())
+        if n > 0:
+            df.loc[fillable, original_code] = df.loc[fillable, new_code]
+        report[f"{original_code.lower()}_backfilled_from_{new_code.lower()}_rows"] = n
 
     # Deterministic backfill for RREC2 (mandatory in Annex2): use RREL3 if blank.
     if "RREL5" in df.columns and "RREL4" in df.columns:
