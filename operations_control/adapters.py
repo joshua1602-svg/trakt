@@ -66,6 +66,12 @@ STEP_TO_STAGE = {
     "project": STAGE_PROJECTION,
 }
 
+#: The onboarding agent's action for "this required field lives in THAT source
+#: column". It is the one action that needs a value from the operator beyond the
+#: choice itself — the column name — so OCC carries it explicitly.
+#: (engine.onboarding_agent.target_first_decisions.SUPPORTED_ACTIONS)
+ACTION_PROVIDE_SOURCE_MAPPING = "provide_source_mapping"
+
 DECISIONS_FILE = "34_target_first_decisions.yaml"
 APPROVED_DECISIONS_FILE = "34_target_first_decisions_approved.yaml"
 REVIEW_QUEUE_FILE = "33_mapping_review_queue.json"
@@ -185,7 +191,15 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
             options = []
             for a in (d.get("options") or d.get("available_actions")
                       or d.get("actions") or []):
-                options.append({"value": str(a), "label": _action_label(str(a))})
+                # The coverage matrix labels the action "map_source_column";
+                # the apply step calls it "provide_source_mapping". Offer the
+                # name the engine will actually execute, or the operator picks
+                # an option that silently applies to nothing.
+                a = _ENGINE_ACTION.get(str(a), str(a))
+                options.append({"value": a, "label": _action_label(a)})
+            if not any(o["value"] == "defer" for o in options):
+                options.append({"value": "defer",
+                                "label": _action_label("defer")})
             rec: Dict[str, Any] = {}
             advisory = llm.get(did)
             unsafe = _looks_unsafe(d)
@@ -270,9 +284,74 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
     return out
 
 
+def _coverage_evidence(handoff: Dict[str, Any],
+                       summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Gate 1's target-coverage numbers, shown as the Review Centre's evidence.
+
+    Straight from the handoff manifest — no recomputation, so what the operator
+    reads is what Gate 2 will act on.
+    """
+    if not handoff:
+        return []
+    rows = [
+        ("Decisions still open", handoff.get("operator_decision_pending_count")),
+        ("Of those, blocking", handoff.get("blocking_decision_count")),
+        ("Approved decisions applied", handoff.get("approved_decision_applied_count")),
+        ("Target fields with no disposition",
+         summary.get("unresolved_disposition_count")),
+        ("Blocking the data checks", summary.get("blocking_for_validation_count")),
+    ]
+    data = {label: value for label, value in rows if value is not None}
+    if not data:
+        return []
+    return [{"label": "What Gate 1 found", "kind": "table", "data": data}]
+
+
 def _looks_unsafe(d: Dict[str, Any]) -> bool:
     s = str(d.get("backstop_status") or d.get("safety") or "").upper()
     return s in ("UNSAFE", "BLOCKED")
+
+
+#: Gate 1 publishes its own verdict in the handoff manifest. These are the keys
+#: the Review Centre reports; OCC never recomputes them.
+HANDOFF_FILE = "24_onboarding_handoff_manifest.json"
+
+
+def read_handoff(work_dir: Optional[Path],
+                 onboard_readiness: Optional[Dict[str, Any]] = None
+                 ) -> Dict[str, Any]:
+    """Gate 1's own readiness verdict, as Gate 1 wrote it.
+
+    The Operations Control Centre reports what the Onboarding Agent found; it
+    does not form a second opinion about mapping success. Returns ``{}`` when
+    there is no manifest, which callers must treat as "nothing claimed" rather
+    than "everything fine".
+    """
+    path: Optional[Path] = None
+    ref = (onboard_readiness or {}).get("mi_handoff") or \
+        (onboard_readiness or {}).get("handoff_manifest")
+    if ref:
+        cand = Path(str(ref))
+        if cand.exists():
+            path = cand
+    if path is None and work_dir:
+        path = _find_artifact(Path(work_dir), HANDOFF_FILE)
+    if path is None:
+        return {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def handoff_ready(handoff: Dict[str, Any]) -> bool:
+    """True only when Gate 1 SAYS the package is ready for Gate 2.
+
+    Absent manifest -> not ready. Gate 2 enforces the same contract itself; this
+    is the reporting side of that decision, so it must fail the same way.
+    """
+    return bool(handoff.get("ready_for_transformation_validation"))
 
 
 def _workflow_summary_status(work_dir: Optional[Path]) -> str:
@@ -336,6 +415,16 @@ def _friendly(field: str) -> str:
         if not f:
             return "a required regulatory field"
     return f.replace("_", " ").strip() or "this field"
+
+
+#: Coverage-matrix action label -> the action name the apply step supports.
+_ENGINE_ACTION = {
+    "map_source_column": ACTION_PROVIDE_SOURCE_MAPPING,
+    "confirm_ND_code": "confirm_default_or_nd",
+    "set_derivation_or_default": "configure_static_value",
+    "accept_mapping": "confirm_selected",
+    "ignore": "mark_not_applicable",
+}
 
 
 def _action_label(action: str) -> str:
@@ -411,6 +500,19 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
     onboard = p.step("onboard")
     ob_status = _stage_status_for_step(onboard.status)
 
+    # Gate 1's OWN verdict. A completed onboard step does not mean the mapping
+    # is settled: Gate 1 routinely finishes, writes its tape, and declares
+    # ready_for_transformation_validation=false with a queue of blocking
+    # decisions. Reading the manifest is what lets the Review Centre report
+    # what Gate 1 found instead of asserting that everything matched.
+    handoff = read_handoff(work_dir, onboard.readiness)
+    hs = handoff.get("target_contract_completion_summary") or {}
+    blocking_decisions = int(handoff.get("blocking_decision_count") or 0)
+    pending_decisions = int(handoff.get("operator_decision_pending_count") or 0)
+    mapping_settled = (onboard.status == STEP_DONE
+                       and (handoff_ready(handoff) if handoff else True)
+                       and blocking_decisions == 0)
+
     # Understanding.
     if onboard.status == STEP_DONE:
         loan_count = (onboard.readiness or {}).get("loan_count")
@@ -437,11 +539,33 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
             else "Waiting to read the files.")
 
     # Mapping.
-    if onboard.status == STEP_DONE:
+    mapping_why = ("Matching each file column to the right meaning is what "
+                   "makes the reports correct.")
+    if mapping_settled:
+        applied = int(handoff.get("approved_decision_applied_count") or 0)
         gar(STAGE_MAPPING, ST_COMPLETED,
-            "All fields were matched using your approved rules.",
-            why="Matching each file column to the right meaning is what makes "
-                "the reports correct.")
+            ("Every field was matched, using the "
+             f"{applied} decision{'s' if applied != 1 else ''} you have already "
+             "approved." if applied else
+             "Every field was matched automatically."),
+            why=mapping_why,
+            evidence=_coverage_evidence(handoff, hs))
+    elif onboard.status == STEP_DONE:
+        # Gate 1 finished but says the package is NOT ready. Report its numbers
+        # and offer its queue; Gate 2 will refuse the package until they are
+        # answered, so hiding them just strands the run.
+        decisions = extract_mapping_decisions(work_dir, workflow) if work_dir else []
+        n = len(decisions) or blocking_decisions or pending_decisions
+        gar(STAGE_MAPPING,
+            ST_NEEDS_REVIEW if decisions else ST_BLOCKED,
+            (f"Trakt matched most columns, but {n} "
+             f"need{'s' if n == 1 else ''} your decision before the figures "
+             "can be checked."),
+            why=mapping_why,
+            decisions=decisions,
+            evidence=_coverage_evidence(handoff, hs),
+            blockers=([] if decisions else language.humanise_blockers(
+                ["onboarding handoff not ready for transformation/validation"])))
     elif onboard.status in (STEP_HALTED, STEP_FAILED):
         decisions = extract_mapping_decisions(work_dir, workflow) if work_dir else []
         if decisions:
@@ -492,6 +616,13 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
                 default_scope="file",
                 subject={"artefact": "validation_halt"})],
             blockers=language.humanise_blockers(va.blockers))
+    elif tr.status == STEP_HALTED and not mapping_settled:
+        # Gate 2 refused an unready Gate 1 package. That is the mapping queue
+        # talking, not a data-quality problem — say so, and leave the decision
+        # to the mapping stage rather than raising a second, competing one.
+        gar(STAGE_VALIDATION, ST_WAITING,
+            "The checks are waiting for the mapping decisions above.",
+            why="Trakt will not check figures whose meaning is still unsettled.")
     elif va.status == STEP_FAILED or tr.status in (STEP_HALTED, STEP_FAILED):
         src = va if va.status == STEP_FAILED else tr
         gar(STAGE_VALIDATION, ST_BLOCKED,

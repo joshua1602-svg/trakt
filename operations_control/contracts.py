@@ -302,6 +302,10 @@ class WorkflowRun:
     batch_id: str = ""
     # Set when the API restarted while this run was executing; cleared on rerun.
     interrupted: bool = False
+    # Digest of the approved-decisions file Gate 1 last consumed. When the
+    # operator answers the review queue this changes, which is how a rerun knows
+    # Gate 1's previous output is stale and must be produced again.
+    onboarding_decisions_digest: str = ""
     blockers: List[str] = field(default_factory=list)   # plain language
     created_at: str = field(default_factory=now_iso)
     created_by: str = ""

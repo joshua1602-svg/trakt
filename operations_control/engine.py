@@ -27,6 +27,7 @@ import yaml
 
 from . import language
 from .adapters import (
+    ACTION_PROVIDE_SOURCE_MAPPING,
     APPROVED_DECISIONS_FILE,
     DECISIONS_FILE,
     GovernedAdapters,
@@ -801,9 +802,14 @@ class OpsEngine:
                 mapping_config_path=(str(approved) if approved else None),
                 dataset=run.delivery.get("dataset", "funded") if
                 run.delivery.get("dataset") == "pipeline" else "",
-                # Annex 2 runs the typed Gate 2/3 path over the MI contract,
-                # matching the proven route's canonical preparation.
-                full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
+                # EVERY governed run takes the typed Gate 2/3 path, MI included.
+                # The lean onboard->stamp shortcut published a canonical that no
+                # Transformation or Validation agent had ever seen, so the
+                # core-field contract enforced at Gate 3 could not apply to the
+                # product it exists to protect. Depth is no longer a function of
+                # the outcome; the outcome still decides what happens AFTER the
+                # canonical is assembled (see _run_annex2_chain).
+                full_pipeline=True,
                 reporting_period=run.reporting_period,
                 enable_llm_advisor=(not deterministic
                                     and bool(llm_policy.get("enabled"))),
@@ -838,14 +844,32 @@ class OpsEngine:
         resume_state: Optional[RunState] = None
         orun_id = run.orchestrator_run_id or f"orun_{run.workflow_id}"
         state_path = staging / orun_id / "run_state.json"
+        # Approved mapping decisions are applied BY Gate 1, so if they have
+        # changed since Gate 1 last ran, its completed output is stale. Resuming
+        # past a "done" onboard step would silently discard every answer the
+        # operator just gave and halt Gate 2 on the same unready handoff.
+        decisions_digest = self._approved_decisions_digest(run)
+        redo_onboarding = (bool(decisions_digest)
+                           and decisions_digest != run.onboarding_decisions_digest)
         if state_path.exists():
             resume_state = RunState.load(state_path)
             for p in resume_state.portfolios:
                 for s in p.steps.values():
                     if s.status in ("halted", "failed", "running"):
                         s.status = "pending"
+                if redo_onboarding:
+                    # Everything downstream of Gate 1 derives from its tape, so
+                    # all of it is reproduced, not just the onboard step.
+                    for s in p.steps.values():
+                        s.status = "pending"
+                    p.status = "pending"
                 if p.status in ("halted", "failed", "running"):
                     p.status = "pending"
+            if redo_onboarding:
+                for s in (resume_state.assemble, resume_state.route,
+                          resume_state.project):
+                    s.status = "pending"
+                resume_state.central_canonical_path = ""
             for s in (resume_state.assemble, resume_state.route,
                       resume_state.project):
                 if s.status in ("halted", "failed", "running"):
@@ -882,12 +906,15 @@ class OpsEngine:
             out_root=str(staging), adapters=adapters,
             created_at=now_iso(), run_id=orun_id,
             resume_state=resume_state,
-            full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
+            # See _build_adapters: MI runs Gate 1 -> Gate 2 -> Gate 3 too.
+            full_pipeline=True,
             force_publish=self._validation_exception_approved(run))
 
         run = self.store.load_workflow(client_id, workflow_id) or run
         run.orchestrator_run_id = state.run_id
         run.staging_root = str(staging)
+        if decisions_digest:
+            run.onboarding_decisions_digest = decisions_digest
         self._apply_run_state(run, state)
 
     def _apply_run_state(self, run: WorkflowRun, state) -> None:
@@ -1263,7 +1290,8 @@ class OpsEngine:
 
     def resolve_decision(self, *, client_id: str, decision_id: str, action: str,
                          actor: str, value: str = "", scope: str = "portfolio",
-                         reason: str = "",
+                         reason: str = "", source_column: str = "",
+                         source_file: str = "",
                          actor_is_admin: bool = False) -> Dict[str, Any]:
         from .rules import ADMIN_ONLY_SCOPES
         if scope in ADMIN_ONLY_SCOPES and not actor_is_admin:
@@ -1272,12 +1300,14 @@ class OpsEngine:
                            "this level.", 403)
         return self._resolve_decision_inner(
             client_id=client_id, decision_id=decision_id, action=action,
-            actor=actor, value=value, scope=scope, reason=reason)
+            actor=actor, value=value, scope=scope, reason=reason,
+            source_column=source_column, source_file=source_file)
 
     def _resolve_decision_inner(self, *, client_id: str, decision_id: str,
                                 action: str, actor: str, value: str = "",
                                 scope: str = "portfolio",
-                                reason: str = "") -> Dict[str, Any]:
+                                reason: str = "", source_column: str = "",
+                                source_file: str = "") -> Dict[str, Any]:
         """Approve / reject / amend one decision. Approvals become governed,
         scoped rules; when no blocking decisions remain open, the affected
         stage is rerun automatically. Duplicate resolutions are rejected."""
@@ -1288,8 +1318,9 @@ class OpsEngine:
         if doc.get("status") != DEC_OPEN:
             raise OpsError("OPS_DECISION_ALREADY_RESOLVED",
                            "This decision has already been resolved.", 409)
-        if action not in ("approve", "reject", "amend"):
-            raise OpsError("OPS_BAD_ACTION", "Choose approve, reject or amend.", 400)
+        if action not in ("approve", "reject", "amend", "defer"):
+            raise OpsError("OPS_BAD_ACTION",
+                           "Choose approve, reject, amend or defer.", 400)
 
         # Input-pack file identification: applies to the BATCH, not a workflow.
         from .contracts import KIND_FILE_ROLE
@@ -1327,6 +1358,24 @@ class OpsEngine:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
                            "The workflow for this decision no longer exists.", 404)
 
+        if action == "defer":
+            # "I need to ask the lender." The item stays OPEN — deferring is a
+            # note about who is working on it, never a way to make a blocking
+            # question go away — so the run stays held and no rule is written.
+            if not reason:
+                raise OpsError("OPS_REASON_REQUIRED",
+                               "Please say what you are waiting for.", 400)
+            notes = list(doc.get("deferrals") or [])
+            notes.append({"by": actor, "at": now_iso(), "reason": reason})
+            doc["deferrals"] = notes
+            doc["deferred"] = True
+            self.store.save_decision(client_id, doc)
+            self.store.append_audit(client_id, "decision_deferred", actor=actor,
+                                    workflow_id=run.workflow_id,
+                                    decision_id=decision_id,
+                                    detail={"reason": reason})
+            return {"decision": doc, "rule": None, "rerun_scheduled": False}
+
         if action == "reject":
             if not reason:
                 raise OpsError("OPS_REASON_REQUIRED",
@@ -1341,6 +1390,18 @@ class OpsEngine:
             return {"decision": doc, "rule": None, "rerun_scheduled": False}
 
         chosen = value or (doc.get("recommendation") or {}).get("value", "")
+        if chosen == ACTION_PROVIDE_SOURCE_MAPPING:
+            if not source_column:
+                raise OpsError("OPS_SOURCE_COLUMN_REQUIRED",
+                               "Name the column in the files this should come "
+                               "from.", 400)
+            if not (source_file or self._sole_delivery_file(run)):
+                # Several files in the pack: which one the column is in is a
+                # real question, and answering it wrongly puts the wrong figures
+                # in the report. Refuse rather than pick.
+                raise OpsError("OPS_SOURCE_FILE_REQUIRED",
+                               "This delivery has more than one file — say "
+                               "which file that column is in.", 400)
         if doc.get("kind") == KIND_PUBLICATION and not chosen:
             chosen = "publish"
         if not chosen:
@@ -1378,6 +1439,8 @@ class OpsEngine:
                    resolution_action=action,
                    resolution_value=chosen, resolution_scope=scope,
                    resolution_reason=reason,
+                   resolution_source_column=source_column,
+                   resolution_source_file=source_file,
                    rule_id=(rule.rule_id if rule else None),
                    rule_version=(rule.version if rule else None))
         self.store.save_decision(client_id, doc)
@@ -1503,6 +1566,22 @@ class OpsEngine:
                 entry["not_applicable_confirmed"] = True
             if sel in ("confirm_default_or_nd", "confirm_ND_code"):
                 entry["default_confirmed"] = True
+            if sel == ACTION_PROVIDE_SOURCE_MAPPING:
+                # The whole point of the action: the operator said WHICH column.
+                # Without it the apply step records INVALID and the field stays
+                # unresolved, so the approval would look accepted and do nothing.
+                entry["selected_source_column"] = \
+                    match.get("resolution_source_column", "")
+                # The central tape builder needs BOTH the file and the column
+                # (`if f and c`) before it will treat a coverage row as a real
+                # source. An operator answering "it is in the STATUS_CD column"
+                # of a single-file delivery should not have to name the file as
+                # well, so fill it in — but only when there is exactly one data
+                # file and therefore nothing to be wrong about.
+                entry["selected_source_file"] = (
+                    match.get("resolution_source_file")
+                    or entry.get("source_file")
+                    or self._sole_delivery_file(run))
             entry["operator_note"] = match.get("resolution_reason") or None
             entry["approved_by"] = match.get("resolved_by", "")
             entry["approved_at"] = match.get("resolved_at", "")
@@ -1516,6 +1595,28 @@ class OpsEngine:
             f"blob://{self.store.layout.container}/{run.client_id}/workflow-runs/"
             f"{run.workflow_id}/onboarding/{APPROVED_DECISIONS_FILE}",
             out.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _sole_delivery_file(run: WorkflowRun) -> str:
+        """The delivery's only data file, or "" when there is a choice to make.
+
+        Returning "" for a multi-file pack is deliberate: guessing which file an
+        operator meant is exactly the kind of silent decision this sprint exists
+        to remove. They name it explicitly instead.
+        """
+        names = [str(f.get("name", "")) for f in (run.delivery.get("files") or [])
+                 if str(f.get("name", "")).strip()]
+        return names[0] if len(names) == 1 else ""
+
+    def _approved_decisions_digest(self, run: WorkflowRun) -> str:
+        """Content digest of the approved-decisions file, or "" when there is
+        none. Content rather than mtime: a rerun that changes nothing must not
+        look like new answers."""
+        p = self._approved_decisions_path(run)
+        if p is None or not p.exists():
+            return ""
+        import hashlib
+        return hashlib.sha256(p.read_bytes()).hexdigest()
 
     def _approved_decisions_path(self, run: WorkflowRun) -> Optional[Path]:
         p = _find_artifact(self._staging_dir(run), APPROVED_DECISIONS_FILE)

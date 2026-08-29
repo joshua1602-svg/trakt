@@ -223,10 +223,15 @@ class CreateWorkflow(BaseModel):
 
 
 class DecisionBody(BaseModel):
-    action: str                        # approve | reject | amend
+    action: str                        # approve | reject | amend | defer
     value: str = ""
     scope: str = "portfolio"
     reason: str = ""
+    # "Point it at a column in the files": the operator names the source column
+    # the required field actually lives in. Carried through to the onboarding
+    # agent's provide_source_mapping action, which needs the column by name.
+    source_column: str = ""
+    source_file: str = ""
 
 
 class ReasonBody(BaseModel):
@@ -680,6 +685,7 @@ def decide(decision_id: str, body: DecisionBody, client: Optional[str] = None,
         client_id=doc["client_id"], decision_id=decision_id,
         action=body.action, actor=principal.name, value=body.value,
         scope=body.scope, reason=body.reason,
+        source_column=body.source_column, source_file=body.source_file,
         actor_is_admin=principal.is_admin)
     return {"ok": True,
             "review": presenters.present_decision(result["decision"]),
