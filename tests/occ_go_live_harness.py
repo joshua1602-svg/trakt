@@ -169,6 +169,9 @@ def answer_mapping_queue(env, client_id: str, workflow_id: str, *,
         # the mapping queue.
         if d["kind"] in ("publication", "enum"):
             continue
+        if (d.get("subject") or {}).get("artefact") in (
+                "regulatory_source", "central_tape_gaps"):
+            continue    # answered by name, not by treatment
         target = (d.get("subject") or {}).get("target_field") or ""
         if target in mapping:
             engine.resolve_decision(

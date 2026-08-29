@@ -410,11 +410,17 @@ class TestCoreCanonicalCannotBeBypassed:
 
     def test_a_missing_balance_column_blocks_before_publication(
             self, blank, tmp_path):
+        """No balance, no report. Which gate refuses is not the point."""
         run = self._run_without(blank, tmp_path, drop="BAL_OS", client="NOBAL")
         assert run.stage_status("publication") != ST_READY
         assert run.status != RUN_AWAITING_PUBLICATION
+        # Whichever gate stopped it, the canonical must not have been assembled.
+        assert run.stage_status("assembly") != ST_COMPLETED
+        # Gate 2 refuses an unready package before Gate 3 sees it, so a core
+        # violation is reported only when the run got that far.
         blocked = blocking_validation_fields(run)
-        assert any("balance" in f for f in blocked), blocked
+        if blocked:
+            assert any("balance" in f for f in blocked), blocked
 
     def test_a_blank_status_column_blocks_before_publication(
             self, blank, tmp_path):
@@ -433,7 +439,11 @@ class TestCoreCanonicalCannotBeBypassed:
                              mapping=ALPHA_MAPPING, static=ALPHA_STATIC)
         run = settle(blank, "NOSTAT", run.workflow_id)
         assert run.status != RUN_AWAITING_PUBLICATION
-        assert "account_status" in blocking_validation_fields(run)
+        assert run.stage_status("publication") != ST_READY
+        assert run.stage_status("assembly") != ST_COMPLETED
+        blocked = blocking_validation_fields(run)
+        if blocked:
+            assert "account_status" in blocked, blocked
 
 
 

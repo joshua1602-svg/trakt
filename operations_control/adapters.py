@@ -370,6 +370,16 @@ def _coverage_evidence(handoff: Dict[str, Any],
     return [{"label": "What Gate 1 found", "kind": "table", "data": data}]
 
 
+#: Placeholders the projector prints when a field simply has no value.
+_ABSENT = ("null", "none", "nan", "na", "<na>", "nat", "-", "")
+
+
+def _all_absent(raw: str) -> bool:
+    """True when every "unmapped value" is really just an absent one."""
+    values = [v.strip().strip("'\"").lower() for v in str(raw).split(",")]
+    return all(v in _ABSENT for v in values)
+
+
 def _looks_unsafe(d: Dict[str, Any]) -> bool:
     s = str(d.get("backstop_status") or d.get("safety") or "").upper()
     return s in ("UNSAFE", "BLOCKED")

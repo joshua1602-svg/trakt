@@ -32,6 +32,7 @@ from .adapters import (
     APPROVED_DECISIONS_FILE,
     DECISIONS_FILE,
     OVERRIDES_FILE,
+    _all_absent,
     GovernedAdapters,
     _find_artifact,
     translate_run_state,
@@ -1134,7 +1135,18 @@ class OpsEngine:
             data = (ev or {}).get("data") or {}
             field = str(data.get("field") or "").strip()
             raw = str(data.get("values") or "").strip()
-            if not field or not raw:
+            if not field:
+                continue
+            if not raw or _all_absent(raw):
+                # The regulator needs this field and the canonical has nothing
+                # in it. That is a MAPPING question, not a translation one — but
+                # it is not one an operator can answer yet: a field that is
+                # regulatory-only (property_type / RREC9, say) is outside the MI
+                # target contract Gate 1 grades against, so the canonical has no
+                # column to put the answer in. Asking would record an approval
+                # that changes nothing. The stage's own blocker states the
+                # problem; see the go-live report's blocker on the Annex 2
+                # onboarding contract.
                 continue
             values = [v.strip().strip("'\"") for v in raw.split(",")]
             # A regulatory field that is EMPTY is not a translation question —
@@ -1858,11 +1870,15 @@ class OpsEngine:
         """Content digest of the approved-decisions file, or "" when there is
         none. Content rather than mtime: a rerun that changes nothing must not
         look like new answers."""
-        p = self._approved_decisions_path(run)
-        if p is None or not p.exists():
-            return ""
         import hashlib
-        return hashlib.sha256(p.read_bytes()).hexdigest()
+        digest = hashlib.sha256()
+        seen = False
+        for p in (self._approved_decisions_path(run),
+                  _find_artifact(self._staging_dir(run), OVERRIDES_FILE)):
+            if p is not None and p.exists():
+                digest.update(p.read_bytes())
+                seen = True
+        return digest.hexdigest() if seen else ""
 
     def _approved_decisions_path(self, run: WorkflowRun) -> Optional[Path]:
         """This run's approved mapping contract, if it has one.
