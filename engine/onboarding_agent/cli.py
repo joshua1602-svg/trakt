@@ -636,8 +636,16 @@ def _build_mapping_llm_callable(profile: str):
 
     def _call(prompt: str) -> str:
         client = anthropic.Anthropic()
+        # The mapping resolver answers one JSON object per reviewed source
+        # column, each carrying a rationale. A 27-column lender tape needs far
+        # more than 4096 output tokens, and the cap is not a soft one: the
+        # response stops mid-string, the resolver reports
+        # `parse_failed / could not parse JSON from response`, and every row is
+        # discarded — so the feature silently returned nothing while still being
+        # billed. This is a ceiling, not a target; a short answer costs the same
+        # as it did before.
         msg = client.messages.create(
-            model=model, max_tokens=4096,
+            model=model, max_tokens=16000,
             messages=[{"role": "user", "content": prompt}],
         )
         return "".join(getattr(b, "text", "") for b in msg.content)

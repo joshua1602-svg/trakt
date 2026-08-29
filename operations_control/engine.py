@@ -778,10 +778,17 @@ class OpsEngine:
         if self._adapter_factory is not None:
             inner = self._adapter_factory(run)
         else:
+            from apps.blob_trigger_app.llm_recommendations import resolve_llm_policy
             from engine.orchestrator_agent.adapters import RealAgentAdapters
             approved = self._approved_decisions_path(run)
             deterministic = approved is not None
             snap = snapshot or {}
+            # The SAME policy the automated route already resolves
+            # (apps.blob_trigger_app.orchestrator_invoke), not a second switch:
+            # TRAKT_LLM_ENABLED + TRAKT_LLM_MODE + a provider key, fail-closed to
+            # deterministic-only. Discovery only — a recurring pack applies its
+            # approved mapping and never invokes the resolver.
+            llm_policy = resolve_llm_policy()
             inner = RealAgentAdapters(
                 client_name=run.client_id,
                 onboarding_mode="mi_only",
@@ -798,6 +805,10 @@ class OpsEngine:
                 # matching the proven route's canonical preparation.
                 full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
                 reporting_period=run.reporting_period,
+                enable_llm_advisor=(not deterministic
+                                    and bool(llm_policy.get("enabled"))),
+                enable_llm_mapping_review=(not deterministic
+                                           and bool(llm_policy.get("resolve_mapping"))),
                 managed_service=True)
         return GovernedAdapters(inner, recorder)
 
