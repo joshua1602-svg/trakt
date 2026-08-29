@@ -49,9 +49,12 @@ export function ScenarioArtifactView({ artifact }: { artifact: ScenarioArtifact 
                 <div className="rounded-lg border border-[var(--color-line)] bg-navy-950/95 px-3 py-2 text-xs shadow-xl">
                   <div className="mb-1 font-medium text-ink-300">Year {label}</div>
                   <div className="space-y-0.5 font-mono text-ink-100">
-                    <div>Balance {formatGBP(row.balance * 1e6)}</div>
+                    {/* P0-2: amounts render in the units the payload supplies.
+                        No presentation-layer scaling — a view must never decide
+                        that a number is "really" millions. */}
+                    <div>Balance {formatGBP(row.balance)}</div>
                     <div>LTV {row.ltv.toFixed(1)}%</div>
-                    <div>Cum. NNEG {formatGBP(row.cumulativeNneg * 1e6)}</div>
+                    <div>Cum. NNEG {formatGBP(row.cumulativeNneg)}</div>
                   </div>
                 </div>
               );

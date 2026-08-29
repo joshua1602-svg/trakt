@@ -38,7 +38,10 @@ function LimitRow({ g }: { g: RiskGroup }) {
       </div>
       <div className="mt-1.5 flex items-center justify-between font-mono text-[11px] text-ink-400">
         <span>
-          {formatGBP(g.balance * 1e6)} · {sharePct.toFixed(1)}%
+          {/* P0-2: the share is the measured value. A balance is rendered ONLY
+              when the payload actually carries one, and then in its own units —
+              never scaled, and never derived from the percentage. */}
+          {g.balance != null && `${formatGBP(g.balance)} · `}{sharePct.toFixed(1)}%
         </span>
         {limitPct != null && <span className="text-ink-500">limit {limitPct.toFixed(0)}%</span>}
       </div>

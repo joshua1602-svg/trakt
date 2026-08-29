@@ -880,7 +880,7 @@ def _apply_request_currency(cid: str, portfolio_id: Optional[str]) -> None:
         try:
             fdf, ferr = _resolve_query_frame("funded", portfolio_id)
             if fdf is not None and not ferr:
-                code = currency_mod.resolve_currency_code(fdf)
+                code = currency_mod.resolve_currency_code(fdf, client_id=cid)
         except Exception as exc:  # noqa: BLE001 - currency is presentational
             logger.warning("currency resolution failed for %s: %s", cid, exc)
         _CLIENT_CURRENCY_CACHE[cid] = code

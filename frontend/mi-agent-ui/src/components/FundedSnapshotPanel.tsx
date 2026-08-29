@@ -53,13 +53,27 @@ function KpiTile({ kpi }: { kpi: SnapshotKPI }) {
  * The deterministic funded-portfolio snapshot shown on the landing page BEFORE
  * any AI query. Clearly labelled as funded-book MI (not the origination pipeline).
  */
+/** Which already-computed measure the stratification bars display. */
+export type StratMeasure = "balance" | "share" | "count";
+
+const MEASURE_LABEL: Record<StratMeasure, string> = {
+  balance: "Balance",
+  share: "% of book",
+  count: "Loans",
+};
+
 export function FundedSnapshotPanel({
   snapshot,
   loading,
+  onDrill,
 }: {
   snapshot: FundedSnapshot | null;
   loading?: boolean;
+  /** Selecting a band. The handler owns what a selection means; this panel
+   *  never derives a population itself. */
+  onDrill?: (dimension: string, band: string) => void;
 }) {
+  const [measure, setMeasure] = useState<StratMeasure>("balance");
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   if (loading && !snapshot) {
@@ -148,15 +162,43 @@ export function FundedSnapshotPanel({
 
       {(snapshot.stratifications?.length ?? 0) > 0 && (
         <div className="mt-4">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-            Stratifications · balance by dimension
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+              Stratifications · {MEASURE_LABEL[measure].toLowerCase()} by dimension
+            </div>
+            {/* Presentation-only view switch. Balance, share and count are all
+                already in the stratification payload the deterministic engine
+                returned — nothing is recomputed in the browser. */}
+            <div role="group" aria-label="Stratification measure"
+                 className="inline-flex overflow-hidden rounded-md border border-navy-600/70">
+              {(Object.keys(MEASURE_LABEL) as StratMeasure[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={measure === m}
+                  data-testid={`strat-measure-${m}`}
+                  onClick={() => setMeasure(m)}
+                  className={cn(
+                    "px-2.5 py-1 text-[10px] font-medium transition-colors",
+                    measure === m ? "bg-peri-400/20 text-peri-200" : "text-ink-400 hover:text-ink-200",
+                  )}
+                >
+                  {MEASURE_LABEL[m]}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {snapshot.stratifications!.map((s) => {
               // Natural bucket order (LTV %, age, vintage year, rate… else
               // alphabetical; Unknown last) + label tidy-ups ("2008.0" → "2008").
               const data: BarDatum[] = sortStratBars(s.bars).map((b) => ({
-                label: cleanBucketLabel(b.label), value: b.balance, count: b.count,
+                label: cleanBucketLabel(b.label),
+                // The selected measure, read straight from the payload.
+                value: measure === "balance" ? b.balance
+                  : measure === "share" ? b.sharePct
+                  : b.count,
+                count: b.count,
               }));
               // The backend decides whether a dimension is available, entirely
               // null, not supplied for these portfolios, or only partially
@@ -177,7 +219,14 @@ export function FundedSnapshotPanel({
                       </span>
                     )}
                   </div>
-                  {drawable ? <BarList data={data} format="gbp" /> : (
+                  {drawable ? (
+                    <BarList
+                      data={data}
+                      format={measure === "balance" ? "gbp" : measure === "share" ? "pct" : "count"}
+                      onSelect={onDrill && ((label) => onDrill(s.label, label))}
+                      selectTitle={(label) => `Ask the MI engine about ${label}`}
+                    />
+                  ) : (
                     <p className="py-3 text-[11px] leading-relaxed text-ink-500">
                       {s.reason ?? "Not available for the selected portfolios."}
                     </p>

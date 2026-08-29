@@ -67,6 +67,9 @@ export interface FundedSnapshot {
   prior: { run_id: string; reporting_date: string | null } | null;
   loan_count: number;
   current_outstanding_balance: number;
+  /** The governed reporting currency for this client (ISO code). The browser
+   *  displays this; the approved client configuration decides it. */
+  currencyCode?: string;
   kpis: SnapshotKPI[];
   /** Point-in-time balance/share breakdowns by dimension (may be empty). */
   stratifications?: FundedStratification[];

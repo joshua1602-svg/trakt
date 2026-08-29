@@ -1393,7 +1393,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         return _error_envelope("Could not load the governed data for this query.",
                                req=req, view=view)
 
-    currency_mod.resolve_and_set(df)
+    currency_mod.resolve_and_set(df, client_id=client_id)
 
     llm_enabled, llm_model = llm_cfg.enabled, llm_cfg.model
     runner = deps.query_runner or run_mi_agent_query
