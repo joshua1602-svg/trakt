@@ -1193,6 +1193,325 @@ class DeckBuilder:
         self._record(spec.get("id", "strat"), spec.get("title"),
                      window if moved else "", placeholder=ph)
 
+    # ------------------------------------------- economic funded movement
+    def slide_balance_movement(self, spec):
+        """Why did funded balance change? — the ECONOMIC bridge.
+
+        Opening, plus the loans that arrived, less the loans that left, plus what
+        the loans present throughout did. Every figure is
+        ``evolution.funded_balance_movement``, which composes the governed
+        reconciled bridge with the governed evidence-based exit split; the deck
+        computes none of it and draws only what reconciled.
+
+        The continuing-loan leg is deliberately NOT labelled interest. It is the
+        movement on loans present at both dates, and separating accretion from
+        repayment needs per-loan period movement the canonical model does not
+        carry — so the slide says what it measured.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        s = self._slide()
+        bm = self.d.balance_movement or {}
+        if not bm.get("available"):
+            self._header(s, spec.get("title", "Funded Balance Movement"),
+                         "Opening to closing", accent=self.theme.peri)
+            self._placeholder_body(s, str(bm.get("reason") or
+                                          "No reconciled movement for this period."))
+            self._footer(s)
+            return self._record("balance_movement", spec.get("title"), "",
+                                placeholder=True)
+
+        opening = float(bm["openingBalance"])
+        closing = float(bm["closingBalance"])
+        net = float(bm["netChange"])
+        window = f"{bm.get('openingPeriod')} to {bm.get('closingPeriod')}"
+
+        # FINDING-LED SUBTITLE, from the reconciled figures alone.
+        direction = "increase" if net >= 0 else "reduction"
+        strap = (f"{compact_currency(abs(net))} {direction} over {window} — "
+                 f"{self._movement_finding(bm)}")
+        self._header(s, spec.get("title", "Funded Balance Movement"),
+                     self._fit_label(strap, self.CONTENT_R - self.CONTENT_L, 11),
+                     accent=self.theme.peri)
+
+        # The waterfall. Exits are shown split where the evidence classified
+        # them, as one bar per reason, so the reader sees WHY loans left.
+        steps = [("Opening", opening, "base"),
+                 ("+ New funding", float(bm["newLoanBalance"]), "add")]
+        components = bm.get("exitComponents") or []
+        if components and bm.get("exitsReconcile"):
+            for comp in components:
+                steps.append((f"− {comp['label']}", -float(comp["balance"]), "sub"))
+        else:
+            steps.append(("− Exits", -float(bm["exitedLoanBalance"]), "sub"))
+        movement = float(bm["continuingMovement"])
+        steps.append((("+ " if movement >= 0 else "− ") + "Continuing book",
+                      movement, "add" if movement >= 0 else "sub"))
+        steps.append(("Closing", closing, "total"))
+
+        box = (Inches(self.CONTENT_L), Inches(1.72),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(3.55))
+        il, it, iw, ih = self._card(s, *box, f"Funded balance movement, {window}")
+        path = self.work / "econ_bridge.png"
+        render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        self._place(s, path, il, it, iw, ih)
+
+        # The counts beneath, and the disclosure the identity depends on.
+        tiles = [
+            {"label": "Loans added", "value": compact_number(bm.get("newLoanCount")),
+             "hint": compact_currency(bm["newLoanBalance"])},
+            {"label": "Loans exited", "value": compact_number(bm.get("exitedLoanCount")),
+             "hint": compact_currency(bm["exitedLoanBalance"])},
+            {"label": "Loans throughout",
+             "value": compact_number(bm.get("continuingLoanCount")),
+             "hint": compact_currency(movement) + " movement"},
+            {"label": "Net change", "value": compact_currency(net),
+             "deltaIntent": "positive" if net >= 0 else "negative"},
+        ]
+        for l, t2, w, h, tile in zip(*self._strip(tiles, top=5.42, height=1.10)):
+            self._tile(s, l, t2, w, h, tile)
+
+        self._text(s, Inches(self.CONTENT_L), Inches(6.60),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.28),
+                   self._movement_disclosure(bm), size=9,
+                   color=self.theme.ink_500, italic=True)
+        self._footer(s)
+        self._record("balance_movement", spec.get("title"), strap)
+
+    def _movement_finding(self, bm) -> str:
+        """The one clause that says where the movement came from.
+
+        Chosen from the reconciled legs by magnitude, so it cannot claim a driver
+        the bridge does not show.
+        """
+        legs = [("new funding", abs(float(bm.get("newLoanBalance") or 0.0))),
+                ("exits", abs(float(bm.get("exitedLoanBalance") or 0.0))),
+                ("movement on the continuing book",
+                 abs(float(bm.get("continuingMovement") or 0.0)))]
+        total = sum(v for _, v in legs)
+        if not total:
+            return "no loan-level movement in the period"
+        label, value = max(legs, key=lambda x: x[1])
+        share = value / total
+        if share < 0.45:
+            return "movement spread across new funding, exits and the continuing book"
+        return f"driven primarily by {label}"
+
+    @staticmethod
+    def _movement_disclosure(bm) -> str:
+        """What the identity rests on, stated on the page rather than assumed."""
+        parts = [f"Reconciled on {bm.get('identifierField') or 'loan identity'}; "
+                 f"residual within tolerance."]
+        if bm.get("exitsClassified") and bm.get("exitsReconcile"):
+            evidence = ", ".join(bm.get("exitEvidenceFields") or ()) or "governed exit evidence"
+            parts.append(f"Exit reasons from {evidence}.")
+        elif bm.get("exitsClassified") is False:
+            parts.append("Exit reasons not evidenced on this tape; exits shown in total.")
+        parts.append("Continuing-book movement is the change on loans present at "
+                     "both dates; it is not split into interest, repayment or "
+                     "further advance.")
+        return " ".join(parts)
+
+    # ------------------------------------------------ stock by constituent book
+    def slide_funded_stock(self, spec):
+        """Where does funded exposure sit, and how has that moved?
+
+        A stacked area over ``funded_evolution.breakdowns['portfolio']`` — the
+        governed period x book series that has always been computed and never
+        drawn. The stack reconciles to the period total by construction: the
+        breakdown routes every blank to an explicit Unknown / Missing bucket
+        precisely so it does.
+
+        With ONE book the stack conveys nothing a single line does not, so the
+        slide falls back to the total series rather than drawing a one-colour
+        stack of itself.
+        """
+        s = self._slide()
+        evo = self.d.funded_evolution or {}
+        periods = evo.get("periods") or []
+        books = self._book_series(evo)
+
+        if len(periods) < 2:
+            self._header(s, spec.get("title", "Funded Stock"), "Funded balance over time")
+            self._placeholder_body(s, "Funded stock over time needs at least two "
+                                      "reporting periods.")
+            self._footer(s)
+            return self._record("funded_stock", spec.get("title"), "", placeholder=True)
+
+        x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+             for p in periods]
+        totals = [(p.get("metrics") or {}).get("funded_balance") for p in periods]
+        multi = len(books) > 1
+        strap = (f"{len(books)} constituent books" if multi
+                 else "Total funded balance over time")
+        self._header(s, spec.get("title", "Funded Stock"), strap, accent=self.theme.peri)
+
+        box = (Inches(self.CONTENT_L), Inches(1.72),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(4.10))
+        il, it, iw, ih = self._card(
+            s, *box, "Funded balance by constituent book" if multi
+            else "Funded balance by reporting period")
+        path = self.work / "funded_stock.png"
+        if multi:
+            series = [{"name": name, "values": vals} for name, vals in books]
+            R.draw_lines(path, x, series, iw, ih, theme=self.theme, currency=True,
+                         stack=True, chart_id="funded_stock")
+        else:
+            R.draw_lines(path, x, [{"name": "Funded balance", "values": totals}],
+                         iw, ih, theme=self.theme, currency=True, area=True,
+                         chart_id="funded_stock")
+        self._place(s, path, il, it, iw, ih)
+
+        self._stock_takeaway(s, books, totals, x, multi)
+        self._footer(s)
+        self._record("funded_stock", spec.get("title"), strap)
+
+    def _book_series(self, evo):
+        """``[(book, [value per period])]`` from the governed breakdown, ordered
+        largest-closing-first so the stack reads top-down by size.
+
+        Every period is filled — a book absent from a period contributes zero
+        there rather than breaking the stack — so the series sum equals the
+        period total exactly.
+        """
+        rows = ((evo.get("breakdowns") or {}).get("portfolio")) or []
+        periods = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+                   for p in (evo.get("periods") or [])]
+        if not rows or not periods:
+            return []
+        index = {p: i for i, p in enumerate(periods)}
+        by_book = {}
+        for row in rows:
+            per, key = str(row.get("period")), str(row.get("key"))
+            if per not in index:
+                continue
+            by_book.setdefault(key, [0.0] * len(periods))[index[per]] = float(
+                row.get("value") or 0.0)
+        return sorted(by_book.items(), key=lambda kv: kv[1][-1], reverse=True)
+
+    def _stock_takeaway(self, slide, books, totals, x, multi):
+        """One line: what the stack says. Materiality decides whether a book may
+        be named as the one that moved."""
+        from mi_agent_api import materiality as MAT
+        from .metric_resolver import compact_currency
+
+        lines = []
+        opening = next((v for v in totals if v is not None), None)
+        closing = next((v for v in reversed(totals) if v is not None), None)
+        if opening is not None and closing is not None:
+            delta = closing - opening
+            lines.append(
+                f"Funded balance moved from {compact_currency(opening)} at {x[0]} "
+                f"to {compact_currency(closing)} at {x[-1]} "
+                f"({'+' if delta >= 0 else '−'}{compact_currency(abs(delta))}).")
+        if multi and len(totals) >= 2:
+            moves = [{"label": name, "value": (vals[-1] - vals[0])}
+                     for name, vals in books]
+            outcome = MAT.classify(moves, base=opening)
+            sentence = MAT.describe(outcome, dimension="constituent book",
+                                    money=compact_currency)
+            if sentence:
+                lines.append(sentence)
+            share = closing and books and books[0][1][-1] / closing
+            if share:
+                lines.append(f"{books[0][0]} is the largest book at "
+                             f"{share * 100:.0f}% of closing balance.")
+        self._takeaway_strip(slide, lines[:3], top=6.02)
+
+    # -------------------------------------------------- per-book forward view
+    def slide_portfolio_projections(self, spec):
+        """Which constituent book is expected to drive the portfolio?
+
+        ``forecast_bridge.portfolio_projections`` — current balance, expected
+        originations under each book's governed forecast treatment, and a
+        retention factor applied ONLY where the client supplied an approved
+        run-off curve. Trakt models no run-off of its own; where none was
+        supplied the balance is held flat and this slide says so, because a
+        projection that quietly assumes a book never redeems is worse than one
+        that admits it does not know.
+        """
+        from .metric_resolver import compact_currency
+
+        s = self._slide()
+        pp = self.d.portfolio_projections or {}
+        books = pp.get("portfolios") or []
+        if len(books) < 1:
+            self._header(s, spec.get("title", "Forward View by Book"), "")
+            self._placeholder_body(s, "No constituent-book projection for this scope.")
+            self._footer(s)
+            return self._record("portfolio_projections", spec.get("title"), "",
+                                placeholder=True)
+
+        horizon = pp.get("horizonMonths")
+        strap = (f"Current and projected balance by book, {horizon}-month horizon"
+                 if horizon else "Current and projected balance by book")
+        self._header(s, spec.get("title", "Forward View by Book"), strap,
+                     accent=self.theme.mint)
+
+        ordered = sorted(books, key=lambda b: float(b.get("projectedBalance") or 0.0),
+                         reverse=True)
+        rows = [[str(b.get("label") or b.get("portfolioId")),
+                 compact_currency(b.get("currentBalance")),
+                 compact_currency(b.get("expectedNewOriginations")),
+                 ("—" if b.get("balanceRetentionFactor") is None
+                  else f"{float(b['balanceRetentionFactor']) * 100:.1f}%"),
+                 compact_currency(b.get("projectedBalance"))]
+                for b in ordered]
+        rows.append(["Total", compact_currency(pp.get("totalCurrentBalance")), "",
+                     "", compact_currency(pp.get("totalProjectedBalance"))])
+
+        box = (Inches(self.CONTENT_L), Inches(1.72),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(2.95))
+        il, it, iw, ih = self._card(s, *box, "Projection by constituent book")
+        path = self.work / "book_projection.png"
+        # "Run-off retained" rather than "Retention": this is the share of the
+        # existing balance the CLIENT's approved run-off curve keeps over the
+        # horizon, not a survival rate Trakt observed.
+        R.draw_table(path, ["Book", "Current", "Expected additions",
+                            "Run-off retained", "Projected"], rows, iw, ih,
+                     theme=self.theme, chart_id="book_projection")
+        self._place(s, path, il, it, iw, ih)
+
+        # Current vs projected, side by side, so the shape is visible not read.
+        chart = (Inches(self.CONTENT_L), Inches(4.90),
+                 Inches(self.CONTENT_R - self.CONTENT_L), Inches(1.62))
+        cl, ct, cw, ch = self._card(s, *chart, "Projected balance by book")
+        p2 = self.work / "book_projection_bars.png"
+        self._barlist_rows(p2, ordered, cw, ch)
+        self._place(s, p2, cl, ct, cw, ch)
+
+        self._text(s, Inches(self.CONTENT_L), Inches(6.62),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.30),
+                   self._projection_disclosure(pp), size=9,
+                   color=self.theme.ink_500, italic=True)
+        self._footer(s)
+        self._record("portfolio_projections", spec.get("title"), strap)
+
+    def _barlist_rows(self, path, books, w, h):
+        rows = [{"label": str(b.get("label") or b.get("portfolioId")),
+                 "balance": float(b.get("projectedBalance") or 0.0)}
+                for b in books]
+        R.draw_barlist(path, rows, "balance", w, h, theme=self.theme,
+                       chart_id="book_projection_bars", dimension="portfolio")
+
+    @staticmethod
+    def _projection_disclosure(pp) -> str:
+        """The run-off disclosure, verbatim in substance from the governed
+        payload — never dropped, because it is the caveat that makes the
+        projection honest."""
+        not_modelled = pp.get("runoffNotModelled") or []
+        modelled = pp.get("runoffModelled") or []
+        parts = []
+        if modelled:
+            parts.append(f"Run-off applied from the client's approved curve for "
+                         f"{', '.join(str(x) for x in modelled)}.")
+        if not_modelled:
+            parts.append(f"No approved run-off curve for "
+                         f"{', '.join(str(x) for x in not_modelled)}; those "
+                         f"balances are held flat, not projected to decay.")
+        parts.append("Trakt generates no mortality, decay or run-off assumption.")
+        return " ".join(parts)
+
     def slide_geo(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Geographic Exposure"),
@@ -1452,8 +1771,11 @@ class DeckBuilder:
                      iw, ih, theme=self.theme, currency=True)
         self._place(s, p1, il, it, iw, ih)
 
-        # -- retention, the question the curves are asked to answer -----------
-        il, it, iw, ih = self._card(s, *boxes[1], "Retention since formation")
+        # -- how each pool has changed since formation ------------------------
+        # Titled for what the table measures rather than for "retention": the
+        # balance column is a net-of-everything ratio, and on a roll-up book it
+        # exceeds 100% while loans are leaving. Only the loan column is survival.
+        il, it, iw, ih = self._card(s, *boxes[1], "Change since formation")
         self._cohort_change_table(s, live, il, it, iw, ih)
 
         overflow = payload.get("overflow") or []
@@ -1462,9 +1784,12 @@ class DeckBuilder:
         # check and cannot read a negation, and it is the more valuable of the
         # two properties — so the sentence is written without the word.
         note = ("Cohorts are the governed static pool: a vintage fixed at "
-                "formation and tracked across reporting periods. Retention is "
-                "the latest period as a percentage of formation; exits are "
-                "loans in the pool at formation that are no longer in it.")
+                "formation and tracked across reporting periods. Loan survival "
+                "is surviving loans as a percentage of the loans at formation; "
+                "exits are loans in the pool at formation that are no longer in "
+                "it. Balance vs formation is the latest balance as a percentage "
+                "of the balance at formation — a net figure that is not "
+                "decomposed here, and which can exceed 100%.")
         if declined:
             note += (f" {len(declined)} cohort"
                      f"{'s were' if len(declined) != 1 else ' was'} not plotted "
@@ -1481,13 +1806,18 @@ class DeckBuilder:
     def _cohort_change_table(self, s, live, il, it, iw, ih):
         from .metric_resolver import compact_currency, compact_number
 
-        spec_cols = [("Cohort", 0.74, PP_ALIGN.LEFT),
-                     ("At formation", 1.10, PP_ALIGN.RIGHT),
-                     ("Latest", 1.00, PP_ALIGN.RIGHT),
-                     ("Retention", 0.90, PP_ALIGN.RIGHT),
+        # COLUMN NAMES ARE THE MEASURE, NOT A HOUSE WORD. "Retention" is
+        # reserved for the count-based survival ratio; the balance ratio is
+        # named for what it is, because calling a >100% balance figure
+        # "retention" invites a reader to conclude the pool grew.
+        spec_cols = [("Cohort", 0.72, PP_ALIGN.LEFT),
+                     ("At formation", 1.04, PP_ALIGN.RIGHT),
+                     ("Latest", 0.96, PP_ALIGN.RIGHT),
+                     ("Balance vs formation", 1.18, PP_ALIGN.RIGHT),
                      ("Loans", 0.66, PP_ALIGN.RIGHT),
-                     ("Exits", 0.62, PP_ALIGN.RIGHT),
-                     ("Seasoning", 0.90, PP_ALIGN.RIGHT)]
+                     ("Loan survival", 0.86, PP_ALIGN.RIGHT),
+                     ("Exits", 0.58, PP_ALIGN.RIGHT),
+                     ("Seasoning", 0.80, PP_ALIGN.RIGHT)]
         scale = (iw - 0.28) / sum(c[1] for c in spec_cols)
         cols, dx = [], 0.0
         for label, weight, align in spec_cols:
@@ -1503,7 +1833,8 @@ class DeckBuilder:
         row_h = min(0.44, band / max(len(live), 1))
         for i, x in enumerate(live):
             y = Inches(head_y + 0.32 + i * row_h)
-            bal_ret = x.retention("funded_balance")
+            bal_ret = x.balance_vs_formation
+            survival = x.loan_survival
             exits = x.exits
             values = [
                 (x.vintage, self.theme.ink_100),
@@ -1513,6 +1844,8 @@ class DeckBuilder:
                  self.theme.ink_100),
                 (f"{x.surviving_count:,}/{x.formation_count:,}"
                  if x.formation_count is not None else "—", self.theme.ink_300),
+                (f"{survival:.0f}%" if survival is not None else "—",
+                 self.theme.ink_100),
                 (f"{exits:,}" if exits is not None else "—",
                  self.theme.rag.get("amber") if exits else self.theme.ink_300),
                 (f"{len(x.live) - 1} period"
@@ -2539,6 +2872,9 @@ class DeckBuilder:
         "portfolio_composition": "slide_portfolio_composition",
         "portfolio_comparison": "slide_portfolio_comparison",
         "movement_drivers": "slide_movement_drivers",
+        "balance_movement": "slide_balance_movement",
+        "funded_stock": "slide_funded_stock",
+        "portfolio_projections": "slide_portfolio_projections",
         "watchlist": "slide_watchlist",
         "strat_barlists": "slide_strat", "multidim": "slide_multidim", "geo": "slide_geo",
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",

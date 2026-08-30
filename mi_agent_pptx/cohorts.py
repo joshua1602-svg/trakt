@@ -267,6 +267,13 @@ class CohortSeries:
         Legitimate here because the only cohorts reaching a slide are those the
         governed series shows as never gaining a member, so the denominator is
         the pool the numerator is a subset of.
+
+        NOTE ON WORDING. "Retention" is a survival idea, and it is only that for
+        a COUNT: a loan is in the pool or it is not, and the ratio cannot exceed
+        100%. A BALANCE ratio is a different measure wearing the same name — on
+        a book where interest rolls up it exceeds 100% while loans are leaving —
+        so the two are exposed under separate names below and the presentation
+        layer must not call the balance one retention.
         """
         pts = self.live
         if pts:
@@ -278,6 +285,26 @@ class CohortSeries:
         if not first or last is None:
             return None
         return last / first * 100.0
+
+    @property
+    def loan_survival(self) -> Optional[float]:
+        """Surviving loans as a percentage of the loans at formation.
+
+        This IS retention: a count-based survival ratio, bounded by 100%.
+        """
+        return self.retention("loan_count")
+
+    @property
+    def balance_vs_formation(self) -> Optional[float]:
+        """Latest balance as a percentage of the balance at formation.
+
+        NOT retention, and never labelled as such. It is the net of everything
+        that happened to the pool's balance — exits, repayment, and on a
+        roll-up book the interest that accrued — and it can legitimately exceed
+        100% while loans are leaving. Trakt does not decompose it here; the
+        attribution that would is not a capability this pack carries.
+        """
+        return self.retention("funded_balance")
 
     @property
     def months_on_book(self) -> Tuple[int, ...]:

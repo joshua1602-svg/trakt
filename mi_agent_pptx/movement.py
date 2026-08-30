@@ -266,19 +266,47 @@ def takeaways(bridge: MovementBridge, limit: int = 2) -> List[str]:
     return lines[: limit * 2]
 
 
+def shape(bridge: MovementBridge):
+    """How this dimension's movement is SHAPED, per the governed materiality
+    rules — driven by one category, concentrated in a few, broadly distributed,
+    or immaterial. Returns ``None`` when the bridge has nothing to classify."""
+    if not bridge.available or not bridge.contributors:
+        return None
+    from mi_agent_api import materiality as MAT
+
+    rows = [{"label": c.category, "value": c.delta} for c in bridge.contributors
+            if not c.is_other]
+    return MAT.classify(rows, base=bridge.opening)
+
+
 def headline(bridge: MovementBridge) -> Optional[str]:
-    """One sentence naming the largest contributor in either direction."""
+    """One sentence about where the movement came from — or that it came from
+    everywhere.
+
+    This used to name the largest contributor unconditionally. On a book where
+    seven regions each grew between £3.7m and £4.4m that produced "South East
+    contributed the largest increase (+£4.4m)", which is arithmetically true and
+    analytically misleading: it invites a reader to act on a difference the data
+    does not support. The governed materiality rules
+    (:mod:`mi_agent_api.materiality`) now decide whether a leader may be named at
+    all, and where none may be, the distribution is itself the finding.
+    """
     if not bridge.available:
         return None
+    from mi_agent_api import materiality as MAT
+
+    outcome = shape(bridge)
+    if outcome is None:
+        return None
+    sentence = MAT.describe(outcome, dimension=bridge.label, money=_money)
+    if outcome.shape != MAT.SHAPE_DRIVEN:
+        return sentence
+
+    # A genuine driver: name it, and name the largest offsetting move where one
+    # exists, because "grew, but one region shrank" is a different story.
     ups, downs = bridge.movers(limit=1)
     if ups and downs:
         return (f"{ups[0].category} contributed the largest increase "
                 f"({_signed(ups[0].delta)}); {downs[0].category} the largest "
                 f"reduction ({_signed(downs[0].delta)}).")
-    if ups:
-        return (f"{ups[0].category} contributed the largest increase "
-                f"({_signed(ups[0].delta)}).")
-    if downs:
-        return (f"{downs[0].category} contributed the largest reduction "
-                f"({_signed(downs[0].delta)}).")
-    return None
+    return sentence
