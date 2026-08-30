@@ -1017,6 +1017,51 @@ def funded_evolution(portfolioId: Optional[str] = None, client_id: Optional[str]
                 "periods": [], "breakdowns": {}, "singlePeriod": True, "error": str(exc)}
 
 
+@app.get("/mi/evolution/funded-movement")
+def funded_balance_movement(portfolioId: Optional[str] = None,
+                            client_id: Optional[str] = None,
+                            toRunId: Optional[str] = None,
+                            to_run_id: Optional[str] = None,
+                            fromPeriod: Optional[str] = None,
+                            portfolioContext: Optional[str] = None,
+                            request: Request = None, response: Response = None
+                            ) -> Dict[str, Any]:
+    """WHY the funded balance changed: the economic opening-to-closing bridge.
+
+    Distinct from ``/mi/evolution/funded``, which reports the level, and from the
+    dimensional attribution behind the movement-detail drawer, which reports
+    which regions or brokers moved. This reports what happened to the LOANS —
+    arrivals, departures (split on evidence into redemption, default, maturity
+    and unexplained) and the movement on those present throughout — reconciling
+    exactly to the closing balance or declining to report. Never 500s.
+    """
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    if not root:
+        return {"available": False, "portfolioId": cid,
+                "reason": "no onboarding output root configured"}
+    etag = http_cache.begin(
+        request, route="mi.evolution.funded-movement",
+        scope=f"{portfolioContext or 'total'}|{fromPeriod or 'prior'}",
+        identity=http_cache.dataset_identity(cid, trid))
+    resolved = _resolve_portfolio_context(portfolioContext, cid)
+    scope = resolved.scope if resolved else None
+    try:
+        def _compute():
+            currency_mod.resolve_and_set(None, client_id=cid)
+            result = evolution_mod.funded_balance_movement(
+                root, cid, trid, scope=scope, start_period=fromPeriod)
+            result["portfolioId"] = cid
+            result["currencyCode"] = currency_mod.current_code()
+            if scope is not None:
+                result["portfolioScope"] = scope.to_dict()
+            return result
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
+    except Exception as exc:  # noqa: BLE001 - must never 500
+        logger.warning("funded balance movement failed for %s: %s", cid, exc)
+        return {"available": False, "portfolioId": cid, "reason": str(exc)}
+
+
 @app.get("/mi/evolution/pipeline")
 def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[str] = None,
                        toRunId: Optional[str] = None, to_run_id: Optional[str] = None,

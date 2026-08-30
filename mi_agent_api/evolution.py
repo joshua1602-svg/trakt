@@ -29,9 +29,14 @@ from . import pipeline_contract as pipeline_mod
 _BALANCE = "current_outstanding_balance"
 # Funded breakdown dimensions exposed over time (kept small + governed).
 _FUNDED_BREAKDOWN_DIMS = {
-    "broker": "broker_channel",
-    "region": "geographic_region_obligor",
-    "ltv_bucket": "ltv_bucket",
+    "broker": ("broker_channel",),
+    "region": ("geographic_region_obligor",),
+    "ltv_bucket": ("ltv_bucket",),
+    # The CONSTITUENT BOOK. The prepared frames have always carried provenance —
+    # scoping filters on it — but no breakdown ever asked for it, so the one
+    # dimension a multi-book funder cares most about was the one the series
+    # could not be cut by. Governed display label first, id as the fallback.
+    "portfolio": ("source_portfolio_label", "source_portfolio_id"),
 }
 MISSING_BUCKET = "Unknown / Missing"
 
@@ -85,6 +90,19 @@ def _reconciliation(df: pd.DataFrame, dataset: str, run_id: str,
     }
 
 
+def _resolve_breakdown_dim(df: pd.DataFrame, key: str) -> Optional[str]:
+    """The first candidate column a breakdown dimension actually has data in.
+
+    Candidates, not a fixed column, so a dimension whose canonical name differs
+    between tapes still resolves — the same data-aware resolution
+    ``funded_bridge`` performs for its attribution dimension.
+    """
+    for col in _FUNDED_BREAKDOWN_DIMS.get(key, ()):
+        if col in getattr(df, "columns", []) and df[col].notna().any():
+            return col
+    return None
+
+
 def _breakdown(df: pd.DataFrame, dim_col: str, value_col: str = _BALANCE
                ) -> List[Dict[str, Any]]:
     """``[{key, value}]`` summing ``value_col`` by ``dim_col``; missing keys go to
@@ -125,7 +143,7 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
     metric/reconciliation/breakdown shape is IDENTICAL regardless of source."""
     required = [_BALANCE, "current_loan_to_value", "current_interest_rate",
                 "youngest_borrower_age"]
-    want_breakdowns = breakdowns or ["broker", "region", "ltv_bucket"]
+    want_breakdowns = breakdowns or ["portfolio", "broker", "region", "ltv_bucket"]
 
     periods: List[Dict[str, Any]] = []
     run_ids: List[str] = []
@@ -169,7 +187,7 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
             "source_file": source,
         })
         for b in want_breakdowns:
-            dim_col = _FUNDED_BREAKDOWN_DIMS.get(b)
+            dim_col = _resolve_breakdown_dim(df, b)
             if dim_col:
                 for row in _breakdown(df, dim_col):
                     bd_series[b].append({"period": (rdate or run_id)[:7], **row})
@@ -416,6 +434,157 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
                 "reporting_date": end.get("reporting_date"), "total": close_total},
         "netChange": round(close_total - open_total, 2),
         "contributions": contribs,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# ECONOMIC funded-balance bridge
+#
+# ``funded_bridge`` above answers "which DIMENSIONS moved the total" — regions,
+# brokers, LTV bands. This answers the different question a funder asks first:
+# *what happened to the loans?* Opening balance, plus the loans that arrived,
+# less the loans that left, plus what the loans present throughout did.
+#
+# NOTHING IS CALCULATED HERE. Two governed engines already own the economics and
+# this composes their output:
+#
+#   mi_agent.period_change.bridge.balance_bridge   the reconciled identity,
+#       over a stable loan key, refusing to report at all on duplicate or
+#       missing identifiers, mixed currency or a missing balance field;
+#   analytics_lib.history.classify_exits           the exit leg split on
+#       EVIDENCE into redemption / default / maturity / unexplained.
+#
+# The two compose exactly: the classified buckets sum to the bridge's exit leg,
+# which is asserted here rather than assumed.
+#
+# One deliberate restraint. ``movement_on_continuing_loans`` is NOT relabelled
+# as interest. On a roll-up book it is mostly accretion; on an amortising book
+# it is mostly repayment; on either it also absorbs further advances and any
+# restatement. Separating them needs per-loan period movement, which the
+# canonical model does not carry. It is reported as what it is — the movement on
+# the loans present at both dates.
+# --------------------------------------------------------------------------- #
+
+#: Presentation-ready labels for the exit buckets, so both surfaces name them
+#: identically. The keys are ``analytics_lib.history``'s own constants.
+EXIT_LABELS = {
+    "redemption": "Redeemed",
+    "default_exit": "Exited in default",
+    "maturity": "Matured",
+    "unknown_exit": "Exited — reason not evidenced",
+}
+
+
+def _snapshot_frame(frame_record):
+    from mi_agent.period_change.models import SnapshotFrame
+    return SnapshotFrame(snapshot_id=str(frame_record.get("run_id") or ""),
+                         reporting_date=(str(frame_record.get("reporting_date"))
+                                         if frame_record.get("reporting_date") else None),
+                         frame=frame_record.get("df"))
+
+
+def funded_balance_movement(output_root: str | os.PathLike, client_id: str,
+                            to_run_id: Optional[str] = None, *, scope=None,
+                            start_period: Optional[str] = None) -> Dict[str, Any]:
+    """The economic opening-to-closing bridge for the governed funded book.
+
+    ``start_period`` (``YYYY-MM``) opens the bridge at a named period; omitted,
+    it opens at the period immediately before the close, which is the movement a
+    reporting pack describes. Returns ``available: False`` with the engine's own
+    reason wherever the bridge declines to report — a bridge that cannot
+    reconcile must say so rather than present a partial identity.
+    """
+    frames = funded_frames(output_root, client_id, to_run_id, scope=scope)
+    if len(frames) < 2:
+        return {"available": False,
+                "reason": ("an opening-to-closing bridge needs two governed "
+                           f"reporting periods; {len(frames)} available"),
+                "periodsAvailable": len(frames)}
+
+    end = frames[-1]
+    start = None
+    if start_period:
+        want = str(start_period)[:7]
+        start = next((f for f in frames[:-1] if _period_label(f) == want), None)
+    start = start or frames[-2]
+    if _period_label(start) == _period_label(end):
+        return {"available": False,
+                "reason": "the opening and closing periods resolve to the same period"}
+
+    from mi_agent.period_change.bridge import balance_bridge
+    bridge = balance_bridge(_snapshot_frame(start), _snapshot_frame(end)).to_dict()
+    if not bridge.get("reconciles"):
+        return {"available": False,
+                "reason": bridge.get("limitation") or
+                          f"the balance bridge reported {bridge.get('status')}",
+                "status": bridge.get("status"),
+                "bridge": bridge}
+
+    # The exit leg, split on evidence. Absent evidence fields the whole exit
+    # balance lands in ``unknown_exit``, which is a data-quality finding and is
+    # shown as one — never quietly folded into redemptions.
+    exits: Dict[str, Any] = {}
+    try:
+        from analytics_lib.history import classify_exits
+        exits = classify_exits(start["df"], end["df"],
+                               as_of=str(end.get("reporting_date") or "")) or {}
+    except Exception as exc:  # noqa: BLE001 - a bridge without the split is still a bridge
+        exits = {"classified": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+    exit_total = round(float(bridge.get("exited_loan_opening_balance") or 0.0), 2)
+    components = []
+    if exits.get("classified"):
+        for key, label in EXIT_LABELS.items():
+            bucket = exits.get(key) or {}
+            balance = round(float(bucket.get("balance") or 0.0), 2)
+            if balance:
+                components.append({"key": key, "label": label, "balance": balance,
+                                   "loanCount": int(bucket.get("loan_count") or 0)})
+        classified_total = round(sum(c["balance"] for c in components), 2)
+        # The two engines must agree. They are computed independently from the
+        # same pair of snapshots, so a disagreement is a real defect, not a
+        # rounding artefact — report it rather than draw a bridge that lies.
+        exits_reconcile = abs(classified_total - exit_total) <= 0.01
+    else:
+        classified_total, exits_reconcile = None, None
+
+    opening = round(float(bridge["opening_balance"]), 2)
+    closing = round(float(bridge["closing_balance"]), 2)
+    return {
+        "available": True,
+        "openingPeriod": _period_label(start),
+        "closingPeriod": _period_label(end),
+        "openingDate": start.get("reporting_date"),
+        "closingDate": end.get("reporting_date"),
+        "identifierField": bridge.get("identifier_field"),
+        "openingBalance": opening,
+        "newLoanBalance": round(float(bridge["new_loan_closing_balance"]), 2),
+        "exitedLoanBalance": exit_total,
+        "continuingMovement": round(float(bridge["movement_on_continuing_loans"]), 2),
+        "closingBalance": closing,
+        "netChange": round(closing - opening, 2),
+        "newLoanCount": bridge.get("new_loan_count"),
+        "exitedLoanCount": bridge.get("exited_loan_count"),
+        "continuingLoanCount": bridge.get("continuing_loan_count"),
+        "reconciles": True,
+        "residual": bridge.get("residual"),
+        "tolerance": bridge.get("rounding_tolerance"),
+        "exitComponents": components,
+        "exitsClassified": bool(exits.get("classified")),
+        "exitsReconcile": exits_reconcile,
+        "exitEvidenceFields": list(exits.get("evidence_fields") or ()),
+        "exitClassificationReason": exits.get("reason"),
+        "lineage": {
+            "identity": ("opening + new loans - exited loans + movement on "
+                         "continuing loans = closing"),
+            "engine": "mi_agent.period_change.bridge.balance_bridge",
+            "exits": "analytics_lib.history.classify_exits (evidence-based)",
+            "continuingMovement": (
+                "The movement on loans present at BOTH dates. It is not split "
+                "into interest, repayment or further advance: that separation "
+                "needs per-loan period movement, which the canonical model does "
+                "not carry."),
+        },
     }
 
 
