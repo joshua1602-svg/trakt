@@ -71,56 +71,132 @@ _AGES = [58, 63, 67, 71, 76, 81, 87]
 _RATES = [5.4, 6.2, 6.8, 7.1, 7.6]
 
 
-def _book(n, cut, *, vintages, scale=1.0, seed=7):
-    """A deterministic pseudo-random book with real spread across every band."""
+#: Constituent books, as (portfolio id, type, share of the whole). A funder pack
+#: for a warehouse or a forward-flow facility is nearly always reporting on more
+#: than one book, and the pages that matter most there — the stock stack, the
+#: per-book forward view, the composition table — are exactly the ones a
+#: single-book fixture cannot exercise.
+_SINGLE = (("direct_001", "direct", 1.0),)
+_MULTI = (("direct_001", "direct", 0.52),
+          ("acquired_001", "acquired", 0.31),
+          ("direct_002", "direct", 0.17))
+
+
+def _pid_for(j, books):
+    """The constituent book a loan belongs to — a function of the LOAN, so a
+    loan keeps its book for life and the per-book stack is a real series."""
+    r = ((j * 7919) % 1000) / 1000.0
+    running = 0.0
+    for pid, ptype, share in books:
+        running += share
+        if r < running:
+            return pid, ptype
+    return books[-1][0], books[-1][1]
+
+
+def _book(first, last, cut, *, vintages, scale=1.0, seed=7, books=_SINGLE,
+          exit_below=None):
+    """Loans ``first..last`` as at ``cut``.
+
+    A loan's IDENTITY and its static attributes — book, region, borrower age,
+    LTV band, origination vintage — are functions of the loan number alone, so
+    the same loan is the same loan in every period. Only its BALANCE moves, with
+    ``scale``. That is what makes the economic bridge meaningful: the continuing
+    leg is a real movement on real continuing loans rather than an artefact of
+    regenerating the book each period.
+
+    ``exit_below`` marks the loans that will be absent from the NEXT period.
+    They carry redemption, default and maturity evidence here — on the opening
+    frame, which is where the classifier reads it from — so the exit leg splits
+    by reason instead of collapsing into the unevidenced bucket.
+    """
     rows = []
-    for i in range(n):
-        ltv = _LTVS[(i * 3 + seed) % len(_LTVS)]
-        balance = (85_000 + ((i * 37_000 + seed * 11_000) % 420_000)) * scale
-        rows.append(_loan(
-            i + 1, "direct_001", "direct", ltv=ltv, balance=float(balance),
-            region=_REGIONS[(i * 5 + seed) % len(_REGIONS)],
-            age=_AGES[(i * 2 + seed) % len(_AGES)],
-            rate=_RATES[(i + seed) % len(_RATES)], cut=cut,
-            origination=vintages[(i * 7 + seed) % len(vintages)]))
+    for j in range(first, last + 1):
+        pid, ptype = _pid_for(j, books)
+        ltv = _LTVS[(j * 3) % len(_LTVS)]
+        balance = (85_000 + ((j * 37_000 + seed * 11_000) % 420_000)) * scale
+        row = _loan(
+            j, pid, ptype, ltv=ltv, balance=float(balance),
+            region=_REGIONS[(j * 5) % len(_REGIONS)],
+            age=_AGES[(j * 2) % len(_AGES)],
+            rate=_RATES[j % len(_RATES)], cut=cut,
+            origination=vintages[(j * 7) % len(vintages)])
+        if exit_below is not None and j < exit_below:
+            kind = j % 3
+            if kind == 0:
+                row["loan_redemption_flag"] = "Y"
+            elif kind == 1:
+                row["default_date"] = cut
+            else:
+                row["maturity_date"] = cut
+        rows.append(row)
     return rows
 
 
-#: (name, [(run_id, reporting_date, loan_count, vintages)], description)
+#: (name, [(run_id, reporting_date, first_loan, last_loan, vintages)], books,
+#:  description). Loans leave from the bottom of the range and arrive at the
+#: top, so a period-on-period pair has both a new leg and an exit leg.
+_SEASONED_VINTAGES = ["2019-03-01", "2020-07-01", "2021-05-01",
+                      "2022-09-01", "2023-06-01", "2024-04-01"]
+_GROWING_VINTAGES = ["2022-05-01", "2023-08-01", "2024-06-01",
+                     "2025-09-01", "2026-03-01"]
+
 BOOKS = {
+    # A — a newly originated single book. One period: no history, no movement.
     "new_book": (
-        [("mi_2026_06", "2026-06-30", 90, ["2026-02-01", "2026-04-01", "2026-06-01"])],
+        [("mi_2026_06", "2026-06-30", 1, 90,
+          ["2026-02-01", "2026-04-01", "2026-06-01"])],
+        _SINGLE,
         "A newly originated book: one reporting period, one origination year."),
+    # B — a seasoned single book. Five periods, six vintages, real exits.
     "seasoned_book": (
-        [("mi_2026_02", "2026-02-28", 300, ["2019-03-01", "2020-07-01", "2021-05-01",
-                                            "2022-09-01", "2023-06-01", "2024-04-01"]),
-         ("mi_2026_03", "2026-03-31", 312, ["2019-03-01", "2020-07-01", "2021-05-01",
-                                            "2022-09-01", "2023-06-01", "2024-04-01"]),
-         ("mi_2026_04", "2026-04-30", 325, ["2019-03-01", "2020-07-01", "2021-05-01",
-                                            "2022-09-01", "2023-06-01", "2024-04-01"]),
-         ("mi_2026_05", "2026-05-31", 338, ["2019-03-01", "2020-07-01", "2021-05-01",
-                                            "2022-09-01", "2023-06-01", "2024-04-01"]),
-         ("mi_2026_06", "2026-06-30", 350, ["2019-03-01", "2020-07-01", "2021-05-01",
-                                            "2022-09-01", "2023-06-01", "2024-04-01"])],
-        "A seasoned book: five reporting periods, six origination vintages."),
+        [("mi_2026_02", "2026-02-28", 1, 300, _SEASONED_VINTAGES),
+         ("mi_2026_03", "2026-03-31", 9, 312, _SEASONED_VINTAGES),
+         ("mi_2026_04", "2026-04-30", 18, 325, _SEASONED_VINTAGES),
+         ("mi_2026_05", "2026-05-31", 26, 338, _SEASONED_VINTAGES),
+         ("mi_2026_06", "2026-06-30", 33, 350, _SEASONED_VINTAGES)],
+        _SINGLE,
+        "A seasoned book: five reporting periods, six vintages, loans leaving "
+        "with evidence each period."),
+    # C — the same seasoning across THREE constituent books, which is what a
+    # warehouse or forward-flow facility actually reports on.
+    "multi_seasoned": (
+        [("mi_2026_02", "2026-02-28", 1, 300, _SEASONED_VINTAGES),
+         ("mi_2026_03", "2026-03-31", 9, 312, _SEASONED_VINTAGES),
+         ("mi_2026_04", "2026-04-30", 18, 325, _SEASONED_VINTAGES),
+         ("mi_2026_05", "2026-05-31", 26, 338, _SEASONED_VINTAGES),
+         ("mi_2026_06", "2026-06-30", 33, 350, _SEASONED_VINTAGES)],
+        _MULTI,
+        "A seasoned multi-book portfolio: three constituent books, five "
+        "periods, evidenced exits."),
+    # D — a growing multi-book portfolio: origination dominates the story.
+    "multi_growing": (
+        [("mi_2026_04", "2026-04-30", 1, 180, _GROWING_VINTAGES),
+         ("mi_2026_05", "2026-05-31", 5, 205, _GROWING_VINTAGES),
+         ("mi_2026_06", "2026-06-30", 10, 260, _GROWING_VINTAGES)],
+        _MULTI,
+        "A growing multi-book portfolio: three periods, still originating "
+        "hard, three constituent books."),
+    # Retained under its old name so an existing invocation still resolves.
     "mixed_book": (
-        [("mi_2026_04", "2026-04-30", 180, ["2022-05-01", "2023-08-01", "2024-06-01",
-                                            "2025-09-01", "2026-03-01"]),
-         ("mi_2026_05", "2026-05-31", 205, ["2022-05-01", "2023-08-01", "2024-06-01",
-                                            "2025-09-01", "2026-03-01"]),
-         ("mi_2026_06", "2026-06-30", 240, ["2022-05-01", "2023-08-01", "2024-06-01",
-                                            "2025-09-01", "2026-03-01"])],
-        "A growing book: three periods, five vintages, still originating."),
+        [("mi_2026_04", "2026-04-30", 1, 180, _GROWING_VINTAGES),
+         ("mi_2026_05", "2026-05-31", 5, 205, _GROWING_VINTAGES),
+         ("mi_2026_06", "2026-06-30", 10, 240, _GROWING_VINTAGES)],
+        _SINGLE,
+        "A growing single book: three periods, five vintages, still originating."),
 }
 
 
 def write_book(root: Path, client: str, key: str) -> Path:
-    periods, _ = BOOKS[key]
-    for idx, (run_id, date, count, vintages) in enumerate(periods):
+    periods, books, _ = BOOKS[key]
+    for idx, (run_id, date, first, last, vintages) in enumerate(periods):
         central = root / client / run_id / "central"
         central.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(_book(count, date, vintages=vintages,
-                           scale=1.0 + 0.03 * idx, seed=7 + idx)).to_csv(
+        # The loans that will be gone next period are evidenced HERE.
+        nxt = periods[idx + 1][2] if idx + 1 < len(periods) else None
+        pd.DataFrame(_book(first, last, date, vintages=vintages,
+                           scale=1.0 + 0.03 * idx, seed=7 + idx,
+                           books=books, exit_below=nxt)).to_csv(
             central / _CENTRAL, index=False)
     return root
 
@@ -372,14 +448,18 @@ def main():
     out_root = _REPO / args.out
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # A: new book. B: seasoned book. C: a richer mixed book. D/E: GBP and EUR.
-    # ``limits``/``pipeline`` off for one case so the conditional composition is
-    # exercised in both directions rather than only when everything resolves.
+    # The five shapes the pack has to be right for:
+    #   A  single-book, newly originated, GBP   — the shortest honest deck
+    #   B  single-book, seasoned, GBP           — history, cohorts, exits
+    #   C  multi-book, seasoned, GBP            — stack, per-book forward view
+    #   D  multi-book, growing, GBP             — origination is the story
+    #   E  seasoned, EUR, no pipeline           — currency, and composition in
+    #                                             the other direction
     cases = [("new_book", "GBP", True, True),
-             ("new_book", "EUR", True, True),
              ("seasoned_book", "GBP", True, True),
-             ("seasoned_book", "EUR", False, True),
-             ("mixed_book", "GBP", True, True)]
+             ("multi_seasoned", "GBP", True, True),
+             ("multi_growing", "GBP", True, True),
+             ("seasoned_book", "EUR", False, True)]
     report = {}
     for book, ccy, has_pipeline, has_limits in cases:
         name = f"{book}_{ccy.lower()}"

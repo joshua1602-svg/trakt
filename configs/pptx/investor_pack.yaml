@@ -148,7 +148,11 @@ slides:
     question: "What else characterises the book?"
     lens: funded
     keys: [rate, vintage, broker, borrower_type]
-    when: "has_stratifications and funded_balance >= 100000000"
+    # `constituent_books <= 1`: on a multi-book pack the composition page has
+    # already spent a page enumerating what the portfolio is made of, and a
+    # second aggregate cut of the same four-plus-four dimensions is then the
+    # least valuable page in the deck.
+    when: "has_stratifications and funded_balance >= 100000000 and constituent_books <= 1"
 
   # Paired dimensions. On a small book the cells are too thin for the crossing
   # to be read as anything but noise, so the page is earned by size.
@@ -173,11 +177,16 @@ slides:
   # the movement on the loans present throughout. This is the loan-level answer
   # to "why did the balance change", and it supersedes the dimensional
   # attribution below wherever the identity reconciles.
+  #
+  # NO `when:` — the guard is strictly better here. A condition can only report
+  # the condition that failed ("the bridge did not reconcile"), which is wrong
+  # and alarming for a one-period book that simply has nothing to bridge yet.
+  # The guard returns the ENGINE's own reason, so the ledger says whether there
+  # was no prior period, no stable identifier, or a residual outside tolerance.
   - id: balance_movement
     type: balance_movement
     title: "Funded Balance Movement"
     question: "Why did funded balance change, loan by loan?"
-    when: "has_balance_movement"
 
   # Governed dimensional attribution: which portfolio types and which dimensions
   # moved the total. Retained as the FALLBACK for a book whose loan-level bridge
@@ -208,10 +217,18 @@ slides:
     type: funnel
     title: "Origination Funnel"
     question: "How does the pipeline convert?"
-    # BOTH are required. `has_funnel` is true whenever weekly extracts exist,
-    # which outlives the pipeline snapshot the conversion page actually draws
-    # from; without the snapshot the handler has a funnel with no stages.
-    when: "has_pipeline and has_funnel"
+    # BOTH pipeline facts are required. `has_funnel` is true whenever weekly
+    # extracts exist, which outlives the pipeline snapshot the conversion page
+    # actually draws from; without the snapshot the handler has a funnel with no
+    # stages. And conversion is a page about origination: on a book whose
+    # pipeline is a rounding error against the funded balance, how it converts
+    # is not one of the nine questions this pack answers.
+    # `has_pipeline_history` matters as much as the rest. This page is about
+    # CONVERSION, and conversion is measured from weekly flow. With a single
+    # extract the handler falls back to cases-by-stage, which is the stage
+    # ladder already on Pipeline Overview in a different unit — the duplication
+    # a starter pack exists to avoid.
+    when: "has_pipeline and has_funnel and has_pipeline_history and pipeline_share >= 0.05"
 
   # PIPELINE SHAPE and WEEKLY RUN-RATE are origination deep dives. They earn a
   # page when origination is the story — a pipeline large enough relative to the
@@ -251,7 +268,7 @@ slides:
     type: portfolio_projections
     title: "Forward View by Constituent Book"
     question: "Which book is expected to drive the portfolio from here?"
-    when: "has_portfolio_projections and constituent_books > 1"
+    when: "constituent_books > 1"
 
   # The run-rate scale-up is a growth story; it is worth a page when there is
   # enough origination relative to the funded book for scale-up to be the
@@ -260,7 +277,7 @@ slides:
     type: forecast_projection
     title: "Forecast Projection — Run-Rate Scale-Up"
     question: "What does the run-rate imply?"
-    when: "has_forecast_projection and pipeline_share >= 0.05"
+    when: "has_forecast_projection and pipeline_share >= 0.10"
 
   # "Was the prior forecast right?" THREE forecast-carrying runs are required,
   # not two: two produce a single prior-forecast-versus-actual point, and one
@@ -275,26 +292,32 @@ slides:
   # 6 — SEASONING
   # ======================================================================
 
-  # Vintage formation, from the governed cohort table the React Cohorts tab
-  # reads. Point-in-time by construction: it describes what each vintage looks
-  # like TODAY. Two vintages is a comparison, not a formation profile, so the
-  # page is earned by three.
-  - id: cohorts
-    type: cohorts
-    title: "Vintage Formation"
-    question: "How much of the book sits in each origination vintage?"
-    when: "has_cohorts and funded_periods >= 2 and cohort_count >= 3"
-
   # Static-pool seasoning, from the governed progression service — one call per
   # cohort, exactly as the dashboard issues when a user selects a vintage.
   # Omitted unless a cohort holds loans in two or more reporting periods: a
   # single period is a formation snapshot, and joining one point into a line
   # would be the misleading trend the sufficiency rules exist to prevent.
+  #
+  # It comes FIRST because it is the stronger page: its table already carries
+  # each vintage at formation and today, which is everything the formation
+  # snapshot below says.
   - id: cohort_progression
     type: cohort_progression
     title: "Cohort Progression"
     question: "How have the cohorts seasoned since they formed?"
     when: has_cohort_progression
+
+  # Vintage formation, from the governed cohort table the React Cohorts tab
+  # reads. Point-in-time by construction: it describes what each vintage looks
+  # like TODAY. Two vintages is a comparison, not a formation profile, so the
+  # page is earned by three — and it is not printed at all where the seasoning
+  # page above already states each vintage at formation.
+  - id: cohorts
+    type: cohorts
+    title: "Vintage Formation"
+    question: "How much of the book sits in each origination vintage?"
+    when: "has_cohorts and funded_periods >= 2 and cohort_count >= 3 and not has_cohort_progression"
+    superseded_by: cohort_progression
 
   # ======================================================================
   # 7 — HEALTH
