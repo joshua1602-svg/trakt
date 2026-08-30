@@ -32,7 +32,16 @@ deck:
   theme: trakt_mi_agent_dark
   footer: "trakt MI Agent · Confidential — for institutional funders/investors"
   logo_path: null
-  template_version: "2.0.0"
+  template_version: "2.3.0"
+
+  # Funding / securitisation thresholds the Time to Scale slide reports against,
+  # in the book's reporting currency. These are a REPORTING decision, not a
+  # forecast one: they are added to the governed milestone ladder through the
+  # `extra_thresholds` parameter that ladder already exposes, and the projection
+  # itself is unchanged. The governed ladder already carries 25m/50m/75m/100m/150m;
+  # 200m is named here because it is a target this pack reports against and the
+  # ladder does not carry it.
+  scale_targets: [200000000]
 
 slides:
   # 1 --------------------------------------------------------------- Cover
@@ -43,7 +52,16 @@ slides:
     title: "Investor & Funder MI Pack"
     question: "What is this report about?"
 
-  # 2 --------------------------------------------------- Executive Summary
+  # 2 ------------------------------------------------ Executive Dashboard
+  # Where is the portfolio today, what is coming, and is anything approaching a
+  # limit? Every tile is a governed figure a later slide also renders, so the
+  # landing page cannot disagree with the pack behind it.
+  - id: executive
+    type: executive
+    title: "Executive Position"
+    question: "Where is the portfolio today, what is coming, and is anything approaching a limit?"
+
+  # 3 --------------------------------------------------- Executive Summary
   # Deterministic governed observations. No LLM.
   - id: executive_summary
     type: exec_insights
@@ -78,26 +96,26 @@ slides:
     title: "Funded Portfolio — Key Measures"
     question: "How large is the book and what are its characteristics?"
 
-  # 6 --------------------------------------------- Funded Stratifications I
-  - id: stratification_1
+  # ------------------------------------------- Funded Stratifications
+  # ONE 2 x 2 matrix of the four dimensions an investor asks first. The pack
+  # used to spend three pages on six of them; four on one page is the executive
+  # answer, and the rest are available as a deep dive below.
+  - id: stratification_funded
     type: strat_barlists
-    title: "Funded Stratifications — LTV & Ticket Size"
-    question: "How is exposure distributed by risk and size?"
-    keys: [ltv, ticket]
+    title: "Funded Stratifications"
+    question: "How is exposure distributed by risk, size, borrower and geography?"
+    lens: funded
+    keys: [ltv, ticket, age, region]
 
-  # 7 -------------------------------------------- Funded Stratifications II
-  - id: stratification_2
+  # OPTIONAL DEEP DIVE — the remaining governed funded dimensions. Included only
+  # where the book is large enough for the second cut to earn a page.
+  - id: stratification_funded_ii
     type: strat_barlists
-    title: "Funded Stratifications — Borrower Age & Type"
-    question: "What is the borrower profile?"
-    keys: [age, borrower_type]
-
-  # 8 ------------------------------------------- Funded Stratifications III
-  - id: stratification_3
-    type: strat_barlists
-    title: "Funded Stratifications — Broker & Region"
-    question: "Where does the business come from?"
-    keys: [broker, region]
+    title: "Funded Stratifications — Secondary Dimensions"
+    question: "What else characterises the book?"
+    lens: funded
+    keys: [rate, vintage, broker, borrower_type]
+    when: "has_stratifications and funded_balance >= 25000000"
 
   # 9 -------------------------------------- Multi-Dimensional Risk Analytics
   - id: multidim
@@ -127,7 +145,7 @@ slides:
     type: cohorts
     title: "Vintage Formation"
     question: "How much of the book sits in each origination vintage?"
-    when: has_cohorts
+    when: "has_cohorts and funded_periods >= 2 and cohort_count >= 2"
 
   # Static-pool seasoning, from the governed progression service
   # (evolution.funded_cohort_progression) — one call per cohort, exactly as the
@@ -143,6 +161,18 @@ slides:
 
   # 13 ---------------------------------------------------- Pipeline Overview
   # Pipeline is direct-origination only; an acquired book does not originate.
+  # PIPELINE STRATIFICATIONS — the same four dimensions as the funded matrix, in
+  # the same visual grammar, from the same bucket registry. The pipeline prep
+  # already materialises these bands (config/mi/pipeline_field_contract.yaml
+  # declares them `reused`); nothing had ever asked it for them.
+  - id: stratification_pipeline
+    type: strat_barlists
+    title: "Pipeline Stratifications"
+    question: "What is the shape of what is about to fund?"
+    lens: pipeline
+    keys: [ltv, ticket, age, region]
+    when: "has_pipeline"
+
   - id: pipeline
     type: pipeline_summary
     title: "Pipeline Overview"
@@ -183,6 +213,18 @@ slides:
     title: "Forecast Projection — Run-Rate Scale-Up"
     question: "What does the run-rate imply?"
     when: "has_forecast_projection"
+
+  # ------------------------------------------ Forecast vs Actual
+  # "Was the prior forecast right?" The handler has always existed; no slide was
+  # ever configured for it. THREE forecast-carrying runs are required, not two:
+  # two produce a single prior-forecast-versus-actual point, and one point is not
+  # a track record. An immature book omits this rather than showing a line
+  # through one observation.
+  - id: forecast_evolution
+    type: forecast_evolution
+    title: "Forecast Evolution — Actual vs Prior Forecast"
+    question: "Was the prior forecast right?"
+    when: "has_forecast_history and forecast_periods >= 3"
 
   # 18b --------------------------------- Portfolio Health and Watch Items
   # At most five governed watch items and three observations. Always rendered:

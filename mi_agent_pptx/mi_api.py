@@ -89,6 +89,10 @@ class DashboardData:
     movement: Dict[str, Any] = field(default_factory=dict)
     #: Deterministic watch items (see :mod:`mi_agent_pptx.watchlist`).
     watchlist: Dict[str, Any] = field(default_factory=dict)
+    #: Utilisation history per approved concentration test across governed
+    #: snapshots (``/mi/concentration-tests/history``). Empty when no approved
+    #: configuration exists or no history resolves.
+    concentration_history: Dict[str, Any] = field(default_factory=dict)
     #: The GOVERNED reporting currency for this book, resolved through
     #: ``mi_agent_api.currency`` exactly as the dashboard resolves it for a
     #: request. The deck never picks a currency of its own.
@@ -502,6 +506,7 @@ def build_dashboard_data(
     prior_run_dir: Optional[str] = None,  # accepted for CLI compatibility (unused)
     portfolio_context: Optional[str] = None,
     tenant_id: Optional[str] = None,
+    scale_targets: Optional[List[float]] = None,
 ) -> DashboardData:
     """Compute the full set of dashboard payloads for *run_dir*, headless.
 
@@ -648,12 +653,21 @@ def build_dashboard_data(
         # date, so it is only resolved when concentration produced nothing.
         data.concentration = _guard(data, "concentration",
                                     lambda: _concentration(out_root, cid, rid, scope))
+        # Movement: how each approved test's utilisation has travelled. Only
+        # asked for when there ARE approved tests — the history service would
+        # otherwise repeat the same "no approved configuration" answer.
+        if data.concentration.get("tests"):
+            data.concentration_history = _guard(
+                data, "concentration_history",
+                lambda: _concentration_history(out_root, cid, rid, scope))
         # Only when the concentration service itself could not run — it consults
         # the extracted monitor internally, so any other path would repeat it.
         if not data.concentration:
             data.risk = _guard(data, "risk", lambda: _risk(out_root, cid, rid))
-        data.extrapolation = _guard(data, "extrapolation",
-                                    lambda: _extrapolation(out_root, prow, cid, rid, history))
+        data.extrapolation = _guard(
+            data, "extrapolation",
+            lambda: _extrapolation(out_root, prow, cid, rid, history,
+                                   scale_targets))
 
         # -- Movement attribution (governed bridge, once per dimension) ------
         data.movement = _guard(data, "movement",
@@ -939,6 +953,19 @@ def _risk(out_root, cid, rid):
     return risk_limits.compute_risk_limits(out_root, cid, rid)
 
 
+def _concentration_history(out_root, cid, rid, scope):
+    """Utilisation of each approved test across REAL governed snapshots.
+
+    ``concentration_tests_api.compute_history`` — the same service behind
+    ``/mi/concentration-tests/history``, which the React Risk Limits workspace
+    already reads. It evaluates today's approved configuration against each
+    historical frame, so the series is comparable period to period. The deck
+    renders the direction; it computes none of it.
+    """
+    from mi_agent_api import concentration_tests_api as ct
+    return ct.compute_history(out_root, cid, rid, scope=scope)
+
+
 def _concentration(out_root, cid, rid, scope):
     """The governed concentration-test envelope — the SAME service the Risk Limits
     workspace, MI Query and Copilot use (``/mi/concentration-tests``).
@@ -954,7 +981,16 @@ def _concentration(out_root, cid, rid, scope):
     return ct.compute_concentration_tests(out_root, cid, rid, scope=scope)
 
 
-def _extrapolation(out_root, prow, cid, rid, history):
+def _extrapolation(out_root, prow, cid, rid, history, scale_targets=()):
+    """The governed scale-up projection.
+
+    ``scale_targets`` are the funding / securitisation thresholds the DECK
+    CONFIG names (``deck.scale_targets`` in the pack definition). They are
+    passed to the governed ladder through the ``extra_thresholds`` parameter it
+    already exposes, so naming a target is a configuration decision and not a
+    new forecast primitive — the projection itself is unchanged.
+    """
     from mi_agent_api import forecast_extrapolation as fx
     return fx.build_extrapolation(out_root, prow or out_root, cid, rid,
-                                  history_model=history)
+                                  history_model=history,
+                                  extra_thresholds=tuple(scale_targets or ()))

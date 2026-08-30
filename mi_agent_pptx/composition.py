@@ -180,7 +180,61 @@ def build_facts(data: Any) -> Dict[str, Any]:
         "has_concentration_forward": bool(
             ((getattr(data, "concentration", {}) or {}).get("states") or {}).get("available")),
     }
+
+    # -- QUANTITATIVE facts -------------------------------------------------
+    # The booleans above answer "does this exist?". A conditional pack also
+    # needs "how much of it is there?", because the difference between a new
+    # book and a seasoned one is not that one has no history — it is that one
+    # has too little history for a trend to mean anything. These three are read
+    # off already-resolved payloads; nothing is computed for them.
+    funded_periods = len((getattr(data, "funded_evolution", {}) or {}).get("periods") or ())
+    pipeline_periods = len((getattr(data, "pipeline_evolution", {}) or {}).get("periods") or ())
+    forecast_periods = len((getattr(data, "forecast_evolution", {}) or {}).get("periods") or ())
+    cohort_count = len((getattr(data, "cohorts", {}) or {}).get("cohorts") or ())
+
+    funded_balance = _kpi_raw(funded, "balance")
+    pipeline_amount = _num((getattr(data, "pipeline", {}) or {}).get("pipelineAmount"))
+    denominator = (funded_balance or 0.0) + (pipeline_amount or 0.0)
+
+    facts.update({
+        #: Reporting periods of funded history actually resolved.
+        "funded_periods": funded_periods,
+        #: Weekly pipeline extracts actually resolved.
+        "pipeline_periods": pipeline_periods,
+        #: Funded runs carrying a forecast. A forecast-vs-actual comparison needs
+        #: THREE: two to produce a prior forecast and an actual to test it
+        #: against, plus one more before the comparison is a track record rather
+        #: than a single data point.
+        "forecast_periods": forecast_periods,
+        #: Origination vintages the governed cohort table found.
+        "cohort_count": cohort_count,
+        #: Funded balance, from the governed KPI (never recomputed).
+        "funded_balance": float(funded_balance or 0.0),
+        #: Pipeline balance, from the governed pipeline snapshot.
+        "pipeline_amount": float(pipeline_amount or 0.0),
+        #: Pipeline as a share of the book it would join. This is what makes a
+        #: book "growing": not that a pipeline exists, but that it is large
+        #: enough relative to the funded book for the origination story to be
+        #: the story. A fraction 0-1.
+        "pipeline_share": (round(float(pipeline_amount or 0.0) / denominator, 4)
+                           if denominator else 0.0),
+    })
     return facts
+
+
+def _num(value: Any) -> Optional[float]:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _kpi_raw(funded: Mapping[str, Any], kpi_id: str) -> Optional[float]:
+    """The raw value behind a governed KPI tile, or ``None``."""
+    for kpi in (funded or {}).get("kpis") or ():
+        if isinstance(kpi, Mapping) and kpi.get("id") == kpi_id:
+            return _num(kpi.get("raw"))
+    return None
 
 
 # --------------------------------------------------------------------------- #

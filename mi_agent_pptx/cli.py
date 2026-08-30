@@ -347,6 +347,9 @@ def run(argv: Optional[List[str]] = None) -> int:
         prior_run_dir=args.prior_run_dir,
         portfolio_context=portfolio_context,
         tenant_id=args.tenant_id,
+        # Funding / securitisation targets are a CONFIG decision, declared in the
+        # pack definition rather than hard-coded here or in the forecast module.
+        scale_targets=deck_meta.get("scale_targets") or [],
     )
     for note in data.notes:
         print(f"[mi_api] {note}")

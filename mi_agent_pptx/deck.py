@@ -258,6 +258,27 @@ class DeckBuilder:
         return [(Inches(l), Inches(top), Inches(w), Inches(height))
                 for l, w in self._grid(min(max(n, 1), 3))]
 
+    def _matrix_boxes(self, n, *, top: float = 1.62, height: float = 4.95,
+                      row_gap: float = 0.22):
+        """Boxes for a 2 x 2 matrix of panels (or one row, for one or two).
+
+        A four-panel matrix is the deck's standard stratification grammar: four
+        governed dimensions, one visual language, readable at a glance. Falls
+        back to a single row for fewer panels so the same handler draws both.
+        """
+        if n <= 2:
+            return self._chart_boxes(n, top=top, height=height)
+        cols = self._grid(2)
+        rows = 2 if n <= 4 else (n + 1) // 2
+        panel_h = (height - row_gap * (rows - 1)) / rows
+        boxes = []
+        for i in range(n):
+            r, c = divmod(i, 2)
+            left, width = cols[c]
+            boxes.append((Inches(left), Inches(top + r * (panel_h + row_gap)),
+                          Inches(width), Inches(panel_h)))
+        return boxes
+
     def _strip(self, tiles, *, top: float = 1.58, height: float = 1.45):
         """A KPI row on the same grid the charts use.
 
@@ -411,6 +432,230 @@ class DeckBuilder:
         self._footer(s)
         self._record("executive_summary", spec.get("title", "Executive Summary"),
                      "Funded KPIs (dashboard-aligned).")
+
+    # ------------------------------------------------- executive dashboard
+    def slide_executive(self, spec):
+        """Slide 1 — where is the portfolio today, what is coming, and is
+        anything approaching a limit?
+
+        The three lenses on one page. Every figure is lifted from a governed
+        payload that a later slide also renders, so the landing page can never
+        disagree with the pack behind it: the funded tiles ARE the funded
+        snapshot's KPI tiles, the pipeline tiles ARE the pipeline snapshot's, the
+        forecast tile IS the forecast bridge's, and the risk strip IS the
+        concentration evaluator's summary.
+
+        There is no React executive landing page to mirror — the dashboard opens
+        on the funded lens of a tabbed workspace. This composition is therefore
+        new, and it is assembled from ``DashboardData`` alone (no extra compute
+        call) precisely so it can be offered back to React as one payload later.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        s = self._slide()
+        funded = self.d.funded or {}
+        pipeline = self.d.pipeline or {}
+        bridge = (self.d.forecast or {}).get("forecastBridge") or {}
+        by_id = {k.get("id"): k for k in funded.get("kpis", [])}
+
+        rd = self.d.reporting_date
+        self._header(s, spec.get("title", "Executive Position"),
+                     ("Funded, pipeline and forecast as at " + _pretty_date(rd))
+                     if rd else "Funded, pipeline and forecast",
+                     accent=self.theme.peri)
+
+        def kpi_tile(kpi_id, label=None):
+            """A funded KPI tile, verbatim from the governed snapshot."""
+            k = by_id.get(kpi_id)
+            if not k:
+                return None
+            return {"label": label or k.get("label"), "value": k.get("value"),
+                    "delta": k.get("delta"), "deltaIntent": k.get("deltaIntent"),
+                    "hint": None if k.get("delta") else k.get("hint"),
+                    "available": k.get("available", True)}
+
+        tiles = [tile for tile in (
+            kpi_tile("balance", "Funded balance"),
+            kpi_tile("loans", "Loans funded"),
+            kpi_tile("wa_current_ltv", "WA current LTV"),
+        ) if tile]
+
+        # PIPELINE — what is coming. Week-on-week deltas come from the governed
+        # prior-week aggregates, never computed here.
+        if pipeline:
+            prior = pipeline.get("priorWeek") or {}
+            amount = pipeline.get("pipelineAmount")
+            cases = pipeline.get("pipelineRowCount")
+
+            def wow(current, previous):
+                if previous is None or current is None:
+                    return None, None
+                diff = float(current) - float(previous)
+                intent = ("positive" if diff > 0 else
+                          "negative" if diff < 0 else "neutral")
+                return compact_currency(diff) + " vs prior wk", intent
+
+            delta, intent = wow(amount, prior.get("pipelineAmount"))
+            tiles.append({"label": "Pipeline balance",
+                          "value": compact_currency(amount),
+                          "delta": delta, "deltaIntent": intent,
+                          "hint": None if delta else "current weekly extract"})
+            tiles.append({"label": "Pipeline cases",
+                          "value": compact_number(cases),
+                          "hint": "live origination cases"})
+
+        # FORECAST — where the current book plus its pipeline lands.
+        weighted = bridge.get("weightedExpectedFundedAmount")
+        if weighted:
+            tiles.append({"label": "Weighted expected",
+                          "value": compact_currency(weighted),
+                          "hint": "probability-weighted pipeline"})
+        forecast_balance = bridge.get("forecastFundedBalance")
+        if forecast_balance:
+            tiles.append({"label": "Forecast funded",
+                          "value": compact_currency(forecast_balance),
+                          "hint": "funded + weighted pipeline"})
+
+        # Time to the nearest scale target the run-rate has not yet passed.
+        milestone = self._next_milestone()
+        if milestone:
+            tiles.append({"label": f"Time to {milestone['label']}",
+                          "value": milestone["value"],
+                          "hint": milestone.get("hint")})
+
+        if not tiles:
+            self._placeholder_body(s, "No governed measures resolved for this run.")
+            self._footer(s)
+            return self._record("executive", spec.get("title"), "", placeholder=True)
+
+        cols = 5 if len(tiles) > 4 else max(len(tiles), 1)
+        self._tile_grid(s, tiles[:10], top=1.58, cols=cols)
+
+        # Two compact trends beneath: the funded book, and what is converting.
+        rows_used = (min(len(tiles), 10) + cols - 1) // cols
+        charts_top = 1.58 + rows_used * (1.62 if rows_used <= 2 else 1.30) + 0.30
+        self._executive_trends(s, top=charts_top)
+
+        # Risk, last: the one line that says whether anything needs attention.
+        self._executive_risk_strip(s)
+        self._footer(s)
+        self._record("executive", spec.get("title"),
+                     "Funded, pipeline, forecast and risk on one page.")
+
+    def _next_milestone(self):
+        """The nearest configured scale target the book has not yet reached.
+
+        Straight from the governed extrapolation ladder
+        (``forecast_extrapolation.build_extrapolation``) — the same milestones the
+        Time to Scale slide tabulates. No projection is performed here.
+        """
+        extrap = self.d.extrapolation or {}
+        for model_key in ("completionRunRateForecast", "kfiConversionForecast"):
+            model = extrap.get(model_key) or {}
+            if not model.get("available"):
+                continue
+            for row in model.get("milestones") or ():
+                base = row.get("base") or row.get("expected") or {}
+                period = base.get("period") if isinstance(base, dict) else None
+                if not period:
+                    for value in row.values():
+                        if isinstance(value, dict) and value.get("period"):
+                            period = value["period"]
+                            break
+                if period:
+                    return {"label": row.get("thresholdLabel", "target"),
+                            "value": str(period),
+                            "hint": "central run-rate scenario"}
+        return None
+
+    def _executive_trends(self, slide, *, top: float):
+        """Up to two compact trends: funded balance, and weighted pipeline.
+
+        Both are governed evolution series already resolved for later slides. A
+        series with fewer than two periods is simply omitted — a single point is
+        not a trend, and an empty chart frame on the landing page is worse than
+        one fewer chart.
+        """
+        height = min(2.30, max(1.55, 6.55 - top))
+        if height < 1.4:
+            return
+        candidates = []
+        funded_evo = (self.d.funded_evolution or {}).get("periods") or []
+        if len(funded_evo) >= 2:
+            candidates.append(("exec_funded", "Funded balance by period", funded_evo,
+                               "funded_balance", True, False))
+        pipe_evo = (self.d.pipeline_evolution or {}).get("periods") or []
+        if len(pipe_evo) >= 2:
+            candidates.append(("exec_pipeline", "Weighted expected pipeline by week",
+                               pipe_evo, "weighted_expected_funded_amount", True, False))
+        if not candidates:
+            return
+        boxes = self._chart_boxes(len(candidates), top=top, height=height)
+        for (cid, title, periods, metric, currency, percent), box in zip(candidates, boxes):
+            il, it, iw, ih = self._card(slide, *box, title)
+            x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+                 for p in periods]
+            values = [(p.get("metrics") or {}).get(metric) for p in periods]
+            if sum(1 for v in values if v is not None) < 2:
+                continue
+            path = self.work / f"{cid}.png"
+            R.draw_lines(path, x, [{"name": title, "values": values}], iw, ih,
+                         theme=self.theme, currency=currency, percent=percent,
+                         area=True, chart_id=cid)
+            self._place(slide, path, il, it, iw, ih)
+
+    def _executive_risk_strip(self, slide):
+        """One line on limits, from the governed concentration evaluator.
+
+        The counts and the closest-to-breaching test are ``concentration.summarise``
+        — the same figures the Concentration slide tabulates — so the landing page
+        and the risk page cannot disagree. "No approved configuration" is itself a
+        finding and is stated plainly rather than left blank.
+        """
+        from . import concentration as C
+
+        env = self.d.concentration or {}
+        rows = C.adapt_tests(env)
+        top = 6.62
+        width = Inches(self.CONTENT_R - self.CONTENT_L)
+        if not rows:
+            self._text(slide, Inches(self.CONTENT_L), Inches(top), width,
+                       Inches(0.30),
+                       "Concentration — no operator-approved limit configuration "
+                       "is in force for this portfolio.",
+                       size=10, color=self.theme.ink_400, italic=True)
+            return
+
+        summary = C.summarise(env, rows)
+        breaches, warnings = summary["breaches"], summary["warnings"]
+        within = max(summary["tests"] - breaches - warnings, 0)
+        parts = [f"{within} within limit"]
+        if warnings:
+            parts.append(f"{warnings} approaching")
+        if breaches:
+            parts.append(f"{breaches} in breach")
+        line = "Concentration — " + ", ".join(parts)
+
+        closest = summary.get("closest")
+        if closest and closest.get("utilisation") is not None:
+            line += (f". Closest to its limit: {closest['label']} at "
+                     f"{closest['utilisation']:.0f}% utilisation")
+            headroom = closest.get("headroom")
+            if headroom is not None:
+                line += f" ({C.format_measure(headroom, closest.get('unit'))} headroom)"
+        if summary.get("expected_breaches"):
+            line += f". {summary['expected_breaches']} forecast to breach"
+
+        worst = (C.STATUS_BREACH if breaches else
+                 C.STATUS_WARNING if warnings else C.STATUS_PASS)
+        colour = {C.STATUS_BREACH: self.theme.rose,
+                  C.STATUS_WARNING: self.theme.amber}.get(worst, self.theme.mint)
+        self._panel(slide, Inches(self.CONTENT_L), Inches(top), width, Inches(0.40),
+                    fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+        self._text(slide, Inches(self.CONTENT_L + 0.18), Inches(top + 0.06),
+                   Emu(int(width) - int(Inches(0.36))), Inches(0.28),
+                   self._fit_label(line + ".", self.CONTENT_R - self.CONTENT_L - 0.4, 10),
+                   size=10, color=colour, bold=True)
 
     # ------------------------------------------------- investor narrative
     def slide_exec_insights(self, spec):
@@ -849,46 +1094,60 @@ class DeckBuilder:
         from . import movement as MV
 
         s = self._slide()
-        strats = self.d.funded.get("stratifications", [])
+        # LENS. ``funded`` (default) reads the funded snapshot; ``pipeline``
+        # reads the governed pipeline stratifications, which carry the SAME
+        # bands from the SAME bucket registry. One handler, one visual grammar,
+        # so a pipeline LTV band and a funded LTV band are read the same way.
+        lens = spec.get("lens", "funded")
+        source = self.d.pipeline if lens == "pipeline" else self.d.funded
+        strats = (source or {}).get("stratifications", []) or []
         keys = spec.get("keys")
         if keys:
-            strats = [st for st in strats if st.get("key") in keys]
-        strats = strats[:2]
+            by_key = {st.get("key"): st for st in strats}
+            strats = [by_key[k] for k in keys if k in by_key and by_key[k].get("bars")]
+        strats = strats[:4]
 
-        bridges = self.d.movement or {}
+        # Movement attribution is a FUNDED concept: it compares two funded
+        # reporting periods. A pipeline stratification has no such bridge.
+        bridges = (self.d.movement or {}) if lens == "funded" else {}
         moved = [bridges[st.get("key")] for st in strats
                  if bridges.get(st.get("key")) is not None
                  and bridges[st.get("key")].available]
         window = self._movement_window(moved[0]) if moved else "Balance by dimension"
-        self._header(s, spec.get("title", "Funded Stratifications"),
+        default_strap = ("Pipeline balance by dimension" if lens == "pipeline"
+                         else "Balance by dimension")
+        self._header(s, spec.get("title", "Stratifications"),
                      ("Composition and period movement" if moved
-                      else "Balance by dimension"), accent=self.theme.peri)
+                      else default_strap), accent=self.theme.peri)
 
-        has_takeaways = bool(moved)
+        # A 2 x 2 matrix leaves no room for a takeaway strip; two panels do.
+        has_takeaways = bool(moved) and len(strats) <= 2
         chart_h = 3.62 if has_takeaways else 4.95
         ph = True
         if len(strats) == 1:
-            boxes = [(Inches(0.55), Inches(1.62), Inches(12.25), Inches(chart_h))]
+            boxes = [(Inches(self.CONTENT_L), Inches(1.62),
+                      Inches(self.CONTENT_R - self.CONTENT_L), Inches(chart_h))]
         else:
-            boxes = [(Inches(0.55), Inches(1.62), Inches(6.02), Inches(chart_h)),
-                     (Inches(6.78), Inches(1.62), Inches(6.02), Inches(chart_h))]
+            boxes = self._matrix_boxes(len(strats), height=chart_h)
 
         for st, box in zip(strats, boxes):
             key = st.get("key")
             rows = st.get("bars", [])
             ok = self._barlist_card(s, box, st.get("label", key or ""), rows,
-                                    "balance", cid=f"strat_{key}", dimension=key)
+                                    "balance", cid=f"strat_{lens}_{key}",
+                                    dimension=key)
             ph = ph and not ok
 
         # A single marginal-change panel beneath, for the dimension that moved
         # most — one clear change view rather than a grid of small ones.
         lines: List[str] = []
-        if moved:
+        if has_takeaways:
             for b in moved:
                 lines.extend(MV.takeaways(b, limit=1))
             self._takeaway_strip(s, lines[:3], top=5.42)
         if not strats:
-            self._placeholder_body(s, "No funded stratifications for this run.")
+            self._placeholder_body(
+                s, f"No {lens} stratifications for this run.")
         self._footer(s)
         self._record(spec.get("id", "strat"), spec.get("title"),
                      window if moved else "", placeholder=ph)
@@ -939,7 +1198,13 @@ class DeckBuilder:
         single = bool(evo.get("singlePeriod")) or len(periods) < 2
         x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
              for p in periods]
-        boxes = self._chart_boxes(len(chart_specs))
+        # Only measures the governed series actually carries. A tape without an
+        # interest rate should lose that panel, not gain an empty one.
+        chart_specs = [cs for cs in chart_specs
+                       if any((p.get("metrics") or {}).get(ser["key"]) is not None
+                              for p in periods for ser in cs["series"])] or chart_specs[:1]
+        boxes = (self._matrix_boxes(len(chart_specs)) if len(chart_specs) > 2
+                 else self._chart_boxes(len(chart_specs)))
         for cs, box in zip(chart_specs, boxes):
             il, it, iw, ih = self._card(s, *box, cs["title"])
             series = [{"name": ser.get("name", ""),
@@ -962,11 +1227,22 @@ class DeckBuilder:
     def slide_funded_evolution(self, spec):
         s = self._slide()
         self._header(s, spec.get("title", "Funded Evolution"), "Funded book over time")
+        # The four measures the dashboard's funded Evolution tab plots. The deck
+        # used to show two of them, so the same tab and the same slide described
+        # the book differently.
         ph = self._evolution_lines(s, spec, self.d.funded_evolution, [
             {"id": "evo_bal", "title": "Funded balance by month",
-             "series": [{"name": "Funded balance", "key": "funded_balance"}], "currency": True},
+             "series": [{"name": "Funded balance", "key": "funded_balance"}],
+             "currency": True},
+            {"id": "evo_count", "title": "Funded loan count by month",
+             "series": [{"name": "Loan count", "key": "loan_count"}],
+             "currency": False},
             {"id": "evo_ltv", "title": "WA current LTV by month",
-             "series": [{"name": "WA LTV", "key": "wa_ltv"}], "currency": False, "percent": True},
+             "series": [{"name": "WA LTV", "key": "wa_ltv"}],
+             "currency": False, "percent": True},
+            {"id": "evo_rate", "title": "WA interest rate by month",
+             "series": [{"name": "WA rate", "key": "wa_interest_rate"}],
+             "currency": False, "percent": True},
         ])
         self._footer(s)
         self._record("funded_evolution", spec.get("title"), "", placeholder=ph)
@@ -1422,7 +1698,6 @@ class DeckBuilder:
         rows = [{"label": pretty.get(st, st),
                  "v": (summary.get(st) or {}).get("latestFlowValue", 0)}
                 for st in stages]
-        box = (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95))
         title = "Latest weekly origination flow by stage"
         # Weekly flow needs ≥2 pipeline extracts. With a single extract, fall back to
         # the CURRENT pipeline funnel — case counts by stage — so the slide still
@@ -1432,10 +1707,74 @@ class DeckBuilder:
                                           value_key="caseCount")
             rows = [{"label": r["label"], "v": r.get("caseCount", 0)} for r in stage_rows]
             title = "Current pipeline cases by stage"
+        # The flow chart takes the upper band; the governed conversion rates sit
+        # beneath it. The deck used to drop the conversion block entirely, which
+        # is the single most-asked question of a growing book — and it is
+        # already computed, with its lag and its sufficiency flag, by
+        # ``evolution.pipeline_funnel_evolution``. Nothing is derived here.
+        conv_rows = self._conversion_rows(summary)
+        box = (Inches(self.CONTENT_L), Inches(1.62),
+               Inches(self.CONTENT_R - self.CONTENT_L),
+               Inches(3.30 if conv_rows else 4.95))
         ok = self._barlist_card(s, box, title, [r for r in rows if r.get("v")], "v",
                                 currency=False, cid="funnel")
+        if conv_rows:
+            self._conversion_strip(s, conv_rows,
+                                   self.d.funnel.get("conversionLagWeeks"))
         self._footer(s)
         self._record("funnel", spec.get("title"), "", placeholder=not ok)
+
+    def _conversion_rows(self, summary):
+        """Governed forward conversion per stage, read straight off the funnel.
+
+        ``weeklyRateValue`` is the evaluator's own forward conversion — average
+        weekly flow into the stage over the lagged KFI stock. It is never
+        recomputed here, and a stage the evaluator marks INSUFFICIENT is carried
+        with that mark rather than silently presented as a rate to plan from.
+        """
+        rows = []
+        for stage, block in (summary or {}).items():
+            conv = (block or {}).get("conversion")
+            if not conv or conv.get("weeklyRateValue") is None:
+                continue
+            rows.append({
+                "label": (block.get("label") or stage),
+                "rate": float(conv["weeklyRateValue"]),
+                "sufficient": bool(conv.get("sufficient")),
+                "weeks": conv.get("weeksInWindow"),
+                "min_weeks": conv.get("minWeeks"),
+            })
+        return rows
+
+    def _conversion_strip(self, slide, rows, lag_weeks):
+        """Conversion rates as a labelled strip beneath the funnel."""
+        top = 5.10
+        width = self.CONTENT_R - self.CONTENT_L
+        basis = ("Forward conversion — average weekly flow into each stage over "
+                 "the KFI stock")
+        basis += (f" lagged {lag_weeks} week(s)." if lag_weeks else " (unlagged).")
+        self._text(slide, Inches(self.CONTENT_L), Inches(top), Inches(width),
+                   Inches(0.26), basis, size=9.5, color=self.theme.ink_400,
+                   italic=True)
+        cells = self._grid(min(len(rows), 4))
+        for (left, w), row in zip(cells, rows[:4]):
+            self._panel(slide, Inches(left), Inches(top + 0.32), Inches(w),
+                        Inches(1.05), fill=self.theme.bg_panel_alt,
+                        line=self.theme.line_soft)
+            self._text(slide, Inches(left + 0.16), Inches(top + 0.42),
+                       Inches(w - 0.32), Inches(0.26),
+                       str(row["label"]).upper(), size=8.5,
+                       color=self.theme.ink_400, bold=True)
+            self._text(slide, Inches(left + 0.16), Inches(top + 0.66),
+                       Inches(w - 0.32), Inches(0.34),
+                       f"{row['rate']:.1f}%/wk", size=17, bold=True,
+                       color=self.theme.ink_100 if row["sufficient"]
+                       else self.theme.ink_500)
+            note = ("of lagged KFI stock" if row["sufficient"] else
+                    f"provisional — {row['weeks']} of {row['min_weeks']}+ weeks")
+            self._text(slide, Inches(left + 0.16), Inches(top + 1.00),
+                       Inches(w - 0.32), Inches(0.24), note, size=8.5,
+                       color=self.theme.ink_500)
 
     def slide_forecast_bridge(self, spec):
         s = self._slide()
@@ -1471,14 +1810,53 @@ class DeckBuilder:
             steps.append(("+ Weighted Pipeline",
                           float(fb.get("weightedExpectedFundedAmount") or 0), "add"))
         steps.append(("Forecast Funded", float(fb.get("forecastFundedBalance") or 0), "total"))
-        box = (Inches(0.55), Inches(1.92), Inches(12.25), Inches(4.64))
+        # The bridge, then WHERE the forecast lands. ``forecast_breakdowns`` was
+        # already being resolved for this deck and thrown away, while the
+        # dashboard's Forecast view rendered both cuts — so the pack answered
+        # "how much" and the screen also answered "where".
+        by_region = self._forecast_breakdown_rows(brk, "byRegionCapped", "byRegion")
+        by_ltv = self._forecast_breakdown_rows(brk, "byLtvBucketCapped", "byLtvBucket")
+        cuts = [(k, lbl, rows, dim) for k, lbl, rows, dim in (
+            ("fc_region", "Forecast balance by region", by_region, "region"),
+            ("fc_ltv", "Forecast balance by LTV band", by_ltv, "ltv"),
+        ) if rows]
+
+        bridge_h = 3.05 if cuts else 4.64
+        box = (Inches(self.CONTENT_L), Inches(1.92),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(bridge_h))
         il, it, iw, ih = self._card(s, *box,
                                     "Funded + weighted pipeline (by expected completion month) → Forecast")
         path = self.work / "bridge.png"
         render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
         self._place(s, path, il, it, iw, ih)
+
+        if cuts:
+            boxes = self._chart_boxes(len(cuts), top=1.92 + bridge_h + 0.20,
+                                      height=6.55 - (1.92 + bridge_h + 0.20))
+            for (cid, label, rows, dim), cbox in zip(cuts, boxes):
+                self._barlist_card(s, cbox, label, rows, "balance",
+                                   cid=cid, dimension=dim)
         self._footer(s)
         self._record("forecast_bridge", spec.get("title"), "", placeholder=False)
+
+    @staticmethod
+    def _forecast_breakdown_rows(breakdowns, capped_key, full_key):
+        """Forecast-by-dimension rows in the deck's bar-list shape.
+
+        ``workspace.forecast_breakdowns`` is the SAME payload the dashboard's
+        Forecast view renders. The capped form (top 10 + Other) is preferred so
+        a long region list stays legible, exactly as it does on screen.
+        """
+        rows = (breakdowns or {}).get(capped_key) or (breakdowns or {}).get(full_key) or []
+        out = []
+        for row in rows:
+            value = row.get("forecastAmount")
+            if value is None:
+                value = row.get("pipelineAmount")
+            if value is None:
+                continue
+            out.append({"label": str(row.get("key", "")), "balance": float(value)})
+        return out
 
     def slide_forecast_projection(self, spec):
         s = self._slide()
@@ -2094,6 +2472,7 @@ class DeckBuilder:
     # ------------------------------------------------------------------- build
     _DISPATCH = {
         "cover": "slide_cover", "kpi_summary": "slide_kpi_summary",
+        "executive": "slide_executive",
         "exec_insights": "slide_exec_insights",
         "portfolio_composition": "slide_portfolio_composition",
         "portfolio_comparison": "slide_portfolio_comparison",

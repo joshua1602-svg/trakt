@@ -46,6 +46,9 @@ class DeckConfig:
     max_strapline_words: int = 24
     suppress_broker_consolidated: bool = True
     logo_path: Optional[str] = None
+    #: Funding / securitisation thresholds the pack reports time-to-scale
+    #: against, added to the governed ladder for this pack only.
+    scale_targets: List[float] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -99,5 +102,6 @@ def load_deck_config(path: str | Path) -> DeckConfig:
         suppress_broker_consolidated=bool(
             deck.get("suppress_broker_consolidated", True)),
         logo_path=deck.get("logo_path"),
+        scale_targets=[float(v) for v in (deck.get("scale_targets") or [])],
         raw=data,
     )
