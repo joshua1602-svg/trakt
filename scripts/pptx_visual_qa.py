@@ -341,6 +341,23 @@ def inspect(content: bytes, currency: str, side: dict):
         if not drawn:
             findings.append(f"{dim} bar list drawn with no categories")
 
+    # Bar lists that cannot fit their own rows. The renderer scales its type to
+    # the row band and stops at a floor; below that floor the labels collide,
+    # which is a defect no text inspection can see because the bars are an image.
+    pictures = {}
+    for n, slide in enumerate(deck.slides, start=1):
+        for shape in slide.shapes:
+            if shape.shape_type == 13 and shape.height:
+                pictures.setdefault(n, []).append(int(shape.height) / 914400)
+    for entry in side.get("rendered") or ():
+        if entry.get("kind") != "barlist":
+            continue
+        rows = len(entry.get("categories") or ())
+        if rows > 14:
+            findings.append(
+                f"{entry.get('chart')}: {rows} bars in one list — beyond what a "
+                f"slide panel can carry legibly")
+
     gates = side.get("preflight", {}) or {}
     for failed in gates.get("failed_gates") or ():
         findings.append(f"publication gate FAILED: {failed}")

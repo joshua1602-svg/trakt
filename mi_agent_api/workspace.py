@@ -14,6 +14,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
+
+from . import presentation as _presentation
 from mi_agent import portfolio_lens as lens_mod
 
 VIEWS = ("funded", "pipeline", "forecast")
@@ -320,18 +322,25 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
     month = _dim_sum(pipeline_df, "expected_completion_month", "weighted_expected_funded_amount")
     by_month = [{"month": k, "weightedExpectedFundedAmount": round(v, 2)}
                 for k, v in sorted(month.items())]
-    # Re-cap region/ltv to top 10 for the visual, keyed on forecastAmount.
-    def _cap(rows):
+    # SELECT by materiality (top 10 + Other), then ORDER for display through the
+    # shared presentation owner. The uncapped forms stay ranked by amount, which
+    # is what a caller inspecting the full distribution wants; the CAPPED forms
+    # are what gets drawn, and a drawn LTV axis must read low-to-high on every
+    # surface that draws it. Without this the Forecast view's LTV cut was the one
+    # banded chart in the product still ordered by size.
+    def _cap(rows, dimension):
         capped = cap_breakdown(
             [{"key": r["key"], "caseCount": 0, "pipelineAmount": r["forecastAmount"],
               "weightedExpectedFundedAmount": r["weightedPipelineAmount"]} for r in rows], 10)
-        return capped
+        return _presentation.order_bars(capped, dimension=dimension,
+                                        label_key="key")
     return {
         "byRegion": region,
         "byLtvBucket": ltv,
         "byCompletionMonth": by_month,
-        "byRegionCapped": _cap(region),
-        "byLtvBucketCapped": _cap(ltv),
+        "byRegionCapped": _cap(region, "region"),
+        "byLtvBucketCapped": _cap(ltv, "ltv"),
+        "displayOrder": _presentation.DISPLAY_ORDER_GOVERNED,
     }
 
 

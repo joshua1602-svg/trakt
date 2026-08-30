@@ -1170,14 +1170,45 @@ def forecast_evolution(output_root: str | os.PathLike,
             "reconciliation": fp.get("reconciliation"),
             "source_file": fp.get("source_file"),
         })
+
+    # WAS THE PRIOR FORECAST RIGHT? The forecast a run published becomes the
+    # prediction the NEXT run's actual tests. That is a re-indexing of the series
+    # already built above — the same numbers, shifted one period — and it is done
+    # here rather than in each surface because it was previously derived in the
+    # browser (``EvolutionPanel``'s forecastVariance) and therefore existed on
+    # exactly one of the two surfaces that should show it.
+    #
+    # No new economics: ``prior_forecast`` at period N IS
+    # ``forecast_funded_balance`` at period N-1, and the variance is the
+    # difference between two figures already reconciled above. The first period
+    # carries none, because nothing forecast it.
+    for index, period in enumerate(periods):
+        if index == 0:
+            period["metrics"]["prior_forecast"] = None
+            period["metrics"]["forecast_variance"] = None
+            continue
+        prior = periods[index - 1]["metrics"].get("forecast_funded_balance")
+        actual = period["metrics"].get("funded_balance")
+        period["metrics"]["prior_forecast"] = prior
+        period["metrics"]["forecast_variance"] = (
+            round(float(actual) - float(prior), 2)
+            if prior is not None and actual is not None else None)
+
     return {
         "dataset": "forecast",
         "portfolioId": client_id,
         "toRunId": to_run_id,
         "periods": periods,
+        #: Periods carrying a testable prior forecast. A forecast-vs-actual view
+        #: needs at least one; a track record needs more than one.
+        "priorForecastPeriods": sum(
+            1 for p in periods if p["metrics"].get("prior_forecast") is not None),
         "lineage": {
             "source": "funded central tapes + governed weighted pipeline",
             "formula": "forecast = funded balance + Σ(weighted expected pipeline)",
+            "priorForecast": ("this run's ACTUAL funded balance beside the forecast "
+                              "the PRIOR run published — the same series, offset by "
+                              "one reporting period"),
         },
         "singlePeriod": len(periods) <= 1,
     }

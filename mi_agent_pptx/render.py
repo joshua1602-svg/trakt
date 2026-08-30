@@ -136,7 +136,17 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
     # styling choice.
     label_x, tx0, tx1 = 0.005, 0.385, 0.86
     tw = tx1 - tx0
-    max_chars = max(10, int((tx0 - label_x) * w * 72 / (10.5 * 0.56)))
+
+    # TYPE SIZE FOLLOWS THE ROW BAND. At a fixed 10.5pt, a panel with more rows
+    # than vertical room drew its labels on top of one another — which is what
+    # the forecast-by-region cut did at seven rows in an inch. The size is
+    # derived from the height each row actually gets, and floored at the
+    # smallest size that is still readable on a projected slide; below that the
+    # panel is genuinely too small for this many rows, and the caller (not the
+    # renderer) should be showing fewer.
+    row_in = band * h
+    font = max(7.5, min(10.5, row_in * 72.0 * 0.52))
+    max_chars = max(10, int((tx0 - label_x) * w * 72 / (font * 0.56)))
     for i, (lab, val) in enumerate(zip(labels, values)):
         yc = 1.0 - pad_top - (i + 0.5) * band
         y0 = yc - bar_h / 2
@@ -150,9 +160,9 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
             linewidth=0, facecolor=theme.peri, alpha=0.9,
             mutation_aspect=h / w, zorder=2))
         ax.text(label_x, yc, _truncate(lab, max_chars), va="center", ha="left",
-                color=theme.ink_300, fontsize=10.5, zorder=3)
+                color=theme.ink_300, fontsize=font, zorder=3)
         ax.text(0.995, yc, fmt(val), va="center", ha="right", color=theme.ink_100,
-                fontsize=10.5, fontproperties=_MONO_FP, zorder=3)
+                fontsize=font, fontproperties=_MONO_FP, zorder=3)
     return _save(fig, path, theme, dpi)
 
 

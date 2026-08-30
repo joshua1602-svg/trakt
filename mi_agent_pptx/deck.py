@@ -226,17 +226,26 @@ class DeckBuilder:
             self._text(slide, l + pad, y, iw, Inches(0.3), str(tile["hint"]),
                        size=9, color=self.theme.ink_400)
 
-    def _tile_grid(self, slide, tiles: List[Dict[str, Any]], *, top=1.62, cols=5):
+    def _tile_grid(self, slide, tiles: List[Dict[str, Any]], *, top=1.62, cols=5,
+                   row_height: Optional[float] = None) -> float:
+        """Lay out KPI tiles; returns the bottom edge of the block, in inches.
+
+        ``row_height`` lets a slide that has to fit something BENEATH the tiles
+        choose a more compact row rather than discovering afterwards that there
+        is no room left for it.
+        """
         rows = max(1, (len(tiles) + cols - 1) // cols)
         gx, gy = Inches(0.16), Inches(0.22)
         left0, top0 = Inches(0.55), Inches(top)
         tile_w = Emu(int((int(Inches(12.25)) - (cols - 1) * int(gx)) / cols))
-        tile_h = Inches(1.62) if rows <= 2 else Inches(1.3)
+        height_in = row_height if row_height is not None else (1.62 if rows <= 2 else 1.3)
+        tile_h = Inches(height_in)
         for i, tile in enumerate(tiles):
             r, c = divmod(i, cols)
             l = Emu(int(left0) + c * (int(tile_w) + int(gx)))
             t = Emu(int(top0) + r * (int(tile_h) + int(gy)))
             self._tile(slide, l, t, tile_w, tile_h, tile)
+        return top + rows * height_in + (rows - 1) * 0.22
 
     #: THE content band. Every tile row and every chart panel is laid out across
     #: these two edges, so a KPI strip and the charts beneath it cannot drift
@@ -257,6 +266,23 @@ class DeckBuilder:
     def _chart_boxes(self, n, *, top: float = 1.62, height: float = 4.95):
         return [(Inches(l), Inches(top), Inches(w), Inches(height))
                 for l, w in self._grid(min(max(n, 1), 3))]
+
+    #: Where the executive slide's risk strip sits, and the clearance the charts
+    #: above it must leave. Without the clearance the trend card's border landed
+    #: on the strip, and the one line a reader takes off the page read as part of
+    #: the chart.
+    RISK_STRIP_TOP = 6.58
+    RISK_STRIP_CLEARANCE = 0.26
+
+    #: Vertical room one bar-list row needs to stay readable, in inches. Derived
+    #: from the renderer: the label and the mono value are ~9pt, and below this
+    #: they begin to collide with the rows above and beneath them.
+    ROW_PITCH_IN = 0.19
+
+    def _barlist_capacity(self, height_in: float, *, minimum: int = 3) -> int:
+        """How many bars a panel of this height can carry legibly."""
+        usable = max(0.0, height_in - 0.42)          # card title + padding
+        return max(minimum, int(usable / self.ROW_PITCH_IN))
 
     def _matrix_boxes(self, n, *, top: float = 1.62, height: float = 4.95,
                       row_gap: float = 0.22):
@@ -528,13 +554,24 @@ class DeckBuilder:
             self._footer(s)
             return self._record("executive", spec.get("title"), "", placeholder=True)
 
-        cols = 5 if len(tiles) > 4 else max(len(tiles), 1)
-        self._tile_grid(s, tiles[:10], top=1.58, cols=cols)
+        # Balance the grid. Five columns for seven tiles leaves a row of five
+        # and a row of two with a hole beside it; four leaves four and three,
+        # which reads as a block. Never more than five across — narrower than
+        # that and a compact currency value stops fitting its tile.
+        shown = tiles[:10]
+        cols = (len(shown) if len(shown) <= 4
+                else min(5, -(-len(shown) // 2)) if len(shown) <= 8 else 5)
 
-        # Two compact trends beneath: the funded book, and what is converting.
-        rows_used = (min(len(tiles), 10) + cols - 1) // cols
-        charts_top = 1.58 + rows_used * (1.62 if rows_used <= 2 else 1.30) + 0.30
-        self._executive_trends(s, top=charts_top)
+        # BUDGET THE PAGE before drawing it. The tiles, the trends and the risk
+        # strip all have to fit between the header and the footer; sizing the
+        # tiles first and discovering afterwards that nothing fits underneath is
+        # how the trend silently vanished. A second tile row is drawn compact so
+        # the trends keep a usable band.
+        rows_used = (len(shown) + cols - 1) // cols
+        row_height = 1.62 if rows_used == 1 else 1.30
+        tiles_bottom = self._tile_grid(s, shown, top=1.58, cols=cols,
+                                       row_height=row_height)
+        self._executive_trends(s, top=tiles_bottom + 0.28)
 
         # Risk, last: the one line that says whether anything needs attention.
         self._executive_risk_strip(s)
@@ -576,7 +613,7 @@ class DeckBuilder:
         not a trend, and an empty chart frame on the landing page is worse than
         one fewer chart.
         """
-        height = min(2.30, max(1.55, 6.55 - top))
+        height = min(2.30, self.RISK_STRIP_TOP - self.RISK_STRIP_CLEARANCE - top)
         if height < 1.4:
             return
         candidates = []
@@ -590,7 +627,11 @@ class DeckBuilder:
                                pipe_evo, "weighted_expected_funded_amount", True, False))
         if not candidates:
             return
-        boxes = self._chart_boxes(len(candidates), top=top, height=height)
+        # One trend gets half the band, not all of it: a single line stretched
+        # across thirteen inches reads as an empty slide with a line in it.
+        boxes = (self._chart_boxes(2, top=top, height=height)[:1]
+                 if len(candidates) == 1
+                 else self._chart_boxes(len(candidates), top=top, height=height))
         for (cid, title, periods, metric, currency, percent), box in zip(candidates, boxes):
             il, it, iw, ih = self._card(slide, *box, title)
             x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
@@ -616,7 +657,7 @@ class DeckBuilder:
 
         env = self.d.concentration or {}
         rows = C.adapt_tests(env)
-        top = 6.62
+        top = self.RISK_STRIP_TOP
         width = Inches(self.CONTENT_R - self.CONTENT_L)
         if not rows:
             self._text(slide, Inches(self.CONTENT_L), Inches(top), width,
@@ -1702,11 +1743,17 @@ class DeckBuilder:
         # Weekly flow needs ≥2 pipeline extracts. With a single extract, fall back to
         # the CURRENT pipeline funnel — case counts by stage — so the slide still
         # carries real data (matching the dashboard's single-period funnel).
+        # Weekly FLOW is a balance; the single-extract fallback is a CASE COUNT.
+        # They are different measures and must not be formatted the same way —
+        # the fallback used to render amounts unlabelled, so a reader could not
+        # tell which they were looking at.
+        as_currency = True
         if not any(r["v"] for r in rows):
             stage_rows = self._stage_rows(self.d.pipeline.get("stageBreakdown", []),
                                           value_key="caseCount")
             rows = [{"label": r["label"], "v": r.get("caseCount", 0)} for r in stage_rows]
             title = "Current pipeline cases by stage"
+            as_currency = False
         # The flow chart takes the upper band; the governed conversion rates sit
         # beneath it. The deck used to drop the conversion block entirely, which
         # is the single most-asked question of a growing book — and it is
@@ -1717,7 +1764,7 @@ class DeckBuilder:
                Inches(self.CONTENT_R - self.CONTENT_L),
                Inches(3.30 if conv_rows else 4.95))
         ok = self._barlist_card(s, box, title, [r for r in rows if r.get("v")], "v",
-                                currency=False, cid="funnel")
+                                currency=as_currency, cid="funnel")
         if conv_rows:
             self._conversion_strip(s, conv_rows,
                                    self.d.funnel.get("conversionLagWeeks"))
@@ -1821,7 +1868,7 @@ class DeckBuilder:
             ("fc_ltv", "Forecast balance by LTV band", by_ltv, "ltv"),
         ) if rows]
 
-        bridge_h = 3.05 if cuts else 4.64
+        bridge_h = 2.72 if cuts else 4.64
         box = (Inches(self.CONTENT_L), Inches(1.92),
                Inches(self.CONTENT_R - self.CONTENT_L), Inches(bridge_h))
         il, it, iw, ih = self._card(s, *box,
@@ -1834,7 +1881,12 @@ class DeckBuilder:
             boxes = self._chart_boxes(len(cuts), top=1.92 + bridge_h + 0.20,
                                       height=6.55 - (1.92 + bridge_h + 0.20))
             for (cid, label, rows, dim), cbox in zip(cuts, boxes):
-                self._barlist_card(s, cbox, label, rows, "balance",
+                # A bar list needs roughly a fifth of an inch per row to stay
+                # legible. Show the bands the panel can actually carry rather
+                # than compressing seven rows into an inch, which produced
+                # overlapping labels.
+                capacity = self._barlist_capacity(float(cbox[3]) / EMU_IN)
+                self._barlist_card(s, cbox, label, rows[:capacity], "balance",
                                    cid=cid, dimension=dim)
         self._footer(s)
         self._record("forecast_bridge", spec.get("title"), "", placeholder=False)
@@ -1910,12 +1962,22 @@ class DeckBuilder:
         s = self._slide()
         self._header(s, spec.get("title", "Forecast Evolution"),
                      "Forecast funded balance across reporting runs", accent=self.theme.mint)
+        # Two charts: where the forecast has travelled, and whether it held.
+        # The prior-forecast series is the governed one
+        # (``evolution.forecast_evolution``), the same series React's Forecast
+        # Evolution tab plots — it used to be derived in the browser, so only one
+        # of the two surfaces could show it.
         ph = self._evolution_lines(s, spec, self.d.forecast_evolution, [
             {"id": "fevo", "title": "Forecast funded balance by run",
              "series": [
                  {"name": "Funded actual", "key": "funded_balance", "color": "#7c9cf0"},
                  {"name": "Weighted pipeline", "key": "weighted_expected_pipeline", "color": "#5ec6b8"},
                  {"name": "Forecast", "key": "forecast_funded_balance", "color": "#e0a458"}],
+             "currency": True},
+            {"id": "fvar", "title": "Actual funded vs the prior run's forecast",
+             "series": [
+                 {"name": "Prior-run forecast", "key": "prior_forecast", "color": "#e0a458"},
+                 {"name": "Actual funded", "key": "funded_balance", "color": "#7c9cf0"}],
              "currency": True}])
         self._footer(s)
         self._record("forecast_evolution", spec.get("title"), "", placeholder=ph)
