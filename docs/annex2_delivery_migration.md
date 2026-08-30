@@ -25,6 +25,47 @@ second Annex 2 implementation.**
 > names the retired file is a record of how the route worked before that
 > migration, kept for provenance; the file itself is gone.
 
+## The 46 legacy defaults, reconciled
+
+The retired file held 70 `field_rules`, of which exactly **46** carried a non-empty
+`default_value` — one per code, no code carrying more than one, and none carrying
+`default_allowed` without a value. So the entry count and the code count are the same 46,
+and there is no entries-versus-fields gap to reconcile.
+
+Each was classified into one mutually exclusive class:
+
+| Class | Count | New owner |
+|---|---:|---|
+| **B — asset universal** (true of every UK equity release book) | 19 | `config/asset/product_defaults_ERM.yaml` |
+| **C — client / deal fact** | 4 | OCC effective client configuration |
+| **D — portfolio decision** | 23 | approved operator decision, inside the permitted ND envelope |
+| **A — regime-prescribed** | 0 | — |
+| **E — invalid** | 0 | — |
+| **Total** | **46** | 19 + 4 + 23 + 0 + 0 |
+
+The class-B nineteen split again by where the answer already lived: **9** the asset pack
+already stated, so the regime copy was a duplicate, and **10** it did not — RREC8, RREL25
+and RREL50–57 — which this migration promoted into it.
+
+Class C is RREC6 (collateral geography) and RREL79–81 (original lender identity).
+
+### Asset-pack promotions
+
+**Eleven fields** were promoted into `product_defaults_ERM.yaml`, in four groups, each on
+the universality test — would this be true of essentially every UK equity release
+portfolio, independent of lender?
+
+| Codes | Fields | Fact | From the 46? |
+|---|---:|---|---|
+| RREC8 | 1 | `lien: 1` | yes |
+| RREC5 | 1 | `collateral_type: RBLD` | **no** — the retired file had no rule for it |
+| RREL25 | 1 | `original_term: ND5` | yes |
+| RREL50–57 | 8 | the interest-revision family, ND5 | yes |
+
+Ten of the eleven are the class-B ten above. RREC5 is not one of the 46: it entered the
+pack because the mapping workbook makes it mandatory and Client B's tape does not carry
+it.
+
 ## Current Annex 2 status
 
 | Property | State |
