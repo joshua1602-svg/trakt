@@ -1319,6 +1319,14 @@ class DeckBuilder:
         self._footer(s)
         self._record("balance_movement", spec.get("title"), strap)
 
+    #: A bridge leg must hold this much of the gross movement before the page
+    #: names it. Deliberately STRICTER than ``materiality.DOMINANCE_SHARE``,
+    #: which governs contributions competing within one dimension: the three
+    #: legs here are structural — every bridge has all of them — so a leg that
+    #: merely leads is not a driver, and only one that carries most of the
+    #: movement is worth naming as the reason the balance changed.
+    LEG_DOMINANCE_SHARE = 0.45
+
     def _movement_finding(self, bm) -> str:
         """The one clause that says where the movement came from.
 
@@ -1334,7 +1342,7 @@ class DeckBuilder:
             return "no loan-level movement in the period"
         label, value = max(legs, key=lambda x: x[1])
         share = value / total
-        if share < 0.45:
+        if share < self.LEG_DOMINANCE_SHARE:
             return "movement spread across new funding, exits and the continuing book"
         return f"driven primarily by {label}"
 
@@ -3059,9 +3067,16 @@ class DeckBuilder:
                 right.append(f"   Concentration limits: {disclosure.lower()}.")
         right.append("")
         right.append("COVERAGE")
-        cuts = d.get("fundedCutsFound") or 0
+        # Prefer the diagnostic; fall back to the periods the funded history
+        # actually resolved. The diagnostic is not populated on every path, and
+        # a coverage block that states the pipeline extract count and nothing
+        # about the funded book is the wrong half of the answer.
+        cuts = d.get("fundedCutsFound") or len(
+            (getattr(self.d, "funded_evolution", {}) or {}).get("periods") or ())
         if cuts:
             right.append(f"   {cuts} funded reporting period(s) available.")
+        else:
+            right.append("   One funded reporting period available.")
         snaps = d.get("pipelineSnapshotsFound") or 0
         right.append(f"   {snaps} weekly pipeline extract(s) available."
                      if snaps else "   No weekly pipeline extracts available.")
@@ -3071,10 +3086,24 @@ class DeckBuilder:
         if self.omissions:
             right.append("")
             right.append("SECTIONS NOT INCLUDED")
-            for o in self.omissions[:6]:
-                right.append(f"   {o.title}: {o.reason}.")
-            if len(self.omissions) > 6:
-                right.append(f"   and {len(self.omissions) - 6} further section(s).")
+            # GROUPED BY REASON. Three consecutive lines repeating "the pipeline
+            # is small relative to the funded book" spend three of the six lines
+            # this block has room for on one fact, and push other sections behind
+            # "and N further" where the reader cannot see them at all.
+            grouped: List[tuple] = []
+            for o in self.omissions:
+                for i, (reason, titles) in enumerate(grouped):
+                    if reason == o.reason:
+                        grouped[i][1].append(o.title)
+                        break
+                else:
+                    grouped.append((o.reason, [o.title]))
+            shown, hidden = grouped[:6], grouped[6:]
+            for reason, titles in shown:
+                right.append(f"   {', '.join(titles)}: {reason}.")
+            if hidden:
+                count = sum(len(t) for _r, t in hidden)
+                right.append(f"   and {count} further section(s).")
 
         self._column_text(s, left, Inches(0.6), Inches(6.0))
         self._column_text(s, right, Inches(6.95), Inches(5.85))

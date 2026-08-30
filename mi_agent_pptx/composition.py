@@ -502,17 +502,117 @@ _CONDITION_WORDING: Dict[str, str] = {
     "has_balance_movement": "the funded balance bridge did not reconcile for this period",
     "has_portfolio_projections": "no constituent-book projection resolved for this scope",
     "constituent_books > 1": "only one constituent book is in scope",
+    "constituent_books <= 1": "the constituent books are reported individually "
+                              "on the portfolio composition page",
+    "has_funnel": "no weekly origination extracts to measure conversion from",
+    "has_cohorts": "the funded tape carries no origination vintage",
+    "has_cohort_progression": "no vintage holds loans in two or more reporting "
+                              "periods, so there is no seasoning to show",
+    "not has_cohort_progression": "the cohort seasoning page already states each "
+                                  "vintage at formation",
+    "not has_balance_movement": "the loan-level balance bridge answers this on "
+                                "its own page",
+    "not has_concentration": "the approved concentration tests answer this on "
+                             "their own page",
+    "has_forecast_projection": "insufficient run-rate history for a scale-up "
+                               "projection",
+    "has_forecast_history": "no prior run published a forecast to test",
+    "has_stratifications": "the funded tape carries no stratification dimensions",
+    "type_count > 1 or portfolio_count > 1": "one portfolio and one portfolio "
+                                            "type are in scope",
+    "funded_periods >= 2": "fewer than two reporting periods are available",
+    "cohort_count >= 3": "fewer than three origination vintages",
+    "funded_balance >= 25000000": "the book is not large enough for paired-"
+                                  "dimension cells to be read as anything but "
+                                  "noise",
+}
+
+#: Investor-facing wording for the THRESHOLD conditions the pack uses. A funder
+#: must never be shown ``pipeline_share >= 0.15``: it is machinery, it explains
+#: nothing, and it belongs to the same family as the storage paths and module
+#: names this page was cleaned of. Each entry says what the threshold MEANS.
+_THRESHOLD_WORDING: Dict[str, str] = {
+    "pipeline_share": "the pipeline is small relative to the funded book, so "
+                      "this origination detail would not change the picture",
+    "funded_balance": "the book is not large enough for this additional cut to "
+                      "earn a page",
+    "funded_periods": "too few reporting periods for this view",
+    "forecast_periods": "too few runs carrying a forecast for a track record",
+    "cohort_count": "too few origination vintages for a formation profile",
+    "pipeline_periods": "too few weekly pipeline extracts for this view",
 }
 
 
 def _explain(condition: str, facts: Mapping[str, Any]) -> str:
-    """A readable reason for a condition that excluded a slide."""
+    """A readable reason for a condition that excluded a slide.
+
+    NEVER the expression itself. This text is printed in a client-facing
+    methodology ledger, and ``the reporting condition 'has_stratifications and
+    funded_balance >= 100000000 and constituent_books <= 1' was not met`` shows
+    a funder the machinery instead of telling them why a page is absent.
+
+    The reason is found by asking the SAME evaluator that excluded the slide
+    which top-level ``and`` clause actually failed, then wording that clause —
+    by its exact text where the config uses a known form, else by the governed
+    facts it names. Names are matched as identifiers, never as substrings: a
+    substring match reported "no forecast is available for this book" for a
+    condition that had only failed ``has_forecast_projection``.
+    """
     text = condition.strip()
     if text in _CONDITION_WORDING:
         return _CONDITION_WORDING[text]
-    # Name the first governed fact in the expression that is falsy — that is the
-    # one an investor would want explained.
-    for name, wording in _CONDITION_WORDING.items():
-        if " " not in name and name in text and not facts.get(name):
+    for clause in _clauses(text):
+        try:
+            if evaluate_condition(clause, facts):
+                continue                      # this clause was satisfied
+        except ConditionError:
+            continue
+        wording = _word_clause(clause, facts)
+        if wording:
             return wording
-    return f"the reporting condition '{text}' was not met"
+    return "this book does not meet the reporting conditions for this section"
+
+
+def _word_clause(clause: str, facts: Mapping[str, Any]) -> Optional[str]:
+    """Investor wording for one failing clause, or ``None``."""
+    text = clause.strip()
+    if text in _CONDITION_WORDING:
+        return _CONDITION_WORDING[text]
+    names = _names(text)
+    for name in names:
+        if name in _CONDITION_WORDING and not facts.get(name):
+            return _CONDITION_WORDING[name]
+    for name in names:
+        if name in _THRESHOLD_WORDING:
+            return _THRESHOLD_WORDING[name]
+    return None
+
+
+def _names(expression: str) -> List[str]:
+    """The governed fact names an expression reads, in source order."""
+    try:
+        tree = ast.parse(expression.strip(), mode="eval")
+    except SyntaxError:
+        return []
+    out: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id not in out:
+            out.append(node.id)
+    return out
+
+
+def _clauses(condition: str) -> List[str]:
+    """The top-level ``and`` operands of an expression, as source text."""
+    try:
+        tree = ast.parse(condition.strip(), mode="eval").body
+    except SyntaxError:
+        return [condition]
+    if isinstance(tree, ast.BoolOp) and isinstance(tree.op, ast.And):
+        out = []
+        for node in tree.values:
+            try:
+                out.append(ast.unparse(node))
+            except Exception:  # noqa: BLE001 - fall back to the whole expression
+                return [condition]
+        return out
+    return [condition]
