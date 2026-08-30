@@ -292,8 +292,20 @@ def movement_attribution(ctx: Mapping[str, Any], portfolio) -> Result:
     if fallers:
         detail.append(", ".join(f"the {s.label.lower()} reduced {money(abs(v))}"
                                 for s, v in fallers))
-    headline = ("Growth driven by " + parts[0] + "." if parts else
-                "The book reduced across every portfolio type.")
+    # "DRIVEN BY" IS A CLAIM, NOT A SORT ORDER. Two portfolio types contributing
+    # +£31.6m and +£30.9m are not one driving the other; naming the first is an
+    # artefact of ranking. The materiality test decides whether a leader may be
+    # named, on the same rule the movement pages use.
+    from mi_agent_api import materiality as MAT
+
+    shape = MAT.classify([{"label": s.label, "value": v} for s, v in risers])
+    if not parts:
+        headline = "The book reduced across every portfolio type."
+    elif len(risers) > 1 and not shape.has_driver:
+        headline = ("Growth spread across " + " and ".join(
+            f"{s.label.lower()} ({signed_money(v)})" for s, v in risers) + ".")
+    else:
+        headline = "Growth driven by " + parts[0] + "."
     return [_insight(
         ctx, MOVEMENT_ATTRIBUTION, headline,
         "; ".join(detail) + "." if detail else headline,
