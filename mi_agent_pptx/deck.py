@@ -1286,8 +1286,11 @@ class DeckBuilder:
                       movement, "add" if movement >= 0 else "sub"))
         steps.append(("Closing", closing, "total"))
 
+        # The tile strip below carries a HINT line, which needs 1.34in of tile —
+        # at 1.10 the hint rendered outside its own panel and landed on the
+        # disclosure. The chart gives up the difference rather than the caption.
         box = (Inches(self.CONTENT_L), Inches(1.72),
-               Inches(self.CONTENT_R - self.CONTENT_L), Inches(3.55))
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(3.34))
         il, it, iw, ih = self._card(s, *box, f"Funded balance movement, {window}")
         path = self.work / "econ_bridge.png"
         render_bridge_waterfall(path, steps, iw, ih, theme=self.theme,
@@ -1306,13 +1309,13 @@ class DeckBuilder:
             {"label": "Net change", "value": compact_currency(net),
              "deltaIntent": "positive" if net >= 0 else "negative"},
         ]
-        for l, t2, w, h, tile in zip(*self._strip(tiles, top=5.42, height=1.10)):
+        for l, t2, w, h, tile in zip(*self._strip(tiles, top=5.18, height=1.34)):
             self._tile(s, l, t2, w, h, tile)
 
-        self._text(s, Inches(self.CONTENT_L), Inches(6.60),
-                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.28),
-                   self._movement_disclosure(bm), size=9,
-                   color=self.theme.ink_500, italic=True)
+        self._text(s, Inches(self.CONTENT_L), Inches(6.58),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.44),
+                   self._movement_disclosure(bm), size=8.5,
+                   color=self.theme.ink_500, italic=True, spacing=1.04)
         self._footer(s)
         self._record("balance_movement", spec.get("title"), strap)
 
@@ -1449,7 +1452,7 @@ class DeckBuilder:
         from mi_agent_api import materiality as MAT
         from .metric_resolver import compact_currency
 
-        lines = []
+        lines, largest = [], ""
         opening = next((v for v in totals if v is not None), None)
         closing = next((v for v in reversed(totals) if v is not None), None)
         if opening is not None and closing is not None:
@@ -1468,8 +1471,8 @@ class DeckBuilder:
                 lines.append(sentence)
             share = closing and books and books[0][1][-1] / closing
             if share:
-                lines.append(f"{books[0][0]} is the largest book at "
-                             f"{share * 100:.0f}% of closing balance.")
+                largest = (f"{books[0][0]} is the largest book at "
+                           f"{share * 100:.0f}% of closing balance.")
         # ONE STORY, NOT TWO. Where the movement page is also in the deck, this
         # page names the number they share and hands the reader on to it. Stated
         # only when the two engines actually agree — a pointer to a page that
@@ -1481,7 +1484,11 @@ class DeckBuilder:
                 lines.append(
                     f"The same {compact_currency(bridge_close)} closing balance is "
                     f"decomposed loan by loan on Funded Balance Movement.")
-        self._takeaway_strip(slide, lines[:3], top=6.02)
+        # The hand-off to the movement page outranks the largest-book line: the
+        # strip holds three, and connecting the two pages is the point.
+        if largest and len(lines) < 3:
+            lines.append(largest)
+        self._takeaway_strip(slide, lines[:3], top=5.96)
 
     # -------------------------------------------------- per-book forward view
     def slide_portfolio_projections(self, spec):
@@ -1522,6 +1529,17 @@ class DeckBuilder:
                   else f"{float(b['balanceRetentionFactor']) * 100:.1f}%"),
                  compact_currency(b.get("projectedBalance"))]
                 for b in ordered]
+        # THE TOTAL MUST BE THE SUM OF THE ROWS ABOVE IT. Where the governed
+        # pipeline cannot be attributed to an individual book, the engine holds
+        # the whole weighted amount OUTSIDE the per-book rows and adds it to the
+        # total — correctly, and with its own disclosure. Omitting that row put a
+        # £111.8MM total over rows summing to £104.8MM, which is the first thing
+        # a funder checks and the last thing a pack can afford to get wrong.
+        unattributed = float(pp.get("unattributedExpectedOriginations") or 0.0)
+        if unattributed:
+            rows.append(["Expected originations — not attributed to a book", "",
+                         compact_currency(unattributed), "",
+                         compact_currency(unattributed)])
         rows.append(["Total", compact_currency(pp.get("totalCurrentBalance")), "",
                      "", compact_currency(pp.get("totalProjectedBalance"))])
 
@@ -1567,6 +1585,15 @@ class DeckBuilder:
         not_modelled = pp.get("runoffNotModelled") or []
         modelled = pp.get("runoffModelled") or []
         parts = []
+        if pp.get("unattributedExpectedOriginations"):
+            # The engine's own words on why the pipeline is not split by book.
+            attribution = next(
+                (d for d in (pp.get("disclosures") or ())
+                 if "not attributed to an individual portfolio" in str(d)), None)
+            parts.append(str(attribution) if attribution else
+                         "Expected originations are not attributed to an "
+                         "individual book and are shown for the originating "
+                         "group.")
         if modelled:
             parts.append(f"Run-off applied from the client's approved curve for "
                          f"{', '.join(str(x) for x in modelled)}.")
@@ -1778,9 +1805,9 @@ class DeckBuilder:
         row_h = min(0.34, band / max(len(shown), 1))
         head_y = (it / EMU_IN) + 0.16
         for label, dx, cw, align, _fn in cols:
-            self._text(s, Inches(x0 + dx), Inches(head_y), Inches(cw), Inches(0.24),
-                       label, size=8.5, color=self.theme.ink_400, bold=True,
-                       align=align)
+            self._text(s, Inches(x0 + dx), Inches(head_y + pad), Inches(cw),
+                       Inches(0.24), label, size=8.5, color=self.theme.ink_400,
+                       bold=True, align=align)
         size = 9.5 if len(shown) <= 8 else 8.5
         for i, r in enumerate(shown):
             y = Inches(head_y + 0.30 + i * row_h)
@@ -1856,7 +1883,9 @@ class DeckBuilder:
                 "exits are loans in the pool at formation that are no longer in "
                 "it. Balance vs formation is the latest balance as a percentage "
                 "of the balance at formation — a net figure that is not "
-                "decomposed here, and which can exceed 100%.")
+                "decomposed here, and which can exceed 100%. Periods is the "
+                "number of reporting periods the cohort has been observed for "
+                "since it formed.")
         if declined:
             note += (f" {len(declined)} cohort"
                      f"{'s were' if len(declined) != 1 else ' was'} not plotted "
@@ -1877,14 +1906,18 @@ class DeckBuilder:
         # reserved for the count-based survival ratio; the balance ratio is
         # named for what it is, because calling a >100% balance figure
         # "retention" invites a reader to conclude the pool grew.
-        spec_cols = [("Cohort", 0.72, PP_ALIGN.LEFT),
-                     ("At formation", 1.04, PP_ALIGN.RIGHT),
-                     ("Latest", 0.96, PP_ALIGN.RIGHT),
-                     ("Balance vs formation", 1.18, PP_ALIGN.RIGHT),
-                     ("Loans", 0.66, PP_ALIGN.RIGHT),
-                     ("Loan survival", 0.86, PP_ALIGN.RIGHT),
-                     ("Exits", 0.58, PP_ALIGN.RIGHT),
-                     ("Seasoning", 0.80, PP_ALIGN.RIGHT)]
+        # Headers must fit their column on ONE line. "Loan survival" and
+        # "Seasoning" each wrapped, and the wrap clipped mid-word — the meaning
+        # of every one of these columns is carried by the note beneath the card,
+        # so the headers are short and the note does the explaining.
+        spec_cols = [("Cohort", 0.68, PP_ALIGN.LEFT),
+                     ("At formation", 1.00, PP_ALIGN.RIGHT),
+                     ("Latest", 0.86, PP_ALIGN.RIGHT),
+                     ("Balance vs formation", 1.30, PP_ALIGN.RIGHT),
+                     ("Loans", 0.64, PP_ALIGN.RIGHT),
+                     ("Survival", 0.78, PP_ALIGN.RIGHT),
+                     ("Exits", 0.56, PP_ALIGN.RIGHT),
+                     ("Periods", 0.66, PP_ALIGN.RIGHT)]
         scale = (iw - 0.28) / sum(c[1] for c in spec_cols)
         cols, dx = [], 0.0
         for label, weight, align in spec_cols:
@@ -1898,8 +1931,12 @@ class DeckBuilder:
                        align=align)
         band = ih - 0.52                      # ih is already INCHES from _card
         row_h = min(0.44, band / max(len(live), 1))
+        # Centred in the band. Four rows pinned to the top of a 3.6in card leave
+        # an inch and a half of empty panel, which reads as a rendering fault
+        # rather than as a short list.
+        pad = max(0.0, (band - len(live) * row_h) / 2)
         for i, x in enumerate(live):
-            y = Inches(head_y + 0.32 + i * row_h)
+            y = Inches(head_y + 0.32 + pad + i * row_h)
             bal_ret = x.balance_vs_formation
             survival = x.loan_survival
             exits = x.exits
@@ -1915,8 +1952,7 @@ class DeckBuilder:
                  self.theme.ink_100),
                 (f"{exits:,}" if exits is not None else "—",
                  self.theme.rag.get("amber") if exits else self.theme.ink_300),
-                (f"{len(x.live) - 1} period"
-                 f"{'s' if len(x.live) - 1 != 1 else ''}", self.theme.ink_300),
+                (str(len(x.live) - 1), self.theme.ink_300),
             ]
             for (value, colour), (_label, dx, cw, align) in zip(values, cols):
                 self._text(s, Inches(x0 + dx), y, Inches(cw), Inches(0.28),
@@ -2467,14 +2503,14 @@ class DeckBuilder:
                  {"name": "Forecast", "key": "forecast_funded_balance", "color": "#e0a458"}],
              "currency": True}]
         ph = self._evolution_lines(s, spec, self.d.forecast_evolution, charts,
-                                   height=3.30)
+                                   height=3.72)
         # The sentence the reader keeps — or, where there is no track record
         # yet, why there is not. Silence would read as an accurate forecast.
-        self._text(s, Inches(self.CONTENT_L), Inches(5.20),
+        self._text(s, Inches(self.CONTENT_L), Inches(5.60),
                    Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.46),
                    FA.describe(accuracy), size=10, color=self.theme.ink_300,
                    italic=True, spacing=1.06)
-        self._text(s, Inches(self.CONTENT_L), Inches(5.74),
+        self._text(s, Inches(self.CONTENT_L), Inches(6.16),
                    Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.44),
                    "Error is the actual funded balance against the forecast the "
                    "PRIOR run published, as a percentage of that forecast. Bias "
@@ -2807,6 +2843,16 @@ class DeckBuilder:
             moved = C.travel(r)
             if moved:
                 status_line += f" · {moved} since {r.get('prior_date') or 'the prior period'}"
+            # HEADROOM MUST APPEAR SOMEWHERE. Its column gives way when prior and
+            # expected are both present, and the detail line below only renders
+            # when the rows are tall enough — so on a four-test page it would
+            # otherwise vanish entirely from the one slide about headroom.
+            if not (forward and historic) or r["headroom"] is None:
+                pass
+            elif not detail:
+                status_line += (
+                    f" · {C.format_measure(abs(r['headroom']), r['unit'])} "
+                    + ("of headroom" if r["headroom"] >= 0 else "beyond the limit"))
             if r.get("expected_breach") and r.get("breach_horizon"):
                 status_line += f" now · forecast breach {r['breach_horizon']}"
             elif r.get("expected_breach"):

@@ -672,6 +672,34 @@ def _gate_stack_reconciles(build_report, data) -> GateResult:
                       evidence={"offenders": bad})
 
 
+def _gate_projection_totals(records, data) -> GateResult:
+    """The per-book forward view's total must be the sum of what it prints.
+
+    The engine correctly holds an UNATTRIBUTED weighted pipeline outside the
+    per-book rows and adds it to the total, with its own disclosure. A slide
+    that renders the rows and the total but not that line prints a total its own
+    rows do not sum to — the first arithmetic a funder checks.
+    """
+    ids = {str(r.get("id")) for r in records or () if not r.get("placeholder")}
+    if "portfolio_projections" not in ids:
+        return GateResult("projection_totals", True,
+                          "no per-book forward view in this deck", mandatory=False)
+    pp = getattr(data, "portfolio_projections", {}) or {}
+    books = pp.get("portfolios") or []
+    rows = sum(float(b.get("projectedBalance") or 0.0) for b in books)
+    unattributed = float(pp.get("unattributedExpectedOriginations") or 0.0)
+    total = float(pp.get("totalProjectedBalance") or 0.0)
+    gap = abs((rows + unattributed) - total)
+    ok = gap <= 0.02
+    return GateResult("projection_totals", ok,
+                      "the projection total equals the rows the page prints"
+                      if ok else
+                      f"the per-book rows plus the unattributed line sum to "
+                      f"{rows + unattributed} but the total states {total}",
+                      evidence={"row_total": rows, "unattributed": unattributed,
+                                "stated_total": total, "gap": gap})
+
+
 def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport:
     """Evaluate every publication gate for a generated deck."""
     deck_path = build_report.get("output")
@@ -714,5 +742,6 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         # the pack is worse than either page alone.
         _gate_stock_and_movement_agree(records, data),
         _gate_stack_reconciles(build_report, data),
+        _gate_projection_totals(records, data),
     ])
     return report
