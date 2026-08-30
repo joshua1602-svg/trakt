@@ -570,9 +570,26 @@ in the simulation and threshold-receipt suites and are unrelated to the pack
 
 ### Branch — `fbfaf8e`, whole suite
 
-<!-- BRANCH RESULT PENDING: the full-suite run on the final tree was still in
-     flight when this section was written. The figure is filled in by the
-     follow-up commit that lands it. -->
+```
+107 failed, 7373 passed, 434 skipped, 8 xfailed, 6 subtests passed   (27:51)
+```
+
+### Difference
+
+```
+new failures introduced by this sprint : 0
+passed                                 : 7357 -> 7373   (+16, the 16 new acceptance tests)
+failed                                 :  108 ->  107   (-1)
+```
+
+**Zero regressions.** The failure sets were compared by node id, not by count:
+every one of the 107 failures on the branch is in the 108-failure baseline set.
+
+The one baseline failure absent on the branch is
+`tests/test_serving_parquet.py::test_the_serving_copy_is_materially_faster_and_smaller`,
+which asserts a wall-clock speed ratio. **This sprint did not fix it** — nothing
+here touches the serving copy — and it should be read as machine timing, not as
+an improvement.
 
 ### Suites the sprint touches, run explicitly on the final tree
 
