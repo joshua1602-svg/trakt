@@ -1364,6 +1364,67 @@ def geo_exposure(portfolioId: Optional[str] = None, client_id: Optional[str] = N
                 "reason": str(exc), "areas": []}
 
 
+@app.get("/mi/multidim")
+def multidim_exposure(portfolioId: Optional[str] = None,
+                      client_id: Optional[str] = None,
+                      runId: Optional[str] = None, run_id: Optional[str] = None,
+                      pair: Optional[str] = None,
+                      portfolioContext: Optional[str] = None,
+                      request: Request = None,
+                      response: Response = None) -> Dict[str, Any]:
+    """Funded balance crossed over two governed band dimensions.
+
+    The analytical definition behind the investor pack's multi-dimensional
+    slide. It is exposed here because the pack must not own an analysis the
+    React product cannot reach: the deck calls
+    ``snapshots.multidimensional`` in-process and this route calls the same
+    function, so both surfaces read one result with one set of axis orders.
+
+    ``pair`` selects a single cross-tab (see ``snapshots.MULTIDIM_PAIRS``);
+    omitted, every pair this book supports is returned. Never 500s.
+    """
+    run_id = runId or run_id
+    if portfolioId and "/" in portfolioId:
+        client_id, run_id = portfolioId.split("/", 1)
+    client_id = client_id or default_tenant_id()
+    pid = f"{client_id}/{run_id or ''}"
+    if not run_id:
+        return {"dataset": "multidim", "portfolioId": pid, "available": False,
+                "reason": "portfolioId (client_id/run_id) is required", "pairs": {}}
+    etag = http_cache.begin(
+        request, route="mi.multidim", scope=f"{portfolioContext or 'total'}|{pair or 'all'}",
+        identity=http_cache.dataset_identity(client_id, run_id))
+    try:
+        def _compute():
+            df, _report = _resolve_run_dataframe(client_id, run_id,
+                                                 _onboarding_output_root())
+            currency_mod.resolve_and_set(df, client_id=client_id)
+            resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
+            scoped = _scoped_frame(df, resolved)
+            scope = resolved.scope if resolved else None
+            pairs = snapshots_mod.multidimensional(scoped, scope)
+            if pair:
+                pairs = {k: v for k, v in pairs.items() if k == pair}
+            result = {"dataset": "multidim", "portfolioId": pid,
+                      "available": bool(pairs), "pairs": pairs,
+                      "measure": "current_outstanding_balance",
+                      "currencyCode": currency_mod.current_code(),
+                      "availablePairs": [p[0] for p in snapshots_mod.MULTIDIM_PAIRS]}
+            if not pairs:
+                result["reason"] = ("the funded tape carries no pair of governed "
+                                    "band dimensions for this scope")
+            block = _scope_block(df, resolved)
+            if block is not None:
+                result["portfolioScope"] = block
+            return result
+        result = http_cache.cached(etag, _compute)
+        return http_cache.finish(response, etag, result)
+    except Exception as exc:  # noqa: BLE001 - the view must never 500
+        logger.warning("multidim failed for %s: %s", pid, exc)
+        return {"dataset": "multidim", "portfolioId": pid, "available": False,
+                "reason": str(exc), "pairs": {}}
+
+
 @app.get("/mi/cohorts/progression")
 def cohort_progression(portfolioId: Optional[str] = None,
                        client_id: Optional[str] = None,

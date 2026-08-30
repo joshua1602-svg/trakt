@@ -366,10 +366,12 @@ def _gate_pipeline_reconciles(text: Optional[str], pipeline) -> GateResult:
     # one on the page (millions, one decimal — the pack's own convention).
     millions = f"{float(amount) / 1e6:.1f}"
     ok = millions in text.replace(",", "")
+    from mi_agent_api import currency as _currency
+    sym = _currency.current_symbol()
     return GateResult("pipeline_reconciles", ok,
                       f"pipeline headline reconciles to the governed snapshot "
-                      f"(£{millions}MM)" if ok else
-                      f"pipeline headline £{millions}MM does not appear in the deck",
+                      f"({sym}{millions}MM)" if ok else
+                      f"pipeline headline {sym}{millions}MM does not appear in the deck",
                       evidence={"pipeline_amount": amount})
 
 
@@ -495,6 +497,81 @@ def _gate_no_duplicate_observations(insights, watchlist) -> GateResult:
                       evidence={"duplicates": dupes[:4], "total": len(headlines)})
 
 
+def _gate_governed_bucket_order(build_report) -> GateResult:
+    """Every banded bar list was DRAWN in the governed order.
+
+    The order is decided once, upstream, by ``mi_agent_api.presentation`` against
+    the ladder in ``config/mi/buckets.yaml``, and the React bar list consumes the
+    same payload. This checks the deck actually honoured it — not the payload it
+    was handed, but the sequence ``render.draw_barlist`` walked, captured inside
+    the drawing function itself.
+
+    It exists because a bar list is a PNG: its category order cannot be read back
+    out of the finished .pptx, so without this the one property most likely to
+    drift is the one nothing could see. That is exactly how the deck came to draw
+    LTV bands in balance order while the dashboard drew them in band order.
+
+    A dimension the registry does not band (region, product, broker) has no
+    governed ladder and is not checked here — there is nothing to check it
+    against.
+    """
+    from mi_agent_api import presentation as _presentation
+
+    drawn = [e for e in (build_report.get("rendered") or [])
+             if e.get("kind") == "barlist" and e.get("dimension")]
+    offenders = []
+    checked = 0
+    for entry in drawn:
+        dimension = entry.get("dimension")
+        ladder = _presentation.governed_ladder(dimension)
+        if not ladder:
+            continue
+        checked += 1
+        categories = [str(c) for c in (entry.get("categories") or [])]
+        expected = [c for c in _presentation.order_categories(
+            categories, dimension=dimension)]
+        if categories != expected:
+            offenders.append({"chart": entry.get("chart"), "dimension": dimension,
+                              "drawn": categories, "expected": expected})
+    if offenders:
+        names = ", ".join(str(o["dimension"]) for o in offenders)
+        return GateResult("governed_bucket_order", False,
+                          f"bar list(s) drawn out of the governed bucket order: {names}",
+                          evidence={"offenders": offenders})
+    return GateResult("governed_bucket_order", True,
+                      f"{checked} banded bar list(s) drawn in the governed bucket order",
+                      evidence={"checked": checked})
+
+
+def _gate_governed_currency(text, data) -> GateResult:
+    """No foreign currency symbol reached the page.
+
+    The deck renders in the currency ``mi_agent_api.currency`` resolved for the
+    book. If any OTHER currency symbol appears in the rendered text, something
+    formatted money without going through the governed formatter — which is the
+    defect this gate exists to stop coming back.
+    """
+    from mi_agent_api import currency as _currency
+
+    code = getattr(data, "currency_code", None) or "GBP"
+    expected = _currency.symbol_for(code).strip()
+    if text is None:
+        return GateResult("governed_currency", False, "deck could not be read")
+    foreign = sorted({sym.strip() for c, sym in
+                      (("GBP", "£"), ("EUR", "€"), ("USD", "$"), ("JPY", "¥"))
+                      if sym.strip() and sym.strip() != expected
+                      and sym.strip() in text})
+    if foreign:
+        return GateResult("governed_currency", False,
+                          f"the deck reports in {code} ({expected}) but also renders "
+                          f"{', '.join(foreign)}",
+                          evidence={"expected": expected, "found": foreign})
+    return GateResult("governed_currency", True,
+                      f"every monetary figure renders in the governed currency "
+                      f"{code} ({expected})",
+                      evidence={"currency_code": code})
+
+
 def _gate_mandatory_slides(records: Sequence[Mapping[str, Any]]) -> GateResult:
     """Cover, methodology and appendix are the disclosure spine of the pack."""
     ids = {str(r.get("id")) for r in records}
@@ -544,5 +621,11 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         _gate_no_unsupported_causal_language(text),
         _gate_no_duplicate_observations(getattr(data, "insights", None),
                                         getattr(data, "watchlist", None)),
+        # -- v2.3: presentation parity with the React dashboard --------------
+        # These two are the structural enforcement of the parity the deck exists
+        # to have. Both check the RENDERED deck: the order the drawing functions
+        # actually walked, and the symbols that actually reached the page.
+        _gate_governed_bucket_order(build_report),
+        _gate_governed_currency(text, data),
     ])
     return report

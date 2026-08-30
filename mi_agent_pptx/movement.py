@@ -217,26 +217,22 @@ def _money(v: Optional[float]) -> str:
 
     The deck deliberately runs two notations, one per medium:
 
-      * TILES and CHART LABELS use ``compact_currency`` (£833.5MM) — the
+      * TILES and CHART LABELS use ``compact_currency`` (833.5MM) — the
         dashboard's own ``formatGBP``, so an exported tile and the screen it
         mirrors are character-for-character identical;
-      * SENTENCES use £833.5m, matching ``mi_agent_api.insight_generators``,
+      * SENTENCES use 833.5m, matching ``mi_agent_api.insight_generators``,
         which also writes React's weekly brief.
+
+    Both take their SYMBOL from the governed reporting currency; neither
+    names one.
 
     These sentences are prose and feed the executive summary, so they follow the
     prose rule. Formatting them as chart labels made one summary card disagree
     with the five beside it.
     """
-    if v is None:
-        return "—"
-    a = abs(v)
-    if a >= 1e9:
-        return f"£{v / 1e9:.2f}bn"
-    if a >= 1e6:
-        return f"£{v / 1e6:.1f}m"
-    if a >= 1e3:
-        return f"£{v / 1e3:.0f}k"
-    return f"£{v:,.0f}"
+    from mi_agent_api.insight_generators import money as _governed
+
+    return _governed(v)
 
 
 def _signed(v: Optional[float]) -> str:

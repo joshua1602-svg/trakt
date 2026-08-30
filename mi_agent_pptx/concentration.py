@@ -68,14 +68,11 @@ def format_measure(value: Optional[float], unit: Optional[str]) -> str:
     if u in ("percent", "percentage", "pct", "%", "percentage_points", "pp"):
         return f"{v:.1f}%"
     if u in ("gbp", "currency", "amount"):
-        a = abs(v)
-        if a >= 1e9:
-            return f"£{v / 1e9:.2f}bn"
-        if a >= 1e6:
-            return f"£{v / 1e6:.1f}m"
-        if a >= 1e3:
-            return f"£{v / 1e3:.0f}k"
-        return f"£{v:,.0f}"
+        # "gbp" is a legacy UNIT TAG in the approved test library, not a claim
+        # about the reporting currency. The symbol comes from the governed
+        # currency in force, so a EUR book shows EUR headroom.
+        from mi_agent_api.insight_generators import money as _governed
+        return _governed(v)
     if u in ("count", "loans", "number"):
         return f"{v:,.0f}"
     return f"{v:,.1f}"

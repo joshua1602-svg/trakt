@@ -98,6 +98,16 @@ export interface FundedStratification {
   key: string;
   label: string;
   bars: FundedStratBar[];
+  /** `"governed"` when the backend already sequenced `bars` against the
+   *  governed bucket ladder (`config/mi/buckets.yaml`) and tidied their labels.
+   *  The browser must then render them in the order given — the investor PPTX
+   *  renders the same payload, and a second opinion here is what put the two
+   *  surfaces out of step. Absent on mock/legacy payloads, which fall back to
+   *  the local heuristic in `lib/stratOrder`. */
+  displayOrder?: string;
+  /** Whether this dimension is a band ladder (ordered) rather than a set of
+   *  names (alphabetical). Decided by the backend from the bucket registry. */
+  ordinal?: boolean;
   availability?: ChartAvailability;
   /** Backend-authored explanation when the chart is not fully available. */
   reason?: string;

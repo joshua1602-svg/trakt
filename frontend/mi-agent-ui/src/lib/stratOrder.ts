@@ -1,13 +1,20 @@
 /**
  * Ordering + label hygiene for stratification bar lists.
  *
- * Backend stratifications arrive ranked by balance. For ordinal dimensions
- * (LTV band, age band, rate band, vintage year, term buckets…) that ranking is
- * unintuitive — the buckets should read in their natural order. This module
- * sorts buckets by the numeric bound parsed from their labels when the
- * dimension is ordinal, and alphabetically otherwise; "Unknown"-style buckets
- * always sink to the end. Values are never altered — display order and label
- * tidy-ups only.
+ * THE BACKEND NOW OWNS THIS. `mi_agent_api/presentation.py` orders every
+ * stratification against the governed bucket ladder in `config/mi/buckets.yaml`
+ * and tags the payload `displayOrder: "governed"`. A payload carrying that tag
+ * is already in the order the business reads, with its labels already tidied,
+ * and this module must leave it exactly as it is — because the investor PPTX
+ * renders the same payload, and a second opinion here is precisely how the deck
+ * and the dashboard came to draw the same LTV stratification in two different
+ * orders.
+ *
+ * What remains below is the FALLBACK for payloads that carry no governed order:
+ * mock data, and any older response shape. It parses a numeric bound out of the
+ * label when the dimension looks ordinal and sorts alphabetically otherwise,
+ * with "Unknown"-style buckets last. Values are never altered — display order
+ * and label tidy-ups only.
  */
 
 /** Buckets that mean "no data" — always sorted last, never parsed. */
@@ -70,4 +77,23 @@ export function sortStratBars<T extends { label: string }>(bars: T[]): T[] {
       return a.label.localeCompare(b.label, "en-GB", { sensitivity: "base", numeric: true });
     })
     .map((e) => e.bar);
+}
+
+
+/** The backend tag marking a payload whose order is already governed. */
+export const DISPLAY_ORDER_GOVERNED = "governed";
+
+/**
+ * Bars in their display order.
+ *
+ * A governed payload is returned UNCHANGED — the backend already sequenced it
+ * against `config/mi/buckets.yaml`, and re-sorting it here would put the
+ * dashboard back out of step with the investor pack. Anything else falls back
+ * to the local heuristic.
+ */
+export function orderBarsForDisplay<T extends { label: string }>(
+  bars: T[],
+  displayOrder?: string | null,
+): T[] {
+  return displayOrder === DISPLAY_ORDER_GOVERNED ? bars : sortStratBars(bars);
 }

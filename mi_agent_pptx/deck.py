@@ -72,6 +72,8 @@ class DeckBuilder:
         self.work = Path(ctx.work_dir or (Path(ctx.run_dir) / "_pptx_charts"))
         self.work.mkdir(parents=True, exist_ok=True)
         self.appendix: List[str] = list(data.notes)
+        #: What each renderer actually drew (see render.record_renders).
+        self.rendered: List[Dict[str, Any]] = []
         self.records: List[Dict[str, Any]] = []
         #: Slides this portfolio did not justify, with reasons (rendered in the
         #: appendix so an omission is never silent).
@@ -270,12 +272,13 @@ class DeckBuilder:
                 list(tiles))
 
     def _barlist_card(self, slide, box, title, rows, value_key, *, currency=True,
-                      cid="bl", label_key="label"):
+                      cid="bl", label_key="label", dimension=None):
         il, it, iw, ih = self._card(slide, *box, title)
         path = self.work / f"{cid}.png"
         if rows:
             R.draw_barlist(path, rows, value_key, iw, ih, theme=self.theme,
-                           currency=currency, label_key=label_key)
+                           currency=currency, label_key=label_key,
+                           chart_id=cid, dimension=dimension)
         else:
             render_placeholder_png(path, "", "No data for this run",
                                    theme=self.theme, width_in=iw, height_in=ih)
@@ -874,7 +877,7 @@ class DeckBuilder:
             key = st.get("key")
             rows = st.get("bars", [])
             ok = self._barlist_card(s, box, st.get("label", key or ""), rows,
-                                    "balance", cid=f"strat_{key}")
+                                    "balance", cid=f"strat_{key}", dimension=key)
             ph = ph and not ok
 
         # A single marginal-change panel beneath, for the dimension that moved
@@ -948,7 +951,7 @@ class DeckBuilder:
                 R.draw_lines(path, x, series, iw, ih, theme=self.theme,
                              currency=cs.get("currency", True),
                              percent=cs.get("percent", False),
-                             area=cs.get("area", False))
+                             area=cs.get("area", False), chart_id=cs["id"])
             else:
                 render_placeholder_png(path, "", "Insufficient reporting history "
                                        "(needs ≥2 periods)", theme=self.theme,
@@ -1400,7 +1403,9 @@ class DeckBuilder:
             hm = md[key]
             path = self.work / f"md_{key}.png"
             R.draw_heatmap(path, hm["xLabels"], hm["yLabels"], hm["matrix"],
-                           iw, ih, theme=self.theme)
+                           iw, ih, theme=self.theme, chart_id=f"multidim_{key}",
+                           x_dimension=hm.get("xDimension"),
+                           y_dimension=hm.get("yDimension"))
             self._place(s, path, il, it, iw, ih)
         self._footer(s)
         self._record("multidim", spec.get("title"),
@@ -2122,15 +2127,22 @@ class DeckBuilder:
         self.omissions = list(omissions)
         self.facts = dict(facts)
 
-        for spec in selected:
-            handler = getattr(self, self._DISPATCH.get(spec.get("type"), ""), None)
-            if handler is None:
-                continue
-            handler(spec)
+        # Record what each renderer actually draws. A bar list becomes a PNG, so
+        # its category order is not recoverable from the finished file; the
+        # record is how a publication gate — and a parity test — can see it.
+        with R.record_renders() as drawn:
+            for spec in selected:
+                handler = getattr(self, self._DISPATCH.get(spec.get("type"), ""), None)
+                if handler is None:
+                    continue
+                handler(spec)
+            self.rendered = list(drawn)
         out = Path(output)
         out.parent.mkdir(parents=True, exist_ok=True)
         self.prs.save(str(out))
         return {"output": str(out), "slides": self.records,
+                "rendered": self.rendered,
+                "currency_code": getattr(self.d, "currency_code", None),
                 "coverage_notes": self.appendix,
                 "omitted_slides": [o.to_dict() for o in self.omissions],
                 "facts": self.facts,

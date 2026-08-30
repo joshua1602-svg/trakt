@@ -31,6 +31,8 @@ import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
 
+from . import presentation as _presentation
+
 from . import currency as currency_mod
 from .funded_prep import prepare_funded_mi_dataset
 from .mi_dataset_contract import build_dataset_contract
@@ -339,12 +341,27 @@ _STRAT_DIMS = [
     ("vintage", "By origination vintage"),
     ("status", "By account status"),
     ("equity", "By protected equity"),
+    # These three used to be computed inside the investor PPTX
+    # (``mi_agent_pptx.mi_api._extra_stratifications``), which picked its own
+    # source columns and — for ticket size — carried its own bin edges that
+    # contradicted config/mi/buckets.yaml. They are governed dimensions in
+    # config/mi/stratification_catalogue.yaml (broker_channel,
+    # borrower_structure, balance_band); they were simply never declared here.
+    # Declaring them gives the deck and the dashboard the same six bands from
+    # the same engine, and removes the only second economic definition that was
+    # living in a renderer.
+    ("broker", "By broker / channel"),
+    ("borrower_type", "By borrower type"),
+    ("ticket", "By ticket size"),
 ]
 _EQUITY_BINS = [0, 5, 10, 20, 30, 50, 101]
 _EQUITY_LABELS = ["<5%", "5–10%", "10–20%", "20–30%", "30–50%", "50%+"]
 #: The canonical rate-band column materialised by ``funded_prep`` from
 #: ``config/mi/buckets.yaml``. This is the sole economic definition.
 _INTEREST_RATE_BUCKET = "interest_rate_bucket"
+#: The canonical ticket-size band column materialised by ``funded_prep``
+#: from ``config/mi/buckets.yaml`` ``balance_band``. Sole definition.
+_TICKET_BUCKET = "ticket_bucket"
 
 #: Backwards-compatible fallback bands, used ONLY when a frame carries no
 #: canonical bucket column (i.e. it never went through funded_prep).
@@ -394,6 +411,39 @@ def _strat_series(df: pd.DataFrame, key: str, scope=None):
         if "protected_equity_flag" in df.columns and df["protected_equity_flag"].notna().any():
             return df["protected_equity_flag"].astype("string")
         return None
+    if key == "broker":
+        # ``funded_prep`` aliases the channel family onto ``origination_channel``
+        # (its ``group`` dimension), so that is the canonical column; the rest
+        # are accepted for a tape that never went through the prep.
+        for col in ("origination_channel", "broker_channel", "broker_name", "broker"):
+            if col in df.columns and df[col].notna().any():
+                return df[col].astype("string")
+        return None
+    if key == "borrower_type":
+        # Derived by ``funded_prep``. The second-borrower date of birth is the
+        # explicit fallback for a tape that carries the fact but not the
+        # derivation: a joint life has one, a single life does not.
+        if "borrower_type" in df.columns and df["borrower_type"].notna().any():
+            return df["borrower_type"].astype("string")
+        for col in ("borrower_2_DOB", "borrower_2_dob", "second_borrower_dob",
+                    "borrower_2_date_of_birth"):
+            if col in df.columns:
+                joint = df[col].notna() & (df[col].astype(str).str.strip() != "")
+                return joint.map({True: "Joint", False: "Single"}).astype("string")
+        return None
+    if key == "ticket":
+        # The canonical ``ticket_bucket`` (config/mi/buckets.yaml ``balance_band``,
+        # materialised by funded_prep) is the SOLE definition of a ticket-size
+        # band. The deck used to band this itself on edges that disagreed with
+        # the registry — 250k and 400k boundaries the registry does not have.
+        # There is no fallback banding here on purpose: a frame that never went
+        # through the prep reports the dimension as unavailable rather than
+        # inventing a second ladder.
+        if _TICKET_BUCKET in df.columns:
+            banded = df[_TICKET_BUCKET].astype("string")
+            if banded.notna().any():
+                return banded
+        return None
     if key == "rate":
         # P0-3: the canonical ``interest_rate_bucket`` (config/mi/buckets.yaml,
         # materialised by funded_prep) is the SOLE economic definition of a rate
@@ -442,6 +492,10 @@ _STRAT_SOURCE_COLUMNS: Dict[str, tuple] = {
     "vintage": ("origination_date", "vintage_year"),
     "status": ("account_status", "loan_status", "performance_status"),
     "equity": ("protected_equity_percentage", "protected_equity_flag"),
+    "broker": ("origination_channel", "broker_channel", "broker_name", "broker"),
+    "borrower_type": ("borrower_type", "borrower_2_DOB", "borrower_2_dob",
+                      "second_borrower_dob", "borrower_2_date_of_birth"),
+    "ticket": ("ticket_bucket", "current_outstanding_balance"),
 }
 
 
@@ -559,7 +613,21 @@ def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]
                 if wl is not None and pd.notna(wl):
                     bar["waLtv"] = round(float(wl), 4)
                 bars.append(bar)
-            entry["bars"] = bars[:12]
+            # SELECT by materiality, then ORDER for display. ``_stratify``
+            # ranks by balance descending, so the top-12 cut keeps the bands
+            # that matter; ``presentation.order_bars`` then sequences the
+            # survivors the way a reader expects to see them — the governed
+            # ladder in config/mi/buckets.yaml for a banded dimension,
+            # alphabetical for a nominal one, unknown last.
+            #
+            # This ordering used to happen in the browser
+            # (``lib/stratOrder.sortStratBars``) and not at all in the investor
+            # pack, so the same LTV stratification read in band order on screen
+            # and in balance order in the deck. It is decided once, here.
+            entry["bars"] = _presentation.order_bars(bars[:12], dimension=key)
+            entry["displayOrder"] = _presentation.DISPLAY_ORDER_GOVERNED
+            entry["ordinal"] = _presentation.is_ordinal(
+                key, [b["label"] for b in entry["bars"]])
             coverage = _strat_coverage(df, key, scope)
             entry.update(coverage)
             if coverage.get("missingPortfolios"):
@@ -572,6 +640,100 @@ def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]
             out.append(entry)
         except Exception:  # noqa: BLE001 - a stratification must never break the snapshot
             continue
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Multi-dimensional cross-tabs
+#
+# Two governed band dimensions crossed on funded balance. This used to live
+# inside the investor PPTX (``mi_agent_pptx.mi_api._matrix`` / ``_multidim``),
+# which meant the deck owned an analytical definition the React product had no
+# way to reach: the dashboard could not draw the same chart even if it wanted
+# to, and nothing outside the renderer could check the grouping.
+#
+# It is a COMPOSITION, not a new calculation. The bands come from
+# ``cohorts._dimension_series`` and the governed stratification series — the same
+# bands every other funded chart uses — and the only arithmetic is a sum of
+# ``current_outstanding_balance`` per cell, which is what ``stratify`` does for
+# one dimension. Nothing new is derived, no threshold is introduced, and the
+# cells reconcile to the funded total by construction.
+# --------------------------------------------------------------------------- #
+
+#: The pairs offered. Each is (key, label, x-dimension, y-dimension), where the
+#: dimensions name governed stratification series. Adding a pair is a config
+#: decision here, not renderer code.
+MULTIDIM_PAIRS: tuple = (
+    ("ltv_age", "Balance by LTV x borrower age", "ltv", "age"),
+    ("ltv_borrower_type", "Balance by LTV x borrower type", "ltv", "borrower_type"),
+    ("ltv_region", "Balance by LTV x region", "ltv", "region"),
+)
+
+
+def cross_tab(df: pd.DataFrame, x_dimension: str, y_dimension: str,
+              scope=None) -> Optional[Dict[str, Any]]:
+    """Funded balance summed across two governed band dimensions.
+
+    Returns ``{xLabels, yLabels, matrix, points, total}`` or ``None`` when either
+    dimension is unavailable. Axis labels are ordered by the SAME governed ladder
+    the one-dimensional stratifications use, so an LTV axis reads low-to-high on
+    both surfaces and in both chart types.
+    """
+    balance_col = "current_outstanding_balance"
+    if df is None or balance_col not in getattr(df, "columns", []):
+        return None
+    x_series = _strat_series(df, x_dimension, scope)
+    y_series = _strat_series(df, y_dimension, scope)
+    if x_series is None or y_series is None:
+        return None
+
+    work = pd.DataFrame({
+        "x": x_series.astype("string"),
+        "y": y_series.astype("string"),
+        "balance": coerce_numeric(df[balance_col]),
+    }).dropna(subset=["x", "y"])
+    if work.empty:
+        return None
+
+    x_labels = _presentation.order_categories(work["x"].dropna().unique(),
+                                              dimension=x_dimension)
+    y_labels = _presentation.order_categories(work["y"].dropna().unique(),
+                                              dimension=y_dimension)
+    xi = {label: i for i, label in enumerate(x_labels)}
+    yi = {label: i for i, label in enumerate(y_labels)}
+
+    matrix = [[0.0] * len(x_labels) for _ in y_labels]
+    points: List[Dict[str, Any]] = []
+    for (xv, yv), sub in work.groupby(["x", "y"], dropna=True):
+        xk = _presentation.clean_label(xv)
+        yk = _presentation.clean_label(yv)
+        if xk not in xi or yk not in yi:
+            continue
+        value = round(float(sub["balance"].sum()), 2)
+        matrix[yi[yk]][xi[xk]] = value
+        points.append({"x": xi[xk], "y": yi[yk], "value": value,
+                       "xLabel": xk, "yLabel": yk, "count": int(len(sub))})
+    total = round(float(work["balance"].sum()), 2)
+    return {"xLabels": x_labels, "yLabels": y_labels, "matrix": matrix,
+            "points": points, "total": total,
+            "xDimension": x_dimension, "yDimension": y_dimension,
+            "measure": "current_outstanding_balance"}
+
+
+def multidimensional(df: pd.DataFrame, scope=None) -> Dict[str, Any]:
+    """Every governed cross-tab this book can support, keyed by pair.
+
+    A pair whose dimensions the tape cannot supply is simply absent, so a caller
+    renders what resolved rather than an empty frame.
+    """
+    out: Dict[str, Any] = {}
+    for key, label, x_dim, y_dim in MULTIDIM_PAIRS:
+        try:
+            table = cross_tab(df, x_dim, y_dim, scope)
+        except Exception:  # noqa: BLE001 - one pair must not break the rest
+            continue
+        if table:
+            out[key] = {"label": label, **table}
     return out
 
 

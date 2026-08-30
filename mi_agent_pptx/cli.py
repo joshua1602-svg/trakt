@@ -305,6 +305,12 @@ def _write_preflight(output, report, preflight, *, deck_meta=None, data=None) ->
         "slides": [{"id": r.get("id"), "title": r.get("title"),
                     "placeholder": bool(r.get("placeholder"))}
                    for r in (report.get("slides") or [])],
+        # The GOVERNED reporting currency this pack renders in, and the record of
+        # what each renderer actually drew. Both are here so the artefact can be
+        # audited after the fact: a bar list is a PNG, so the order it drew is
+        # not recoverable from the .pptx itself.
+        "currency_code": report.get("currency_code"),
+        "rendered": report.get("rendered") or [],
     }
     try:
         preflight_path(output).write_text(json.dumps(payload, indent=2, default=str),
@@ -359,8 +365,16 @@ def run(argv: Optional[List[str]] = None) -> int:
         logo_path=deck_meta.get("logo_path"),
     )
 
-    builder = DeckBuilder(data, ctx, theme=THEME)
-    report = builder.build(slides, output)
+    # RENDER under the book's governed currency. ``build_dashboard_data`` closed
+    # its own scope when it returned, and the render phase formats money of its
+    # own (tile values, chart labels, axis ticks, waterfall annotations), so the
+    # currency has to be in force here too — otherwise the payload would say EUR
+    # and the drawn chart would say GBP.
+    from mi_agent_api import currency as _currency
+
+    with _currency.use_currency(data.currency_code):
+        builder = DeckBuilder(data, ctx, theme=THEME)
+        report = builder.build(slides, output)
 
     placeholders = [r for r in report["slides"] if r.get("placeholder")]
     print(f"\nDeck: {report['output']}")
@@ -379,7 +393,8 @@ def run(argv: Optional[List[str]] = None) -> int:
     # -- publication gates ------------------------------------------------
     # The deck is ALWAYS written. A gate failure withholds publication; it does
     # not destroy the artefact an operator needs in order to diagnose it.
-    preflight = run_preflight(report, data)
+    with _currency.use_currency(data.currency_code):
+        preflight = run_preflight(report, data)
     print(f"\nPreflight: {preflight.summary()}")
     for r in preflight.results:
         if not r.passed:

@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextvars
 import logging
 import os
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -62,6 +63,26 @@ def current_symbol() -> str:
 def set_currency(code: Optional[str]) -> None:
     if code:
         _CURRENCY_CODE.set(str(code).strip().upper())
+
+
+@contextmanager
+def use_currency(code: Optional[str]):
+    """Scope the reporting currency to a block, then restore what was in force.
+
+    The request path sets the currency once per request and lets the request's
+    context die with it (``datasets._apply_request_currency``). A BATCH producer
+    — the investor deck — has no request to die with, so it needs the currency
+    for the length of one build and must not leave it set for whatever the
+    process does next. This is that scoping, over the SAME ContextVar; it is not
+    a second resolution path, and callers still resolve the code through
+    :func:`resolve_currency_code`.
+    """
+    token = _CURRENCY_CODE.set(str(code).strip().upper()) if code else None
+    try:
+        yield current_code()
+    finally:
+        if token is not None:
+            _CURRENCY_CODE.reset(token)
 
 
 #: Where the governed client configuration lives. A deployment points this at

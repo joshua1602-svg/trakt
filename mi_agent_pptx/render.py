@@ -9,6 +9,8 @@ width×height of its slide panel and onto the theme panel background.
 
 from __future__ import annotations
 
+import contextvars
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -36,6 +38,47 @@ _MONO_FP = fm.FontProperties(family=_MONO)
 EVO_PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"]
 
 
+# --------------------------------------------------------------------------- #
+# Render record
+#
+# A bar list is drawn as a PNG, so the category labels it drew are not text in
+# the finished .pptx and cannot be read back out of the file. That made the one
+# thing most worth checking — did the deck draw the bands in the governed order?
+# — the one thing no test could see, which is exactly how the deck and the
+# dashboard came to disagree about it.
+#
+# Each renderer therefore records WHAT IT DREW, at the moment it draws it. This
+# is not the payload the deck intended to render: it is the sequence the drawing
+# function actually walked, captured inside that function. The record travels
+# into the deck's preflight sidecar, where a publication gate checks it and any
+# reader can audit it.
+# --------------------------------------------------------------------------- #
+
+_RENDER_RECORD: contextvars.ContextVar[Optional[List[Dict[str, Any]]]] = \
+    contextvars.ContextVar("pptx_render_record", default=None)
+
+
+@contextmanager
+def record_renders():
+    """Collect a record of every chart drawn inside the block."""
+    entries: List[Dict[str, Any]] = []
+    token = _RENDER_RECORD.set(entries)
+    try:
+        yield entries
+    finally:
+        _RENDER_RECORD.reset(token)
+
+
+def _record(kind: str, chart_id: Optional[str], **fields: Any) -> None:
+    """Append one drawn-chart entry, when a recorder is active."""
+    entries = _RENDER_RECORD.get()
+    if entries is None:
+        return
+    entry: Dict[str, Any] = {"kind": kind, "chart": chart_id}
+    entry.update(fields)
+    entries.append(entry)
+
+
 def _fig(w, h, theme, dpi=220):
     fig = plt.figure(figsize=(w, h), dpi=dpi)
     fig.patch.set_facecolor(theme.bg_panel)
@@ -55,9 +98,20 @@ def _truncate(label: str, max_chars: int) -> str:
 def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
                  h: float, *, theme: PptxTheme = THEME, currency: bool = True,
                  label_key: str = "label", count_key: Optional[str] = "count",
-                 dpi: int = 220) -> Path:
-    """Dashboard BarList: label left, periwinkle bar ∝ max, mono value right."""
+                 dpi: int = 220, chart_id: Optional[str] = None,
+                 dimension: Optional[str] = None) -> Path:
+    """Dashboard BarList: label left, periwinkle bar ∝ max, mono value right.
+
+    Bars are drawn in the order given. The ORDER IS NOT DECIDED HERE — it is
+    decided once, upstream, by ``mi_agent_api.presentation`` against the governed
+    bucket ladder, and both this renderer and the React bar list consume it. The
+    sequence drawn is recorded (see :func:`record_renders`) so a publication gate
+    can check it against that ladder.
+    """
     rows = [r for r in rows if r is not None]
+    _record("barlist", chart_id, dimension=dimension,
+            categories=[str(r.get(label_key, "")) for r in rows],
+            values=[r.get(value_key) for r in rows], currency=currency)
     fig = _fig(w, h, theme, dpi)
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_facecolor(theme.bg_panel)
@@ -220,10 +274,16 @@ def draw_bubble(path, points: Sequence[Dict[str, Any]], x_labels: Sequence[str],
 
 def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
                  matrix: Sequence[Sequence[float]], w: float, h: float, *,
-                 theme: PptxTheme = THEME, dpi: int = 220) -> Path:
+                 theme: PptxTheme = THEME, dpi: int = 220,
+                 chart_id: Optional[str] = None,
+                 x_dimension: Optional[str] = None,
+                 y_dimension: Optional[str] = None) -> Path:
     """Balance heatmap: rows=y_labels, cols=x_labels, cell shade ∝ balance, with
     the £ value annotated. Uses the periwinkle→mint brand ramp."""
     from matplotlib.colors import LinearSegmentedColormap
+    _record("heatmap", chart_id, categories=[str(x) for x in x_labels],
+            rows=[str(y) for y in y_labels],
+            dimension=x_dimension, row_dimension=y_dimension)
     fig = _fig(w, h, theme, dpi)
     # The row labels are real category names — "Yorkshire and The Humber" is 24
     # characters — and a truncated dimension label is a legibility defect on a
@@ -262,8 +322,11 @@ def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
 def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,
-               dpi: int = 220) -> Path:
+               dpi: int = 220, chart_id: Optional[str] = None) -> Path:
     """Dashboard line/area chart. *series* = [{name, values, color?}]."""
+    _record("lines", chart_id, categories=[str(x) for x in x_labels],
+            series=[str(s.get("name", "")) for s in series],
+            currency=currency, percent=percent)
     fig = _fig(w, h, theme, dpi)
     # Left margin fits a full compact-currency tick ('£120.0MM'); the axes top
     # leaves a clear band for the legend, which is drawn ABOVE the plot rather
@@ -394,7 +457,7 @@ def _fmt_money(value: float, *, signed: bool = False) -> str:
 
 
 def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: float,
-                           *, theme: PptxTheme = THEME, dpi: int = 220) -> Path:
+                           *, theme: PptxTheme = THEME, dpi: int = 220, chart_id: Optional[str] = None) -> Path:
     """Concentration tests as horizontal utilisation bars against their limit.
 
     One row per test. The bar is utilisation of the contractual limit, so the
@@ -408,6 +471,9 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
       * a hollow caret  — EXPECTED forecast;
       * a hatched tick  — the ALL-PIPELINE-CONVERTS stress (never an expectation).
     """
+    _record("utilisation", chart_id,
+            categories=[str(x.get("label", "")) for x in tests],
+            statuses=[str(x.get("status", "")) for x in tests])
     fig = _fig(w, h, theme, dpi)
     ax = fig.add_axes([0.30, 0.10, 0.62, 0.84])
     ax.set_facecolor(theme.bg_panel)
@@ -461,9 +527,13 @@ def draw_utilisation_tests(path, tests: Sequence[Dict[str, Any]], w: float, h: f
 
 def draw_table(path, columns: Sequence[str], rows: Sequence[Sequence[Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
-               status_col: Optional[int] = None, dpi: int = 220) -> Path:
+               status_col: Optional[int] = None, dpi: int = 220,
+               chart_id: Optional[str] = None) -> Path:
     """Compact dark table (risk category tables). *rows* are pre-formatted str
     cells; ``status_col`` colours a RAG status cell."""
+    _record("table", chart_id, columns=[str(c) for c in columns],
+            cells=[[str(c) for c in row] for row in rows],
+            status_col=status_col)
     fig = _fig(w, h, theme, dpi)
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
     ax.set_facecolor(theme.bg_panel)

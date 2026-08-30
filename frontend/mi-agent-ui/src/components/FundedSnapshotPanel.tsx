@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { FundedSnapshot, SnapshotKPI } from "@/domain";
 import { BarList, type BarDatum } from "@/components/pipeline/bits";
-import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
+import { cleanBucketLabel, orderBarsForDisplay } from "@/lib/stratOrder";
 import { cn, formatDate } from "@/lib/utils";
 
 function deltaColour(intent?: SnapshotKPI["deltaIntent"]) {
@@ -190,9 +190,13 @@ export function FundedSnapshotPanel({
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {snapshot.stratifications!.map((s) => {
-              // Natural bucket order (LTV %, age, vintage year, rate… else
-              // alphabetical; Unknown last) + label tidy-ups ("2008.0" → "2008").
-              const data: BarDatum[] = sortStratBars(s.bars).map((b) => ({
+              // Display order comes from the backend, which sequenced these
+              // against the governed bucket ladder and tagged the payload
+              // `displayOrder`. The investor PPTX renders the same payload in
+              // the same order; re-deciding it here is what put the two
+              // surfaces out of step. `cleanBucketLabel` is a no-op on a
+              // governed payload (already cleaned) and still tidies a mock one.
+              const data: BarDatum[] = orderBarsForDisplay(s.bars, s.displayOrder).map((b) => ({
                 label: cleanBucketLabel(b.label),
                 // The selected measure, read straight from the payload.
                 value: measure === "balance" ? b.balance
