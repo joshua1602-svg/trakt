@@ -158,3 +158,6 @@ question_interpretation/.kestrelmoor_store/
 # The durable, reviewable artefact is migration_phase0/estate.json, which carries
 # every failing node id BY NAME (what abort condition A5 compares against).
 migration_phase0/*_full.txt
+
+# Investor-pack visual QA output (regenerate with scripts/pptx_visual_qa.py).
+artifacts/pptx_qa/*.pptx
