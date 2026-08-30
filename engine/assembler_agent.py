@@ -129,7 +129,7 @@ def build_regime_command(
         "--regime", regime,
         "--registry", registry or str(_CONFIG_ROOT / "system" / "fields_registry.yaml"),
         "--enum-mapping", enum_mapping or str(_CONFIG_ROOT / "system" / "enum_mapping.yaml"),
-        "--config", config or str(_CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"),
+        "--config", config or "",
         "--template-order", template_order or str(_CONFIG_ROOT / "system" / "esma_code_order.yaml"),
         "--portfolio-type", portfolio_type,
         "--output-dir", str(out_dir),

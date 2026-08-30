@@ -326,8 +326,6 @@ def build_validation_package(
         repo_root / "config" / "system" / "fields_registry.yaml")
     if registry_path and not Path(registry_path).is_absolute() and not Path(registry_path).exists():
         registry_path = str(repo_root / registry_path)
-    regime_config_path = regime_config_path or tx_manifest.get("regime_config_path", "") or str(
-        repo_root / "config" / "regime" / "annex2_delivery_rules.yaml")
     asset_config_path = asset_config_path or tx_manifest.get("asset_config_path", "") or str(
         repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
     enum_config_dir = enum_config_dir or str(repo_root / "config" / "system")
@@ -360,19 +358,17 @@ def build_validation_package(
         or _asset_class_from_config(asset_config_path)
         or "").strip()
     enum_lib = ra.load_enum_lib(enum_config_dir)
-    regime_cfg = _read_yaml(Path(regime_config_path)) or {}
 
-    # Authoritative workbook universe (ND envelope) + asset config defaults.
-    # These give the runtime regime index / diagnostic visibility into ND/default
-    # eligibility for codes that lack a full hand-authored field_rules entry
-    # (e.g. RREL15 customer_type, RREL24 maturity_date).
+    # The effective Annex 2 contract: the ND envelope from the workbook-derived
+    # field universe, the canonical binding from the registry, mandatory status
+    # from the workbook's multiplicity. Every one of the 107 codes is present, so
+    # a field is never treated as unregulated merely because nobody wrote a rule.
     field_universe = ra.load_field_universe(field_universe_path)
     code_to_canonical = _build_code_to_canonical(registry_fields)
     asset_cfg = _read_yaml(Path(asset_config_path)) or {}
     asset_defaults = asset_cfg.get("defaults", {}) or {}
     asset_nd_defaults = asset_cfg.get("nd_defaults", {}) or {}
-    regime_index = ra.build_regime_index(
-        regime_cfg, field_universe=field_universe, code_to_canonical=code_to_canonical)
+    regime_index = ra.build_regime_index()
 
     # 5/6) value-level + cross-field validation -------------------------------
     results: List[Dict[str, Any]] = []
@@ -390,7 +386,19 @@ def build_validation_package(
                 # A mandatory field that permits no ND/default but is entirely
                 # absent from the tape is a true validation failure (surfaced,
                 # never filled here).
-                defaultable = bool(rule.get("default_allowed")) or bool(rule.get("nd_allowed"))
+                meta_abs = registry_fields.get(canonical, {}) or {}
+                # The registry already says which fields this asset class is
+                # allowed not to carry, and why. Reporting-entity identity, for
+                # instance, is declared as supplied by the governed client
+                # configuration and injected at projection — so its absence from
+                # a loan tape is expected, not a defect. Reuse that declaration
+                # rather than deciding again here.
+                applic = ((meta_abs.get("applicability") or {}).get(portfolio_type)
+                          or {}) if portfolio_type else {}
+                allowed_missing = bool(applic.get("allowed_missing"))
+                defaultable = (bool(rule.get("default_allowed"))
+                               or bool(rule.get("nd_allowed"))
+                               or allowed_missing)
                 if mandatory and not defaultable and canonical not in seen_mandatory_absent:
                     seen_mandatory_absent.add(canonical)
                     # WHOSE mandatory? A field the core canonical contract

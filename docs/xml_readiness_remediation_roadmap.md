@@ -116,7 +116,7 @@ confirm the correct source before a value is projected.
 
 * **RREL27 purpose** — enum mapping in config (`config_mapping_required`).
 * Genuine `nd_default_rule_missing` items (where ND **is** ESMA-allowed) — define
-  an *allowed* ND/default rule in `annex2_delivery_rules.yaml` / asset config,
+  an *allowed* ND code in the effective Annex 2 contract, or a default in the asset config,
   never a silent fill. **Note:** the only such-labelled code this run is RREL82,
   which allows **no ND** and is therefore an onboarding static-reference item
   (group C / onboarding), **not** a config ND/default decision.

@@ -382,10 +382,11 @@ def regulatory_output(*, verbose: bool = True) -> Dict[str, Any]:
     if proj.returncode != 0 or projected is None:
         return _regulatory_unavailable(proj, stages, "projection", verbose)
 
+    # No --rules: Gate 4b derives the effective Annex 2 contract from the
+    # authoritative sources, exactly as it does in production.
     norm = _stage("gate_4b_delivery_normalisation", [
         sys.executable, cfg.REPO_ROOT / "engine" / "gate_4b_delivery" / "annex2_delivery_normalizer.py",
         "--input", projected,
-        "--rules", _demo_delivery_rules(out_dir),
         "--output-dir", out_dir,
     ])
     delivery = next(iter(sorted(out_dir.glob("*_delivery_ready.csv"))), None)
@@ -506,65 +507,6 @@ def _demo_enum_mapping(out_dir: Path) -> Path:
         encoding="utf-8",
     )
     return path
-
-
-def _demo_delivery_rules(out_dir: Path) -> Path:
-    """Write a demo-scoped copy of the Annex 2 delivery rules and return its path.
-
-    ``config/regime/annex2_delivery_rules.yaml`` is production configuration and is
-    left untouched. Its ``RREL83`` (originator LEI) rule is a strict controlled
-    vocabulary: an LEI that is not a key in ``transform.enum_map`` is rejected, so
-    the synthetic originator LEI would fail delivery normalisation for every row.
-
-    The overlay adds exactly one entry — an identity mapping for this
-    demonstration's own LEI, read from the demo client config. It changes no rule,
-    relaxes no validator, and adds no field: the LEI still has to satisfy the
-    ``lei`` validator and the ISO 17442 pattern downstream. This is client
-    onboarding configuration, which is per-client by design.
-    """
-    import yaml
-
-    source = cfg.REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
-    rules = yaml.safe_load(source.read_text(encoding="utf-8"))
-
-    client_cfg = yaml.safe_load(cfg.demo_client_config().read_text(encoding="utf-8"))
-    lei = _find_key(client_cfg, "originator_legal_entity_identifier")
-    if not lei:
-        raise RuntimeError("demo client config carries no originator LEI")
-
-    rule = rules.setdefault("field_rules", {}).setdefault("RREL83", {})
-    # REPLACE rather than extend: the production vocabulary lists other clients'
-    # LEIs, and a demonstration artefact must not carry them. A per-client
-    # onboarding configuration would only ever hold that client's own LEI.
-    rule.setdefault("transform", {})["enum_map"] = {str(lei): str(lei)}
-
-    path = out_dir / "annex2_delivery_rules_demo.yaml"
-    path.write_text(
-        "# GENERATED — demo-scoped copy of config/regime/annex2_delivery_rules.yaml.\n"
-        "# SYNTHETIC DEMONSTRATION DATA — NOT A REAL CUSTOMER.\n"
-        "# The only difference from the production rules is one RREL83 enum_map\n"
-        "# entry: an identity mapping for this demonstration's originator LEI.\n"
-        + yaml.safe_dump(rules, sort_keys=False, allow_unicode=True),
-        encoding="utf-8",
-    )
-    return path
-
-
-def _find_key(node: Any, key: str) -> Optional[Any]:
-    """Depth-first search for ``key`` in a nested mapping/sequence structure."""
-    if isinstance(node, dict):
-        if key in node:
-            return node[key]
-        for value in node.values():
-            found = _find_key(value, key)
-            if found is not None:
-                return found
-    elif isinstance(node, list):
-        for value in node:
-            found = _find_key(value, key)
-            if found is not None:
-                return found
-    return None
 
 
 def _regulatory_unavailable(proc: subprocess.CompletedProcess,

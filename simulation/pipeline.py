@@ -395,9 +395,6 @@ def run_regulatory_gates(source: Path, case, *, regime: str,
     cmd += _acquisition_cli(case)
     if master_config:
         cmd += ["--master-config", master_config]
-    overlay = build_delivery_rules(case, out_dir, master_config)
-    if overlay is not None:
-        cmd += ["--annex2-delivery-rules", overlay]
     started = time.monotonic()
     proc = _run(cmd)
     reg = GateRun(
@@ -412,54 +409,6 @@ def run_regulatory_gates(source: Path, case, *, regime: str,
                 f"invoked: trakt_run.py --mode regulatory --regime {regime}")
         _observe_gate_banners(reg)
     return reg
-
-
-def build_delivery_rules(case, out_dir: Path,
-                         master_config: Optional[Path] = None) -> Optional[Path]:
-    """A per-client Annex 2 delivery-rules overlay for this run.
-
-    ``config/regime/annex2_delivery_rules.yaml`` enumerates the ACCEPTED value
-    of ``RREL83`` (the originator LEI) in a per-field ``enum_map``. That map
-    currently contains one client's LEI, so any other originator's LEI is
-    rejected as an unmapped enum and Gate 4b blocks delivery — an identifier is
-    being validated as if it were a controlled vocabulary. See the framework
-    report: the rule should check the LEI's SHAPE, not membership of a list.
-
-    Rather than edit the shared regulatory contract, this writes a run-scoped
-    overlay adding the simulated originator's own LEI, and passes it through the
-    existing ``--annex2-delivery-rules`` CLI option — the configuration point
-    the pipeline already provides for exactly this.
-    """
-    import yaml
-
-    rules_path = CONFIG_ROOT / "regime" / "annex2_delivery_rules.yaml"
-    if not rules_path.exists():
-        return None
-    lei = _originator_lei(master_config)
-    if not lei:
-        return None
-    rules = yaml.safe_load(rules_path.read_text(encoding="utf-8")) or {}
-    field_rules = rules.get("field_rules") or {}
-    rrel83 = field_rules.get("RREL83")
-    if isinstance(rrel83, dict):
-        enum_map = ((rrel83.get("transform") or {}).get("enum_map") or {})
-        enum_map[lei] = lei
-        rrel83.setdefault("transform", {})["enum_map"] = enum_map
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / "delivery_rules_overlay.yaml"
-    path.write_text(yaml.safe_dump(rules, sort_keys=False), encoding="utf-8")
-    return path
-
-
-def _originator_lei(master_config: Optional[Path]) -> Optional[str]:
-    import yaml
-
-    if not master_config or not Path(master_config).exists():
-        return None
-    cfg = yaml.safe_load(Path(master_config).read_text(encoding="utf-8")) or {}
-    lei = ((cfg.get("defaults") or {})
-           .get("originator_legal_entity_identifier"))
-    return str(lei).strip() if lei else None
 
 
 def projected_regime_csv(out_dir: Path, regime: str) -> Optional[Path]:

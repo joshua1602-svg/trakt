@@ -195,7 +195,6 @@ def cmd_compare(args: argparse.Namespace) -> int:
                  "config/system/esma_code_order.yaml",
                  "config/system/esma_model_structure.yaml",
                  "config/system/enum_mapping.yaml",
-                 "config/regime/annex2_delivery_rules.yaml",
                  "config/regime/annex2_field_universe.yaml",
                  "config/delivery/annex2_field_xsd_path_map.yaml"],
             "mutating_writes": "none — Stage 1 is observational",

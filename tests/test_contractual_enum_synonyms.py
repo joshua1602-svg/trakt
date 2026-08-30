@@ -2,7 +2,7 @@
 """Do the contractual analytics and the Annex 2 delivery path agree on enums?
 
 ``analytics_lib/contractual.py`` restates the ESMA enum synonyms rather than
-reading ``config/regime/annex2_delivery_rules.yaml``, because MI runtime must not
+reading the Annex 2 delivery contract, because MI runtime must not
 depend on the regulatory delivery chain — see
 ``tests/test_mi_regulatory_separation.py``.
 
@@ -34,7 +34,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from analytics_lib.contractual import _ENUM_SYNONYMS
 
-DELIVERY_RULES = _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
+from tests.annex2_contract_fixture import contract_path
+DELIVERY_RULES = Path(contract_path())
 
 
 def _delivery_enum_map(code: str) -> dict:
@@ -96,7 +97,7 @@ def test_the_analytics_do_not_read_the_regulatory_configuration():
     source = (_REPO_ROOT / "analytics_lib" / "contractual.py").read_text(
         encoding="utf-8")
     assert "config/regime/" not in source
-    assert "annex2_delivery_rules" not in source
+    assert "regime_contract" not in source
 
 
 def test_normalisation_works_with_no_regulatory_configuration(monkeypatch):

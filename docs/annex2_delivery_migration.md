@@ -12,6 +12,19 @@ second Annex 2 implementation.**
 > `config/delivery/annex2_field_xsd_path_map.yaml` still records
 > `production_ready: 0/107` and `do_not_generate_production_xml: true`.
 
+> **RETIRED — `config/regime/annex2_delivery_rules.yaml` no longer exists.**
+> It was a hand-maintained second statement of Annex 2 truth, covering 70 of the
+> 107 codes, read by five stages, and disagreeing with the authoritative sources
+> in five places. The delivery contract is now DERIVED, per run, from those
+> sources alone — the field universe (ND envelope), the ESMA mapping workbook
+> (mandatory-ness, XML leaf), the auth.099 XSD (type, pattern, enumeration,
+> precision), the fields registry (canonical name) and the governed enum
+> configuration — by `engine/regime_contract`. Values (defaults and no-data
+> answers) are not in the contract at all: they come from the asset pack, the
+> client configuration and approved operator decisions. Everything below that
+> names the retired file is a record of how the route worked before that
+> migration, kept for provenance; the file itself is gone.
+
 ## Current Annex 2 status
 
 | Property | State |

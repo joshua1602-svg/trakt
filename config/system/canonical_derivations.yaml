@@ -25,6 +25,10 @@
 #   presence_to_flag
 #       null / blank    -> "N"
 #       any value       -> "Y"
+#   ratio_percentage  (two sources: numerator, denominator)
+#       either null     -> null
+#       denominator<=0  -> null
+#       otherwise       -> numerator / denominator * 100, to 4 decimal places
 
 version: 1
 
@@ -42,3 +46,29 @@ derivations:
       Y when the loan carries a protected-equity percentage greater than zero,
       N when the percentage is present and zero, null when the source is blank.
     preserve_source: true
+
+  # Loan-to-value. The regulator requires both the current and the original LTV
+  # on every record (RREC12 / RREC16) and permits a no-data code — but a no-data
+  # code would be untrue for a lender that supplies the balance and the
+  # valuation, which is the whole ratio. So it is calculated from governed
+  # canonical values, and only where the lender does not state it: a supplied
+  # LTV always wins (`fill_blank_only`).
+  #
+  # The canonical LTV is a PERCENTAGE, which is what the estate already assumes
+  # — Gate 3's business rules bound it to 0–500 and reconcile it against balance
+  # and valuation within 1%.
+  current_loan_to_value:
+    from: [current_outstanding_balance, current_valuation_amount]
+    rule: ratio_percentage
+    fill_blank_only: true
+    description: >-
+      Current outstanding balance as a percentage of the current valuation.
+      Calculated only where the lender does not supply the ratio itself.
+
+  original_loan_to_value:
+    from: [original_principal_balance, original_valuation_amount]
+    rule: ratio_percentage
+    fill_blank_only: true
+    description: >-
+      Original advance as a percentage of the valuation at origination.
+      Calculated only where the lender does not supply the ratio itself.

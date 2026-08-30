@@ -25,7 +25,9 @@ import pandas as pd
 
 # Valid LEIs (check digits included) for two unrelated lenders.
 LEI_A = "549300ABCDE123456702"
-LEI_B = "213800ABCDE123456701"
+#: Deliberately unlike the repository ERM_UK configuration's LEI, so a value
+#: appearing in Client B's return can only have come from Client B.
+LEI_B = "2138LTM0000000000199"
 
 CONTAINER = "raw-v2"
 
@@ -542,4 +544,12 @@ BETA_REGULATORY_STATUS = {
 
 
 #: Pool-level facts an operator states once for Client B's portfolio.
-BETA_REGULATORY_CONSTANTS = {"pool_addition_date": "2026-01-31"}
+#:
+#: ``number_of_days_in_arrears`` is answered as a value rather than a column on
+#: purpose. The tape's "Arrears" column is a BALANCE — it is mapped to
+#: ``arrears_balance`` (RREL67) and reads 0.00 on every record — so pointing
+#: RREL68 at it would report a money amount as a number of days. The regulator
+#: permits no no-data code for RREL68, so the honest answer is the operator's:
+#: no account in this book is in arrears, therefore zero days.
+BETA_REGULATORY_CONSTANTS = {"pool_addition_date": "2026-01-31",
+                             "number_of_days_in_arrears": "0"}

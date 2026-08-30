@@ -22,7 +22,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 NORMALIZER = REPO / "engine/gate_4b_delivery/annex2_delivery_normalizer.py"
 XML_BUILDER = REPO / "engine/gate_5_delivery/xml_builder_annex2.py"
-RULES_PATH = REPO / "config/regime/annex2_delivery_rules.yaml"
+#: The Annex 2 contract is DERIVED (engine.regime_contract.annex2_contract), not
+#: read from a file. OCC materialises it per run, with the portfolio's approved
+#: decisions merged in, and hands that artefact to Gate 4b.
 XSD_PATH = REPO / "config/system/DRAFT1auth.099.001.04_1.3.0.xsd"
 WORKBOOK = REPO / ("DRAFT1auth.099.001.04_non-ABCP Underlying Exposure "
                    "Report_Version_1.3.1.xlsx")
@@ -125,11 +127,18 @@ class Annex2Stages:
             report=report)
 
     def run_normalisation(self, *, projected_csv: str, out_dir: Path,
-                          rules_path: Path = RULES_PATH) -> StageOutcome:
-        """Invoke the EXISTING Gate 4b delivery normaliser, unmodified."""
+                          rules_path: Optional[Path] = None) -> StageOutcome:
+        """Invoke the EXISTING Gate 4b delivery normaliser, unmodified.
+
+        With no ``rules_path`` the normaliser derives the contract itself; OCC
+        passes the run's materialised contract so the approved decisions for this
+        portfolio are part of it.
+        """
         out_dir.mkdir(parents=True, exist_ok=True)
         cmd = [sys.executable, str(NORMALIZER), "--input", str(projected_csv),
-               "--rules", str(rules_path), "--output-dir", str(out_dir)]
+               "--output-dir", str(out_dir)]
+        if rules_path:
+            cmd += ["--rules", str(rules_path)]
         t0 = time.time()
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               cwd=str(REPO))
@@ -147,7 +156,8 @@ class Annex2Stages:
         counts = self._frame_counts(projected_csv,
                                     str(delivery[0]) if delivery else "")
         metrics = {"elapsed_s": elapsed, "returncode": proc.returncode,
-                   "rules_version": _file_version(rules_path), **counts}
+                   "rules_version": (_file_version(rules_path) if rules_path
+                                     else "derived"), **counts}
         artefacts = {
             "delivery_ready_csv": str(delivery[0]) if delivery else "",
             "delivery_report": str(report_p[0]) if report_p else "",

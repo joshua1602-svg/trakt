@@ -17,7 +17,7 @@ properties that must hold whichever code wins:
   silently — if they diverge, this file says so out loud.
 
 The ND1-vs-ND5 determination itself is recorded as OPEN. See the comment block
-above RREL20 in ``config/regime/annex2_delivery_rules.yaml`` and
+above the secondary-income entries in ``config/asset/product_defaults_ERM.yaml`` and
 ``docs/annex2_delivery_migration.md``.
 
 Run: python -m pytest tests/test_annex2_secondary_income_applicability.py
@@ -38,7 +38,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 _NORMALIZER = _REPO / "engine" / "gate_4b_delivery" / "annex2_delivery_normalizer.py"
-_RULES = _REPO / "config" / "regime" / "annex2_delivery_rules.yaml"
+_ASSET_PACK = _REPO / "config" / "asset" / "product_defaults_ERM.yaml"
 _ERM = _REPO / "config" / "asset" / "product_defaults_ERM.yaml"
 _STANDARDS = _REPO / "config" / "system" / "standards_library.yaml"
 _UNIVERSE = _REPO / "config" / "regime" / "annex2_field_universe.yaml"
@@ -54,7 +54,31 @@ _SOURCES = {"RREL20": "secondary_income", "RREL21": "secondary_income_verificati
 
 
 def _rules():
-    return yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+    """The effective Annex 2 contract, as a delivery-rules document."""
+    from tests.annex2_contract_fixture import contract_rules
+    return contract_rules()
+
+
+def _rules_with_product_answer():
+    """The contract, PLUS the asset pack's answer applied as a delivery default.
+
+    In production the product's ND1 reaches the frame at Gate 4 — the projector
+    applies ``defaults.nd_defaults`` from the asset pack while building the
+    return. The contract itself carries no values, deliberately. These
+    behavioural tests need the value present to exercise the "a supplied value
+    always wins" property, so they attach the pack's own answer here rather than
+    inventing one.
+    """
+    doc = _rules()
+    erm = _erm_nd_defaults()
+    for code, canonical in _SOURCES.items():
+        answer = erm.get(canonical)
+        if answer:
+            doc["field_rules"][code] = dict(
+                doc["field_rules"][code],
+                default_allowed=True, default_value=answer,
+                mandatory=False, enforce_presence=False)
+    return doc
 
 
 def _erm_nd_defaults():
@@ -67,13 +91,13 @@ def _only(*codes, **overrides):
     RREL3 stays a plain frame column (the exposure identifier the normaliser
     uses for row attribution); it needs no rule of its own.
     """
-    full = _rules()
+    full = _rules_with_product_answer()
     fields = {}
     for code in codes:
         rule = dict(full["field_rules"][code])
         rule.update(overrides.get(code, {}))
         fields[code] = rule
-    return {"defaults": full.get("defaults", {}), "field_rules": fields}
+    return {"field_rules": fields}
 
 
 # --------------------------------------------------------------------------- #
@@ -83,7 +107,7 @@ class TestTheRationaleIsAboutUnderwritingNotBorrowerCount(unittest.TestCase):
     """Joint borrowers exist. The reason must never be "there is no obligor"."""
 
     def test_no_configuration_claims_equity_release_has_no_secondary_obligor(self):
-        for path in (_RULES, _ERM):
+        for path in (_ERM,):
             text = path.read_text(encoding="utf-8").lower()
             for phrase in ("there is no secondary obligor",
                            "no secondary obligor exists",
@@ -92,8 +116,9 @@ class TestTheRationaleIsAboutUnderwritingNotBorrowerCount(unittest.TestCase):
                                  f"{path.name} justifies the code on borrower "
                                  f"absence; equity release has joint borrowers")
 
-    def test_the_rules_state_the_underwriting_rationale(self):
-        text = _RULES.read_text(encoding="utf-8").lower()
+    def test_the_product_states_the_underwriting_rationale(self):
+        """The reasoning lives beside the decision, in the layer that owns it."""
+        text = _ERM.read_text(encoding="utf-8").lower()
         self.assertIn("joint borrower", text)
         self.assertIn("underwriting", text)
 
@@ -132,30 +157,33 @@ class TestProductDefaultAndDeliveryRuleAgree(unittest.TestCase):
     divergence is now resolved on **ND1** and this test keeps it resolved.
     """
 
-    def test_both_layers_declare_the_same_code(self):
+    def test_only_one_layer_declares_the_code(self):
+        """The disagreement is gone because the duplicate is gone.
+
+        Two files once stated this judgement — the regime rules said ND5, the
+        asset pack said ND1 — and the delivery used the regime's, so ND5
+        shipped. The regime layer no longer states values at all: it states what
+        the REGULATOR permits, and the product states what is true of the
+        product.
+        """
         rules = _rules()["field_rules"]
         erm = _erm_nd_defaults()
         for code in _CODES:
-            rule_value = rules[code].get("default_value")
-            erm_value = erm.get(_SOURCES[code])
-            self.assertEqual(
-                rule_value, erm_value,
-                f"{code}: annex2_delivery_rules.yaml says {rule_value!r} but "
-                f"product_defaults_ERM.yaml says {erm_value!r}. Two files "
-                f"disagreeing on a regulatory judgement is how the wrong code "
-                f"ships silently.")
+            self.assertNotIn("default_value", rules[code],
+                             f"{code}: the contract must state no value")
+            self.assertEqual(erm.get(_SOURCES[code]), "ND1", code)
 
-    def test_the_agreed_code_is_nd1(self):
+    def test_the_regulator_still_permits_both_codes(self):
+        """The envelope is wider than the product's choice, and stays stated."""
         rules = _rules()["field_rules"]
-        erm = _erm_nd_defaults()
         for code in _CODES:
-            self.assertEqual(rules[code]["default_value"], "ND1", code)
-            self.assertEqual(erm[_SOURCES[code]], "ND1", code)
+            self.assertIn("ND1", rules[code]["nd_allowed"], code)
+            self.assertIn("ND5", rules[code]["nd_allowed"], code)
 
-    def test_the_rationale_is_recorded_next_to_the_rule(self):
-        text = _RULES.read_text(encoding="utf-8")
+    def test_the_rationale_is_recorded_next_to_the_decision(self):
+        text = _ERM.read_text(encoding="utf-8")
         self.assertIn("underwriting criteria do not require", text,
-                      "the ND1 rationale must sit beside the rule it explains")
+                      "the ND1 rationale must sit beside the decision")
         self.assertNotIn("UNDER REVIEW", text,
                          "the decision is settled; the review marker must go")
 
@@ -186,10 +214,10 @@ class TestSuppliedValuesAreNeverOverwritten(unittest.TestCase):
         rules = _only(*_CODES)
         out, _issues, summary = NORM.normalize_delivery(
             pd.DataFrame({"RREL3": ["EXP-SINGLE-1"]}), rules)
-        declared = _rules()["field_rules"]["RREL20"]["default_value"]
+        declared = _erm_nd_defaults()["secondary_income"]
         self.assertEqual(out.at[0, "RREL20"], declared)
         self.assertEqual(out.at[0, "RREL21"],
-                         _rules()["field_rules"]["RREL21"]["default_value"])
+                         _erm_nd_defaults()["secondary_income_verification"])
         self.assertEqual(summary["field_provenance"]
                          ["populated_by_declared_delivery_rule"], 2)
 
@@ -217,7 +245,7 @@ class TestSuppliedValuesAreNeverOverwritten(unittest.TestCase):
                          "a supplied secondary income was overwritten")
         # The blank row still receives the governed default.
         self.assertEqual(out.at[1, "RREL20"],
-                         _rules()["field_rules"]["RREL20"]["default_value"])
+                         _erm_nd_defaults()["secondary_income"])
 
     def test_a_real_secondary_income_verification_value_is_preserved(self):
         rules = _only("RREL21")
@@ -284,14 +312,17 @@ class TestNoNdContaminationOfCanonicalTruth(unittest.TestCase):
             self.assertNotIn("ND1", entry)
             self.assertNotIn("ND5", entry)
 
-    def test_nd_defaults_live_in_regime_and_asset_config_only(self):
-        """ND for these fields is a DELIVERY decision, not canonical data."""
+    def test_nd_defaults_live_in_the_asset_config_only(self):
+        """ND for these fields is a PRODUCT decision, not canonical data — and
+        not a regime one either. The contract states the permitted envelope; the
+        asset pack states the answer; the canonical states nothing."""
         erm = _erm_nd_defaults()
-        self.assertIn("secondary_income", erm,
-                      "the product-level ND decision must stay declared")
         rules = _rules()["field_rules"]
         for code in _CODES:
-            self.assertTrue(str(rules[code].get("default_value") or "").startswith("ND"))
+            self.assertTrue(str(erm.get(_SOURCES[code]) or "").startswith("ND"),
+                            f"{_SOURCES[code]} must carry the product's answer")
+            self.assertNotIn("default_value", rules[code],
+                             f"{code}: the regime layer states no value")
 
 
 if __name__ == "__main__":  # pragma: no cover

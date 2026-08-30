@@ -7,8 +7,9 @@ Derive the **production** Annex 2 XML structure gap matrix from the authoritativ
 artefacts in the repo:
 
   * config/regime/annex2_field_universe.yaml   (107 Annex 2 codes, format, ND)
-  * config/regime/annex2_delivery_rules.yaml   (workbook_semantic leaf tokens,
-                                                mandatory, projected_source_field)
+  * the effective Annex 2 contract (engine.regime_contract), which derives the
+    workbook_semantic leaf token, mandatory-ness and projected_source_field
+    from the mapping workbook, the fields registry and the XSD
 
 It writes ``output/config_review/annex2_xml_structure_gap_matrix.csv`` — one row
 per ESMA code — classifying, for production XML, the proposed XML level /
@@ -29,7 +30,6 @@ import yaml
 
 _REPO = Path(__file__).resolve().parents[1]
 _UNIVERSE = _REPO / "config" / "regime" / "annex2_field_universe.yaml"
-_RULES = _REPO / "config" / "regime" / "annex2_delivery_rules.yaml"
 _OUT = _REPO / "output" / "config_review" / "annex2_xml_structure_gap_matrix.csv"
 
 # Report/header-level codes (one-per-report) and their confirmed XSD paths,
@@ -135,7 +135,7 @@ def _classify(code: str, rule: dict, entry: dict):
     if leaf_hint and not path_known:
         notes.append(f"leaf token hint: {leaf_hint}")
     if not leaf_hint and not path_known:
-        notes.append("workbook_semantic absent (TBC/mismapped in delivery rules)")
+        notes.append("workbook_semantic absent (the workbook maps no XML leaf)")
     if code in _RESOLVED_FOR_DATA:
         notes.append("delivery-valid for data; XSD path still to be confirmed")
     nd = []
@@ -166,9 +166,18 @@ def _classify(code: str, rule: dict, entry: dict):
     }
 
 
+def _contract_rules() -> dict:
+    """The effective Annex 2 contract as ``{code: rule}``."""
+    import sys
+    if str(_REPO) not in sys.path:
+        sys.path.insert(0, str(_REPO))
+    from engine.regime_contract import as_delivery_rules, build_contract
+    return as_delivery_rules(build_contract())["field_rules"]
+
+
 def main() -> int:
     universe = (_load_yaml(_UNIVERSE).get("fields") or {})
-    rules = (_load_yaml(_RULES).get("field_rules") or {})
+    rules = _contract_rules()
 
     rows = []
     for code in sorted(universe, key=lambda c: (c[:4], int("".join(ch for ch in c if ch.isdigit()) or 0))):

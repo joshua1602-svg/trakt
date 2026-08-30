@@ -2,11 +2,12 @@
 "the lender does not supply this regulatory field".
 
 ESMA's no-data codes are the regulator's own vocabulary for that situation, and
-which of them a field may carry is already stated per ESMA code in
-``config/regime/annex2_delivery_rules.yaml``. Their meanings are already stated
-in ``config/system/standards_library.yaml``. Nothing here decides anything: it
-reads both, and offers the operator exactly the treatments the rules permit for
-the field in front of them.
+which of them a field may carry is already stated per ESMA code in the
+workbook-derived field universe. Their meanings are already stated in
+``config/system/standards_library.yaml``. Nothing here decides anything: it
+reads the effective Annex 2 contract and offers the operator exactly the
+treatments the REGULATOR permits for the field in front of them — not the
+treatments someone once wrote a rule for.
 
 A no-data code is a REGULATORY statement about why a field is empty. It belongs
 to the projection and never to the canonical — the projector applies it from
@@ -24,7 +25,10 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 _REPO = Path(__file__).resolve().parents[2]
-_REGIME_RULES = _REPO / "config" / "regime" / "annex2_delivery_rules.yaml"
+#: The effective Annex 2 contract, derived from the authoritative sources.
+#: Nothing here reads a delivery-rules file: the no-data envelope belongs to the
+#: workbook-derived field universe, and the code a canonical field reports as
+#: belongs to the fields registry.
 _STANDARDS = _REPO / "config" / "system" / "standards_library.yaml"
 _REGISTRY = _REPO / "config" / "system" / "fields_registry.yaml"
 
@@ -44,15 +48,12 @@ def _nd_options() -> Dict[str, Dict[str, Any]]:
 
 
 @lru_cache(maxsize=1)
-def _rules_by_code() -> Dict[str, Dict[str, Any]]:
-    try:
-        doc = yaml.safe_load(_REGIME_RULES.read_text(encoding="utf-8")) or {}
-    except Exception:  # noqa: BLE001
-        return {}
-    return {str(k): (v or {}) for k, v in (doc.get("field_rules") or {}).items()}
+def _contract():
+    """The effective Annex 2 contract (cached by the contract module)."""
+    from engine.regime_contract.annex2_contract import contract
+    return contract()
 
 
-@lru_cache(maxsize=1)
 def _code_for_field() -> Dict[str, str]:
     """``{canonical field: ESMA Annex 2 code}`` from the registry."""
     out: Dict[str, str] = {}
@@ -85,19 +86,21 @@ def field_for_esma_code(code: str) -> str:
 
 
 def permitted_nd_codes(field: str) -> List[str]:
-    """The no-data codes the regime rules allow for ``field``.
+    """The no-data codes the REGULATOR permits for ``field``.
 
-    Empty when the field has no Annex 2 code, when the rules name none, or when
-    the only ones named cannot be offered as a plain choice.
+    Read from the workbook-derived field universe by way of the effective
+    contract, so a code the regulator allows ND for is offered whether or not
+    anyone ever hand-wrote a rule for it. ND4 carries a date
+    (``ND4-YYYY-MM-DD``) and is not offered as a bare choice.
     """
     code = esma_code_for(field)
     if not code:
         return []
-    allowed = (_rules_by_code().get(code) or {}).get("nd_allowed") or []
+    fc = _contract().get(code)
+    if fc is None:
+        return []
     known = _nd_options()
-    return [str(c).strip().upper() for c in allowed
-            if str(c).strip().upper() in known
-            and not _ND4.match(str(c).strip())]
+    return [c for c in fc.nd_allowed if c in known and not _ND4.match(c)]
 
 
 def describe(nd_code: str) -> str:
@@ -183,9 +186,16 @@ def absent_regulatory_fields(evidence: List[Dict[str, Any]]) -> List[str]:
         if not isinstance(data, dict):
             continue
         field = str(data.get("field") or "").strip()
+        if not field:
+            continue
+        # A field the population reconciliation could not fill says so plainly;
+        # a projector failure reports it as a NULL placeholder among its values.
+        if str((ev or {}).get("label", "")) == "Regulatory field with no value":
+            out.append(field)
+            continue
         raw = str(data.get("values") or "")
         values = [v.strip().strip("'\"").lower() for v in raw.split(",")]
-        if field and values and all(v in absent for v in values):
+        if values and all(v in absent for v in values):
             out.append(field)
     return out
 
@@ -202,50 +212,56 @@ LAYER_REGULATORY = "regulatory"
 
 
 def permitted_enum_codes(field: str) -> List[str]:
-    """The codes the regime rules accept for ``field``, from its enum map."""
+    """The regulator's own code list for ``field``, from the XSD enumeration."""
     code = esma_code_for(field)
     if not code:
         return []
-    transform = (_rules_by_code().get(code) or {}).get("transform") or {}
-    enum_map = transform.get("enum_map")
-    if not isinstance(enum_map, dict):
-        return []
-    return sorted({str(v).strip() for v in enum_map.values() if str(v).strip()})
+    fc = _contract().get(code)
+    return sorted(fc.enum_values) if fc else []
 
 
 def is_permitted_enum(field: str, code: str) -> bool:
     return str(code or "").strip() in permitted_enum_codes(field)
 
 
-def materialise_effective_delivery_rules(*, base_rules_path: Path,
+def materialise_effective_delivery_rules(*, out_path: Path,
                                          translations: Dict[str, Dict[str, str]],
-                                         out_path: Path) -> Path:
-    """Repository delivery rules + approved per-client enum translations.
+                                         base_rules_path: Optional[Path] = None,
+                                         ) -> Path:
+    """The effective Annex 2 contract for this run, including approved decisions.
 
-    ``translations`` is ``{canonical field: {lender value: regulator code}}``.
-    Each pair is merged into that field's existing ``transform.enum_map``, which
-    is the table the delivery normaliser already consults, so an approved
-    translation is applied while the return is built and the canonical keeps the
-    lender's own wording.
+    ``translations`` is ``{canonical field: {lender value: regulator code}}`` from
+    approved decisions. Each pair is merged into the field's enum vocabulary,
+    which the contract takes from the XSD enumeration — so an operator can teach
+    the delivery what one of the lender's words means, and cannot invent a code
+    the regulator does not define. The canonical keeps the lender's own wording.
+
+    ``base_rules_path`` is accepted for call compatibility and ignored: the
+    contract has no base file to start from.
     """
-    doc = yaml.safe_load(Path(base_rules_path).read_text(encoding="utf-8")) or {}
-    rules = doc.setdefault("field_rules", {})
-    for field, pairs in (translations or {}).items():
-        code = esma_code_for(field)
-        if not code or code not in rules:
+    from engine.regime_contract.annex2_contract import materialise_delivery_rules
+    return materialise_delivery_rules(out_path, operator_translations=translations)
+
+
+def client_regulatory_values(defaults: Dict[str, Any]) -> Dict[str, str]:
+    """Client-configured values that are themselves Annex 2 regulatory targets.
+
+    A client configuration states facts about the lender — who originated the
+    book, its LEI, where it is established. Those are canonical fields with an
+    Annex 2 code, so a value stated there IS the regulator's answer, and it
+    reaches the return the same way any other configured regulatory value does.
+
+    Only keys the fields registry maps to an Annex 2 code qualify, so nothing is
+    listed here and a configuration key that means something else to another
+    consumer is left alone.
+    """
+    out: Dict[str, str] = {}
+    codes = _code_for_field()
+    for key, value in (defaults or {}).items():
+        if not isinstance(value, (str, int, float)):
             continue
-        transform = (rules[code].setdefault("transform", {}) or {})
-        enum_map = dict(transform.get("enum_map") or {})
-        if not enum_map:
-            continue          # the field is not enum-mapped; nothing to extend
-        for lender_value, regulator_code in (pairs or {}).items():
-            if str(regulator_code).strip() in set(enum_map.values()):
-                enum_map[str(lender_value)] = str(regulator_code).strip()
-        transform["enum_map"] = enum_map
-        rules[code]["transform"] = transform
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(
-        "# GENERATED by operations_control — effective Annex 2 delivery rules\n"
-        "# (repository rules + approved regulatory enum translations).\n"
-        + yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
-    return out_path
+        text = str(value).strip()
+        if not text or not codes.get(str(key)):
+            continue
+        out[str(key)] = text
+    return out

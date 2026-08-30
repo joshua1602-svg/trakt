@@ -71,7 +71,10 @@ AGENT_VERSION = "1.0"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_POLICY = _REPO_ROOT / "config" / "delivery" / "xml_preview_policy.yaml"
 _DEFAULT_UNIVERSE = _REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml"
-_DEFAULT_REGIME = _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
+def _default_regime_contract() -> str:
+    """The derived Annex 2 contract; there is no delivery-rules file."""
+    from engine.regime_contract.annex2_contract import materialised_contract_path
+    return materialised_contract_path()
 _DEFAULT_PATH_MAP = _REPO_ROOT / "config" / "delivery" / "annex2_field_xsd_path_map.yaml"
 _DEFAULT_XSD = _REPO_ROOT / "DRAFT1auth.099.001.04_1.3.0.xsd"
 
@@ -784,7 +787,7 @@ def evaluate_and_emit(
         field_universe_path or
         (policy.get("synthetic_schema_test_policy") or {}).get("field_universe_path")
         or _DEFAULT_UNIVERSE)
-    field_rules = _load_field_rules(regime_config_path or _DEFAULT_REGIME)
+    field_rules = _load_field_rules(regime_config_path or _default_regime_contract())
 
     manifest = _read_json(d / "60_delivery_manifest.json")
     readiness = _read_json(d / "61_delivery_readiness.json")

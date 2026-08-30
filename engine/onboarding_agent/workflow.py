@@ -110,7 +110,7 @@ def _next_action(stage: str, status: str, advisor_enabled: bool) -> str:
     if status == NEEDS_CONFIGURATION:
         return ("The Annex 2 target universe is loaded but not fully configured — some "
                 "codes are pending a regime field rule (or missing from 28a). Complete the "
-                "regime config (config/regime/annex2_delivery_rules.yaml) against the "
+                "effective Annex 2 contract against the "
                 "workbook universe; see 43_annex2_field_universe_reconciliation.")
     if status == READY:
         return ("All Gate 4 decisions are resolved — the pack is ready for MI handoff / "
@@ -694,7 +694,7 @@ def run_operator_workflow(
     # --- Annex 2 (ESMA) target-contract resolution -------------------------
     # regulatory_mi already means "ESMA Annex 2 delivery". When the run targets
     # the Annex 2 contract we load TWO config layers: the regime rules
-    # (config/regime/annex2_delivery_rules.yaml) and the ERM asset defaults
+    # (derived by engine.regime_contract.annex2_contract) and the ERM asset defaults
     # (config/asset/product_defaults_ERM.yaml) — both default automatically and
     # can be overridden by explicit flags.
     from engine.onboarding_agent.mode_policy import resolve_mode_alias
@@ -705,7 +705,8 @@ def run_operator_workflow(
     is_annex2 = (explicit_annex2
                  or _tcov.target_contract_kind(resolved_mode) == "esma_annex_2")
     if is_annex2:
-        regime_config = regime_config or str(_tcov._ANNEX2_REGIME_DEFAULT)
+        # No regime-config file to default to: the Annex 2 contract is derived
+        # from the field universe, the registry, the workbook and the XSD.
         asset_config = asset_config or str(_tcov._ASSET_CONFIG_DEFAULT)
 
     # Build a shared LLM callable only when the advisor is enabled (None when no
@@ -887,7 +888,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--target-contract", default="",
                    help="explicit target contract id, e.g. ESMA_Annex2 (default: mode-derived).")
     p.add_argument("--regime-config", default="",
-                   help="regime rules config (default: config/regime/annex2_delivery_rules.yaml "
+                   help="regime rules config (default: the derived Annex 2 contract "
                         "for Annex 2 mode).")
     p.add_argument("--asset-config", default="",
                    help="asset-class defaults config (default: "

@@ -19,6 +19,20 @@ defaults:
   # --- 2. Property & Borrower Characteristics ---
   property_occupancy_type: Owner-occupied
   original_valuation_method: FIEI    # Standard full appraial for origination
+
+  # RREC8. A UK lifetime mortgage is advanced against a FIRST legal charge on
+  # the borrower's own home — the no-negative-equity guarantee and the FCA's
+  # MCOB rules for lifetime mortgages both assume it, and a second-charge
+  # lifetime mortgage is not a product that exists in this market. The highest
+  # lien position held by the originator is therefore always 1. Relocated here
+  # from the regime layer, where it applied to every residential portfolio of
+  # any product.
+  lien: 1
+
+  # RREC5. The primary asset securing a lifetime mortgage is the borrower's
+  # residential dwelling; that is what the product IS. A lender that supplies a
+  # collateral type still wins — this only fills a blank.
+  collateral_type: RBLD
   
   # --- 3. Currency ---
   exposure_currency_denomination: GBP
@@ -37,7 +51,7 @@ nd_defaults:
   # Borrower income is simply not part of equity-release underwriting (age,
   # property value and LTV are), so the data is not collected because the
   # underwriting criteria do not require it: exactly ND1. Matches the whole
-  # income family above and config/regime/annex2_delivery_rules.yaml.
+  # income family above, and RREL20/RREL21 permit ND1 in the field universe.
   secondary_income: ND1                   # RREL20
   secondary_income_verification: ND1      # RREL21
   debt_to_income_ratio: ND5               # RREL40 — DTI not captured for ERM (see reporting_policy.nd_policy)
@@ -45,6 +59,12 @@ nd_defaults:
   # --- 5. The "Not Applicable" Safety Net (ND2) ---
   # These fields exist in ESMA but are irrelevant for ERM
   maturity_date: ND5                         # No fixed term
+  # RREL25. "Original contractual term (number of months) at the origination
+  # date." A lifetime mortgage has none: it runs until death or the sale of the
+  # home. The same product truth as the maturity date above, and the reason the
+  # regime's months-between-dates derivation cannot answer it — there is no end
+  # date to count to.
+  original_term: ND5
   scheduled_principal_payment_frequency: ND5 # No payments
   scheduled_interest_payment_frequency: ND5  # No payments
   current_interest_rate_margin: ND5          # Fixed rate, no margin
@@ -63,6 +83,23 @@ nd_defaults:
   interest_rate_floor: ND5                   # Fixed rate; no floor
   deposit_amount: ND5                        # No deposit is taken on a lifetime mortgage
   next_interest_rate_reset_date: ND5         # Fixed rate
+
+  # --- 5c. The interest-revision family (relocated from the regime layer) ---
+  # A lifetime mortgage is fixed for life: there is no contractual revision of
+  # the margin or the reference index, so none of the revision fields applies.
+  # This is the same product truth already stated above for the current index,
+  # its tenor, the cap, the floor and the reset date — the revision fields were
+  # simply left behind in the regime rules, where they were asserted for every
+  # residential portfolio regardless of product, and inconsistently (ND1 for the
+  # first two revisions, ND5 for the third).
+  revision_margin_1: ND5                     # RREL50
+  interest_revision_date_1: ND5              # RREL51
+  revision_margin_2: ND5                     # RREL52
+  interest_revision_date_2: ND5              # RREL53
+  revision_margin_3: ND5                     # RREL54
+  interest_revision_date_3: ND5              # RREL55
+  revised_interest_rate_index: ND5           # RREL56
+  revised_interest_rate_index_tenor: ND5     # RREL57
   
   # --- 5. Data Gaps (ND5) ---
   # Safe defaults for optional fields likely missing from older tapes
@@ -94,7 +131,9 @@ reporting_policy:
   not_applicable: []
 
   # ASSET-SPECIFIC ENUM OVERRIDES. These take precedence over the GENERIC Annex 2
-  # enum_map in config/regime/annex2_delivery_rules.yaml for THIS asset class only.
+  # enum map — which the effective contract derives from the auth.099 schema's own
+  # enumeration plus config/system/enum_mapping.yaml and enum_synonyms.yaml — for
+  # THIS asset class only.
   # Keyed by canonical field; each maps a source label -> the ESMA code that this
   # asset class must report. This is a deliberate, documented policy decision —
   # not a global synonym — applied by the Projection Agent as a config-driven
@@ -105,7 +144,7 @@ reporting_policy:
   # but it is NOT a scheduled bullet amortisation under the Annex 2 definition
   # (RREL35 BLLT = "full principal repaid in the LAST instalment" of a schedule).
   # The correct regulatory reporting value for this product is therefore OTHR.
-  # Generic (non-ERM) portfolios still map Bullet -> BLLT via the regime enum_map.
+  # Generic (non-ERM) portfolios still map Bullet -> BLLT via the generic enum map.
   # If product/legal review later confirms a genuine scheduled bullet, change the
   # target here to BLLT (or remove the override).
   enum_overrides:

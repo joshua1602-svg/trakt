@@ -70,21 +70,33 @@ class TestAnnex2HandoffValidation(unittest.TestCase):
         for key in ("target_coverage_matrix_path", "decision_queue_path",
                     "field_contract_path", "lineage_path", "central_tape_path"):
             self.assertTrue(m.get(key), key)
-        self.assertTrue(m["ready_for_transformation_validation"])
 
     def test_not_xml_ready(self):
         self.assertFalse(self.manifest["ready_for_xml_delivery"])
         self.assertTrue(self.manifest["not_xml_ready"])
         self.assertFalse(self.readiness["ready_for_xml_delivery"])
 
-    def test_unresolved_items_classified_not_failed(self):
-        # Pending regime rules / defaults are classified for the next agent, not
-        # treated as onboarding failures that block the handoff.
+    def test_unresolved_items_are_decisions_not_failures(self):
+        """A regulatory field nobody owns is a question, not a crash.
+
+        This tape carries no answer for a set of mandatory Annex 2 fields — an
+        originator identity, a set of arrears and prepayment dates. They used to
+        be silently filled by a no-data code written into the regime rules, which
+        made the handoff "ready" while quietly answering on the lender's behalf.
+        The regime now states only what the regulator PERMITS, so each of these
+        surfaces as a decision for the client configuration or an operator to
+        answer, and the handoff says so rather than pretending.
+        """
         m = self.manifest
         self.assertGreaterEqual(m["pending_regime_rule_count"], 0)
         self.assertGreaterEqual(m["downstream_default_required_count"], 0)
-        self.assertEqual(m["blocking_decision_count"], 0)
-        self.assertTrue(m["ready_for_transformation_validation"])
+        self.assertGreater(m["blocking_decision_count"], 0,
+                           "a tape missing mandatory regulatory fields must "
+                           "raise decisions, not pass silently")
+        self.assertFalse(m["ready_for_transformation_validation"],
+                         "readiness must reflect the open decisions")
+        # ...and every one of them is classified, with a queue to answer from.
+        self.assertTrue(m.get("decision_queue_path"))
 
     def test_contract_doc_states_guard(self):
         doc = (_REPO_ROOT / "due_diligence" / "ONBOARDING_HANDOFF_CONTRACT.md")

@@ -772,14 +772,36 @@ def apply_annex2_post_projection_guards(
             df.loc[rrel3_fillable, "RREL3"] = df.loc[rrel3_fillable, "RREL2"]
         report["rrel3_backfilled_from_rrel2_rows"] = n_rrel3
 
+    # RREC3, the ORIGINAL collateral identifier. A lifetime mortgage is secured
+    # on one property and the tape carries one row per policy, so the collateral
+    # is identified by the exposure it secures — the same reasoning that already
+    # gives RREC1 the report's unique identifier and RREC2 the exposure's. ESMA
+    # requires the identifier to be different from any external identification
+    # number, which the exposure identifier already satisfies. Applied only where
+    # the lender supplies no collateral identifier of its own.
+    if "RREC3" in df.columns and "RREL2" in df.columns:
+        fillable = _blank_mask(df["RREC3"]) & (~_blank_mask(df["RREL2"]))
+        n = int(fillable.sum())
+        if n > 0:
+            df.loc[fillable, "RREC3"] = df.loc[fillable, "RREL2"]
+        report["rrec3_backfilled_from_rrel2_rows"] = n
+
     # The ORIGINAL identifiers, from the NEW ones. Annex 2 pairs each identifier:
-    # original and new are the same value until the exposure or the obligor is
-    # replaced, and ESMA's instructions say to report the same value when it has
-    # not changed. The backfills below already fill new-from-original; a book
-    # that supplies only the current identifier — the ordinary case for a lender
-    # that has never restructured — needs the other direction too, and without
-    # it the builder refuses a return whose every other field is correct.
-    for new_code, original_code in (("RREL3", "RREL2"), ("RREL5", "RREL4")):
+    # original and new are the same value until the exposure, the obligor or the
+    # collateral is replaced, and ESMA's instructions say to report the same
+    # value when it has not changed. The backfills below already fill
+    # new-from-original; a book that supplies only the current identifier — the
+    # ordinary case for a lender that has never restructured — needs the other
+    # direction too, and without it the builder refuses a return whose every
+    # other field is correct.
+    #
+    # The collateral pair (RREC3 original / RREC4 new) is the third member of
+    # the same family and works identically. Neither admits a no-data code, so a
+    # derivation is the only thing that can answer them: the collateral of a
+    # single-property lifetime mortgage is identified by the exposure it secures,
+    # which is why RREC3 is seeded from the exposure identifier just above.
+    for new_code, original_code in (("RREL3", "RREL2"), ("RREL5", "RREL4"),
+                                    ("RREC4", "RREC3")):
         if new_code not in df.columns or original_code not in df.columns:
             continue
         fillable = _blank_mask(df[original_code]) & (~_blank_mask(df[new_code]))
@@ -796,6 +818,17 @@ def apply_annex2_post_projection_guards(
         if n_rrel5 > 0:
             df.loc[rrel5_fillable, "RREL5"] = df.loc[rrel5_fillable, "RREL4"]
         report["rrel5_backfilled_from_rrel4_rows"] = n_rrel5
+
+    # RREC4, the NEW collateral identifier: the same value as RREC3 until the
+    # collateral is replaced, which is what ESMA's own instruction for the field
+    # says ("if there has been no change in the identifier, enter the same
+    # identifier"). The pair loop above fills the other direction.
+    if "RREC4" in df.columns and "RREC3" in df.columns:
+        fillable = _blank_mask(df["RREC4"]) & (~_blank_mask(df["RREC3"]))
+        n = int(fillable.sum())
+        if n > 0:
+            df.loc[fillable, "RREC4"] = df.loc[fillable, "RREC3"]
+        report["rrec4_backfilled_from_rrec3_rows"] = n
 
     # Deterministic backfill for RREC2 (mandatory in Annex2): use RREL3 if blank.
     if "RREC2" in df.columns and "RREL3" in df.columns:

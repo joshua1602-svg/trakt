@@ -225,24 +225,32 @@ def _policy_block(cfg: Optional[dict]) -> Dict[str, Any]:
     return cfg.get("reporting_policy") or {}
 
 
-def build_regime_index(regime_cfg: Optional[dict]) -> Dict[str, Dict[str, Any]]:
-    """Index the regime ``field_rules`` by ESMA code (projection envelope)."""
+def build_regime_index(regime_cfg: Optional[dict] = None) -> Dict[str, Dict[str, Any]]:
+    """Index the effective Annex 2 contract by ESMA code (projection envelope).
+
+    Derived from the field universe, the fields registry, the mapping workbook
+    and the XSD rather than a hand-maintained rules file, so the completion
+    checklist and the delivery normaliser cannot disagree about what a code is.
+    ``regime_cfg`` is accepted for call compatibility and ignored.
+    """
+    from engine.regime_contract.annex2_contract import contract
+
     out: Dict[str, Dict[str, Any]] = {}
-    cfg = regime_cfg or {}
-    deferred = set((cfg.get("reconciliation_scope", {}) or {}).get("deferred_fields", []) or [])
-    for code, rule in (cfg.get("field_rules", {}) or {}).items():
-        rule = rule or {}
-        transform = rule.get("transform") if isinstance(rule.get("transform"), dict) else {}
-        out[str(code)] = {
-            "canonical_field": rule.get("projected_source_field", "") or "",
-            "nd_allowed": [str(x).upper() for x in (rule.get("nd_allowed") or [])],
-            "default_allowed": bool(rule.get("default_allowed", False)),
-            "default_value": "" if rule.get("default_value") is None else str(rule.get("default_value")),
-            "enum_map": transform.get("enum_map") if isinstance(transform.get("enum_map"), dict) else {},
-            "derive": rule.get("derive"),
-            "mandatory": bool(rule.get("mandatory", False)),
-            "enforce_presence": bool(rule.get("enforce_presence", False)),
-            "deferred": str(code) in deferred,
+    for fc in contract().fields.values():
+        out[fc.esma_code] = {
+            "canonical_field": fc.canonical_field,
+            "nd_allowed": [str(x).upper() for x in fc.nd_allowed],
+            # A value is never the contract's to give: defaults belong to the
+            # asset pack, the client configuration and approved decisions.
+            "default_allowed": False,
+            "default_value": "",
+            "enum_map": dict(fc.enum_map),
+            "derive": dict(fc.derive) or None,
+            "mandatory": bool(fc.mandatory),
+            "enforce_presence": bool(fc.enforce_presence),
+            # Nothing is deferred: a concept the schema carries as an attribute
+            # has no element to be missing.
+            "deferred": not fc.emitting,
         }
     return out
 

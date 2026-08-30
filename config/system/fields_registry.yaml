@@ -4810,11 +4810,20 @@ fields:
         severity_if_missing: warning
         nd_default: ND2
         reason: "Equity release (roll-up) products typically have no scheduled interest payments; interest accrues until redemption."
+  # The secondary-income pair is scoped like the rest of the Annex 2 field set.
+  # It was the only pair marked `rre` out of the template's 107 canonical
+  # fields — including its own primary-income twins RREL16 to RREL19, which are
+  # `common`. That left an equity release run projecting 105 of 107 codes: the
+  # two were filtered out of the regime frame entirely, so neither the asset
+  # pack's ND1 nor anything else could reach them, and RREL21 (which auth.099
+  # requires on every record) arrived empty. An equity release loan is a
+  # residential real-estate exposure; there is no scope on which these two
+  # differ from their twins.
   secondary_income:
     allowed_values: null
     category: regulatory
     format: decimal
-    portfolio_type: rre
+    portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
         code: RREL20
@@ -4825,7 +4834,7 @@ fields:
     allowed_values: income_verification
     category: regulatory
     format: list
-    portfolio_type: rre
+    portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
         code: RREL21

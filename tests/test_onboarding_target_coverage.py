@@ -88,7 +88,7 @@ class TestTargetContractLoading(unittest.TestCase):
     def test_regulatory_mode_loads_annex2(self):
         cid, csrc, fields = tcov.load_target_contract("regulatory_mi", {})
         self.assertEqual(cid, "esma_annex_2")
-        self.assertTrue(csrc.endswith("annex2_delivery_rules.yaml"))
+        self.assertIn("annex2_contract", csrc)
         names = {f["target_field"] for f in fields}
         self.assertIn("RREL1", names)
         self.assertIn("RREC9", names)
@@ -208,23 +208,37 @@ class TestAnnex2DefaultsNotMissing(unittest.TestCase):
         self.assertNotEqual(r["coverage_status"], tcov.MISSING_REQUIRED)
         self.assertTrue(r["nd_rule_applied"])
 
-    def test_static_default_is_defaulted_value(self):
-        # RREC8 (lien) has a fixed, explicit non-ND regulatory default "1": that
-        # is a defaulted_value (distinct from a configured/static transform value
-        # and from an ND default).
-        self.assertEqual(self.cov["RREC8"]["coverage_status"], tcov.DEFAULTED_VALUE)
+    def test_static_default_is_supplied_by_the_asset_pack(self):
+        # RREC8 (lien) is 1 for every UK lifetime mortgage — the product is
+        # advanced against a first charge. That is an ASSET fact and now lives
+        # in product_defaults_ERM.yaml, so coverage reports it as a configured
+        # value rather than a regime default.
+        self.assertEqual(self.cov["RREC8"]["coverage_status"],
+                         tcov.CONFIGURED_STATIC)
         self.assertEqual(self.cov["RREC8"]["selected_value"], "1")
 
     def test_derive_rule_is_derived(self):
         # RREL25 (original_term) has a months_between_dates derivation.
         self.assertEqual(self.cov["RREL25"]["coverage_status"], tcov.DERIVED)
 
-    def test_known_rule_fields_not_counted_missing(self):
+    def test_fields_with_an_owner_are_not_counted_missing(self):
         summary = self.res["target_first_coverage"]["coverage_summary"]
-        # The well-known ND/default/config fields must not inflate "missing".
-        for code in ("RREL16", "RREL22", "RREC8", "RREL25", "RREC6"):
-            self.assertNotEqual(self.cov[code]["coverage_status"], tcov.MISSING_REQUIRED)
+        # A field whose answer has an owner — the asset pack, a derivation —
+        # must not inflate "missing".
+        for code in ("RREL16", "RREC8", "RREL25"):
+            self.assertNotEqual(self.cov[code]["coverage_status"],
+                                tcov.MISSING_REQUIRED, code)
         self.assertGreater(summary["derived_config_defaulted_fields"], 0)
+
+    def test_a_field_with_no_owner_is_reported_missing(self):
+        """The honest counterpart. RREL22 (special scheme) and RREC6
+        (collateral geography) had a no-data code written into the regime rules,
+        which is not a regime fact — whether a book was originated under a
+        government scheme is a fact about that book. With the regime layer
+        stating only what is PERMITTED, they surface for a decision."""
+        for code in ("RREL22", "RREC6"):
+            self.assertEqual(self.cov[code]["coverage_status"],
+                             tcov.MISSING_REQUIRED, code)
 
 
 # --------------------------------------------------------------------------- #

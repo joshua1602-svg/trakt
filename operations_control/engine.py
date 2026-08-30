@@ -1297,6 +1297,32 @@ class OpsEngine:
                          "field": field, "esma_code": code}))
         return out
 
+    @staticmethod
+    def _unfilled_regulatory_evidence(recon: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Each field the reconciliation cannot fill, as an answerable question.
+
+        The reconciliation now assesses the frame that will actually be
+        delivered, so it knows at projection time exactly which required fields
+        have no value — every one of them, not the first one the XML builder
+        happens to trip over. Reported in the shape the decision surface already
+        reads, so each becomes a no-data question where the regulator permits a
+        no-data code and a source question where it does not.
+        """
+        out: List[Dict[str, Any]] = []
+        blocking = {r["annex2_code"] for r in (recon.get("rows") or [])
+                    if r.get("blocking")}
+        for row in (recon.get("rows") or []):
+            if row.get("annex2_code") not in blocking:
+                continue
+            out.append({"label": "Regulatory field with no value",
+                        "kind": "text",
+                        "data": {"field": row.get("canonical_field", ""),
+                                 "esma_code": row.get("annex2_code", ""),
+                                 "level": "record",
+                                 "values": "NULL",
+                                 "found": "no value on any record"}})
+        return out
+
     def _regulatory_source_decisions(self, run: WorkflowRun,
                                      evidence) -> List[DecisionRequired]:
         """Ask which column holds a regulatory field the regulator insists on.
@@ -1530,7 +1556,8 @@ class OpsEngine:
             # Population-path reconciliation (I2) — persisted evidence; only
             # genuinely unsupported required outputs may block.
             from .annex2 import population as _pop
-            recon = _pop.reconciliation_document()
+            recon = _pop.reconciliation_document(
+                projected_csv=out.artefacts.get("projected_csv", ""))
             recon_path = chain_dir / "population_reconciliation.json"
             recon_path.write_text(json.dumps(recon, indent=2),
                                   encoding="utf-8")
@@ -1561,42 +1588,39 @@ class OpsEngine:
                 warnings=out.warnings + recon_warn,
                 blockers=([recon["summary_sentence"]]
                           if recon["blocking_count"] else []),
-                evidence=[{"label": "How each regulatory field is filled",
-                           "kind": "table",
-                           "data": recon["mechanism_counts"]}],
+                evidence=([{"label": "How each regulatory field is filled",
+                            "kind": "table",
+                            "data": recon["mechanism_counts"]}]
+                          + self._unfilled_regulatory_evidence(recon)),
                 inputs=[state.central_canonical_path or ""],
                 outputs=[a2["projected_csv"]])
             if recon["blocking_count"]:
                 self._park_regulatory(
                     run, state, stage=STAGE_PROJECTION, summary=out.summary,
                     blockers=[recon["summary_sentence"]],
-                    warnings=out.warnings + recon_warn)
+                    warnings=out.warnings + recon_warn,
+                    evidence=self._unfilled_regulatory_evidence(recon))
                 return
 
         # ---- Stage: delivery normalisation (I1 stage 1) ------------------ #
         if not done(STAGE_DELIVERY_PREP, "delivery_ready_csv"):
             self._save_stage_gar(run, STAGE_DELIVERY_PREP, ST_RUNNING,
                                  "Preparing the delivery data.")
-            # Approved translations are merged into the delivery rules the
-            # normaliser already consults, so they apply while the return is
-            # built. The canonical is untouched and goes on carrying the
-            # lender's own words.
+            # The contract this delivery is normalised against, written out for
+            # the run's record: the regulator's own requirements from the field
+            # universe, the registry, the workbook and the XSD, plus whatever
+            # this portfolio's operator approved. Approved translations teach the
+            # delivery what one of the lender's words means; the canonical is
+            # untouched and goes on carrying the lender's own words.
+            from .annex2 import nd_treatments as _nd
             translations = self._regulatory_enum_translations(run)
-            rules_path = None
-            if translations:
-                from .annex2 import nd_treatments as _nd
-                rules_path = _nd.materialise_effective_delivery_rules(
-                    base_rules_path=_stages.RULES_PATH,
-                    translations=translations,
-                    out_path=chain_dir / "effective_delivery_rules.yaml")
-                a2["effective_delivery_rules"] = str(rules_path)
-            out = (runners.run_normalisation(
-                       projected_csv=a2["projected_csv"],
-                       out_dir=chain_dir / "delivery", rules_path=rules_path)
-                   if rules_path else
-                   runners.run_normalisation(
-                       projected_csv=a2["projected_csv"],
-                       out_dir=chain_dir / "delivery"))
+            rules_path = _nd.materialise_effective_delivery_rules(
+                translations=translations,
+                out_path=chain_dir / "effective_delivery_rules.yaml")
+            a2["effective_delivery_rules"] = str(rules_path)
+            out = runners.run_normalisation(
+                projected_csv=a2["projected_csv"],
+                out_dir=chain_dir / "delivery", rules_path=rules_path)
             audit_detail = {"metrics": out.metrics,
                             "warning_count": len(out.warnings),
                             "blocker_count": len(out.blockers)}

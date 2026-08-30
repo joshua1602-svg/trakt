@@ -22,7 +22,7 @@ Guardrails (enforced by construction):
     carried forward with an explicit owner + recommended action.
 
 It reuses the frozen Gate 4 ESMA-code ordering primitives and the authoritative
-``annex2_delivery_rules.yaml`` regime contract through
+effective Annex 2 regime contract through
 :mod:`engine.projection_agent.gate4_adapter`.
 """
 
@@ -37,6 +37,16 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import yaml
+
+def _derived_annex2_contract_path() -> str:
+    """The effective Annex 2 contract, materialised for a path-taking caller.
+
+    Derived from the field universe, the fields registry, the mapping workbook
+    and the XSD. There is no delivery-rules file to read.
+    """
+    from engine.regime_contract.annex2_contract import materialised_contract_path
+    return materialised_contract_path()
+
 
 from engine.projection_agent import gate4_adapter as g4
 from engine.validation_agent.projection_blocker_diagnostics import (
@@ -364,7 +374,13 @@ def _project_cell(
                                      asset_enum_overrides)
 
     # (3) nothing materialised and no allowed ND/default.
-    if rule["mandatory"] and rule["enforce_presence"]:
+    #
+    # ``mandatory`` alone decides this. ``enforce_presence`` in the contract
+    # answers a different question — whether the delivery normaliser should
+    # object to a column that is absent from the frame entirely, which the XML
+    # builder tolerates — and a required field with nothing to put in it blocks
+    # the delivery either way.
+    if rule["mandatory"]:
         res.update(
             projection_status=ST_UNRESOLVED_NOT_MATERIALISED, blocking_for_delivery=True,
             problem={
@@ -444,8 +460,9 @@ def build_projection_package(
     target_contract_id = val_manifest.get("target_contract_id", "")
 
     repo_root = Path(__file__).resolve().parents[2]
-    regime_config_path = regime_config_path or val_manifest.get("regime_config_path", "") or str(
-        repo_root / "config" / "regime" / "annex2_delivery_rules.yaml")
+    regime_config_path = (regime_config_path
+                          or val_manifest.get("regime_config_path", "")
+                          or _derived_annex2_contract_path())
     asset_config_path = asset_config_path or val_manifest.get("asset_config_path", "") or str(
         repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
     registry_path = registry_path or val_manifest.get("registry_path", "") or str(

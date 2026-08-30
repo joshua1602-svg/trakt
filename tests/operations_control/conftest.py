@@ -204,6 +204,28 @@ class ScriptedAdapters(AgentAdapters):
         return StepResult(ok=True, output_path=str(out), message="projected")
 
 
+def _stub_projected_frame() -> str:
+    """A stub projection that carries a value for every code the regulator
+    requires.
+
+    The population reconciliation is REAL even when the delivery stages are
+    stubbed — it reads the frame the projection produced and reports any
+    required field with no value, which is the whole point of it. A two-column
+    stub would therefore be reported as a hundred missing fields, and these
+    tests are about the chain, not about the contract. So the stub frame is
+    complete by construction, from the contract itself.
+    """
+    from engine.regime_contract.annex2_contract import contract
+    c = contract()
+    codes = [code for code in c.codes() if c[code].emitting]
+    row = []
+    for code in codes:
+        fc = c[code]
+        row.append(fc.enum_values[0] if fc.enum_values
+                   else ("ND5" if "ND5" in fc.nd_allowed else "STUB"))
+    return ",".join(codes) + "\n" + ",".join(row) + "\n"
+
+
 class StubAnnex2Stages:
     """Stub for the governed Annex 2 delivery chain seam. Same method
     signatures as operations_control.annex2.stages.Annex2Stages."""
@@ -218,7 +240,7 @@ class StubAnnex2Stages:
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         p = out_dir / "annex2_ESMA_Annex2_projected.csv"
-        p.write_text("RREL1,RREL2\nSECID,L1\n", encoding="utf-8")
+        p.write_text(_stub_projected_frame(), encoding="utf-8")
         return StageOutcome(ok=True, summary="Regulatory data projected.",
                             artefacts={"projected_csv": str(p)},
                             metrics={"records": 1, "fields": 2})

@@ -21,7 +21,7 @@ said so in its output:
   enumerations (``config/system/enum_mapping.yaml``). Its verdict is about the
   governed dataset.
 * **Gate 4b (delivery preflight)** checks the *projected regulatory output*
-  against ``config/regime/annex2_delivery_rules.yaml``, after Gate 4 projection
+  against the effective Annex 2 contract, after Gate 4 projection
   has applied the documented source-value transforms. Its verdict is about the
   submission.
 
@@ -64,7 +64,7 @@ Usage::
       --field-summary  out_validation/<portfolio>_field_summary.csv \\
       --violations     out_validation/<portfolio>_canonical_violations.csv \\
       --canonical      out/<portfolio>_canonical_typed.csv \\
-      --rules          config/regime/annex2_delivery_rules.yaml \\
+
       --universe       config/regime/annex2_field_universe.yaml \\
       --enum-mapping   config/system/enum_mapping.yaml \\
       --output         out/<portfolio>_ESMA_Annex2_exception_reconciliation.json
@@ -493,7 +493,7 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
             entry["resolution"] = (
                 f"Correct '{field}' at source, or add an explicit mapping for "
                 f"{unresolved or observed} to the {', '.join(codes)} enum_map in "
-                "config/regime/annex2_delivery_rules.yaml. Do not submit until one "
+                "the effective Annex 2 contract. Do not submit until one "
                 "of the two is done."
             )
 
@@ -525,7 +525,7 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
             ),
             "annexPreflight": (
                 "Gate 4b. Checks the projected Annex 2 output against the "
-                f"{len(field_rules)} field rules in annex2_delivery_rules.yaml, AFTER "
+                f"{len(field_rules)} rules in the effective Annex 2 contract, AFTER "
                 "Gate 4 has applied the documented projection transforms. Its verdict "
                 "is about the submission, not the dataset. A PASS there is NOT 'the "
                 "dataset has no exceptions'."
@@ -549,12 +549,19 @@ def reconcile(field_summary: pd.DataFrame, violations: pd.DataFrame,
     }
 
 
+def _derived_annex2_contract() -> dict:
+    """The effective Annex 2 contract; there is no rules file to read."""
+    from engine.regime_contract.annex2_contract import as_delivery_rules
+    return as_delivery_rules()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Annex 2 exception reconciliation (Gate 4b)")
     ap.add_argument("--field-summary", required=True)
     ap.add_argument("--violations", required=True)
     ap.add_argument("--canonical", required=False)
-    ap.add_argument("--rules", required=True)
+    ap.add_argument("--rules", default="",
+                    help="effective Annex 2 contract (default: derived)")
     ap.add_argument("--universe", required=True)
     ap.add_argument("--enum-mapping", required=True)
     ap.add_argument("--business-rules", required=False,
@@ -591,7 +598,8 @@ def main() -> None:
         field_summary=field_summary,
         violations=violations,
         canonical=canonical,
-        rules=_load_yaml(Path(args.rules)),
+        rules=(_load_yaml(Path(args.rules)) if args.rules
+               else _derived_annex2_contract()),
         universe=_load_yaml(Path(args.universe)),
         enum_mapping=_load_yaml(Path(args.enum_mapping)),
         delivery_issues=_optional(args.delivery_issues, "field"),

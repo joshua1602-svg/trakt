@@ -169,6 +169,17 @@ def materialise_effective_config(*, base_config_path: Path,
     from . import nd_treatments as nd
     nd_defaults = nd.nd_defaults_from_settings(overrides or {})
     constants = nd.regulatory_constants_from_settings(overrides or {})
+    # Client identity facts the regulator asks for by name — the originator, its
+    # LEI, the country it is established in. The client configuration has always
+    # carried them under ``defaults:`` and nothing ever projected them, so they
+    # arrived at the regulator empty even though the answer was configured. They
+    # are values for named regulatory targets, so they travel the same way an
+    # approved pool constant does: applied while the return is built, never
+    # written back to the canonical. Which keys qualify is read off the fields
+    # registry, not listed here.
+    configured = nd.client_regulatory_values(cfg.get("defaults") or {})
+    for field, value in configured.items():
+        constants.setdefault(field, value)
     for key, value in (overrides or {}).items():
         if nd.field_from_setting(key) or nd.field_from_constant_setting(key):
             continue        # merged below under defaults, not set flat

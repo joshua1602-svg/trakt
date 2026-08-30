@@ -36,7 +36,7 @@ if str(_REPO) not in sys.path:
 
 _PROJECTOR = _REPO / "engine" / "gate_4_projection" / "regime_projector.py"
 _ASSET = _REPO / "config" / "asset" / "product_defaults_ERM.yaml"
-_RULES = _REPO / "config" / "regime" / "annex2_delivery_rules.yaml"
+_UNIVERSE = _REPO / "config" / "regime" / "annex2_field_universe.yaml"
 _ORCH = _REPO / "engine" / "orchestrator" / "trakt_run.py"
 _DEMO_ARTEFACTS = _REPO / "demo_platform" / "artefacts.py"
 _DEMO_CLIENT = _REPO / "demo_platform" / "config" / "config_client_ALDERBRIDGE_DEMO.yaml"
@@ -175,14 +175,13 @@ class TestOwnershipBoundaries(unittest.TestCase):
                          f"duplicated ND ownership: {sorted(overlap)} — one layer "
                          f"must be authoritative")
 
-    def test_the_regime_declares_the_representation_model(self):
-        """Representation is governed metadata, not inference in code."""
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
-        scope = rules.get("reconciliation_scope") or {}
-        self.assertIn("representation", scope,
-                      "the workbook-vs-XML representation model must be declared")
-        for code in ("RREL18", "RREL28", "RREC22"):
-            self.assertIn(code, scope["representation"])
+    def test_the_regime_owns_no_delivery_rules_file(self):
+        """Regulatory truth is derived from authority, not written down twice."""
+        self.assertFalse(
+            (_REPO / "config" / "regime" / "annex2_delivery_rules.yaml").exists(),
+            "annex2_delivery_rules.yaml was a second source of Annex 2 truth "
+            "and has been retired; the contract is derived from the field "
+            "universe, the fields registry, the mapping workbook and the XSD")
 
 
 class TestNonEmittingReconciliation(unittest.TestCase):
@@ -197,10 +196,9 @@ class TestNonEmittingReconciliation(unittest.TestCase):
         sys.modules["_norm_probe"] = norm
         spec.loader.exec_module(norm)
 
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
-        scoped = {"defaults": rules.get("defaults", {}),
-                  "reconciliation_scope": rules["reconciliation_scope"],
-                  "field_rules": {"RREL16": rules["field_rules"]["RREL16"]}}
+        from engine.regime_contract.annex2_contract import as_delivery_rules
+        rules = as_delivery_rules()
+        scoped = {"field_rules": {"RREL16": rules["field_rules"]["RREL16"]}}
         frame = pd.DataFrame({"RREL3": ["A", "B"],
                               "RREL18": ["ND1", "ND1"],     # non-emitting
                               "RREL22": ["ND5", "ND5"]})    # emitting
@@ -215,136 +213,87 @@ class TestNonEmittingReconciliation(unittest.TestCase):
 
     def test_rrel18_is_not_treated_as_a_missing_element(self):
         """It is the Ccy attribute of an amount, not an absent node."""
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
-        self.assertNotIn("RREL18", rules["field_rules"],
-                         "RREL18 has no XML element; a delivery rule would write "
-                         "a value with no destination")
-        text = _RULES.read_text(encoding="utf-8")
-        self.assertIn("Ccy", text, "the attribute rationale must be recorded")
+        from engine.regime_contract.annex2_contract import contract
+        fc = contract()["RREL18"]
+        self.assertFalse(fc.emitting,
+                         "RREL18 has no XML element of its own; a rule that "
+                         "wrote a value there would have no destination")
+        self.assertIn("Currency", fc.field_name)
 
 
-class TestRepresentationModel(unittest.TestCase):
-    """Workbook concept != XML representation, declared rather than inferred."""
+class TestRepresentationIsReadOffTheSchema(unittest.TestCase):
+    """Which concepts have no XML element of their own is the XSD's answer.
 
-    @classmethod
-    def setUpClass(cls):
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
-        cls.model = (rules.get("reconciliation_scope") or {}).get("representation") or {}
-        cls.rules = rules
-
-    def test_all_three_currency_concepts_are_classified_consistently(self):
-        for code in ("RREL18", "RREL28", "RREC22"):
-            meta = self.model[code]
-            self.assertEqual(meta["representation_type"], "xml_attribute", code)
-            self.assertEqual(meta["attribute_name"], "Ccy", code)
-            self.assertTrue(str(meta.get("emission_condition") or "").strip(),
-                            f"{code} must state WHEN it is emitted")
-            self.assertTrue(meta.get("attribute_of") or meta.get("qualifies_codes"),
-                            f"{code} must name the amount(s) it qualifies")
-
-    def test_each_names_the_amount_it_qualifies(self):
-        self.assertEqual(self.model["RREL18"]["attribute_of"], "RREL16")
-        self.assertEqual(self.model["RREC22"]["attribute_of"], "RREC13")
-        self.assertIn("RREL30", self.model["RREL28"]["qualifies_codes"])
-
-    def test_the_qualified_codes_exist_and_carry_amounts(self):
-        """A currency cannot qualify a concept that has no amount."""
-        universe = yaml.safe_load(
-            (_REPO / "config" / "regime" / "annex2_field_universe.yaml").read_text(
-                encoding="utf-8"))
-        universe = universe.get("fields") or universe
-        targets = ["RREL16", "RREC13"] + list(self.model["RREL28"]["qualifies_codes"])
-        for code in targets:
-            self.assertIn(code, universe, f"{code} is not a real Annex 2 code")
-
-    def test_none_of_the_three_has_a_delivery_rule_or_would_emit(self):
-        for code in ("RREL18", "RREL28", "RREC22"):
-            self.assertNotIn(code, self.rules["field_rules"],
-                             f"{code} has no XML element; a delivery rule would "
-                             f"write a value with no destination")
-
-    def test_classification_is_metadata_driven_not_hard_coded(self):
-        """Adding a concept must be configuration, not a code change."""
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "_norm_repr", _REPO / "engine" / "gate_4b_delivery" / "annex2_delivery_normalizer.py")
-        norm = importlib.util.module_from_spec(spec)
-        sys.modules["_norm_repr"] = norm
-        spec.loader.exec_module(norm)
-        self.assertEqual(norm.non_emitting_codes(self.rules),
-                         ["RREC22", "RREL18", "RREL28"])
-        # A synthetic extra concept must be picked up with no code change.
-        extended = {"reconciliation_scope": {"representation": dict(
-            self.model, ZZZ99={"representation_type": "xml_attribute",
-                               "attribute_name": "Ccy"})}}
-        self.assertIn("ZZZ99", norm.non_emitting_codes(extended))
-
-    def test_the_occ_evidence_module_reads_the_same_authority(self):
-        from operations_control.annex2 import interventions as iv
-        self.assertEqual(tuple(iv._non_emitting_codes()),
-                         tuple(sorted(("RREL18", "RREL28", "RREC22"))))
-        self.assertEqual(tuple(sorted(iv.NON_EMITTING_CODES_FALLBACK)),
-                         tuple(iv._non_emitting_codes()),
-                         "the fallback must stay in step with the configuration")
-
-    def test_the_model_is_marked_interim(self):
-        """Its status must be explicit so it is promoted, not entrenched."""
-        text = _RULES.read_text(encoding="utf-8")
-        self.assertIn("STATUS: INTERIM", text)
-
-
-class TestRepresentationCountsAcrossAllConcepts(unittest.TestCase):
-    """The whole 107-code universe, classified from the authoritative workbook.
-
-    Slow: reads the 9.6 MB mapping workbook once. It is the only source that can
-    prove a code has no XML path of its own.
+    It used to be a declaration in the delivery-rules file — a list someone had
+    to keep correct. It is now derived: a workbook code whose path the schema
+    does not define as an element cannot produce a node, and exactly three
+    Annex 2 concepts are in that position.
     """
 
     @classmethod
     def setUpClass(cls):
-        from engine.gate_5_delivery import xml_builder_annex2 as builder
-        wb = str(_REPO / "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure "
-                         "Report_Version_1.3.1.xlsx")
-        specs = {}
-        for mode in ("PRF", "NPRF"):
-            for code, s in builder.load_mapping_specs(wb, "DRAFT1auth.099.001.04", mode).items():
-                specs.setdefault(code, []).extend(s)
-        cls.specs = specs
-        universe = yaml.safe_load(
-            (_REPO / "config" / "regime" / "annex2_field_universe.yaml").read_text(
-                encoding="utf-8"))
-        cls.universe = universe.get("fields") or universe
+        from engine.regime_contract.annex2_contract import contract
+        cls.contract = contract()
 
-    def _classify(self, code):
-        tags = {x.tag for x in (self.specs.get(code) or [])}
-        nd = {"NoDataOptn", "NoData", "NoData4"}
-        if not tags:
-            return "xml_attribute"
-        if tags & nd and tags - nd:
-            return "xml_choice"
-        return "xml_element"
+    def test_exactly_three_concepts_have_no_element(self):
+        self.assertEqual(sorted(self.contract.non_emitting_codes()),
+                         ["RREC22", "RREL18", "RREL28"])
+
+    def test_they_are_the_currency_concepts(self):
+        for code in self.contract.non_emitting_codes():
+            name = self.contract[code].field_name.lower()
+            self.assertIn("currency", name,
+                          f"{code} has no XML element but is not a currency")
+
+    def test_their_provenance_names_the_schema(self):
+        for code in ("RREC22", "RREL18", "RREL28"):
+            self.assertEqual(self.contract[code].provenance.get("emitting"), "XSD")
+
+    def test_the_amounts_they_qualify_do_have_elements(self):
+        for code in ("RREL16", "RREC13", "RREL30"):
+            self.assertTrue(self.contract[code].emitting,
+                            f"{code} carries an amount and must emit an element")
+
+    def test_the_normaliser_and_occ_read_the_same_answer(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_norm_repr",
+            _REPO / "engine" / "gate_4b_delivery" / "annex2_delivery_normalizer.py")
+        norm = importlib.util.module_from_spec(spec)
+        sys.modules["_norm_repr"] = norm
+        spec.loader.exec_module(norm)
+        from operations_control.annex2.interventions import _non_emitting_codes
+        self.assertEqual(sorted(norm.non_emitting_codes({})),
+                         sorted(_non_emitting_codes()))
+        self.assertEqual(sorted(norm.non_emitting_codes({})),
+                         sorted(self.contract.non_emitting_codes()))
+
+
+class TestTheContractCoversTheWholeUniverse(unittest.TestCase):
+    """Every Annex 2 concept is in the contract, from the layer that owns it."""
+
+    @classmethod
+    def setUpClass(cls):
+        from engine.regime_contract.annex2_contract import contract
+        cls.contract = contract()
+        cls.universe = (yaml.safe_load(_UNIVERSE.read_text(encoding="utf-8"))
+                        or {}).get("fields") or {}
 
     def test_the_universe_is_107_concepts(self):
         self.assertEqual(len(self.universe), 107)
 
-    def test_representation_totals(self):
-        counts = {"xml_choice": 0, "xml_element": 0, "xml_attribute": 0}
-        for code in self.universe:
-            counts[self._classify(code)] += 1
-        self.assertEqual(counts["xml_choice"], 87)
-        self.assertEqual(counts["xml_element"], 17)
-        self.assertEqual(counts["xml_attribute"], 3)
-        self.assertEqual(sum(counts.values()), 107)
+    def test_every_universe_code_is_in_the_contract(self):
+        self.assertEqual(sorted(self.contract.fields), sorted(self.universe))
 
-    def test_exactly_the_three_declared_codes_have_no_workbook_path(self):
-        """The declared model must match what the workbook actually says."""
-        no_path = sorted(c for c in self.universe if not (self.specs.get(c) or []))
-        self.assertEqual(no_path, ["RREC22", "RREL18", "RREL28"])
+    def test_every_code_has_a_canonical_binding_from_the_registry(self):
+        for code, fc in self.contract.fields.items():
+            self.assertTrue(fc.canonical_field, f"{code} has no canonical field")
+            self.assertEqual(fc.provenance.get("canonical_field"), "REGISTRY", code)
 
-    def test_their_qualified_amounts_do_have_paths(self):
-        for code in ("RREL16", "RREC13", "RREL30"):
-            self.assertTrue(any(x.tag == "Amt" for x in self.specs.get(code) or []),
-                            f"{code} should carry an Amt leaf for a Ccy to qualify")
+    def test_the_totals_add_up(self):
+        emitting = len(self.contract.emitting_codes())
+        self.assertEqual(emitting + len(self.contract.non_emitting_codes()),
+                         len(self.universe))
 
 
 if __name__ == "__main__":  # pragma: no cover

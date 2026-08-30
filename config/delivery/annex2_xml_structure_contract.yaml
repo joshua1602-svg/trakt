@@ -14,7 +14,8 @@
 #   * "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report.xml"
 #     (vendored sample message — residential real estate, performing loan)
 #   * config/regime/annex2_field_universe.yaml         (107 codes)
-#   * config/regime/annex2_delivery_rules.yaml         (workbook_semantic leaves)
+#   * the effective Annex 2 contract (engine/regime_contract), whose
+#     workbook_semantic leaves come from the ESMA mapping workbook
 #   * config/system/esma_code_order.yaml               (flat code order — NOT the
 #     nested XSD sequence; explicitly a "starter template, verify before prod")
 #

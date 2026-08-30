@@ -220,17 +220,30 @@ class TestOrchestratorRealAgents(unittest.TestCase):
         self.assertGreater(len(df), 0)
 
     def test_regime_path_real_agents_runs_and_gates(self):
+        """The real regulatory chain executes and gates on real agent output.
+
+        Where it gates moved, and moved earlier. It used to clear onboarding and
+        halt at transformation, because onboarding parked the 37 Annex 2 codes
+        that had no hand-written rule as "pending a regime rule" — a statement
+        about a configuration file rather than about this tape. Every code is
+        governed now, so onboarding assesses them against the pack and the ones
+        it does not carry, and which no asset, client or operator layer answers
+        for, become blocking Gate 4 decisions. The run therefore halts at
+        onboarding with a named reason instead of passing an unready package
+        downstream. The handoff is still written either way.
+        """
         from engine.orchestrator_agent.state import STEP_DONE, STEP_HALTED
         state = self._run(target="regime", mode="regulatory_mi", regime="ESMA_Annex2")
-        # The real regulatory chain executes; onboarding produces the handoff and
-        # transformation runs. On this pack it gates (mandatory regulatory fields),
-        # so the run halts — governed auto-halt on real agent output.
-        self.assertEqual(state.portfolios[0].step("onboard").status, STEP_DONE)
+        onboard = state.portfolios[0].step("onboard")
+        self.assertIn(onboard.status, (STEP_DONE, STEP_HALTED))
+        self.assertIn("24_onboarding_handoff_manifest.json", onboard.message)
         self.assertIn(state.status, (STEP_HALTED, STEP_DONE))
         if state.status == STEP_HALTED:
             self.assertTrue(state.blockers)
-            self.assertTrue(any("transform" in b.lower() or "valid" in b.lower()
-                                for b in state.blockers))
+            self.assertTrue(
+                any(word in b.lower() for b in state.blockers
+                    for word in ("onboard", "transform", "valid")),
+                f"a halt must name the stage that gated: {state.blockers}")
         else:  # if a future pack passes cleanly, projection must have produced output
             self.assertEqual(state.project.status, STEP_DONE)
 

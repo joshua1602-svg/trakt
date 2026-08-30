@@ -94,9 +94,34 @@ def _presence_to_flag(value: Any) -> Optional[str]:
     return FLAG_FALSE if _is_blank(value) else FLAG_TRUE
 
 
+def _ratio_percentage(numerator: Any, denominator: Any) -> Optional[str]:
+    """``numerator / denominator`` as a percentage, to four decimal places.
+
+    Null in, null out: a missing balance or a missing valuation yields nothing.
+    A denominator of zero or less yields nothing either — a ratio against no
+    valuation is not a small number, it is an unknown one.
+    """
+    if _is_blank(numerator) or _is_blank(denominator):
+        return None
+    try:
+        num = float(str(numerator).replace(",", "").strip())
+        den = float(str(denominator).replace(",", "").strip())
+    except (TypeError, ValueError):
+        raise DerivationError(f"not numeric: {numerator!r} / {denominator!r}")
+    if den <= 0 or math.isnan(num) or math.isnan(den):
+        return None
+    return f"{(num / den) * 100.0:.4f}"
+
+
 RULES: Dict[str, Callable[[Any], Optional[str]]] = {
     "positive_number_to_flag": _positive_number_to_flag,
     "presence_to_flag": _presence_to_flag,
+}
+
+#: Rules that read TWO canonical columns. Declared separately because the
+#: single-source mechanics above are the common case and stay unchanged.
+RULES_MULTI: Dict[str, Callable[..., Optional[str]]] = {
+    "ratio_percentage": _ratio_percentage,
 }
 
 
@@ -118,22 +143,42 @@ def load_derivations(config_path: str | Path = "") -> Dict[str, Dict[str, Any]]:
     out: Dict[str, Dict[str, Any]] = {}
     for target, spec in (data.get("derivations", {}) or {}).items():
         spec = spec or {}
-        source = str(spec.get("from", "") or "").strip()
+        raw_from = spec.get("from", "")
+        sources = ([str(x).strip() for x in raw_from if str(x).strip()]
+                   if isinstance(raw_from, (list, tuple))
+                   else [str(raw_from or "").strip()])
+        sources = [x for x in sources if x]
         rule = str(spec.get("rule", "") or "").strip()
-        if not target or not source or rule not in RULES:
+        multi = rule in RULES_MULTI
+        if not target or not sources or (rule not in RULES and not multi):
+            continue
+        if multi and len(sources) != 2:
             continue
         out[str(target).strip()] = {
-            "from": source,
+            "from": sources[0] if not multi else list(sources),
+            "sources": list(sources),
             "rule": rule,
+            "multi": multi,
             "description": str(spec.get("description", "") or "").strip(),
             "preserve_source": bool(spec.get("preserve_source", True)),
+            # A derivation calculates what the lender did not supply. Where the
+            # lender DID supply it, the real value wins: the derivation fills
+            # blanks only. Existing single-source entries keep their behaviour
+            # of rewriting the whole column, because there the derived field is
+            # by definition a view of its source.
+            "fill_blank_only": bool(spec.get("fill_blank_only", False)),
         }
     return out
 
 
 def derived_field_parents(config_path: str | Path = "") -> Dict[str, str]:
-    """``{derived_canonical_field: source_canonical_field}`` for guard checks."""
-    return {t: s["from"] for t, s in load_derivations(config_path).items()}
+    """``{derived_canonical_field: source_canonical_field}`` for guard checks.
+
+    A multi-source derivation reports its first source; the guard only asks
+    whether a field is derived and from where, not how many inputs it took.
+    """
+    return {t: (s["sources"][0] if s.get("multi") else s["from"])
+            for t, s in load_derivations(config_path).items()}
 
 
 # --------------------------------------------------------------------------- #
@@ -161,8 +206,11 @@ def apply_derivations(
     results: Dict[str, Dict[str, Any]] = {}
 
     for target, spec in derivations.items():
-        source = spec["from"]
         rule_name = spec["rule"]
+        if spec.get("multi"):
+            results[target] = _apply_multi(df, target, spec)
+            continue
+        source = spec["from"]
         rule = RULES[rule_name]
         if source not in df.columns:
             results[target] = {
@@ -196,3 +244,53 @@ def apply_derivations(
             "sample_failures": failures,
         }
     return results
+
+
+def _apply_multi(df: pd.DataFrame, target: str,
+                 spec: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply a two-source rule (currently only ``ratio_percentage``)."""
+    rule_name = spec["rule"]
+    rule = RULES_MULTI[rule_name]
+    sources: List[str] = list(spec["sources"])
+    missing = [c for c in sources if c not in df.columns]
+    if missing:
+        return {"applied": False, "rule": rule_name,
+                "derived_from": ", ".join(sources),
+                "reason": "source_field_absent",
+                "missing_sources": missing}
+
+    fill_blank_only = bool(spec.get("fill_blank_only"))
+    existing = (df[target] if target in df.columns else None)
+    values: List[Optional[str]] = []
+    failures: List[str] = []
+    derived_count = kept_count = null_count = 0
+    for idx in range(len(df)):
+        supplied = None if existing is None else existing.iloc[idx]
+        if fill_blank_only and not _is_blank(supplied):
+            values.append(str(supplied))
+            kept_count += 1
+            continue
+        try:
+            value = rule(df[sources[0]].iloc[idx], df[sources[1]].iloc[idx])
+        except DerivationError as exc:
+            if len(failures) < 5:
+                failures.append(str(exc))
+            value = None
+        values.append(value)
+        if value is None:
+            null_count += 1
+        else:
+            derived_count += 1
+
+    df[target] = pd.Series(values, index=df.index, dtype="object")
+    return {
+        "applied": True,
+        "rule": rule_name,
+        "derived_from": ", ".join(sources),
+        "description": spec.get("description", ""),
+        "value_counts": {"derived": derived_count,
+                         "kept_supplied_value": kept_count,
+                         "null": null_count},
+        "failure_count": len(failures),
+        "sample_failures": failures,
+    }

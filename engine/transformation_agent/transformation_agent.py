@@ -256,17 +256,28 @@ def _load_field_contract(paths: Dict[str, Path]) -> List[Dict[str, Any]]:
 # Value resolution for downstream defaults / static / ND values
 # --------------------------------------------------------------------------- #
 
-def _build_regime_defaults(regime_cfg: Optional[dict]) -> Dict[str, Dict[str, Any]]:
-    """Map esma_code -> {default_value, nd_allowed, projected_source_field, has_enum_map}."""
+def _build_regime_defaults(regime_cfg: Optional[dict] = None) -> Dict[str, Dict[str, Any]]:
+    """What the regime says about each code, from the effective Annex 2 contract.
+
+    ``esma_code -> {nd_allowed, projected_source_field, has_enum_map}``.
+
+    There is deliberately no ``default_value`` here. A no-data code or a fallback
+    is a DECISION about a particular book — which layer it belongs to (the asset
+    class, the client, or an operator confirming a portfolio fact) is settled
+    before this stage, and all three already reach the frame through the asset
+    pack and the effective client configuration above. The regime says what is
+    PERMITTED; it does not choose. ``regime_cfg`` is accepted and ignored.
+    """
+    from engine.regime_contract.annex2_contract import contract
+
     out: Dict[str, Dict[str, Any]] = {}
-    for code, rule in ((regime_cfg or {}).get("field_rules", {}) or {}).items():
-        rule = rule or {}
-        out[str(code)] = {
-            "default_value": rule.get("default_value", ""),
-            "default_allowed": bool(rule.get("default_allowed", False)),
-            "nd_allowed": rule.get("nd_allowed", []) or [],
-            "projected_source_field": rule.get("projected_source_field", ""),
-            "has_enum_map": bool((rule.get("transform") or {}).get("enum_map")),
+    for fc in contract().fields.values():
+        out[fc.esma_code] = {
+            "default_value": "",
+            "default_allowed": False,
+            "nd_allowed": list(fc.nd_allowed),
+            "projected_source_field": fc.canonical_field,
+            "has_enum_map": bool(fc.enum_map),
         }
     return out
 
@@ -285,7 +296,8 @@ def _resolve_value(
       1. value already carried in the handoff contract (selected_value_sample);
       2. asset-class config default (product_defaults_ERM.yaml);
       3. asset-class ND default;
-      4. regime config default_value (annex2_delivery_rules.yaml).
+    There is no regime tier: the regime states what a field may contain, not
+    what this book reports.
 
     Returns ``(value, value_source)``; value is "" when nothing resolves.
     """
@@ -295,9 +307,9 @@ def _resolve_value(
         return str(asset_defaults[canonical]).strip(), "asset_config_default"
     if canonical in asset_nd_defaults and not _is_blank(asset_nd_defaults[canonical]):
         return str(asset_nd_defaults[canonical]).strip(), "asset_config_nd_default"
-    rd = regime_defaults.get(str(esma_code), {})
-    if not _is_blank(rd.get("default_value")):
-        return str(rd["default_value"]).strip(), "regime_config_default"
+    # There is deliberately no regime tier below this. The regime states what a
+    # field may contain, never what this book reports; a value with no asset,
+    # client or operator owner is surfaced rather than invented.
     return "", ""
 
 
@@ -381,8 +393,6 @@ def build_transformation_package(
     repo_root = Path(__file__).resolve().parents[2]
     asset_config_path = asset_config_path or handoff.get("asset_config_path", "") or str(
         repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
-    regime_config_path = regime_config_path or handoff.get("regime_config_path", "") or str(
-        repo_root / "config" / "regime" / "annex2_delivery_rules.yaml")
     registry_path = registry_path or handoff.get("registry_path", "") or str(
         repo_root / "config" / "system" / "fields_registry.yaml")
     if registry_path and not Path(registry_path).is_absolute() and not Path(registry_path).exists():
@@ -393,8 +403,7 @@ def build_transformation_package(
     asset_cfg = _read_yaml(Path(asset_config_path)) or {}
     asset_defaults = asset_cfg.get("defaults", {}) or {}
     asset_nd_defaults = asset_cfg.get("nd_defaults", {}) or {}
-    regime_cfg = _read_yaml(Path(regime_config_path)) or {}
-    regime_defaults = _build_regime_defaults(regime_cfg)
+    regime_defaults = _build_regime_defaults()
 
     # --- 2) load the central canonical tape (NO Gate 1 re-run) ---
     if not paths["central_tape"].exists():
@@ -1256,21 +1265,11 @@ def _finalise_contract(
                 issue_id = res.get("issue_id", "")
 
         elif cls == oh.HC_TRANSFORMATION_REQUIRED:
-            # Derivation owned by transformation. Where a deterministic regime
-            # default exists we materialise it; otherwise we surface, never guess.
+            # Derivation owned by transformation. A value is materialised only
+            # from the asset, client or operator layers above; where none owns
+            # it we surface the gap rather than let the regime invent one.
             owner = OWN_TRANSFORMATION
-            rd = regime_defaults.get(str(esma_code), {})
-            if not _is_blank(rd.get("default_value")) and not _col_sample(df, canonical):
-                if canonical and canonical not in df.columns:
-                    df[canonical] = pd.NA
-                if canonical:
-                    col = df[canonical].astype("string")
-                    blank = col.isna() | (col.str.strip() == "") | (col.str.strip() == "<NA>")
-                    if blank.any():
-                        df.loc[blank, canonical] = str(rd["default_value"]).strip()
-                status = TS_DERIVED
-                value_source = "regime_config_default"
-            elif _col_sample(df, canonical):
+            if _col_sample(df, canonical):
                 status = TS_DERIVED
             else:
                 status = TS_SEMANTIC_DERIVATION

@@ -1,75 +1,53 @@
-"""operations_control.annex2.population — population-path reconciliation (I2).
+"""operations_control.annex2.population — can every required field be filled?
 
-Deterministic per-code assessment of how each of the 107 Annex 2 universe
-codes is populated by the authoritative runtime route. Derived ONLY from the
-authoritative components' configuration:
+The question this answers is not "does a rule mention this code" but "will a
+VALUE reach the regulator". Those are different, and confusing them is how a
+delivery could be declared complete here and then refused twenty-one times by
+the XML builder: the projector emits a column for every registry-mapped code, so
+a code always had a column, and a blank column is not a populated field.
 
-  * config/regime/annex2_field_universe.yaml   (the 107-code universe + ND flags)
-  * config/system/fields_registry.yaml         (regime_mapping -> projector emission)
-  * config/regime/annex2_delivery_rules.yaml   (field_rules / deferred scope)
-  * known, documented builder injections       (Gate 5 ND/no-data scaffolding)
+So the assessment is made against the frame that will actually be delivered,
+using the same authority the builder uses:
 
-The direct ``field_rules`` count is NOT a completeness measure: the projector
-emits every registry-mapped code and the normaliser passes unruled columns
-through verbatim. A code blocks ONLY when it is applicable, required, has no
-population mechanism, no permitted no-data representation, and no builder
-coverage — i.e. genuinely unsupported.
+  * the effective Annex 2 contract (engine.regime_contract.annex2_contract) —
+    which codes the workbook makes mandatory, and which no-data codes the
+    regulator permits;
+  * the projected frame itself — what the layered configuration and the lender's
+    data actually produced.
+
+A mandatory code blocks when the frame has no value for it and nothing in the
+contract will supply one. Whether an operator could answer it, and how, is the
+decision surface's business (see ``nd_treatments``); this module reports the
+truth about the delivery in front of it.
 """
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import yaml
-
 REPO = Path(__file__).resolve().parents[2]
 
-UNIVERSE_PATH = REPO / "config/regime/annex2_field_universe.yaml"
-RULES_PATH = REPO / "config/regime/annex2_delivery_rules.yaml"
-REGISTRY_PATH = REPO / "config/system/fields_registry.yaml"
-
-# Codes the Gate 5 builder represents itself with permitted no-data scaffolding
-# (documented behaviour, instrumented by interventions.py — never altered here).
-#
-# Phase 2 emptied this set. RREL20/RREL21 used to live here:
-# ``_ensure_scndry_oblgr_incm_defaults`` wrote ND5 into IncmVal / Vrfctn when
-# the columns were absent from the delivery frame. They are now declared in
-# ``config/regime/annex2_delivery_rules.yaml`` with ``default_value: ND5``, so
-# the ``elif rule:`` branch in ``assess_population`` classifies them as
-# rule-governed — which is the truth — and the builder inserts nothing. The
-# mechanism constant is kept because it
-# is a real category the classifier must still be able to express: the
-# non-performing historical-collection block
-# (``_ensure_hstrcl_colltn_nd_defaults``) remains builder-side and would belong
-# here if it were ever reached by this report.
-# See docs/annex2_delivery_migration.md.
-BUILDER_ND_COVERED: dict = {}
-
-MECH_RULE = "direct field rule"
-MECH_REGISTRY = "projected registry mapping"
-MECH_ENUM = "enum mapping"
+MECH_SOURCE = "value in the delivery frame"
+MECH_DERIVED = "deterministic derivation"
 MECH_ND = "permitted no-data value"
-MECH_BUILDER = "builder transformation (no-data insertion)"
-MECH_STATIC = "static client/report configuration"
-MECH_DEFERRED = "omitted (deferred / not applicable)"
-MECH_UNSUPPORTED = "genuinely unsupported"
+MECH_ATTRIBUTE = "carried as an XML attribute (no element of its own)"
+MECH_OPTIONAL = "optional — may be absent"
+MECH_UNSUPPORTED = "no value and no permitted representation"
 
-#: Codes whose values originate from static client configuration rather than
-#: loan data (identity/geography of the reporting entity).
-STATIC_CONFIG_CODES = {"RREL1", "RREL83", "RREL84", "RREL6"}
+_BLANK = {"", "nan", "none", "null", "<na>"}
 
 
 @dataclass
 class CodeAssessment:
     annex2_code: str
     field_name: str
-    priority: str                 # Mandatory | Optional | Analytics | unmapped
-    applicability: str            # in scope | deferred
-    xsd_requirement: str          # ND allowances
+    canonical_field: str
+    mandatory: bool
+    nd_permitted: str
     population_mechanism: str
-    source: str                   # config/registry provenance, plain text
+    source: str
     expected_final_treatment: str
     blocking: bool
     explanation: str
@@ -78,127 +56,134 @@ class CodeAssessment:
         return asdict(self)
 
 
-def _load_yaml(p: Path) -> Dict[str, Any]:
-    return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+def _column_state(df, code: str) -> str:
+    """``populated`` | ``blank`` | ``absent`` for one code in the frame."""
+    if df is None or code not in getattr(df, "columns", []):
+        return "absent"
+    col = df[code].astype(str).str.strip().str.lower()
+    if col.isin(_BLANK).all():
+        return "blank"
+    if col.isin(_BLANK).any():
+        return "partial"
+    return "populated"
 
 
-def assess_population(
-    universe_path: Path = UNIVERSE_PATH,
-    rules_path: Path = RULES_PATH,
-    registry_path: Path = REGISTRY_PATH,
-) -> List[CodeAssessment]:
-    universe = _load_yaml(universe_path).get("fields") or {}
-    rules = _load_yaml(rules_path)
-    field_rules = rules.get("field_rules") or {}
-    deferred = set((rules.get("reconciliation_scope") or {})
-                   .get("deferred_fields") or [])
-    registry = _load_yaml(registry_path).get("fields") or {}
+def _derivation_inputs_present(df, derive: Dict[str, Any]) -> bool:
+    """Will this derivation actually produce a value on this frame?
 
-    code2canon: Dict[str, str] = {}
-    code2prio: Dict[str, str] = {}
-    for name, spec in registry.items():
-        rm = (spec or {}).get("regime_mapping", {}).get("ESMA_Annex2") or {}
-        code = rm.get("code")
-        if code:
-            code2canon.setdefault(code, name)
-            code2prio.setdefault(code, rm.get("priority", ""))
+    A declared derivation is not an answer unless its inputs are there. A
+    lifetime mortgage's original term is months between origination and
+    maturity, and a lifetime mortgage has no maturity — so the rule exists, and
+    on this book it computes nothing. Reporting that as "covered by a
+    derivation" is how a gap reaches the XML builder unannounced.
+    """
+    inputs = [c for c in (list(derive.get("fields") or [])
+                          + [derive.get("start_field"), derive.get("end_field")])
+              if c]
+    if df is None or not inputs:
+        return bool(inputs)
+    for column in inputs:
+        if _column_state(df, column) not in ("populated", "partial"):
+            return False
+        # A no-data code is a statement that there is no value; a calculation
+        # cannot be performed on one.
+        values = df[column].astype(str).str.strip().str.upper()
+        if values.str.fullmatch(r"ND[1-5](-\d{4}-\d{2}-\d{2})?").all():
+            return False
+    return True
 
+
+def assess_population(projected_csv: Optional[str | Path] = None,
+                      *, performance_mode: Optional[str] = None,
+                      ) -> List[CodeAssessment]:
+    """Assess every Annex 2 code against the frame that will be delivered.
+
+    With no frame the assessment is structural — what the contract requires and
+    what the regulator permits — and nothing is reported as blocking, because
+    without data there is nothing yet to be missing.
+    """
+    from engine.regime_contract.annex2_contract import contract
+
+    df = None
+    if projected_csv and Path(projected_csv).exists():
+        import pandas as pd
+        df = pd.read_csv(projected_csv, dtype=str).fillna("")
+
+    c = contract(performance_mode)
     out: List[CodeAssessment] = []
-    for code in sorted(universe):
-        u = universe[code] or {}
-        nd_ok = bool(u.get("nd1_4_allowed") or u.get("nd5_allowed"))
-        xsd_req = ", ".join(x for x in (
-            "ND1-4 allowed" if u.get("nd1_4_allowed") else "",
-            "ND5 allowed" if u.get("nd5_allowed") else "") if x) or "no ND"
-        prio = code2prio.get(code, "unmapped")
-        canon = code2canon.get(code, "")
-        rule = field_rules.get(code) or {}
-        is_deferred = code in deferred
+    for code in c.codes():
+        fc = c.fields[code]
+        state = _column_state(df, code)
+        nd = ", ".join(fc.nd_allowed) or "none"
 
-        if is_deferred:
-            mech, blocking = MECH_DEFERRED, False
-            source = "annex2_delivery_rules reconciliation_scope.deferred_fields"
-            treatment = "not emitted; formally deferred"
-            expl = "Formally deferred in the delivery rules scope."
-        elif code in STATIC_CONFIG_CODES:
-            mech, blocking = MECH_STATIC, False
-            source = ("client configuration (identity/reporting attributes) "
-                      "+ projector derivation")
-            treatment = "derived from client configuration at projection"
-            expl = ("Populated from static regulatory configuration; the "
-                    "regulatory-details preflight verifies the inputs.")
-        elif rule:
-            has_enum = bool((rule.get("transform") or {}).get("enum_map"))
-            nd_default = str(rule.get("default_value", "")).startswith("ND")
-            mech = MECH_ENUM if has_enum else MECH_RULE
-            if nd_default:
-                mech = f"{mech} -> {MECH_ND}"
-            blocking = False
-            source = "annex2_delivery_rules field_rules entry" + \
-                (" + registry regime_mapping" if canon else "")
-            treatment = ("permitted no-data default when blank"
-                         if nd_default else "governed value in delivery output")
-            expl = "Rule-governed treatment on the authoritative route."
-        elif code in BUILDER_ND_COVERED:
-            # Checked before the registry branch: these codes are registry-
-            # mapped but the projector's portfolio-type filter excludes their
-            # canonical source for this asset class, so the runtime truth is
-            # the builder's permitted no-data representation.
-            mech, blocking = MECH_BUILDER, False
-            source = "gate 5 builder no-data scaffolding (documented, instrumented)"
-            treatment = BUILDER_ND_COVERED[code]
-            expl = ("Optional and ND-permitted; the builder represents it "
-                    "with a permitted no-data value. Not a blocker.")
-        elif canon:
-            mech, blocking = MECH_REGISTRY, False
-            source = f"fields_registry regime_mapping <- canonical '{canon}'"
-            treatment = ("value passes projection and delivery verbatim "
-                         "(normaliser passes unruled columns through)")
-            expl = ("No direct field rule, but the projector emits the code "
-                    "from the registry mapping and the normaliser passes it "
-                    "through — rule count does not gate emission.")
-        elif code in BUILDER_ND_COVERED:
-            mech, blocking = MECH_BUILDER, False
-            source = "gate 5 builder no-data scaffolding (documented, instrumented)"
-            treatment = BUILDER_ND_COVERED[code]
-            expl = ("Optional and ND-permitted; the builder represents it "
-                    "with a permitted no-data value. Not a blocker.")
-        elif nd_ok or prio in ("Optional", "Analytics", "unmapped"):
-            mech, blocking = MECH_ND if nd_ok else MECH_DEFERRED, False
-            source = "field universe ND allowance" if nd_ok else "optional field"
-            treatment = ("permitted no-data representation available"
-                         if nd_ok else "may be omitted (optional)")
-            expl = "Optional and/or representable as permitted no-data."
+        if not fc.emitting:
+            mech, blocking = MECH_ATTRIBUTE, False
+            source = "auth.099 XSD — the schema defines no element at this path"
+            treatment = "disclosed as an attribute of the value it qualifies"
+            expl = ("The schema carries this concept as an attribute of another "
+                    "field, so it has no element that could be missing.")
+        elif df is not None and state in ("populated", "partial"):
+            mech = MECH_SOURCE
+            blocking = bool(fc.mandatory and state == "partial")
+            source = "the projected delivery frame"
+            treatment = ("a value on every record" if state == "populated"
+                         else "a value on some records only")
+            expl = ("The delivery carries a value." if state == "populated" else
+                    "The delivery carries a value on some records and not "
+                    "others; the regulator requires one on every record.")
+        elif fc.derive and _derivation_inputs_present(df, fc.derive):
+            mech, blocking = MECH_DERIVED, False
+            source = f"derivation ({fc.derive.get('type', '')})"
+            treatment = "calculated during delivery preparation"
+            expl = "Calculated from other delivered values; nothing to supply."
+        elif not fc.mandatory:
+            mech, blocking = MECH_OPTIONAL, False
+            source = "workbook multiplicity"
+            treatment = "may be absent from the submission"
+            expl = "The schema permits this field to be absent."
+        elif fc.nd_allowed:
+            mech, blocking = MECH_ND, df is not None
+            source = "field universe — the regulator permits a no-data code"
+            treatment = f"needs an approved no-data treatment ({nd})"
+            expl = ("Required and not supplied. The regulator permits a no-data "
+                    "code here, so an operator can say why it is empty — until "
+                    "one is approved the delivery has no value for it.")
         else:
-            mech, blocking = MECH_UNSUPPORTED, True
+            mech, blocking = MECH_UNSUPPORTED, df is not None
             source = "none found"
             treatment = "cannot be validly represented"
-            expl = ("Mandatory, applicable, no population mechanism, no "
-                    "permitted no-data representation.")
+            expl = ("Required, not supplied, and the regulator permits no "
+                    "no-data code: only a real value will do.")
 
         out.append(CodeAssessment(
-            annex2_code=code, field_name=str(u.get("field_name", "")),
-            priority=prio, applicability="deferred" if is_deferred else "in scope",
-            xsd_requirement=xsd_req, population_mechanism=mech, source=source,
+            annex2_code=code, field_name=fc.field_name,
+            canonical_field=fc.canonical_field, mandatory=bool(fc.mandatory),
+            nd_permitted=nd, population_mechanism=mech, source=source,
             expected_final_treatment=treatment, blocking=blocking,
             explanation=expl))
     return out
 
 
-def reconciliation_document(assessments: Optional[List[CodeAssessment]] = None
+def reconciliation_document(assessments: Optional[List[CodeAssessment]] = None,
+                            *, projected_csv: Optional[str | Path] = None,
+                            performance_mode: Optional[str] = None,
                             ) -> Dict[str, Any]:
     """The persistable reconciliation artefact + operator summary."""
-    rows = assessments or assess_population()
+    rows = assessments if assessments is not None else assess_population(
+        projected_csv, performance_mode=performance_mode)
     blockers = [r for r in rows if r.blocking]
     from collections import Counter
     mech_counts = Counter(r.population_mechanism for r in rows)
     return {
         "universe_count": len(rows),
+        "assessed_against": str(projected_csv) if projected_csv else "",
+        "mandatory_count": sum(1 for r in rows if r.mandatory),
         "blocking_count": len(blockers),
         "blocking_codes": [r.annex2_code for r in blockers],
         "mechanism_counts": dict(mech_counts),
         "summary_sentence": (
-            "Every required regulatory field has a valid way of being filled."
+            "Every required regulatory field has a value or a permitted way of "
+            "being filled."
             if not blockers else
             f"{len(blockers)} required field"
             f"{'s' if len(blockers) != 1 else ''} cannot be filled and "

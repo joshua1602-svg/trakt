@@ -82,7 +82,7 @@ def _statuses(findings, component):
 def test_index_loads_the_live_annex2_configuration(index):
     assert index.registry_by_code, "fields_registry regime mapping is empty"
     assert index.code_order, "esma_code_order.yaml Record list is empty"
-    assert index.delivery_rules, "annex2_delivery_rules field_rules is empty"
+    assert index.delivery_rules, "the derived Annex 2 contract is empty"
     assert index.universe, "annex2_field_universe fields is empty"
     assert index.xsd_path_map, "annex2_field_xsd_path_map fields is empty"
     assert index.registry_by_code["RREL69"]["canonical_field"] == \
@@ -291,9 +291,17 @@ def test_assessment_output_is_stable_across_runs(index):
 # Stage 1 boundary
 # --------------------------------------------------------------------------- #
 
-CONFIG_FILES = (P_REGISTRY, P_CODE_ORDER, P_DELIVERY_RULES, P_ENUM_MAPPING,
+#: P_DELIVERY_RULES is deliberately absent: the Annex 2 contract is derived at
+#: runtime and has no file to hash. Its authoritative sources are hashed instead
+#: — the field universe and the enum configuration are already here, and the
+#: schema and workbook index are added, so the same "nothing was written"
+#: property is asserted over everything the contract is built from.
+CONFIG_FILES = (P_REGISTRY, P_CODE_ORDER, P_ENUM_MAPPING,
                 P_XSD_PATH_MAP, "config/regime/annex2_field_universe.yaml",
-                "config/system/esma_model_structure.yaml")
+                "config/system/esma_model_structure.yaml",
+                "config/system/enum_synonyms.yaml",
+                "config/system/DRAFT1auth.099.001.04_1.3.0.xsd",
+                "config/generated/annex2_workbook_index.json")
 
 
 def test_the_impact_pass_does_not_modify_any_active_config(index):
