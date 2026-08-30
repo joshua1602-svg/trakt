@@ -7,20 +7,51 @@
 # number and chart in the pack equals the dashboard for the same portfolio.
 # Nothing is recomputed in the deck.
 #
+# THE SPINE. The pack answers nine business questions in order, and a slide
+# earns its place by answering one of them for THIS book:
+#
+#   1 EXECUTIVE POSITION   what is this, where are we, what changed
+#   2 FUNDED STOCK         what do I own, and where does it sit
+#   3 FUNDED MOVEMENT      why did the balance change
+#   4 ORIGINATION          what is about to fund, and does it convert
+#   5 FORECAST             where is it heading, and was the last one right
+#   6 SEASONING            how do vintages behave as they age
+#   7 HEALTH               what needs attention
+#   8 CONCENTRATION        am I inside the limits
+#   9 GOVERNANCE           what does this cover and how was it made
+#
+# The pack is a STARTER PACK, not a catalogue. A new single-book portfolio
+# should land around ten to fourteen pages; a seasoned multi-book portfolio
+# with a live pipeline around fourteen to eighteen. Slides that only restate a
+# neighbouring page for a book of this shape are conditioned out rather than
+# printed — see the `when:` clauses below, each of which carries the reason.
+#
 # COMPOSITION. A slide appears only when the portfolio justifies it. Two gates,
 # both of which must pass (see mi_agent_pptx/composition.py):
 #
 #   when:  a condition over governed FACTS about this portfolio. Supported:
-#            scope, is_total, portfolio_count, type_count, has_direct,
-#            has_acquired, is_mixed, mixed_reporting_dates, has_funded,
-#            has_stratifications, has_movement, has_funded_history, has_geo,
-#            has_cohorts, has_multidim, has_pipeline, has_pipeline_history,
-#            has_funnel, has_forecast, has_forecast_projection,
-#            has_forecast_history, has_risk
+#            scope, is_total, portfolio_count, type_count, constituent_books,
+#            has_direct, has_acquired, is_mixed, mixed_reporting_dates,
+#            has_funded, has_stratifications, has_movement, has_attribution,
+#            has_balance_movement, has_exit_reasons, has_funded_history,
+#            has_geo, has_cohorts, has_cohort_progression, has_multidim,
+#            has_pipeline, has_pipeline_history, has_funnel, has_forecast,
+#            has_forecast_projection, has_forecast_history,
+#            has_portfolio_projections, has_risk, has_concentration,
+#            has_concentration_forward, funded_periods, pipeline_periods,
+#            forecast_periods, cohort_count, funded_balance, pipeline_amount,
+#            pipeline_share
 #          Names, and/or/not, comparisons and `in` only — never arbitrary code.
 #
 #   guard: a data check on the payload the handler would draw from, so a slide
 #          can never reach the deck and then discover it has nothing to show.
+#
+#   superseded_by: the id of an EARLIER slide that answers the same question
+#          better for this book. When that slide is in the deck, this one is
+#          recorded as "covered by <it>" rather than as an absent capability —
+#          so the omission ledger can never contradict a page the reader can
+#          see. Must name a slide defined above this one; composition evaluates
+#          the list in order.
 #
 # Anything dropped is recorded with a reason and rendered in the appendix. The
 # deck therefore contains NO placeholder pages.
@@ -32,7 +63,7 @@ deck:
   theme: trakt_mi_agent_dark
   footer: "trakt MI Agent · Confidential — for institutional funders/investors"
   logo_path: null
-  template_version: "2.3.0"
+  template_version: "3.0.0"
 
   # Funding / securitisation thresholds the Time to Scale slide reports against,
   # in the book's reporting currency. These are a REPORTING decision, not a
@@ -44,7 +75,10 @@ deck:
   scale_targets: [200000000]
 
 slides:
-  # 1 --------------------------------------------------------------- Cover
+  # ======================================================================
+  # 1 — EXECUTIVE POSITION
+  # ======================================================================
+
   # States the reporting entity, the governed scope, every constituent book and
   # every reporting date. Always present — a deck must say what it is about.
   - id: cover
@@ -52,7 +86,6 @@ slides:
     title: "Investor & Funder MI Pack"
     question: "What is this report about?"
 
-  # 2 ------------------------------------------------ Executive Dashboard
   # Where is the portfolio today, what is coming, and is anything approaching a
   # limit? Every tile is a governed figure a later slide also renders, so the
   # landing page cannot disagree with the pack behind it.
@@ -61,45 +94,43 @@ slides:
     title: "Executive Position"
     question: "Where is the portfolio today, what is coming, and is anything approaching a limit?"
 
-  # 3 --------------------------------------------------- Executive Summary
   # Deterministic governed observations. No LLM.
   - id: executive_summary
     type: exec_insights
     title: "Executive Summary"
     question: "What changed this period?"
 
-  # 3 ------------------------------------------------ Portfolio Composition
-  # The anchor slide: total, then each portfolio type on identical measures.
+  # ======================================================================
+  # 2 — FUNDED STOCK
+  # ======================================================================
+
+  # The constituent-book anchor: total, then each portfolio type on identical
+  # measures. A single-book, single-type portfolio has nothing to compose — the
+  # page would be the funded KPI page with one column — so it is conditioned
+  # out rather than printed as a table of one.
   - id: portfolio_composition
     type: portfolio_composition
     title: "Portfolio Composition"
     question: "What do I own today?"
+    when: "type_count > 1 or portfolio_count > 1"
 
-  # NOTE: a separate "Direct vs Acquired" slide was removed in the close-out
-  # pass. Its comparison table duplicated Portfolio Composition, and its
-  # waterfall was identical to the one on Portfolio Movement and Drivers. The
-  # unique measures (WA borrower age, loan movement) moved to Portfolio
-  # Composition. The handler remains available for a future configuration.
-
-  # 5 ------------------------------------------ Portfolio Movement and Drivers
-  # Governed attribution: which portfolio types and which dimensions moved the
-  # total. Every component reconciles exactly to the headline movement.
-  - id: movement_drivers
-    type: movement_drivers
-    title: "Portfolio Movement and Drivers"
-    question: "Why did funded AuM change during the period?"
-    when: "has_attribution or has_movement"
-
-  # 6 --------------------------------------------------------- Funded KPIs
   - id: funded_kpis
     type: kpi_summary
     title: "Funded Portfolio — Key Measures"
     question: "How large is the book and what are its characteristics?"
 
-  # ------------------------------------------- Funded Stratifications
-  # ONE 2 x 2 matrix of the four dimensions an investor asks first. The pack
-  # used to spend three pages on six of them; four on one page is the executive
-  # answer, and the rest are available as a deep dive below.
+  # WHERE THE STOCK SITS, AND HOW THAT MOVED. With more than one constituent
+  # book this is a stacked area over the governed period x book breakdown, and
+  # the stack reconciles to the period total by construction. With one book it
+  # falls back to the total series — a one-colour stack of itself says nothing
+  # a single area does not.
+  - id: funded_stock
+    type: funded_stock
+    title: "Funded Stock"
+    question: "Where does funded exposure sit, and how has that moved?"
+    when: "has_funded_history"
+
+  # ONE 2 x 2 matrix of the four dimensions an investor asks first.
   - id: stratification_funded
     type: strat_barlists
     title: "Funded Stratifications"
@@ -107,126 +138,168 @@ slides:
     lens: funded
     keys: [ltv, ticket, age, region]
 
-  # OPTIONAL DEEP DIVE — the remaining governed funded dimensions. Included only
-  # where the book is large enough for the second cut to earn a page.
+  # OPTIONAL DEEP DIVE — the remaining governed funded dimensions. A second cut
+  # of the same book is a deep-dive page, not a starter-pack page: it is
+  # included only where the book is large enough for the second cut to change a
+  # funding decision.
   - id: stratification_funded_ii
     type: strat_barlists
     title: "Funded Stratifications — Secondary Dimensions"
     question: "What else characterises the book?"
     lens: funded
     keys: [rate, vintage, broker, borrower_type]
-    when: "has_stratifications and funded_balance >= 25000000"
+    when: "has_stratifications and funded_balance >= 100000000"
 
-  # 9 -------------------------------------- Multi-Dimensional Risk Analytics
+  # Paired dimensions. On a small book the cells are too thin for the crossing
+  # to be read as anything but noise, so the page is earned by size.
   - id: multidim
     type: multidim
     title: "Multi-Dimensional Risk Analytics"
     question: "Where do risk dimensions concentrate together?"
+    when: "funded_balance >= 25000000"
 
-  # 10 -------------------------------------------------- Geographic Exposure
   - id: geography
     type: geo
     title: "Geographic Exposure"
     question: "Where is the collateral?"
+    when: "has_geo"
 
-  # 11 ------------------------------------------------------ Funded Evolution
-  # A trend needs at least two reporting periods.
-  - id: funded_evolution
-    type: funded_evolution
-    title: "Funded Balance Evolution"
-    question: "How is the book changing over time?"
-    when: "has_funded_history"
+  # ======================================================================
+  # 3 — FUNDED MOVEMENT
+  # ======================================================================
 
-  # 12 ------------------------------------------------------ Vintage Cohorts
-  # Vintage formation, from the governed cohort table the React Cohorts tab
-  # reads (cohorts.cohort_analysis). Point-in-time by construction: it describes
-  # what each vintage looks like TODAY.
-  - id: cohorts
-    type: cohorts
-    title: "Vintage Formation"
-    question: "How much of the book sits in each origination vintage?"
-    when: "has_cohorts and funded_periods >= 2 and cohort_count >= 2"
+  # THE ECONOMIC BRIDGE. Opening, plus the loans that arrived, less the loans
+  # that left (split by evidenced exit reason where the tape carries one), plus
+  # the movement on the loans present throughout. This is the loan-level answer
+  # to "why did the balance change", and it supersedes the dimensional
+  # attribution below wherever the identity reconciles.
+  - id: balance_movement
+    type: balance_movement
+    title: "Funded Balance Movement"
+    question: "Why did funded balance change, loan by loan?"
+    when: "has_balance_movement"
 
-  # Static-pool seasoning, from the governed progression service
-  # (evolution.funded_cohort_progression) — one call per cohort, exactly as the
-  # dashboard issues when a user selects a vintage. Omitted unless a cohort
-  # holds loans in two or more reporting periods: a single period is a formation
-  # snapshot, and joining one point into a line would be the misleading trend
-  # the sufficiency rules exist to prevent.
-  - id: cohort_progression
-    type: cohort_progression
-    title: "Cohort Progression"
-    question: "How have the cohorts seasoned since they formed?"
-    when: has_cohort_progression
+  # Governed dimensional attribution: which portfolio types and which dimensions
+  # moved the total. Retained as the FALLBACK for a book whose loan-level bridge
+  # did not reconcile — running both would tell the same story twice, in two
+  # grammars, and invite the reader to reconcile them by hand.
+  - id: movement_drivers
+    type: movement_drivers
+    title: "Portfolio Movement and Drivers"
+    question: "Why did funded AuM change during the period?"
+    when: "(has_attribution or has_movement) and not has_balance_movement"
+    # When the loan-level bridge IS in the deck, the ledger must say this page
+    # is covered rather than that movement could not be attributed — the reader
+    # can see the attribution on the previous page.
+    superseded_by: balance_movement
 
-  # 13 ---------------------------------------------------- Pipeline Overview
+  # ======================================================================
+  # 4 — ORIGINATION
+  # ======================================================================
+
   # Pipeline is direct-origination only; an acquired book does not originate.
-  # PIPELINE STRATIFICATIONS — the same four dimensions as the funded matrix, in
-  # the same visual grammar, from the same bucket registry. The pipeline prep
-  # already materialises these bands (config/mi/pipeline_field_contract.yaml
-  # declares them `reused`); nothing had ever asked it for them.
-  - id: stratification_pipeline
-    type: strat_barlists
-    title: "Pipeline Stratifications"
-    question: "What is the shape of what is about to fund?"
-    lens: pipeline
-    keys: [ltv, ticket, age, region]
-    when: "has_pipeline"
-
   - id: pipeline
     type: pipeline_summary
     title: "Pipeline Overview"
     question: "What is likely to fund next?"
     when: "has_pipeline"
 
-  # 14 --------------------------------------------------- Pipeline Evolution
-  - id: pipeline_evolution
-    type: pipeline_evolution
-    title: "Pipeline Evolution"
-    question: "How is the pipeline trending?"
-    when: "has_pipeline_history"
-
-  # 15 -------------------------------------------------- Origination Funnel
   - id: funnel
     type: funnel
     title: "Origination Funnel"
     question: "How does the pipeline convert?"
-    when: "has_pipeline"
+    # BOTH are required. `has_funnel` is true whenever weekly extracts exist,
+    # which outlives the pipeline snapshot the conversion page actually draws
+    # from; without the snapshot the handler has a funnel with no stages.
+    when: "has_pipeline and has_funnel"
 
-  # 16 ---------------------------------- Origination Flow (KFIs & Completions)
+  # PIPELINE SHAPE and WEEKLY RUN-RATE are origination deep dives. They earn a
+  # page when origination is the story — a pipeline large enough relative to the
+  # funded book to change what the book looks like — and not otherwise. The
+  # `strat_barlists` (lens: pipeline) and `origination_flow` handlers remain
+  # available for an origination-focused configuration.
+  - id: stratification_pipeline
+    type: strat_barlists
+    title: "Pipeline Stratifications"
+    question: "What is the shape of what is about to fund?"
+    lens: pipeline
+    keys: [ltv, ticket, age, region]
+    when: "has_pipeline and pipeline_share >= 0.15"
+
   - id: origination_flow
     type: origination_flow
     title: "Origination Flow — KFIs & Completions"
     question: "What is the weekly origination run-rate?"
-    when: "has_pipeline_history"
+    when: "has_pipeline_history and pipeline_share >= 0.15"
 
-  # 17 ------------------------------------------------------ Forecast Bridge
+  # ======================================================================
+  # 5 — FORECAST
+  # ======================================================================
+
   - id: forecast_bridge
     type: forecast_bridge
     title: "Forecast Bridge — Funded to Forecast"
     question: "Where is the portfolio heading on the current book?"
     when: "has_forecast"
 
-  # 18 -------------------------------------------------- Forecast Projection
+  # WHICH BOOK IS EXPECTED TO DRIVE THE PORTFOLIO. Current balance, expected
+  # originations under each book's governed forecast treatment, and a retention
+  # factor applied only where the client supplied an approved run-off curve.
+  # One book has no per-book split to show — the forecast bridge above already
+  # is that book's forward view.
+  - id: portfolio_projections
+    type: portfolio_projections
+    title: "Forward View by Constituent Book"
+    question: "Which book is expected to drive the portfolio from here?"
+    when: "has_portfolio_projections and constituent_books > 1"
+
+  # The run-rate scale-up is a growth story; it is worth a page when there is
+  # enough origination relative to the funded book for scale-up to be the
+  # question being asked.
   - id: forecast_projection
     type: forecast_projection
     title: "Forecast Projection — Run-Rate Scale-Up"
     question: "What does the run-rate imply?"
-    when: "has_forecast_projection"
+    when: "has_forecast_projection and pipeline_share >= 0.05"
 
-  # ------------------------------------------ Forecast vs Actual
-  # "Was the prior forecast right?" The handler has always existed; no slide was
-  # ever configured for it. THREE forecast-carrying runs are required, not two:
-  # two produce a single prior-forecast-versus-actual point, and one point is not
-  # a track record. An immature book omits this rather than showing a line
-  # through one observation.
+  # "Was the prior forecast right?" THREE forecast-carrying runs are required,
+  # not two: two produce a single prior-forecast-versus-actual point, and one
+  # point is not a track record.
   - id: forecast_evolution
     type: forecast_evolution
     title: "Forecast Evolution — Actual vs Prior Forecast"
     question: "Was the prior forecast right?"
     when: "has_forecast_history and forecast_periods >= 3"
 
-  # 18b --------------------------------- Portfolio Health and Watch Items
+  # ======================================================================
+  # 6 — SEASONING
+  # ======================================================================
+
+  # Vintage formation, from the governed cohort table the React Cohorts tab
+  # reads. Point-in-time by construction: it describes what each vintage looks
+  # like TODAY. Two vintages is a comparison, not a formation profile, so the
+  # page is earned by three.
+  - id: cohorts
+    type: cohorts
+    title: "Vintage Formation"
+    question: "How much of the book sits in each origination vintage?"
+    when: "has_cohorts and funded_periods >= 2 and cohort_count >= 3"
+
+  # Static-pool seasoning, from the governed progression service — one call per
+  # cohort, exactly as the dashboard issues when a user selects a vintage.
+  # Omitted unless a cohort holds loans in two or more reporting periods: a
+  # single period is a formation snapshot, and joining one point into a line
+  # would be the misleading trend the sufficiency rules exist to prevent.
+  - id: cohort_progression
+    type: cohort_progression
+    title: "Cohort Progression"
+    question: "How have the cohorts seasoned since they formed?"
+    when: has_cohort_progression
+
+  # ======================================================================
+  # 7 — HEALTH
+  # ======================================================================
+
   # At most five governed watch items and three observations. Always rendered:
   # "no material watch items" is a finding, not an empty slide.
   - id: watchlist
@@ -234,18 +307,19 @@ slides:
     title: "Portfolio Health and Watch Items"
     question: "What requires attention before the next reporting period?"
 
-  # 19 ------------------------------------ Concentration Tests and Headroom
-  # The governed, operator-approved concentration capability
-  # (/mi/concentration-tests). Carries CURRENT funded, EXPECTED forecast and the
-  # ALL-PIPELINE-CONVERTS stress as three distinct states — the stress is never
-  # presented as the expected outcome.
+  # ======================================================================
+  # 8 — CONCENTRATION
+  # ======================================================================
+
+  # The governed, operator-approved concentration capability. Carries CURRENT
+  # funded, EXPECTED forecast and the ALL-PIPELINE-CONVERTS stress as three
+  # distinct states — the stress is never presented as the expected outcome.
   - id: concentration
     type: concentration
     title: "Concentration Tests and Headroom"
     question: "Am I operating within approved limits, and where could pressure emerge?"
     when: "has_concentration"
 
-  # 20 ---------------------------------------------------------- Risk Limits
   # The legacy extracted monitor. Shown only when no approved concentration
   # configuration exists, so the two never appear together saying similar things.
   - id: risk
@@ -253,8 +327,14 @@ slides:
     title: "Risk Limits"
     question: "Am I operating within approved limits?"
     when: "has_risk and not has_concentration"
+    # Without this the pack renders limit headroom and then states, in the
+    # methodology ledger, that no governed risk-limit artefact exists.
+    superseded_by: concentration
 
-  # 21 ------------------------------------------- Data and Methodology
+  # ======================================================================
+  # 9 — GOVERNANCE
+  # ======================================================================
+
   # Investor-safe: scope, source dates, coverage, basis of preparation and the
   # omission ledger. Never storage locations, endpoints or module names.
   - id: methodology
