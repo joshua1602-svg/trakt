@@ -2496,9 +2496,15 @@ class DeckBuilder:
             return self._record(spec.get("id", "concentration"), spec.get("title"),
                                 "", placeholder=True)
 
+        # DIRECTION OF TRAVEL. The prior governed value comes from the history
+        # service, which re-evaluates today's approved configuration against
+        # each historical frame — so "moved toward the limit" is a statement
+        # about the book, not about a changed definition.
+        rows = C.attach_history(rows, self.d.concentration_history)
         summary = C.summarise(env, rows)
         top = C.select_tests(rows)
         forward = C.forward_states_available(env)
+        historic = any(r.get("prior_value") is not None for r in top)
 
         # -- summary strip --------------------------------------------------
         tiles = [
@@ -2547,12 +2553,31 @@ class DeckBuilder:
         # ends inside the panel. Deriving the width from whether dx was zero
         # pushed the fifth column 0.2in off the slide once the Expected column
         # appeared, which only happens when forward states exist.
-        if forward:
+        # The table reads left to right as the sequence a covenant actually
+        # moves through: where it was, where it is, where it is expected to go,
+        # and the limit it is measured against.
+        # Six columns would squeeze the test name below the width at which a
+        # governed limit name is still legible, so where prior AND expected are
+        # both present the HEADROOM column gives way: it is limit less current,
+        # both of which are on the row, and the detail line states it in words.
+        if forward and historic:
+            cols = [("Test", 0.0, 1.98, PP_ALIGN.LEFT),
+                    ("Prior", 2.04, 0.68, PP_ALIGN.RIGHT),
+                    ("Current", 2.78, 0.70, PP_ALIGN.RIGHT),
+                    ("Expected", 3.54, 0.78, PP_ALIGN.RIGHT),
+                    ("Limit", 4.38, 0.72, PP_ALIGN.RIGHT)]
+        elif forward:
             cols = [("Test", 0.0, 2.00, PP_ALIGN.LEFT),
                     ("Current", 2.06, 0.70, PP_ALIGN.RIGHT),
-                    ("Limit", 2.82, 0.66, PP_ALIGN.RIGHT),
-                    ("Headroom", 3.54, 0.76, PP_ALIGN.RIGHT),
-                    ("Expected", 4.38, 0.72, PP_ALIGN.RIGHT)]
+                    ("Expected", 2.82, 0.72, PP_ALIGN.RIGHT),
+                    ("Limit", 3.60, 0.66, PP_ALIGN.RIGHT),
+                    ("Headroom", 4.32, 0.76, PP_ALIGN.RIGHT)]
+        elif historic:
+            cols = [("Test", 0.0, 1.96, PP_ALIGN.LEFT),
+                    ("Prior", 2.02, 0.78, PP_ALIGN.RIGHT),
+                    ("Current", 2.86, 0.78, PP_ALIGN.RIGHT),
+                    ("Limit", 3.70, 0.72, PP_ALIGN.RIGHT),
+                    ("Headroom", 4.48, 0.84, PP_ALIGN.RIGHT)]
         else:
             cols = [("Test", 0.0, 2.20, PP_ALIGN.LEFT),
                     ("Current", 2.35, 0.85, PP_ALIGN.RIGHT),
@@ -2584,17 +2609,22 @@ class DeckBuilder:
             status_colour = self.theme.rag.get(
                 {"breach": "red", "warning": "amber"}.get(r["status"], "green"),
                 self.theme.ink_300)
-            values = [
-                (self._fit_label(r["label"], cols[0][2]), self.theme.ink_100),
-                (C.format_measure(r["value"], r["unit"]), status_colour),
-                (C.format_measure(r["limit"], r["unit"]), self.theme.ink_300),
-                (f"{r['headroom']:.1f}" if r["headroom"] is not None else "—",
-                 self.theme.ink_300),
-            ]
+            values = [(self._fit_label(r["label"], cols[0][2]), self.theme.ink_100)]
+            if historic:
+                values.append((C.format_measure(r["prior_value"], r["unit"])
+                               if r.get("prior_value") is not None else "—",
+                               self.theme.ink_500))
+            values.append((C.format_measure(r["value"], r["unit"]), status_colour))
             if forward:
                 values.append((C.format_measure(r["expected_value"], r["unit"])
                                if r["expected_value"] is not None else "—",
                                self.theme.peri))
+            values.append((C.format_measure(r["limit"], r["unit"]),
+                           self.theme.ink_300))
+            if not (forward and historic):
+                values.append((f"{r['headroom']:.1f}"
+                               if r["headroom"] is not None else "—",
+                               self.theme.ink_300))
             for i, ((value, colour), (_label, dx, cw, align)) in enumerate(
                     zip(values, cols)):
                 self._text(s, Inches(7.5 + dx), y, Inches(cw), Inches(0.3),
@@ -2605,6 +2635,9 @@ class DeckBuilder:
             # says which is which — "PASS · breaches 2026-07" reads as a
             # contradiction rather than as a forward-looking warning.
             status_line = r["status"].upper()
+            moved = C.travel(r)
+            if moved:
+                status_line += f" · {moved} since {r.get('prior_date') or 'the prior period'}"
             if r.get("expected_breach") and r.get("breach_horizon"):
                 status_line += f" now · forecast breach {r['breach_horizon']}"
             elif r.get("expected_breach"):
@@ -2625,10 +2658,14 @@ class DeckBuilder:
                         + (f" ({r['expected_utilisation']:.0f}% of limit)"
                            if r["expected_utilisation"] is not None else ""))
                 if forward and r["stress_value"] is not None:
-                    bits.append(
+                    # A stress that eases the test, or moves it not at all, is
+                    # explained rather than printed bare — an "under stress"
+                    # figure BELOW the current one reads as a fault.
+                    explained = C.stress_note(r)
+                    bits.append(explained or (
                         "under the all-pipeline-converts stress "
-                        f"{C.format_measure(r['stress_value'], r['unit'])}")
-                if not bits and r["headroom"] is not None:
+                        f"{C.format_measure(r['stress_value'], r['unit'])}"))
+                if (not bits or (forward and historic)) and r["headroom"] is not None:
                     bits.append(
                         f"{C.format_measure(abs(r['headroom']), r['unit'])} "
                         + ("of headroom remaining" if r["headroom"] >= 0

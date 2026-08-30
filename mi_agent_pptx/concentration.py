@@ -130,6 +130,88 @@ def adapt_tests(envelope: Optional[Mapping[str, Any]]) -> List[Dict[str, Any]]:
     return rows
 
 
+def attach_history(rows: Sequence[Dict[str, Any]],
+                   history: Optional[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Add the PRIOR governed value of each test, where one was evaluated.
+
+    A covenant table states where a test sits and where it is expected to go,
+    and leaves the reader to guess whether it has been moving toward the limit
+    or away from it. The prior point comes from ``compute_history``, which
+    evaluates TODAY's approved configuration against each historical frame — so
+    prior and current are comparable, and a change is a change in the book
+    rather than a change in the definition.
+
+    Rows are copied; nothing is recomputed. A test with fewer than two governed
+    frames simply carries no prior, and the presentation layer shows nothing
+    rather than inventing a direction from one point.
+    """
+    out = [dict(r) for r in rows]
+    if not (history or {}).get("available"):
+        return out
+    by_test: Dict[Any, Mapping[str, Any]] = {
+        sr.get("testId"): sr for sr in (history or {}).get("series") or ()
+        if isinstance(sr, Mapping)}
+    for row in out:
+        sr = by_test.get(row.get("test_id"))
+        points = [p for p in ((sr or {}).get("points") or ())
+                  if isinstance(p, Mapping) and _num(p.get("value")) is not None]
+        if len(points) < 2:
+            continue
+        prior = points[-2]
+        row["prior_value"] = _num(prior.get("value"))
+        row["prior_date"] = prior.get("reportingDate")
+        row["prior_status"] = normalise_status(prior.get("status"))
+        row["periods_observed"] = len(points)
+    return out
+
+
+def travel(row: Mapping[str, Any]) -> Optional[str]:
+    """"toward the limit" / "away from the limit" / "broadly unchanged".
+
+    Direction is expressed against the LIMIT, not against the number, because
+    the governed operator decides which way is worse: a ``min`` test moving down
+    is moving toward its floor. A move smaller than a fiftieth of the limit is
+    not a direction — it is the book's ordinary noise — and is reported as
+    unchanged rather than dressed up as a trend.
+    """
+    prior, current, limit = (_num(row.get("prior_value")), _num(row.get("value")),
+                             _num(row.get("limit")))
+    if prior is None or current is None:
+        return None
+    delta = current - prior
+    tolerance = abs(limit) * 0.02 if limit else 0.0
+    if abs(delta) <= tolerance:
+        return "broadly unchanged"
+    worse_is_higher = str(row.get("operator") or "max").lower() != "min"
+    toward = (delta > 0) if worse_is_higher else (delta < 0)
+    return "toward the limit" if toward else "away from the limit"
+
+
+def stress_note(row: Mapping[str, Any]) -> Optional[str]:
+    """What the all-pipeline-converts stress actually did to this test.
+
+    The stress adds the whole pipeline to the book, and for a test whose
+    denominator grows faster than its numerator that DILUTES the concentration:
+    the stressed figure comes out below the current one. Printing that number
+    beside the word "stress" reads as a fault. It is not — it is a real property
+    of the test — so it is stated rather than shown bare, and a stress that
+    changes nothing is not presented as a result at all.
+    """
+    current, stressed = _num(row.get("value")), _num(row.get("stress_value"))
+    if current is None or stressed is None:
+        return None
+    limit = _num(row.get("limit"))
+    tolerance = abs(limit) * 0.005 if limit else 0.0
+    if abs(stressed - current) <= tolerance:
+        return "the stress does not move this test"
+    worse_is_higher = str(row.get("operator") or "max").lower() != "min"
+    eased = (stressed < current) if worse_is_higher else (stressed > current)
+    if eased:
+        return ("converting the whole pipeline would dilute this test, not "
+                "stress it")
+    return None
+
+
 def rank_key(row: Mapping[str, Any]):
     """Deterministic severity order, exactly as specified.
 
