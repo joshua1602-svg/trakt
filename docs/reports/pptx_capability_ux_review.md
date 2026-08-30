@@ -8,6 +8,18 @@ MI calculation or configuration was changed.
 cites a file and, where it matters, a line. Where a module exists but is not on
 the production path, it is called out as such rather than counted as capability.
 
+> **CORRECTION (see `docs/reports/pptx_provenance_check.md`).** A follow-up
+> provenance check confirmed that every module cited in this report belongs to the
+> React-connected estate — the legacy Streamlit PPTX
+> (`analytics/generate_pptx_client.py`) is a disjoint estate with zero imports in
+> either direction, and no finding here came from it. **One claim was wrong:**
+> `test_channel_parity.py` does *not* exercise the deck build. Its `deck` fixture
+> calls `mi_agent_pptx.mi_api.build_dashboard_data` and stops there, so it proves
+> **payload** parity, not rendered-deck parity — no test in the repository compares
+> a rendered deck to the dashboard. Sections 4 and 12 are amended below. Two
+> figures are refined: the dead-code total (≈590 lines fully orphaned + ~800
+> test-only) and the composition fact count (26, not 24).
+
 ---
 
 ## 1. Executive answer
@@ -103,7 +115,7 @@ deck is genuinely wired into the dashboard, not a batch side-product only.
 ### 2.2 Current slide list
 
 Composition (`mi_agent_pptx/composition.py`) evaluates a restricted-AST `when:`
-expression over 24 governed facts, then a per-type data guard. Anything dropped
+expression over 26 governed facts, then a per-type data guard. Anything dropped
 is recorded with an investor-facing reason and rendered in the methodology page's
 omission ledger. **There are no "no data" placeholder pages.** Max rendered = 22
 (`risk` and `concentration` are mutually exclusive).
@@ -183,8 +195,11 @@ the production path**. Verified by grep across the repo excluding tests:
 | `data_resolver.py` / `metric_resolver.MetricResolver` | 260 + class | only via the `__init__` re-export and `chart_resolver` |
 
 Live from those files: `metric_resolver.compact_currency/compact_number/format_percent`
-and `chart_resolver.render_bridge_waterfall` only. **≈1,400–1,700 of 10,247 lines in
-`mi_agent_pptx` are v1 residue.** This is the main reason a reader of the README
+and `chart_resolver.render_bridge_waterfall` only. **≈1,400 of 10,247 lines in
+`mi_agent_pptx` are unreachable from production.** Of those, `pptx_builder.py` (497)
+and `validation.py` (91) have zero references anywhere including tests; the rest are
+**test-only** (`tests/mi_agent_pptx/test_charts_and_placeholders.py:7,9`,
+`test_data_and_metrics.py:8`), so retiring them means retiring those tests too. This is the main reason a reader of the README
 comes away with the wrong mental model of what the deck does.
 
 ---
@@ -276,9 +291,19 @@ appear in the deck. Same words, different sets.
 
 ### B. Data parity — **strong, and tested**
 
-`tests/mi_agent_pptx/test_channel_parity.py` drives the real React HTTP routes and
-the real deck build over one fixture book and compares underlying values, not
-formatted strings. Run for this review: **15 passed, 1 skipped.** It asserts
+`tests/mi_agent_pptx/test_channel_parity.py` drives the real React HTTP routes
+(`TestClient(mi_agent_api.app)`) on one side and `mi_agent_pptx.mi_api.build_dashboard_data`
+on the other, over one fixture book, comparing underlying values rather than
+formatted strings. Run for this review: **15 passed, 1 skipped.**
+
+**It does not build a deck** (`test_channel_parity.py:116-120`; no `DeckBuilder`,
+`cli.run` or `generate_investor_pptx` appears in the file). `build_dashboard_data`
+*is* on the production React path, so this is payload parity for the real data
+layer — but it stops one hop short of `DeckBuilder` and `render.py`. The six tests
+that do build a deck have no React side to compare against. **No test anywhere
+compares a rendered deck to the rendered dashboard**, which is structurally why
+RED-2 below was never caught: both halves of that divergence live downstream of
+where this test stops. It asserts
 headline funded figures, portfolio-context totals, stratifications bar-for-bar,
 funded evolution series, cohorts, geo exposure, concentration evaluations,
 reporting date, scope narrowing, vintage table, cohort basis, static-pool
@@ -531,7 +556,7 @@ Only three earn a place, and the bar is "an investor asks this on every call":
 ### What the system already knows about history
 
 **A conditional composition engine already exists.** `mi_agent_pptx/composition.py`:
-`build_facts` (`:126-183`) derives 24 governed facts from the resolved payloads;
+`build_facts` (`:126-183`) derives 26 governed facts from the resolved payloads;
 `evaluate_condition` (`:68`) evaluates the `when:` expression as a restricted AST
 walk (names, and/or/not, comparisons, `in` — never `eval` of arbitrary code); a
 per-type `will_render` guard then checks the actual payload; every drop is recorded
@@ -863,7 +888,9 @@ thing built under the C+ architecture rather than the last thing bolted on.
 | Promote `_multidim` to a governed `/mi/multidim` payload; React renders the same heatmaps — **RED-4** | MED |
 | Move broker / borrower_type / ticket into `snapshots._STRAT_DIMS` and delete `_extra_stratifications` + `_ticket_series` — **RED-3** | LOW–MED |
 | Move the forecast-variance lag-1 shift from `EvolutionPanel.tsx:909-918` into `evolution.forecast_evolution` | LOW |
+| **Add a rendered-deck-vs-React test** — build via `cli.run` and drive `TestClient(app)` in one fixture. None exists today; this is a new assertion class, not an extension | LOW–MED |
 | Extend `test_channel_parity` to compare **all** stratification keys and **display order**, not just shared keys and values | LOW |
+| Correct the `test_channel_parity.py:3-4` docstring and the `mi_agent_pptx/README.md` module table — both misdescribe the system to the next reader | LOW |
 | Replace the grep-based `test_the_deck_layer_owns_no_economic_calculation` with an import-boundary check (deck may import `mi_agent_api` / `analytics_lib`, may not define bin edges) | LOW |
 
 ### D. Small MI composition (existing primitives)
