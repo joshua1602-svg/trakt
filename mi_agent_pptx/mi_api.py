@@ -89,6 +89,15 @@ class DashboardData:
     movement: Dict[str, Any] = field(default_factory=dict)
     #: Deterministic watch items (see :mod:`mi_agent_pptx.watchlist`).
     watchlist: Dict[str, Any] = field(default_factory=dict)
+    #: The ECONOMIC opening-to-closing bridge (evolution.funded_balance_movement):
+    #: opening + new - exits + movement on continuing = closing, with the exit
+    #: leg split on evidence. Distinct from ``movement``, which attributes the
+    #: same net change across dimensions.
+    balance_movement: Dict[str, Any] = field(default_factory=dict)
+    #: Per-constituent-book forward view (forecast_bridge.portfolio_projections):
+    #: current balance, expected originations, governed run-off retention where
+    #: the client supplied a curve, and the disclosure where they did not.
+    portfolio_projections: Dict[str, Any] = field(default_factory=dict)
     #: Utilisation history per approved concentration test across governed
     #: snapshots (``/mi/concentration-tests/history``). Empty when no approved
     #: configuration exists or no history resolves.
@@ -674,6 +683,18 @@ def build_dashboard_data(
                                lambda: _movement(out_root, cid, rid, scope, data,
                                                  prior_reporting_date=prior_rd))
 
+        # -- ECONOMIC movement: what happened to the LOANS -------------------
+        # The same governed composition ``/mi/evolution/funded-movement`` serves.
+        data.balance_movement = _guard(
+            data, "balance_movement",
+            lambda: _balance_movement(out_root, cid, rid, scope, prior_rd))
+
+        # -- Per-book forward view -------------------------------------------
+        # Already served at /mi/forecast/snapshot and rendered by nothing.
+        data.portfolio_projections = _guard(
+            data, "portfolio_projections",
+            lambda: _portfolio_projections(funded_df, registry, scope, data))
+
         pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
 
     # -- Deterministic executive summary (no LLM) ------------------------
@@ -839,6 +860,31 @@ def _movement(out_root, cid, rid, scope, data: DashboardData,
                              start_period=prior_reporting_date,
                              lens_filters=lens_filters,
                              lens_label=lens_label, note=data.note)
+
+
+def _balance_movement(out_root, cid, rid, scope, prior_reporting_date):
+    """The governed economic bridge, opened at the SAME period the funded
+    snapshot compares against so the pack measures one window throughout."""
+    from mi_agent_api import evolution
+    start = str(prior_reporting_date)[:7] if prior_reporting_date else None
+    return evolution.funded_balance_movement(out_root, cid, rid, scope=scope,
+                                             start_period=start)
+
+
+def _portfolio_projections(funded_df, registry, scope, data: DashboardData):
+    """The per-constituent-book forward view.
+
+    ``forecast_bridge.portfolio_projections`` is the same function
+    ``/mi/forecast/snapshot`` attaches as ``portfolioProjections``. It applies a
+    run-off curve ONLY where the client has supplied an approved one and
+    discloses every book where it has not; nothing is modelled here.
+    """
+    from mi_agent_api import forecast_bridge as fb
+    bridge = (data.forecast or {}).get("forecastBridge") or {}
+    weighted = bridge.get("weightedExpectedFundedAmount")
+    return fb.portfolio_projections(
+        funded_df, registry, scope,
+        weighted_pipeline=(float(weighted) if weighted else 0.0))
 
 
 def _watchlist(data: DashboardData) -> Dict[str, Any]:

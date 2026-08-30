@@ -332,8 +332,20 @@ def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
 def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,
-               dpi: int = 220, chart_id: Optional[str] = None) -> Path:
-    """Dashboard line/area chart. *series* = [{name, values, color?}]."""
+               dpi: int = 220, chart_id: Optional[str] = None,
+               stack: bool = False, zero_based: Optional[bool] = None) -> Path:
+    """Dashboard line/area chart. *series* = [{name, values, color?}].
+
+    ``stack`` draws the series as a stacked area — the right grammar for a STOCK
+    split into parts that sum to a total, where a set of separate lines would
+    make the reader add them up by eye.
+
+    ``zero_based`` forces the value axis to include zero. Default (``None``)
+    decides it: a stock or a stacked series is anchored at zero, because a
+    magnitude read off a floating baseline exaggerates every movement; a rate
+    or a narrow-range series is not, because zero-anchoring it would flatten the
+    only variation it has.
+    """
     _record("lines", chart_id, categories=[str(x) for x in x_labels],
             series=[str(s.get("name", "")) for s in series],
             currency=currency, percent=percent)
@@ -359,13 +371,38 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
         ax.axis("off")
         return _save(fig, path, theme, dpi)
 
-    for i, s in enumerate(series):
-        vals = [None if v is None else float(v) for v in s.get("values", [])]
-        color = s.get("color") or EVO_PALETTE[i % len(EVO_PALETTE)]
-        ax.plot(x, vals, color=color, linewidth=2.4, marker="o", markersize=3,
-                label=s.get("name", ""), zorder=3, solid_capstyle="round")
-        if area and len(series) == 1:
-            ax.fill_between(x, [v or 0 for v in vals], color=color, alpha=0.16, zorder=2)
+    if stack and len(series) > 1:
+        # Stacked area: parts of one total. Drawn bottom-up in the order given,
+        # so the caller's ordering (largest book first) is what the reader sees.
+        stacked = [[float(v or 0.0) for v in s.get("values", [])] for s in series]
+        colours = [s.get("color") or EVO_PALETTE[i % len(EVO_PALETTE)]
+                   for i, s in enumerate(series)]
+        ax.stackplot(x, *stacked, colors=colours, alpha=0.88,
+                     labels=[s.get("name", "") for s in series],
+                     edgecolor=theme.bg_panel, linewidth=0.6, zorder=2)
+    else:
+        for i, s in enumerate(series):
+            vals = [None if v is None else float(v) for v in s.get("values", [])]
+            color = s.get("color") or EVO_PALETTE[i % len(EVO_PALETTE)]
+            ax.plot(x, vals, color=color, linewidth=2.4, marker="o", markersize=3,
+                    label=s.get("name", ""), zorder=3, solid_capstyle="round")
+            if area and len(series) == 1:
+                ax.fill_between(x, [v or 0 for v in vals], color=color,
+                                alpha=0.16, zorder=2)
+
+    # AXIS MATERIALITY. A stock chart on a floating baseline turns a fractional
+    # move into a cliff. Anchor a currency/stacked axis at zero unless the caller
+    # says otherwise; leave a rate axis alone, where zero-anchoring would flatten
+    # the only variation there is.
+    anchor = zero_based if zero_based is not None else (stack or (currency and not percent))
+    if anchor:
+        shown = [float(v) for sr in series for v in (sr.get("values") or ())
+                 if v is not None]
+        if shown and min(shown) >= 0:
+            top = max(sum(vals) for vals in zip(*[[float(v or 0.0) for v in
+                      (sr.get("values") or ())] for sr in series])) if stack and len(series) > 1 \
+                  else max(shown)
+            ax.set_ylim(0, top * 1.08 if top else 1.0)
 
     if currency:
         ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: compact_currency(v)))
