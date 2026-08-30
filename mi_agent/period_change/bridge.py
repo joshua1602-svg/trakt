@@ -48,8 +48,21 @@ from .models import (
 #: the canonical field the rest of the platform keys loans on
 #: (``mi_agent_api.snapshots._loan_ids``); the others are accepted only as the
 #: same canonical concept under an alternative canonical name.
+#:
+#: ``unique_identifier`` is the ESMA Annex 2 RREL1 exposure identifier, which a
+#: regime-projected book carries INSTEAD of the analytics name rather than as
+#: well as it. Omitting it here meant the bridge declined on exactly those
+#: books — reporting "no stable loan identifier" about a tape whose identifier
+#: the regime requires to be constant for the life of the exposure — while
+#: ``engine.platform_assembler.LOAN_KEY_FIELDS`` and
+#: ``mi_agent_api.evolution._LOAN_ID_COLS`` both keyed the same loans happily.
+#: Three governed modules held three different answers to "what is a loan
+#: identity"; this one now matches the assembler that produced the tape. The
+#: duplicate- and missing-identifier refusals below are unchanged, so a tape
+#: whose regulatory identifier is NOT stable still gets no bridge.
 IDENTIFIER_FIELDS: Tuple[str, ...] = (
-    "loan_identifier", "original_loan_identifier", "underlying_exposure_identifier")
+    "loan_identifier", "unique_identifier",
+    "original_loan_identifier", "underlying_exposure_identifier")
 
 #: Provenance column that qualifies a loan identifier. Originators reuse simple
 #: sequences ("0001"), so on a consolidated book the identifier alone is not a

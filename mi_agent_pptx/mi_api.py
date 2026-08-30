@@ -102,6 +102,13 @@ class DashboardData:
     #: snapshots (``/mi/concentration-tests/history``). Empty when no approved
     #: configuration exists or no history resolves.
     concentration_history: Dict[str, Any] = field(default_factory=dict)
+    #: What Trakt can and cannot report for THIS portfolio, from the published
+    #: capability registry (``trakt_core.capability``) — ``metric id ->
+    #: Availability``. This is how the pack stays asset-agnostic: it asks
+    #: whether a capability resolves for this book's canonical shape, never
+    #: whether the book is a particular asset class. Discovery reads columns
+    #: and two enum mixes; it computes none of the metrics it describes.
+    capabilities: Dict[str, Any] = field(default_factory=dict)
     #: The GOVERNED reporting currency for this book, resolved through
     #: ``mi_agent_api.currency`` exactly as the dashboard resolves it for a
     #: request. The deck never picks a currency of its own.
@@ -695,6 +702,13 @@ def build_dashboard_data(
             data, "portfolio_projections",
             lambda: _portfolio_projections(funded_df, registry, scope, data))
 
+        # -- WHAT THIS BOOK SUPPORTS -----------------------------------------
+        # Resolved AFTER the funded history, because several capabilities turn
+        # on how many governed snapshots exist rather than on any column.
+        data.capabilities = _guard(
+            data, "capabilities",
+            lambda: _capabilities(funded_df, data.funded_evolution)) or {}
+
         pipe_snapshots = _pipeline_extract_count(prow, pipe_cid)
 
     # -- Deterministic executive summary (no LLM) ------------------------
@@ -869,6 +883,22 @@ def _balance_movement(out_root, cid, rid, scope, prior_reporting_date):
     start = str(prior_reporting_date)[:7] if prior_reporting_date else None
     return evolution.funded_balance_movement(out_root, cid, rid, scope=scope,
                                              start_period=start)
+
+
+def _capabilities(funded_df, funded_evolution) -> Dict[str, Any]:
+    """Every published capability resolved against this portfolio's shape.
+
+    ``metric id -> Availability``. The registry is asset-agnostic by
+    construction — a capability declares the economic conditions it needs, and
+    any book meeting them gets it — which is precisely the property the pack
+    needs: conditional reporting driven by what the tape supports, never by a
+    branch on what the book is called.
+    """
+    from trakt_core import capability as cap
+
+    periods = len((funded_evolution or {}).get("periods") or ()) or 1
+    shape = cap.describe_portfolio(funded_df, history_periods=periods)
+    return {a.metric: a for a in cap.resolve_all(shape)}
 
 
 def _portfolio_projections(funded_df, registry, scope, data: DashboardData):

@@ -483,6 +483,34 @@ def _snapshot_frame(frame_record):
                          frame=frame_record.get("df"))
 
 
+def _exit_frames(opening, closing):
+    """The same two frames, addressable by the exit classifier.
+
+    ``analytics_lib.history`` keys loans on ``loan_identifier`` and nothing
+    else. A regime-projected book carries the ESMA RREL1 name
+    (``unique_identifier``) INSTEAD of the analytics one, so the classifier
+    declines on it — and the bridge then shows a total exit bar for a book whose
+    exit reasons are sitting right there on the tape.
+
+    This aliases the column and changes NOTHING else: the identifiers are the
+    same strings, the classification rules are the classifier's own, and where
+    neither name is present both frames are handed back untouched so the
+    classifier declines exactly as it does today. No new analytic is performed.
+    """
+    from analytics_lib.history import LOAN_ID_FIELD
+
+    for frame in (opening, closing):
+        if LOAN_ID_FIELD in getattr(frame, "columns", ()):
+            return opening, closing        # already addressable; leave it alone
+    alias = next((c for c in _LOAN_ID_COLS
+                  if c in getattr(opening, "columns", ())
+                  and c in getattr(closing, "columns", ())), None)
+    if alias is None:
+        return opening, closing
+    return (opening.rename(columns={alias: LOAN_ID_FIELD}),
+            closing.rename(columns={alias: LOAN_ID_FIELD}))
+
+
 def funded_balance_movement(output_root: str | os.PathLike, client_id: str,
                             to_run_id: Optional[str] = None, *, scope=None,
                             start_period: Optional[str] = None) -> Dict[str, Any]:
@@ -526,7 +554,8 @@ def funded_balance_movement(output_root: str | os.PathLike, client_id: str,
     exits: Dict[str, Any] = {}
     try:
         from analytics_lib.history import classify_exits
-        exits = classify_exits(start["df"], end["df"],
+        opening_df, closing_df = _exit_frames(start["df"], end["df"])
+        exits = classify_exits(opening_df, closing_df,
                                as_of=str(end.get("reporting_date") or "")) or {}
     except Exception as exc:  # noqa: BLE001 - a bridge without the split is still a bridge
         exits = {"classified": False, "reason": f"{type(exc).__name__}: {exc}"}

@@ -2851,6 +2851,8 @@ class DeckBuilder:
         right.append(f"   {snaps} weekly pipeline extract(s) available."
                      if snaps else "   No weekly pipeline extracts available.")
 
+        right.extend(self._capability_lines())
+
         if self.omissions:
             right.append("")
             right.append("SECTIONS NOT INCLUDED")
@@ -2863,6 +2865,63 @@ class DeckBuilder:
         self._column_text(s, right, Inches(6.95), Inches(5.85))
         self._footer(s)
         self._record(spec.get("id", "appendix"), spec.get("title"), "")
+
+    #: Why a measure is absent, in the language a funder reads. The registry
+    #: distinguishes these deliberately: "we lack a field" is a data request to
+    #: the client, "this book has no such thing" is a property of the asset,
+    #: and "that needs a model we do not run" is a boundary Trakt has drawn.
+    #: Collapsing them into "not available" is what makes a pack look evasive.
+    _CAPABILITY_WORDING = {
+        "NOT_APPLICABLE": "not applicable to this portfolio",
+        "UNAVAILABLE": "required data not supplied",
+        "ASSUMPTION_REQUIRED": "would require an assumption Trakt does not make",
+        "MODEL_REQUIRED": "would require behavioural modelling Trakt does not perform",
+        "METHODOLOGY_NOT_APPROVED": "methodology not yet approved",
+    }
+    #: Grouped in the order a reader can act on: what they can fix, what is
+    #: inherent, what Trakt has chosen not to do.
+    _CAPABILITY_ORDER = ("UNAVAILABLE", "NOT_APPLICABLE", "ASSUMPTION_REQUIRED",
+                         "MODEL_REQUIRED", "METHODOLOGY_NOT_APPROVED")
+
+    def _capability_lines(self):
+        """"Measures not reported for this book", and the reason for each.
+
+        Read from the published capability registry's own resolution against
+        this portfolio's canonical shape — the same catalogue the API and the
+        agent tools answer from. Nothing here branches on what the book IS: a
+        capability declares the economic conditions it needs, and this page
+        reports which of them this tape did not meet.
+        """
+        from trakt_core import capability as cap
+
+        resolved = self.d.capabilities or {}
+        if not resolved:
+            return []
+        registry = cap.load_registry()
+        grouped = {}
+        for metric, availability in resolved.items():
+            status = getattr(availability, "status", cap.AVAILABLE)
+            if status == cap.AVAILABLE:
+                continue
+            entry = registry.get(metric)
+            grouped.setdefault(status, []).append(
+                str(getattr(entry, "name", None) or metric))
+        if not grouped:
+            return []
+
+        lines = ["", "MEASURES NOT REPORTED FOR THIS BOOK"]
+        budget = 4
+        for status in self._CAPABILITY_ORDER:
+            names = sorted(grouped.get(status) or ())
+            if not names or budget <= 0:
+                continue
+            shown = ", ".join(names[:3])
+            if len(names) > 3:
+                shown += f" and {len(names) - 3} other measure(s)"
+            wording = self._CAPABILITY_WORDING.get(status, "not available")
+            lines.append(f"   {shown} — {wording}.")
+            budget -= 1
+        return lines
 
     def _column_text(self, slide, lines, left, width):
         """A column of the methodology page; section headings pick up the accent."""

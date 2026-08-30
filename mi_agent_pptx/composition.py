@@ -221,6 +221,16 @@ def build_facts(data: Any) -> Dict[str, Any]:
     pipeline_amount = _num((getattr(data, "pipeline", {}) or {}).get("pipelineAmount"))
     denominator = (funded_balance or 0.0) + (pipeline_amount or 0.0)
 
+    # -- CAPABILITY facts ----------------------------------------------------
+    # One boolean per published capability, named ``can_<metric id>``, taken
+    # from the registry's own resolution against this portfolio's canonical
+    # shape. This is what lets a deck config say "include this page where the
+    # book supports the measure" without ever naming an asset class: the
+    # registry declares the ECONOMIC conditions a capability needs, and a book
+    # that meets them gets it whatever it is called.
+    for metric, availability in (getattr(data, "capabilities", {}) or {}).items():
+        facts[f"can_{metric}"] = bool(getattr(availability, "available", False))
+
     facts.update({
         #: Reporting periods of funded history actually resolved.
         "funded_periods": funded_periods,
