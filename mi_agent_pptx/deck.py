@@ -621,6 +621,23 @@ class DeckBuilder:
                             "hint": "central run-rate scenario"}
         return None
 
+    @staticmethod
+    def _period_labels(periods) -> List[str]:
+        """The category axis for an evolution series.
+
+        A WEEKLY series carries both ``week`` (the extract date) and ``period``
+        (its calendar month). Labelling four weekly extracts by month drew an
+        axis reading 2026-05, 2026-05, 2026-06, 2026-06 — four gridlines, two
+        labels, each printed twice, which reads as a rendering fault and hides
+        that the series has four observations. Where a distinct ``week`` exists
+        on every point it is the label; otherwise the monthly period is.
+        """
+        weeks = [str(p.get("week") or "") for p in periods]
+        if all(weeks) and len(set(weeks)) == len(weeks):
+            return weeks
+        return [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+                for p in periods]
+
     def _executive_trends(self, slide, *, top: float):
         """Up to two compact trends: funded balance, and weighted pipeline.
 
@@ -643,15 +660,20 @@ class DeckBuilder:
                                pipe_evo, "weighted_expected_funded_amount", True, False))
         if not candidates:
             return
-        # One trend gets half the band, not all of it: a single line stretched
-        # across thirteen inches reads as an empty slide with a line in it.
-        boxes = (self._chart_boxes(2, top=top, height=height)[:1]
-                 if len(candidates) == 1
-                 else self._chart_boxes(len(candidates), top=top, height=height))
+        # One trend is CENTRED at two-thirds width. Full width stretches a
+        # single line across thirteen inches and reads as an empty slide with a
+        # line in it; the old half-width box was left-aligned, which left six
+        # inches of bare panel beside it and read as a page that failed to
+        # finish drawing.
+        if len(candidates) == 1:
+            width = (self.CONTENT_R - self.CONTENT_L) * 0.66
+            left = self.CONTENT_L + ((self.CONTENT_R - self.CONTENT_L) - width) / 2
+            boxes = [(Inches(left), Inches(top), Inches(width), Inches(height))]
+        else:
+            boxes = self._chart_boxes(len(candidates), top=top, height=height)
         for (cid, title, periods, metric, currency, percent), box in zip(candidates, boxes):
             il, it, iw, ih = self._card(slide, *box, title)
-            x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
-                 for p in periods]
+            x = self._period_labels(periods)
             values = [(p.get("metrics") or {}).get(metric) for p in periods]
             if sum(1 for v in values if v is not None) < 2:
                 continue
@@ -1387,8 +1409,7 @@ class DeckBuilder:
             self._footer(s)
             return self._record("funded_stock", spec.get("title"), "", placeholder=True)
 
-        x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
-             for p in periods]
+        x = self._period_labels(periods)
         totals = [(p.get("metrics") or {}).get("funded_balance") for p in periods]
         multi = len(books) > 1
         # FINDING-LED SUBTITLE, from the series itself. The title is stable; the
@@ -1657,8 +1678,7 @@ class DeckBuilder:
         lone point — so do the same (a one-dot 'trend' reads as broken)."""
         periods = evo.get("periods", [])
         single = bool(evo.get("singlePeriod")) or len(periods) < 2
-        x = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
-             for p in periods]
+        x = self._period_labels(periods)
         # Only measures the governed series actually carries. A tape without an
         # interest rate should lose that panel, not gain an empty one.
         chart_specs = [cs for cs in chart_specs
