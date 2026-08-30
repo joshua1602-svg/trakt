@@ -318,6 +318,22 @@ class DeckBuilder:
                 [Inches(height)] * len(tiles),
                 list(tiles))
 
+    #: A dimension is worth a panel when its balance is not all in one bucket.
+    #: 99.5% rather than 100% because a handful of loans in a second band does
+    #: not make a distribution either.
+    SPREAD_FLOOR = 0.995
+
+    @classmethod
+    def _has_spread(cls, strat) -> bool:
+        """Does this stratification actually distribute across its buckets?"""
+        bars = [b for b in (strat or {}).get("bars") or ()
+                if isinstance(b, dict)]
+        values = [abs(float(b.get("balance") or 0.0)) for b in bars]
+        total = sum(values)
+        if len(values) < 2 or total <= 0:
+            return len(values) > 1
+        return (max(values) / total) < cls.SPREAD_FLOOR
+
     def _barlist_card(self, slide, box, title, rows, value_key, *, currency=True,
                       cid="bl", label_key="label", dimension=None):
         il, it, iw, ih = self._card(slide, *box, title)
@@ -1146,7 +1162,15 @@ class DeckBuilder:
         if keys:
             by_key = {st.get("key"): st for st in strats}
             strats = [by_key[k] for k in keys if k in by_key and by_key[k].get("bars")]
-        strats = strats[:4]
+        # LOW-INFORMATION DIMENSIONS. A bar list whose whole balance sits in one
+        # bucket draws a single full-width bar and says exactly what its own
+        # title says. It is dropped in favour of a dimension that has spread —
+        # but only while spread exists somewhere, because on a book where every
+        # dimension is concentrated that IS the finding, and an empty page is
+        # not an improvement on a flat one.
+        flat = [st for st in strats if not self._has_spread(st)]
+        spread = [st for st in strats if self._has_spread(st)]
+        strats = (spread or strats)[:4]
 
         # Movement attribution is a FUNDED concept: it compares two funded
         # reporting periods. A pipeline stratification has no such bridge.
@@ -1182,10 +1206,23 @@ class DeckBuilder:
         # A single marginal-change panel beneath, for the dimension that moved
         # most — one clear change view rather than a grid of small ones.
         lines: List[str] = []
+        # NEVER SILENT. A reader must be able to tell a dimension dropped for
+        # being uniform from one the tape does not carry.
+        note = ""
+        if spread and flat:
+            names = ", ".join(str(st.get("label") or st.get("key")) for st in flat)
+            note = (f"{names}: the whole book sits in a single band, so the "
+                    f"distribution is not charted.")
         if has_takeaways:
+            if note:
+                lines.append(note)
             for b in moved:
                 lines.extend(MV.takeaways(b, limit=1))
             self._takeaway_strip(s, lines[:3], top=5.42)
+        elif note:
+            self._text(s, Inches(self.CONTENT_L), Inches(6.62),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.28),
+                       note, size=9, color=self.theme.ink_500, italic=True)
         if not strats:
             self._placeholder_body(
                 s, f"No {lens} stratifications for this run.")
@@ -1548,7 +1585,8 @@ class DeckBuilder:
         self._footer(s)
         self._record("geography", spec.get("title"), "", placeholder=not areas)
 
-    def _evolution_lines(self, s, spec, evo, chart_specs, accent=None):
+    def _evolution_lines(self, s, spec, evo, chart_specs, accent=None,
+                         height=None):
         """Render N line-chart cards from an evolution payload's periods[].
 
         A time series needs ≥2 reporting periods; the dashboard flags a single cut
@@ -1564,7 +1602,8 @@ class DeckBuilder:
                        if any((p.get("metrics") or {}).get(ser["key"]) is not None
                               for p in periods for ser in cs["series"])] or chart_specs[:1]
         boxes = (self._matrix_boxes(len(chart_specs)) if len(chart_specs) > 2
-                 else self._chart_boxes(len(chart_specs)))
+                 else self._chart_boxes(len(chart_specs), **(
+                     {"height": height} if height else {})))
         for cs, box in zip(chart_specs, boxes):
             il, it, iw, ih = self._card(s, *box, cs["title"])
             series = [{"name": ser.get("name", ""),
@@ -2123,16 +2162,37 @@ class DeckBuilder:
                 "sufficient": bool(conv.get("sufficient")),
                 "weeks": conv.get("weeksInWindow"),
                 "min_weeks": conv.get("minWeeks"),
+                # WHAT THE CALCULATION ACTUALLY DID, per stage. The slide used
+                # to word the basis line from a deck-level lag field and every
+                # tile from the fixed phrase "of lagged KFI stock" — so a deck
+                # whose rates were computed UNLAGGED said "(unlagged)" once and
+                # "of lagged KFI stock" four times on the same page.
+                "lag_applied": bool(conv.get("lagApplied")),
+                "lag_weeks": conv.get("lagWeeks"),
             })
         return rows
 
     def _conversion_strip(self, slide, rows, lag_weeks):
-        """Conversion rates as a labelled strip beneath the funnel."""
+        """Conversion rates as a labelled strip beneath the funnel.
+
+        The basis is read from what the EVALUATOR did, per stage, not from a
+        deck-level field — so the sentence at the top of the strip and the note
+        under each rate can never describe two different calculations.
+        """
         top = 5.10
         width = self.CONTENT_R - self.CONTENT_L
+        lags = {(r.get("lag_weeks") if r.get("lag_applied") else None)
+                for r in rows}
         basis = ("Forward conversion — average weekly flow into each stage over "
                  "the KFI stock")
-        basis += (f" lagged {lag_weeks} week(s)." if lag_weeks else " (unlagged).")
+        if lags == {None}:
+            basis += ", unlagged: no KFI-to-completion lag was estimable."
+        elif len(lags) == 1:
+            basis += f", lagged {lags.pop()} week(s)."
+        else:
+            # Mixed is a real state — a stage with too little history gets no
+            # lag — and stating one number for the page would misdescribe it.
+            basis += "; the lag applied is stated per stage below."
         self._text(slide, Inches(self.CONTENT_L), Inches(top), Inches(width),
                    Inches(0.26), basis, size=9.5, color=self.theme.ink_400,
                    italic=True)
@@ -2150,8 +2210,12 @@ class DeckBuilder:
                        f"{row['rate']:.1f}%/wk", size=17, bold=True,
                        color=self.theme.ink_100 if row["sufficient"]
                        else self.theme.ink_500)
-            note = ("of lagged KFI stock" if row["sufficient"] else
-                    f"provisional — {row['weeks']} of {row['min_weeks']}+ weeks")
+            if not row["sufficient"]:
+                note = f"provisional — {row['weeks']} of {row['min_weeks']}+ weeks"
+            elif row.get("lag_applied"):
+                note = f"of KFI stock {row.get('lag_weeks')}wk earlier"
+            else:
+                note = "of current KFI stock (unlagged)"
             self._text(slide, Inches(left + 0.16), Inches(top + 1.00),
                        Inches(w - 0.32), Inches(0.24), note, size=8.5,
                        color=self.theme.ink_500)
@@ -2261,6 +2325,7 @@ class DeckBuilder:
                      else (Inches(0.55), Inches(1.62), Inches(12.25), Inches(4.95)))
         il, it, iw, ih = self._card(s, *chart_box, "Projected funded balance")
         path = self.work / "projection.png"
+        band_note = ""
         if proj:
             x = [str(p.get("month")) for p in proj]
             series = [
@@ -2268,6 +2333,12 @@ class DeckBuilder:
                 {"name": "Base", "values": [p.get("base") for p in proj], "color": "#7c9cf0"},
                 {"name": "Upside", "values": [p.get("upside") for p in proj], "color": "#5ec6b8"},
             ]
+            # INDISTINGUISHABLE SCENARIOS. Three lines that sit on top of each
+            # other read as a rendering fault, and invite a reader to look for a
+            # difference between scenarios that this book's run-rate history does
+            # not produce. Where the band is immaterial the chart carries the
+            # base case alone and the band is stated in words instead.
+            series, band_note = self._scenario_series(proj, series)
             R.draw_lines(path, x, series, iw, ih, theme=self.theme, currency=True)
         else:
             render_placeholder_png(path, "", "Insufficient run-rate history for a "
@@ -2288,32 +2359,102 @@ class DeckBuilder:
             tpath = self.work / "milestones.png"
             R.draw_table(tpath, cols, trows, iw, ih, theme=self.theme)
             self._place(s, tpath, il, it, iw, ih)
+        if band_note:
+            self._text(s, Inches(0.57), Inches(6.62), Inches(12.2), Inches(0.28),
+                       band_note, size=9, color=self.theme.ink_500, italic=True)
         self._footer(s)
-        self._record("forecast_projection", spec.get("title"), "", placeholder=not proj)
+        self._record("forecast_projection", spec.get("title"), band_note,
+                     placeholder=not proj)
+
+    #: A scenario band narrower than this share of the base terminal balance is
+    #: not a band a reader can act on, and three lines drawn through it overlap.
+    SCENARIO_BAND_FLOOR = 0.03
+
+    def _scenario_series(self, proj, series):
+        """The scenario lines worth drawing, and the band stated in words.
+
+        Returns the series unchanged where downside and upside genuinely
+        separate from base by the horizon. Where they do not, returns the base
+        case alone plus a sentence carrying the range — which is the same
+        information, legibly, and does not imply a spread the run-rate history
+        did not produce.
+        """
+        from .metric_resolver import compact_currency
+
+        terminal = proj[-1] if proj else {}
+        base = terminal.get("base")
+        low, high = terminal.get("downside"), terminal.get("upside")
+        if base in (None, 0) or low is None or high is None:
+            return series, ""
+        try:
+            spread = (float(high) - float(low)) / abs(float(base))
+        except (TypeError, ValueError, ZeroDivisionError):
+            return series, ""
+        if spread >= self.SCENARIO_BAND_FLOOR:
+            return series, ""
+        base_only = [s for s in series if s.get("name") == "Base"]
+        return (base_only or series), (
+            f"Downside and upside sit within {spread * 100:.1f}% of the base "
+            f"case at the horizon ({compact_currency(low)} to "
+            f"{compact_currency(high)}), so the scenarios are not separately "
+            f"plotted. The milestone table below carries all three.")
 
     def slide_forecast_evolution(self, spec):
+        """Was the prior forecast right? — the credibility page.
+
+        The two charts are secondary here. What a funder wants from this page is
+        a number: how far off has this forecaster been, and does it lean. Both
+        are arithmetic over figures the governed evolution service has already
+        reconciled — ``prior_forecast`` at period N IS the forecast period N-1
+        published — so nothing is modelled and nothing is projected.
+        """
+        from . import forecast_accuracy as FA
+
         s = self._slide()
-        self._header(s, spec.get("title", "Forecast Evolution"),
-                     "Forecast funded balance across reporting runs", accent=self.theme.mint)
-        # Two charts: where the forecast has travelled, and whether it held.
-        # The prior-forecast series is the governed one
-        # (``evolution.forecast_evolution``), the same series React's Forecast
-        # Evolution tab plots — it used to be derived in the browser, so only one
-        # of the two surfaces could show it.
-        ph = self._evolution_lines(s, spec, self.d.forecast_evolution, [
+        accuracy = FA.measure(self.d.forecast_evolution)
+        # FINDING-LED SUBTITLE. The title is stable; the subtitle states the
+        # track record where one exists, and says nothing where one does not.
+        strap = "Forecast funded balance across reporting runs"
+        if accuracy.available:
+            lean = accuracy.lean
+            strap = (f"Typically {accuracy.error_pct:.1f}% from the outturn "
+                     f"across {accuracy.observations} periods"
+                     + (f", {lean}stated on average" if lean else
+                        ", with no consistent lean"))
+        self._header(s, spec.get("title", "Forecast Evolution"), strap,
+                     accent=self.theme.mint)
+
+        # THE VARIANCE CHART LEADS. The forecast's own travel is the supporting
+        # view; whether it held is the question the page is titled with.
+        charts = [
+            {"id": "fvar", "title": "Actual funded vs the prior run's forecast",
+             "series": [
+                 {"name": "Prior-run forecast", "key": "prior_forecast", "color": "#e0a458"},
+                 {"name": "Actual funded", "key": "funded_balance", "color": "#7c9cf0"}],
+             "currency": True},
             {"id": "fevo", "title": "Forecast funded balance by run",
              "series": [
                  {"name": "Funded actual", "key": "funded_balance", "color": "#7c9cf0"},
                  {"name": "Weighted pipeline", "key": "weighted_expected_pipeline", "color": "#5ec6b8"},
                  {"name": "Forecast", "key": "forecast_funded_balance", "color": "#e0a458"}],
-             "currency": True},
-            {"id": "fvar", "title": "Actual funded vs the prior run's forecast",
-             "series": [
-                 {"name": "Prior-run forecast", "key": "prior_forecast", "color": "#e0a458"},
-                 {"name": "Actual funded", "key": "funded_balance", "color": "#7c9cf0"}],
-             "currency": True}])
+             "currency": True}]
+        ph = self._evolution_lines(s, spec, self.d.forecast_evolution, charts,
+                                   height=3.30)
+        # The sentence the reader keeps — or, where there is no track record
+        # yet, why there is not. Silence would read as an accurate forecast.
+        self._text(s, Inches(self.CONTENT_L), Inches(5.20),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.46),
+                   FA.describe(accuracy), size=10, color=self.theme.ink_300,
+                   italic=True, spacing=1.06)
+        self._text(s, Inches(self.CONTENT_L), Inches(5.74),
+                   Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.44),
+                   "Error is the actual funded balance against the forecast the "
+                   "PRIOR run published, as a percentage of that forecast. Bias "
+                   "is the mean signed error; a negative bias means the forecast "
+                   "was high. No forecast is restated after the fact.",
+                   size=8.5, color=self.theme.ink_500, spacing=1.06)
         self._footer(s)
-        self._record("forecast_evolution", spec.get("title"), "", placeholder=ph)
+        self._record("forecast_evolution", spec.get("title"), strap, placeholder=ph)
 
     def slide_risk(self, spec):
         s = self._slide()

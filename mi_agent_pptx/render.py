@@ -329,6 +329,45 @@ def draw_heatmap(path, x_labels: Sequence[str], y_labels: Sequence[str],
     return _save(fig, path, theme, dpi)
 
 
+def _currency_tick_formatter(ax, series, stack):
+    """A money tick formatter that cannot label two gridlines the same.
+
+    Compact currency rounds to one decimal at millions, so its finest step is
+    0.1MM. A series living between 109.05m and 109.14m therefore labels every
+    gridline "£109.1MM" — four identical labels, which reads as a rendering
+    fault rather than as a flat series.
+
+    The test is the compact notation's own RESOLUTION against the axis range,
+    not an absolute range: where the range spans fewer than about five compact
+    steps, the axis carries more decimal places instead. Anything wider keeps
+    the compact form every other money label in the pack uses.
+    """
+    values = [float(v) for sr in series for v in (sr.get("values") or ())
+              if v is not None]
+    if not values:
+        return lambda v, p: compact_currency(v)
+    if stack:
+        columns = zip(*[[float(v or 0.0) for v in (sr.get("values") or ())]
+                        for sr in series])
+        totals = [sum(col) for col in columns] or [0.0]
+        low, high = 0.0, max(totals)
+    else:
+        low, high = min(values), max(values)
+    span, magnitude = high - low, max(abs(low), abs(high))
+    unit, suffix = ((1e9, "BN") if magnitude >= 1e9 else
+                    (1e6, "MM") if magnitude >= 1e6 else
+                    (1e3, "K") if magnitude >= 1e3 else (1.0, ""))
+    step = unit * (0.01 if suffix == "BN" else 0.1 if suffix == "MM" else 1.0)
+    if span <= 0 or span >= step * 5:
+        return lambda v, p: compact_currency(v)
+    # Enough decimals for five ticks to be distinct at this unit.
+    dp = 2
+    while dp < 6 and span / unit < 5 * (10 ** -dp):
+        dp += 1
+    from mi_agent_api import currency as _cur
+    return lambda v, p: f"{_cur.current_symbol()}{v / unit:,.{dp}f}{suffix}"
+
+
 def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,
@@ -405,7 +444,13 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
             ax.set_ylim(0, top * 1.08 if top else 1.0)
 
     if currency:
-        ax.yaxis.set_major_formatter(FuncFormatter(lambda v, p: compact_currency(v)))
+        # DUPLICATE TICKS. Compact currency rounds to one decimal at millions,
+        # so a series that lives between 109.05m and 109.14m labels every
+        # gridline "£109.1MM" — four identical labels, which reads as a
+        # rendering fault rather than as a flat series. Where the ticks would
+        # collide the axis carries a scaled label and states its unit once.
+        ax.yaxis.set_major_formatter(FuncFormatter(
+            _currency_tick_formatter(ax, series, stack)))
     elif percent:
         # Decimals follow the RANGE, not a constant. A weighted LTV that moves
         # between 45.8% and 47.2% produced five ticks all reading "46%" — an
