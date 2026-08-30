@@ -1,0 +1,1771 @@
+# GENERATED — effective Annex 2 contract. Do not edit; do not commit as
+# a source of truth. Regenerated from the authoritative sources on every
+# run by engine.regime_contract.annex2_contract.
+regime: ESMA_Annex2
+generated_from:
+- config/regime/annex2_field_universe.yaml
+- config/system/fields_registry.yaml
+- DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx
+- config/system/DRAFT1auth.099.001.04_1.3.0.xsd
+- config/system/enum_mapping.yaml
+- config/system/enum_synonyms.yaml
+- config/asset/product_defaults_ERM.yaml
+generated_by: engine.regime_contract.annex2_contract
+note: 'Effective Annex 2 contract, derived from the authoritative sources. Not hand-maintained and not a source of truth:
+  edit the layer that owns the fact instead.'
+field_rules:
+  RREC1:
+    esma_code: RREC1
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: ScrtstnRpt/ScrtstnIdr
+    projected_source_field: collateral_unique_identifier
+    validators:
+      regex: ^(?:[A-Z0-9]{18,18}[0-9]{2,2}[N]{1,1}[0-9]{4,4}[0-9]{2,2})$
+  RREC2:
+    esma_code: RREC2
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: UndrlygXpsrId/NewUndrlygXpsrIdr
+    projected_source_field: underlying_exposure_identifier
+  RREC3:
+    esma_code: RREC3
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: CollIdr/OrgnlIdr
+    projected_source_field: original_collateral_identifier
+  RREC4:
+    esma_code: RREC4
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: CollIdr/NewIdr
+    projected_source_field: new_collateral_identifier
+  RREC5:
+    esma_code: RREC5
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: CmonData/CollTp
+    projected_source_field: collateral_type
+    transform:
+      enum_map:
+        INDV: INDV
+        ITEQ: ITEQ
+        MCHT: MCHT
+        CARX: CARX
+        AERO: AERO
+        CBLD: CBLD
+        CMTR: CMTR
+        ENEQ: ENEQ
+        GUAR: GUAR
+        IBLD: IBLD
+        INDE: INDE
+        MDEQ: MDEQ
+        MIXD: MIXD
+        NACM: NACM
+        NALV: NALV
+        OFEQ: OFEQ
+        OTHR: OTHR
+        OTFA: OTFA
+        OTGI: OTGI
+        OTRE: OTRE
+        OTHV: OTHV
+        OTHE: OTHE
+        RALV: RALV
+        RBLD: RBLD
+        SECU: SECU
+        HOUSE: RBLD
+        DETACHED: RBLD
+        SEMI_DETACHED: RBLD
+        BUNGALOW: RBLD
+        FLAT: RBLD
+        APARTMENT: RBLD
+        MAISONETTE: RBLD
+        MIXED_USE: MIXD
+        COMMERCIAL_RESIDENTIAL: MIXD
+        OFFICE: CBLD
+        RETAIL: CBLD
+        WAREHOUSE: IBLD
+        INDUSTRIAL: IBLD
+        LAND: OTHR
+        AGRICULTURAL: OTHR
+        DEVELOPMENT: OTHR
+        MANUAL: OTHR
+        OTHER: OTHR
+        UNKNOWN: OTHR
+        RESIDENTIAL BUILDING (RBLD): RBLD
+        COMMERCIAL BUILDING (CBLD): CBLD
+        INDUSTRIAL BUILDING (IBLD): IBLD
+        MIXED USE BUILDING (MIXD): MIXD
+        OTHER REAL ESTATE (OTRE): OTRE
+        OTHER (OTHR): OTHR
+        residential property: RBLD
+  RREC6:
+    esma_code: RREC6
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: CmonData/TrtrlUnitClssfctn
+    projected_source_field: geographic_region_collateral
+    validators:
+      regex: ^(?:[A-Z]{2,2}[A-Z0-9]{3,3}|[A-Z]{2,2}[Z]{3,3})$
+  RREC7:
+    esma_code: RREC7
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: Dtls/OccpncyTp
+    projected_source_field: occupancy_type
+    transform:
+      enum_map:
+        HOLD: HOLD
+        TLET: TLET
+        OTHR: OTHR
+        FOWN: FOWN
+        POWN: POWN
+  RREC8:
+    esma_code: RREC8
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: CmonData/LienVal
+    projected_source_field: lien
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 4
+      fraction_digits: 0
+  RREC9:
+    esma_code: RREC9
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: Dtls/PrprtyTp
+    projected_source_field: property_type
+    transform:
+      enum_map:
+        BIZZ: BIZZ
+        PCMM: PCMM
+        RBGL: RBGL
+        RHOS: RHOS
+        RTHS: RTHS
+        RFLT: RFLT
+        OTHR: OTHR
+        MULF: MULF
+        LAND: LAND
+        DETACHED HOUSE: RHOS
+        DETACHED: RHOS
+        HOUSE: RHOS
+        SEMI DETACHED: RHOS
+        SEMI-DETACHED HOUSE: RHOS
+        RESIDENTIAL HOUSE: RHOS
+        FLAT: RFLT
+        APARTMENT: RFLT
+        FLAT / APARTMENT: RFLT
+        RESIDENTIAL FLAT: RFLT
+        BUNGALOW: RBGL
+        COMMERCIAL: PCMM
+        MIXED_USE: PCMM
+        OFFICE: BIZZ
+        RETAIL: BIZZ
+        INDUSTRIAL: BIZZ
+        OTHER: OTHR
+        UNKNOWN: OTHR
+        Semi-detached house: RHOS
+        Detached house: RHOS
+        House: RHOS
+        Flat: RFLT
+        Bungalow: RBGL
+        Office: BIZZ
+        Retail: BIZZ
+        Industrial: BIZZ
+        Mixed_use: PCMM
+        Mixed Use: PCMM
+        Other: OTHR
+  RREC10:
+    esma_code: RREC10
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: Dtls/NrgyPrfrmncCertVal
+    projected_source_field: energy_performance_certificate_value
+    transform:
+      enum_map:
+        EPCA: EPCA
+        EPCB: EPCB
+        EPCC: EPCC
+        EPCD: EPCD
+        EPCE: EPCE
+        EPCF: EPCF
+        EPCG: EPCG
+        OTHR: OTHR
+  RREC11:
+    esma_code: RREC11
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: Dtls/NrgyPrfrmncCertPrvdrNm
+    projected_source_field: energy_performance_certificate_provider_name
+  RREC12:
+    esma_code: RREC12
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: CurInf/LnToVal
+    projected_source_field: current_loan_to_value
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREC13:
+    esma_code: RREC13
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: CurInf/ValtnAmt
+    projected_source_field: current_valuation_amount
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREC14:
+    esma_code: RREC14
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: CurInf/ValtnMtd
+    projected_source_field: current_valuation_method
+    transform:
+      enum_map:
+        AUVM: AUVM
+        DRVB: DRVB
+        FOEI: FOEI
+        FIEI: FIEI
+        IDXD: IDXD
+        MAEA: MAEA
+        OTHR: OTHR
+        DKTP: DKTP
+        TXAT: TXAT
+        Full survey: FIEI
+        automated valuation: AUVM
+  RREC15:
+    esma_code: RREC15
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: CurInf/ValtnDt
+    projected_source_field: current_valuation_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREC16:
+    esma_code: RREC16
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: InfAtOrgtn/LnToVal
+    projected_source_field: original_loan_to_value
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREC17:
+    esma_code: RREC17
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: InfAtOrgtn/ValtnAmt
+    projected_source_field: original_valuation_amount
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREC18:
+    esma_code: RREC18
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: InfAtOrgtn/ValtnMtd
+    projected_source_field: original_valuation_method
+    transform:
+      enum_map:
+        AUVM: AUVM
+        DRVB: DRVB
+        FOEI: FOEI
+        FIEI: FIEI
+        IDXD: IDXD
+        MAEA: MAEA
+        OTHR: OTHR
+        DKTP: DKTP
+        TXAT: TXAT
+        Full survey: FIEI
+        automated valuation: AUVM
+  RREC19:
+    esma_code: RREC19
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: InfAtOrgtn/ValtnDt
+    projected_source_field: original_valuation_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREC20:
+    esma_code: RREC20
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: Nfrcmnt/SaleDt
+    projected_source_field: date_of_sale
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREC21:
+    esma_code: RREC21
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: Nfrcmnt/SalePric
+    projected_source_field: sale_price
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREC22:
+    esma_code: RREC22
+    mandatory: false
+    enforce_presence: false
+    nd_allowed:
+    - ND5
+    projected_source_field: collateral_currency
+  RREC23:
+    esma_code: RREC23
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: Dtls/GuarntrTp
+    projected_source_field: guarantor_type
+    transform:
+      enum_map:
+        BANK: BANK
+        CATN: CATN
+        FGAS: FGAS
+        GOVE: GOVE
+        FAML: FAML
+        IOTH: IOTH
+        INSU: INSU
+        NHGX: NHGX
+        NGUA: NGUA
+        OTHR: OTHR
+  RREL1:
+    esma_code: RREL1
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: ScrtstnRpt/ScrtstnIdr
+    projected_source_field: unique_identifier
+    validators:
+      regex: ^(?:[A-Z0-9]{18,18}[0-9]{2,2}[N]{1,1}[0-9]{4,4}[0-9]{2,2})$
+  RREL2:
+    esma_code: RREL2
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: UndrlygXpsrId/OrgnlUndrlygXpsrIdr
+    projected_source_field: original_underlying_exposure_identifier
+  RREL3:
+    esma_code: RREL3
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: UndrlygXpsrId/NewUndrlygXpsrIdr
+    projected_source_field: new_underlying_exposure_identifier
+  RREL4:
+    esma_code: RREL4
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: UndrlygXpsrId/OrgnlOblgrIdr
+    projected_source_field: original_obligor_identifier
+  RREL5:
+    esma_code: RREL5
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: UndrlygXpsrId/NewOblgrIdr
+    projected_source_field: new_obligor_identifier
+  RREL6:
+    esma_code: RREL6
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: ScrtstnRpt/CutOffDt
+    projected_source_field: data_cut_off_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL7:
+    esma_code: RREL7
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: ActvtyDtDtls/PoolAddtnDt
+    projected_source_field: pool_addition_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL8:
+    esma_code: RREL8
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: ActvtyDtDtls/RpDt
+    projected_source_field: date_of_repurchase
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL9:
+    esma_code: RREL9
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: GnlAttrbts/RedDt
+    projected_source_field: redemption_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL10:
+    esma_code: RREL10
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: OblgrDtls/Resdt
+    projected_source_field: resident
+    transform:
+      boolean: xsd_lowercase_true_false
+  RREL11:
+    esma_code: RREL11
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: TrtrlUnit/Clssfctn
+    projected_source_field: geographic_region_obligor
+    validators:
+      regex: ^(?:[A-Z]{2,2}[A-Z0-9]{3,3}|[A-Z]{2,2}[Z]{3,3})$
+  RREL12:
+    esma_code: RREL12
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: TrtrlUnit/ClssfctnYr
+    projected_source_field: geographic_region_classification
+    validators:
+      regex: ^-?\d{4}$
+  RREL13:
+    esma_code: RREL13
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: AddtlCmonData/MplyntSts
+    projected_source_field: employment_status
+    transform:
+      enum_map:
+        NOEM: NOEM
+        OTHR: OTHR
+        PNNR: PNNR
+        EMRS: EMRS
+        EMBL: EMBL
+        EMUK: EMUK
+        SFEM: SFEM
+        STNT: STNT
+        UNEM: UNEM
+        Retired: PNNR
+        Employed: EMUK
+        Self employed: SFEM
+  RREL14:
+    esma_code: RREL14
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: AddtlCmonData/CdtImprdOblgr
+    projected_source_field: credit_impaired_obligor
+    transform:
+      boolean: xsd_lowercase_true_false
+  RREL15:
+    esma_code: RREL15
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: OblgrDtls/CstmrTp
+    projected_source_field: customer_type
+    transform:
+      enum_map:
+        EEMO: EEMO
+        ENRO: ENRO
+        ENEO: ENEO
+        CEMO: CEMO
+        CNRO: CNRO
+        CNEO: CNEO
+        OTHR: OTHR
+        Joint: CNEO
+        Individual: CNEO
+  RREL16:
+    esma_code: RREL16
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: PmryOblgrIncm/IncmVal
+    projected_source_field: primary_income
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL17:
+    esma_code: RREL17
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: PmryOblgrIncm/Tp
+    projected_source_field: primary_income_type
+    transform:
+      enum_map:
+        CORP: CORP
+        DSPL: DSPL
+        EISS: EISS
+        ENIS: ENIS
+        EITX: EITX
+        GRAN: GRAN
+        NTIN: NTIN
+        NITS: NITS
+        NITX: NITX
+        OTHR: OTHR
+  RREL18:
+    esma_code: RREL18
+    mandatory: false
+    enforce_presence: false
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    projected_source_field: primary_income_currency
+  RREL19:
+    esma_code: RREL19
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: PmryOblgrIncm/Vrfctn
+    projected_source_field: primary_income_verification
+    transform:
+      enum_map:
+        SCRG: SCRG
+        NVRF: NVRF
+        OTHR: OTHR
+        SCRT: SCRT
+        SCNF: SCNF
+        VRFD: VRFD
+  RREL20:
+    esma_code: RREL20
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: ScndryOblgrIncm/IncmVal
+    projected_source_field: secondary_income
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL21:
+    esma_code: RREL21
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: ScndryOblgrIncm/Vrfctn
+    projected_source_field: secondary_income_verification
+    transform:
+      enum_map:
+        SCRG: SCRG
+        NVRF: NVRF
+        OTHR: OTHR
+        SCRT: SCRT
+        SCNF: SCNF
+        VRFD: VRFD
+  RREL22:
+    esma_code: RREL22
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: UndrlygXpsrDtls/SpclSchme
+    projected_source_field: special_scheme
+  RREL23:
+    esma_code: RREL23
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: IssncAndMtrtyDtls/OrgtnDt
+    projected_source_field: origination_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL24:
+    esma_code: RREL24
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: IssncAndMtrtyDtls/MtrtyDt
+    projected_source_field: maturity_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL25:
+    esma_code: RREL25
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: IssncAndMtrtyDtls/OrgnlTerm
+    projected_source_field: original_term
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 4
+      fraction_digits: 0
+    derive:
+      type: months_between_dates
+      start_field: RREL23
+      end_field: RREL24
+  RREL26:
+    esma_code: RREL26
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: UndrlygXpsrDtls/OrgtnChanl
+    projected_source_field: origination_channel
+    transform:
+      enum_map:
+        BROK: BROK
+        DRCT: DRCT
+        WEBI: WEBI
+        BRAN: BRAN
+        OTHR: OTHR
+        TPTC: TPTC
+        TPAC: TPAC
+  RREL27:
+    esma_code: RREL27
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: UndrlygXpsrDtls/Purp
+    projected_source_field: purpose
+    transform:
+      enum_map:
+        BSFN: BSFN
+        CMRT: CMRT
+        CNST: CNST
+        EQRE: EQRE
+        IMRT: IMRT
+        GSPL: GSPL
+        OTHR: OTHR
+        PURC: PURC
+        RMRT: RMRT
+        RMEQ: RMEQ
+        RENV: RENV
+        RGBY: RGBY
+        DCON: DCON
+        ACQUISITION: PURC
+        PURCHASE MAIN RESIDENCE: PURC
+        ACQUISITION_FOR_INVESTMENT: IMRT
+        INVESTMENT: IMRT
+        ACQUISITION_FOR_LIQUIDATION: OTHR
+        REFINANCE: RMRT
+        REFINANCING: RMRT
+        REFI: RMRT
+        CONSTRUCTION: CNST
+        NEW_BUILD: CNST
+        REDEVELOPMENT: RENV
+        DEVELOPMENT: RENV
+        HOME IMPROVEMENT: RENV
+        HOME IMPROVEMENTS: RENV
+        EQUITY RELEASE: EQRE
+        DEBT CONSOLIDATION: DCON
+        OTHER: OTHR
+        UNKNOWN: OTHR
+        Home improvement: RENV
+        Home improvements: RENV
+        Purchase of main residence: PURC
+        Refinance: RMRT
+        Refi: RMRT
+        Equity Release: EQRE
+        Other: OTHR
+        Business finance: BSFN
+  RREL28:
+    esma_code: RREL28
+    mandatory: false
+    enforce_presence: false
+    nd_allowed: []
+    projected_source_field: exposure_currency_denomination
+  RREL29:
+    esma_code: RREL29
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: BalDtls/OrgnlPrncplBal
+    projected_source_field: original_principal_balance
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL30:
+    esma_code: RREL30
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: BalDtls/CurPrncplBal
+    projected_source_field: current_principal_balance
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL31:
+    esma_code: RREL31
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: BalDtls/PrrPrncplBal
+    projected_source_field: prior_principal_balances
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL32:
+    esma_code: RREL32
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: BalDtls/PrpssUndrlygXpsr
+    projected_source_field: pari_passu_underlying_exposures
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL33:
+    esma_code: RREL33
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: BalDtls/TtlCdtLmt
+    projected_source_field: total_credit_limit
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL34:
+    esma_code: RREL34
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: BalDtls/PurchsPric
+    projected_source_field: purchase_price
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL35:
+    esma_code: RREL35
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: RpmtDtls/AmtstnTp
+    projected_source_field: amortisation_type
+    transform:
+      enum_map:
+        BLLT: BLLT
+        FIXE: FIXE
+        FRXX: FRXX
+        DEXX: DEXX
+        OTHR: OTHR
+        ANNUITY: FRXX
+        FRENCH: FRXX
+        FRENCH AMORTISATION: FRXX
+        CAPITAL_REPAYMENT: FRXX
+        CONSTANT_INSTALLMENT: FRXX
+        LEVEL_PAYMENT: FRXX
+        STANDARD: FRXX
+        GERMAN: DEXX
+        TILGUNG: DEXX
+        TILGUNGSDARLEHEN: DEXX
+        INTEREST_THEN_LEVEL: DEXX
+        FIXED: FIXE
+        FIXED_AMORTISATION: FIXE
+        CONSTANT_PRINCIPAL: FIXE
+        LINEAR: FIXE
+        BULLET: BLLT
+        INTEREST_ONLY_BULLET: BLLT
+        IO_BULLET: BLLT
+        FULL_REPAY_AT_MATURITY: BLLT
+        REDEMPTION_AT_MATURITY: BLLT
+        PART_AND_PART: OTHR
+        MIXED: OTHR
+        HYBRID: OTHR
+        OTHER: OTHR
+        UNKNOWN: OTHR
+        N_A: OTHR
+        Interest roll-up: OTHR
+        Bullet: OTHR
+  RREL36:
+    esma_code: RREL36
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/GracePrdEndDt
+    projected_source_field: principal_grace_period_end_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL37:
+    esma_code: RREL37
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/SchdldPmtFrqcy
+    projected_source_field: scheduled_principal_payment_frequency
+    transform:
+      enum_map:
+        MNTH: MNTH
+        QUTR: QUTR
+        SEMI: SEMI
+        YEAR: YEAR
+        OTHR: OTHR
+  RREL38:
+    esma_code: RREL38
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/IntrstPmtFrqcy
+    projected_source_field: scheduled_interest_payment_frequency
+    transform:
+      enum_map:
+        MNTH: MNTH
+        QUTR: QUTR
+        SEMI: SEMI
+        YEAR: YEAR
+        OTHR: OTHR
+  RREL39:
+    esma_code: RREL39
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: PmtDtls/PmtDue
+    projected_source_field: payment_due
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL40:
+    esma_code: RREL40
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: RskDtls/DebtToIncm
+    projected_source_field: debt_to_income_ratio
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL41:
+    esma_code: RREL41
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: RpmtDtls/BllnAmt
+    projected_source_field: balloon_amount
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL42:
+    esma_code: RREL42
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: IntrstRateDtls/Tp
+    projected_source_field: interest_rate_type
+    transform:
+      enum_map:
+        DISC: DISC
+        FXRL: FXRL
+        FLCF: FLCF
+        FXPR: FXPR
+        FINX: FINX
+        FLIF: FLIF
+        CAPP: CAPP
+        FLFL: FLFL
+        FLCA: FLCA
+        MODE: MODE
+        OBLS: OBLS
+        OTHR: OTHR
+        SWIC: SWIC
+        FIXED: FXRL
+        FIXED RATE: FXRL
+        FIX: FXRL
+        VARIABLE: FLIF
+        VARIABLE RATE: FLIF
+        FLOATING: FLIF
+        VAR: FLIF
+        LIBOR: FLIF
+        EURIBOR: FLIF
+        BASE_RATE: FLIF
+        TEASER: DISC
+        INTRODUCTORY: DISC
+        DISCOUNTED: DISC
+        MIXED: OTHR
+        UNKNOWN: OTHR
+        OTHER: OTHR
+        Fixed: FXRL
+        Variable: FLIF
+  RREL43:
+    esma_code: RREL43
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/CurRate
+    projected_source_field: current_interest_rate
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL44:
+    esma_code: RREL44
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/CurIndx
+    projected_source_field: current_interest_rate_index
+    transform:
+      enum_map:
+        ECBR: ECBR
+        EUCH: EUCH
+        FUSW: FUSW
+        GCFR: GCFR
+        ISDA: ISDA
+        JIBA: JIBA
+        LDOR: LDOR
+        LIBI: LIBI
+        LIBO: LIBO
+        MOSP: MOSP
+        MAAA: MAAA
+        OTHR: OTHR
+        NIBO: NIBO
+        PFAN: PFAN
+        PRBO: PRBO
+        STBO: STBO
+        SWAP: SWAP
+        TLBO: TLBO
+        TREA: TREA
+        WIBO: WIBO
+        TIBO: TIBO
+        BOER: BOER
+        BBSW: BBSW
+        BUBO: BUBO
+        CDOR: CDOR
+        CIBO: CIBO
+        EONA: EONA
+        EONS: EONS
+        EURI: EURI
+        EUUS: EUUS
+  RREL45:
+    esma_code: RREL45
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/CurTnor
+    projected_source_field: current_interest_rate_index_tenor
+    transform:
+      enum_map:
+        DAIL: DAIL
+        INDA: INDA
+        MNTH: MNTH
+        YEAR: YEAR
+        TOMN: TOMN
+        QUTR: QUTR
+        SEMI: SEMI
+        ONDE: ONDE
+        OVNG: OVNG
+        WEEK: WEEK
+        TOWK: TOWK
+        OTHR: OTHR
+        FOMN: FOMN
+  RREL46:
+    esma_code: RREL46
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: IntrstRateDtls/CurIntrstRateMrgn
+    projected_source_field: current_interest_rate_margin
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL47:
+    esma_code: RREL47
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: AddtlCmonData/RstIntrvl
+    projected_source_field: interest_rate_reset_interval
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 4
+      fraction_digits: 0
+  RREL48:
+    esma_code: RREL48
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: AddtlCmonData/Cap
+    projected_source_field: interest_rate_cap
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL49:
+    esma_code: RREL49
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: AddtlCmonData/Flr
+    projected_source_field: interest_rate_floor
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL50:
+    esma_code: RREL50
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: FrstRvsnData/Mrgn
+    projected_source_field: revision_margin_1
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL51:
+    esma_code: RREL51
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: FrstRvsnData/IntrstRvsnDt
+    projected_source_field: interest_revision_date_1
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL52:
+    esma_code: RREL52
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: ScndRvsnData/Mrgn
+    projected_source_field: revision_margin_2
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL53:
+    esma_code: RREL53
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: ScndRvsnData/IntrstRvsnDt
+    projected_source_field: interest_revision_date_2
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL54:
+    esma_code: RREL54
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: ThrdRvsnData/Mrgn
+    projected_source_field: revision_margin_3
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL55:
+    esma_code: RREL55
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: ThrdRvsnData/IntrstRvsnDt
+    projected_source_field: interest_revision_date_3
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL56:
+    esma_code: RREL56
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: IntrstRateDtls/RvisdIntrstRateIndx
+    projected_source_field: revised_interest_rate_index
+    transform:
+      enum_map:
+        ECBR: ECBR
+        EUCH: EUCH
+        FUSW: FUSW
+        GCFR: GCFR
+        ISDA: ISDA
+        JIBA: JIBA
+        LDOR: LDOR
+        LIBI: LIBI
+        LIBO: LIBO
+        MOSP: MOSP
+        MAAA: MAAA
+        OTHR: OTHR
+        NIBO: NIBO
+        PFAN: PFAN
+        PRBO: PRBO
+        STBO: STBO
+        SWAP: SWAP
+        TLBO: TLBO
+        TREA: TREA
+        WIBO: WIBO
+        TIBO: TIBO
+        BOER: BOER
+        BBSW: BBSW
+        BUBO: BUBO
+        CDOR: CDOR
+        CIBO: CIBO
+        EONA: EONA
+        EONS: EONS
+        EURI: EURI
+        EUUS: EUUS
+  RREL57:
+    esma_code: RREL57
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: IntrstRateDtls/RvisdIntrstRateIndxTnor
+    projected_source_field: revised_interest_rate_index_tenor
+    transform:
+      enum_map:
+        DAIL: DAIL
+        INDA: INDA
+        MNTH: MNTH
+        YEAR: YEAR
+        TOMN: TOMN
+        QUTR: QUTR
+        SEMI: SEMI
+        ONDE: ONDE
+        OVNG: OVNG
+        WEEK: WEEK
+        TOWK: TOWK
+        OTHR: OTHR
+        FOMN: FOMN
+  RREL58:
+    esma_code: RREL58
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    workbook_semantic: PmtDtls/NbOfPmtsBfrScrtstn
+    projected_source_field: number_of_payments_before_securitisation
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 4
+      fraction_digits: 0
+  RREL59:
+    esma_code: RREL59
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: PrepmtCmonData/AllwdPerYr
+    projected_source_field: percentage_of_prepayments_allowed_per_year
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 11
+      fraction_digits: 10
+  RREL60:
+    esma_code: RREL60
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: PrepmtDtls/LckOutEndDt
+    projected_source_field: prepayment_lock_out_end_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL61:
+    esma_code: RREL61
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: PrepmtCmonData/Fee
+    projected_source_field: prepayment_fee
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL62:
+    esma_code: RREL62
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: PrepmtCmonData/FeeEndDt
+    projected_source_field: prepayment_fee_end_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL63:
+    esma_code: RREL63
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: PrepmtCmonData/LatstDt
+    projected_source_field: prepayment_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL64:
+    esma_code: RREL64
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: PrepmtCmonData/CmltvAmt
+    projected_source_field: cumulative_prepayments
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL65:
+    esma_code: RREL65
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: GnlAttrbts/RstrgDt
+    projected_source_field: date_of_restructuring
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL66:
+    esma_code: RREL66
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: ArrearsDtls/DtLastInArrears
+    projected_source_field: date_last_in_arrears
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL67:
+    esma_code: RREL67
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: ArrearsBal/Amt
+    projected_source_field: arrears_balance
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL68:
+    esma_code: RREL68
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: ArrearsDtls/NbOfDaysInArrears
+    projected_source_field: number_of_days_in_arrears
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 4
+      fraction_digits: 0
+  RREL69:
+    esma_code: RREL69
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: GnlAttrbts/AcctSts
+    projected_source_field: account_status
+    transform:
+      enum_map:
+        ARRE: ARRE
+        DFLT: DFLT
+        DTCR: DTCR
+        DADB: DADB
+        NDFT: NDFT
+        OTHR: OTHR
+        PERF: PERF
+        RDMD: RDMD
+        REBR: REBR
+        REDF: REDF
+        REOT: REOT
+        RERE: RERE
+        RESS: RESS
+        RARR: RARR
+        RNAR: RNAR
+        In possession: OTHR
+        Live: PERF
+        Moved to LTC: OTHR
+        Probate - awaiting sale: OTHR
+        Redeemed: RDMD
+  RREL70:
+    esma_code: RREL70
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: CmonData/DfltOrFrclsrRsn
+    projected_source_field: reason_for_default_or_foreclosure
+    transform:
+      enum_map:
+        PDXX: PDXX
+        UPXX: UPXX
+        UPPD: UPPD
+  RREL71:
+    esma_code: RREL71
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/GrssDflt
+    projected_source_field: default_amount
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL72:
+    esma_code: RREL72
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: CmonData/DtOfDflt
+    projected_source_field: default_date
+    validators:
+      regex: ^\d{4}-\d{2}-\d{2}$
+  RREL73:
+    esma_code: RREL73
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: RcvrsData/AllctdLoss
+    projected_source_field: allocated_losses
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL74:
+    esma_code: RREL74
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: RcvrsData/CmltvRcvrs
+    projected_source_field: cumulative_recoveries
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL75:
+    esma_code: RREL75
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: DfltDtls/Ltgtn
+    projected_source_field: litigation
+    transform:
+      boolean: xsd_lowercase_true_false
+  RREL76:
+    esma_code: RREL76
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: RskDtls/Rcrs
+    projected_source_field: recourse
+    transform:
+      boolean: xsd_lowercase_true_false
+  RREL77:
+    esma_code: RREL77
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND5
+    workbook_semantic: RskDtls/Dpst
+    projected_source_field: deposit_amount
+    validators:
+      regex: ^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$
+    precision:
+      total_digits: 18
+      fraction_digits: 5
+  RREL78:
+    esma_code: RREL78
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: RskDtls/InsrncOrInvstmtPrvdr
+    projected_source_field: insurance_or_investment_provider
+  RREL79:
+    esma_code: RREL79
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: OrgnlLndr/Nm
+    projected_source_field: original_lender_name
+  RREL80:
+    esma_code: RREL80
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: OrgnlLndr/LEICd
+    projected_source_field: original_lender_legal_entity_identifier
+    validators:
+      regex: ^(?:[A-Z0-9]{18,18}[0-9]{2,2})$
+  RREL81:
+    esma_code: RREL81
+    mandatory: true
+    enforce_presence: true
+    nd_allowed:
+    - ND1
+    - ND2
+    - ND3
+    - ND4
+    - ND5
+    workbook_semantic: OrgnlLndr/CtryOfDmcl
+    projected_source_field: original_lender_establishment_country
+    validators:
+      regex: ^(?:[A-Z]{2,2})$
+  RREL82:
+    esma_code: RREL82
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: Orgtr/Nm
+    projected_source_field: originator_name
+  RREL83:
+    esma_code: RREL83
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: Orgtr/LEI
+    projected_source_field: originator_legal_entity_identifier
+    validators:
+      regex: ^(?:[A-Z0-9]{18,18}[0-9]{2,2})$
+  RREL84:
+    esma_code: RREL84
+    mandatory: true
+    enforce_presence: true
+    nd_allowed: []
+    workbook_semantic: Orgtr/CtryOfDmcl
+    projected_source_field: originator_establishment_country
+    validators:
+      regex: ^(?:[A-Z]{2,2})$

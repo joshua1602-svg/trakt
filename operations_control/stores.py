@@ -105,6 +105,19 @@ class OpsLayout:
     def decisions_prefix(self, client_id: str) -> str:
         return self._c(client_id, "decisions")
 
+    # -- approved onboarding decisions -------------------------------------- #
+    def approved_decisions_uri(self, client_id: str, portfolio_id: str,
+                               dataset: str, filename: str) -> str:
+        """Durable home for the approved mapping contract of ONE source.
+
+        Scoped by client + portfolio + dataset because that is the granularity
+        at which a schema is stable: next month's file for the same source
+        answers to the same decisions, and no other client's or portfolio's
+        source can ever read it.
+        """
+        return self._c(client_id, "approved-decisions",
+                       portfolio_id or "_", dataset or "funded", filename)
+
     # -- rules -------------------------------------------------------------- #
     def _rules_base(self, client_id: Optional[str]) -> str:
         return self._c(client_id or GLOBAL_SCOPE_DIR, "rules")

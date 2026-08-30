@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from operations_control.engine import OpsError
+from operations_control.contracts import KIND_FILE_ROLE
 
 from .conftest import (
     OP_A,
@@ -123,8 +124,34 @@ class TestBatchLifecycle:
                                            batch_id=batch["batch_id"],
                                            source_path=str(f),
                                            received_by="a")
-        assert batch["status"] == "incomplete"
         assert "loan_extract" in batch["missing_input_roles"]
+        # It asks rather than waiting. A file whose role was invented from its
+        # own filename satisfies nothing, so leaving the pack merely
+        # "incomplete" left the operator with no way to say what the file is —
+        # which is where a new lender's differently-named tape used to stop.
+        assert batch["status"] == "review_required"
+        [d] = [d for d in store.open_decisions("client_a")
+               if d["kind"] == KIND_FILE_ROLE]
+        assert "mystery.csv" in d["question"]
+        assert {o["value"] for o in d["options"]} >= {"loan_extract"}
+
+    def test_naming_the_unknown_file_completes_the_pack(
+            self, store, source_registry, tmp_path):
+        """The operator's answer is what the pack was waiting for."""
+        engine = _mk(store, source_registry, tmp_path)
+        batch = _batch(engine)
+        f = _tape(tmp_path / "in", name="mystery.csv", body="a,b\n1,2\n")
+        batch = engine.register_batch_file(client_id="client_a",
+                                           batch_id=batch["batch_id"],
+                                           source_path=str(f),
+                                           received_by="a")
+        [d] = [d for d in store.open_decisions("client_a")
+               if d["kind"] == KIND_FILE_ROLE]
+        engine.resolve_decision(client_id="client_a", decision_id=d["decision_id"],
+                                action="approve", actor="Ops",
+                                value="loan_extract", scope="file")
+        batch = engine.intake.load_batch("client_a", batch["batch_id"])
+        assert batch["missing_input_roles"] == []
 
 
 class TestAmbiguityAndOverride:

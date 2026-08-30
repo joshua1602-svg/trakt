@@ -1,0 +1,1968 @@
+<title>Two Lenders Through One Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,600;1,6..72,400&family=Public+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --ground:#FAF8F5; --panel:#FFFFFF; --ink:#16191C; --ink-soft:#4A5157;
+  --ink-faint:#7C848B; --rule:#E2DED7; --rule-soft:#EFEBE4;
+  --accent:#0E5A61; --accent-soft:#E3EFEF; --accent-ink:#0A4046;
+  --good:#2E6B45; --good-bg:#E6F0E8; --warn:#8F5C10; --warn-bg:#F7EDDC;
+  --bad:#9E2F2A; --bad-bg:#F6E4E2; --neutral-bg:#EDEAE4;
+  --shadow:0 1px 2px rgba(20,25,28,.05), 0 8px 24px -16px rgba(20,25,28,.25);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#111417; --panel:#171B1F; --ink:#EDEAE4; --ink-soft:#B3BAC0;
+    --ink-faint:#7E868D; --rule:#2A3036; --rule-soft:#21262B;
+    --accent:#5FB6BC; --accent-soft:#152C2E; --accent-ink:#8FD0D4;
+    --good:#7FBF95; --good-bg:#152520; --warn:#D9A253; --warn-bg:#2A2114;
+    --bad:#E08D86; --bad-bg:#2B1917; --neutral-bg:#22272C;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 28px -18px rgba(0,0,0,.8);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#111417; --panel:#171B1F; --ink:#EDEAE4; --ink-soft:#B3BAC0;
+  --ink-faint:#7E868D; --rule:#2A3036; --rule-soft:#21262B;
+  --accent:#5FB6BC; --accent-soft:#152C2E; --accent-ink:#8FD0D4;
+  --good:#7FBF95; --good-bg:#152520; --warn:#D9A253; --warn-bg:#2A2114;
+  --bad:#E08D86; --bad-bg:#2B1917; --neutral-bg:#22272C;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 28px -18px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+body{
+  background:var(--ground); color:var(--ink);
+  font-family:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.62; margin:0;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1120px; margin:0 auto; padding:0 28px 96px}
+.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:.86em; letter-spacing:-.01em}
+code{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:.86em;
+  background:var(--rule-soft); padding:.1em .34em; border-radius:3px}
+
+/* ---------- masthead ---------- */
+header.mast{border-bottom:2px solid var(--ink); margin:0 0 8px; padding:56px 0 20px}
+.eyebrow{font-size:12px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); font-weight:700; margin:0 0 18px}
+h1{font-family:"Newsreader",Georgia,serif; font-weight:400; font-size:clamp(38px,6vw,64px);
+  line-height:1.02; letter-spacing:-.02em; margin:0 0 18px; text-wrap:balance; max-width:16ch}
+.standfirst{font-family:"Newsreader",Georgia,serif; font-size:clamp(18px,2.2vw,22px);
+  line-height:1.5; color:var(--ink-soft); max-width:62ch; margin:0 0 26px}
+.meta{display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 34px;
+  font-size:13px; color:var(--ink-faint); padding:0 0 4px}
+.meta b{color:var(--ink); font-weight:500}
+.meta .save{margin-left:auto}
+
+/* A quiet control, not a call to action: this is a document, and saving it is
+   a convenience beside its provenance line rather than the point of the page. */
+.savebtn{font:inherit; font-size:13px; color:var(--accent); background:none;
+  border:0; border-bottom:1px solid transparent; padding:0 0 1px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:7px}
+.savebtn:hover:not(:disabled){border-bottom-color:var(--accent)}
+.savebtn:focus-visible{outline:2px solid var(--accent); outline-offset:3px;
+  border-radius:2px}
+.savebtn:disabled{color:var(--ink-faint); cursor:default}
+.savebtn svg{width:13px; height:13px; flex:none}
+.savenote{font-size:13px; color:var(--ink-faint)}
+@media (prefers-reduced-motion:no-preference){
+  .savebtn{transition:border-color .15s ease, color .15s ease}
+}
+
+/* ---------- verdict ---------- */
+.verdict{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  gap:1px; background:var(--rule); border:1px solid var(--rule);
+  margin:34px 0 0; border-radius:8px; overflow:hidden}
+.vcell{background:var(--panel); padding:20px 22px}
+.vcell .n{font-family:"Newsreader",Georgia,serif; font-size:40px; line-height:1;
+  letter-spacing:-.02em; display:block; margin:0 0 6px}
+.vcell .l{font-size:12.5px; color:var(--ink-faint); line-height:1.45}
+.vcell.good .n{color:var(--good)} .vcell.bad .n{color:var(--bad)}
+.vcell.warn .n{color:var(--warn)} .vcell.acc .n{color:var(--accent)}
+
+/* ---------- sections ---------- */
+section{padding:56px 0 0; border-top:1px solid var(--rule-soft); margin-top:52px}
+section:first-of-type{border-top:none}
+.shead{display:flex; align-items:baseline; gap:16px; margin:0 0 6px}
+.sletter{font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:500;
+  color:var(--accent); border:1px solid var(--accent); border-radius:4px;
+  padding:2px 8px; flex:none}
+h2{font-family:"Newsreader",Georgia,serif; font-weight:400; font-size:clamp(25px,3.4vw,34px);
+  line-height:1.15; letter-spacing:-.015em; margin:0; text-wrap:balance}
+h3{font-size:15px; font-weight:700; letter-spacing:.01em; margin:34px 0 10px}
+h4{font-size:12px; letter-spacing:.13em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:700; margin:30px 0 10px}
+p{margin:0 0 15px; max-width:70ch}
+.lede{font-family:"Newsreader",Georgia,serif; font-size:19px; line-height:1.55;
+  color:var(--ink-soft); max-width:64ch; margin:14px 0 26px}
+ul,ol{margin:0 0 16px; padding-left:1.15em; max-width:70ch}
+li{margin:0 0 7px}
+ul.plain{list-style:none; padding:0}
+ul.plain li{padding-left:1.3em; position:relative}
+ul.plain li::before{content:"—"; position:absolute; left:0; color:var(--accent)}
+strong{font-weight:700}
+.footnote{font-size:13.5px; color:var(--ink-faint); max-width:74ch}
+
+/* ---------- chips ---------- */
+.chip{display:inline-block; font-size:11px; font-weight:700; letter-spacing:.07em;
+  text-transform:uppercase; padding:3px 9px; border-radius:999px; white-space:nowrap;
+  vertical-align:middle}
+.c-yes{background:var(--good-bg); color:var(--good)}
+.c-no{background:var(--bad-bg); color:var(--bad)}
+.c-part{background:var(--warn-bg); color:var(--warn)}
+.c-hist{background:var(--neutral-bg); color:var(--ink-faint);
+  border:1px dashed var(--rule)}
+.c-neu{background:var(--neutral-bg); color:var(--ink-soft)}
+
+/* ---------- tables ---------- */
+.tw{overflow-x:auto; margin:0 0 22px; border:1px solid var(--rule);
+  border-radius:8px; background:var(--panel); box-shadow:var(--shadow)}
+table{border-collapse:collapse; width:100%; font-size:14px}
+th{text-align:left; font-size:11px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:700; padding:12px 16px;
+  border-bottom:1px solid var(--rule); white-space:nowrap; background:var(--panel)}
+td{padding:12px 16px; border-bottom:1px solid var(--rule-soft);
+  vertical-align:top; line-height:1.5}
+tr:last-child td{border-bottom:none}
+td.num{font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap}
+th.num{text-align:right}
+
+/* ---------- flow ---------- */
+.flow{display:flex; flex-direction:column; gap:0; margin:8px 0 24px}
+.fstep{display:grid; grid-template-columns:34px 1fr; gap:0 16px; position:relative;
+  padding:0 0 20px}
+.fstep::before{content:""; position:absolute; left:16px; top:26px; bottom:0;
+  width:1px; background:var(--rule)}
+.fstep:last-child::before{display:none}
+.fdot{width:33px; height:26px; display:flex; align-items:center; justify-content:center;
+  font-family:"IBM Plex Mono",monospace; font-size:11px; font-weight:500;
+  border:1px solid var(--rule); border-radius:5px; background:var(--panel);
+  color:var(--ink-faint); z-index:1}
+.fstep.gate .fdot{border-color:var(--accent); color:var(--accent);
+  background:var(--accent-soft)}
+.fstep.human .fdot{border-color:var(--warn); color:var(--warn); background:var(--warn-bg)}
+.fbody{padding-top:2px}
+.fbody b{display:block; font-size:14.5px; margin:0 0 2px}
+.fbody span{display:block; font-size:13.5px; color:var(--ink-soft); max-width:66ch}
+.fbody .mono{font-size:12px; color:var(--ink-faint); display:block; margin-top:3px}
+.fork{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:18px;
+  margin:6px 0 24px}
+.forkcard{border:1px solid var(--rule); border-radius:8px; background:var(--panel);
+  padding:18px 20px; box-shadow:var(--shadow)}
+.forkcard h5{margin:0 0 4px; font-size:14.5px}
+.forkcard p{font-size:13.5px; color:var(--ink-soft); margin:0 0 10px}
+
+/* ---------- evidence ---------- */
+.ev{background:var(--panel); border:1px solid var(--rule); border-left:3px solid var(--accent);
+  border-radius:0 6px 6px 0; padding:15px 18px; margin:0 0 22px;
+  font-family:"IBM Plex Mono",monospace; font-size:12.5px; line-height:1.75;
+  overflow-x:auto; white-space:pre; color:var(--ink-soft)}
+.ev b{color:var(--ink); font-weight:500}
+.callout{border:1px solid var(--rule); border-radius:8px; padding:18px 22px;
+  margin:0 0 24px; background:var(--panel); box-shadow:var(--shadow)}
+.callout.bad{border-left:3px solid var(--bad)}
+.callout.good{border-left:3px solid var(--good)}
+.callout.warn{border-left:3px solid var(--warn)}
+.callout p:last-child{margin-bottom:0}
+.callout h4{margin-top:0}
+.cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:0 44px}
+
+/* ---------- historical marking ----------
+   Chronology is evidence. Where a section records a state that later work
+   changed, the section keeps what it said and carries a band saying so, rather
+   than being quietly rewritten into agreement with the ending. */
+.timenote{border:1px solid var(--warn); border-left:4px solid var(--warn);
+  background:var(--warn-bg); border-radius:8px; padding:14px 18px; margin:0 0 22px}
+.timenote h4{margin:0 0 6px; font-size:13px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--warn)}
+.timenote p{margin:0; font-size:14.5px; color:var(--ink-soft)}
+.timenote p + p{margin-top:8px}
+.reading{border:1px solid var(--rule); border-left:4px solid var(--accent);
+  background:var(--panel); border-radius:8px; padding:18px 22px; margin:26px 0 0;
+  box-shadow:var(--shadow)}
+.reading h4{margin:0 0 7px; font-size:13px; letter-spacing:.08em;
+  text-transform:uppercase; color:var(--accent)}
+.reading p{margin:0; font-size:15px; color:var(--ink-soft); max-width:80ch}
+.was{display:block; font-size:12.5px; color:var(--ink-faint); margin-top:4px}
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Trakt · Go-live sprint · Final report</p>
+  <h1>Two lenders through one pipeline</h1>
+  <p class="standfirst">
+    Two synthetic equity release lenders were onboarded from nothing, sent raw files to
+    blob storage, and processed through the production route. One reached governed
+    management information across three consecutive months. The other reached management
+    information <em>and</em> a schema-valid ESMA Annex 2 return — but only after the thing
+    that had been stopping it turned out not to be seven missing rules, which is the part
+    worth reading carefully.
+  </p>
+  <div class="meta">
+    <span>Branch <b class="mono">claude/trakt-pre-go-live-audit-gnpv65</b></span>
+    <span>Base <b class="mono">fce4bd7</b></span>
+    <span>Scope <b>equity release, GBP, monthly</b></span>
+    <span class="save" id="save-slot" hidden>
+      <button type="button" class="savebtn" id="save-btn">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 1.75v8.5M4.75 7 8 10.25 11.25 7M2 12.5v1.75h12V12.5"/>
+        </svg>Save this report
+      </button>
+    </span>
+  </div>
+</header>
+
+<div class="verdict">
+  <div class="vcell good"><span class="n">14</span><span class="l">of 14 acceptance
+    questions answered YES, including the one that had to be NO</span></div>
+  <div class="vcell good"><span class="n">PASS</span><span class="l">Client B's Annex 2 return
+    reaches XML and passes XSD validation, both reporting periods</span></div>
+  <div class="vcell acc"><span class="n">3</span><span class="l">months of Client A
+    processed with zero questions after the first</span></div>
+  <div class="vcell good"><span class="n">0</span><span class="l">changes to MI Query
+    Agent behaviour — 332 of its tests pass unchanged</span></div>
+</div>
+
+<div class="reading">
+  <h4>How to read this report</h4>
+  <p>It is written in the order the work happened, so several sections record a blocker as
+  it stood at that point in the sprint. <strong>Sections describing intermediate blockers
+  record the state at that point in the sprint. Section O and the final fourteen-question
+  table are the authoritative current state.</strong> Every section whose status was later
+  overtaken carries a band saying so and pointing forward; nothing that was true has been
+  rewritten to look as though it never was.</p>
+</div>
+
+<!-- ================================================= A ==================== -->
+<section id="flow">
+  <div class="shead"><span class="sletter">A</span><h2>The production flow, as it now runs</h2></div>
+  <p class="lede">
+    Every step below is code that executed during the rehearsals. Nothing here is a design
+    intention.
+  </p>
+
+  <div class="flow">
+    <div class="fstep"><span class="fdot">1</span><div class="fbody">
+      <b>A raw file lands at the governed blob prefix</b>
+      <span>The lender writes to
+        <code>{client}/{book}/{dataset}/{frequency}/{portfolio}/{period}/{file}</code>.
+        A path that does not parse is refused, not guessed at.</span>
+      <span class="mono">apps/blob_trigger_app/path_parser.py</span></div></div>
+
+    <div class="fstep"><span class="fdot">2</span><div class="fbody">
+      <b>Event Grid wakes the trigger, which hands the file to OCC</b>
+      <span>The trigger's whole job is to register the arrival. It decides nothing.</span>
+      <span class="mono">function_app.py → apps/blob_trigger_app/occ_intake.py</span></div></div>
+
+    <div class="fstep"><span class="fdot">3</span><div class="fbody">
+      <b>OCC identifies the client and refuses one it does not govern</b>
+      <span>A delivery for a client with no activated configuration is blocked here. It
+        used to inherit the repository's default client file — another lender's LEI and
+        originator identity — and process as though it were governed.</span>
+      <span class="mono">OpsEngine._client_is_activated</span></div></div>
+
+    <div class="fstep"><span class="fdot">4</span><div class="fbody">
+      <b>The workflow is chosen from approved configuration</b>
+      <span><code>regime_required</code> on the source record decides MI versus
+        MI&nbsp;+&nbsp;Annex&nbsp;2. Only the funded book is ever in scope. No model is
+        consulted.</span>
+      <span class="mono">occ_intake.outcome_for_source</span></div></div>
+
+    <div class="fstep human"><span class="fdot">?</span><div class="fbody">
+      <b>If a file cannot be identified, Trakt asks what it is</b>
+      <span>A lender's tape is called whatever the lender calls it. Client B's was
+        <code>PolicyExtract.csv</code>; one answer, once, and the pack completed.</span></div></div>
+
+    <div class="fstep gate"><span class="fdot">G1</span><div class="fbody">
+      <b>Gate 1 — Onboarding Agent</b>
+      <span>Deterministic mapping against the registry and alias libraries, a target
+        coverage matrix, and its own verdict on whether the package is finished.</span></div></div>
+
+    <div class="fstep human"><span class="fdot">✋</span><div class="fbody">
+      <b>OCC Review Centre — the operator answers what Gate 1 could not</b>
+      <span>Accept, change, point it at a named column, mark not applicable, or defer.
+        The queue and its counts are Gate 1's own; OCC forms no second opinion about
+        mapping success.</span></div></div>
+
+    <div class="fstep"><span class="fdot">↺</span><div class="fbody">
+      <b>Approved decisions persist and Gate 1 runs again deterministically</b>
+      <span>Scoped by client and portfolio, versioned, and stored as the source's standing
+        mapping contract — which is what makes month two silent.</span></div></div>
+
+    <div class="fstep gate"><span class="fdot">G2</span><div class="fbody">
+      <b>Gate 2 — Transformation Agent</b>
+      <span>Refuses a package Gate 1 has not declared ready. That contract already
+        existed; what changed is that MI runs now reach it.</span></div></div>
+
+    <div class="fstep gate"><span class="fdot">G3</span><div class="fbody">
+      <b>Gate 3 — Validation Agent</b>
+      <span>Enforces the canonical core-field contract. Nothing publishes without
+        passing here.</span></div></div>
+  </div>
+
+  <p><strong>Then it forks.</strong> Both branches consume the same validated canonical
+    and the same pinned effective configuration.</p>
+
+  <div class="fork">
+    <div class="forkcard">
+      <h5>Management information</h5>
+      <p>Platform canonical → operator publication approval → client-scoped processed
+        path → dashboard and MI Query Agent.</p>
+      <span class="chip c-yes">Proven for both lenders</span>
+    </div>
+    <div class="forkcard">
+      <h5>Regime — only where <span class="mono">regime_required</span></h5>
+      <p>Gate 4 Projection → Annex delivery → XML → XSD → regulatory publication. Runs
+        after assembly, on the same canonical, as a separate governed chain.</p>
+      <span class="chip c-yes">Proven end to end — XML written, XSD passed</span>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <h4>The rule that now separates them</h4>
+    <p>A regulatory failure withholds the regulatory artefact and nothing else. A dwelling
+    type the regulator has no code for does not make the lender's balances wrong, so the
+    management report is still offered for approval and the published record carries no
+    XML reference. The reverse cannot happen: the delivery chain only runs after Gate 3
+    passed, so nothing can publish a canonical validation refused.</p>
+  </div>
+</section>
+
+<!-- ================================================= B ==================== -->
+<section id="clienta">
+  <div class="shead"><span class="sletter">B</span><h2>Client A — three months, one conversation</h2></div>
+  <p class="lede">
+    A new equity release lender whose core system writes terse codes: <span class="mono">ACCT_REF</span>,
+    <span class="mono">BAL_OS</span>, <span class="mono">STATUS_CD</span>. Nothing about it is in any
+    alias library.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Month</th><th>What happened</th><th>Questions asked</th><th>Outcome</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">2025-11-30</td>
+        <td>First contact. Gate 1 mapped what it could and declared the package not ready.
+            Gate 2 refused it. The operator answered the queue: 12 columns named, 3 static
+            values set, the rest marked not applicable.</td>
+        <td class="num">41</td>
+        <td><span class="chip c-yes">Published</span></td></tr>
+      <tr><td class="mono">2025-12-31</td>
+        <td>Same schema. The standing mapping contract applied automatically; all four
+            gates ran; publication offered.</td>
+        <td class="num">0</td>
+        <td><span class="chip c-yes">Published</span></td></tr>
+      <tr><td class="mono">2026-01-31</td>
+        <td>Same again.</td>
+        <td class="num">0</td>
+        <td><span class="chip c-yes">Published</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="footnote">
+    "Questions asked" counts open operator decisions excluding the publication approval,
+    which is never automatic and is not a defect.
+  </p>
+
+  <h4>What the gates did, month one</h4>
+  <div class="ev">before review   onboard <b>done</b>      transform <b>halted</b>   — handoff not ready for Gate 2
+after review    onboard <b>done</b>      transform <b>done</b>     validate <b>done</b>   stamp <b>done</b>
+                run status <b>awaiting_publication</b></div>
+
+  <h4>What reached the canonical</h4>
+  <div class="ev">loan_identifier             <b>ACC100000</b>   ← the operator's chosen key
+account_status              <b>LIVE</b>
+current_outstanding_balance <b>254990.33</b>
+current_principal_balance   <b>254990.33</b>   ← filled by the equity release equivalence
+current_interest_rate       <b>3.645</b>
+original_principal_balance  <b>184890</b>
+origination_date            <b>2018-01-15</b>
+current_valuation_amount    <b>479756.92</b>
+youngest_borrower_age       <b>80</b>          40 rows, no blanks</div>
+
+  <p>
+    The rehearsal is a test, not a transcript:
+    <span class="mono">tests/test_occ_go_live_e2e.py</span> performs it on every run.
+  </p>
+</section>
+
+<!-- ================================================= C ==================== -->
+<section id="clientb">
+  <div class="shead"><span class="sletter">C</span><h2>Client B — a different vocabulary, and a wall</h2></div>
+
+  <div class="timenote">
+    <h4>Historical — first contact</h4>
+    <p>This is Client B as it stood on first contact, and the wall in the title is real:
+    the regulatory branch stopped at Gate 4 and no return was produced. It is kept because
+    it is where the investigation started.</p>
+    <p><strong>Superseded by section O.</strong> Client B now runs to
+    <span class="mono">annex2_submission.xml</span> and passes XSD validation on both
+    reporting periods.</p>
+  </div>
+
+  <p class="lede">
+    A second, unrelated lender: prose headers, a policy book rather than a loan book,
+    <span class="mono">regime_required</span> true, and management statuses no regulator has a
+    code for.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Stage</th><th>Result</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td>Workflow selection</td><td><span class="chip c-yes">mi_annex2</span></td>
+        <td>From the source record's <span class="mono">regime_required</span>, set during onboarding
+            when the ESMA Annex 2 product was chosen.</td></tr>
+      <tr><td>File identification</td><td><span class="chip c-part">Asked</span></td>
+        <td><span class="mono">PolicyExtract.csv</span> matched no known role. One question, one answer,
+            pack complete.</td></tr>
+      <tr><td>Gate 1 → 2 → 3</td><td><span class="chip c-yes">Passed</span></td>
+        <td>First contact, no mapping questions: this lender's prose headers resolve
+            deterministically where Client A's codes do not.</td></tr>
+      <tr><td>MI publication</td><td><span class="chip c-yes">Published</span></td>
+        <td>Version 1, with no Annex 2 reference attached.</td></tr>
+      <tr><td>Regulatory data in the canonical</td><td><span class="chip c-yes">Yes</span></td>
+        <td><span class="mono">Dwelling Type</span> reaches <span class="mono">property_type</span> as
+            <span class="mono">'Flat'</span>, deterministically. This is what the routing fix
+            changed — see section K.</td></tr>
+      <tr><td>Second reporting period</td><td><span class="chip c-yes">Deterministic</span></td>
+        <td>Zero review questions; all four gates; MI publishable again.</td></tr>
+      <tr><td>Gate 4 projection</td><td><span class="chip c-hist">Then: past RREC9, stops at RREL27</span></td>
+        <td><span class="mono">purpose</span> has no column in this lender's tape and no regime
+            default, so ESMA's enum rejects the empty value. Section K.
+            <span class="was">Now: completed, both periods — section O.</span></td></tr>
+      <tr><td>Gate 5 XML / XSD</td><td><span class="chip c-hist">Then: not reached</span></td>
+        <td>Blocked upstream. The chain itself is exercised by
+            <span class="mono">test_annex_delivery_agent_annex2.py</span>, which passes.
+            <span class="was">Now: 30 records written, XSD PASSED, both periods — section O.</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <p>
+    Client B was the more honest rehearsal of the two, because it failed somewhere real.
+    Its management information was complete and published; its regulatory delivery was not
+    produced, and Trakt said so rather than shipping a partial one. That property — refusing
+    to ship a partial return — is what made the rest of the investigation possible, and it is
+    unchanged now that the return succeeds.
+  </p>
+</section>
+
+<!-- ================================================= D ==================== -->
+<section id="mapping">
+  <div class="shead"><span class="sletter">D</span><h2>Mapping governance</h2></div>
+  <p class="lede">
+    Three defects stood between an operator's answer and the data. All three are closed.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>What was wrong</th><th>Why it mattered</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>The Review Centre said <em>"All fields were matched using your approved
+            rules"</em> whenever Gate 1's step completed.</td>
+        <td>A completed step means Gate 1 finished, not that the mapping is settled. On
+            Client A's first delivery that sentence was untrue 40 times over, and no
+            decisions were raised at all — so Gate 2 refused a package nobody had been
+            asked to fix.</td>
+        <td>The stage reports the handoff manifest's own numbers and offers the queue Gate
+            1 built.</td>
+      </tr>
+      <tr>
+        <td>"Point it at a column in the files" was offered, but there was nowhere to put
+            the column name — and the option named an action
+            (<span class="mono">map_source_column</span>) the apply step does not support.</td>
+        <td>Approving it recorded an answer that applied to nothing. The operator saw an
+            accepted decision and an unchanged canonical.</td>
+        <td>The decision API carries the column; the options name actions the engine
+            executes; the single-file delivery supplies its own filename, and a multi-file
+            pack is asked rather than guessed.</td>
+      </tr>
+      <tr>
+        <td>Rerun resumed from persisted state and skipped completed steps.</td>
+        <td>Approved decisions are applied <em>by</em> Gate 1, so its previous output is
+            stale the moment they change. Every answer was silently discarded.</td>
+        <td>The run tracks the digest of the approved-decisions artefact Gate 1 last
+            consumed and reproduces Gate 1, and everything downstream of its tape, when it
+            differs.</td>
+      </tr>
+    </tbody>
+  </table></div>
+
+  <h4>The operator's five actions</h4>
+  <ul class="plain">
+    <li><strong>Accept</strong> the proposal as offered.</li>
+    <li><strong>Change</strong> it — choose a different treatment.</li>
+    <li><strong>Point it at a column</strong> — name the source column the field lives in.</li>
+    <li><strong>Mark not applicable</strong> — this book does not hold it.</li>
+    <li><strong>Defer</strong> — record that you are waiting on the lender. The item stays
+      open and the run stays held, so deferring can never be a quiet way to make a blocking
+      question disappear.</li>
+  </ul>
+
+  <div class="callout warn">
+    <h4>The LLM stays a recommender</h4>
+    <p>Both rehearsals ran with the resolver off. The Part&nbsp;II benchmark measured it at
+    75% precision against the deterministic matcher's 100%, and — worse — it drove blocking
+    decisions to zero, so its three false positives, one of them on a balance, would have
+    reached MI with no human ever seeing them. The policy machinery is wired and OCC
+    resolves it correctly; the recommendation is that
+    <span class="mono">TRAKT_LLM_MODE=resolving</span> stays off in production and the arm is used
+    for advice a person confirms.</p>
+  </div>
+</section>
+
+<!-- ================================================= E ==================== -->
+<section id="core">
+  <div class="shead"><span class="sletter">E</span><h2>The core canonical cannot be bypassed</h2></div>
+  <p class="lede">
+    The required answer to "can an economically incomplete canonical reach MI?" is NO. It is
+    now NO on the production route, not only in a direct gate invocation.
+  </p>
+
+  <p>
+    The lean production path was <span class="mono">onboard → stamp</span>: an MI delivery published a
+    canonical that no Transformation or Validation agent had ever seen, so the core-field
+    contract enforced at Gate 3 could not apply to the product it exists to protect. Depth
+    is no longer a function of the outcome. The outcome still decides what happens after
+    assembly; it no longer decides whether the data is checked.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Negative case</th><th>Result</th><th>Where it stops</th></tr></thead>
+    <tbody>
+      <tr><td>Required core column absent (balance)</td><td><span class="chip c-no">Blocked</span></td>
+        <td><span class="mono">CORE001</span> at Gate 3; publication never offered</td></tr>
+      <tr><td>Required core column present but entirely empty</td><td><span class="chip c-no">Blocked</span></td>
+        <td><span class="mono">CORE002</span> — including nullable dtypes, which used to pass silently</td></tr>
+      <tr><td>Delivery for a client with no activated configuration</td><td><span class="chip c-no">Blocked</span></td>
+        <td>Before classification, with the sentence naming the fix</td></tr>
+      <tr><td>File whose role cannot be recognised</td><td><span class="chip c-part">Asked</span></td>
+        <td>File-role decision; the pack waits rather than proceeding</td></tr>
+      <tr><td>Unfamiliar source header</td><td><span class="chip c-part">Asked</span></td>
+        <td>Gate 1 queue; Gate 2 refuses until answered</td></tr>
+      <tr><td>Several plausible loan identifiers</td><td><span class="chip c-part">Asked</span></td>
+        <td>Non-blocking question naming every candidate and the one used</td></tr>
+      <tr><td>Unknown management enum value</td><td><span class="chip c-yes">Preserved</span></td>
+        <td>Warning at Gate 3; the value is not touched</td></tr>
+      <tr><td>Regulatory enum with no approved translation</td><td><span class="chip c-part">Regime held</span></td>
+        <td>Gate 4; MI unaffected and still publishable</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================================================= F ==================== -->
+<section id="enums">
+  <div class="shead"><span class="sletter">F</span><h2>The lender's own words survive</h2></div>
+  <p class="lede">
+    "Probate — awaiting sale" is a real servicing state. ESMA has no code for it and
+    management information depends on it. It reaches MI exactly as written.
+  </p>
+
+  <div class="ev">account_status as it reaches MI, Client B:
+
+  <b>['In possession', 'Live', 'Moved to LTC', 'Probate - awaiting sale', 'Redeemed']</b>
+
+Gate 2  values not in a known enum are left untouched, never guessed
+Gate 3  ENUM_INVALID recorded at <b>warn</b> — the canonical stays valid
+MI      the original string, unmodified</div>
+
+  <p>
+    Strict enum conformance belongs at the regulatory boundary, and that is where it now
+    lives. Where ESMA requires a permitted code, the translation is a governed decision
+    recorded once at client scope and reused; the management value it translates is
+    unchanged by it. Where no translation exists, the regulatory branch holds and the
+    management report does not.
+  </p>
+
+  <div class="callout good">
+    <h4>Why this is worth the words</h4>
+    <p>The alternative — nulling a value the regulator does not recognise — is the kind of
+    defect that is invisible until someone asks why the probate book looks empty. Three
+    tests now assert the exact string survives Gate 2, Gate 3 and assembly, and that an
+    unknown enum is not a blocking validation error.</p>
+  </div>
+</section>
+
+<!-- ================================================= G ==================== -->
+<section id="regime">
+  <div class="shead"><span class="sletter">G</span><h2>The regime branch</h2></div>
+  <p class="lede">
+    <span class="mono">regime_required</span> correctly decides whether Gate 4 and Gate 5 execute.
+    What they then execute on was where the sprint stopped for a long time; section O is
+    where it stopped stopping.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Requirement</th><th>Status</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Routing from approved configuration, not inference</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Client A → <span class="mono">mi</span>, Client B → <span class="mono">mi_annex2</span>; pipeline and
+            forecast datasets short-circuit to MI whatever the registry says</td></tr>
+      <tr><td>Same pinned effective configuration as the MI run</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>The chain runs after assembly on the run's own pinned snapshot</td></tr>
+      <tr><td>Client identity, LEI, originator from the client's own config</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Fixed this sprint — see section H</td></tr>
+      <tr><td>Regulatory failure does not invalidate valid MI</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Demonstrated while Client B's projection was still blocked: MI published, no XML
+            reference on the record. The property is about what a regulatory failure may
+            withhold, so the demonstration stands whether or not the return later
+            succeeded — and it did</td></tr>
+      <tr><td>Regulatory-only source data survives onboarding</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Fixed this sprint — section K</td></tr>
+      <tr><td>A new lender reaches XML and XSD</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Client B writes <span class="mono">annex2_submission.xml</span>, 30 records, and
+            passes XSD validation on both reporting periods — section O.
+            <span class="was">Was NO for most of the sprint: section K records the ESMA enum
+            the lender does not supply and the missing ND decision surface at the projection
+            boundary, which was the visible edge of the contract defect section O
+            resolves.</span></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================================================= H ==================== -->
+<section id="isolation">
+  <div class="shead"><span class="sletter">H</span><h2>Client isolation</h2></div>
+
+  <div class="callout bad">
+    <h4>What was found</h4>
+    <p>The Annex&nbsp;2 delivery chain read
+    <span class="mono">config/client/config_client_ERM_UK.yaml</span> for every client. That is one
+    existing client's file, so every other lender's regulatory identity — LEI, originator
+    name, establishment country — was assessed against someone else's. Client B's valid LEI
+    was reported as invalid because the check was never looking at it.</p>
+    <p>The effective-configuration resolver already resolved a client's own generated
+    configuration correctly. The delivery chain simply was not using it. It does now.</p>
+  </div>
+
+  <div class="tw"><table>
+    <thead><tr><th>Isolation property</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Each client is governed by its own generated configuration</td>
+        <td><span class="chip c-yes">Asserted</span> — Client A's LEI appears in Client A's
+            config and nowhere in Client B's, and the reverse</td></tr>
+      <tr><td>Neither client's rules are applicable to the other</td>
+        <td><span class="chip c-yes">Asserted</span> — the rule store returns nothing across
+            the boundary</td></tr>
+      <tr><td>The standing mapping contract is scoped by client and portfolio</td>
+        <td><span class="chip c-yes">Asserted</span> — reachable for its own source and no
+            neighbouring key</td></tr>
+      <tr><td>The same canonical field is filled from different columns per lender</td>
+        <td><span class="chip c-yes">Asserted</span> — <span class="mono">BAL_OS</span> and
+            <span class="mono">Loan Balance</span>, no shared alias</td></tr>
+      <tr><td>A client Trakt has not onboarded cannot process at all</td>
+        <td><span class="chip c-yes">Asserted</span> — blocked before classification</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="footnote">
+    One alias was promoted globally this sprint: <span class="mono">policy status</span> →
+    <span class="mono">account_status</span> (R-1, approved). It is safe globally because the word has
+    no competing meaning in this asset class — an equity release lender calls the loan a
+    policy. No other synthetic synonym was promoted.
+  </p>
+</section>
+
+<!-- ================================================= I ==================== -->
+<section id="regression">
+  <div class="shead"><span class="sletter">I</span><h2>Regression</h2></div>
+  <p class="lede">
+    Exact counts. A new failure was never dismissed as unrelated without being proven on
+    the pre-change baseline.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Suite group</th><th class="num">Passed</th><th class="num">Failed</th>
+      <th class="num">Skipped</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Phase A baseline</strong> — 11 suites, after R-1, before any sprint change</td>
+        <td class="num">1391</td><td class="num">0</td><td class="num">0</td>
+        <td>The acquired-pack smoke suite went from 8 failed to 37 passed on the alias alone</td></tr>
+      <tr><td><strong>Final sweep</strong> — the same 11 suites plus the two new ones,
+          re-run after the routing fix</td>
+        <td class="num">1428</td><td class="num">0</td><td class="num">0</td>
+        <td>OCC, both orchestrator paths, all four gate agents, both Annex 2 delivery
+            suites, acquired smoke, governed ERE validation</td></tr>
+      <tr><td><span class="mono">tests/test_occ_go_live_e2e.py</span> — the new acceptance suite</td>
+        <td class="num">27</td><td class="num">0</td><td class="num">0</td>
+        <td>Real agents, real blob route, two lenders, four reporting periods</td></tr>
+      <tr><td><span class="mono">tests/test_registry_management_field_extension.py</span> — new</td>
+        <td class="num">8</td><td class="num">0</td><td class="num">0</td>
+        <td>A management-only field entering the registry disturbs no Annex code set</td></tr>
+      <tr><td><strong>MI Query Agent acceptance</strong> — 15 suites</td>
+        <td class="num">332</td><td class="num">0</td><td class="num">0</td>
+        <td>Unchanged. No MI Query Agent code, dashboard calculation or capability was touched</td></tr>
+      <tr><td><strong>Contract migration — 13-suite sweep</strong>, re-run after the retirement</td>
+        <td class="num">1429</td><td class="num">0</td><td class="num">0</td>
+        <td>The same 13 suites as the row above it. Section O records every assertion that moved
+            and why</td></tr>
+      <tr><td><strong>Contract migration — Annex 2 and touched surface</strong>, 31 suites</td>
+        <td class="num">702</td><td class="num">0</td><td class="num">4</td>
+        <td>Every suite that names Annex 2, the four re-pointed scripts, the simulator, the demo
+            platform, regulatory watch and the contractual analytics. The 4 skips are the
+            pre-existing "the demonstration has not been built" cases</td></tr>
+      <tr><td><span class="mono">tests/test_phase8a_mi_interpreter_harness.py</span></td>
+        <td class="num">61</td><td class="num">5</td><td class="num">0</td>
+        <td>Pre-existing, verified identical against a stashed clean tree in the previous
+            sprint and unchanged by this one</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Behaviour that moved, declared</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Test</th><th>What it asserted</th><th>Why it changed</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">test_intake.py<br>test_unknown_file_does_not_satisfy_required_role</td>
+        <td>An unrecognised file leaves the pack merely "incomplete"</td>
+        <td>It now asks what the file is. Waiting with no available action was where a new
+            lender's differently-named tape stopped.</td></tr>
+      <tr><td class="mono">test_annex2_delivery.py<br>two failure-path tests</td>
+        <td>A regulatory failure parks the whole run BLOCKED</td>
+        <td>That is the behaviour this sprint deliberately removes. They now assert the
+            delivery is withheld and the management report is not.</td></tr>
+      <tr><td class="mono">operations_control/conftest.py</td>
+        <td>Nothing — an added fixture</td>
+        <td>The suite's clients are now registered as onboarded, because a delivery for a
+            client Trakt has never onboarded is refused. Client Onboarding's own tests
+            create their clients themselves and are excluded, as are the OCC Agent's
+            practice-run safety tests, which assert that nothing is written to the live
+            container.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="footnote">
+    The whole-repository run (7,000+ tests) exceeds the tool timeout, so the sweep is
+    scoped to the suites the sprint's regression requirements name, plus the MI Query
+    Agent acceptance suites.
+  </p>
+</section>
+
+<!-- ================================================= J ==================== -->
+<section id="remaining">
+  <div class="shead"><span class="sletter">J</span><h2>What is left</h2></div>
+
+  <h3>Go-live blocker</h3>
+  <div class="callout warn">
+    <h4>Superseded — see section K</h4>
+    <p>The blocker recorded here was that Gate 1 graded a regime-required delivery
+    against the MI contract, so regulatory-only source information was discarded before
+    Gate 4 could see it. That is fixed and proven. What replaced it is narrower and is
+    written up in full in the next section.</p>
+  </div>
+
+  <h3>Post-go-live registry hardening</h3>
+  <ul>
+    <li><strong>R-2, the balance vocabulary.</strong> Both the deterministic matcher and
+      the resolver send an outstanding balance to the principal field. The equity release
+      equivalence makes that harmless today and would not stay harmless for a book that
+      services interest. Needs an MI calibration run either side.</li>
+    <li><strong>R-3 to R-11</strong> from the previous sprint's recommendation report,
+      unchanged and still awaiting approval. Deliberately not applied: registry coverage
+      improves after go-live, and the sprint's objective was a safe operator-executable
+      route for every unknown header, which now exists.</li>
+    <li><strong>Ambiguous abbreviations</strong> — <span class="mono">ID</span>,
+      <span class="mono">STATUS</span>, <span class="mono">TYPE</span> currently auto-map at full confidence.
+      Not promoted, not weakened; measured and recorded.</li>
+  </ul>
+
+  <h3>Post-go-live technical debt</h3>
+  <ul>
+    <li><strong>Gate 1's blocking-decision count over-reports.</strong> Client A's first
+      delivery raised 40 blocking decisions of which 4 actually blocked validation; the
+      rest were fields no equity release book holds. It is answerable and it is safe, but
+      it makes first contact heavier than it needs to be.</li>
+    <li><strong>Approving publication while a rerun is in flight</strong> ends the run
+      before the rerun's chain completes. Only reachable when an operator answers a
+      regulatory question and publishes MI in the same moment; worth a guard.</li>
+    <li><strong>The five pre-existing MI interpreter harness failures</strong> remain
+      untouched and unexplained. Out of scope here — investigating them means touching MI
+      interpreter behaviour.</li>
+  </ul>
+</section>
+
+<!-- ================================================= K ==================== -->
+<section id="routing">
+  <div class="shead"><span class="sletter">K</span><h2>The routing fix, and what it left</h2></div>
+
+  <div class="timenote">
+    <h4>Historical — the routing fix stands, what it left does not</h4>
+    <p>The routing defect and its fix are current and unchanged: regulatory-only columns
+    survive onboarding, and that is permanent. <strong>What this section describes as
+    remaining — the XML still blocked, one field discovered per round — is superseded by
+    section O</strong>, which found that the fields were not the problem.</p>
+  </div>
+
+  <p class="lede">
+    The defect was general: OCC classified a regime-required delivery correctly and then
+    asked Gate 1 to grade it against the management contract, which excludes the
+    regulatory category outright. Every regulatory-only column a lender supplied was
+    discarded during onboarding.
+  </p>
+
+  <h4>What changed</h4>
+  <p>
+    The routing now derives from the rule that already knew the answer.
+    <span class="mono">select_target</span> maps dataset plus <span class="mono">regime_required</span> to a
+    target; a target other than <span class="mono">mi</span> means this delivery owes a regulatory
+    return. That single answer is threaded to the three places that resolve scope
+    independently — Gate 1's field scope, the central tape builder's, and the target
+    contract, which is extended with the regulatory targets <em>renamed from the existing
+    Annex 2 contract</em>, so each keeps the dispositions the regime rules already define:
+    its default, its permitted ND codes, its derivation. Not a second regulatory mapper —
+    a rename of the one that exists.
+  </p>
+
+  <div class="ev">field scope, MI contract, regime-required delivery
+
+  included fields   159 <b>&rarr; 414</b>      what Gate 1 is willing to see
+  blocking fields    11 <b>&rarr;  13</b>      what a lender is required to supply
+
+Scope moved. Requirements did not.</div>
+
+  <p>
+    That distinction is the whole safety argument. Every added target is optional and
+    non-enforcing, so no ESMA field becomes a mandatory lender source. Gate 1 still
+    distinguishes source-mapped, derived, configured, defaulted, ND-eligible, not
+    applicable and genuinely missing. And the canonical keeps management semantics,
+    because the contract is still the MI one — Client B's
+    <span class="mono">account_status</span> still reaches MI as
+    <span class="mono">"Probate - awaiting sale"</span>.
+  </p>
+
+  <h4>Proven from raw blob, twice</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Requirement</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Event Grid → OCC; Client B configuration resolved; <span class="mono">regime_required</span> true</td>
+        <td><span class="chip c-yes">Yes</span> — selection <span class="mono">mi_annex2</span></td></tr>
+      <tr><td><span class="mono">Dwelling Type</span> reaches the canonical as <span class="mono">property_type</span></td>
+        <td><span class="chip c-yes">Yes</span> — <span class="mono">source_mapped</span>, value <span class="mono">'Flat'</span>,
+            deterministically, with no alias added for it</td></tr>
+      <tr><td>Gate 2 and Gate 3 succeed on the wider canonical</td>
+        <td><span class="chip c-yes">Yes</span> — both reporting periods</td></tr>
+      <tr><td>MI is publishable</td>
+        <td><span class="chip c-yes">Yes</span> — published, version 1, no XML reference</td></tr>
+      <tr><td>Gate 4 receives the regulatory field</td>
+        <td><span class="chip c-yes">Yes</span> — RREC9 satisfied; the projection moved past it</td></tr>
+      <tr><td>Second reporting period asks nothing</td>
+        <td><span class="chip c-yes">Yes</span> — zero review questions</td></tr>
+      <tr><td>Client A unaffected</td>
+        <td><span class="chip c-yes">Yes</span> — <span class="mono">regime_required</span> false leaves every
+            input to Gate 1 identical; months 2 and 3 still silent</td></tr>
+      <tr><td>XML generated, XSD passes, regulatory publication</td>
+        <td><span class="chip c-hist">Then: no</span> — see below.
+            <span class="was">Now: yes — XML written and XSD PASSED, both periods
+            (section O).</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Three defects the fix exposed, and closed</h4>
+  <p>
+    Each was only reachable once regulatory fields were actually in the canonical, which
+    is a fair description of why they had never been seen.
+  </p>
+  <ul class="plain">
+    <li><strong>An ND code is a string, and the regulator asks for it in numeric fields
+      too.</strong> Writing <span class="mono">"ND1"</span> into a column pandas had typed
+      <span class="mono">Int64</span> raised <span class="mono">TypeError</span> and failed Gate 2 outright.
+      The column is widened first; the value is never coerced.</li>
+    <li><strong>A regulatory-only field that is absent was blocking validation</strong>,
+      taking otherwise valid management data down with it. Whose mandatory decides which
+      branch: a core field makes the canonical wrong and blocks validation; a
+      regulatory-only one makes the return wrong and blocks projection, leaving MI
+      publishable.</li>
+    <li><strong>An enum map is a projection instruction, not a configured value.</strong>
+      Copied verbatim it dispositioned a field as "configured static" with nothing to
+      configure — no column, and a projection that then rejected the field it had been
+      told was handled.</li>
+  </ul>
+
+  <div class="callout bad">
+    <h4>What still stops the XML</h4>
+    <p><strong>What happens.</strong> The projection now clears
+    <span class="mono">property_type</span> and stops on <span class="mono">purpose</span> (RREL27): the
+    lender's tape has no purpose column, and ESMA will not accept an empty value in an
+    enum field.</p>
+    <p><strong>Why it is not the same blocker.</strong> The previous one was information
+    being destroyed — a column the lender supplied, discarded before anyone could use it.
+    This one is information the lender never supplied. That is a legitimate thing for a
+    system to stop on.</p>
+    <p><strong>Why it still stops.</strong> ESMA permits <span class="mono">ND5</span> here, but the
+    regime rules define no default for it, so Gate 1 dispositions it
+    <span class="mono">needs_confirmation</span> — correctly — and nobody is asked, because it is
+    optional and non-blocking for MI. The operator therefore has no route to say "record
+    it as not collected". A decision surface exists for a regulatory enum whose values are
+    <em>wrong</em>; there is none for one whose values are <em>absent</em>.</p>
+    <p><strong>The shape of the fix.</strong> Raise the ND choice as a decision at the
+    projection boundary, offering the codes the regime rules already permit, and persist
+    the answer as the configured value for that target — the existing
+    <span class="mono">configure_static_value</span> bridge, which already carries an operator's
+    amendment into the next Gate 1 run. It is a decision surface, not an engine change,
+    and it is the last thing between this pipeline and an XML return.</p>
+    <p>I did not build it here. It is a different defect from the one this sprint was
+    scoped to fix, the instruction was not to broaden the work, and a change of that shape
+    made at the end of a long session without its own rehearsal is exactly the kind that
+    looks finished and is not.</p>
+  </div>
+</section>
+
+<!-- ================================================= L ==================== -->
+<section id="regdecisions">
+  <div class="shead"><span class="sletter">L</span><h2>Answering what the regulator asks and the lender cannot</h2></div>
+  <p class="lede">
+    A regulatory field the lender's data does not carry had no governed answer. The regime
+    rules permit a no-data code for many of them and the standards library says what each
+    code means; neither was reachable from the Review Centre. Gate 4 stopped, correctly,
+    and nobody was asked anything.
+  </p>
+
+  <h4>Four questions, none of which names a field, a code or a lender</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Situation</th><th>What is offered</th><th>Where the answer lands</th></tr></thead>
+    <tbody>
+      <tr><td>The lender does not record this at all, and the rules permit a no-data code</td>
+        <td>That field's own <span class="mono">nd_allowed</span> list, labelled with ESMA's own
+            descriptions — for <span class="mono">purpose</span>, exactly one: ND5, "Not applicable"</td>
+        <td><span class="mono">defaults.nd_defaults</span> in the effective client configuration, applied
+            by the projector while building the return</td></tr>
+      <tr><td>The lender's word needs the regulator's code</td>
+        <td>The codes that field's <span class="mono">enum_map</span> already accepts — for
+            <span class="mono">account_status</span>: OTHR, PERF, RDMD</td>
+        <td>Merged into the delivery rules the normaliser consults, marked as belonging to
+            the regulatory layer</td></tr>
+      <tr><td>The regulator will take nothing but the value, and it is in the files</td>
+        <td>The delivery's own column headers</td>
+        <td>The approved-overrides artefact Gate 1 reads, so the field enters the canonical
+            on the rerun</td></tr>
+      <tr><td>…and it is a fact about the report, not about a loan</td>
+        <td>The same question, amended with the value — the date a pool was formed is in
+            no loan's row</td>
+        <td><span class="mono">defaults.regulatory_constants</span>, applied in the same
+            projection-only way</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout good">
+    <h4>The boundary this keeps</h4>
+    <p>Every one of these changes what the regulator is told and nothing else. The
+    canonical goes on saying, truthfully, that the lender does not supply the field, and
+    Client B's <span class="mono">account_status</span> still reaches MI as "Probate - awaiting sale"
+    while the return says OTHR. A translation is explicitly marked as regulatory so it can
+    never be projected into client mapping memory, where Gate 1 would apply it to the
+    management data — which is the one way this could have quietly become a canonical
+    rewrite.</p>
+  </div>
+
+  <h4>Refused before approval, not discovered at build time</h4>
+  <div class="ev">operator picks a treatment the rules do not permit for that field
+
+  <b>OPS_TREATMENT_NOT_PERMITTED</b>: The regulator does not allow that treatment
+  for this field. Permitted: ND5.
+
+operator picks a code that field's enum map does not accept
+
+  <b>OPS_CODE_NOT_PERMITTED</b>: The regulator does not accept that code for this
+  field. Permitted: OTHR, PERF, RDMD.</div>
+
+  <h4>Three fixes the surface made reachable</h4>
+  <ul class="plain">
+    <li><strong>An empty column is not an unmapped value.</strong> Only <span class="mono">"NAN"</span>
+      was excluded from the check, so a regulatory column the lender does not supply was
+      reported as data failing the regulator's code list — and strict mode refused the
+      whole return over it. How a blank stringifies depends on the column's dtype.</li>
+    <li><strong>A no-data default only filled gaps in a column that already existed</strong>,
+      which is the one case it is not needed. An absent column is what a no-data code is
+      for.</li>
+    <li><strong>Two identifiers had no derivation.</strong> The field map gives RREC1 the
+      same canonical field as RREL1, and ESMA says to report the same identifier when it
+      has not changed — so the original-from-new backfills now match the new-from-original
+      ones that already existed.</li>
+  </ul>
+
+  <h4>Client B, second attempt <span class="chip c-hist">state at this point in the sprint</span></h4>
+  <div class="ev">period 1   Gate 1 <b>done</b>  Gate 2 <b>done</b>  Gate 3 <b>done</b>  MI <b>published</b>
+           projection <b>completed</b>   delivery preparation <b>completed</b>   XML <b>blocked</b>
+           15 questions, answered across three review rounds
+
+period 2   same schema, <b>0 questions</b> — every standing rule reused
+
+(final run, after section O: XML <b>written</b>  XSD <b>PASSED</b>  30 records, both periods)</div>
+
+  <div class="callout bad">
+    <h4>Superseded by section O — what stopped the XML at this point, and why I stopped here</h4>
+    <p>The Gate 5 builder enforces the XSD workbook's own mandatory set, which is wider
+    than the delivery rules', and Client B's synthetic tape does not carry several of those
+    fields. Each is surfaced by the same machinery and each is answerable — the run
+    advanced through <span class="mono">RREL5</span>, <span class="mono">RREC1</span>,
+    <span class="mono">RREL4</span>, <span class="mono">RREL7</span> and on to the next — but they are
+    discovered one per round, and each round is a full pipeline execution.</p>
+    <p>The mechanism is convergent; my time was not. I could have made an XML appear by
+    padding the synthetic tape with the fields the builder wanted, and that would have been
+    manufacturing the result rather than proving the pipeline. The honest position is that
+    the decision surface this blocker was about is built, validated, scoped and reused, and
+    that finishing the rehearsal is a matter of answering the remaining questions rather
+    than of building anything further.</p>
+    <p><strong>What that reading missed, and section O corrects:</strong> the fields were
+    being discovered one per round because the delivery contract itself was wrong — 21
+    codes optional where the workbook says <span class="mono">[1..1]</span>, from a
+    hand-maintained file covering 70 of the 107 codes. Deriving the contract from the
+    authoritative sources surfaced the whole set at once, and the run completes.</p>
+  </div>
+</section>
+
+<!-- ================================================= M ==================== -->
+<section id="annexfinish">
+  <div class="shead"><span class="sletter">M</span><h2>Annex 2 completion — how far, and what stops it</h2></div>
+  <div class="callout good">
+    <h4>Superseded by section O</h4>
+    <p>This section records where Annex 2 stood at the end of the previous sprint, and the
+    seven fields that stopped it. It is kept as the account of how the blocker was found and
+    described. It is <strong>no longer the current state</strong>: the seven were not entries
+    missing from a rules file but the visible edge of that file being a second source of
+    Annex 2 truth. Retiring it, and deriving the contract from the sources that own each
+    fact, is section O — which is where Client B's return reaches XML and passes XSD.</p>
+  </div>
+  <p class="lede">
+    One more layer was missing, and it was not a mechanism: it was a file that already
+    existed, already said the right things, and was never handed to Gate 4.
+  </p>
+
+  <h4>The equity release product layer was never passed to the projector</h4>
+  <p>
+    <span class="mono">config/asset/product_defaults_ERM.yaml</span> states what is true of every UK
+    equity release loan whoever lends it — no scheduled maturity, no rate cap or floor, no
+    reset interval, no principal grace period, and the income family not collected because
+    ERM underwriting does not use it. The projector has always accepted that layer through
+    <span class="mono">--product-defaults</span>. <span class="mono">engine/assembler_agent</span> never passed
+    it. Every regime run reaching Gate 4 by this route was projected without the product
+    layer, and each of those facts arrived at the regulator empty.
+  </p>
+  <p>
+    The pack is now resolved from the same registry the orchestrator already declares
+    (<span class="mono">ASSET_PACKS</span>), so a portfolio type gains its pack in one place, and a
+    type with no pack runs without the layer — a supported state, not an error.
+  </p>
+
+  <h4>What that resolved, measured</h4>
+  <div class="ev">XSD-mandatory Annex 2 fields the Gate 5 builder refused:  <b>22</b>
+
+resolved by the product layer + the operator's pool-addition answer   <b>6</b>
+  maturity_date · interest_rate_cap · interest_rate_floor
+  interest_rate_reset_interval · principal_grace_period_end_date · pool_addition_date
+
+remaining                                                            <b>16</b></div>
+
+  <h4>The sixteen divide cleanly</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Group</th><th class="num">Count</th><th>Fields</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Have a permitted no-data code in the regime rules</td><td class="num">9</td>
+        <td class="mono">resident · geographic_region_classification ·
+            credit_impaired_obligor · origination_channel · purpose · occupancy_type ·
+            current_loan_to_value · original_loan_to_value · current_valuation_method</td>
+        <td><span class="chip c-yes">Answerable today</span> through the decision surface in
+            section L</td></tr>
+      <tr><td>Have <strong>no entry at all</strong> in
+          <span class="mono">annex2_delivery_rules.yaml</span></td><td class="num">7</td>
+        <td class="mono">date_of_repurchase · customer_type · total_credit_limit ·
+            purchase_price · payment_due · original_collateral_identifier ·
+            new_collateral_identifier</td>
+        <td><span class="chip c-hist">Then: no governed answer exists</span>
+            <span class="was">Now: all seven answered — the contract derives them from the
+            workbook and the XSD (section O).</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout bad">
+    <h4>Why I stopped here rather than finishing it</h4>
+    <p>For those seven the rules define no permitted no-data code, no default and no
+    derivation, so no governed layer has anything to say about them. The builder stops at
+    the first — <span class="mono">date_of_repurchase</span> — before the answerable nine are ever
+    reached.</p>
+    <p>Writing <span class="mono">nd_allowed: [ND5]</span> against them would assert a regulatory
+    permission that no rule grants, which is precisely what this sprint forbids. So they
+    are reported rather than filled.</p>
+    <p><strong>Question 10 stayed NO at this point.</strong> What changed is the shape of the answer: the
+    reason is now a list of seven configuration entries, each one a decision for someone
+    who can say what ESMA permits for that field, rather than a property of the pipeline.
+    Two of the seven — the collateral identifiers — look derivable by the pattern the
+    projector already uses for <span class="mono">RREC2 ← RREL3</span>, and the other five are ERM
+    product facts that belong in the product layer beside the twenty-two already there.</p>
+  </div>
+
+  <h4>Client B, as it ran at this point <span class="chip c-hist">superseded — see section O</span></h4>
+  <div class="tw"><table>
+    <thead><tr><th>Item</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>First-period questions</td><td>15, over 3 review rounds</td></tr>
+      <tr><td>Regulatory treatments persisted</td>
+        <td>1 source column (<span class="mono">new_obligor_identifier ← Borrower Ref</span>),
+            4 enum translations (Live→PERF; In possession, Moved to LTC, Probate - awaiting
+            sale→OTHR), 1 no-data (<span class="mono">purpose</span>→ND5), 1 pool constant
+            (<span class="mono">pool_addition_date</span>)</td></tr>
+      <tr><td>Gates 1–3</td><td><span class="chip c-yes">All done</span></td></tr>
+      <tr><td>MI publication</td><td><span class="chip c-yes">Published, version 1</span>, no XML reference</td></tr>
+      <tr><td>Management enums</td>
+        <td><span class="chip c-yes">Unchanged</span> — <span class="mono">"Probate - awaiting sale"</span>
+            reaches MI as written while the return says OTHR</td></tr>
+      <tr><td>Gate 4 projection</td><td><span class="chip c-yes">Completed</span></td></tr>
+      <tr><td>Delivery preparation</td><td><span class="chip c-yes">Completed</span></td></tr>
+      <tr><td>Gate 5 XML / XSD</td><td><span class="chip c-hist">Then: blocked</span> on the seven above.
+          <span class="was">Now: XML written, 30 records, XSD PASSED — both periods (section O).</span></td></tr>
+      <tr><td>Second period</td><td><span class="chip c-yes">0 questions</span> — every standing
+          regulatory decision reused automatically</td></tr>
+      <tr><td>Client identity used</td><td>Client B's own generated configuration and LEI</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ================================================= N ==================== -->
+<section id="ermconfig">
+  <div class="shead"><span class="sletter">N</span><h2>Who owns the equity release configuration</h2></div>
+
+  <div class="callout warn">
+    <h4>First, a correction to the brief's premise</h4>
+    <p>There is no <span class="mono">config_ERM_UK.yaml</span>. The repository contains
+    <span class="mono">config/client/config_client_ERM_UK.yaml</span> (and a
+    <span class="mono">_demo</span> twin), and its own first line calls it
+    <em>"LAYER 3: MASTER CLIENT CONFIG"</em>. It is a <strong>client</strong> file.</p>
+    <p>The reusable UK equity release product layer is a <strong>different file that already
+    exists</strong>: <span class="mono">config/asset/product_defaults_ERM.yaml</span>, Layer 2, with
+    22 no-data treatments and 10 product defaults. It is alive, authoritative, and — until
+    this commit — never reached Gate 4.</p>
+    <p>So the two questions really are separate, and the answers point opposite ways.
+    <strong>The product-default concept should not merely survive; it was being starved.</strong>
+    The client file is the one carrying material that has moved elsewhere.</p>
+  </div>
+
+  <h4>Inventory and classification</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Block / path</th><th>Consumer</th><th>Category</th><th>Disposition</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">client.client_id, display_name, environment</td>
+        <td><span class="mono">migration.py</span>, dashboards</td>
+        <td>1 — OCC / client</td>
+        <td>OCC generates all three. <strong>Duplicate</strong></td></tr>
+      <tr><td class="mono">portfolio.asset_class, country, base_currency</td>
+        <td>projector, MI currency, Gate 2</td><td>1 — OCC / client</td>
+        <td>OCC generates all three. <strong>Duplicate</strong></td></tr>
+      <tr><td class="mono">portfolio.static_reporting_date</td>
+        <td><span class="mono">regime_projector</span>, <span class="mono">canonical_transform</span>,
+            <span class="mono">run_context</span></td>
+        <td>2 — portfolio / source</td>
+        <td>A pinned date belongs to a delivery, not a client. Now supplied by the run's
+            reporting period. <strong>Legacy</strong></td></tr>
+      <tr><td class="mono">defaults.originator_name / _legal_entity_identifier /
+            _establishment_country</td>
+        <td>Annex 2 preflight and projector</td><td>1 — OCC / client</td>
+        <td>OCC captures all three at onboarding. <strong>Duplicate, and the one that
+            caused the cross-client leak</strong></td></tr>
+      <tr><td class="mono">default_regime, supported_regimes, regime</td>
+        <td><span class="mono">trakt_run</span>, <span class="mono">validate_canonical</span>,
+            annex2 provider</td>
+        <td>1 — OCC / client</td>
+        <td>OCC generates them from the selected reporting products.
+            <strong>Duplicate</strong></td></tr>
+      <tr><td class="mono">regime_overrides.ESMA_Annex2.uk_geography</td>
+        <td><span class="mono">regime_projector</span></td>
+        <td>3 — <strong>UK ERM product</strong></td>
+        <td>"UK obligor and collateral geography is delivered as GBZZZ" is true of any UK
+            book, not of one lender. OCC copies it into every generated config, which
+            makes it a product fact stored per client. <strong>Belongs in the product
+            layer</strong></td></tr>
+      <tr><td class="mono">nuts_classification_year: 2021</td>
+        <td><span class="mono">canonical_transform</span></td>
+        <td>3 / 4 — UK regulatory vintage</td>
+        <td>A UK-wide classification vintage, not a lender's choice.
+            <strong>Product or regime layer</strong></td></tr>
+      <tr><td class="mono">enrichment.uk_nuts3.*</td>
+        <td><span class="mono">canonical_transform</span></td>
+        <td>3 — <strong>UK ERM product</strong></td>
+        <td>Postcode → ITL3 lookup, its reference file and its target field are the same
+            for every UK book. OCC does not generate it, so a second lender gets no
+            geography enrichment at all. <strong>Belongs in the product layer</strong></td></tr>
+      <tr><td class="mono">transformations.copy_if_missing<br>
+            (current_principal_balance ← current_outstanding_balance)</td>
+        <td>Gate 2 transformation agent</td>
+        <td>3 — <strong>UK ERM product</strong></td>
+        <td>The equity release balance equivalence — a product fact, and already declared
+            in the product layer. <strong>Duplicate; see below</strong></td></tr>
+      <tr><td class="mono">loan_engine.* (8 keys)</td>
+        <td><span class="mono">loan_ledger_engine</span>, projector, migration</td>
+        <td>1 / 6 — client, mostly legacy</td>
+        <td>OCC generates two of eight. The rest — ledger path, payments file, penalty
+            rate, lockout quarters — are an ERE-era ledger prototype.
+            <strong>Legacy</strong></td></tr>
+      <tr><td class="mono">pipeline_persistence.* (8 keys)</td>
+        <td><span class="mono">trakt_run</span> only</td><td>6 — legacy</td>
+        <td>Read solely by the non-deployed CLI orchestrator. Not reachable on the
+            production route. <strong>Dead for production</strong></td></tr>
+      <tr><td class="mono">mi.branding.app_title / theme.primary_color</td>
+        <td><span class="mono">analytics/streamlit_app_erm.py</span></td>
+        <td>5 — presentation</td>
+        <td>OCC generates the title but not the theme. Read unconditionally, so every
+            client's dashboard shows this one's branding.
+            <strong>Client presentation, wrongly shared</strong></td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>The runtime merge, as the code actually does it</h4>
+  <div class="ev"><b>Gate 4 projection</b>   product layer  →  client config
+   config/asset/product_defaults_ERM.yaml   (deep_merge base, this commit)
+   effective client config                  (OCC-generated + approved overrides)
+   client wins on conflict; a no-data disagreement between the layers is
+   REFUSED rather than silently resolved
+
+<b>Gate 5 delivery</b>     repository delivery rules + approved enum translations
+
+<b>Gates 1-3</b>           registry + alias libraries + effective config snapshot
+                    + asset config (product_defaults_ERM.yaml) + approved decisions
+
+<b>Everywhere</b>          approved RuleRecords, scoped client / portfolio</div>
+
+  <h4>The twelve questions</h4>
+  <div class="tw"><table>
+    <thead><tr><th class="mono">#</th><th>Question</th><th>Answer</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">1</td><td>Required at runtime?</td><td><span class="chip c-part">Partial</span></td>
+        <td>Not for an OCC-activated client — it uses its own generated config. Still the
+            declared default in 6 code paths</td></tr>
+      <tr><td class="mono">2</td><td>What breaks if deleted today?</td><td><span class="chip c-neu">See right</span></td>
+        <td>The ERE dashboard and PPTX loaders, the MI currency default, the
+            non-deployed <span class="mono">trakt_run</span> CLI, the onboarding migration source, and
+            the <span class="mono">--config</span> default of any non-OCC projector caller. Client A and
+            Client B are unaffected</td></tr>
+      <tr><td class="mono">3</td><td>Any runtime path treating it as a fallback for a
+            different client?</td><td><span class="chip c-yes">Closed</span></td>
+        <td>It was a defect when this audit was written, and reported rather than fixed.
+            Both delivery-path fallbacks are now removed — see the callout below.
+            <span class="was">Was: NO — defect, reported not fixed.</span></td></tr>
+      <tr><td class="mono">4</td><td>Already generated by OCC?</td><td><span class="chip c-neu">22 paths</span></td>
+        <td>client identity, portfolio basics, originator identity, regime selection,
+            geography override, NUTS year, pipeline flags, two loan-engine keys, app title</td></tr>
+      <tr><td class="mono">5</td><td>Already authoritative in the regime config?</td>
+        <td><span class="chip c-neu">None</span></td>
+        <td>It holds no enum map, no <span class="mono">nd_allowed</span> and no projection
+            disposition. The regulatory layer is not duplicated here</td></tr>
+      <tr><td class="mono">6</td><td>Genuine reusable ERM product defaults?</td>
+        <td><span class="chip c-yes">4 blocks</span></td>
+        <td><span class="mono">uk_geography</span>, <span class="mono">nuts_classification_year</span>,
+            <span class="mono">enrichment.uk_nuts3</span>, <span class="mono">copy_if_missing</span></td></tr>
+      <tr><td class="mono">7</td><td>Any ERM enum defaults genuinely product-level?</td>
+        <td><span class="chip c-yes">No — none here</span></td>
+        <td>This file defines no enum mapping at all. All regulatory enum mapping already
+            lives in the Annex 2 layer, where it belongs</td></tr>
+      <tr><td class="mono">8</td><td>Any ND defaults genuinely product-level?</td>
+        <td><span class="chip c-yes">Yes, but not here</span></td>
+        <td>The distinction holds and the estate already makes it: "ESMA permits ND1" is
+            <span class="mono">nd_allowed</span> in the regime rules; "ERM underwriting does not collect
+            income, so ND1 is the truthful code" is <span class="mono">nd_defaults</span> in the product
+            pack. 22 such product ND decisions exist — none in this file</td></tr>
+      <tr><td class="mono">9</td><td>Where does the ER balance equivalence live?</td>
+        <td><span class="chip c-no">Three copies</span></td>
+        <td><span class="mono">product_defaults_ERM.yaml</span> (correct),
+            <span class="mono">config_client_ERM_UK.yaml</span> and its
+            <span class="mono">_demo</span> twin. Not one authoritative definition</td></tr>
+      <tr><td class="mono">10</td><td>Would a new ERM lender get the right defaults through
+            OCC activation?</td><td><span class="chip c-part">Partial</span></td>
+        <td>Yes for the product pack and the copied geography override; <strong>no</strong>
+            for <span class="mono">enrichment.uk_nuts3</span>, which OCC does not generate — Client B
+            received no postcode-to-ITL3 enrichment</td></tr>
+      <tr><td class="mono">11</td><td>Does the architecture support the layered composition
+            without bespoke Python?</td><td><span class="chip c-yes">Yes</span></td>
+        <td>Proven twice this sprint. The layers exist and now all four reach the
+            run; what is uneven is which layer holds which fact</td></tr>
+      <tr><td class="mono">12</td><td>Is the name still appropriate?</td>
+        <td><span class="chip c-no">No</span></td>
+        <td>Once the product blocks leave, what remains is one lender's configuration and
+            some ERE-era prototype settings. <span class="mono">config_client_ere_funding_uk.yaml</span>
+            would say what it is — <em>not renamed</em>, as instructed</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout good">
+    <h4>Go-live isolation defect — reported here, closed in section O</h4>
+    <p><em>As found:</em> <span class="mono">mi_agent_api/currency.py::client_config_path()</span>
+    resolved a client's currency config by looking for
+    <span class="mono">config/client/config_client_{id}.yaml</span> and, finding none,
+    <strong>returned this incumbent's file</strong>. It never consulted the OCC-generated
+    configuration, so every OCC-onboarded client read ERE Funding's
+    <span class="mono">portfolio.base_currency</span>.</p>
+    <p>Harmless only because the commercial scope is mono-currency GBP, and the same shape of
+    defect as the Annex 2 one this sprint had already closed. Two smaller instances of the
+    same pattern were found with it:
+    <span class="mono">assembler_agent.build_regime_command</span> defaulted
+    <span class="mono">--config</span> to this file for any non-OCC caller, and
+    <span class="mono">analytics/streamlit_app_erm.py</span> read its branding
+    unconditionally.</p>
+    <p>Not fixed <em>at the time</em>: the first is MI Query Agent surface, which this
+    sprint was told not to touch, and none was needed for the Annex 2 rehearsal.</p>
+    <p><strong>Now closed, two of the three.</strong>
+    <span class="mono">client_config_path()</span> returns <span class="mono">None</span>
+    rather than this incumbent's file, and the module-level default it fell back to is
+    deleted; <span class="mono">assembler_agent.build_regime_command</span> passes an empty
+    <span class="mono">--config</span> rather than substituting it. Both are the ones that
+    could put one lender's configuration into another lender's regulatory return, and both
+    are asserted closed by question 12.</p>
+    <p><strong>Still open, deliberately:</strong>
+    <span class="mono">analytics/streamlit_app_erm.py</span> still reads this file's
+    branding unconditionally. It is dashboard presentation rather than a configuration
+    fallback in the delivery path, and it remains MI surface this sprint was told not to
+    touch. Rows 9 and 10 of the table above — the three copies of the balance equivalence,
+    and <span class="mono">enrichment.uk_nuts3</span> that OCC does not generate — are also
+    unchanged and still current.</p>
+  </div>
+
+  <h4>Recommendation — OPTION B, reduce</h4>
+  <p>
+    Not delete. Four blocks in this file are genuine reusable UK equity release product
+    facts, and they should move <em>into</em> the product layer that already exists rather
+    than disappear with the file:
+    <span class="mono">uk_geography</span>, <span class="mono">nuts_classification_year</span>,
+    <span class="mono">enrichment.uk_nuts3</span> and the balance equivalence. The
+    <span class="mono">enrichment.uk_nuts3</span> block is the one with a live consequence — OCC does
+    not generate it, so a second UK lender silently gets no geography enrichment.
+  </p>
+  <p>
+    Everything OCC now generates should stop being duplicated here; the ERE-era loan-engine
+    and pipeline-persistence settings should go; the branding belongs to whichever client is
+    being displayed. What is left is one incumbent lender's configuration, which is a
+    legitimate thing to keep and a misleading thing to call a product file.
+  </p>
+  <p class="footnote">
+    Audit only — nothing in this file was deleted, split, renamed or rewritten. The one
+    change this section prompted was wiring the product layer into Gate 4, which section M
+    covers and which was necessary for the Annex 2 rehearsal.
+  </p>
+</section>
+
+<!-- ================================================= questions ============ -->
+<section id="questions">
+  <div class="shead"><span class="sletter">✓</span><h2>The fourteen questions</h2></div>
+  <p class="lede">
+    The sprint is complete only if all fourteen are YES. <strong>All fourteen are.</strong>
+    Question 10 was the one that did not arrive; section O is how it did.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th class="mono">#</th><th>Question</th><th>Answer</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">1</td><td>Can OCC create and activate a brand-new client and portfolio with no bespoke Python?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Both lenders onboarded through the case flow only. Every value is an answer an
+            operator types.</td></tr>
+      <tr><td class="mono">2</td><td>Does a raw blob arrival automatically create the correct OCC workflow?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Client A → <span class="mono">mi</span>; Client B → <span class="mono">mi_annex2</span>; both from the
+            governed path and the source registry.</td></tr>
+      <tr><td class="mono">3</td><td>Does OCC invoke Gate 1 → Gate 2 → Gate 3 for MI?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>The lean <span class="mono">onboard → stamp</span> path is gone. All four steps ran on every
+            rehearsal run.</td></tr>
+      <tr><td class="mono">4</td><td>Does Gate 1 route unfamiliar mappings to human review, including LLM recommendations?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>41 questions on first contact, each answerable five ways. The LLM arm is wired
+            and policy-gated; both rehearsals ran with it off, by recommendation.</td></tr>
+      <tr><td class="mono">5</td><td>Are approved mappings persisted and reused automatically in later months?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Months 2 and 3 asked nothing and published.</td></tr>
+      <tr><td class="mono">6</td><td>Can an incomplete core canonical ever reach MI?</td>
+        <td><span class="chip c-yes">No — as required</span></td>
+        <td>Missing balance and blank status both stop before assembly; publication is
+            never offered.</td></tr>
+      <tr><td class="mono">7</td><td>Are unfamiliar management enum values preserved rather than destroyed?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>"Probate - awaiting sale" reaches MI as written; Gate 3 warns and does not
+            reject.</td></tr>
+      <tr><td class="mono">8</td><td>Can a genuinely new management-only field be proposed without affecting Annex 2?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Proven structurally with one synthetic non-ESMA field: no Annex code set
+            changes, no core contract changes, and absence never blocks.</td></tr>
+      <tr><td class="mono">9</td><td>Does <span class="mono">regime_required</span> correctly determine whether Gate 4/5 executes?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Traced from the onboarding product choice to the source record to the intake
+            decision; tested both ways.</td></tr>
+      <tr><td class="mono">10</td><td>Does a regime-required portfolio produce both governed MI and Annex 2 XML/XSD?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Client B publishes MI and writes <span class="mono">annex2_submission.xml</span> —
+            30 records, both reporting periods — which
+            <span class="mono">lxml.etree.XMLSchema</span> validates against
+            <span class="mono">DRAFT1auth.099.001.04_1.3.0.xsd</span> with
+            <span class="mono">xsd_result: PASSED</span>. Real XML, real schema, zero errors.
+            No padding, no arbitrary no-data code, no weakened validation. Section O.</td></tr>
+      <tr><td class="mono">11</td><td>Can regulatory enum failure block Annex 2 without destroying valid MI?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Demonstrated on the run where Client B's projection was blocked: MI published at
+            version 1, no XML reference on the record. The question is what a regulatory
+            failure is allowed to withhold, so the demonstration is not weakened by the
+            return later succeeding.</td></tr>
+      <tr><td class="mono">12</td><td>Can a second lender run through the same code with isolated configuration and mappings?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Five isolation properties asserted, and both remaining cross-client fallbacks are
+            now removed: <span class="mono">mi_agent_api.currency</span> returns
+            <span class="mono">None</span> rather than reaching for the ERM UK configuration, and
+            <span class="mono">assembler_agent</span> no longer substitutes it either. Client B's
+            return carries its own LEI 31 times and the ERM UK LEI zero times.</td></tr>
+      <tr><td class="mono">13</td><td>Can Month 2/3 run without a developer when the schema is unchanged?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>Zero questions, both months, straight to publication approval.</td></tr>
+      <tr><td class="mono">14</td><td>Is MI Query Agent behaviour/regression unchanged?</td>
+        <td><span class="chip c-yes">Yes</span></td>
+        <td>332 passed across 15 suites. No MI Query Agent code was touched.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout good">
+    <h4>The honest summary</h4>
+    <p>An MI-only equity release lender can go live now: onboarded in OCC, files to blob,
+    governed mapping decisions where needed, all three gates, and recurring months that need
+    nobody. A regime-required lender reaches governed MI on the same route <em>and</em> produces a
+    schema-valid Annex 2 return: Client B, two reporting periods, 30 records each, XSD PASSED
+    both times, and zero questions in the second period.</p>
+    <p>The seven fields that blocked it were never seven missing rules. They were the visible
+    edge of a hand-maintained delivery-rules file that stated Annex 2 truth a second time, for 70
+    of the 107 codes, and that five stages read in preference to the authoritative sources. That
+    file is retired. The contract is derived per run from the field universe, the ESMA mapping
+    workbook, the auth.099 schema, the fields registry and the governed enum configuration; the
+    values come from the asset pack, the client configuration and approved operator decisions,
+    each recorded against the layer that owns it.</p>
+    <p>What is still true, and stated rather than buried: the synthetic demo pack does <em>not</em>
+    reach a return. Twenty-four of its mandatory codes are portfolio decisions no layer has made
+    for it, so the run halts with them listed as operator decisions — where the retired file used
+    to fill them with a regime-level default on the lender's behalf. Being blocked on a named list
+    is the correct answer for a tape nobody has made those decisions about.</p>
+  </div>
+</section>
+
+<!-- ================================================= O ==================== -->
+<section id="section-o">
+  <div class="shead"><span class="sletter">O</span><h2>Annex 2 contract migration</h2></div>
+
+  <p class="lede">Annex 2 truth was written down twice: once in the authoritative
+  sources, and once in a hand-maintained delivery-rules file that five pipeline stages read
+  in preference to them. That file is gone. The contract is now derived from the layer that
+  owns each fact, and Client B's return reaches XML and passes XSD validation.</p>
+
+  <div class="verdict">
+    <div class="vcell good"><span class="n">107</span><span class="l">codes in the derived contract</span></div>
+    <div class="vcell good"><span class="n">0</span><span class="l">reads of the retired file left anywhere that runs</span></div>
+    <div class="vcell good"><span class="n">0</span><span class="l">Gate 4b / Gate 5 disagreements</span></div>
+    <div class="vcell good"><span class="n">PASS</span><span class="l">Client B XSD, both periods</span></div>
+  </div>
+
+  <h3>A. Legacy file disposition</h3>
+
+  <div class="tw"><table>
+    <thead><tr><th>Prior consumer</th><th>What it took from the file</th><th>What replaced it</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Gate 1</strong> <span class="mono">target_coverage.load_annex2_target_contract</span></td>
+        <td>Seeded the Annex 2 target contract from 70 <span class="mono">field_rules</span>, 21 of them optional where the workbook says <span class="mono">[1..1]</span></td>
+        <td>All 107 codes from the derived contract; mandatory from the workbook</td></tr>
+      <tr><td><strong>Gate 2</strong> <span class="mono">transformation_agent._build_regime_defaults</span></td>
+        <td>A fourth default tier — <span class="mono">default_value</span>, <span class="mono">nd_allowed</span>, <span class="mono">projected_source_field</span></td>
+        <td>The contract for ND envelope and canonical binding. <strong>The regime default tier is gone</strong>: the regime says what is permitted, never what this book reports</td></tr>
+      <tr><td><strong>Gate 3</strong> <span class="mono">rules_adapter.build_regime_index</span></td>
+        <td>Indexed rules by <span class="mono">projected_source_field</span>, binding two canonical fields to the wrong code</td>
+        <td>Indexed from the contract; both mis-bindings gone by construction</td></tr>
+      <tr><td><strong>Gate 4b</strong> <span class="mono">annex2_delivery_normalizer</span></td>
+        <td><span class="mono">--rules annex2_delivery_rules.yaml</span></td>
+        <td><span class="mono">--rules</span> is now optional and derives the contract; OCC passes the run's materialised contract with the portfolio's approved decisions merged in</td></tr>
+      <tr><td><strong>OCC</strong> <span class="mono">nd_treatments</span>, <span class="mono">population</span>, <span class="mono">interventions</span>, <span class="mono">stages</span></td>
+        <td>Permitted ND, completeness, the attribute-only list, the rules path</td>
+        <td>ND from the field universe; completeness assessed against the delivery frame; attribute-only read off the XSD</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout good">
+    <h4>Retired</h4>
+    <p><span class="mono">config/regime/annex2_delivery_rules.yaml</span> is deleted. No module under
+    <span class="mono">engine/</span>, <span class="mono">operations_control/</span>,
+    <span class="mono">apps/</span>, <span class="mono">mi_agent_api/</span>,
+    <span class="mono">mi_agent_operator/</span>, <span class="mono">trakt_core/</span>,
+    <span class="mono">regulatory_watch/</span>, <span class="mono">scripts/</span>,
+    <span class="mono">simulation/</span>, <span class="mono">demo_platform/</span>,
+    <span class="mono">deploy/</span>, <span class="mono">analytics_lib/</span> or
+    <span class="mono">snapshot/</span> names it — asserted by a test, not by inspection.
+    No compatibility shim, no fallback, and no replacement hand-maintained file: the contract is
+    built in memory from the sources, and the one committed artefact is a machine-generated index of
+    the workbook's own XML facts, carrying the workbook's SHA-256 so a stale copy rebuilds itself.</p>
+  </div>
+
+  <h3>B. The 107-field effective contract</h3>
+
+  <div class="tw"><table>
+    <thead><tr><th>Property</th><th class="num">Codes</th><th>Owner</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Field identity and name</td><td class="num">107</td><td class="mono">UNIVERSE</td><td><span class="mono">annex2_field_universe.yaml</span></td></tr>
+      <tr><td>Canonical binding</td><td class="num">107</td><td class="mono">REGISTRY</td><td><span class="mono">fields_registry.yaml · regime_mapping</span></td></tr>
+      <tr><td>Mandatory / optional</td><td class="num">107</td><td class="mono">WORKBOOK</td><td>MULTIPLICITY of the branch the builder selects for a blank</td></tr>
+      <tr><td>No-data envelope</td><td class="num">89</td><td class="mono">UNIVERSE</td><td><span class="mono">nd1_4_allowed</span> / <span class="mono">nd5_allowed</span></td></tr>
+      <tr><td>Element vs attribute</td><td class="num">107</td><td class="mono">XSD</td><td>3 codes have no element: RREC22, RREL18, RREL28 — derived, not declared</td></tr>
+      <tr><td>Enum vocabulary</td><td class="num">24</td><td class="mono">XSD</td><td>265 codes, the schema's own enumerations, complete</td></tr>
+      <tr><td>Lender-word translations</td><td class="num">16</td><td class="mono">ENUM CONFIG · ASSET · OPERATOR</td><td>173 accepted spellings — every <span class="mono">enum_map</span> key that is not itself an ESMA code for that field — from <span class="mono">enum_mapping</span>, <span class="mono">enum_synonyms</span>, the asset pack and approved decisions. The retired file carried 44 across 13 codes</td></tr>
+      <tr><td>Boolean type</td><td class="num">4</td><td class="mono">XSD</td><td><span class="mono">xs:boolean</span> base types</td></tr>
+      <tr><td>Shape pattern</td><td class="num">64</td><td class="mono">XSD</td><td>8 explicit <span class="mono">xs:pattern</span> facets; 56 from the base type (<span class="mono">xs:date</span>, <span class="mono">xs:gYear</span>, <span class="mono">xs:decimal</span>)</td></tr>
+      <tr><td>Numeric precision</td><td class="num">36</td><td class="mono">XSD</td><td><span class="mono">totalDigits</span> / <span class="mono">fractionDigits</span>, applied as a maximum</td></tr>
+      <tr><td>Derivation</td><td class="num">1</td><td class="mono">DERIVATION</td><td>RREL25, months between origination and maturity</td></tr>
+      <tr><td>Values (defaults, ND answers)</td><td class="num">0</td><td class="mono">ASSET · CLIENT · OPERATOR</td><td>The contract carries none, deliberately</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>C. Residual migration</h3>
+
+  <h4>R1 — the 46 defaults, each classified</h4>
+
+  <div class="tw"><table>
+    <thead><tr><th>Classification</th><th class="num">Count</th><th>New owner</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td><strong>B — asset universal</strong> — true of every UK equity release book</td><td class="num">19</td>
+        <td class="mono">product_defaults_ERM.yaml</td>
+        <td>The income family, DTI, EPC value, original valuation method, recourse, lien, original term and the interest-revision family. <strong>9</strong> the pack already stated, so the regime copy was a duplicate; <strong>10</strong> it did not, and this sprint promoted them. The regime copy is gone either way; the product's statement stands alone.</td></tr>
+      <tr><td><strong>C — client / deal fact</strong></td><td class="num">4</td>
+        <td>OCC effective client configuration</td>
+        <td>RREC6 collateral geography (the client's <span class="mono">uk_geography</span> override) and RREL79–81 original lender identity. Where a client configuration does not carry them, they surface as operator decisions — which is what happened for Client B.</td></tr>
+      <tr><td><strong>D — portfolio decision</strong></td><td class="num">23</td>
+        <td>approved operator decision, inside the permitted ND envelope</td>
+        <td>Prepayment, arrears, default, restructuring, sale and valuation events. Whether a book has any of these is a fact about that book, not about ESMA and not about equity release.</td></tr>
+      <tr><td><strong>A — regime-prescribed</strong></td><td class="num">0</td><td>—</td>
+        <td>None of the 46 was a fallback the regulation itself states under a defined condition.</td></tr>
+      <tr><td><strong>E — invalid</strong></td><td class="num">0</td><td>—</td>
+        <td>Every one had a defensible home; none was simply removed.</td></tr>
+      <tr><td><strong>Total</strong></td><td class="num"><strong>46</strong></td><td>—</td>
+        <td>19 + 4 + 23 + 0 + 0. The classes are mutually exclusive and every entry falls in exactly one, so the split reconciles to the entry count with nothing double-counted and nothing left over.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="footnote">The count is of <strong>entries</strong>, and here that is also the count
+  of codes: the retired file held 70 <span class="mono">field_rules</span>, of which exactly 46
+  carried a non-empty <span class="mono">default_value</span>, one per code. No code carried
+  more than one default, and none carried <span class="mono">default_allowed</span> without a
+  value, so there is no entries-versus-fields gap to reconcile.</p>
+
+  <p><strong>Eleven fields were promoted into the asset pack</strong>, in the four groups
+  below, each on the universality test — would this be true of essentially every UK equity
+  release portfolio, independent of lender? Ten of the eleven are the ten from the class-B
+  row above, whose answer the regime file was carrying and the product pack was not. The
+  eleventh, <span class="mono">RREC5</span>, is not one of the 46: the retired file had no rule
+  for it at all, and it entered the pack because the workbook makes it mandatory and Client B's
+  tape does not carry it.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th class="mono">Code</th><th>Fact</th><th>Why it is an asset universal</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">RREC8</td><td><span class="mono">lien: 1</span><span class="was">1 field · from the 46</span></td>
+        <td>A lifetime mortgage is advanced against a first legal charge on the borrower's own home. The no-negative-equity guarantee and the FCA's lifetime-mortgage rules both assume it; a second-charge lifetime mortgage is not a product in this market.</td></tr>
+      <tr><td class="mono">RREC5</td><td><span class="mono">collateral_type: RBLD</span><span class="was">1 field · <strong>not</strong> from the 46 — no legacy rule existed</span></td>
+        <td>The asset securing a lifetime mortgage is the borrower's residential dwelling. A lender that supplies a collateral type still wins — this fills a blank only.</td></tr>
+      <tr><td class="mono">RREL25</td><td><span class="mono">original_term: ND5</span><span class="was">1 field · from the 46</span></td>
+        <td>A lifetime mortgage has no original contractual term; it runs until death or sale. The same product truth the pack already states for the maturity date — and the reason the months-between-dates derivation cannot answer it.</td></tr>
+      <tr><td class="mono">RREL50–57</td><td>the interest-revision family, ND5<span class="was">8 fields · all from the 46</span></td>
+        <td>Fixed for life: no contractual revision of margin or index. The pack already said exactly this for the current index, its tenor, the cap, the floor and the reset date; the revision fields were left behind in the regime layer, and inconsistently — ND1 for the first two revisions, ND5 for the third.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>R2 to R6</h4>
+
+  <div class="tw"><table>
+    <thead><tr><th class="mono">#</th><th>Residual</th><th>Disposition</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">R2</td><td>Real lender-word enum translations</td>
+        <td>The 167 identity pass-throughs are gone — the XSD's own enumerations supply the regulator's vocabulary in full, 265 codes across 24 fields, so the 67 valid codes the hand-written maps rejected are accepted. The genuine lender words come from <span class="mono">enum_mapping.yaml</span>, <span class="mono">enum_synonyms.yaml</span>, the asset pack's overrides and approved operator translations — 173 accepted spellings across 16 codes, up from 44 across 13, and none of them in a regime file.</td></tr>
+      <tr><td class="mono">R3</td><td>Five hand-narrowed patterns</td>
+        <td><strong>Removed.</strong> None had a schema basis: RREL2 capped at 64 characters against a schema maximum of 1000, RREL19/21 at 12, RREL56/57 at 32. The schema now governs. Where the XSD states no explicit pattern the contract enforces the base type instead — a date is a date, a year is a year — which is what stops a region name reaching Gate 5.</td></tr>
+      <tr><td class="mono">R4</td><td>The RREL25 derivation</td>
+        <td><strong>Kept, in the contract's derivation layer</strong>, because its inputs are ESMA codes rather than canonical columns. The other two <span class="mono">derive</span> rules were dead — they named canonical columns that cannot exist in a code-named frame — and are gone.</td></tr>
+      <tr><td class="mono">R5</td><td>The RREC22 deferral</td>
+        <td><strong>Removed.</strong> RREC22 is one of the three concepts the XSD carries as a currency attribute, which the contract derives from the schema. A concept with no element of its own is not a coverage gap and needs no declaration that it may be skipped.</td></tr>
+      <tr><td class="mono">R6</td><td><span class="mono">unknown_values: reject</span></td>
+        <td><strong>Made an explicit code invariant and the configuration deleted.</strong> A value the regulator's own code list does not contain is always rejected; that is a property of a regulatory delivery, not a setting anyone should be able to switch off. The key was never read by the normaliser in any case.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>D. Corrected defects</h3>
+
+  <div class="tw"><table>
+    <thead><tr><th>Defect</th><th>What it did</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr><td><span class="mono">RREL65</span> mis-bound</td>
+        <td>The rules gave RREL65 (<em>Date Of Restructuring</em>) the canonical field <span class="mono">date_of_repurchase</span>, which the registry maps to RREL8. Gate 3 believed the field was RREL65 and ND5-eligible; OCC believed it was RREL8 with no permitted ND, so the operator was asked an unanswerable question every round.</td>
+        <td>Both gates read the registry. <span class="mono">date_of_repurchase → RREL8</span>, <span class="mono">date_of_restructuring → RREL65</span>.</td></tr>
+      <tr><td><span class="mono">RREC7</span> mis-bound</td>
+        <td>Rules said <span class="mono">occupancy</span>; the registry says <span class="mono">occupancy_type</span>.</td>
+        <td>Gone by construction.</td></tr>
+      <tr><td>67 valid ESMA codes rejected</td>
+        <td>Hand-written enum maps were incomplete and <span class="mono">enum_map</span> is a strict vocabulary, so a lender reporting <span class="mono">ARRE</span> (12 of 15 account-status codes were missing) or a rate on <span class="mono">SOFR</span> (28 of 30 indices missing) was refused.</td>
+        <td>The vocabulary is the XSD enumeration. A test asserts no code the schema defines can be rejected.</td></tr>
+      <tr><td>Precision narrower than the schema</td>
+        <td><span class="mono">PercentageRate</span> is 11/10 in auth.099 and the rules said 8/4; monetary is 18/5 and the rules said 18/2. Ten codes with schema facets had no check at all.</td>
+        <td>36 codes carry the schema's own facets, applied as a maximum — a value supplied to two decimal places is no longer padded out to the schema's ceiling.</td></tr>
+      <tr><td>A client's LEI in the regime file</td>
+        <td><span class="mono">RREL83</span> carried a literal LEI as an <span class="mono">enum_map</span>, mapping the securitisation-identifier form back to the bare LEI — masking a client configuration that held the wrong value.</td>
+        <td>The client configuration holds the LEI itself, in the shape auth.099 enforces; RREL1 still derives the securitisation identifier from it.</td></tr>
+      <tr><td>UK geography duplicated</td>
+        <td>A <span class="mono">geography_map</span> collapsing ten UK region names to <span class="mono">GBZZZ</span>, restating a client-configuration override in a regime file, and a regex hard-coding <span class="mono">GBZZZ</span> where the schema's own pattern already admits it generically.</td>
+        <td>The client configuration's <span class="mono">uk_geography</span> override is the single statement.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Four more, found by running it</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Defect</th><th>Effect</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>Every client rule shared one identity</td>
+        <td><span class="mono">RuleRecord.subject_key()</span> had no case for <span class="mono">client_rule</span>, so every approved standing decision superseded the previous one. A portfolio could hold exactly one; the thirty-fourth answer silently erased the thirty-third.</td>
+        <td>A client rule's subject is its setting. Client B's second period now asks nothing at all.</td></tr>
+      <tr><td>Gate 5 destroyed a permitted no-data code</td>
+        <td>The builder coerced any RREL12 value that was not a four-digit year to blank — including <span class="mono">ND1</span>, the other branch of the same schema choice — and then refused the field as blank.</td>
+        <td>A no-data code passes through untouched. The intervention report no longer counts an operator's own decision as an automatic insertion.</td></tr>
+      <tr><td>Two Annex 2 fields scoped out of equity release</td>
+        <td><span class="mono">secondary_income</span> and its verification twin were the only 2 of 107 canonical Annex 2 fields marked <span class="mono">portfolio_type: rre</span> — including their own primary-income twins, which are <span class="mono">common</span>. An equity release run projected 105 of 107 codes and RREL21, which auth.099 requires on every record, arrived empty.</td>
+        <td>Scoped like the rest of the template.</td></tr>
+      <tr><td>A derivation counted as coverage without its inputs</td>
+        <td>The reconciliation credited RREL25 to its derivation even where the maturity date it counts to is a no-data code — so a gap reached the builder unannounced.</td>
+        <td>A derivation counts only when its inputs carry values.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>E. Gate 4 / Gate 5 reconciliation</h3>
+
+  <div class="callout good">
+    <h4>The invariant, and what it took to state it correctly</h4>
+    <p>Gate 5 does not read a code's multiplicity across every branch. It selects an XML branch for
+    the value in hand and reads <em>that</em> branch's <span class="mono">minOccurs</span> — so a code
+    with an optional branch somewhere is still refused when the branch chosen for an empty value is
+    <span class="mono">[1..1]</span>. Taking the minimum across all branches, which is the obvious
+    reading, made Gate 4b call such a field optional and hand Gate 5 a frame it refused. The contract
+    now computes mandatory-ness exactly as the builder does.</p>
+    <p>It also matches the builder's other asymmetry: an absent column is skipped, a present-and-blank
+    column is refused. So presence is not enforced, and a value — where the column exists — is.</p>
+  </div>
+
+  <div class="tw"><table>
+    <thead><tr><th>Requirement</th><th class="num">Result</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>Fields Gate 4b calls non-blocking that Gate 5 would refuse</td><td class="num">0</td>
+        <td>Asserted per code, on both PRF and NPRF, against the builder's own branch selection.</td></tr>
+      <tr><td>Fields Gate 4b requires that the selected XSD branch permits to be absent</td><td class="num">0</td>
+        <td>Same test, the other direction.</td></tr>
+      <tr><td>Client B, Gate 4b result</td><td class="num">PASS</td><td>No blocking issues after the operator's answers.</td></tr>
+      <tr><td>Client B, Gate 5 result</td><td class="num">PASS</td><td>XML written, XSD validated.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Derived-contract parity, before retirement</h4>
+  <p>The legacy contract and the derived contract were run through the real Gate 4b on the golden
+  XSD fixture and on Client B's projections, and every difference classified.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Classification</th><th class="num">Fields</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>EXPECTED CORRECTION</td><td class="num">122</td>
+        <td>The authoritative source supersedes the legacy behaviour: mostly fields the workbook makes mandatory that the legacy rules passed silently, plus four the legacy rules wrongly flagged (its own ND1 defaults against its own stricter ND list).</td></tr>
+      <tr><td>RESIDUAL MIGRATION</td><td class="num">0</td><td>No legitimate content was left without an owner.</td></tr>
+      <tr><td><strong>REGRESSION</strong></td><td class="num"><strong>0</strong></td><td>No legitimate behaviour was lost.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>F. Client B — the final run</h3>
+
+  <p>Raw blob → OCC → Gate 1 → operator review → Gate 2 → Gate 3 → governed canonical → MI →
+  Gate 4 → Gate 4b → Gate 5 → XML → XSD. No padding, no arbitrary no-data code, no weakened schema,
+  no hand-edited XML.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Measure</th><th>Period 1 — 2026-01-31</th><th>Period 2 — 2026-02-28</th></tr></thead>
+    <tbody>
+      <tr><td>Operator questions</td><td>58, over 3 rounds</td><td><strong>0</strong></td></tr>
+      <tr><td>What was asked</td><td>1 loan-identity mapping, 4 management enum translations, 2 pool constants, 51 regulatory no-data treatments</td><td>Nothing — every decision persisted and was reused</td></tr>
+      <tr><td>Gates 1–3</td><td>all done</td><td>all done</td></tr>
+      <tr><td>MI</td><td>published, version 1</td><td>ready</td></tr>
+      <tr><td>Management enums</td><td colspan="2">"In possession", "Live", "Moved to LTC", "Probate - awaiting sale", "Redeemed" — all five reach MI as the lender wrote them</td></tr>
+      <tr><td>Gate 4 projection</td><td>completed</td><td>completed</td></tr>
+      <tr><td>Gate 4b delivery prep</td><td>completed</td><td>completed</td></tr>
+      <tr><td>XML</td><td><span class="mono">annex2_submission.xml</span>, 30 records</td><td><span class="mono">annex2_submission.xml</span>, 30 records</td></tr>
+      <tr><td>XSD validation</td><td><span class="chip c-yes">PASSED</span></td><td><span class="chip c-yes">PASSED</span></td></tr>
+      <tr><td>Identity in the return</td><td colspan="2">Client B's own LEI, 31 times (one header, 30 records). Zero occurrences of the ERM UK configuration's LEI or originator name.</td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="footnote">Client B's fixture LEI was changed to a value unlike the repository ERM UK
+  configuration's, so a value appearing in its return can only have come from Client B. The
+  projection and the effective contract from this run are committed as the golden fixture the
+  real-components test now runs against — a governed delivery rather than a demo artefact whose
+  gaps a regime-level default once filled on the lender's behalf.</p>
+  <h3>G. What the retirement reached beyond the pipeline</h3>
+
+  <p>Five pipeline stages read the file. <strong>Seven more files outside the pipeline read it
+  too</strong> — the deployment manifest, four analysis scripts, the demo platform and the
+  simulator — and every one would have failed on a missing path, so retirement meant re-pointing
+  or deleting them, not deleting a line. Two further files named it only in a comment. The last
+  row below is in this table for a different reason: <span class="mono">analytics_lib</span> never
+  read the file, but the widened vocabulary reached it. The guard test now scans
+  <span class="mono">scripts/</span>,
+  <span class="mono">simulation/</span>, <span class="mono">demo_platform/</span>,
+  <span class="mono">deploy/</span>, <span class="mono">analytics_lib/</span> and
+  <span class="mono">snapshot/</span> as well as the production packages.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Place</th><th>What it did with the file</th><th>What it does now</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">deploy/trakt-ops-api/verify_package.py</td>
+        <td>Listed the file as a governed artefact that must travel in the deployment package</td>
+        <td>Lists the contract's five sources instead, including the cached workbook index — the
+            mapping workbook itself is not shipped</td></tr>
+      <tr><td class="mono">scripts/</td>
+        <td>Four analysis scripts read <span class="mono">field_rules</span> for the
+            <span class="mono">workbook_semantic</span> leaf, mandatory-ness and canonical name</td>
+        <td>All four call <span class="mono">as_delivery_rules(build_contract())</span>. Their
+            "delivery_rules-proven" provenance token is now "workbook-proven", which is what it
+            always meant</td></tr>
+      <tr><td class="mono">demo_platform/artefacts.py</td>
+        <td>Wrote a demo-scoped <em>copy</em> of the production rules, adding the demo LEI to
+            RREL83's <span class="mono">enum_map</span> so the demo could deliver at all</td>
+        <td>Gone, with the helper it needed. Gate 4b derives the contract, exactly as in
+            production</td></tr>
+      <tr><td class="mono">simulation/pipeline.py</td>
+        <td>Wrote a run-scoped overlay for the same reason, and passed it through a
+            <span class="mono">--annex2-delivery-rules</span> option that no longer exists</td>
+        <td>Gone. The overlay and its two helpers are deleted</td></tr>
+      <tr><td class="mono">analytics_lib/contractual.py</td>
+        <td>Restated the delivery path's enum synonyms, deliberately, so MI runtime does not
+            depend on the regulatory chain — but restated a narrower set than the delivery
+            path accepted</td>
+        <td>Still restates them, and now restates the full accepted vocabulary. Same
+            modelling, wider and realigned input. See below</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="callout good">
+    <h4>The RREL83 defect the retirement removed at the source</h4>
+    <p>The retired file validated the originator LEI by membership of a hand-maintained
+    <span class="mono">enum_map</span> that held one client's LEI. Every other originator's LEI was
+    rejected as an unmapped enum — an identifier checked against a guest list rather than for its
+    shape. Both the demo platform and the simulator carried a workaround for it, and a test pinned
+    the defect as current behaviour.</p>
+    <p>The contract takes RREL83 from the schema, where it is a pattern-constrained identifier
+    (<span class="mono">^(?:[A-Z0-9]{18}[0-9]{2})$</span>). Any valid LEI passes, no LEI is
+    enumerated, both workarounds are deleted, and the test now asserts the fix instead of the
+    defect. The retired file's <span class="mono">enum_map</span> also meant every client's LEI was
+    listed in a shared file — so the demo had to <em>replace</em> the map rather than extend it, to
+    avoid shipping other clients' identifiers in a demonstration artefact. That problem no longer
+    exists either.</p>
+  </div>
+
+  <h4>Expanded supported lender vocabulary across contractual analytics</h4>
+
+  <p>The retired file's enum maps were narrower than the governed enum configuration. Deriving the
+  contract from <span class="mono">enum_mapping.yaml</span> and
+  <span class="mono">enum_synonyms.yaml</span> widened what the delivery path accepts — and
+  <span class="mono">tests/test_contractual_enum_synonyms.py</span> exists precisely to catch the
+  resulting drift: <em>a loan Trakt can deliver but cannot schedule loses its contractual WAL
+  silently.</em> It caught it. Forty labels across RREL35, RREL37 and RREL42 — "annuity",
+  "tilgungsdarlehen", "euribor", "teaser", "semi" — were added to
+  <span class="mono">analytics_lib.contractual._ENUM_SYNONYMS</span>, each mapping to an ESMA code
+  the module already handled.</p>
+
+  <p><strong>What this is, precisely:</strong> expanded supported lender vocabulary across
+  contractual analytics, keeping the cashflow engine aligned with terminology accepted by the
+  governed regulatory mapping. The scheduling capability is not new — amortisation types,
+  payment frequencies and rate types were already modelled, and every added label resolves to a
+  code the engine already knew what to do with. What was new was the gap: a lender writing
+  "Annuity" would have produced a valid FRXX return through the regulatory mapping while the
+  analytics failed to recognise the same word and returned no schedule or WAL. This materially
+  widens and realigns the input vocabulary on the analytics side; it adds no modelling.</p>
+
+  <h3>H. Fixtures — and one assertion that had stopped meaning anything</h3>
+
+  <p>The committed CI fixture was a projection built against the 70-rule file. Under the derived
+  contract it leaves 24 mandatory codes unanswered — the portfolio decisions the retired file used
+  to fill with a regime-level default on the lender's behalf — so it can no longer reach XSD. It
+  was replaced with the governed Client B projection, with that run's own approved account-status
+  translations applied. Nothing was invented: every value in it is the target of an operator
+  decision recorded in the committed effective contract.</p>
+
+  <div class="callout warn">
+    <h4>RREL18, and a reconciliation that only worked in one direction</h4>
+    <p>The evidence block asserted
+    <span class="mono">attributed_as_automatic == difference_added_by_builder</span>, which held
+    while the builder could only <em>add</em> no-data values. On the governed fixture the
+    difference is <strong>&minus;30</strong>: the prepared data carries 30 no-data values the report
+    does not, one per record for RREL18 (Primary Income Currency). auth.099 carries the three
+    currency concepts as an <em>attribute</em> of the amount they qualify, and an attribute has
+    nowhere to put ND1.</p>
+    <p>That is the schema's shape, not a lost value — but the old equality would have been just as
+    satisfied by a genuine loss. It is now two separate statements: the builder invented nothing
+    (<span class="mono">attributed_as_automatic == 0</span>), and the shortfall equals exactly the
+    no-data values held against codes the schema has no element for. A value going missing from a
+    code the schema <em>does</em> emit now fails the test.</p>
+  </div>
+
+</section>
+
+<!-- ================================================= changes ============== -->
+<section id="changes">
+  <div class="shead"><span class="sletter">Δ</span><h2>What changed</h2></div>
+
+  <div class="tw"><table>
+    <thead><tr><th class="mono">Commit</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">a43f0ca</td><td>Enforce the canonical core-field contract at Gate 3 <span class="chip c-neu">prior sprint</span></td></tr>
+      <tr><td class="mono">ba16ed1</td><td>Let OCC resolve the LLM mapping policy, and stop truncating the resolver <span class="chip c-neu">prior sprint</span></td></tr>
+      <tr><td class="mono">0377963</td><td>Teach the mapper that an equity release loan is called a policy <span class="chip c-neu">R-1</span></td></tr>
+      <tr><td class="mono">3d9e464</td><td>Run every governed MI run through Gate 2 and Gate 3 — and the three defects the lean path had hidden</td></tr>
+      <tr><td class="mono">ea318e6</td><td>Give each client its own configuration, and each unknown file a question</td></tr>
+      <tr><td class="mono">107f160</td><td>Hold the regulatory delivery without destroying valid management data</td></tr>
+      <tr><td class="mono">81f7051</td><td>Ask which column is the loan instead of guessing, and refuse ungoverned clients</td></tr>
+      <tr><td class="mono">cd4003f</td><td>Stop asking a regulatory question nobody can answer yet</td></tr>
+      <tr><td class="mono">4ab9cb4</td><td>Stop discarding a lender's regulatory columns before Gate 4 can see them <span class="chip c-yes">the routing fix</span></td></tr>
+      <tr><td class="mono">0e50423</td><td>Let an operator answer what the regulator asks and the lender cannot <span class="chip c-yes">the decision surface</span></td></tr>
+      <tr><td class="mono">bfae403</td><td>Give Gate 4 the equity release product layer it was never handed <span class="chip c-yes">the product layer</span></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="cols">
+    <div>
+      <h4>Not done, deliberately</h4>
+      <ul class="plain">
+        <li>No second core-field list; the registry's <span class="mono">core_canonical</span> flag stays authoritative.</li>
+        <li>Gate 1 readiness was not loosened; Gates 2 and 3 were not weakened.</li>
+        <li>No synthetic alias was auto-added to production beyond approved R-1.</li>
+        <li>No ambiguous abbreviation was globally promoted.</li>
+        <li>No lender-specific Python exists anywhere in either rehearsal.</li>
+        <li>The old router was not reactivated; there is still one orchestrator.</li>
+        <li>MI Query Agent semantics, dashboard calculations and the canonical registry structure are untouched.</li>
+        <li>Nothing multi-currency; the scope stayed GBP.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>The one thing that would change the answer</h4>
+      <p>It changed. The seven were not rules to be added; they were what a second source of
+      Annex 2 truth looked like from the outside. Section O retires it. What remains is not a
+      blocker but a queue: the twenty-four portfolio decisions the synthetic demo pack has never
+      had made for it, each one a question for whoever can say what this book reports — not a
+      configuration entry anyone can invent.</p>
+      <h4>Key handling</h4>
+      <p class="footnote">The provider key supplied for the previous sprint was never
+      written to source control, a <span class="mono">.env</span>, a log, an artefact or a test
+      snapshot, and both rehearsals here ran with the resolver disabled. It exists in the
+      chat transcript regardless, so treat it as compromised and rotate it.</p>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Saving the report as a standalone file.
+//
+// The published page is served inside the artifact frame, so its own
+// documentElement carries the viewer's runtime. Rather than serialise that, the
+// export is rebuilt from the three things that ARE the report — its title, its
+// stylesheet and the .wrap element — wrapped in a minimal document. The result
+// opens offline in any browser and looks like what the reader was looking at,
+// including which theme they were reading it in.
+//
+// The affordance stays hidden unless the capability actually resolves: a button
+// that cannot do anything is worse than no button.
+// ---------------------------------------------------------------------------
+(function () {
+  "use strict";
+
+  var slot = document.getElementById("save-slot");
+  var btn = document.getElementById("save-btn");
+  if (!slot || !btn || !window.claude || typeof window.claude.use !== "function") return;
+
+  var FILENAME = "trakt-go-live-report.html";
+  var LABEL = btn.innerHTML;
+
+  function esc(t) {
+    return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function say(text) {
+    var note = document.createElement("span");
+    note.className = "savenote";
+    note.setAttribute("role", "status");
+    note.textContent = text;
+    slot.replaceChildren(note);
+  }
+
+  function restore() {
+    slot.replaceChildren(btn);
+    btn.disabled = false;
+    btn.innerHTML = LABEL;
+  }
+
+  function buildDocument() {
+    var wrap = document.querySelector(".wrap");
+    var style = document.querySelector("style");
+    if (!wrap || !style) return null;
+
+    // Clone so the live page is untouched, then drop the parts that only make
+    // sense inside the frame: this control and this script.
+    var copy = wrap.cloneNode(true);
+    copy.querySelectorAll("#save-slot, script").forEach(function (n) { n.remove(); });
+
+    var theme = document.documentElement.getAttribute("data-theme");
+    var fonts = document.querySelector('link[rel="stylesheet"]');
+
+    return [
+      "<!doctype html>",
+      '<html lang="en"' + (theme ? ' data-theme="' + esc(theme) + '"' : "") + ">",
+      "<head>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width,initial-scale=1">',
+      "<title>" + esc(document.title || "Trakt go-live report") + "</title>",
+      fonts ? '<link rel="stylesheet" href="' + esc(fonts.href) + '">' : "",
+      "<style>img{max-width:100%}</style>",
+      "<style>" + style.textContent + "</style>",
+      "</head>",
+      "<body>",
+      copy.outerHTML,
+      "</body></html>"
+    ].join("\n");
+  }
+
+  // Codes that mean "this view will never save": stop offering it.
+  var DEAD = {
+    unavailable: 1, not_granted: 1, capability_disabled: 1,
+    capability_removed: 1, extension_not_enabled: 1
+  };
+
+  window.claude.use("downloads").then(function (downloads) {
+    if (!downloads) return;                       // absent by design — stay hidden
+    slot.hidden = false;
+
+    btn.addEventListener("click", function () {
+      var html = buildDocument();
+      if (!html) { say("Could not assemble the file."); return; }
+
+      btn.disabled = true;
+      btn.textContent = "Saving…";
+
+      downloads.save({ filename: FILENAME, data: html }).then(function () {
+        say("Saved as " + FILENAME);
+      }, function (err) {
+        var code = (err && err.code) || "unavailable";
+        if (code === "declined") { restore(); return; }        // they said no; no fuss
+        if (code === "rate_limited") {
+          say("A save prompt is already open — finish that one first.");
+          setTimeout(restore, 4000);
+          return;
+        }
+        if (DEAD[code]) { slot.hidden = true; return; }
+        say("Saving is not available here.");
+      });
+    });
+  });
+})();
+</script>

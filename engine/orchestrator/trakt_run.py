@@ -740,7 +740,6 @@ def run_regulatory(py: str, args, ctx: dict, out_dir: Path) -> dict:
         _run([
             py, _script("annex2_delivery_normalizer"),
             "--input", str(projected),
-            "--rules", args.annex2_delivery_rules,
             "--output-dir", str(out_dir),
         ])
 
@@ -1137,7 +1136,8 @@ examples:
     ap.add_argument("--annex2-mapping-sheet", default="DRAFT1auth.099.001.04")
     ap.add_argument("--annex2-xsd", default=str(CONFIG_ROOT / "system" / "DRAFT1auth.099.001.04_1.3.0.xsd"))
     ap.add_argument("--annex2-performance-mode", choices=["PRF", "NPRF"], default="PRF")
-    ap.add_argument("--annex2-delivery-rules", default=str(CONFIG_ROOT / "regime" / "annex2_delivery_rules.yaml"))
+    # Gate 4b derives the Annex 2 contract from the authoritative sources; there
+    # is no delivery-rules file to point at.
     ap.add_argument(
         "--regime-xml-template", dest="regime_xml_template", default=None,
         help="Jinja XML delivery template for a NON-Annex-2 regime "

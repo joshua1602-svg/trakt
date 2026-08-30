@@ -30,7 +30,7 @@ It is a **projection** stage, not a delivery or XML agent. It does NOT:
     invent ND-values / defaults / source mappings.
 
 It reuses the frozen Gate 4 ESMA-code ordering primitives and the authoritative
-``annex2_delivery_rules.yaml`` regime contract through a clean, non-raising
+effective Annex 2 regime contract through a clean, non-raising
 adapter (:mod:`engine.projection_agent.gate4_adapter`).
 
 See ``docs/projection_agent_v1_review.md`` for the Gate 4 / 4b / 5 review.

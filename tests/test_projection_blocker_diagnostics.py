@@ -43,9 +43,9 @@ from engine.transformation_agent import transformation_agent as ta
 
 REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
 ASSET = str(_REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml")
-REGIME = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
+from tests.annex2_contract_fixture import contract_path
 
-
+REGIME = contract_path()
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -582,44 +582,57 @@ class TestNDVisibilityFromUniverseAndAsset(unittest.TestCase):
 # build_regime_index universe merge
 # --------------------------------------------------------------------------- #
 
-class TestRegimeIndexUniverseMerge(unittest.TestCase):
-    def test_universe_only_code_synthesised(self):
-        from engine.validation_agent import rules_adapter as ra
-        universe = {"RREL24": {"nd_allowed": ["ND5"], "nd1_4_allowed": False,
-                               "nd5_allowed": True}}
-        idx = ra.build_regime_index(
-            {"field_rules": {}}, field_universe=universe,
-            code_to_canonical={"RREL24": "maturity_date"})
-        self.assertIn("maturity_date", idx)
-        self.assertEqual(idx["maturity_date"]["nd_allowed"], ["ND5"])
-        self.assertEqual(idx["maturity_date"]["nd_source"], "field_universe")
-        self.assertEqual(idx["maturity_date"]["rule_source"], "field_universe")
+class TestRegimeIndexComesFromTheUniverse(unittest.TestCase):
+    """The no-data envelope is the workbook universe's, for every code.
 
-    def test_field_rules_wins_over_universe(self):
-        from engine.validation_agent import rules_adapter as ra
-        regime = {"field_rules": {"RREL40": {
-            "projected_source_field": "debt_to_income_ratio",
-            "nd_allowed": ["ND5"], "default_allowed": True}}}
-        universe = {"RREL40": {"nd_allowed": ["ND1", "ND2"], "nd1_4_allowed": True,
-                               "nd5_allowed": False}}
-        idx = ra.build_regime_index(
-            regime, field_universe=universe,
-            code_to_canonical={"RREL40": "debt_to_income_ratio"})
-        # field_rules nd_allowed is preserved (not overwritten by universe)
-        self.assertEqual(idx["debt_to_income_ratio"]["nd_allowed"], ["ND5"])
-        self.assertEqual(idx["debt_to_income_ratio"]["nd_source"], "field_rules")
+    This used to be a MERGE: a hand-maintained rules file supplied the envelope
+    and the universe backfilled where the file was silent — so a rule that
+    disagreed with the regulator won, and 35 of 70 did. There is nothing to
+    merge now.
+    """
 
-    def test_universe_backfills_empty_field_rule(self):
+    def setUp(self):
         from engine.validation_agent import rules_adapter as ra
-        regime = {"field_rules": {"RREL24": {
-            "projected_source_field": "maturity_date", "nd_allowed": []}}}
-        universe = {"RREL24": {"nd_allowed": ["ND5"], "nd1_4_allowed": False,
-                               "nd5_allowed": True}}
-        idx = ra.build_regime_index(
-            regime, field_universe=universe,
-            code_to_canonical={"RREL24": "maturity_date"})
-        self.assertEqual(idx["maturity_date"]["nd_allowed"], ["ND5"])
-        self.assertEqual(idx["maturity_date"]["nd_source"], "field_universe")
+        self.idx = ra.build_regime_index()
+
+    def test_every_annex2_code_is_indexed(self):
+        self.assertEqual(len(self.idx), 107)
+
+    def test_the_envelope_is_the_universes(self):
+        import yaml
+        from pathlib import Path as _P
+        repo = _P(__file__).resolve().parents[1]
+        universe = (yaml.safe_load(
+            (repo / "config" / "regime" / "annex2_field_universe.yaml").read_text(
+                encoding="utf-8")) or {})["fields"]
+        by_code = {v["esma_code"]: v for v in self.idx.values()}
+        for code, meta in universe.items():
+            expected = []
+            if meta.get("nd1_4_allowed"):
+                expected += ["ND1", "ND2", "ND3", "ND4"]
+            if meta.get("nd5_allowed"):
+                expected += ["ND5"]
+            self.assertEqual(by_code[code]["nd_allowed"], expected, code)
+            self.assertEqual(by_code[code]["nd_source"], "field_universe", code)
+
+    def test_a_code_with_no_hand_written_rule_is_still_governed(self):
+        """RREL24 and RREL15 never had one; both are fully indexed."""
+        for canonical, code in (("maturity_date", "RREL24"),
+                                ("customer_type", "RREL15")):
+            entry = self.idx[canonical]
+            self.assertEqual(entry["esma_code"], code)
+            self.assertTrue(entry["nd_allowed"], canonical)
+            self.assertEqual(entry["rule_source"], "regime_contract")
+
+    def test_a_legacy_rules_document_cannot_change_the_answer(self):
+        """Passing one is accepted for call compatibility and ignored."""
+        from engine.validation_agent import rules_adapter as ra
+        poisoned = ra.build_regime_index(
+            {"field_rules": {"RREL40": {"projected_source_field": "debt_to_income_ratio",
+                                        "nd_allowed": ["ND9"]}}})
+        self.assertEqual(poisoned["debt_to_income_ratio"]["nd_allowed"],
+                         self.idx["debt_to_income_ratio"]["nd_allowed"])
+        self.assertNotIn("ND9", poisoned["debt_to_income_ratio"]["nd_allowed"])
 
 
 # --------------------------------------------------------------------------- #

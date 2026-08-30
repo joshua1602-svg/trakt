@@ -333,7 +333,6 @@ WATCHED = (
     "config/system/esma_code_order.yaml",
     "config/system/esma_model_structure.yaml",
     "config/system/enum_mapping.yaml",
-    "config/regime/annex2_delivery_rules.yaml",
     "config/regime/annex2_field_universe.yaml",
     "config/delivery/annex2_field_xsd_path_map.yaml",
     "DRAFT1auth.099.001.04_1.3.0.xsd",

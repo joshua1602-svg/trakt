@@ -92,6 +92,12 @@ class RuleRecord:
             return f"enum:{p.get('field', '')}:{_norm(p.get('source_value', ''))}"
         if self.kind == "validation_exception":
             return f"exception:{p.get('check', '')}"
+        if self.kind == "client_rule":
+            # A client rule is ABOUT its setting. Without this every client rule
+            # shared one subject key, so approving a second one superseded the
+            # first: a portfolio could hold exactly one standing decision, and
+            # the thirty-fourth answer silently erased the thirty-third.
+            return f"client_rule:{_norm(str(p.get('setting', '')))}"
         return f"{self.kind}:{_norm(str(p.get('subject', '')))}"
 
 
@@ -265,6 +271,9 @@ def project_rules_to_client_memory(rules: List[RuleRecord], client_id: str,
                       f"({r.scope} scope)"))
             n += 1
         elif r.kind == "enum":
+            if (p or {}).get("layer") == "regulatory":
+                # Belongs to the Annex 2 boundary, not to the canonical.
+                continue
             store.save_entry(MemoryEntry(
                 client_id=client_id, decision_type=DECISION_ENUM_MAPPING,
                 source_column=p.get("field", ""),

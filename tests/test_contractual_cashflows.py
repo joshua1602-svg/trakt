@@ -66,7 +66,7 @@ def _loan(**overrides):
 # Enum normalisation — reused from the delivery rules, not restated
 # =========================================================================== #
 def test_the_repositorys_own_enum_map_is_what_normalises_rrel35():
-    """`annex2_delivery_rules.yaml` already maps "French" to FRXX for the
+    """The governed enum configuration already maps "French" to FRXX for the
     delivery path. A second mapping in Python would be a second definition of
     one thing, and they would drift the first time a synonym was added to only
     one of them."""

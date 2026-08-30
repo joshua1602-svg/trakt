@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+from apps.blob_trigger_app import file_roles as fr
 from apps.blob_trigger_app.file_roles import classify_pack
 
 from .contracts import (BATCH_DATASET_DEFAULT, BATCH_FREQUENCY_DEFAULT,
@@ -369,9 +370,18 @@ class IntakeService:
             f["recognition_confidence"] = (float(conf) if conf is not None
                                            else None)
             f["recognised_schema"] = "cols:" + stable_hash(*map(str, cols))
+            # A fallback assignment is not a recognition: the role was invented
+            # from the filename at confidence 0 and matches nothing the workflow
+            # expects, so the pack waits for an input that will never arrive
+            # under that name. Treat it as ambiguous, which raises the file-role
+            # decision and gives the operator a governed way to say what the
+            # file is — a new lender's tape is called whatever the lender calls
+            # it, and waiting silently is not an answer.
             f["recognition_status"] = (
-                "ambiguous" if result.ambiguous_role_conflict and
-                f["recognised_file_type"] in result.conflicting_roles
+                "ambiguous"
+                if (f["recognition_basis"] == fr.BASIS_FALLBACK
+                    or (result.ambiguous_role_conflict
+                        and f["recognised_file_type"] in result.conflicting_roles))
                 else "recognised")
             self.store.append_audit(
                 batch["client_id"], "file_classified", actor="system",

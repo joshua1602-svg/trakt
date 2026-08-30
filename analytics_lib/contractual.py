@@ -167,6 +167,22 @@ _ENUM_SYNONYMS: Dict[str, Dict[str, str]] = {
         "other": "OTHR", "interest roll-up": "OTHR",
         "frxx": "FRXX", "dexx": "DEXX", "fixe": "FIXE", "bllt": "BLLT",
         "othr": "OTHR",
+        # A level-instalment loan, however the lender labels it.
+        "annuity": "FRXX", "french amortisation": "FRXX",
+        "capital_repayment": "FRXX", "constant_installment": "FRXX",
+        "level_payment": "FRXX", "standard": "FRXX",
+        # Constant principal with declining interest.
+        "tilgung": "DEXX", "tilgungsdarlehen": "DEXX",
+        "interest_then_level": "DEXX",
+        "fixed": "FIXE", "fixed_amortisation": "FIXE",
+        "constant_principal": "FIXE", "linear": "FIXE",
+        # Principal repaid in one final instalment.
+        "interest_only_bullet": "BLLT", "io_bullet": "BLLT",
+        "full_repay_at_maturity": "BLLT", "redemption_at_maturity": "BLLT",
+        # Not a schedule this module can enumerate — OTHR, and OTHR yields no
+        # cashflows rather than a guessed one.
+        "part_and_part": "OTHR", "mixed": "OTHR", "hybrid": "OTHR",
+        "unknown": "OTHR", "n_a": "OTHR",
     },
     "RREL42": {
         "fixed": "FXRL",
@@ -174,10 +190,17 @@ _ENUM_SYNONYMS: Dict[str, Dict[str, str]] = {
         "fxpr": "FXPR", "finx": "FINX", "capp": "CAPP", "flfl": "FLFL",
         "flca": "FLCA", "mode": "MODE", "obls": "OBLS", "swic": "SWIC",
         "othr": "OTHR",
+        "fixed rate": "FXRL", "fix": "FXRL",
+        "variable": "FLIF", "variable rate": "FLIF", "floating": "FLIF",
+        "var": "FLIF", "libor": "FLIF", "euribor": "FLIF",
+        "base_rate": "FLIF",
+        "teaser": "DISC", "introductory": "DISC", "discounted": "DISC",
+        "mixed": "OTHR", "unknown": "OTHR", "other": "OTHR",
     },
     "RREL37": {
         "monthly": "MNTH", "quarterly": "QUTR",
         "mnth": "MNTH", "qutr": "QUTR",
+        "semi": "SEMI", "year": "YEAR", "othr": "OTHR",
     },
 }
 

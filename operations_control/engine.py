@@ -27,8 +27,12 @@ import yaml
 
 from . import language
 from .adapters import (
+    ACTION_PROVIDE_SOURCE_MAPPING,
+    _slug,
     APPROVED_DECISIONS_FILE,
     DECISIONS_FILE,
+    OVERRIDES_FILE,
+    _all_absent,
     GovernedAdapters,
     _find_artifact,
     translate_run_state,
@@ -46,6 +50,7 @@ from .contracts import (
     Delivery,
     GovernedAgentResult,
     KIND_CLIENT_RULE,
+    KIND_FIELD_MAPPING,
     KIND_PUBLICATION,
     KIND_VALIDATION_EXCEPTION,
     OUTCOME_MI,
@@ -70,6 +75,7 @@ from .contracts import (
     ST_READY,
     ST_RUNNING,
     ST_WAITING,
+    STAGE_ASSEMBLY,
     STAGE_DELIVERY_PREP,
     STAGE_MAPPING,
     STAGE_PROJECTION,
@@ -338,13 +344,45 @@ class OpsEngine:
     def _staging_dir(self, run: WorkflowRun) -> Path:
         return self.staging_root / run.client_id / run.workflow_id
 
+    def _contract_target(self, run: WorkflowRun) -> str:
+        """The TARGET whose field contract this delivery must satisfy.
+
+        Distinct from the execution target below. The existing routing rule
+        already knows the answer from the dataset and whether regulatory output
+        is required — pipeline and forecast are never in regime scope, a funded
+        book is when its source says so — so it is asked rather than restated.
+        """
+        from apps.blob_trigger_app.target_selection import select_target
+        return select_target(
+            run.delivery.get("dataset", "funded") or "funded",
+            run.delivery.get("frequency", "") or "",
+            regime_required=(run.outcome == OUTCOME_MI_ANNEX2)).target
+
+    def _regulatory_reporting_required(self, run: WorkflowRun) -> bool:
+        """Does this delivery owe a regulatory return?
+
+        When it does, Gate 1 keeps regulatory-category fields IN SCOPE, so a
+        column the lender supplied only for Annex 2 survives into the canonical.
+        Under the MI field scope the regulatory category is excluded outright,
+        which meant such a column was discarded before Gate 4 ever saw it and
+        reappeared at projection as a mandatory field with no value — the
+        go-live blocker this closes.
+
+        Scope, not requirements. Nothing regulatory becomes a mandatory lender
+        source (``regulatory_missing`` stays false), the coverage matrix still
+        distinguishes source-mapped, derived, configured, defaulted, ND-eligible,
+        not-applicable and genuinely-missing, and the canonical keeps management
+        semantics: lender enum values unchanged, no ND sentinels. ESMA codes and
+        ND belong to Gate 4's projection.
+        """
+        return self._contract_target(run) != "mi"
+
     def _orchestrator_target(self, run: WorkflowRun) -> str:
-        # Both outcomes run the conductor on the MI target: the AUTHORITATIVE
-        # (and only XSD-proven) Annex 2 route projects from the assembled
-        # platform canonical; the regulatory delivery steps are the OCC's own
-        # governed chain (see _run_annex2_chain), mirroring the proven route
-        # exactly rather than the regulatory-onboarding path that cannot reach
-        # XML today.
+        # EXECUTION target. Both outcomes run the conductor on MI: the
+        # AUTHORITATIVE (and only XSD-proven) Annex 2 route projects from the
+        # assembled platform canonical, and the regulatory delivery steps are the
+        # OCC's own governed chain (see _run_annex2_chain). Depth and contract are
+        # separate levers — see _onboarding_mode for the contract.
         return "mi"
 
     def _annex2_runners(self):
@@ -601,6 +639,14 @@ class OpsEngine:
         batch = self.intake.classify(batch, role_schemas=role_schemas,
                                      aliases=aliases)
 
+        # A delivery for a client Trakt has never onboarded stops here. Without
+        # this it would resolve to the repository's default client
+        # configuration — another lender's regulatory identity, LEI included —
+        # and process as though it were governed. Fail closed: the fix is an
+        # onboarding case, not a rerun.
+        if not self._client_is_activated(batch["client_id"]):
+            return self._park_batch_unactivated(batch, actor)
+
         # Configuration readiness (no persistence — the run pins its own).
         cfg = self._config_resolver().resolve(
             client_id=batch["client_id"], portfolio_id=batch["portfolio_id"],
@@ -622,6 +668,62 @@ class OpsEngine:
                 and not batch.get("workflow_id"):
             return self.start_batch(client_id=client_id,
                                     batch_id=batch["batch_id"], actor=actor)
+        return batch
+
+    #: Said to the operator when a delivery arrives for a client that has not
+    #: been through Client Onboarding.
+    UNACTIVATED_SENTENCE = (
+        "Complete client onboarding and activate the client configuration "
+        "before processing this delivery.")
+
+    def _client_is_activated(self, client_id: str) -> bool:
+        """Is this client governed by a configuration of its OWN?
+
+        Three ways to be: the onboarding index lists it (activated through a
+        case), it has a generated client configuration (activated or migrated),
+        or the repository's configured client file is that client's — which is
+        how a client that predates Client Onboarding stays governed without
+        being onboarded twice.
+        """
+        if not client_id:
+            return False
+        try:
+            from .onboarding.artefacts import client_config_rel
+            from .onboarding.store import OnboardingStore
+            ob = OnboardingStore(self.store)
+            if client_id in ob.onboarded_clients():
+                return True
+            if ob.read_artefact(client_id, client_config_rel(client_id)):
+                return True
+        except Exception:  # noqa: BLE001
+            # Never let a store problem quietly admit an ungoverned client.
+            return False
+        return client_id == self._configured_client_id()
+
+    def _configured_client_id(self) -> str:
+        """The client the repository's configured client file belongs to."""
+        cached = getattr(self, "_configured_client_id_cache", None)
+        if cached is not None:
+            return cached
+        value = ""
+        try:
+            doc = yaml.safe_load(
+                self.client_config_path.read_text(encoding="utf-8")) or {}
+            value = str((doc.get("client") or {}).get("client_id") or "")
+        except Exception:  # noqa: BLE001
+            value = ""
+        self._configured_client_id_cache = value
+        return value
+
+    def _park_batch_unactivated(self, batch: Dict[str, Any],
+                                actor: str) -> Dict[str, Any]:
+        batch["status"] = "blocked"
+        batch["status_reason"] = self.UNACTIVATED_SENTENCE
+        self.intake.save_batch(batch)
+        self.store.append_audit(
+            batch["client_id"], "delivery_blocked_client_not_activated",
+            actor=actor, detail={"batch_id": batch["batch_id"],
+                                 "source_prefix": batch.get("source_prefix", "")})
         return batch
 
     def _sync_file_role_decisions(self, batch: Dict[str, Any]) -> List[str]:
@@ -778,13 +880,21 @@ class OpsEngine:
         if self._adapter_factory is not None:
             inner = self._adapter_factory(run)
         else:
+            from apps.blob_trigger_app.llm_recommendations import resolve_llm_policy
             from engine.orchestrator_agent.adapters import RealAgentAdapters
             approved = self._approved_decisions_path(run)
             deterministic = approved is not None
             snap = snapshot or {}
+            # The SAME policy the automated route already resolves
+            # (apps.blob_trigger_app.orchestrator_invoke), not a second switch:
+            # TRAKT_LLM_ENABLED + TRAKT_LLM_MODE + a provider key, fail-closed to
+            # deterministic-only. Discovery only — a recurring pack applies its
+            # approved mapping and never invokes the resolver.
+            llm_policy = resolve_llm_policy()
             inner = RealAgentAdapters(
                 client_name=run.client_id,
                 onboarding_mode="mi_only",
+                regulatory_reporting_enabled=self._regulatory_reporting_required(run),
                 # The agent consumes the immutable effective-configuration
                 # snapshot, never live repository YAML.
                 registry=snap.get("registry"),
@@ -794,10 +904,19 @@ class OpsEngine:
                 mapping_config_path=(str(approved) if approved else None),
                 dataset=run.delivery.get("dataset", "funded") if
                 run.delivery.get("dataset") == "pipeline" else "",
-                # Annex 2 runs the typed Gate 2/3 path over the MI contract,
-                # matching the proven route's canonical preparation.
-                full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
+                # EVERY governed run takes the typed Gate 2/3 path, MI included.
+                # The lean onboard->stamp shortcut published a canonical that no
+                # Transformation or Validation agent had ever seen, so the
+                # core-field contract enforced at Gate 3 could not apply to the
+                # product it exists to protect. Depth is no longer a function of
+                # the outcome; the outcome still decides what happens AFTER the
+                # canonical is assembled (see _run_annex2_chain).
+                full_pipeline=True,
                 reporting_period=run.reporting_period,
+                enable_llm_advisor=(not deterministic
+                                    and bool(llm_policy.get("enabled"))),
+                enable_llm_mapping_review=(not deterministic
+                                           and bool(llm_policy.get("resolve_mapping"))),
                 managed_service=True)
         return GovernedAdapters(inner, recorder)
 
@@ -827,14 +946,32 @@ class OpsEngine:
         resume_state: Optional[RunState] = None
         orun_id = run.orchestrator_run_id or f"orun_{run.workflow_id}"
         state_path = staging / orun_id / "run_state.json"
+        # Approved mapping decisions are applied BY Gate 1, so if they have
+        # changed since Gate 1 last ran, its completed output is stale. Resuming
+        # past a "done" onboard step would silently discard every answer the
+        # operator just gave and halt Gate 2 on the same unready handoff.
+        decisions_digest = self._approved_decisions_digest(run)
+        redo_onboarding = (bool(decisions_digest)
+                           and decisions_digest != run.onboarding_decisions_digest)
         if state_path.exists():
             resume_state = RunState.load(state_path)
             for p in resume_state.portfolios:
                 for s in p.steps.values():
                     if s.status in ("halted", "failed", "running"):
                         s.status = "pending"
+                if redo_onboarding:
+                    # Everything downstream of Gate 1 derives from its tape, so
+                    # all of it is reproduced, not just the onboard step.
+                    for s in p.steps.values():
+                        s.status = "pending"
+                    p.status = "pending"
                 if p.status in ("halted", "failed", "running"):
                     p.status = "pending"
+            if redo_onboarding:
+                for s in (resume_state.assemble, resume_state.route,
+                          resume_state.project):
+                    s.status = "pending"
+                resume_state.central_canonical_path = ""
             for s in (resume_state.assemble, resume_state.route,
                       resume_state.project):
                 if s.status in ("halted", "failed", "running"):
@@ -858,6 +995,11 @@ class OpsEngine:
             self._on_step(client_id, workflow_id, step, result)
 
         adapters = self._build_adapters(run, recorder, snapshot)
+        # Approved column mappings, materialised where Gate 1 reads them. Done
+        # for EVERY run, not only after an approval, so a later month's fresh
+        # working directory carries the same approved choices.
+        self._write_approved_overrides_file(
+            run, project_dir=(staging / orun_id / "portfolios" / run.portfolio_id))
         spec = PortfolioSpec(
             source_portfolio_id=run.portfolio_id,
             input=run.delivery.get("input_path", ""),
@@ -871,12 +1013,15 @@ class OpsEngine:
             out_root=str(staging), adapters=adapters,
             created_at=now_iso(), run_id=orun_id,
             resume_state=resume_state,
-            full_pipeline=(run.outcome == OUTCOME_MI_ANNEX2),
+            # See _build_adapters: MI runs Gate 1 -> Gate 2 -> Gate 3 too.
+            full_pipeline=True,
             force_publish=self._validation_exception_approved(run))
 
         run = self.store.load_workflow(client_id, workflow_id) or run
         run.orchestrator_run_id = state.run_id
         run.staging_root = str(staging)
+        if decisions_digest:
+            run.onboarding_decisions_digest = decisions_digest
         self._apply_run_state(run, state)
 
     def _apply_run_state(self, run: WorkflowRun, state) -> None:
@@ -928,6 +1073,27 @@ class OpsEngine:
     # ------------------------------------------------------------------ #
     # Governed Annex 2 delivery chain (I1-I4)
     # ------------------------------------------------------------------ #
+    def _regulatory_enum_translations(self, run: WorkflowRun
+                                      ) -> Dict[str, Dict[str, str]]:
+        """``{field: {lender value: regulator code}}`` from approved rules.
+
+        Scoped like every other rule, so one client's reading of its own
+        vocabulary is never applied to another's.
+        """
+        from .annex2.nd_treatments import LAYER_REGULATORY
+        out: Dict[str, Dict[str, str]] = {}
+        for r in self.rules.applicable(client_id=run.client_id,
+                                       portfolio_id=run.portfolio_id):
+            p = r.payload or {}
+            if r.kind != "enum" or p.get("layer") != LAYER_REGULATORY:
+                continue
+            field = str(p.get("field", ""))
+            source = str(p.get("source_value", ""))
+            code = str(p.get("canonical_value", ""))
+            if field and source and code:
+                out.setdefault(field, {})[source] = code
+        return out
+
     def _client_rule_overrides(self, run: WorkflowRun) -> Dict[str, Any]:
         """Approved client_rule settings from the governed rule store."""
         out: Dict[str, Any] = {}
@@ -956,6 +1122,302 @@ class OpsEngine:
         run.set_stage(stage, status, gar.result_id)
         self._sync_decisions(run, gar)
         self.store.save_workflow(run)
+
+    def _park_regulatory(self, run: WorkflowRun, state, *, stage: str,
+                         summary: str, blockers, warnings=None, evidence=None,
+                         why: str = "") -> None:
+        """Stop the REGULATORY branch without discarding valid management data.
+
+        Management information and the ESMA Annex 2 delivery are two products of
+        one validated canonical, and they fail for different reasons. A property
+        type the regulator has no code for does not make the lender's own
+        balances wrong. So the regulatory stage is recorded blocked, an enum
+        translation is asked for where that is what is missing, and — when the
+        canonical has already passed Gates 1 to 3 and been assembled — MI is
+        offered for publication as usual.
+
+        The reverse is not true and must not be: nothing here can publish a
+        canonical that did not pass Gate 3, because this is only reached after
+        the orchestrator finished.
+        """
+        decisions = self._enum_translation_decisions(run, stage, evidence or [])
+        decisions += self._no_data_treatment_decisions(run, stage, evidence or [])
+        decisions += self._regulatory_source_decisions(run, evidence or [])
+        self._save_stage_gar(run, stage, ST_BLOCKED, summary, why=why,
+                             blockers=list(blockers or []),
+                             warnings=list(warnings or []),
+                             evidence=list(evidence or []),
+                             decisions=decisions)
+        mi_ready = (run.stage_status(STAGE_ASSEMBLY) == ST_COMPLETED
+                    and bool(getattr(state, "central_canonical_path", "")))
+        if not mi_ready:
+            self._park(run, RUN_BLOCKED)
+            return
+        self._prepare_publication(run, state)
+        self._save_stage_gar(
+            run, STAGE_PUBLICATION, ST_READY,
+            "The management report is prepared and waiting for your approval "
+            "to publish. The regulatory delivery is held separately.",
+            why="The regulatory problem above does not affect these figures; "
+                "nothing is shared until you approve it.",
+            decisions=[DecisionRequired(
+                decision_id=f"{run.workflow_id}_publish",
+                kind=KIND_PUBLICATION,
+                title="Approve publication",
+                question="Publish this management report as the latest "
+                         "official version? The Annex 2 delivery stays held.",
+                blocking=True,
+                options=[{"value": "publish", "label": "Publish"},
+                         {"value": "hold", "label": "Hold — not yet"}],
+                default_scope="file",
+                subject={"artefact": "publication"})])
+        self.store.append_audit(
+            run.client_id, "regulatory_branch_held", actor="system",
+            workflow_id=run.workflow_id,
+            detail={"stage": stage, "blockers": list(blockers or []),
+                    "management_information": "available for publication"})
+        self._park(run, RUN_NEEDS_REVIEW)
+
+    def _enum_translation_decisions(self, run: WorkflowRun, stage: str,
+                                    evidence) -> List[DecisionRequired]:
+        """Ask for the ESMA code a lender value should be reported as.
+
+        The canonical keeps the lender's word — "Probate - awaiting sale" stays
+        exactly that in MI. The regulator wants one of its own codes, so the
+        translation is a governed decision, recorded once and reused, and it
+        changes nothing about the management value it translates.
+        """
+        from .annex2 import nd_treatments as nd
+        out: List[DecisionRequired] = []
+        for ev in evidence:
+            data = (ev or {}).get("data")
+            if not isinstance(data, dict):
+                # Evidence is free-form across the delivery stages — a table's
+                # data is a list. Only the shape this reads is relevant here.
+                continue
+            field = str(data.get("field") or "").strip()
+            raw = str(data.get("values") or "").strip()
+            if not field:
+                continue
+            if not raw or _all_absent(raw):
+                # The regulator needs this field and the lender does not supply
+                # it. That is not a translation question — there is no lender
+                # word to translate — it is a question about how to REPORT the
+                # absence, and ESMA's no-data codes are the regulator's own
+                # vocabulary for exactly that. Handled below.
+                continue
+            values = [v.strip().strip("'\"") for v in raw.split(",")]
+            # A regulatory field that is EMPTY is not a translation question —
+            # there is no lender word to translate. Asking "how should NULL be
+            # reported?" is noise, and answering it would map absence to a code.
+            # Those stay as the plain blocker the stage already carries.
+            values = [v for v in values
+                      if v and v.lower() not in ("null", "none", "nan", "na",
+                                                 "<na>", "nat", "-")]
+            for value in values[:20]:
+                friendly = field.replace("_", " ")
+                options = [{"value": c, "label": c}
+                           for c in nd.permitted_enum_codes(field)]
+                if not options:
+                    continue
+                out.append(DecisionRequired(
+                    decision_id=f"{run.workflow_id}_enum_{_slug(field)}_{_slug(value)}",
+                    kind="enum",
+                    title=f"How should '{value}' be reported to the regulator?",
+                    question=(f"'{value}' is how this book records {friendly}. "
+                              "The regulator only accepts its own codes, so "
+                              "Trakt needs to know which one this is. The "
+                              "management report keeps the original wording "
+                              "either way."),
+                    blocking=True, category="regulatory_enum",
+                    severity="blocking",
+                    observed_values=[value],
+                    options=options,
+                    allowed_scopes=["portfolio", "client"],
+                    default_scope="client",
+                    subject={"artefact": "regulatory_enum_translation",
+                             "field": field, "source_value": value,
+                             "stage": stage}))
+        return out
+
+    def _no_data_treatment_decisions(self, run: WorkflowRun, stage: str,
+                                     evidence) -> List[DecisionRequired]:
+        """Ask how to REPORT a regulatory field the lender does not supply.
+
+        The canonical is not wrong — it says, truthfully, that this book has no
+        such column. The Annex 2 return still has to say something, and ESMA
+        defines what: a no-data code stating WHY the field is empty. Which codes
+        a field may carry is already in the regime rules, and their meanings are
+        already in the standards library, so this offers exactly those and
+        invents nothing.
+
+        The answer is a standing statement about the field for this client and
+        portfolio, so later periods reuse it without asking again. It reaches
+        the projection through ``defaults.nd_defaults`` in the effective client
+        configuration — which the projector applies while building the return
+        and never writes back to the canonical.
+        """
+        from .annex2 import nd_treatments as nd
+        out: List[DecisionRequired] = []
+        settled = self._client_rule_overrides(run)
+        for field in nd.absent_regulatory_fields(evidence):
+            if nd.setting_for(field) in settled:
+                continue                      # already answered and still valid
+            options = nd.treatment_options(field)
+            if not options:
+                # The rules permit no no-data treatment for this field, so there
+                # is nothing an operator could legitimately choose. The stage's
+                # own blocker stands: this return cannot be produced until the
+                # data exists. (Negative case B.)
+                continue
+            friendly = field.replace("_", " ")
+            code = nd.esma_code_for(field)
+            out.append(DecisionRequired(
+                decision_id=f"{run.workflow_id}_nd_{_slug(field)}",
+                kind=KIND_CLIENT_RULE,
+                title=f"How should the regulator be told about {friendly}?",
+                question=(f"This book does not record {friendly}, and the "
+                          f"regulator requires {code}. ESMA has codes for saying "
+                          "why a field is empty — which one is true here? The "
+                          "management report is unaffected: it will go on "
+                          "showing that the field is not supplied."),
+                blocking=True, category="regulatory_no_data",
+                severity="blocking",
+                options=options,
+                allowed_scopes=["portfolio", "client"],
+                default_scope="portfolio",
+                evidence=[{"label": "What Trakt found", "kind": "text",
+                           "data": {"field": field, "esma_code": code,
+                                    "found": "no value in the canonical",
+                                    "permitted": ", ".join(
+                                        o["value"] for o in options)}}],
+                subject={"artefact": "regulatory_no_data",
+                         "setting": nd.setting_for(field),
+                         "label": f"No-data treatment for {friendly}",
+                         "field": field, "esma_code": code}))
+        return out
+
+    @staticmethod
+    def _unfilled_regulatory_evidence(recon: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Each field the reconciliation cannot fill, as an answerable question.
+
+        The reconciliation now assesses the frame that will actually be
+        delivered, so it knows at projection time exactly which required fields
+        have no value — every one of them, not the first one the XML builder
+        happens to trip over. Reported in the shape the decision surface already
+        reads, so each becomes a no-data question where the regulator permits a
+        no-data code and a source question where it does not.
+        """
+        out: List[Dict[str, Any]] = []
+        blocking = {r["annex2_code"] for r in (recon.get("rows") or [])
+                    if r.get("blocking")}
+        for row in (recon.get("rows") or []):
+            if row.get("annex2_code") not in blocking:
+                continue
+            out.append({"label": "Regulatory field with no value",
+                        "kind": "text",
+                        "data": {"field": row.get("canonical_field", ""),
+                                 "esma_code": row.get("annex2_code", ""),
+                                 "level": "record",
+                                 "values": "NULL",
+                                 "found": "no value on any record"}})
+        return out
+
+    def _regulatory_source_decisions(self, run: WorkflowRun,
+                                     evidence) -> List[DecisionRequired]:
+        """Ask which column holds a regulatory field the regulator insists on.
+
+        The counterpart to a no-data question. Where the rules permit a no-data
+        code, "the lender does not record this" is a complete answer. Where they
+        do not — an obligor identifier, say — the regulator will take nothing
+        but the value, so the only useful question is which column it is in.
+
+        The answer is a governed column mapping, materialised into the approved-
+        overrides artefact Gate 1 already reads, so the field enters the
+        canonical on the rerun and Gate 4 finds it there. It is only worth
+        asking because the regulatory targets are now part of the contract: the
+        canonical has somewhere to put the answer.
+        """
+        from .annex2 import nd_treatments as nd
+        out: List[DecisionRequired] = []
+        for ev in evidence or []:
+            if (ev or {}).get("label") != "Regulatory field with no value":
+                continue
+            data = ev.get("data")
+            if not isinstance(data, dict):
+                continue
+            field = str(data.get("field") or "").strip()
+            code = str(data.get("esma_code") or "").strip()
+            if not field or nd.permitted_nd_codes(field):
+                # With a permitted no-data code this is not a mapping question;
+                # the no-data decision covers it.
+                continue
+            settled = self._client_rule_overrides(run)
+            if nd.constant_setting_for(field) in settled:
+                continue                      # already answered as a constant
+            columns = self._delivery_columns(run)
+            friendly = field.replace("_", " ")
+            if str(data.get("level")) == "header" or not columns:
+                # A report-level fact — the date the pool was formed, say — is
+                # not in any loan's row. It is answered once as a value.
+                out.append(DecisionRequired(
+                    decision_id=f"{run.workflow_id}_regconst_{_slug(field)}",
+                    kind=KIND_CLIENT_RULE,
+                    title=f"What is the {friendly} for this portfolio?",
+                    question=(f"The regulator requires {friendly} ({code}) and "
+                              "will not accept a no-data code for it. It is the "
+                              "same for the whole report, so it is recorded "
+                              "once here rather than read from the files. The "
+                              "management report is unaffected."),
+                    blocking=True, category="regulatory_constant_missing",
+                    severity="blocking",
+                    options=[], allowed_scopes=["portfolio", "client"],
+                    default_scope="portfolio",
+                    evidence=[{"label": "What Trakt found", "kind": "text",
+                               "data": {"field": field, "esma_code": code,
+                                        "found": "blank on every row"}}],
+                    subject={"artefact": "regulatory_constant",
+                             "setting": nd.constant_setting_for(field),
+                             "label": friendly, "field": field,
+                             "esma_code": code}))
+                continue
+            out.append(DecisionRequired(
+                decision_id=f"{run.workflow_id}_regsrc_{_slug(field)}",
+                kind=KIND_FIELD_MAPPING,
+                title=f"Which column holds the {friendly}?",
+                question=(f"The regulator requires {friendly} ({code}) on every "
+                          "record and will not accept a no-data code for it. "
+                          "Which column in the files holds it? If it is the "
+                          "same for the whole portfolio and not in the files at "
+                          "all, amend this with the value instead. The "
+                          "management report is unaffected either way."),
+                blocking=True, category="regulatory_source_missing",
+                severity="blocking",
+                options=[{"value": c, "label": c} for c in columns],
+                allowed_scopes=["portfolio", "client"],
+                default_scope="portfolio",
+                evidence=[{"label": "What Trakt found", "kind": "text",
+                           "data": {"field": field, "esma_code": code,
+                                    "found": "blank on every row"}}],
+                subject={"artefact": "regulatory_source",
+                         "canonical_field": field, "esma_code": code}))
+        return out
+
+    def _delivery_columns(self, run: WorkflowRun) -> List[str]:
+        """Column headers of this delivery's files, for the operator to pick."""
+        out: List[str] = []
+        try:
+            import pandas as pd
+            base = Path(run.delivery.get("input_path", ""))
+            for f in sorted(base.glob("*")) if base.exists() else []:
+                if f.suffix.lower() not in (".csv", ".xlsx", ".xls"):
+                    continue
+                cols = (pd.read_csv(f, nrows=0) if f.suffix.lower() == ".csv"
+                        else pd.read_excel(f, nrows=0)).columns
+                out.extend(str(c) for c in cols if str(c) not in out)
+        except Exception:  # noqa: BLE001 — an empty list simply asks nothing
+            pass
+        return out
 
     def _park(self, run: WorkflowRun, status: str) -> None:
         if run.status != status:
@@ -1019,8 +1481,15 @@ class OpsEngine:
 
         # ---- Stage: regulatory details preflight (I3) -------------------- #
         from .annex2 import preflight as _pf
+        from .annex2 import stages as _stages
         overrides = self._client_rule_overrides(run)
-        pf = _pf.run_preflight(client_config_path=self.client_config_path,
+        # THIS client's configuration, not the repository default. The default
+        # is one existing client's file: reading it here assessed every other
+        # lender's regulatory identity — LEI, originator, jurisdiction —
+        # against someone else's, which is both wrong and a cross-client leak.
+        # The resolver already owns this lookup; the delivery chain now uses it.
+        client_config = self._config_resolver().client_config_for(run.client_id)
+        pf = _pf.run_preflight(client_config_path=client_config,
                                overrides=overrides,
                                reporting_period=run.reporting_period)
         if pf["status"] == "blocked":
@@ -1070,13 +1539,16 @@ class OpsEngine:
         if not done(STAGE_PROJECTION, "projected_csv"):
             self._save_stage_gar(run, STAGE_PROJECTION, ST_RUNNING,
                                  "Projecting the regulatory data.")
-            effective_cfg = None
-            if overrides:
-                effective_cfg = _pf.materialise_effective_config(
-                    base_config_path=self.client_config_path,
-                    overrides=overrides,
-                    out_path=chain_dir / "effective_client_config.yaml")
-                a2["effective_config"] = str(effective_cfg)
+            # ALWAYS materialise, even with no overrides. Passing None here
+            # made the projector fall back to the repository's default client
+            # file — one existing client's regulatory identity — for every other
+            # lender, which is the same leak the preflight had. The effective
+            # config is this client's own, plus whatever the operator approved.
+            effective_cfg = _pf.materialise_effective_config(
+                base_config_path=client_config,
+                overrides=overrides,
+                out_path=chain_dir / "effective_client_config.yaml")
+            a2["effective_config"] = str(effective_cfg)
             out = runners.run_projection(
                 central_canonical=state.central_canonical_path,
                 out_dir=chain_dir / "projection",
@@ -1084,7 +1556,8 @@ class OpsEngine:
             # Population-path reconciliation (I2) — persisted evidence; only
             # genuinely unsupported required outputs may block.
             from .annex2 import population as _pop
-            recon = _pop.reconciliation_document()
+            recon = _pop.reconciliation_document(
+                projected_csv=out.artefacts.get("projected_csv", ""))
             recon_path = chain_dir / "population_reconciliation.json"
             recon_path.write_text(json.dumps(recon, indent=2),
                                   encoding="utf-8")
@@ -1096,11 +1569,12 @@ class OpsEngine:
                         "blocking_codes": recon["blocking_codes"],
                         "mechanism_counts": recon["mechanism_counts"]})
             if not out.ok:
-                self._save_stage_gar(run, STAGE_PROJECTION, ST_BLOCKED,
-                                     out.summary, blockers=out.blockers,
-                                     warnings=out.warnings)
                 run.annex2 = a2
-                self._park(run, RUN_BLOCKED)
+                self._park_regulatory(run, state, stage=STAGE_PROJECTION,
+                                      summary=out.summary,
+                                      blockers=out.blockers,
+                                      warnings=out.warnings,
+                                      evidence=out.evidence)
                 return
             recon_warn = ([] if recon["blocking_count"] == 0
                           else [recon["summary_sentence"]])
@@ -1114,22 +1588,39 @@ class OpsEngine:
                 warnings=out.warnings + recon_warn,
                 blockers=([recon["summary_sentence"]]
                           if recon["blocking_count"] else []),
-                evidence=[{"label": "How each regulatory field is filled",
-                           "kind": "table",
-                           "data": recon["mechanism_counts"]}],
+                evidence=([{"label": "How each regulatory field is filled",
+                            "kind": "table",
+                            "data": recon["mechanism_counts"]}]
+                          + self._unfilled_regulatory_evidence(recon)),
                 inputs=[state.central_canonical_path or ""],
                 outputs=[a2["projected_csv"]])
             if recon["blocking_count"]:
-                self._park(run, RUN_BLOCKED)
+                self._park_regulatory(
+                    run, state, stage=STAGE_PROJECTION, summary=out.summary,
+                    blockers=[recon["summary_sentence"]],
+                    warnings=out.warnings + recon_warn,
+                    evidence=self._unfilled_regulatory_evidence(recon))
                 return
 
         # ---- Stage: delivery normalisation (I1 stage 1) ------------------ #
         if not done(STAGE_DELIVERY_PREP, "delivery_ready_csv"):
             self._save_stage_gar(run, STAGE_DELIVERY_PREP, ST_RUNNING,
                                  "Preparing the delivery data.")
+            # The contract this delivery is normalised against, written out for
+            # the run's record: the regulator's own requirements from the field
+            # universe, the registry, the workbook and the XSD, plus whatever
+            # this portfolio's operator approved. Approved translations teach the
+            # delivery what one of the lender's words means; the canonical is
+            # untouched and goes on carrying the lender's own words.
+            from .annex2 import nd_treatments as _nd
+            translations = self._regulatory_enum_translations(run)
+            rules_path = _nd.materialise_effective_delivery_rules(
+                translations=translations,
+                out_path=chain_dir / "effective_delivery_rules.yaml")
+            a2["effective_delivery_rules"] = str(rules_path)
             out = runners.run_normalisation(
                 projected_csv=a2["projected_csv"],
-                out_dir=chain_dir / "delivery")
+                out_dir=chain_dir / "delivery", rules_path=rules_path)
             audit_detail = {"metrics": out.metrics,
                             "warning_count": len(out.warnings),
                             "blocker_count": len(out.blockers)}
@@ -1138,15 +1629,13 @@ class OpsEngine:
                                     workflow_id=run.workflow_id,
                                     detail=audit_detail)
             if not out.ok:
-                self._save_stage_gar(
-                    run, STAGE_DELIVERY_PREP, ST_BLOCKED, out.summary,
+                run.annex2 = a2
+                self._park_regulatory(
+                    run, state, stage=STAGE_DELIVERY_PREP, summary=out.summary,
                     why="Publishing figures that fail the delivery checks "
                         "could mislead the regulator.",
                     warnings=out.warnings, blockers=out.blockers,
-                    evidence=out.evidence,
-                    inputs=[a2.get("projected_csv", "")])
-                run.annex2 = a2
-                self._park(run, RUN_BLOCKED)
+                    evidence=out.evidence)
                 return
             a2["delivery_ready_csv"] = out.artefacts.get("delivery_ready_csv", "")
             a2["delivery_metrics"] = out.metrics
@@ -1172,11 +1661,14 @@ class OpsEngine:
                         "xml_sha256": out.metrics.get("xml_sha256", ""),
                         "interventions": out.report.get("interventions", [])})
             if not out.ok:
-                self._save_stage_gar(run, STAGE_XML, ST_BLOCKED, out.summary,
-                                     blockers=out.blockers,
-                                     warnings=out.warnings)
+                # Includes an XML that fails XSD validation: the regulatory
+                # artefact is withheld, the management report is not.
                 run.annex2 = a2
-                self._park(run, RUN_BLOCKED)
+                self._park_regulatory(run, state, stage=STAGE_XML,
+                                      summary=out.summary,
+                                      blockers=out.blockers,
+                                      warnings=out.warnings,
+                                      evidence=out.evidence)
                 return
             a2.update({
                 "xml": out.artefacts.get("xml", ""),
@@ -1252,7 +1744,8 @@ class OpsEngine:
 
     def resolve_decision(self, *, client_id: str, decision_id: str, action: str,
                          actor: str, value: str = "", scope: str = "portfolio",
-                         reason: str = "",
+                         reason: str = "", source_column: str = "",
+                         source_file: str = "",
                          actor_is_admin: bool = False) -> Dict[str, Any]:
         from .rules import ADMIN_ONLY_SCOPES
         if scope in ADMIN_ONLY_SCOPES and not actor_is_admin:
@@ -1261,12 +1754,14 @@ class OpsEngine:
                            "this level.", 403)
         return self._resolve_decision_inner(
             client_id=client_id, decision_id=decision_id, action=action,
-            actor=actor, value=value, scope=scope, reason=reason)
+            actor=actor, value=value, scope=scope, reason=reason,
+            source_column=source_column, source_file=source_file)
 
     def _resolve_decision_inner(self, *, client_id: str, decision_id: str,
                                 action: str, actor: str, value: str = "",
                                 scope: str = "portfolio",
-                                reason: str = "") -> Dict[str, Any]:
+                                reason: str = "", source_column: str = "",
+                                source_file: str = "") -> Dict[str, Any]:
         """Approve / reject / amend one decision. Approvals become governed,
         scoped rules; when no blocking decisions remain open, the affected
         stage is rerun automatically. Duplicate resolutions are rejected."""
@@ -1277,8 +1772,9 @@ class OpsEngine:
         if doc.get("status") != DEC_OPEN:
             raise OpsError("OPS_DECISION_ALREADY_RESOLVED",
                            "This decision has already been resolved.", 409)
-        if action not in ("approve", "reject", "amend"):
-            raise OpsError("OPS_BAD_ACTION", "Choose approve, reject or amend.", 400)
+        if action not in ("approve", "reject", "amend", "defer"):
+            raise OpsError("OPS_BAD_ACTION",
+                           "Choose approve, reject, amend or defer.", 400)
 
         # Input-pack file identification: applies to the BATCH, not a workflow.
         from .contracts import KIND_FILE_ROLE
@@ -1316,6 +1812,24 @@ class OpsEngine:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
                            "The workflow for this decision no longer exists.", 404)
 
+        if action == "defer":
+            # "I need to ask the lender." The item stays OPEN — deferring is a
+            # note about who is working on it, never a way to make a blocking
+            # question go away — so the run stays held and no rule is written.
+            if not reason:
+                raise OpsError("OPS_REASON_REQUIRED",
+                               "Please say what you are waiting for.", 400)
+            notes = list(doc.get("deferrals") or [])
+            notes.append({"by": actor, "at": now_iso(), "reason": reason})
+            doc["deferrals"] = notes
+            doc["deferred"] = True
+            self.store.save_decision(client_id, doc)
+            self.store.append_audit(client_id, "decision_deferred", actor=actor,
+                                    workflow_id=run.workflow_id,
+                                    decision_id=decision_id,
+                                    detail={"reason": reason})
+            return {"decision": doc, "rule": None, "rerun_scheduled": False}
+
         if action == "reject":
             if not reason:
                 raise OpsError("OPS_REASON_REQUIRED",
@@ -1330,6 +1844,41 @@ class OpsEngine:
             return {"decision": doc, "rule": None, "rerun_scheduled": False}
 
         chosen = value or (doc.get("recommendation") or {}).get("value", "")
+        if chosen == ACTION_PROVIDE_SOURCE_MAPPING:
+            if not source_column:
+                raise OpsError("OPS_SOURCE_COLUMN_REQUIRED",
+                               "Name the column in the files this should come "
+                               "from.", 400)
+            if not (source_file or self._sole_delivery_file(run)):
+                # Several files in the pack: which one the column is in is a
+                # real question, and answering it wrongly puts the wrong figures
+                # in the report. Refuse rather than pick.
+                raise OpsError("OPS_SOURCE_FILE_REQUIRED",
+                               "This delivery has more than one file — say "
+                               "which file that column is in.", 400)
+        subject_now = doc.get("subject") or {}
+        if subject_now.get("artefact") == "regulatory_no_data":
+            # Only treatments the regime rules already allow for THIS field. A
+            # no-data code states why a field is empty; the wrong one is a false
+            # statement to the regulator, so it is refused before it can be
+            # approved rather than after the return is built.
+            from .annex2 import nd_treatments as nd
+            field = str(subject_now.get("field", ""))
+            if not nd.is_permitted(field, chosen):
+                allowed = ", ".join(nd.permitted_nd_codes(field)) or "none"
+                raise OpsError(
+                    "OPS_TREATMENT_NOT_PERMITTED",
+                    f"The regulator does not allow that treatment for this "
+                    f"field. Permitted: {allowed}.", 400)
+        if subject_now.get("artefact") == "regulatory_enum_translation":
+            from .annex2 import nd_treatments as nd
+            field = str(subject_now.get("field", ""))
+            if not nd.is_permitted_enum(field, chosen):
+                allowed = ", ".join(nd.permitted_enum_codes(field)) or "none"
+                raise OpsError(
+                    "OPS_CODE_NOT_PERMITTED",
+                    f"The regulator does not accept that code for this field. "
+                    f"Permitted: {allowed}.", 400)
         if doc.get("kind") == KIND_PUBLICATION and not chosen:
             chosen = "publish"
         if not chosen:
@@ -1361,12 +1910,15 @@ class OpsEngine:
         rule = None
         if doc.get("kind") in ("field_mapping", "alias", "enum", "transformation",
                                KIND_VALIDATION_EXCEPTION, KIND_CLIENT_RULE):
-            rule = self._persist_rule(run, doc, chosen, scope, actor, reason)
+            rule = self._persist_rule(run, doc, chosen, scope, actor, reason,
+                                      action=action)
 
         doc.update(status=DEC_APPROVED, resolved_by=actor, resolved_at=now_iso(),
                    resolution_action=action,
                    resolution_value=chosen, resolution_scope=scope,
                    resolution_reason=reason,
+                   resolution_source_column=source_column,
+                   resolution_source_file=source_file,
                    rule_id=(rule.rule_id if rule else None),
                    rule_version=(rule.version if rule else None))
         self.store.save_decision(client_id, doc)
@@ -1378,6 +1930,7 @@ class OpsEngine:
                                         "scope": scope})
 
         self._write_approved_decisions_file(run)
+        self._write_approved_overrides_file(run)
 
         rerun_scheduled = False
         # Rerun only when the whole review batch is resolved — never mid-batch,
@@ -1395,22 +1948,55 @@ class OpsEngine:
                 "rerun_scheduled": rerun_scheduled}
 
     def _persist_rule(self, run: WorkflowRun, doc: Dict[str, Any], value: str,
-                      scope: str, actor: str, reason: str) -> RuleRecord:
+                      scope: str, actor: str, reason: str,
+                      action: str = "approve") -> RuleRecord:
         subject = doc.get("subject") or {}
         kind = doc["kind"]
         payload: Dict[str, Any]
-        if kind in ("field_mapping", "alias"):
-            payload = {"source_column": subject.get("source_column")
-                       or subject.get("target_field", ""),
-                       "canonical_field": value}
-            desc = (f"Treat '{subject.get('source_column') or subject.get('target_field')}' "
-                    f"as '{value.replace('_', ' ')}'.")
+        if (kind == KIND_FIELD_MAPPING
+                and subject.get("artefact") == "regulatory_source"
+                and action == "amend"):
+            # "It is not in the files; it is this." A pool-level fact answered
+            # on the same question, recorded as a regulatory constant and
+            # applied while the return is built — never to the canonical.
+            from .annex2.nd_treatments import constant_setting_for
+            field = str(subject.get("canonical_field", ""))
+            payload = {"setting": constant_setting_for(field), "value": value}
+            kind = KIND_CLIENT_RULE
+            desc = f"Report {field.replace('_', ' ')} as {value}."
+            scope = scope if scope in ("portfolio", "client") else "portfolio"
+        elif kind in ("field_mapping", "alias"):
+            if subject.get("canonical_field"):
+                # The question was "which column is this field?", so the
+                # operator's answer IS the source column and the canonical side
+                # is already known. (The usual direction is the other way: "what
+                # is this column?", answered with a canonical field.)
+                payload = {"source_column": value,
+                           "canonical_field": str(subject["canonical_field"])}
+                desc = (f"'{value}' is the "
+                        f"{str(subject['canonical_field']).replace('_', ' ')}.")
+            else:
+                payload = {"source_column": subject.get("source_column")
+                           or subject.get("target_field", ""),
+                           "canonical_field": value}
+                desc = (f"Treat '{subject.get('source_column') or subject.get('target_field')}' "
+                        f"as '{value.replace('_', ' ')}'.")
         elif kind == "enum":
             payload = {"field": subject.get("field", ""),
                        "source_value": subject.get("source_value", ""),
                        "canonical_value": value}
-            desc = (f"Read '{subject.get('source_value')}' as '{value}' for "
-                    f"{subject.get('field', 'this field')}.")
+            if subject.get("artefact") == "regulatory_enum_translation":
+                # A translation for the REGULATOR. It must not become a client
+                # mapping-memory entry, because Gate 1 applies those to the
+                # management data and the lender's own wording has to survive
+                # there — that is the whole point of translating at the boundary.
+                from .annex2.nd_treatments import LAYER_REGULATORY
+                payload["layer"] = LAYER_REGULATORY
+                desc = (f"Report '{subject.get('source_value')}' to the "
+                        f"regulator as '{value}'.")
+            else:
+                desc = (f"Read '{subject.get('source_value')}' as '{value}' for "
+                        f"{subject.get('field', 'this field')}.")
         elif kind == KIND_VALIDATION_EXCEPTION:
             payload = {"check": subject.get("artefact", "validation"),
                        "disposition": value, "justification": reason}
@@ -1418,9 +2004,20 @@ class OpsEngine:
             scope = "file"      # validation exceptions never generalise silently
         elif kind == KIND_CLIENT_RULE:
             payload = {"setting": subject.get("setting", ""), "value": value}
-            desc = (f"Set {subject.get('label') or subject.get('setting')} "
-                    f"for this client.")
-            scope = "client"    # regulatory identity is client-scoped
+            if subject.get("artefact") in ("regulatory_no_data",
+                                          "regulatory_constant"):
+                # Why a field is empty can differ between a client's books — one
+                # portfolio may not collect it, another may hold it elsewhere —
+                # so this keeps the scope the operator chose. Regulatory
+                # IDENTITY below is different: it is the client, and forcing
+                # client scope there is deliberate.
+                desc = (f"Report {subject.get('field') or 'this field'} to the "
+                        f"regulator as {value}.")
+                scope = scope if scope in ("portfolio", "client") else "portfolio"
+            else:
+                desc = (f"Set {subject.get('label') or subject.get('setting')} "
+                        f"for this client.")
+                scope = "client"    # regulatory identity is client-scoped
         else:
             payload = {"subject": subject.get("decision_id", ""),
                        "selected_action": value}
@@ -1492,6 +2089,22 @@ class OpsEngine:
                 entry["not_applicable_confirmed"] = True
             if sel in ("confirm_default_or_nd", "confirm_ND_code"):
                 entry["default_confirmed"] = True
+            if sel == ACTION_PROVIDE_SOURCE_MAPPING:
+                # The whole point of the action: the operator said WHICH column.
+                # Without it the apply step records INVALID and the field stays
+                # unresolved, so the approval would look accepted and do nothing.
+                entry["selected_source_column"] = \
+                    match.get("resolution_source_column", "")
+                # The central tape builder needs BOTH the file and the column
+                # (`if f and c`) before it will treat a coverage row as a real
+                # source. An operator answering "it is in the STATUS_CD column"
+                # of a single-file delivery should not have to name the file as
+                # well, so fill it in — but only when there is exactly one data
+                # file and therefore nothing to be wrong about.
+                entry["selected_source_file"] = (
+                    match.get("resolution_source_file")
+                    or entry.get("source_file")
+                    or self._sole_delivery_file(run))
             entry["operator_note"] = match.get("resolution_reason") or None
             entry["approved_by"] = match.get("resolved_by", "")
             entry["approved_at"] = match.get("resolved_at", "")
@@ -1500,15 +2113,126 @@ class OpsEngine:
             return
         out = pending.parent / APPROVED_DECISIONS_FILE
         out.write_text(yaml.safe_dump(docy, sort_keys=False), encoding="utf-8")
-        # Durable copy in the operations-control container.
+        text = out.read_text(encoding="utf-8")
+        # Durable copy in the operations-control container: the run's own audit
+        # trail...
         self.store.storage.write_text(
             f"blob://{self.store.layout.container}/{run.client_id}/workflow-runs/"
-            f"{run.workflow_id}/onboarding/{APPROVED_DECISIONS_FILE}",
-            out.read_text(encoding="utf-8"))
+            f"{run.workflow_id}/onboarding/{APPROVED_DECISIONS_FILE}", text)
+        # ...and the source's standing mapping contract, which is what makes
+        # next month deterministic. Decisions are matched on target_field, not
+        # on position, so the same contract answers the same schema again.
+        self.store.storage.write_text(
+            self.store.layout.approved_decisions_uri(
+                run.client_id, run.portfolio_id,
+                run.delivery.get("dataset", "funded"), APPROVED_DECISIONS_FILE),
+            text)
+        self.store.append_audit(
+            run.client_id, "approved_mapping_contract_saved", actor="system",
+            workflow_id=run.workflow_id,
+            detail={"portfolio_id": run.portfolio_id,
+                    "dataset": run.delivery.get("dataset", "funded")})
+
+    def _write_approved_overrides_file(self, run: WorkflowRun,
+                                       project_dir: Optional[Path] = None) -> None:
+        """Materialise approved column mappings as Gate 1's overrides artefact.
+
+        ``12_approved_mapping_overrides.yaml`` is what the central tape builder
+        already reads for approved source selections — including which column is
+        the loan identifier, a choice no target-contract decision can express
+        because the loan key is the tape's identity rather than one of its
+        fields.
+        """
+        rules = [r for r in self.rules.applicable(
+            client_id=run.client_id, portfolio_id=run.portfolio_id,
+            file_ref=run.delivery.get("schema_fingerprint", ""))
+            if r.kind in ("field_mapping", "alias")
+            and (r.payload or {}).get("source_column")
+            and (r.payload or {}).get("canonical_field")]
+        if not rules:
+            return
+        doc = {"version": 1,
+               "_doc": "Approved by operators in the Operations Control "
+                       "Centre; regenerated from the governed rule store on "
+                       "every approval.",
+               "user_overrides": [
+                   # The tape builder needs BOTH a file and a column before it
+                   # treats an override as a real source, so a single-file
+                   # delivery names its own file. A multi-file pack leaves it
+                   # blank, which the operator was already required to resolve
+                   # when approving.
+                   {"source_file": (r.payload.get("source_file")
+                                    or self._sole_delivery_file(run)),
+                    "source_column": r.payload["source_column"],
+                    "canonical_field": r.payload["canonical_field"],
+                    "method": "operator_approved", "confidence": 1.0,
+                    "rule_id": r.rule_id, "rule_version": r.version}
+                   for r in rules]}
+        text = yaml.safe_dump(doc, sort_keys=False)
+        work_dir = self._staging_dir(run)
+        pending = _find_artifact(work_dir, DECISIONS_FILE)
+        target_dir = (project_dir if project_dir is not None
+                      else (pending.parent if pending is not None else work_dir))
+        target_dir.mkdir(parents=True, exist_ok=True)
+        (target_dir / OVERRIDES_FILE).write_text(text, encoding="utf-8")
+        self.store.storage.write_text(
+            self.store.layout.approved_decisions_uri(
+                run.client_id, run.portfolio_id,
+                run.delivery.get("dataset", "funded"), OVERRIDES_FILE), text)
+
+    @staticmethod
+    def _sole_delivery_file(run: WorkflowRun) -> str:
+        """The delivery's only data file, or "" when there is a choice to make.
+
+        Returning "" for a multi-file pack is deliberate: guessing which file an
+        operator meant is exactly the kind of silent decision this sprint exists
+        to remove. They name it explicitly instead.
+        """
+        names = [str(f.get("name", "")) for f in (run.delivery.get("files") or [])
+                 if str(f.get("name", "")).strip()]
+        return names[0] if len(names) == 1 else ""
+
+    def _approved_decisions_digest(self, run: WorkflowRun) -> str:
+        """Content digest of the approved-decisions file, or "" when there is
+        none. Content rather than mtime: a rerun that changes nothing must not
+        look like new answers."""
+        import hashlib
+        digest = hashlib.sha256()
+        seen = False
+        for p in (self._approved_decisions_path(run),
+                  _find_artifact(self._staging_dir(run), OVERRIDES_FILE)):
+            if p is not None and p.exists():
+                digest.update(p.read_bytes())
+                seen = True
+        return digest.hexdigest() if seen else ""
 
     def _approved_decisions_path(self, run: WorkflowRun) -> Optional[Path]:
+        """This run's approved mapping contract, if it has one.
+
+        A run that has been through review has its own copy in staging. A NEW
+        delivery for a source that was approved in an earlier period has none —
+        so the source's standing contract is materialised into this run's
+        staging and used, which is what lets month 2 process without asking the
+        same questions again. Scoped by client + portfolio + dataset, so no
+        other client's contract is reachable from here.
+        """
         p = _find_artifact(self._staging_dir(run), APPROVED_DECISIONS_FILE)
-        return p
+        if p is not None:
+            return p
+        uri = self.store.layout.approved_decisions_uri(
+            run.client_id, run.portfolio_id,
+            run.delivery.get("dataset", "funded"), APPROVED_DECISIONS_FILE)
+        try:
+            text = self.store.storage.read_text(uri) \
+                if self.store.storage.exists(uri) else ""
+        except Exception:  # noqa: BLE001 — a missing contract is not an error
+            text = ""
+        if not text:
+            return None
+        dest = self._staging_dir(run) / APPROVED_DECISIONS_FILE
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(text, encoding="utf-8")
+        return dest
 
     def _validation_exception_approved(self, run: WorkflowRun) -> bool:
         for d in self.store.list_decisions(run.client_id,
@@ -1604,7 +2328,13 @@ class OpsEngine:
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
                            "That workflow could not be found.", 404)
-        if run.status != RUN_AWAITING_PUBLICATION:
+        # A run held on the REGULATORY branch sits at needs_review — the enum
+        # translations are still open — while its management report is prepared
+        # and its publication stage is ready. The precondition is therefore the
+        # publication stage, not the run status; a run whose publication stage
+        # is not ready still cannot publish, whatever its status says.
+        if (run.status != RUN_AWAITING_PUBLICATION
+                and run.stage_status(STAGE_PUBLICATION) != ST_READY):
             raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
                            "This workflow is not ready to publish.", 409)
         period = run.reporting_period or "unspecified"
@@ -1740,7 +2470,11 @@ class OpsEngine:
         if run is None:
             raise OpsError("OPS_WORKFLOW_NOT_FOUND",
                            "That workflow could not be found.", 404)
-        if run.status != RUN_AWAITING_PUBLICATION:
+        # Symmetric with approve_publication: a run held on the regulatory
+        # branch sits at needs_review with a ready publication stage, and
+        # holding that report must stay available.
+        if (run.status != RUN_AWAITING_PUBLICATION
+                and run.stage_status(STAGE_PUBLICATION) != ST_READY):
             raise OpsError("OPS_PUBLICATION_NOT_PREPARED",
                            "This workflow is not awaiting publication.", 409)
         period = run.reporting_period or "unspecified"

@@ -13,8 +13,8 @@
 #
 # See:
 #   docs/mi_mna_target_architecture_and_build_plan.md   (§2.1, §8)
-#   config/regime/annex2_delivery_rules.yaml
 #   config/regime/annex2_field_universe.yaml
+#   engine/regime_contract/            (the effective Annex 2 contract)
 
 route_id: regulatory_annex2
 description: >-

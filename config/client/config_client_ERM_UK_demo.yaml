@@ -39,7 +39,8 @@ loan_engine:
   ledger_db: out/loan_ledger.db
   payments_file: demo_payments.csv
 defaults:
-  originator_legal_entity_identifier: 213800ABCDE123456701N202501
+  originator_legal_entity_identifier: "213800ABCDE123456701"   # LEI, not the
+  # securitisation identifier: RREL1 derives that from this value.
   originator_name: ERE Funding Limited
   originator_establishment_country: GB
 transformations:

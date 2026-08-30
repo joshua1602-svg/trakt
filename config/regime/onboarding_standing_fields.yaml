@@ -5,8 +5,8 @@
 # WHY THIS FILE EXISTS
 # --------------------
 # Everything here already exists somewhere in Trakt: the Annex 2 fields are
-# entries in config/regime/annex2_field_universe.yaml and
-# config/regime/annex2_delivery_rules.yaml; the Annex 12 fields are the
+# entries in config/regime/annex2_field_universe.yaml, from which the
+# effective Annex 2 contract is derived; the Annex 12 fields are the
 # `annex12.deal` block of config/regime/annex12_template.yaml; the client
 # identity fields are the `client:` / `portfolio:` / `defaults:` blocks of
 # config/client/config_client_*.yaml.

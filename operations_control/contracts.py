@@ -80,7 +80,11 @@ RUN_TRANSITIONS: Dict[str, tuple] = {
     RUN_RECEIVED: (RUN_RUNNING, RUN_CANCELLED),
     RUN_RUNNING: (RUN_NEEDS_REVIEW, RUN_BLOCKED, RUN_AWAITING_PUBLICATION,
                   RUN_FAILED, RUN_CANCELLED),
-    RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED),
+    # A run held on the REGULATORY branch sits here with its management
+    # report prepared, so publishing or holding that report is legal
+    # from needs_review — the open questions are about the delivery.
+    RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED, RUN_PUBLISHED,
+                       RUN_HELD),
     RUN_BLOCKED: (RUN_RUNNING, RUN_CANCELLED),
     RUN_AWAITING_PUBLICATION: (RUN_PUBLISHED, RUN_HELD, RUN_RUNNING, RUN_CANCELLED),
     RUN_HELD: (RUN_AWAITING_PUBLICATION, RUN_RUNNING, RUN_CANCELLED),
@@ -302,6 +306,10 @@ class WorkflowRun:
     batch_id: str = ""
     # Set when the API restarted while this run was executing; cleared on rerun.
     interrupted: bool = False
+    # Digest of the approved-decisions file Gate 1 last consumed. When the
+    # operator answers the review queue this changes, which is how a rerun knows
+    # Gate 1's previous output is stale and must be produced again.
+    onboarding_decisions_digest: str = ""
     blockers: List[str] = field(default_factory=list)   # plain language
     created_at: str = field(default_factory=now_iso)
     created_by: str = ""

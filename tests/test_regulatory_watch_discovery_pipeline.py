@@ -484,7 +484,6 @@ def test_the_cli_refuses_an_unusable_source_config(tmp_path):
 WATCHED = (
     "config/regulatory_watch/esma_annex2_sources.yaml",
     "config/regulatory_watch/esma_annex2_publication_sources.yaml",
-    "config/regime/annex2_delivery_rules.yaml",
     "config/system/fields_registry.yaml",
     "config/system/esma_code_order.yaml",
 )

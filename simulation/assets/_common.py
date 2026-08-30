@@ -32,9 +32,9 @@ from ..models import (
 #: so the simulator writes what the platform actually validates rather than its
 #: own internal vocabulary.
 REPORTED_STATUS = {
-    # "Active" rather than "PERFORMING": it is the token
-    # config/regime/annex2_delivery_rules.yaml already maps to the ESMA PERF
-    # code, so a performing account reaches delivery without a bespoke mapping.
+    # "Active" rather than "PERFORMING": it is the token the governed enum
+    # configuration already maps to the ESMA PERF code, so a performing account
+    # reaches delivery without a bespoke mapping.
     "performing": "Active",
     # ARR001 accepts ARRE / DEFAULT / RESTRUCTURED for an account carrying
     # arrears, and DEF001 requires DEFAULT wherever a default date exists.

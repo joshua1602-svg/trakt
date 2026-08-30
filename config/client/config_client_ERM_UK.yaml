@@ -64,7 +64,12 @@ loan_engine:
 # --- DEFAULTS (CRITICAL CHANGE) ---
 # These are moved here so the Projector injects them into the CSV rows.
 defaults:
-  originator_legal_entity_identifier: "213800ABCDE123456701N202501"  # RREL83
+  # RREL83. The LEI itself — 20 characters, ISO 17442, and the shape auth.099
+  # enforces. The value here used to carry the securitisation identifier's
+  # "N<year><seq>" suffix, which the schema rejects; the regime rules then
+  # mapped it back to the bare LEI to hide that. RREL1 still derives the
+  # securitisation identifier from this LEI, so nothing else changes.
+  originator_legal_entity_identifier: "213800ABCDE123456701"
   originator_name: "ERE Funding Limited"                            # RREL82
   originator_establishment_country: "GB"                            # RREL84
 

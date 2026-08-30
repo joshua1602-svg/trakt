@@ -19,11 +19,11 @@ component                               backing artefact(s)
 canonical field registry regime map     config/system/fields_registry.yaml
 ESMA code ordering                      config/system/esma_code_order.yaml,
                                         config/system/esma_model_structure.yaml
-ND permissions / defaults               config/regime/annex2_delivery_rules.yaml,
+ND permissions / defaults               the derived Annex 2 contract,
                                         config/regime/annex2_field_universe.yaml
 enum mapping                            config/system/enum_mapping.yaml,
-                                        annex2_delivery_rules.yaml transforms
-validation rules                        annex2_delivery_rules.yaml validators
+                                        the contract's enum vocabulary
+validation rules                        the contract's XSD-derived validators
 XML/XSD mapping and building            config/delivery/annex2_field_xsd_path_map.yaml
 Annex 2 fixtures and tests              tests/fixtures/annex2_*, tests/test_annex2_*
 ======================================  =====================================
@@ -78,7 +78,7 @@ REGIME = "ESMA_Annex2"
 P_REGISTRY = "config/system/fields_registry.yaml"
 P_CODE_ORDER = "config/system/esma_code_order.yaml"
 P_MODEL_STRUCTURE = "config/system/esma_model_structure.yaml"
-P_DELIVERY_RULES = "config/regime/annex2_delivery_rules.yaml"
+P_DELIVERY_RULES = "engine.regime_contract.annex2_contract (derived)"
 P_FIELD_UNIVERSE = "config/regime/annex2_field_universe.yaml"
 P_ENUM_MAPPING = "config/system/enum_mapping.yaml"
 P_XSD_PATH_MAP = "config/delivery/annex2_field_xsd_path_map.yaml"
@@ -145,7 +145,12 @@ class TraktImplementationIndex:
         index.model_structure_order = [str(c) for c
                                        in (structure.get("Record") or [])]
 
-        rules = _load_yaml(root / P_DELIVERY_RULES)
+        # The Annex 2 contract is derived from the field universe, the fields
+        # registry, the mapping workbook and the XSD; there is no rules file to
+        # read. Impact analysis compares against the same contract the pipeline
+        # uses, so a regulatory change is assessed against what actually runs.
+        from engine.regime_contract.annex2_contract import as_delivery_rules
+        rules = as_delivery_rules()
         index.delivery_rules = {str(k): (v or {}) for k, v
                                 in (rules.get("field_rules") or {}).items()}
         scope = rules.get("reconciliation_scope") or {}
@@ -247,7 +252,7 @@ class Context:
     delta: SpecDelta
     code: str
     registry: Optional[Dict[str, Any]]          # fields_registry regime entry
-    rule: Optional[Dict[str, Any]]              # annex2_delivery_rules entry
+    rule: Optional[Dict[str, Any]]              # effective contract entry
     path_entry: Optional[Dict[str, Any]]        # annex2_field_xsd_path_map
     in_order: bool                              # esma_code_order / structure
     order_position: Optional[int]

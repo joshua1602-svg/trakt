@@ -16,7 +16,8 @@ This module flips the workflow to be *target-contract-first*:
          - MI modes      -> the MI semantics field registry
                             (``mi_agent/mi_semantics_field_registry.yaml``)
          - Regulatory    -> the relevant ESMA annex, primarily ANNEX 2
-                            (``config/regime/annex2_delivery_rules.yaml``).
+                            (the effective contract from
+                            ``engine.regime_contract.annex2_contract``).
                             Annex 12 is deliberately NOT mixed in here.
     3. For each TARGET field, find the best source candidate(s), or a
        derivation / default / ND / configured-static rule, or mark it missing.
@@ -124,7 +125,9 @@ D_SOURCE_VALUE = "source_value_normalisation"
 
 # Default asset-class config layer for ESMA Annex 2 (UK Equity Release).
 _ASSET_CONFIG_DEFAULT = _REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml"
-_ANNEX2_REGIME_DEFAULT = _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
+#: Kept only so callers that still pass a regime-config path have something to
+#: pass. The Annex 2 contract is derived, not read from a file.
+_ANNEX2_REGIME_DEFAULT = None
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +178,79 @@ def _mi_domain(entry: Dict[str, Any]) -> str:
     if crit.startswith("layer:"):
         return crit.split(":", 1)[1]
     return {"core_canonical": "core", "derived_bucket": "derived_dimension"}.get(crit, crit)
+
+
+def regulatory_target_extension(
+    existing: List[Dict[str, Any]],
+    annex2_config_path: Optional[str | Path] = None,
+    registry_path: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
+    """Regulatory targets to add to the MI contract for a regime-required run.
+
+    The MI semantics registry is a curated management contract and does not carry
+    every field ESMA asks for. A delivery that owes an Annex 2 return is projected
+    from the SAME canonical, so a regulatory-only column the lender has supplied
+    has to be recognised here or it is gone: excluded from coverage, absent from
+    the tape, and reappearing at projection as a mandatory field with no value.
+
+    The rows come from the EXISTING Annex 2 contract, renamed from ESMA codes to
+    canonical field names, so each one keeps the dispositions the regulator's own
+    rules already define — its default, its permitted ND codes, its derivation.
+    That is what makes a missing regulatory field an ND or a default rather than
+    a question, and it is why this is a rename of an existing contract rather
+    than a second regulatory mapper.
+
+    Every added row is OPTIONAL and never enforces presence, so no ESMA target
+    becomes a mandatory lender source field. What changes is visibility: the
+    field now has a coverage row, so it can be source-mapped, derived, defaulted,
+    ND-coded, marked not applicable, or — when none of those fit — asked about.
+    """
+    reg_path = Path(registry_path) if registry_path else (
+        _REPO_ROOT / "config" / "system" / "fields_registry.yaml")
+    try:
+        fields = (yaml.safe_load(reg_path.read_text(encoding="utf-8")) or {}
+                  ).get("fields", {}) or {}
+    except Exception:  # noqa: BLE001
+        return []
+    code_to_field: Dict[str, str] = {}
+    for name, entry in fields.items():
+        for mapping in ((entry or {}).get("regime_mapping") or {}).values():
+            code = (mapping or {}).get("code")
+            if code:
+                code_to_field.setdefault(str(code), str(name))
+    try:
+        _cid, _csrc, annex_rows = load_annex2_target_contract(annex2_config_path)
+    except Exception:  # noqa: BLE001
+        return []
+
+    have = {str(r.get("target_field", "")) for r in existing}
+    have |= {str(r.get("match_field", "")) for r in existing}
+    rows: List[Dict[str, Any]] = []
+    seen: set = set()
+    for row in annex_rows:
+        canonical = code_to_field.get(str(row.get("target_field", "")), "")
+        if not canonical or canonical in have or canonical in seen:
+            continue
+        seen.add(canonical)
+        out = dict(row)
+        out["esma_code"] = str(row.get("target_field", ""))
+        out["target_field"] = canonical
+        out["match_field"] = canonical
+        out["target_label"] = canonical.replace("_", " ")
+        # In scope to be answered; never a requirement on the lender.
+        out["required_status"] = "optional"
+        out["enforce_presence"] = False
+        # An enum map is a PROJECTION instruction — it turns a lender value into
+        # a regulator code at Gate 4. On the management canonical it is not a
+        # configured value, and treating it as one dispositions the field as
+        # "configured static" with nothing to configure: no column, and a
+        # projection that then rejects the field it was told was handled. Drop
+        # the marker so a field with no source falls through to its ND code or
+        # default, which is what the regime rules actually say to do.
+        if not out.get("default_value"):
+            out["configured_value_source"] = ""
+        rows.append(out)
+    return rows
 
 
 def load_mi_target_contract(
@@ -245,57 +321,69 @@ def _code_sort_key(code: str) -> Tuple[str, int, str]:
     return (str(code or ""), 1 << 30, str(code or ""))
 
 
+def _contract_field_rules() -> Dict[str, Any]:
+    """The effective Annex 2 contract as ``{code: rule}``.
+
+    The reconciliation reports below were written against a loaded delivery-rules
+    document. They now read the derived contract instead, so a report can never
+    describe a rule set the pipeline does not use.
+    """
+    from engine.regime_contract.annex2_contract import as_delivery_rules
+    return as_delivery_rules().get("field_rules", {}) or {}
+
+
 def load_annex2_target_contract(
     config_path: Optional[str | Path] = None,
 ) -> Tuple[str, str, List[Dict[str, Any]]]:
-    """Load ESMA Annex 2 delivery rules as the regulatory target contract.
+    """The ESMA Annex 2 regulatory target contract, derived from authority.
 
-    Annex 12 is deliberately excluded — it is heavily driven by non-data-tape
-    (report-level / issuer / SPV / waterfall / note / investor-report) metadata
-    and is handled separately. This loader only reads the Annex 2 rules file.
+    Every one of the 107 codes, with its canonical binding from the fields
+    registry, its mandatory status from the workbook's multiplicity and its
+    no-data envelope from the field universe. It used to be seeded from a
+    hand-maintained delivery-rules file that covered 70 codes and called 21 of
+    them optional where the workbook says ``[1..1]``; a code is no longer
+    optional merely because nobody wrote a rule for it.
+
+    Annex 12 is deliberately excluded — it is deal-level and handled separately.
+    ``config_path`` is accepted for call compatibility and ignored.
     """
-    path = Path(config_path) if config_path else (
-        _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    field_rules = data.get("field_rules", {}) or {}
-    deferred = set(data.get("reconciliation_scope", {}).get("deferred_fields", []) or [])
+    from engine.regime_contract.annex2_contract import contract
+
+    c = contract()
     rows: List[Dict[str, Any]] = []
-    for code, rule in field_rules.items():
-        transform = rule.get("transform", {}) or {}
-        derive = rule.get("derive", {}) or {}
-        default_value = rule.get("default_value", "") if rule.get("default_allowed") else ""
-        nd_allowed = list(rule.get("nd_allowed", []) or [])
+    for code in c.codes():
+        fc = c.fields[code]
+        canonical = fc.canonical_field
         configured = ""
-        if "enum_map" in transform:
-            configured = "enum_map"
-        elif "geography_map" in transform:
-            configured = "geography_map"
-        elif "boolean" in transform:
-            configured = "boolean_transform"
+        if fc.derive:
+            configured = "derived"
         rows.append({
             "target_field": code,
             "esma_code": code,
-            "projected_source_field": rule.get("projected_source_field", ""),
+            "projected_source_field": canonical,
             "target_domain": _annex2_domain(code),
-            "target_label": rule.get("workbook_semantic", "") or code,
-            "required_status": "mandatory" if rule.get("mandatory") else "optional",
-            "enforce_presence": bool(rule.get("enforce_presence")),
-            "applicability_status": "deferred_reconciliation" if code in deferred else "applicable",
-            "match_field": rule.get("projected_source_field", ""),
-            "synonyms": [s for s in (rule.get("projected_source_field", ""),
-                                     rule.get("workbook_semantic", "")) if s],
-            "derived": bool(derive),
-            "derivation_rule": (f"{derive.get('type')}" if derive else ""),
-            "default_rule": (f"default_value={default_value}" if default_value else ""),
-            "default_value": default_value,
-            # The regime contract is the default source until an asset-config
-            # layer overrides it (see apply_asset_overlay).
-            "default_rule_source": ("regime_config" if default_value else ""),
-            "default_reason": ("ESMA Annex 2 regime default" if default_value else ""),
-            "nd_allowed": nd_allowed,
+            "target_label": fc.field_name or fc.workbook_semantic or code,
+            "required_status": "mandatory" if fc.mandatory else "optional",
+            "enforce_presence": bool(fc.enforce_presence),
+            # A code the schema carries as an attribute of another value has no
+            # element of its own, so presence is not a coverage question.
+            "applicability_status": ("attribute_of_another_field"
+                                     if not fc.emitting else "applicable"),
+            "match_field": canonical,
+            "synonyms": [x for x in (canonical, fc.workbook_semantic) if x],
+            "derived": bool(fc.derive),
+            "derivation_rule": str((fc.derive or {}).get("type", "")),
+            # The contract carries no values. A default belongs to the asset
+            # pack, the client configuration or an approved operator decision,
+            # and the asset overlay applies those on top of this contract.
+            "default_rule": "",
+            "default_value": "",
+            "default_rule_source": "",
+            "default_reason": "",
+            "nd_allowed": list(fc.nd_allowed),
             "configured_value_source": configured,
         })
-    return "esma_annex_2", str(path), rows
+    return "esma_annex_2", "engine.regime_contract.annex2_contract", rows
 
 
 # ---------------------------------------------------------------------------
@@ -379,23 +467,21 @@ def build_annex2_full_contract(
       1. the workbook-derived field universe (``annex2_field_universe.yaml``);
       2. otherwise the ``fields_registry`` ESMA_Annex2 mapping ∪ regime rules.
 
-    Codes with a full regime rule keep their rich rule. Authoritative codes
-    without one are included as ``pending_regime_rule`` (or ``deferred`` when in
-    ``reconciliation_scope.deferred_fields``), enriched with workbook metadata
-    and the registry canonical field (so they can still be source-mapped).
-    Codes declared deferred in the regime config that are NOT in the
-    authoritative universe are reported in 43 as ``not_in_authoritative_universe``
-    and are not added to 28a.
+    The contract now covers the whole workbook universe, so this adds nothing in
+    the ordinary case; the extension path remains for a universe that grows ahead
+    of the contract, and enriches any such code with workbook metadata and the
+    registry canonical field so it can still be source-mapped.
 
     Returns ``(contract_id, contract_source, target_fields, universe_meta)``.
     """
     cid, csrc, ruled = load_annex2_target_contract(annex2_config_path)
     ruled_by_code = {r["target_field"]: r for r in ruled}
-    try:
-        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
-    except Exception:
-        regime = {}
-    deferred = set(regime.get("reconciliation_scope", {}).get("deferred_fields", []) or [])
+    # Nothing is deferred any more. The one code that used to be — RREC22, the
+    # collateral valuation currency — is one of the three the XSD carries as a
+    # Ccy attribute rather than an element, which the contract derives from the
+    # schema. A concept with no element of its own is not a coverage gap, so it
+    # needs no separate declaration that it may be skipped.
+    deferred: set = set()
 
     workbook, workbook_src = load_annex2_workbook_universe(universe_path)
     registry = load_annex2_authoritative_universe(registry_path)
@@ -543,9 +629,8 @@ def build_annex2_config_validation(
     valid), its source layer and the validation outcome — it never silently
     applies an invalid default.
     """
-    regime = yaml.safe_load(Path(regime_config_path).read_text(encoding="utf-8")) or {}
-    field_rules = regime.get("field_rules", {}) or {}
-    deferred = set(regime.get("reconciliation_scope", {}).get("deferred_fields", []) or [])
+    field_rules = _contract_field_rules()
+    deferred: set = set()          # see build_annex2_target_contract
     asset_defaults, asset_src = load_asset_defaults(asset_config_path)
 
     # Reverse index: normalized projected_source_field -> esma_code.
@@ -958,11 +1043,7 @@ def build_annex2_nd_eligibility_reconciliation(
       not_in_workbook  - regime code absent from the authoritative workbook
     """
     cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
-    try:
-        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
-    except Exception:
-        regime = {}
-    field_rules = regime.get("field_rules", {}) or {}
+    field_rules = _contract_field_rules()
     workbook, _src = load_annex2_workbook_universe(universe_path)
 
     all_codes = set(field_rules) | set(workbook)
@@ -1139,11 +1220,7 @@ def build_annex2_config_alignment_review(
     the recorded alignment actions, into one auditable review. Report-only.
     """
     cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
-    try:
-        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
-    except Exception:
-        regime = {}
-    field_rules = regime.get("field_rules", {}) or {}
+    field_rules = _contract_field_rules()
     workbook, _src = load_annex2_workbook_universe(universe_path)
     registry = load_annex2_authoritative_universe(registry_path)
     val_rows, _overlay, _asrc = build_annex2_config_validation(
@@ -1246,8 +1323,10 @@ def build_annex2_config_alignment_review(
         })
 
     # 3. Phantom deferred codes removed from the active runtime list.
-    active_deferred = set(regime.get("reconciliation_scope", {})
-                          .get("deferred_fields", []) or [])
+    # The runtime deferral list is gone: the contract derives attribute-only
+    # concepts from the schema, so nothing is deferred and every phantom code is
+    # simply absent from the universe.
+    active_deferred: set = set()
     for code in _ANNEX2_ALIGNMENT_ACTIONS["phantom_deferred_removed"]:
         still_active = code in active_deferred
         rows.append({
@@ -1440,11 +1519,7 @@ def build_annex2_enum_coverage_reconciliation(
       no_regime_rule               - {LIST} field with no regime rule yet
     """
     cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
-    try:
-        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
-    except Exception:
-        regime = {}
-    field_rules = regime.get("field_rules", {}) or {}
+    field_rules = _contract_field_rules()
     workbook, _src = load_annex2_workbook_universe(universe_path)
     registry = load_annex2_authoritative_universe(registry_path)
 
@@ -1594,11 +1669,7 @@ def build_annex2_semantic_mapping_reconciliation(
     NOT change any rule; flags suspected code↔field mismaps for manual review.
     """
     cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
-    try:
-        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
-    except Exception:
-        regime = {}
-    field_rules = regime.get("field_rules", {}) or {}
+    field_rules = _contract_field_rules()
     workbook, _src = load_annex2_workbook_universe(universe_path)
     registry = load_annex2_authoritative_universe(registry_path)
 
@@ -1757,11 +1828,7 @@ def build_annex2_mapping_correction_proposals(
                   if r["semantic_status"] == "semantic_mismatch"}
 
     cid, csrc, _ruled = load_annex2_target_contract(regime_config_path)
-    try:
-        regime = yaml.safe_load(Path(csrc).read_text(encoding="utf-8")) or {}
-    except Exception:
-        regime = {}
-    field_rules = regime.get("field_rules", {}) or {}
+    field_rules = _contract_field_rules()
     workbook, _src = load_annex2_workbook_universe(universe_path)
     registry = load_annex2_authoritative_universe(registry_path)
 
@@ -2104,7 +2171,14 @@ def load_target_contract(
 ) -> Tuple[str, str, List[Dict[str, Any]]]:
     """Load the mode-appropriate target contract."""
     if target_contract_kind(mode, context) == "mi_semantics":
-        return load_mi_target_contract(mi_registry_path)
+        cid, csrc, rows = load_mi_target_contract(mi_registry_path)
+        if (context or {}).get("regulatory_reporting_enabled"):
+            extra = regulatory_target_extension(
+                rows, annex2_config_path=annex2_config_path)
+            if extra:
+                rows = rows + extra
+                csrc = f"{csrc} + regulatory registry ({len(extra)} fields)"
+        return cid, csrc, rows
     return load_annex2_target_contract(annex2_config_path)
 
 

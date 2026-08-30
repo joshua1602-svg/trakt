@@ -13,8 +13,9 @@ It is evidence-driven and deliberately conservative:
     (ResdtlRealEsttLn/PrfrmgLn -> SecuritisationLoanData2 ->
     ExposureData1 + CollateralData22), plus the report header (ScrtstnRpt) and
     the exposure-identification block (UndrlygXpsrId);
-  * a mapping is only ``confirmed`` when the delivery-rules ``workbook_semantic``
-    leaf token AND the vendored sample message agree with the XSD path;
+  * a mapping is only ``confirmed`` when the contract's ``workbook_semantic``
+    leaf token — which comes from the ESMA mapping workbook — AND the vendored
+    sample message agree with the XSD path;
   * field labels / leaf tokens alone are treated as INFERENCE, not proof
     (inferred_high_confidence / inferred_low_confidence);
   * a token that names an element absent from the schema is a ``conflict``;
@@ -44,7 +45,6 @@ if str(_REPO) not in sys.path:
 _XSD = _REPO / "DRAFT1auth.099.001.04_1.3.0.xsd"
 _SAMPLE = _REPO / "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report.xml"
 _UNIVERSE = _REPO / "config" / "regime" / "annex2_field_universe.yaml"
-_RULES = _REPO / "config" / "regime" / "annex2_delivery_rules.yaml"
 _YAML_OUT = _REPO / "config" / "delivery" / "annex2_field_xsd_path_map.yaml"
 _CSV_OUT = _REPO / "output" / "config_review" / "annex2_field_xsd_path_map.csv"
 
@@ -402,18 +402,18 @@ def map_code(code, rule, entry, xsd_index, all_xsd_names, sample_names):
             note = (f"leaf '{leaf_key}' is ambiguous: {len(matches)} XSD locations "
                     f"({', '.join(m['xml_path'].split('/')[-2] for m in matches[:4])} ...)")
         else:
-            # token leaf not found by exact name. delivery_rules workbook_semantic
+            # token leaf not found by exact name. The workbook_semantic
             # uses a workbook naming convention that often differs from the XSD
             # element names (e.g. 'AmrtstnType' vs XSD 'AmtstnTp', 'Prps' vs
             # 'Purp'), so a non-match is NOT proof of contradiction.
             if leaf_key in all_xsd_names:
-                status, source = LOW, "delivery_rules"
+                status, source = LOW, "workbook_semantic"
                 note = (f"leaf '{leaf_key}' exists in the XSD but not in the residential "
                         "performing branch (different asset class / sub-branch); needs review")
             else:
                 near = difflib.get_close_matches(leaf_key, sorted(xsd_index), n=1, cutoff=0.82)
                 if near:
-                    status, source = finalize(xsd_index[near[0]][0], LOW, "delivery_rules")
+                    status, source = finalize(xsd_index[near[0]][0], LOW, "workbook_semantic")
                     note = (f"workbook_semantic '{token}' uses non-XSD naming; closest XSD "
                             f"element '{near[0]}' is a CANDIDATE only — needs manual confirmation")
                 else:
@@ -421,9 +421,9 @@ def map_code(code, rule, entry, xsd_index, all_xsd_names, sample_names):
                     note = (f"workbook_semantic '{token}' uses workbook (non-XSD) naming with no "
                             "close XSD element in the residential branch; needs manual XSD review")
     else:
-        # no workbook_semantic token (TBC / commented out in delivery rules).
+        # no workbook_semantic token (the workbook maps this code to no leaf).
         status, source = UNRESOLVED, "manual_review"
-        note = "no workbook_semantic in delivery_rules (TBC/mismapped); needs manual XSD review"
+        note = "no workbook_semantic (the workbook maps no XML leaf); needs manual XSD review"
 
     # cardinality from level.
     if level == "header":
@@ -491,7 +491,7 @@ def apply_overrides(rows_by_code, xsd_index, sample_names):
                                     "in sample. NOTE: report-level, not an exposure identifier.")})
 
     # RREL3/4/5: exposure identifiers present in sample under UndrlygXpsrId; the
-    # field-name match is strong but not delivery_rules-proven -> high confidence.
+    # field-name match is strong but not workbook-proven -> high confidence.
     for code, elem in (("RREL3", "NewUndrlygXpsrIdr"), ("RREL4", "OrgnlOblgrIdr"),
                        ("RREL5", "NewOblgrIdr")):
         if code in rows_by_code and leaf(elem) and elem in sample_names:
@@ -503,7 +503,7 @@ def apply_overrides(rows_by_code, xsd_index, sample_names):
                       "mapping_status": HIGH, "evidence_source": "sample_xml",
                       "owner": "manual_review", "blocks_production_xml": True,
                       "evidence_note": (f"present in sample under UndrlygXpsrId as {elem}; "
-                                        "field-label match strong but not delivery_rules-proven")})
+                                        "field-label match strong but not workbook-proven")})
 
     # RREC3/RREC4: CollIdr children present in sample; field-label disambiguates
     # (Original->OrgnlIdr, New->NewIdr). High confidence, not confirmed.
@@ -517,7 +517,7 @@ def apply_overrides(rows_by_code, xsd_index, sample_names):
                       "mapping_status": HIGH, "evidence_source": "sample_xml",
                       "owner": "manual_review", "blocks_production_xml": True,
                       "evidence_note": (f"Coll/CollIdr/{elem} present in sample; field-label "
-                                        "disambiguation only — not delivery_rules-proven")})
+                                        "disambiguation only — not workbook-proven")})
 
 
 # --------------------------------------------------------------------------- #
@@ -528,7 +528,8 @@ def build_rows():
     xsd_index, all_xsd_names = build_xsd_index()
     sample_names, _sample_paths = build_sample_index()
     universe = _load_yaml(_UNIVERSE).get("fields") or {}
-    rules = _load_yaml(_RULES).get("field_rules") or {}
+    from engine.regime_contract import as_delivery_rules, build_contract
+    rules = as_delivery_rules(build_contract())["field_rules"]
 
     def sort_key(c):
         return (c[:4], int("".join(ch for ch in c if ch.isdigit()) or 0))

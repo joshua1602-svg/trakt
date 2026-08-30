@@ -150,6 +150,19 @@ def _is_blank(v: Any) -> bool:
 # Validate the transformation manifest
 # --------------------------------------------------------------------------- #
 
+def _asset_class_from_config(asset_config_path: str) -> str:
+    """The asset class declared by the asset-layer config, or ``""``.
+
+    Never raises: an unreadable asset config leaves the core check unscoped,
+    which is the conservative direction (no applicability relaxations apply).
+    """
+    try:
+        doc = _read_yaml(Path(asset_config_path)) or {}
+    except Exception:  # noqa: BLE001 — configuration must not break validation
+        return ""
+    return str(doc.get("asset_class") or "").strip()
+
+
 def validate_transformation_manifest(manifest: dict) -> None:
     """Fail loudly unless the transformation package is ready for validation.
 
@@ -313,8 +326,6 @@ def build_validation_package(
         repo_root / "config" / "system" / "fields_registry.yaml")
     if registry_path and not Path(registry_path).is_absolute() and not Path(registry_path).exists():
         registry_path = str(repo_root / registry_path)
-    regime_config_path = regime_config_path or tx_manifest.get("regime_config_path", "") or str(
-        repo_root / "config" / "regime" / "annex2_delivery_rules.yaml")
     asset_config_path = asset_config_path or tx_manifest.get("asset_config_path", "") or str(
         repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
     enum_config_dir = enum_config_dir or str(repo_root / "config" / "system")
@@ -339,20 +350,25 @@ def build_validation_package(
 
     # config layers
     registry_fields = ra.load_registry_fields(registry_path)
+    # Asset class for the registry's applicability layer. The asset config
+    # declares it for exactly this purpose ("used to select the asset-specific
+    # registry applicability layer"); the transformation manifest may override.
+    portfolio_type = str(
+        tx_manifest.get("portfolio_type")
+        or _asset_class_from_config(asset_config_path)
+        or "").strip()
     enum_lib = ra.load_enum_lib(enum_config_dir)
-    regime_cfg = _read_yaml(Path(regime_config_path)) or {}
 
-    # Authoritative workbook universe (ND envelope) + asset config defaults.
-    # These give the runtime regime index / diagnostic visibility into ND/default
-    # eligibility for codes that lack a full hand-authored field_rules entry
-    # (e.g. RREL15 customer_type, RREL24 maturity_date).
+    # The effective Annex 2 contract: the ND envelope from the workbook-derived
+    # field universe, the canonical binding from the registry, mandatory status
+    # from the workbook's multiplicity. Every one of the 107 codes is present, so
+    # a field is never treated as unregulated merely because nobody wrote a rule.
     field_universe = ra.load_field_universe(field_universe_path)
     code_to_canonical = _build_code_to_canonical(registry_fields)
     asset_cfg = _read_yaml(Path(asset_config_path)) or {}
     asset_defaults = asset_cfg.get("defaults", {}) or {}
     asset_nd_defaults = asset_cfg.get("nd_defaults", {}) or {}
-    regime_index = ra.build_regime_index(
-        regime_cfg, field_universe=field_universe, code_to_canonical=code_to_canonical)
+    regime_index = ra.build_regime_index()
 
     # 5/6) value-level + cross-field validation -------------------------------
     results: List[Dict[str, Any]] = []
@@ -370,14 +386,39 @@ def build_validation_package(
                 # A mandatory field that permits no ND/default but is entirely
                 # absent from the tape is a true validation failure (surfaced,
                 # never filled here).
-                defaultable = bool(rule.get("default_allowed")) or bool(rule.get("nd_allowed"))
+                meta_abs = registry_fields.get(canonical, {}) or {}
+                # The registry already says which fields this asset class is
+                # allowed not to carry, and why. Reporting-entity identity, for
+                # instance, is declared as supplied by the governed client
+                # configuration and injected at projection — so its absence from
+                # a loan tape is expected, not a defect. Reuse that declaration
+                # rather than deciding again here.
+                applic = ((meta_abs.get("applicability") or {}).get(portfolio_type)
+                          or {}) if portfolio_type else {}
+                allowed_missing = bool(applic.get("allowed_missing"))
+                defaultable = (bool(rule.get("default_allowed"))
+                               or bool(rule.get("nd_allowed"))
+                               or allowed_missing)
                 if mandatory and not defaultable and canonical not in seen_mandatory_absent:
                     seen_mandatory_absent.add(canonical)
+                    # WHOSE mandatory? A field the core canonical contract
+                    # requires is management data, and its absence makes the
+                    # canonical wrong — that blocks validation. A field only the
+                    # regulator requires makes the RETURN wrong, not the figures,
+                    # so it blocks projection and leaves valid MI publishable.
+                    # Same failure, reported once, routed to the branch it
+                    # actually breaks.
+                    core = bool((registry_fields.get(canonical, {}) or {})
+                                .get("core_canonical"))
                     results.append(ra._result(
                         f"VR-{canonical}-presence", canonical, canonical, esma,
-                        "presence", "fail", "error", 0, int(row_count), 0,
-                        ["<column absent>"], True, True,
-                        notes="mandatory field absent from transformed tape"))
+                        "presence", "fail", "error" if core else "warn",
+                        0, int(row_count), 0,
+                        ["<column absent>"], core, True,
+                        notes=("mandatory field absent from transformed tape"
+                               if core else
+                               "required by the regulator and absent — blocks the "
+                               "Annex 2 delivery, not the management report")))
                 continue
             meta = registry_fields.get(canonical, {}) or {}
             fmt = str(meta.get("format", "")).lower()
@@ -389,6 +430,12 @@ def build_validation_package(
         results.extend(ra.validate_uniqueness(
             df, ["loan_identifier", "unique_identifier"]))
         results.extend(ra.validate_business_rules(df))
+        # The authoritative core_canonical contract. Enforced HERE so a canonical
+        # cannot reach ready_for_validation_complete without the economically
+        # essential fields; the definition itself stays in the registry and
+        # engine.gate_3_validation.validate_canonical (single source of truth).
+        results.extend(ra.validate_core_canonical_presence(
+            df, registry_fields, portfolio_type))
     except Exception as exc:  # uncontrolled parser/type/enum exception
         uncontrolled_error = f"{type(exc).__name__}: {exc}"
 
