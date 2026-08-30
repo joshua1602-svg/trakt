@@ -82,14 +82,25 @@ _STAGE_LABELS = {
 
 
 def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
-                            dpi=220):
+                            dpi=220, chart_id=None):
     """Render a forecast-bridge waterfall (funded → +weighted pipeline → forecast).
 
     *steps* is an ordered list of ``(label, value, kind)`` where kind is
     ``base`` / ``add`` / ``sub`` / ``total``. Mirrors the dashboard waterfall
     colours (base navy, add periwinkle, total mint).
+
+    The steps are RECORDED, for the same reason bar-list categories are: they
+    become pixels the moment the figure is saved, so neither a publication gate
+    nor a test can otherwise see which legs a bridge actually drew — and "did
+    the exit leg get split by reason" is exactly that kind of question.
     """
     from pathlib import Path as _P
+    from .render import _record
+
+    _record("waterfall", chart_id,
+            categories=[str(label) for label, _v, _k in steps],
+            values=[float(v or 0.0) for _l, v, _k in steps],
+            kinds=[str(k) for _l, _v, k in steps])
     colors = {"base": theme.navy, "add": theme.peri, "sub": theme.negative,
               "total": theme.mint}
     fig = plt.figure(figsize=(width_in, height_in), dpi=dpi)

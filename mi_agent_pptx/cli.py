@@ -311,6 +311,12 @@ def _write_preflight(output, report, preflight, *, deck_meta=None, data=None) ->
         # not recoverable from the .pptx itself.
         "currency_code": report.get("currency_code"),
         "rendered": report.get("rendered") or [],
+        # The governed FACTS composition decided from — including one
+        # ``can_<metric>`` per published capability. The omission ledger says
+        # which pages are absent; this says what the book was measured to be
+        # when that was decided, which is the other half of auditing a
+        # conditional pack after the fact.
+        "facts": report.get("facts") or {},
     }
     try:
         preflight_path(output).write_text(json.dumps(payload, indent=2, default=str),

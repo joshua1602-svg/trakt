@@ -590,6 +590,88 @@ def _gate_mandatory_slides(records: Sequence[Mapping[str, Any]]) -> GateResult:
 # Entry point.
 # --------------------------------------------------------------------------- #
 
+def _gate_stock_and_movement_agree(records, data) -> GateResult:
+    """The stock page and the movement page must close on the same number.
+
+    They are computed by different engines from the same governed snapshots:
+    the stock series is the funded-evolution loader's per-period balance, the
+    bridge is ``period_change.balance_bridge`` reconciling loan by loan. A pack
+    that prints one closing balance on page six and a different one on page nine
+    has done the reader more harm than either page did good, and no reader can
+    be expected to notice which of the two to believe.
+
+    The gate is skipped where only one of the pages is in the deck. It is
+    MANDATORY where both are: this is the reconciliation the pack's credibility
+    rests on.
+    """
+    ids = {str(r.get("id")) for r in records or ()
+           if not r.get("placeholder")}
+    if not {"funded_stock", "balance_movement"} <= ids:
+        return GateResult("stock_and_movement_agree", True,
+                          "the stock and movement pages are not both in this deck",
+                          mandatory=False)
+    movement = getattr(data, "balance_movement", {}) or {}
+    periods = (getattr(data, "funded_evolution", {}) or {}).get("periods") or []
+    closing = movement.get("closingBalance")
+    stock = next((( p.get("metrics") or {}).get("funded_balance")
+                  for p in reversed(periods)
+                  if (p.get("metrics") or {}).get("funded_balance") is not None),
+                 None)
+    if closing is None or stock is None:
+        return GateResult("stock_and_movement_agree", False,
+                          "one of the two pages rendered without a closing balance")
+    gap = abs(float(stock) - float(closing))
+    # A hundredth of a currency unit, matching the bridge's own tolerance.
+    ok = gap <= max(0.01, abs(float(closing)) * 1e-9)
+    return GateResult("stock_and_movement_agree", ok,
+                      "the stock series and the balance bridge close on the same "
+                      "figure" if ok else
+                      f"the stock page closes at {stock} and the movement page at "
+                      f"{closing}",
+                      evidence={"stock_closing": stock, "bridge_closing": closing,
+                                "gap": gap})
+
+
+def _gate_stack_reconciles(build_report, data) -> GateResult:
+    """A stacked stock chart must sum to the period total it sits beside.
+
+    The stack is drawn from the governed per-book breakdown and the totals come
+    from the same loader, so they agree by construction — which is exactly why
+    this is worth pinning. A stack whose parts do not sum to the whole is the
+    one defect a reader cannot see and cannot recover from.
+    """
+    # The render record keys the chart under "chart" (see render._record).
+    drawn = [r for r in (build_report.get("rendered") or ())
+             if r.get("chart") == "funded_stock" and len(r.get("series") or ()) > 1]
+    if not drawn:
+        return GateResult("stack_reconciles", True,
+                          "no multi-book stock stack in this deck", mandatory=False)
+    evo = getattr(data, "funded_evolution", {}) or {}
+    periods = evo.get("periods") or []
+    rows = ((evo.get("breakdowns") or {}).get("portfolio")) or []
+    labels = [str(p.get("period") or p.get("reporting_date") or p.get("run_id"))
+              for p in periods]
+    summed: Dict[str, float] = {}
+    for row in rows:
+        summed[str(row.get("period"))] = (summed.get(str(row.get("period")), 0.0)
+                                          + float(row.get("value") or 0.0))
+    bad = []
+    for label, period in zip(labels, periods):
+        total = (period.get("metrics") or {}).get("funded_balance")
+        if total is None:
+            continue
+        gap = abs(float(total) - summed.get(label, 0.0))
+        if gap > max(0.01, abs(float(total)) * 1e-6):
+            bad.append({"period": label, "total": total,
+                        "stack": summed.get(label, 0.0), "gap": gap})
+    return GateResult("stack_reconciles", not bad,
+                      f"the per-book stack sums to the period total in all "
+                      f"{len(labels)} periods" if not bad else
+                      f"the per-book stack does not sum to the period total in "
+                      f"{len(bad)} period(s)",
+                      evidence={"offenders": bad})
+
+
 def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport:
     """Evaluate every publication gate for a generated deck."""
     deck_path = build_report.get("output")
@@ -627,5 +709,10 @@ def run_preflight(build_report: Mapping[str, Any], data: Any) -> PreflightReport
         # actually walked, and the symbols that actually reached the page.
         _gate_governed_bucket_order(build_report),
         _gate_governed_currency(text, data),
+        # -- v3.0: the stock and the movement are one story ------------------
+        # Two engines, two pages, one book. If they close on different numbers
+        # the pack is worse than either page alone.
+        _gate_stock_and_movement_agree(records, data),
+        _gate_stack_reconciles(build_report, data),
     ])
     return report

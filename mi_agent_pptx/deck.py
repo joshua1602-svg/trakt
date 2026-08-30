@@ -1290,7 +1290,8 @@ class DeckBuilder:
                Inches(self.CONTENT_R - self.CONTENT_L), Inches(3.55))
         il, it, iw, ih = self._card(s, *box, f"Funded balance movement, {window}")
         path = self.work / "econ_bridge.png"
-        render_bridge_waterfall(path, steps, iw, ih, theme=self.theme)
+        render_bridge_waterfall(path, steps, iw, ih, theme=self.theme,
+                                chart_id="balance_movement")
         self._place(s, path, il, it, iw, ih)
 
         # The counts beneath, and the disclosure the identity depends on.
@@ -1379,8 +1380,10 @@ class DeckBuilder:
              for p in periods]
         totals = [(p.get("metrics") or {}).get("funded_balance") for p in periods]
         multi = len(books) > 1
-        strap = (f"{len(books)} constituent books" if multi
-                 else "Total funded balance over time")
+        # FINDING-LED SUBTITLE, from the series itself. The title is stable; the
+        # subtitle says what the series shows, so a reader who reads only the
+        # headings still gets the direction of the book.
+        strap = self._stock_strap(totals, x, books, multi)
         self._header(s, spec.get("title", "Funded Stock"), strap, accent=self.theme.peri)
 
         box = (Inches(self.CONTENT_L), Inches(1.72),
@@ -1402,6 +1405,20 @@ class DeckBuilder:
         self._stock_takeaway(s, books, totals, x, multi)
         self._footer(s)
         self._record("funded_stock", spec.get("title"), strap)
+
+    def _stock_strap(self, totals, x, books, multi) -> str:
+        """What the stock series shows, in one clause."""
+        from .metric_resolver import compact_currency
+
+        opening = next((v for v in totals if v is not None), None)
+        closing = next((v for v in reversed(totals) if v is not None), None)
+        prefix = f"{len(books)} constituent books · " if multi else ""
+        if opening is None or closing is None or not opening:
+            return prefix + "Funded balance over time"
+        pct = (closing - opening) / abs(opening) * 100.0
+        direction = "up" if pct >= 0 else "down"
+        return (f"{prefix}{compact_currency(closing)} at {x[-1]}, "
+                f"{direction} {abs(pct):.1f}% since {x[0]}")
 
     def _book_series(self, evo):
         """``[(book, [value per period])]`` from the governed breakdown, ordered
@@ -1453,6 +1470,17 @@ class DeckBuilder:
             if share:
                 lines.append(f"{books[0][0]} is the largest book at "
                              f"{share * 100:.0f}% of closing balance.")
+        # ONE STORY, NOT TWO. Where the movement page is also in the deck, this
+        # page names the number they share and hands the reader on to it. Stated
+        # only when the two engines actually agree — a pointer to a page that
+        # closes on a different figure would be worse than no pointer.
+        bm = self.d.balance_movement or {}
+        if bm.get("available") and closing is not None:
+            bridge_close = float(bm.get("closingBalance") or 0.0)
+            if abs(bridge_close - float(closing)) <= max(0.01, abs(bridge_close) * 1e-9):
+                lines.append(
+                    f"The same {compact_currency(bridge_close)} closing balance is "
+                    f"decomposed loan by loan on Funded Balance Movement.")
         self._takeaway_strip(slide, lines[:3], top=6.02)
 
     # -------------------------------------------------- per-book forward view
