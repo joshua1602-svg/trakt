@@ -159,5 +159,9 @@ question_interpretation/.kestrelmoor_store/
 # every failing node id BY NAME (what abort condition A5 compares against).
 migration_phase0/*_full.txt
 
-# Investor-pack visual QA output (regenerate with scripts/pptx_visual_qa.py).
-artifacts/pptx_qa/*.pptx
+# Investor-pack visual QA. The generated decks are a megabyte each and the
+# harness regenerates them (scripts/pptx_visual_qa.py); the report it writes is
+# small and is the record of what the last run found, so that is kept.
+!artifacts/pptx_qa/
+artifacts/pptx_qa/*
+!artifacts/pptx_qa/qa_report.json
