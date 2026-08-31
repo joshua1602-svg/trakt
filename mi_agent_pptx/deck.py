@@ -189,6 +189,27 @@ class DeckBuilder:
         return img_l, img_t, img_w, img_h
 
     # ------------------------------------------------------------------- tiles
+    #: Approximate widths, in ems, of the characters a KPI value is made of.
+    #: A digit is not a full em and a full stop is not a digit; treating them
+    #: as equal is what made a currency figure look too wide for its tile.
+    _EM = {".": 0.30, ",": 0.30, " ": 0.30, "1": 0.55, "%": 0.95, "M": 0.90,
+           "W": 0.90, "+": 0.60, "-": 0.35, "—": 0.90, "−": 0.60, "/": 0.35}
+
+    @classmethod
+    def _text_width_in(cls, text: str, size_pt: float, *, bold: bool = True) -> float:
+        """Roughly how wide ``text`` draws at ``size_pt``, in inches."""
+        ems = 0.0
+        for ch in str(text or ""):
+            if ch in cls._EM:
+                ems += cls._EM[ch]
+            elif ch.isdigit() or ch in "£$€":
+                ems += 0.62
+            elif ch.isupper():
+                ems += 0.70
+            else:
+                ems += 0.55
+        return ems * (size_pt / 72.0) * (1.06 if bold else 1.0)
+
     def _tile(self, slide, l, t, w, h, tile: Dict[str, Any]):
         self._panel(slide, l, t, w, h, fill=self.theme.bg_panel_alt,
                     line=self.theme.line_soft, lw=1.0)
@@ -202,15 +223,18 @@ class DeckBuilder:
         # A KPI value may be a long label (an area name), not just a number. Step
         # the size down so it fits the tile instead of being clipped — a value the
         # reader cannot see is worse than a smaller one.
+        #
+        # Sized on the WIDTH THE STRING ACTUALLY DRAWS, not on how many
+        # characters it has. Counting characters made "£78.4MM" — seven
+        # characters, four of them narrow — step down twice, so the funded
+        # balance printed at 12pt beside a 20pt "48.3%": the most important
+        # number in the pack rendered as the least important thing on the page.
         width_in = int(iw) / EMU_IN
-        size = 20
-        for limit, candidate in ((width_in * 2.6, 20), (width_in * 3.4, 15),
-                                 (width_in * 4.6, 12)):
-            if len(val) <= limit:
+        size = 10
+        for candidate in (20, 15, 12):
+            if self._text_width_in(val, candidate) <= width_in * 0.98:
                 size = candidate
                 break
-        else:
-            size = 10
         self._text(slide, l + pad, t + Inches(0.44), iw, Inches(0.58), val,
                    size=size, bold=True,
                    color=self.theme.ink_100 if avail else self.theme.ink_500)

@@ -392,3 +392,48 @@ def test_12_the_methodology_columns_stay_on_the_slide(rich):
                 f"{DeckBuilder._COLUMN_HEIGHT}in box: {lines[0]!r}")
             checked += 1
     assert checked >= 2, "the methodology page's two columns were not found"
+
+
+def test_13_the_headline_number_is_not_the_smallest_on_the_page(rich):
+    """Catches: the funded balance printed at 12pt beside a 20pt "48.3%".
+
+    Tile values were sized by counting characters, so "£78.4MM" — seven
+    characters, four of them narrow — stepped down twice while "48.3%" stayed
+    at full size in the same width of tile. The most important number in the
+    pack rendered as the least important thing on the page, which reads as a
+    rendering fault rather than as a measure.
+    """
+    import io
+
+    import pptx as _pptx
+
+    from mi_agent_pptx.deck import DeckBuilder
+
+    # It fits, and the estimator knows it: a 2.00in tile has ~1.68in inside it.
+    assert DeckBuilder._text_width_in("£78.4MM", 20) < 1.68
+    assert DeckBuilder._text_width_in("£78.4MM", 20) > \
+        DeckBuilder._text_width_in("251", 20)
+
+    deck = _pptx.Presentation(io.BytesIO(generate_and_download()))
+    for slide in deck.slides:
+        heads = [sh.text_frame.text for sh in slide.shapes
+                 if sh.has_text_frame and sh.text_frame.text.strip()]
+        if not heads or "Key Measures" not in heads[0]:
+            continue
+        sizes = {}
+        for sh in slide.shapes:
+            if not sh.has_text_frame:
+                continue
+            text = sh.text_frame.text.strip()
+            for para in sh.text_frame.paragraphs:
+                for run in para.runs:
+                    if run.font.size and run.font.size.pt >= 10 and text:
+                        sizes.setdefault(text, run.font.size.pt)
+        values = {t: pt for t, pt in sizes.items()
+                  if t and t[0] in "£$€" or t.replace(".", "").isdigit()
+                  or t.endswith("%")}
+        assert values, sizes
+        assert len(set(values.values())) == 1, (
+            f"one page, two type sizes for the same kind of measure: {values}")
+        return
+    pytest.fail("no Key Measures page in the pack")
