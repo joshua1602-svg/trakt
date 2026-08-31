@@ -289,31 +289,37 @@ off the rendered PowerPoint rather than off the builder's inputs.
 
 ### Broad
 
-**Pending at the time of writing.** Two full-suite runs are in flight and this
-section will be completed from their output, not from an estimate:
+Both runs were executed to completion and compared at TEST-ID level, not by
+count. A count cannot distinguish a new failure from a fixed one, and the
+recorded Phase 3 baseline stores a count only — so the baseline was re-run from
+a clean worktree at this sprint's own starting SHA.
 
-- `62cc602` (this sprint's starting SHA) in a clean worktree, to establish the
-  baseline failure SET rather than only its count;
-- `HEAD` on this branch.
+| Run | Failed | Passed | Skipped | xfailed |
+|---|---|---|---|---|
+| `62cc602` (starting SHA, clean worktree) | 107 | 7432 | 434 | 8 |
+| `HEAD` (this branch) | **107** | **7474** | 438 | 8 |
 
-The comparison that matters is the DIFFERENCE between the two failing test-ID
-lists, because the recorded Phase 3 baseline (107 failed / 7432 passed) records
-a count and not a list, and a count cannot distinguish a new failure from a
-fixed one.
+The baseline run reproduces the recorded Phase 3 figures exactly (107 / 7432),
+so the comparison rests on a measured baseline rather than a quoted one.
 
-What is already established:
+**Set difference: empty in both directions.**
 
-- An intermediate full run at `a1a0147` gave **108 failed / 7467 passed / 436
-  skipped / 8 xfailed**. Not one failing file is a file this branch touches.
-- Every failure encountered while running the affected suites during the sprint
-  was checked against the baseline individually and reproduced there:
-  `test_conversion2_period_movement.py` (5),
-  `test_onboarding_central_tape_builder.py::TestPipelineTape::test_linked_rows_record_relationship`,
-  `test_portfolio_identity_alignment.py` (2 of its 8), and
-  `test_analytical_capability_layer.py::TestSecondBookAcceptance::test_q7_compares_the_two_governed_sides_and_reconciles`
-  — the last confirmed by running it inside the `62cc602` worktree.
+- **New failures: 0.** No test fails at HEAD that passed at the baseline.
+- **Fixed: 0.** No pre-existing failure was repaired or worked around, as
+  instructed.
+- **+42 passing**, from the tests this sprint added.
 
-No pre-existing failure was fixed, and none was worked around.
+One honest note on how that number was reached. An intermediate HEAD run showed
+108 failed. The extra failure was one of this sprint's OWN tests — `test_7`
+pinned an exact slide count for the single-book fixture, which passes in
+isolation and fails in the full suite at eight slides, because a fixture
+elsewhere in the run commits an operator-approved concentration configuration
+and that book then legitimately earns a concentration page. The deck was
+correct; the assertion was wrong, and it was asserting what other tests left
+behind rather than what the test is named for. It was corrected (`8611cc0`) and
+verified in the exact ordering that exposed it. The ID-level diff is what
+caught this; a count-only comparison would have shown 108 against 107 and said
+nothing about which test.
 
 ---
 
