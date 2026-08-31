@@ -497,3 +497,40 @@ def test_15_the_pipeline_page_reconciles_to_its_own_tile(rich):
             "a terminal stage is drawn as live pipeline stock:\n" + page)
         return
     pytest.skip("this book has no governed pipeline source")
+
+
+def test_16_the_forecast_bridge_steps_sum_to_its_own_closing_bar():
+    """Catches: £7.0m of monthly steps under a £4.1m weighted-pipeline block.
+
+    The forecast is funded plus the LIVE pipeline weighted by conversion, and
+    the bridge's headline says so — but the by-month, by-region and by-LTV
+    cuts summed the weighted amount over the whole extract, terminal cases
+    included. A reader adding the steps of a waterfall is doing the one thing a
+    waterfall is drawn for, and got 71% more than the bar it closes on.
+    """
+    import pandas as pd
+
+    from mi_agent_api import workspace as W
+
+    funded = pd.DataFrame([
+        {"geographic_region_obligor": "London", "ltv_bucket": "20-30%",
+         "current_outstanding_balance": 1000.0}])
+    pipeline = pd.DataFrame([
+        {"pipeline_stage": "KFI", "geographic_region_obligor": "London",
+         "ltv_bucket": "20-30%", "expected_completion_month": "2026-07",
+         "weighted_expected_funded_amount": 100.0},
+        {"pipeline_stage": "OFFER", "geographic_region_obligor": "London",
+         "ltv_bucket": "20-30%", "expected_completion_month": "2026-08",
+         "weighted_expected_funded_amount": 50.0},
+        # Already funded. It is in the funded book; counting it here reports the
+        # same exposure twice in one bridge.
+        {"pipeline_stage": "COMPLETED", "geographic_region_obligor": "London",
+         "ltv_bucket": "20-30%", "expected_completion_month": "2026-07",
+         "weighted_expected_funded_amount": 400.0},
+    ])
+    brk = W.forecast_breakdowns(funded, pipeline)
+    months = sum(m["weightedExpectedFundedAmount"]
+                 for m in brk["byCompletionMonth"])
+    assert months == pytest.approx(150.0), brk["byCompletionMonth"]
+    for key in ("byRegion", "byLtvBucket"):
+        assert sum(r["forecastAmount"] for r in brk[key]) == pytest.approx(1150.0)

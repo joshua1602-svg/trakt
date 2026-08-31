@@ -316,6 +316,16 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
     """Forecast-by-dimension breakdowns for the Forecast view (region / LTV /
     completion month), capped where long."""
     from .pipeline_contract import cap_breakdown
+    from .pipeline_prep import live_mask
+
+    # THE CUTS ADD UP TO THE BRIDGE. The forecast is funded plus the LIVE
+    # pipeline weighted by conversion, and the bridge's headline says so — but
+    # these breakdowns summed the weighted amount over the whole extract, so
+    # the waterfall's own monthly steps came to £7.0m under a £4.1m closing
+    # block. A reader adding the steps of a bridge is doing the one thing a
+    # bridge is drawn for.
+    if pipeline_df is not None and len(pipeline_df):
+        pipeline_df = pipeline_df[live_mask(pipeline_df)]
     region = forecast_dimension_breakdown(funded_df, pipeline_df, "geographic_region_obligor")
     ltv = forecast_dimension_breakdown(funded_df, pipeline_df, "ltv_bucket")
     # Completion-month: pipeline contributes weighted by month; funded is "now".
