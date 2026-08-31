@@ -754,6 +754,11 @@ MULTIDIM_WANT = 4
 #: carrying balance, the matrix is mostly empty and the eye reads noise.
 MULTIDIM_MIN_DENSITY = 0.18
 
+#: Reason codes specific to a crossing. The shared codes in
+#: ``mi_agent_api.presentation`` cover the rest.
+REASON_TOO_SPARSE = "TOO_SPARSE"
+REASON_REDUNDANT = "REDUNDANT"
+
 #: And it has to be a crossing. One row or one column is a one-dimensional
 #: stratification drawn as a grid, which the stratification pages already do
 #: better.
@@ -798,43 +803,71 @@ def select_multidim_pairs(df: pd.DataFrame, scope=None, *, want: int = 4,
     rejection ledger is what the methodology page prints, so a reader can see
     which crossings were considered and why they are not there.
     """
-    selected: Dict[str, Any] = {}
-    rejected: List[Dict[str, Any]] = []
-    seen_dimensions: set = set()
-
-    for key, x_dim, y_dim in candidates or ():
+    # STAGE 1 — what can be read at all. Each gate produces a reason that is
+    # derivable from the crossing's own numbers.
+    usable, rejected = [], []
+    for index, (key, x_dim, y_dim) in enumerate(candidates or ()):
         label = pair_label(x_dim, y_dim)
-        if len(selected) >= max(0, want):
-            rejected.append({"key": key, "label": label,
-                             "reason": f"{len(selected)} stronger crossings "
-                                       f"already earned the page"})
-            continue
         try:
             table = cross_tab(df, x_dim, y_dim, scope)
         except Exception:  # noqa: BLE001 - one pair must not break the rest
             table = None
         if not table:
             rejected.append({"key": key, "label": label,
+                             "reasonCode": _presentation.REASON_NOT_SUPPLIED,
                              "reason": "the tape does not supply both dimensions"})
             continue
         shape = _matrix_shape(table)
         if (shape["xCategories"] < MULTIDIM_MIN_AXIS
                 or shape["yCategories"] < MULTIDIM_MIN_AXIS):
             rejected.append({"key": key, "label": label,
+                             "reasonCode": _presentation.REASON_ONE_CATEGORY,
                              "reason": ("one side of the crossing has a single "
                                         "category, so this is a stratification "
                                         "rather than a crossing")})
             continue
         if shape["density"] < MULTIDIM_MIN_DENSITY:
             rejected.append({"key": key, "label": label,
+                             "reasonCode": REASON_TOO_SPARSE,
                              "reason": (f"only {shape['density'] * 100:.0f}% of "
                                         f"cells carry balance, too sparse to read")})
             continue
+        # THE SAME INFORMATION RULE THE STRATIFICATIONS USE, over CELLS rather
+        # than bars: a crossing whose balance piles into a few cells tells a
+        # reader less than one that spreads across the grid.
+        cells = [{"balance": value} for row in (table.get("matrix") or ())
+                 for value in row if value]
+        info = _presentation.dispersion(cells)
+        shape["score"] = info["score"]
+        shape["evenness"] = info["evenness"]
+        usable.append((index, key, label, x_dim, y_dim, table, shape))
+
+    # STAGE 2 — rank by information, declaration order only as a tie-break.
+    # This used to be a single pass in declaration order, so the first four
+    # resolvable pairs won whatever the data said — the same defect the
+    # one-dimensional selector had, and the reason every fixture drew LTV
+    # against age, region, ticket and rate.
+    usable.sort(key=lambda item: (
+        -round(item[6]["score"], _presentation.SCORE_PRECISION), item[0]))
+
+    selected: Dict[str, Any] = {}
+    seen_dimensions: set = set()
+    for _index, key, label, x_dim, y_dim, table, shape in usable:
+        if len(selected) >= max(0, want):
+            rejected.append({
+                "key": key, "label": label,
+                "reasonCode": _presentation.REASON_LOWER_RANKED,
+                "reason": (f"{len(selected)} crossings carry more information "
+                           f"for this book (this {shape['score']:.2f})"),
+                "score": shape["score"]})
+            continue
         if {x_dim, y_dim} <= seen_dimensions:
             rejected.append({"key": key, "label": label,
+                             "reasonCode": REASON_REDUNDANT,
                              "reason": ("both dimensions are already crossed on "
                                         "this page, so it repeats a story told "
-                                        "above")})
+                                        "above"),
+                             "score": shape["score"]})
             continue
         selected[key] = {"label": label, **table, "shape": shape}
         seen_dimensions.update({x_dim, y_dim})

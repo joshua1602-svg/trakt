@@ -91,10 +91,15 @@ def test_an_uninformative_dimension_is_never_selected():
 
 
 def test_the_next_best_dimension_takes_the_freed_slot():
-    """The panel is not left empty because the default lost its place."""
+    """The panel is not left empty because the default lost its place.
+
+    The order among the survivors is now their INFORMATION order — LTV (four
+    bands, 30% top) then region (three, 40%) then ticket (three, 50%) — not
+    the order they were preferred in.
+    """
     out = P.select_dimensions(_candidates(), want=3,
                               preferred=("broker", "ltv", "ticket", "region"))
-    assert [e["key"] for e in out["selected"]] == ["ltv", "ticket", "region"]
+    assert [e["key"] for e in out["selected"]] == ["ltv", "region", "ticket"]
 
 
 def test_selection_is_deterministic():
@@ -108,10 +113,17 @@ def test_selection_is_deterministic():
         assert again == first, (again, first)
 
 
-def test_the_preferred_order_is_honoured_where_it_is_informative():
+def test_preference_no_longer_overrides_information():
+    """THE DEFECT THIS SPRINT EXISTS TO FIX.
+
+    Preference used to be the first sort key, so naming a dimension first won
+    it the page whatever the data said. LTV carries four bands with 30% in the
+    largest and region three with 40%: LTV is the more informative cut, and it
+    is now selected first even when region is preferred ahead of it.
+    """
     out = P.select_dimensions(_candidates(), want=2,
                               preferred=("region", "ltv", "ticket"))
-    assert [e["key"] for e in out["selected"]] == ["region", "ltv"]
+    assert [e["key"] for e in out["selected"]] == ["ltv", "region"]
 
 
 def test_nothing_is_dropped_silently():
@@ -120,11 +132,15 @@ def test_nothing_is_dropped_silently():
     out = P.select_dimensions(_candidates(), want=2,
                               preferred=("ltv", "ticket", "region"))
     assert len(out["selected"]) == 2
-    rejected = {r["key"]: r["reason"] for r in out["rejected"]}
-    assert set(rejected) == {"broker", "region"}
-    assert all(rejected.values()), rejected
-    assert "one category" in rejected["broker"]
-    assert "more informative" in rejected["region"]
+    rejected = {r["key"]: r for r in out["rejected"]}
+    assert set(rejected) == {"broker", "ticket"}
+    assert all(r["reason"] for r in rejected.values()), rejected
+    # THE REASON MUST BE THE REAL ONE. Broker cannot be distributed at all;
+    # ticket simply scored below the cut, and that is a ranking statement
+    # rather than a claim that ticket says nothing.
+    assert rejected["broker"]["reasonCode"] == P.REASON_ONE_CATEGORY
+    assert rejected["ticket"]["reasonCode"] == P.REASON_LOWER_RANKED
+    assert "scored higher" in rejected["ticket"]["reason"]
 
 
 def test_asking_for_more_than_exists_returns_what_exists():

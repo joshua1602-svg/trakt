@@ -1388,8 +1388,12 @@ class DeckBuilder:
         # NEVER SILENT. A reader must be able to tell a dimension dropped for
         # being uniform from one the tape does not carry.
         note = ""
-        dropped = [r for r in rejected if "one category" in (r.get("reason") or "")
-                   or "single" in (r.get("reason") or "")]
+        # NAMED BY CODE, NOT BY SUBSTRING. The page states what the book could
+        # not distribute on; a dimension that merely ranked below the four
+        # drawn is a different fact and is not reported as an absence.
+        _unusable = (_sel.REASON_ONE_CATEGORY, _sel.REASON_LOW_INFORMATION,
+                     _sel.REASON_LOW_COVERAGE, _sel.REASON_NOT_SUPPLIED)
+        dropped = [r for r in rejected if r.get("reasonCode") in _unusable]
         if dropped:
             names = ", ".join(str(r.get("label") or r.get("key"))
                               for r in dropped[:3])

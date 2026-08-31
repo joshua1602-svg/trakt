@@ -341,11 +341,20 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
     "strat_barlists": _strat_guard,
     # At least one paired-dimension panel must actually have data — an "available"
     # multidim payload whose panels are all empty would render an empty slide.
+    # At least one paired-dimension panel must actually have data — an
+    # "available" multidim payload whose panels are all empty would render an
+    # empty slide.
+    #
+    # ASKS WHAT IT MEANS, NOT WHICH KEYS. This used to name three specific
+    # pairs (ltv_age, ltv_borrower_type, ltv_region), which was invisible only
+    # while the selector returned them in declaration order every time. The
+    # moment pairs were chosen on information content the guard dropped a page
+    # carrying four perfectly good crossings, because none of them happened to
+    # be the three it had been told to look for.
     "multidim": lambda s, d: (
-        None if any(((getattr(d, "multidim", {}) or {}).get(k) or {}).get(f)
-                    for k, f in (("ltv_age", "points"),
-                                 ("ltv_borrower_type", "matrix"),
-                                 ("ltv_region", "matrix")))
+        None if any(isinstance(v, Mapping) and v.get("matrix")
+                    for k, v in (getattr(d, "multidim", {}) or {}).items()
+                    if not str(k).startswith("_"))
         else "paired-dimension analysis is not available for this book"),
     "geo": _geo_guard,
     "funded_evolution": _evolution_guard("funded_evolution", "funded evolution"),
