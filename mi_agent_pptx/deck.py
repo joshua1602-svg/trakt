@@ -869,7 +869,7 @@ class DeckBuilder:
                                 spec.get("title"), "Single portfolio.")
 
         # -- 2. the split, as one proportional bar ----------------------------
-        self._composition_bar(s, slices, total_bal, top=2.90)
+        self._composition_bar(s, slices, p, top=2.90)
 
         # -- 3. one card per portfolio type -----------------------------------
         # Cards, not columns: with more than two types a shared-row table forces
@@ -877,8 +877,8 @@ class DeckBuilder:
         # their internal hierarchy.
         lead = [
             ("Balance", lambda sl: compact_currency(sl.balance)),
-            ("Share", lambda sl: (f"{(sl.balance or 0) / total_bal * 100:.1f}%"
-                                  if total_bal else "—")),
+            ("Share", lambda sl: (f"{p.share_of(sl) * 100:.1f}%"
+                                  if p.share_of(sl) is not None else "—")),
             ("Movement", lambda sl: self._signed_currency(sl.balance_movement)),
         ]
         rest = [
@@ -900,7 +900,7 @@ class DeckBuilder:
         self._record(spec.get("id", "portfolio_composition"), spec.get("title"),
                      f"{len(slices)} portfolio type(s).")
 
-    def _composition_bar(self, s, slices, total, *, top: float):
+    def _composition_bar(self, s, slices, ctx, *, top: float):
         """The split as ONE proportional bar.
 
         A restrained institutional visual rather than a donut: segment length is
@@ -913,7 +913,11 @@ class DeckBuilder:
                    self.theme.rag.get("amber", self.theme.ink_300)]
         x = left
         for i, sl in enumerate(slices):
-            share = ((sl.balance or 0.0) / total) if total else (1.0 / len(slices))
+            # From the governed composition service. An equal split is the
+            # fallback ONLY when there is no total to divide by.
+            share = ctx.share_of(sl)
+            if share is None:
+                share = 1.0 / len(slices)
             seg = max(width * share, 0.06)     # a sliver must still be visible
             bar = s.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x),
                                      Inches(top), Inches(seg), Inches(0.30))
@@ -933,7 +937,8 @@ class DeckBuilder:
         # label. Listing every type again under a bar that already names them
         # spends a line of the slide saying the same thing twice.
         unlabelled = [(i, sl) for i, sl in enumerate(slices)
-                      if width * (((sl.balance or 0.0) / total) if total else 1.0) < 1.5]
+                      if width * (ctx.share_of(sl) if ctx.share_of(sl) is not None
+                                  else 1.0) < 1.5]
         lx = left
         for i, sl in unlabelled:
             dot = s.shapes.add_shape(MSO_SHAPE.OVAL, Inches(lx), Inches(top + 0.40),
@@ -942,7 +947,9 @@ class DeckBuilder:
             dot.fill.fore_color.rgb = self._rgb(colours[i % len(colours)])
             dot.line.fill.background()
             dot.shadow.inherit = False
-            label = f"{sl.label} — {(((sl.balance or 0) / total * 100) if total else 0):.1f}%"
+            slice_share = ctx.share_of(sl)
+            label = (f"{sl.label} — {slice_share * 100:.1f}%" if slice_share is not None
+                     else str(sl.label))
             self._text(s, Inches(lx + 0.18), Inches(top + 0.34), Inches(3.2),
                        Inches(0.24), label, size=9, color=self.theme.ink_400)
             lx += 3.4
@@ -1020,7 +1027,11 @@ class DeckBuilder:
                   if sl.balance_movement is not None]
         path = self.work / "cmp_attrib.png"
         if movers:
-            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            # ``total - Σ movements`` is the opening the waterfall must reach.
+            # Both attribution slides derived it; one definition now serves both.
+            from mi_agent_api.portfolio_context import opening_from_movement
+            opening = opening_from_movement(p.total_balance,
+                                            sum(v for _s, v in movers)) or 0.0
             steps = [("Opening", float(opening), "base")]
             for sl, v in movers:
                 steps.append((sl.label.replace(" portfolio", "").replace(
@@ -1090,7 +1101,11 @@ class DeckBuilder:
                   if sl.balance_movement is not None]
         path = self.work / "mv_type.png"
         if movers:
-            opening = (p.total_balance or 0) - sum(v for _s, v in movers)
+            # ``total - Σ movements`` is the opening the waterfall must reach.
+            # Both attribution slides derived it; one definition now serves both.
+            from mi_agent_api.portfolio_context import opening_from_movement
+            opening = opening_from_movement(p.total_balance,
+                                            sum(v for _s, v in movers)) or 0.0
             steps = [("Opening", float(opening), "base")]
             for sl, v in movers:
                 steps.append((sl.label.replace(" portfolio", "")

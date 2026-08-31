@@ -325,7 +325,12 @@ def portfolio_mix(ctx: Mapping[str, Any], portfolio) -> Result:
     if not total:
         return [], [Omission(PORTFOLIO_MIX, "no governed funded balance.",
                              OMITTED_UNAVAILABLE)]
-    shares = [(s, (s.balance or 0.0) / total * 100.0) for s in portfolio.type_slices]
+    # From the governed composition service — the same owner the composition
+    # slide reads, so the executive summary and the page it summarises can never
+    # state two different shares for one book.
+    from mi_agent_api.portfolio_context import balance_share
+    shares = [(s, (balance_share(s.balance, total) or 0.0) * 100.0)
+              for s in portfolio.type_slices]
     shares.sort(key=lambda x: -x[1])
     lead, lead_share = shares[0]
     text = "; ".join(f"{s.label.lower()} {pct(share)} of balance across "

@@ -256,6 +256,24 @@ class DeckPortfolioContext:
         return display_of(self.snapshot, "balance")
 
     # -- composition -------------------------------------------------------
+    def share_of(self, sl: "TypeSlice") -> Optional[float]:
+        """A type slice's share of the book, as a fraction — from the governed
+        composition service, never derived at a call site."""
+        from mi_agent_api.portfolio_context import balance_share
+        return balance_share(getattr(sl, "balance", None), self.total_balance)
+
+    def opening_of(self, sl: "TypeSlice") -> Optional[float]:
+        """The opening balance this slice's movement decomposes."""
+        from mi_agent_api.portfolio_context import opening_from_movement
+        return opening_from_movement(getattr(sl, "balance", None),
+                                     getattr(sl, "balance_movement", None))
+
+    @property
+    def composition(self) -> Dict[str, Dict[str, Any]]:
+        """``portfolio_type -> {balance, share, movement, opening}``."""
+        from mi_agent_api.portfolio_context import type_composition
+        return type_composition(self.total_balance, self.type_slices)
+
     def slice_for(self, portfolio_type: str) -> Optional[TypeSlice]:
         low = str(portfolio_type or "").lower()
         for sl in self.type_slices:
