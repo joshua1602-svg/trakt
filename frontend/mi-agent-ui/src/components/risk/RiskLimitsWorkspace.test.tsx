@@ -39,6 +39,7 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
     getForecastSnapshot: vi.fn(),
     getFundedEvolution: vi.fn(),
     getPipelineEvolution: vi.fn(),
+    getPipelineMovement: vi.fn(async () => ({ dataset: "pipeline_movement" as const, portfolioId: "p", available: false, reason: "no extracts", stages: [] })),
     getForecastEvolution: vi.fn(),
     getFunnelEvolution: vi.fn(),
     getRiskLimits: vi.fn(),

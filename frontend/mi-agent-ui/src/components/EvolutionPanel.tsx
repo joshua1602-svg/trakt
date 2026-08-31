@@ -19,8 +19,10 @@ import type {
   CohortGrain,
   CohortProgression,
   StagePoint,
+  PipelineMovement,
 } from "@/domain";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
+import { StageMovementPanel } from "@/components/pipeline/StageMovementPanel";
 import { InsightLineChart } from "@/components/insight/InsightLineChart";
 import { ConversionContext } from "@/components/insight/ConversionContext";
 import { InsightStageCard } from "@/components/insight/InsightStageCard";
@@ -819,6 +821,9 @@ export function EvolutionPanel({
   const [view, setView] = useState<EvoView>(allowed[0] ?? "funded");
   const [funded, setFunded] = useState<FundedEvolution | null>(null);
   const [pipeline, setPipeline] = useState<PipelineEvolution | null>(null);
+  // Case-level stage movement — the SAME governed reconciliation the investor
+  // pack renders, fetched alongside the pipeline series it sits with.
+  const [movement, setMovement] = useState<PipelineMovement | null>(null);
   const [forecast, setForecast] = useState<ForecastEvolution | null>(null);
   const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
   const [loading, setLoading] = useState(false);
@@ -838,7 +843,15 @@ export function EvolutionPanel({
     const run = async () => {
       try {
         if (view === "funded") setFunded(await client.getFundedEvolution(portfolioId, portfolioContext));
-        else if (view === "pipeline") setPipeline(await client.getPipelineEvolution(portfolioId, portfolioContext));
+        else if (view === "pipeline") {
+          const [series, moved] = await Promise.all([
+            client.getPipelineEvolution(portfolioId, portfolioContext),
+            client.getPipelineMovement(portfolioId, portfolioContext)
+              .catch(() => null),
+          ]);
+          setPipeline(series);
+          setMovement(moved);
+        }
         else if (view === "origination") setFunnel(await client.getFunnelEvolution(portfolioId, portfolioContext));
         else if (view === "cohorts") { /* CohortView is self-contained (owns its fetches) */ }
         else setForecast(await client.getForecastEvolution(portfolioId, portfolioContext));
@@ -996,6 +1009,12 @@ export function EvolutionPanel({
 
       {view === "pipeline" && (
         <TimingDisclosureBanner timing={pipeline?.pipelineTiming} />
+      )}
+
+      {view === "pipeline" && movement?.available && (
+        <div className="grid grid-cols-1 gap-4">
+          <StageMovementPanel movement={movement} />
+        </div>
       )}
 
       {view === "pipeline" && (

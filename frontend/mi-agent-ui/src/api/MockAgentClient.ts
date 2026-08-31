@@ -15,6 +15,7 @@ import type {
   FundedEvolution,
   FundedSnapshot,
   PipelineEvolution,
+  PipelineMovement,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
   ConcentrationDrivers,
@@ -134,6 +135,16 @@ export class MockAgentClient implements AgentClient {
 
   getPipelineEvolution(portfolioId: string): Promise<PipelineEvolution> {
     return Promise.resolve(mockPipelineEvolution(portfolioId));
+  }
+
+  getPipelineMovement(portfolioId: string): Promise<PipelineMovement> {
+    return Promise.resolve({
+      dataset: "pipeline_movement" as const,
+      portfolioId,
+      available: false,
+      reason: "the mock client carries no weekly pipeline extracts",
+      stages: [],
+    });
   }
 
   /**

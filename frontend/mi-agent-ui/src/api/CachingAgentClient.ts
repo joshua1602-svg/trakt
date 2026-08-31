@@ -141,6 +141,9 @@ export function withCache(
     getPipelineEvolution: (portfolioId, portfolioContext, signal) =>
       resource(`pipelineEvolution|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getPipelineEvolution(portfolioId, portfolioContext, signal)),
+    getPipelineMovement: (portfolioId, portfolioContext, signal) =>
+      resource(`pipelineMovement|${portfolioId}|${portfolioContext ?? ""}`,
+        () => client.getPipelineMovement(portfolioId, portfolioContext, signal)),
     getForecastEvolution: (portfolioId, portfolioContext, signal) =>
       resource(`forecastEvolution|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getForecastEvolution(portfolioId, portfolioContext, signal)),

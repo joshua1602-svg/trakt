@@ -22,6 +22,7 @@ import type {
   MovementDetailType,
   WeeklyBrief,
   PipelineEvolution,
+  PipelineMovement,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
   ConcentrationDrivers,
@@ -233,6 +234,13 @@ export class HttpAgentClient implements AgentClient {
                       signal?: AbortSignal): Promise<PipelineEvolution> {
     return this.getJson<PipelineEvolution>(
       `/mi/evolution/pipeline?${this.scoped(portfolioId, portfolioContext)}`, signal);
+  }
+
+  getPipelineMovement(portfolioId: string, portfolioContext?: string,
+                      signal?: AbortSignal): Promise<PipelineMovement> {
+    return this.getJson<PipelineMovement>(
+      `/mi/evolution/pipeline-movement?${this.scoped(portfolioId, portfolioContext)}`,
+      signal);
   }
 
   getMovementDetail(portfolioId: string, detailType: MovementDetailType,

@@ -187,6 +187,12 @@ def build_facts(data: Any) -> Dict[str, Any]:
         # -- pipeline --------------------------------------------------------
         "has_pipeline": bool(getattr(data, "pipeline", {}) or {}),
         "has_pipeline_history": _periods(getattr(data, "pipeline_evolution", {})),
+        # Case-level stage movement is available only where the governed
+        # pipeline contract resolved a STABLE case identifier in both extracts.
+        # There is no fallback: without one the only honest answer is that this
+        # cannot be reported, and the engine says so in its own words.
+        "has_pipeline_movement": bool(
+            (getattr(data, "pipeline_movement", {}) or {}).get("available")),
         "has_funnel": bool((getattr(data, "funnel", {}) or {}).get("series")
                            or (getattr(data, "pipeline", {}) or {}).get("stageBreakdown")),
         # -- forecast / risk --------------------------------------------------
@@ -498,6 +504,8 @@ _CONDITION_WORDING: Dict[str, str] = {
     "has_concentration": "no governed concentration tests are configured for this portfolio",
     "has_attribution": "no prior reporting period to attribute movement against",
     "has_pipeline_history": "fewer than two weekly pipeline extracts are available",
+    "has_pipeline_movement": ("case-level stage movement needs a stable case "
+                              "identifier in two governed weekly extracts"),
     "has_geo": "no area-level (ITL3) exposure resolved for this book",
     "has_balance_movement": "the funded balance bridge did not reconcile for this period",
     "has_portfolio_projections": "no constituent-book projection resolved for this scope",

@@ -30,6 +30,7 @@ import type {
   MovementDetailType,
   WeeklyBrief,
   PipelineEvolution,
+  PipelineMovement,
   ConcentrationDrillthrough,
   ConcentrationDrivers,
   ConcentrationHistory,
@@ -92,6 +93,13 @@ export interface AgentClient {
   /** Pipeline time series (weekly amount/cases + by-stage over time). */
   getPipelineEvolution(portfolioId: string, portfolioContext?: string,
                       signal?: AbortSignal): Promise<PipelineEvolution>;
+
+  /**
+   * Per-stage case and balance reconciliation between two governed weekly
+   * extracts. The SAME computation the investor pack renders.
+   */
+  getPipelineMovement(portfolioId: string, portfolioContext?: string,
+                      signal?: AbortSignal): Promise<PipelineMovement>;
 
   /** Forecast bridge over time (funded balance + weighted pipeline per run). */
   getForecastEvolution(portfolioId: string, portfolioContext?: string,

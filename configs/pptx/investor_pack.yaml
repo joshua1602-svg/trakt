@@ -248,6 +248,17 @@ slides:
     keys: [ltv, ticket, age, region, rate, product, borrower_type, broker]
     when: "has_pipeline and pipeline_amount >= 1000000"
 
+  # HOW CASES ARE PROGRESSING. The funnel above measures conversion as weekly
+  # FLOW; this is the case-level reconciliation between two extracts, on counts
+  # and on money, with departures split by where the case actually went. It
+  # needs a stable case identifier in both extracts and says so when it has
+  # none — there is deliberately no fallback.
+  - id: pipeline_movement
+    type: pipeline_movement
+    title: "Pipeline Stage Movement"
+    question: "What happened to pipeline cases between reporting periods?"
+    when: "has_pipeline_movement"
+
   - id: origination_flow
     type: origination_flow
     title: "Origination Flow — KFIs & Completions"

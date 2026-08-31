@@ -46,6 +46,7 @@ function makeClient(): AgentClient {
     getForecastSnapshot: any,
     getFundedEvolution: any,
     getPipelineEvolution: any,
+    getPipelineMovement: async () => ({ dataset: "pipeline_movement" as const, portfolioId: "p", available: false, reason: "no extracts", stages: [] }),
     getForecastEvolution: any,
     getFunnelEvolution: any,
     getRiskLimits: any,

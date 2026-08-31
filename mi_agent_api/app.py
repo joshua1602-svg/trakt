@@ -1113,6 +1113,69 @@ def pipeline_evolution(portfolioId: Optional[str] = None, client_id: Optional[st
                 "periods": [], "byStage": [], "singlePeriod": True, "error": str(exc)}
 
 
+@app.get("/mi/evolution/pipeline-movement")
+def pipeline_stage_movement(portfolioId: Optional[str] = None,
+                            client_id: Optional[str] = None,
+                            toRunId: Optional[str] = None,
+                            to_run_id: Optional[str] = None,
+                            portfolioContext: Optional[str] = None,
+                            request: Request = None, response: Response = None
+                            ) -> Dict[str, Any]:
+    """What actually happened to pipeline cases between two weekly extracts.
+
+    Per live stage, on counts AND amounts::
+
+        opening live + arrivals - departures +/- amount change on stayers
+            = closing live
+
+    Departures are split by where the case went — on to another stage,
+    completed, withdrawn, or absent from the extract — because "left the stage"
+    and "left the pipeline" are different events and a funnel that conflates
+    them cannot be read.
+
+    The computation is ``evolution.pipeline_stage_movement``, which the
+    investor pack also calls in-process, so the dashboard and the deck read one
+    reconciliation. Returns ``available: false`` with the engine's own reason
+    wherever case identity cannot be governed — there is deliberately no
+    fallback, because without a stable case key the only honest answer is that
+    this cannot be reported.
+    """
+    cid, _funded_trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    pipeline_cut = toRunId or to_run_id
+    resolved, refusal = _pipeline_scope_gate(
+        portfolioContext, cid, "pipeline_movement", portfolioId=cid,
+        toRunId=pipeline_cut, available=False, stages=[])
+    if refusal is not None:
+        return refusal
+    root = _pipeline_discovery_root()
+    if not root:
+        return {"dataset": "pipeline_movement", "portfolioId": cid,
+                "toRunId": pipeline_cut, "available": False, "stages": [],
+                "reason": "no pipeline root configured"}
+    etag = http_cache.begin(
+        request, route="mi.evolution.pipeline_movement", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, _funded_trid,
+                                             include_pipeline=True))
+    try:
+        result = evolution_mod.pipeline_stage_movement(
+            root, cid, to_run_id=pipeline_cut,
+            historical_model=_pipeline_history(cid))
+        result.setdefault("dataset", "pipeline_movement")
+        result.setdefault("portfolioId", cid)
+        result.setdefault("stages", [])
+        if resolved is not None:
+            result["portfolioScope"] = resolved.scope.to_dict()
+            state = resolved.capability(CAP_PIPELINE)
+            if state is not None:
+                result["pipelineCapability"] = state.to_dict()
+        return http_cache.finish(response, etag, result)
+    except Exception as exc:  # noqa: BLE001 - the view must never 500
+        logger.warning("pipeline stage movement failed for %s: %s", cid, exc)
+        return {"dataset": "pipeline_movement", "portfolioId": cid,
+                "toRunId": pipeline_cut, "available": False, "stages": [],
+                "reason": str(exc)}
+
+
 @app.get("/mi/insight/movement-detail")
 def movement_detail(detailType: str,
                     portfolioId: Optional[str] = None,

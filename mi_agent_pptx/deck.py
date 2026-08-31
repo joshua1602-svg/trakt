@@ -2283,9 +2283,9 @@ class DeckBuilder:
             return
         y = float(it) / EMU_IN + 0.24
         for label, value in rows[:6]:
-            self._text(slide, il, Inches(y), Inches(float(iw) / EMU_IN * 0.66),
+            self._text(slide, il, Inches(y), Inches(iw * 0.66),
                        Inches(0.3), label, size=10, color=self.theme.ink_400)
-            self._text(slide, il, Inches(y), Inches(float(iw) / EMU_IN),
+            self._text(slide, il, Inches(y), Inches(iw),
                        Inches(0.3), str(value), size=10.5,
                        color=self.theme.ink_100, align=PP_ALIGN.RIGHT, bold=True)
             y += 0.42
@@ -2348,6 +2348,117 @@ class DeckBuilder:
         self._place(s, p2, il, it, iw, ih)
         self._footer(s)
         self._record("pipeline_evolution", spec.get("title"), "", placeholder=single)
+
+    def slide_pipeline_movement(self, spec):
+        """Pipeline Stage Movement — *what happened to cases between periods?*
+
+        For each live stage, on counts AND amounts::
+
+            opening live + arrivals - departures +/- amount change on stayers
+                = closing live
+
+        Two aligned reads, because a funder asks both: a stage table carrying
+        the identity in cases and money, and — where cases left a stage — where
+        they actually went. "Left the stage" and "left the pipeline" are
+        different events, and a completion is not attrition.
+
+        Nothing is computed here. The reconciliation is
+        ``evolution.pipeline_stage_movement``, which ``/mi/evolution/pipeline-
+        movement`` serves to the dashboard, so both surfaces read one result.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        s = self._slide()
+        mv = self.d.pipeline_movement or {}
+        stages = [st for st in (mv.get("stages") or ())
+                  if st.get("openingCaseCount") or st.get("closingCaseCount")]
+        window = ""
+        if mv.get("openingWeek") and mv.get("closingWeek"):
+            window = f"{mv['openingWeek']} to {mv['closingWeek']}"
+        self._header(s, spec.get("title", "Pipeline Stage Movement"),
+                     (f"Case and balance movement by stage, {window}" if window
+                      else "Case and balance movement by stage"),
+                     accent=self.theme.peri)
+        if not stages:
+            self._placeholder_body(
+                s, mv.get("reason") or "No governed stage movement for this book.")
+            self._footer(s)
+            return self._record("pipeline_movement", spec.get("title"), "",
+                                placeholder=True)
+
+        # -- the identity, stage by stage ------------------------------------
+        cols = ["Stage", "Opening", "Arrived", "Departed", "On stayers", "Closing"]
+        rows = []
+        for st in stages:
+            def _leg(count, amount, sign):
+                # A zero leg is a dash. "−0  £0" reads as a rendering fault.
+                if not count and not amount:
+                    return "—"
+                return (f"{sign}{compact_number(count)}  "
+                        f"{compact_currency(amount)}")
+
+            rows.append([
+                self._STAGE_PRETTY.get(st["stage"], st["stage"]),
+                f"{compact_number(st['openingCaseCount'])}  "
+                f"{compact_currency(st['openingAmount'])}",
+                _leg(st["arrivalCaseCount"], st["arrivalAmount"], "+"),
+                _leg(st["departureCaseCount"], st["departureAmount"], "−"),
+                self._signed_currency(st.get("amountChangeOnPersisting")),
+                f"{compact_number(st['closingCaseCount'])}  "
+                f"{compact_currency(st['closingAmount'])}",
+            ])
+        # -- where the departures went ---------------------------------------
+        destinations: Dict[str, Dict[str, Any]] = {}
+        for st in stages:
+            for dest in st.get("departuresByDestination") or ():
+                bucket = destinations.setdefault(
+                    str(dest.get("stage", "")).upper(),
+                    {"cases": 0, "amount": 0.0})
+                bucket["cases"] += int(dest.get("caseCount") or 0)
+                bucket["amount"] += float(dest.get("amount") or 0.0)
+        bars = [{"label": ("Left the extract" if key == "ABSENT"
+                           else self._STAGE_PRETTY.get(key, key.title())),
+                 "balance": info["amount"], "count": info["cases"]}
+                for key, info in destinations.items() if info["amount"]]
+        bars.sort(key=lambda b: -b["balance"])
+
+        # THE TABLE TAKES THE PAGE WHEN NOTHING DEPARTED. Reserving a second
+        # panel for "no case left a stage" spends half the slide saying nothing
+        # happened; the sentence carries that, and the table gets the room.
+        table_h = 2.78 if bars else 3.92
+        il, it, iw, ih = self._card(
+            s, Inches(self.CONTENT_L), Inches(1.62),
+            Inches(self.CONTENT_R - self.CONTENT_L), Inches(table_h),
+            "Live stock by stage")
+        path = self.work / "pipe_move_table.png"
+        R.draw_table(path, cols, rows, iw, ih, theme=self.theme)
+        self._place(s, path, il, it, iw, ih)
+
+        if bars:
+            self._barlist_card(
+                s, (Inches(self.CONTENT_L), Inches(4.58),
+                    Inches(self.CONTENT_R - self.CONTENT_L), Inches(1.94)),
+                "Where departing cases went", bars, "balance",
+                cid="pipe_move_dest")
+        else:
+            self._text(s, Inches(self.CONTENT_L), Inches(5.76),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.32),
+                       "No case left a live stage between these two extracts.",
+                       size=11, color=self.theme.ink_400, italic=True)
+
+        note = mv.get("lineage", {}).get("identity") or ""
+        if note:
+            self._text(s, Inches(self.CONTENT_L), Inches(6.60),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.30),
+                       ("Reconciled on the governed case identifier "
+                        f"({mv.get('identifierField')}): {note}. An amount "
+                        "amendment is a movement on the same case, not an exit "
+                        "and an arrival."),
+                       size=8.5, color=self.theme.ink_500, italic=True)
+        self._footer(s)
+        self._record("pipeline_movement", spec.get("title"),
+                     f"{len(stages)} live stage(s); "
+                     f"{'reconciles' if mv.get('reconciles') else 'residual outside tolerance'}.")
 
     def slide_origination_flow(self, spec):
         """KFI and Completion weekly-flow panels (bars) with a cumulative line —
@@ -3588,6 +3699,7 @@ class DeckBuilder:
         "cohort_progression": "slide_cohort_progression",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",
         "funnel": "slide_funnel", "origination_flow": "slide_origination_flow",
+        "pipeline_movement": "slide_pipeline_movement",
         "forecast_bridge": "slide_forecast_bridge",
         "forecast_projection": "slide_forecast_projection",
         "forecast_evolution": "slide_forecast_evolution", "risk": "slide_risk",

@@ -21,6 +21,7 @@ function client(getForecastExtrapolation: AgentClient["getForecastExtrapolation"
     getPortfolioContext: vi.fn(async () => ({ available: false, client_id: null, default_context_id: "total", contexts: [], portfolios: [], portfolio_types: [], pipeline_portfolios: null })),
     getForecastSnapshot: vi.fn(), getFundedEvolution: vi.fn(),
     getPipelineEvolution: vi.fn(), getForecastEvolution: vi.fn(),
+    getPipelineMovement: vi.fn(async () => ({ dataset: "pipeline_movement" as const, portfolioId: "p", available: false, reason: "no extracts", stages: [] })),
     getFunnelEvolution: vi.fn(), getRiskLimits: vi.fn(), getCohortProgression: vi.fn(),
     getConcentrationTests: vi.fn(), getConcentrationDrillthrough: vi.fn(), getConcentrationHistory: vi.fn(),
     getConcentrationDrivers: vi.fn(),

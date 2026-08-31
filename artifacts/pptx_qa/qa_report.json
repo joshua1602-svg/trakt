@@ -2,7 +2,7 @@
   "new_book_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/new_book_gbp.pptx",
-    "slides": 14,
+    "slides": 15,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -13,6 +13,7 @@
       "Pipeline Overview",
       "Origination Funnel",
       "Pipeline Stratifications",
+      "Pipeline Stage Movement",
       "Origination Flow \u2014 KFIs & Completions",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Portfolio Health and Watch Items",
@@ -24,7 +25,7 @@
   "seasoned_book_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/seasoned_book_gbp.pptx",
-    "slides": 17,
+    "slides": 19,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -37,6 +38,8 @@
       "Funded Balance Movement",
       "Pipeline Overview",
       "Origination Funnel",
+      "Pipeline Stratifications",
+      "Pipeline Stage Movement",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Forecast Evolution \u2014 Actual vs Prior Forecast",
       "Cohort Progression",
@@ -49,7 +52,7 @@
   "multi_seasoned_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/multi_seasoned_gbp.pptx",
-    "slides": 18,
+    "slides": 20,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -62,6 +65,8 @@
       "Funded Balance Movement",
       "Pipeline Overview",
       "Origination Funnel",
+      "Pipeline Stratifications",
+      "Pipeline Stage Movement",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Forward View by Constituent Book",
       "Forecast Evolution \u2014 Actual vs Prior Forecast",
@@ -75,7 +80,7 @@
   "multi_growing_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/multi_growing_gbp.pptx",
-    "slides": 18,
+    "slides": 20,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -88,6 +93,8 @@
       "Funded Balance Movement",
       "Pipeline Overview",
       "Origination Funnel",
+      "Pipeline Stratifications",
+      "Pipeline Stage Movement",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Forward View by Constituent Book",
       "Forecast Evolution \u2014 Actual vs Prior Forecast",
