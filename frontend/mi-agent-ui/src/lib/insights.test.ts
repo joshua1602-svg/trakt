@@ -7,10 +7,17 @@ function chart(
   opts: { withLtv?: boolean } = {},
 ): ChartArtifact {
   const series = [{ key: "balance", label: "Balance", color: "#000" }];
-  const displayHints: ChartArtifact["displayHints"] = { balance: { format: "gbp", scale: null } };
+  // ADDITIVITY IS ENGINE-OWNED. A fixture models an engine payload, so it
+  // carries the contract the engine now publishes: a balance SUM may be
+  // added across categories, a weighted average may not. Without it the
+  // measure falls back to non-additive and no share is computed — which is
+  // the safe direction, and why these fixtures state it explicitly.
+  const displayHints: ChartArtifact["displayHints"] = {
+    balance: { format: "gbp", scale: null, additive: true },
+  };
   if (opts.withLtv) {
     series.push({ key: "wa_ltv", label: "WA LTV", color: "#111" });
-    displayHints!.wa_ltv = { format: "pct", scale: "percent_fraction" };
+    displayHints!.wa_ltv = { format: "pct", scale: "percent_fraction", additive: false };
   }
   return {
     id: "art",
@@ -119,7 +126,7 @@ function trendTable(rows: Array<Record<string, string | number>>): TableArtifact
     mock: false,
     columns: [
       { key: "period", label: "Period", format: "text" },
-      { key: "funded_balance", label: "Funded balance", format: "gbp" },
+      { key: "funded_balance", label: "Funded balance", format: "gbp", additive: true },
     ],
     rows,
   };
@@ -160,7 +167,7 @@ describe("computeInsights — stock snapshot time-series (bug: additive months)"
       createdAt: "2026-06-26T08:00:00Z", mock: false,
       columns: [
         { key: "vintage_year", label: "Vintage year", format: "text" },
-        { key: "balance", label: "Balance", format: "gbp" },
+        { key: "balance", label: "Balance", format: "gbp", additive: true },
       ],
       rows: [
         { vintage_year: "2021", balance: 700 },

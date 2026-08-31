@@ -90,6 +90,12 @@ export function regionChartArtifact(ctx: Ctx): ChartArtifact {
     valueFormat: "gbp",
     unit: "MM",
     series: [{ key: "balance", label: "Balance (£MM)", color: THEME.peri }],
+    // The mock models an engine payload, so it carries the contract the engine
+    // publishes. This is a balance SUM (aggregation: "sum" above), so it is
+    // additive and a share of the regional total is meaningful. Without it the
+    // demo silently loses its concentration observations — mocks that omit a
+    // contract field stop modelling the thing they exist to model.
+    displayHints: { balance: { format: "gbp", scale: null, additive: true } },
   };
 }
 

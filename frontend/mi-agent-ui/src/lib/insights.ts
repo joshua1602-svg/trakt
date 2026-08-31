@@ -149,6 +149,20 @@ function isSnapshotTimeSeries(model: DrillModel): boolean {
   return periodLike.length >= 2 && periodLike.length >= Math.ceil(model.values.length * 0.8);
 }
 
+/**
+ * Is this artifact's row set the whole population?
+ *
+ * Reads the engine's own answer. Absent contract means the artifact predates
+ * the field or came from a source that does not cap — treated as complete,
+ * because the additive + snapshot guards above already carry the load and
+ * suppressing every share on an older payload would be a worse answer than the
+ * one this exists to prevent.
+ */
+function populationIsComplete(artifact: Artifact): boolean {
+  const population = (artifact as { population?: { populationComplete?: boolean } }).population;
+  return population?.populationComplete !== false;
+}
+
 /* --------------------------- the engine --------------------------- */
 
 /**
@@ -185,12 +199,21 @@ export function computeInsights(
   const m = mean(values);
   const top3 = sorted.slice(0, 3);
 
-  // A stock snapshot series (funded balance by month) is NOT part-to-whole:
-  // summing balances across snapshots double-counts the overlapping book, so
-  // "% of total" concentration / ranking shares would be false. Only compute
-  // additive shares for genuine cross-sectional breakdowns.
+  // A share is only a share when THREE things hold, and each has produced a
+  // false statement in this panel when it did not:
+  //
+  //   1. the measure is ADDITIVE — engine-owned, never inferred from format.
+  //      A money-formatted average summed into a "total" gave shares of a
+  //      £3.06m denominator against a real book of £38.6m;
+  //   2. it is not a stock SNAPSHOT SERIES — summing a balance across months
+  //      double-counts the overlapping book;
+  //   3. the POPULATION IS COMPLETE — the engine caps a high-cardinality chart
+  //      to a ranked top-N, and where it dropped a non-additive tail the rows
+  //      in hand are not the whole. A share of a denominator we cannot see is
+  //      not a share.
   const timeSeries = isSnapshotTimeSeries(model);
-  const shareable = focus.additive && !timeSeries && total !== 0;
+  const complete = populationIsComplete(artifact);
+  const shareable = focus.additive && !timeSeries && complete && total !== 0;
 
   const statistics: InsightStatistics = {
     measureKey: focus.key,

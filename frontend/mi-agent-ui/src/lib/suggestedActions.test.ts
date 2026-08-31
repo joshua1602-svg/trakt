@@ -18,6 +18,10 @@ function regionChart(): ChartArtifact {
       { geographic_region_obligor: "South East", current_outstanding_balance: 100 },
     ],
     valueFormat: "gbp",
+    // Engine-owned additivity. The "drill into the largest value" suggestion is
+    // ranked by the additive primary measure, so the fixture must carry the
+    // contract the engine now publishes — a balance SUM is sum-able.
+    displayHints: { current_outstanding_balance: { format: "gbp", scale: null, additive: true } },
   };
 }
 

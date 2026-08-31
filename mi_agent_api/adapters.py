@@ -302,6 +302,22 @@ def _label_for(col: str, resolved: Dict[str, Any]) -> str:
     return col.replace("_", " ").title()
 
 
+def _population_complete(rows: List[Dict[str, Any]], full_row_count: int,
+                         value_key: Optional[str],
+                         other_categories: Dict[str, List[str]]) -> bool:
+    """Is every category's VALUE still represented in ``rows``?
+
+    True when nothing was capped. True when an additive measure was capped,
+    because the remainder was folded into an aggregated ``Other`` row and the
+    rows still sum to the whole. False when a NON-additive tail was dropped —
+    the only case in which a share computed over the returned rows would be a
+    share of a denominator that does not exist.
+    """
+    if len(rows) >= full_row_count:
+        return True
+    return bool(other_categories) and is_additive_measure(value_key or "")
+
+
 def _chart_artifact(
     qr: Dict[str, Any],
     cr: Dict[str, Any],
@@ -314,6 +330,10 @@ def _chart_artifact(
     rows = qr.get("data") or []
     resolved = qr.get("resolved_fields", {})
     columns = list(rows[0].keys()) if rows else []
+    # The population the ENGINE produced, before any visual cap. A consumer that
+    # cannot tell a complete result from a ranked top-N will read the rows it was
+    # given as the whole book.
+    full_row_count = len(rows)
 
     x_key: Optional[str] = None
     y_key: Optional[str] = None
@@ -444,6 +464,15 @@ def _chart_artifact(
     # Per-column display hints (format + storage scale) so React formats values —
     # especially fraction percents (0.51 -> 51.0%) — without guessing.
     display_hints = {c: _hint(hints, c) for c in columns} if hints else {}
+    # ADDITIVITY, PUBLISHED. Whether a column can be summed across categories is
+    # a property of the aggregation that produced it, and the engine is the only
+    # place that knows. It travels beside the format so a consumer reads it
+    # rather than inferring it — a display format cannot distinguish
+    # ``balance_sum`` from ``balance_avg``, and one consumer inferring it that
+    # way summed ten broker averages into a portfolio total.
+    for column in columns:
+        display_hints.setdefault(column, {"format": None, "scale": None})
+        display_hints[column]["additive"] = is_additive_measure(column)
 
     chart_warnings, chart_diagnostics = split_warnings(list(cr.get("warnings", [])))
     if chart_diagnostics:
@@ -476,6 +505,20 @@ def _chart_artifact(
         "rows": rows,
         "valueFormat": value_format,
         "displayHints": display_hints,
+        # POPULATION COMPLETENESS. ``truncated`` says categories were dropped for
+        # the visual; ``populationComplete`` says whether the VALUE of every
+        # category is still represented — true when nothing was capped, and true
+        # for an additive cap because the remainder is folded into ``Other``.
+        # It is false only where a non-additive tail was dropped, which is
+        # exactly when a part-to-whole claim over the returned rows would be
+        # false. A consumer must not compute a share of a total it cannot see.
+        "population": {
+            "returnedCount": len(rows),
+            "totalCount": full_row_count,
+            "truncated": len(rows) < full_row_count,
+            "populationComplete": _population_complete(
+                rows, full_row_count, value_key, other_categories),
+        },
         # Drill metadata for the capped "Other" bucket (NOT IN the shown categories).
         "otherCategories": other_categories or None,
         # User-visible card carries business-facing warnings only; technical
@@ -722,15 +765,41 @@ def _with_receipt(answer: str, workflow: Dict[str, Any]) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
+#: Aggregation suffixes that produce a SUM-ABLE column. Everything else — an
+#: average, a weighted average, a median, a share — is NOT sum-able, however it
+#: happens to be formatted for display.
+_ADDITIVE_SUFFIXES = ("_sum", "_total")
+_ADDITIVE_EXACT = ("count",)
+
+
+def is_additive_measure(column: str) -> bool:
+    """Can this emitted column be summed across categories?
+
+    THE AUTHORITATIVE DETERMINATION, and the only one. It is a property of the
+    AGGREGATION that produced the column, never of how the column is displayed:
+    ``current_outstanding_balance_sum`` and ``current_outstanding_balance_avg``
+    are both formatted as money, and only the first may be added up.
+
+    A consumer that inferred this from the display format summed ten broker
+    AVERAGES into a "portfolio total" and reported shares of it — which is why
+    the answer is now published on the artifact contract instead of being
+    re-derived downstream. See ``docs/reports/mi_cross_channel_ownership_audit.md``.
+    """
+    if not column:
+        return False
+    return (column in _ADDITIVE_EXACT
+            or any(column.endswith(sfx) for sfx in _ADDITIVE_SUFFIXES))
+
+
 def _cap_bar_rows(rows: List[Dict[str, Any]], x_key: str, value_key: str,
                   n: int = 10) -> Tuple[List[Dict[str, Any]], bool]:
     """Cap a bar chart to the top ``n`` categories by ``value_key``.
 
-    For an additive measure (``*_sum`` / ``count`` / ``*_total``) the remainder is
-    folded into an aggregated ``Other`` row so the chart still totals correctly;
-    for a non-additive measure (avg / weighted avg / share) the tail is dropped
-    from the VISUAL only (the full detail remains in the table/export). No-op when
-    there are ``<= n`` categories.
+    For an additive measure the remainder is folded into an aggregated ``Other``
+    row so the chart still totals correctly; for a non-additive measure (avg /
+    weighted avg / share) the tail is dropped from the VISUAL only (the full
+    detail remains in the table/export). No-op when there are ``<= n``
+    categories.
     """
     if not value_key or len(rows) <= n:
         return rows, False
@@ -740,8 +809,7 @@ def _cap_bar_rows(rows: List[Dict[str, Any]], x_key: str, value_key: str,
         return float(v) if isinstance(v, (int, float)) else float("-inf")
 
     ordered = sorted(rows, key=_val, reverse=True)
-    additive = (value_key.endswith("_sum") or value_key == "count"
-                or value_key.endswith("_total"))
+    additive = is_additive_measure(value_key)
     if additive:
         head, tail = ordered[: n - 1], ordered[n - 1:]
         other: Dict[str, Any] = {x_key: "Other"}

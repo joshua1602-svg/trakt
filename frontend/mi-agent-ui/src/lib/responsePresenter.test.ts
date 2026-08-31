@@ -17,7 +17,8 @@ function regionChart(): ChartArtifact {
     xKey: "geographic_region_obligor",
     series: [{ key: "current_outstanding_balance", label: "Balance", color: "#000" }],
     valueFormat: "gbp",
-    displayHints: { current_outstanding_balance: { format: "gbp", scale: null } },
+    // Engine-owned additivity — see docs/reports/mi_cross_channel_ownership_audit.md.
+    displayHints: { current_outstanding_balance: { format: "gbp", scale: null, additive: true } },
     rows: [
       { geographic_region_obligor: "London", current_outstanding_balance: 700 },
       { geographic_region_obligor: "South East", current_outstanding_balance: 200 },

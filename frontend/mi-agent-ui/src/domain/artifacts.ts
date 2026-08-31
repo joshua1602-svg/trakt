@@ -131,6 +131,31 @@ export interface DisplayHint {
   format?: ValueFormat;
   /** "percent_fraction" (0.51) | "percent_points" (51) | null. */
   scale?: "percent_fraction" | "percent_points" | null;
+  /**
+   * Whether this column may be SUMMED across categories — decided by the
+   * engine from the aggregation that produced it, never from `format`. A
+   * money-formatted average is not additive. Absent means "assume not".
+   */
+  additive?: boolean;
+}
+
+/**
+ * How much of the population a result carries.
+ *
+ * The engine may cap a high-cardinality chart to a ranked top-N. For an
+ * ADDITIVE measure the remainder is folded into an aggregated "Other" row, so
+ * the rows still sum to the whole and `populationComplete` stays true. For a
+ * non-additive measure the tail is dropped from the visual, and any
+ * part-to-whole claim over the returned rows would be a share of a denominator
+ * that does not exist.
+ */
+export interface ArtifactPopulation {
+  returnedCount: number;
+  totalCount: number;
+  /** Categories were dropped for the visual. */
+  truncated: boolean;
+  /** Every category's VALUE is still represented in `rows`. */
+  populationComplete: boolean;
 }
 
 export interface ChartArtifact extends ArtifactBase {
@@ -153,6 +178,8 @@ export interface ChartArtifact extends ArtifactBase {
   sizeLabel?: string;
   /** Per-column {format, scale} so the renderer formats without guessing. */
   displayHints?: Record<string, DisplayHint>;
+  /** Population completeness for these rows (see `ArtifactPopulation`). */
+  population?: ArtifactPopulation;
   /**
    * For a bar capped to top-N + "Other", the shown category values per x-column.
    * A drill on "Other" is executed as `<dim> NOT IN [these]`, recovering the
@@ -172,6 +199,8 @@ export interface TableColumn {
   scale?: "percent_fraction" | "percent_points" | null;
   /** Render an inline magnitude bar scaled to the column max. */
   bar?: boolean;
+  /** Engine-owned: may this column be summed? See `DisplayHint.additive`. */
+  additive?: boolean;
 }
 
 export interface TableArtifact extends ArtifactBase {
