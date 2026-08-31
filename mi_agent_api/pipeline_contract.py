@@ -941,10 +941,23 @@ def compute_pipeline_snapshot(
     weighted = report.get("weighted_expected_funded_amount")
     src = source or {}
     as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
+    # THE BREAKDOWNS DESCRIBE THE SAME POPULATION AS THE HEADLINE. The live-stock
+    # correction gave ``pipelineAmount`` and ``pipelineRowCount`` the live stages
+    # and left every breakdown of them on the whole extract, so a stage chart's
+    # bars summed to the extract while the tile above them stated the live book —
+    # £10.7m of bars under a £7.8m total, and a broker split of a population no
+    # figure on the page reports. A breakdown of the pipeline is a breakdown of
+    # the pipeline. Terminal cases keep their own published counts
+    # (``pipelineTerminalStageCounts``) and the whole frame still reaches every
+    # flow, conversion and history measure, which need it.
+    from .pipeline_prep import live_mask
+
+    live_df = df[live_mask(df)]
     # Long categorical breakdowns are capped to top 10 (+ Other) for the visual;
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
-    broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
-    region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
+    broker_full = _dimension_breakdown(live_df, "broker_channel", key_name="key")
+    region_full = _dimension_breakdown(live_df, "geographic_region_obligor",
+                                       key_name="key")
     completion_breakdown = _expected_completion_breakdown(df)
     completion_summary = _expected_completion_summary(completion_breakdown, as_of)
     return {
@@ -993,7 +1006,7 @@ def compute_pipeline_snapshot(
         "historicalModelEvidence": _history.historical_model_evidence(
             report.get("historical_completion_model"),
             report.get("completion_probability_basis")),
-        "stageBreakdown": _stage_breakdown(df),
+        "stageBreakdown": _stage_breakdown(live_df),
         "expectedCompletionBreakdown": completion_breakdown,
         "expectedCompletionSummary": completion_summary,
         # Named diagnostics (relative to the pipeline as-of month).
@@ -1002,7 +1015,7 @@ def compute_pipeline_snapshot(
         "currentMonthExpectedCompletionCount": completion_summary["currentMonthExpectedCompletionCount"],
         "nextExpectedCompletionMonth": completion_summary["nextExpectedCompletionMonth"],
         # Governed pipeline stratifications, same shape/order/labels as funded.
-        "stratifications": _pipeline_stratifications(df),
+        "stratifications": _pipeline_stratifications(live_df),
         "brokerBreakdown": cap_breakdown(broker_full, 10),
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),

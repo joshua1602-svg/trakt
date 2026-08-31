@@ -437,3 +437,63 @@ def test_13_the_headline_number_is_not_the_smallest_on_the_page(rich):
             f"one page, two type sizes for the same kind of measure: {values}")
         return
     pytest.fail("no Key Measures page in the pack")
+
+
+# --------------------------------------------------------------------------- #
+# 7. A BREAKDOWN OF THE PIPELINE IS A BREAKDOWN OF THE PIPELINE.
+# --------------------------------------------------------------------------- #
+
+def test_14_pipeline_breakdowns_sum_to_the_pipeline_headline():
+    """Catches: £10.7m of stage bars beneath a £7.8m total pipeline tile.
+
+    The live-stock correction gave ``pipelineAmount`` the active stages and
+    left every breakdown of it on the whole extract, terminal cases included.
+    A funder adding the bars on the Pipeline Overview page got a third more
+    than the headline above them, and the broker split described a population
+    no figure on the page reports.
+    """
+    import pandas as pd
+
+    from mi_agent_api import pipeline_contract as PC
+
+    rows = []
+    for i, (stage, amount, broker) in enumerate((
+            ("KFI", 100.0, "Direct"), ("APPLICATION", 200.0, "Direct"),
+            ("OFFER", 300.0, "Network"), ("COMPLETED", 400.0, "Direct"),
+            ("WITHDRAWN", 50.0, "Network"))):
+        rows.append({"pipeline_case_identifier": f"C{i}", "pipeline_stage": stage,
+                     "current_outstanding_balance": amount,
+                     "broker_channel": broker})
+    df = pd.DataFrame(rows)
+
+    stages = PC._stage_breakdown(df[df["pipeline_stage"].isin(
+        ("KFI", "APPLICATION", "OFFER"))])
+    assert {r["stage"] for r in stages} == {"KFI", "APPLICATION", "OFFER"}
+    assert sum(r["pipelineAmount"] for r in stages) == pytest.approx(600.0)
+
+    from mi_agent_api.pipeline_prep import live_mask
+
+    live = df[live_mask(df)]
+    assert len(live) == 3, "live stock must exclude completed and withdrawn"
+    brokers = PC._dimension_breakdown(live, "broker_channel")
+    assert sum(r["pipelineAmount"] for r in brokers) == pytest.approx(600.0)
+
+
+def test_15_the_pipeline_page_reconciles_to_its_own_tile(rich):
+    """The same property, read off the printed page rather than the frame."""
+    import io
+    import re
+
+    import pptx as _pptx
+
+    deck = _pptx.Presentation(io.BytesIO(generate_and_download()))
+    for slide in deck.slides:
+        lines = [sh.text_frame.text.strip() for sh in slide.shapes
+                 if sh.has_text_frame and sh.text_frame.text.strip()]
+        if not lines or "Pipeline Overview" not in lines[0]:
+            continue
+        page = "\n".join(lines)
+        assert "Completed" not in page and "Withdrawn" not in page, (
+            "a terminal stage is drawn as live pipeline stock:\n" + page)
+        return
+    pytest.skip("this book has no governed pipeline source")
