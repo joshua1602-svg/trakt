@@ -301,10 +301,73 @@ against §19:
 
 ## 13. Regression
 
-PLACEHOLDER_REGRESSION
+### Targeted
+
+| Suite | Result |
+|---|---|
+| `test_dimension_selection.py` (shared informativeness rule) | 11 passed |
+| `test_chart_geometry.py` (margins, legend band, flat series) | 11 passed |
+| `test_executive_composition.py` | 9 passed |
+| `test_multidim_selection.py` | 10 passed |
+| `test_pipeline_composition.py` | 6 passed |
+| `test_pipeline_stage_movement_surface.py` | 8 passed |
+| `test_forecast_composition.py` | 6 passed |
+| `test_cohort_hero_metric.py` | 8 passed |
+| React `StageMovementPanel.test.tsx` | 7 passed |
+| React `ForecastView.stacked.test.tsx` | 5 passed |
+| React suite (all) | **533 passed / 69 files** |
+| React typecheck (`tsc --noEmit`) | clean |
+| PPTX / deck / presentation / parity / composition | passing |
+
+**81 new tests**, 12 of them driving the real
+`generate → poll → download` route and reading the rendered PowerPoint back.
+
+### Broad
+
+Both runs executed to completion and compared at TEST-ID level, not by count.
+
+| Run | Failed | Passed | Skipped | xfailed |
+|---|---|---|---|---|
+| `62cc602` (measured baseline, clean worktree) | 107 | 7432 | 434 | 8 |
+| `HEAD` (this branch) | **107** | **7543** | 438 | 8 |
+
+**Set difference: empty in both directions.**
+
+- **New failures: 0.**
+- **Fixed: 0** — no pre-existing failure was repaired or worked around.
+- **+111 passing.**
+
+Two test files were updated rather than left failing, and both are expectation
+changes rather than repairs: `test_investor_v2.py` and `test_investor_v21.py`
+asserted the Origination Funnel is present whenever a pipeline exists. Pipeline
+Stage Movement now supersedes it where case identity is governable, so they
+assert the durable property instead — that the question is answered, not which
+page answers it.
 
 ---
 
 ## 14. Merge recommendation
 
-PLACEHOLDER_MERGE
+**YES.**
+
+Zero new failures against a measured baseline, zero pre-existing failures
+touched, +111 passing, and every representative pack clean on the 24 preflight
+gates with a page-by-page visual review behind it.
+
+Two things a reviewer should look at first, because they are where the value and
+the risk both sit:
+
+- **`snapshots.select_multidim_pairs` and `presentation.select_dimensions`** are
+  new selection rules that decide what a page shows. They are deterministic,
+  they publish their rejections, and they are tested — but they are judgement,
+  and judgement is the thing worth a second opinion.
+- **`workspace.forecast_breakdowns` and `pipeline_contract.cap_breakdown`** now
+  carry `fundedAmount` through the top-N cap. That is a payload contract change
+  React reads, and the reason the first stacked-bar attempt drew slivers.
+
+One thing deliberately not done: the seasoned packs run at 20-21 slides against
+a 15-19 guidance. Two pages were removed on genuine redundancy and I stopped
+there rather than cutting a page that answers a distinct question in the spine.
+If the count matters more than the coverage, the next candidate is Funded
+Portfolio — Key Measures on multi-book packs, where Portfolio Composition
+already carries most of its measures per type.
