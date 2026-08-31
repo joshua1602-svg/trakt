@@ -182,6 +182,14 @@ def attach_history(rows: Sequence[Dict[str, Any]],
         row["prior_date"] = prior.get("reportingDate")
         row["prior_status"] = normalise_status(prior.get("status"))
         row["periods_observed"] = len(points)
+        # The WHOLE governed series, so a renderer can show the path to the
+        # limit rather than only its last step. Values are the engine's; no
+        # ratio is formed here.
+        row["history_points"] = [
+            {"date": p.get("reportingDate"),
+             "value": _num(p.get("value")),
+             "utilisation": _num(p.get("utilisation"))}
+            for p in points]
         # The engine's classification travels with the row.
         row["direction"] = sr.get("direction")
     return out

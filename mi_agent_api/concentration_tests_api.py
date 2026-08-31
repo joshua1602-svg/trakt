@@ -661,6 +661,13 @@ def compute_history(output_root, client_id: str, to_run_id: Optional[str],
                 "reportingDate": frame.get("reporting_date"),
                 "value": row["currentValue"],
                 "status": row["status"],
+                # ALREADY COMPUTED, PREVIOUSLY DISCARDED. The evaluator produces
+                # utilisation for every historical frame it evaluates; the point
+                # kept the raw value and dropped it, so a consumer wanting the
+                # PATH to the limit had either to recompute the ratio — becoming
+                # a second owner of it — or go without. Nothing new is
+                # calculated here.
+                "utilisation": row.get("utilization"),
             })
         # PRIOR, and which way the test travelled. Computed here so the
         # dashboard and the pack cannot classify the same movement differently,

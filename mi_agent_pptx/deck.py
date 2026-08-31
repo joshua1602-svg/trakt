@@ -323,6 +323,10 @@ class DeckBuilder:
     #: above it must leave. Without the clearance the trend card's border landed
     #: on the strip, and the one line a reader takes off the page read as part of
     #: the chart.
+    #: Governed frames a utilisation history needs before it is a path rather
+    #: than a prior. Two points is the direction the table already states.
+    CONC_MIN_HISTORY = 3
+
     RISK_STRIP_TOP = 6.58
     RISK_STRIP_CLEARANCE = 0.26
 
@@ -3299,10 +3303,42 @@ class DeckBuilder:
                  "expectedUtilisation": r["expected_utilisation"] if forward else None,
                  "stressUtilisation": r["stress_utilisation"] if forward else None}
                 for r in top]
-        il, it, iw, ih = self._card(s, Inches(0.55), Inches(2.66), Inches(6.5),
-                                    Inches(3.62), "Utilisation of limit")
+        # THE PATH TO THE LIMIT, WHERE THERE IS ONE. The bars answer "am I
+        # inside my limits"; a reader on a covenant page also asks "and which
+        # way is it going". The engine has evaluated every historical frame
+        # against today's approved configuration all along — the deck was
+        # already fetching that series and spending it on a single direction
+        # word. Where three or more governed frames exist, the panel plots the
+        # path; below that it keeps the bars, because two points are a prior,
+        # not a trend.
+        #
+        # Utilisation, not the raw value, so a ceiling test and a FLOOR test
+        # share one scale and 100% means "at the limit" for both. The figures
+        # are the evaluator's own.
+        history = [r for r in top
+                   if len(r.get("history_points") or ()) >= self.CONC_MIN_HISTORY
+                   and all(p.get("utilisation") is not None
+                           for p in r["history_points"])]
+        il, it, iw, ih = self._card(
+            s, Inches(0.55), Inches(2.66), Inches(6.5), Inches(3.62),
+            "Utilisation of limit over time" if history else "Utilisation of limit")
         path = self.work / "conc_util.png"
-        R.draw_utilisation_tests(path, bars, iw, ih, theme=self.theme)
+        if history:
+            dates = [str(p.get("date") or "") for p in history[0]["history_points"]]
+            # The legend sizes its own type; truncating here produced
+            # "Scotland conce".
+            lines = [{"name": str(r["label"]),
+                      "values": [(p["utilisation"] * 100.0
+                                  if p["utilisation"] is not None and
+                                  p["utilisation"] <= 1.5 else p["utilisation"])
+                                 for p in r["history_points"]]}
+                     for r in history]
+            R.draw_lines(path, dates, lines, iw, ih, theme=self.theme,
+                         currency=False, zero_based=True,
+                         reference={"value": 100.0, "label": "limit"},
+                         chart_id="conc_util_history")
+        else:
+            R.draw_utilisation_tests(path, bars, iw, ih, theme=self.theme)
         self._place(s, path, il, it, iw, ih)
 
         # -- the numbers behind the bars -------------------------------------

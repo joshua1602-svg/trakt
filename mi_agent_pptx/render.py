@@ -524,7 +524,8 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,
                dpi: int = 220, chart_id: Optional[str] = None,
-               stack: bool = False, zero_based: Optional[bool] = None) -> Path:
+               stack: bool = False, zero_based: Optional[bool] = None,
+               reference: Optional[Dict[str, Any]] = None) -> Path:
     """Dashboard line/area chart. *series* = [{name, values, color?}].
 
     ``stack`` draws the series as a stacked area — the right grammar for a STOCK
@@ -640,6 +641,25 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
     ax.set_xticks([x[i] for i in idx])
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8.5,
                        color=theme.ink_500)
+    # A GOVERNED REFERENCE LEVEL — a limit, a threshold — drawn as a rule the
+    # series is read against. ``{"value": ..., "label": ...}``. The value comes
+    # from the caller's payload; nothing is derived here.
+    if reference and reference.get("value") is not None:
+        level = float(reference["value"])
+        # THE REFERENCE MUST BE IN VIEW. A limit line drawn off the top of the
+        # axis is the one thing the chart exists to show: four utilisation
+        # paths at 30-47% against a 100% limit read as four flat lines unless
+        # the limit is on the page with them.
+        lo, hi = ax.get_ylim()
+        ax.set_ylim(min(lo, level * 0.98), max(hi, level * 1.08))
+        ax.axhline(level, color=theme.rag.get("amber", "#e0a458"), linewidth=1.3,
+                   linestyle=(0, (5, 4)), zorder=3)
+        if reference.get("label"):
+            ax.text(0.995, level, f" {reference['label']}", transform=
+                    ax.get_yaxis_transform(), ha="right", va="bottom",
+                    fontsize=8, color=theme.rag.get("amber", "#e0a458"),
+                    zorder=4)
+
     if len(series) > 1:
         # ONE row. At ncol=3 a fourth series wrapped onto a second row that the
         # axes' headroom did not allow for, and the wrapped entry printed over
