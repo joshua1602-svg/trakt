@@ -26,6 +26,7 @@ if str(_ROOT) not in sys.path:
 
 from mi_agent_api import presentation as P      # noqa: E402
 from mi_agent_api import snapshots as S         # noqa: E402
+from mi_agent_pptx import deck as D             # noqa: E402
 
 
 def bars(*pairs):
@@ -184,3 +185,61 @@ def test_the_deck_owns_no_second_selection_rule():
         if "strat" in text or "dimension" in text.lower():
             hand_rolled.append((node.lineno, text.strip()))
     assert not hand_rolled, hand_rolled
+
+
+# --------------------------------------------------------------------------- #
+# The ledger the page prints.
+# --------------------------------------------------------------------------- #
+
+def _rej(key, label, code):
+    return {"key": key, "label": label, "reasonCode": code}
+
+
+def test_a_dimension_that_ranked_lower_is_never_called_uncharted():
+    """THE UNTRUE LEDGER LINE THIS SPRINT REMOVES.
+
+    "The whole book sits in a single band" is a claim about the DATA. Ticket
+    size spread over five bands and lost on score; saying the book sits in one
+    band would be false, and a funder can check it against the page above.
+    """
+    note = D.strat_ledger_note(
+        [_rej("ticket", "By ticket size", P.REASON_LOWER_RANKED)], [], drawn=4)
+    assert "single band" not in note, note
+    assert "ranked below the 4" in note, note
+
+
+def test_a_dimension_the_book_cannot_distribute_on_says_so():
+    note = D.strat_ledger_note(
+        [_rej("broker", "By broker / channel", P.REASON_ONE_CATEGORY)], [],
+        drawn=4)
+    assert "single band" in note, note
+
+
+def test_both_facts_are_reported_and_kept_apart():
+    """A book can have one of each, and each dimension must sit in its own
+    sentence — otherwise the reader cannot tell which claim is about which."""
+    note = D.strat_ledger_note(
+        [_rej("broker", "By broker / channel", P.REASON_ONE_CATEGORY),
+         _rej("ticket", "By ticket size", P.REASON_LOWER_RANKED)], [], drawn=4)
+    uncharted, ranked = note.split("charted.")
+    assert "By broker / channel" in uncharted and "By ticket size" not in uncharted
+    assert "By ticket size" in ranked and "By broker / channel" not in ranked
+
+
+def test_the_page_says_nothing_when_there_is_nothing_to_say():
+    """No suppressed dimension, no footnote — the strip is not padding."""
+    assert D.strat_ledger_note([], [], drawn=4) == ""
+
+
+def test_a_long_list_is_summarised_rather_than_run_off_the_slide():
+    note = D.strat_ledger_note(
+        [_rej(f"d{i}", f"By dimension {i}", P.REASON_LOWER_RANKED)
+         for i in range(7)], [], drawn=4)
+    assert "and 3 other(s)" in note, note
+    assert note.count(",") <= 4, note
+
+
+def test_the_clause_counts_the_panels_actually_drawn():
+    """"Ranked below the 4 drawn here" has to be the number on the page."""
+    assert "below the 2 drawn" in D.strat_ledger_note(
+        [_rej("ticket", "By ticket size", P.REASON_LOWER_RANKED)], [], drawn=2)

@@ -58,6 +58,52 @@ class DeckContext:
     logo_path: Optional[str] = None
 
 
+
+def strat_ledger_note(rejected, flat, *, drawn: int) -> str:
+    """The one line under the stratification panels: what is not on this page.
+
+    TWO DIFFERENT FACTS, kept in two clauses, because collapsing them is how a
+    ledger comes to say something untrue:
+
+      * a dimension the book CANNOT distribute on — one category, no coverage,
+        not supplied — is an absence, and the page says the book sits in a
+        single band;
+      * a dimension the book CAN distribute on that simply scored below the
+        panels drawn is a RANKING statement, and saying it "is not charted"
+        would claim the data says nothing when the data says plenty.
+
+    Keyed off the reason CODES the selector recorded, never off the prose, so a
+    copy edit to a reason cannot silently move a dimension between clauses.
+    """
+    from mi_agent_api import presentation as _sel
+
+    unusable = (_sel.REASON_ONE_CATEGORY, _sel.REASON_LOW_INFORMATION,
+                _sel.REASON_LOW_COVERAGE, _sel.REASON_NOT_SUPPLIED)
+
+    def _names(rows, cap):
+        return ", ".join(str(r.get("label") or r.get("key")) for r in rows[:cap])
+
+    note = ""
+    dropped = [r for r in (rejected or ()) if r.get("reasonCode") in unusable]
+    if dropped:
+        note = (f"{_names(dropped, 3)}: the whole book sits in a single band, "
+                f"so the distribution is not charted.")
+    elif flat:
+        note = (f"{_names(list(flat), 3)}: the whole book sits in a single "
+                f"band, so the distribution is not charted.")
+
+    # Before this, a book with no uniform dimension printed nothing at all:
+    # the reader saw four panels and no sign that seven cuts had been weighed.
+    ranked = [r for r in (rejected or ())
+              if r.get("reasonCode") == _sel.REASON_LOWER_RANKED]
+    if ranked:
+        more = f" and {len(ranked) - 4} other(s)" if len(ranked) > 4 else ""
+        note = ((note + " ") if note else "") + (
+            f"{_names(ranked, 4)}{more}: available, and ranked below the "
+            f"{drawn} drawn here.")
+    return note
+
+
 class DeckBuilder:
     def __init__(self, data: DashboardData, ctx: DeckContext,
                  theme: PptxTheme = THEME):
@@ -1391,22 +1437,7 @@ class DeckBuilder:
         lines: List[str] = []
         # NEVER SILENT. A reader must be able to tell a dimension dropped for
         # being uniform from one the tape does not carry.
-        note = ""
-        # NAMED BY CODE, NOT BY SUBSTRING. The page states what the book could
-        # not distribute on; a dimension that merely ranked below the four
-        # drawn is a different fact and is not reported as an absence.
-        _unusable = (_sel.REASON_ONE_CATEGORY, _sel.REASON_LOW_INFORMATION,
-                     _sel.REASON_LOW_COVERAGE, _sel.REASON_NOT_SUPPLIED)
-        dropped = [r for r in rejected if r.get("reasonCode") in _unusable]
-        if dropped:
-            names = ", ".join(str(r.get("label") or r.get("key"))
-                              for r in dropped[:3])
-            note = (f"{names}: the whole book sits in a single band, so the "
-                    f"distribution is not charted.")
-        elif flat:
-            names = ", ".join(str(st.get("label") or st.get("key")) for st in flat)
-            note = (f"{names}: the whole book sits in a single band, so the "
-                    f"distribution is not charted.")
+        note = strat_ledger_note(rejected, flat, drawn=len(strats))
         if has_takeaways:
             if note:
                 lines.append(note)
