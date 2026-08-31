@@ -25,7 +25,7 @@ import os
 import re
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -701,14 +701,145 @@ def _funded_stratifications(df: pd.DataFrame, scope=None) -> List[Dict[str, Any]
 # cells reconcile to the funded total by construction.
 # --------------------------------------------------------------------------- #
 
-#: The pairs offered. Each is (key, label, x-dimension, y-dimension), where the
-#: dimensions name governed stratification series. Adding a pair is a config
-#: decision here, not renderer code.
+#: Short display names for the governed stratification dimensions, used to build
+#: a pair's label. Declared once so a new pair is a single line below rather
+#: than a label invented in a renderer.
+DIMENSION_NAMES: Dict[str, str] = {
+    "ltv": "LTV", "age": "borrower age", "region": "region", "rate": "rate",
+    "product": "product", "vintage": "vintage", "status": "account status",
+    "equity": "protected equity", "broker": "broker / channel",
+    "borrower_type": "borrower type", "ticket": "ticket size",
+}
+
+#: The pairs offered, in the order a reader asks for them. Each is
+#: (key, x-dimension, y-dimension) over the governed stratification series;
+#: the label is derived, so adding a pair is one line.
+#:
+#: ``cross_tab`` is generic over all eleven dimensions — this list is the
+#: ECONOMICALLY MEANINGFUL subset, not a limit of the engine. LTV is the
+#: primary risk axis and pairs first; size, borrower and geography follow,
+#: because "how much of my exposure is high-LTV AND large-ticket" is the
+#: question a credit committee actually asks. Nothing here branches on asset
+#: class: a pair whose dimensions a tape cannot supply simply does not resolve.
+MULTIDIM_CANDIDATE_PAIRS: tuple = (
+    ("ltv_age", "ltv", "age"),
+    ("ltv_region", "ltv", "region"),
+    ("ltv_ticket", "ltv", "ticket"),
+    ("ltv_rate", "ltv", "rate"),
+    ("ltv_product", "ltv", "product"),
+    ("ltv_vintage", "ltv", "vintage"),
+    ("ltv_borrower_type", "ltv", "borrower_type"),
+    ("ticket_age", "ticket", "age"),
+    ("ticket_region", "ticket", "region"),
+    ("rate_vintage", "rate", "vintage"),
+    ("product_region", "product", "region"),
+    ("region_age", "region", "age"),
+)
+
+#: Kept as the historical default set (LTV against age, borrower type and
+#: region). Retained so a caller that wants the fixed three still has them;
+#: the deck now asks for a governed SELECTION instead.
 MULTIDIM_PAIRS: tuple = (
     ("ltv_age", "Balance by LTV x borrower age", "ltv", "age"),
     ("ltv_borrower_type", "Balance by LTV x borrower type", "ltv", "borrower_type"),
     ("ltv_region", "Balance by LTV x region", "ltv", "region"),
 )
+
+#: How many crossings a page carries. Two core plus, where the book supports
+#: them, two deep-dive — enough to show the interaction without turning the
+#: pack into a catalogue of every pairing the engine can compute.
+MULTIDIM_WANT = 4
+
+#: A crossing has to be populated enough to read. Below this share of its cells
+#: carrying balance, the matrix is mostly empty and the eye reads noise.
+MULTIDIM_MIN_DENSITY = 0.18
+
+#: And it has to be a crossing. One row or one column is a one-dimensional
+#: stratification drawn as a grid, which the stratification pages already do
+#: better.
+MULTIDIM_MIN_AXIS = 2
+
+
+def pair_label(x_dimension: str, y_dimension: str) -> str:
+    """The display label for a pair, from the shared dimension names."""
+    x = DIMENSION_NAMES.get(x_dimension, x_dimension)
+    y = DIMENSION_NAMES.get(y_dimension, y_dimension)
+    return f"Balance by {x} x {y}"
+
+
+def _matrix_shape(table: Mapping[str, Any]) -> Dict[str, Any]:
+    """How readable this crossing is: axis sizes and the share of cells with
+    balance in them."""
+    matrix = table.get("matrix") or []
+    cells = sum(len(row) for row in matrix)
+    filled = sum(1 for row in matrix for v in row if v)
+    return {
+        "xCategories": len(table.get("xLabels") or ()),
+        "yCategories": len(table.get("yLabels") or ()),
+        "cells": cells,
+        "filledCells": filled,
+        "density": round(filled / cells, 4) if cells else 0.0,
+    }
+
+
+def select_multidim_pairs(df: pd.DataFrame, scope=None, *, want: int = 4,
+                          candidates: Sequence[tuple] = MULTIDIM_CANDIDATE_PAIRS
+                          ) -> Dict[str, Any]:
+    """The paired dimensions worth drawing for THIS book.
+
+    Every pair is resolved through the same generic ``cross_tab``; what varies
+    is which ones survive. A pair is dropped when a dimension the tape cannot
+    supply leaves it unresolved, when either axis collapses to a single
+    category (a crossing needs two sides), when the matrix is too sparse to
+    read, or when both of its dimensions already appear in pairs that were
+    selected — that last one is what stops four matrices telling one story.
+
+    Returns ``{"selected": {key: {...}}, "rejected": [{key, reason}]}``. The
+    rejection ledger is what the methodology page prints, so a reader can see
+    which crossings were considered and why they are not there.
+    """
+    selected: Dict[str, Any] = {}
+    rejected: List[Dict[str, Any]] = []
+    seen_dimensions: set = set()
+
+    for key, x_dim, y_dim in candidates or ():
+        label = pair_label(x_dim, y_dim)
+        if len(selected) >= max(0, want):
+            rejected.append({"key": key, "label": label,
+                             "reason": f"{len(selected)} stronger crossings "
+                                       f"already earned the page"})
+            continue
+        try:
+            table = cross_tab(df, x_dim, y_dim, scope)
+        except Exception:  # noqa: BLE001 - one pair must not break the rest
+            table = None
+        if not table:
+            rejected.append({"key": key, "label": label,
+                             "reason": "the tape does not supply both dimensions"})
+            continue
+        shape = _matrix_shape(table)
+        if (shape["xCategories"] < MULTIDIM_MIN_AXIS
+                or shape["yCategories"] < MULTIDIM_MIN_AXIS):
+            rejected.append({"key": key, "label": label,
+                             "reason": ("one side of the crossing has a single "
+                                        "category, so this is a stratification "
+                                        "rather than a crossing")})
+            continue
+        if shape["density"] < MULTIDIM_MIN_DENSITY:
+            rejected.append({"key": key, "label": label,
+                             "reason": (f"only {shape['density'] * 100:.0f}% of "
+                                        f"cells carry balance, too sparse to read")})
+            continue
+        if {x_dim, y_dim} <= seen_dimensions:
+            rejected.append({"key": key, "label": label,
+                             "reason": ("both dimensions are already crossed on "
+                                        "this page, so it repeats a story told "
+                                        "above")})
+            continue
+        selected[key] = {"label": label, **table, "shape": shape}
+        seen_dimensions.update({x_dim, y_dim})
+
+    return {"selected": selected, "rejected": rejected}
 
 
 def cross_tab(df: pd.DataFrame, x_dimension: str, y_dimension: str,

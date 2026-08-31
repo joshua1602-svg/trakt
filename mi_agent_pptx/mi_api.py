@@ -481,7 +481,15 @@ def _multidim(df: pd.DataFrame, scope=None) -> Dict[str, Any]:
     result with one set of axis orders.
     """
     from mi_agent_api import snapshots as snap
-    return snap.multidimensional(df, scope)
+    # The GOVERNED SELECTION, not the fixed historical three. The generator is
+    # generic over eleven dimensions and the pack was drawing the same LTV
+    # crossed with age, borrower type and region on every book; which crossings
+    # a book can actually support is a property of the book.
+    chosen = snap.select_multidim_pairs(df, scope, want=snap.MULTIDIM_WANT)
+    out = dict(chosen["selected"])
+    if chosen["rejected"]:
+        out["_rejected"] = chosen["rejected"]
+    return out
 
 
 def _cohort_progression(out_root: str, cid: str, *,

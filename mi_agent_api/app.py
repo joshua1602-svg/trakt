@@ -1447,14 +1447,35 @@ def multidim_exposure(portfolioId: Optional[str] = None,
             resolved = _resolve_portfolio_context(portfolioContext, client_id, df)
             scoped = _scoped_frame(df, resolved)
             scope = resolved.scope if resolved else None
-            pairs = snapshots_mod.multidimensional(scoped, scope)
+            chosen = snapshots_mod.select_multidim_pairs(
+                scoped, scope, want=snapshots_mod.MULTIDIM_WANT)
+            pairs = chosen["selected"]
             if pair:
-                pairs = {k: v for k, v in pairs.items() if k == pair}
+                # A named pair is served whether or not the selection picked it:
+                # the selection decides what a PAGE shows, and a caller asking
+                # for one crossing has already decided.
+                if pair not in pairs:
+                    for key, x_dim, y_dim in snapshots_mod.MULTIDIM_CANDIDATE_PAIRS:
+                        if key != pair:
+                            continue
+                        table = snapshots_mod.cross_tab(scoped, x_dim, y_dim, scope)
+                        if table:
+                            pairs = {key: {"label": snapshots_mod.pair_label(
+                                x_dim, y_dim), **table}}
+                        break
+                    else:
+                        pairs = {}
+                else:
+                    pairs = {pair: pairs[pair]}
             result = {"dataset": "multidim", "portfolioId": pid,
                       "available": bool(pairs), "pairs": pairs,
                       "measure": "current_outstanding_balance",
                       "currencyCode": currency_mod.current_code(),
-                      "availablePairs": [p[0] for p in snapshots_mod.MULTIDIM_PAIRS]}
+                      # What was considered and why it is not here — the same
+                      # ledger the pack's methodology page prints.
+                      "notSelected": chosen["rejected"],
+                      "availablePairs": [p[0] for p in
+                                         snapshots_mod.MULTIDIM_CANDIDATE_PAIRS]}
             if not pairs:
                 result["reason"] = ("the funded tape carries no pair of governed "
                                     "band dimensions for this scope")

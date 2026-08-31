@@ -2302,30 +2302,38 @@ class DeckBuilder:
         self._header(s, spec.get("title", "Multi-Dimensional Risk Analytics"),
                      "Funded balance across paired dimensions", accent=self.theme.peri)
         md = self.d.multidim or {}
-        # Only panels that actually resolved are drawn, and the layout adapts to
-        # how many there are. Rendering an empty card labelled "not available"
-        # tells an investor nothing; the composition guard omits the slide when
-        # none resolve.
-        panels = [(key, title) for key, title in
-                  (("ltv_age", "Balance by LTV × Borrower Age"),
-                   ("ltv_borrower_type", "Balance by LTV × Borrower Type"),
-                   ("ltv_region", "Balance by LTV × Region"))
-                  if (md.get(key) or {}).get("matrix")]
+        # WHAT THIS BOOK SUPPORTS, not a fixed three. The pairs are chosen by
+        # the engine's governed selection — both dimensions present, both axes
+        # real, the matrix dense enough to read, and no crossing repeating a
+        # story a crossing above already told. Only panels that resolved are
+        # drawn; the composition guard omits the slide when none do.
+        wanted = spec.get("pairs")
+        panels = [(key, str(entry.get("label", key)).replace(" x ", " × "))
+                  for key, entry in md.items()
+                  if not key.startswith("_")
+                  and isinstance(entry, dict) and entry.get("matrix")
+                  and (not wanted or key in wanted)]
+        panels = panels[:4]
         if not panels:
             self._placeholder_body(s, "No paired funded dimensions resolved.")
             self._footer(s)
             return self._record("multidim", spec.get("title"), "", placeholder=True)
 
-        # Region carries the longest labels, so it takes the full width when it
-        # would otherwise share a row with another matrix.
+        # A crossing with long row labels (region, product) takes the full width
+        # when it would otherwise share a row and be squeezed to unreadable.
+        _wide_dims = ("region", "product", "status")
         if len(panels) == 3:
-            wide = [p for p in panels if p[0] == "ltv_region"]
-            narrow = [p for p in panels if p[0] != "ltv_region"]
+            wide = [p for p in panels
+                    if any(d in p[0] for d in _wide_dims)][:1]
+            narrow = [p for p in panels if p not in wide]
             boxes = [(Inches(l), Inches(1.62), Inches(w), Inches(2.42))
                      for l, w in self._grid(2)]
             boxes += [(Inches(self.CONTENT_L), Inches(4.20),
                        Inches(self.CONTENT_R - self.CONTENT_L), Inches(2.38))]
-            ordered = narrow + wide
+            ordered = (narrow + wide) if wide else panels
+        elif len(panels) == 4:
+            ordered = panels
+            boxes = self._matrix_boxes(4, top=1.62, height=4.96)
         else:
             boxes = self._chart_boxes(len(panels))
             ordered = panels
