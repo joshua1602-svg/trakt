@@ -230,18 +230,23 @@ slides:
     # a starter pack exists to avoid.
     when: "has_pipeline and has_funnel and has_pipeline_history and pipeline_share >= 0.05"
 
-  # PIPELINE SHAPE and WEEKLY RUN-RATE are origination deep dives. They earn a
-  # page when origination is the story — a pipeline large enough relative to the
-  # funded book to change what the book looks like — and not otherwise. The
-  # `strat_barlists` (lens: pipeline) and `origination_flow` handlers remain
-  # available for an origination-focused configuration.
+  # WHAT IS ABOUT TO FUND, on the same four-panel grammar as the funded book,
+  # so a reader compares the two lenses without relearning the page. `keys` is
+  # the PREFERRED order; a dimension with nothing to distribute gives its slot
+  # to the next one this pipeline supports.
+  #
+  # The old 15% share gate meant a pipeline had to be large relative to the
+  # funded book before its SHAPE could be shown — but shape is what a funder
+  # asks about origination whatever its size, and the funnel above already
+  # carries the "is origination the story" judgement. What this page needs is a
+  # pipeline big enough for bands to be real, which is what the amount floor is.
   - id: stratification_pipeline
     type: strat_barlists
     title: "Pipeline Stratifications"
     question: "What is the shape of what is about to fund?"
     lens: pipeline
-    keys: [ltv, ticket, age, region]
-    when: "has_pipeline and pipeline_share >= 0.15"
+    keys: [ltv, ticket, age, region, rate, product, borrower_type, broker]
+    when: "has_pipeline and pipeline_amount >= 1000000"
 
   - id: origination_flow
     type: origination_flow

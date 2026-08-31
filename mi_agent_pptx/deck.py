@@ -1325,19 +1325,25 @@ class DeckBuilder:
         lens = spec.get("lens", "funded")
         source = self.d.pipeline if lens == "pipeline" else self.d.funded
         strats = (source or {}).get("stratifications", []) or []
-        keys = spec.get("keys")
-        if keys:
-            by_key = {st.get("key"): st for st in strats}
-            strats = [by_key[k] for k in keys if k in by_key and by_key[k].get("bars")]
-        # LOW-INFORMATION DIMENSIONS. A bar list whose whole balance sits in one
-        # bucket draws a single full-width bar and says exactly what its own
-        # title says. It is dropped in favour of a dimension that has spread —
-        # but only while spread exists somewhere, because on a book where every
-        # dimension is concentrated that IS the finding, and an empty page is
-        # not an improvement on a flat one.
+        # ``keys`` IS A PREFERENCE, NOT A FILTER. It names the cuts a reader asks
+        # for first; where one of them has nothing to distribute on this book —
+        # pipeline broker/channel at 100% Direct is the standing example — the
+        # slot goes to the next most informative dimension the book DOES
+        # support, rather than to a panel with one full-width bar in it.
+        #
+        # The judgement is the shared one in ``mi_agent_api.presentation``, so a
+        # dimension React declines to chart and a dimension the pack declines to
+        # draw are the same dimension.
+        from mi_agent_api import presentation as _sel
+
+        strats = [st for st in strats if st.get("bars")]
+        chosen = _sel.select_dimensions(strats, want=4, value_key="balance",
+                                        preferred=tuple(spec.get("keys") or ()))
+        rejected = chosen["rejected"]
+        # On a book where EVERY dimension is concentrated, that is the finding —
+        # and an empty page is not an improvement on a flat one.
+        strats = chosen["selected"] or strats[:4]
         flat = [st for st in strats if not self._has_spread(st)]
-        spread = [st for st in strats if self._has_spread(st)]
-        strats = (spread or strats)[:4]
 
         # Movement attribution is a FUNDED concept: it compares two funded
         # reporting periods. A pipeline stratification has no such bridge.
@@ -1382,7 +1388,14 @@ class DeckBuilder:
         # NEVER SILENT. A reader must be able to tell a dimension dropped for
         # being uniform from one the tape does not carry.
         note = ""
-        if spread and flat:
+        dropped = [r for r in rejected if "one category" in (r.get("reason") or "")
+                   or "single" in (r.get("reason") or "")]
+        if dropped:
+            names = ", ".join(str(r.get("label") or r.get("key"))
+                              for r in dropped[:3])
+            note = (f"{names}: the whole book sits in a single band, so the "
+                    f"distribution is not charted.")
+        elif flat:
             names = ", ".join(str(st.get("label") or st.get("key")) for st in flat)
             note = (f"{names}: the whole book sits in a single band, so the "
                     f"distribution is not charted.")
@@ -2180,17 +2193,102 @@ class DeckBuilder:
         self._barlist_card(s, box1, "Pipeline amount by stage",
                            self._stage_rows(p.get("stageBreakdown", [])), "pipelineAmount",
                            cid="pipe_stage")
-        # broker/region breakdown rows are keyed `key` (not `label`) and cap_breakdown
-        # appends an aggregated "Other" row last — sort by amount so the BarList reads
-        # largest-first, and bind the label to `key`.
-        broker = list(p.get("brokerBreakdown", []) or p.get("regionBreakdown", []))
-        broker.sort(key=lambda r: r.get("pipelineAmount", 0), reverse=True)
-        broker_title = ("Pipeline amount by broker / channel"
-                        if p.get("brokerBreakdown") else "Pipeline amount by region")
-        self._barlist_card(s, box2, broker_title, broker, "pipelineAmount",
-                           cid="pipe_broker", label_key="key")
+        # THE SECOND CHART EARNS ITS PLACE. It was broker/channel, falling back
+        # to region — and on a direct-only book that drew one bar labelled
+        # "Direct", which is the pipeline total already in the tile above it,
+        # redrawn as a chart. The strongest dimension this pipeline actually
+        # distributes across takes the panel instead, judged by the shared rule.
+        second = self._pipeline_second_cut(p)
+        if second:
+            self._barlist_card(s, box2, second["title"], second["rows"],
+                               second["value_key"], cid="pipe_second",
+                               label_key=second["label_key"],
+                               dimension=second.get("dimension"))
+        else:
+            # Nothing distributes. Rather than a meaningless chart, the panel
+            # carries the pipeline facts a second chart would have competed
+            # with — the expected-completion profile the tiles only summarise.
+            self._pipeline_secondary_facts(s, box2, p)
         self._footer(s)
         self._record("pipeline", spec.get("title"), "", placeholder=False)
+
+    def _pipeline_second_cut(self, pipeline):
+        """The strongest informative pipeline dimension, or ``None``.
+
+        Reads the governed pipeline stratifications — the SAME payload the
+        Pipeline Stratifications page draws — so the two cannot disagree about
+        which cuts this pipeline supports, and applies the shared
+        informativeness rule to pick the one worth a panel here.
+        """
+        from mi_agent_api import presentation as _sel
+
+        strats = [st for st in (pipeline.get("stratifications") or ())
+                  if isinstance(st, dict) and st.get("bars")]
+        if strats:
+            chosen = _sel.select_dimensions(
+                strats, want=1, value_key="balance",
+                preferred=("product", "region", "ltv", "ticket", "age", "rate"))
+            if chosen["selected"]:
+                st = chosen["selected"][0]
+                return {"title": f"Pipeline amount {str(st.get('label', '')).lower()}",
+                        "rows": st["bars"], "value_key": "balance",
+                        "label_key": "label", "dimension": st.get("key")}
+
+        # No governed stratifications on this payload (an older pipeline
+        # source): fall back to the flat breakdowns, still judged on shape.
+        for key, title in (("brokerBreakdown", "Pipeline amount by broker / channel"),
+                           ("regionBreakdown", "Pipeline amount by region")):
+            rows = list(pipeline.get(key) or ())
+            if not rows:
+                continue
+            rows.sort(key=lambda r: r.get("pipelineAmount", 0), reverse=True)
+            if _sel.is_informative(rows, value_key="pipelineAmount"):
+                return {"title": title, "rows": rows,
+                        "value_key": "pipelineAmount", "label_key": "key"}
+        return None
+
+    def _pipeline_secondary_facts(self, slide, box, pipeline):
+        """Governed pipeline facts, where no dimension earns a chart.
+
+        Every figure is lifted from the pipeline snapshot the tiles above read;
+        nothing is computed here.
+        """
+        from .metric_resolver import compact_currency, compact_number
+
+        il, it, iw, ih = self._card(slide, *box, "Expected completion profile")
+        rows = []
+        nxt = pipeline.get("nextExpectedCompletionMonth")
+        if nxt:
+            rows.append(("Next expected completion month", str(nxt)))
+        cur = pipeline.get("currentMonthExpectedCompletionCount")
+        if cur is not None:
+            rows.append(("Cases expected to complete this month",
+                         compact_number(cur)))
+        overdue = pipeline.get("overdueExpectedCompletionCount")
+        if overdue is not None:
+            rows.append(("Cases past their expected completion date",
+                         compact_number(overdue)))
+        overdue_amt = pipeline.get("overdueExpectedCompletionWeightedAmount")
+        if overdue_amt:
+            rows.append(("Weighted amount past expected completion",
+                         compact_currency(overdue_amt)))
+        stages = pipeline.get("pipelineLiveStages") or ()
+        if stages:
+            rows.append(("Live stages", ", ".join(
+                str(x).title() for x in stages)))
+        if not rows:
+            self._text(slide, il, it + Inches(0.2), iw, Inches(0.3),
+                       "No further governed pipeline detail for this book.",
+                       size=10, color=self.theme.ink_500, italic=True)
+            return
+        y = float(it) / EMU_IN + 0.24
+        for label, value in rows[:6]:
+            self._text(slide, il, Inches(y), Inches(float(iw) / EMU_IN * 0.66),
+                       Inches(0.3), label, size=10, color=self.theme.ink_400)
+            self._text(slide, il, Inches(y), Inches(float(iw) / EMU_IN),
+                       Inches(0.3), str(value), size=10.5,
+                       color=self.theme.ink_100, align=PP_ALIGN.RIGHT, bold=True)
+            y += 0.42
 
     def _stage_rows(self, rows, value_key="pipelineAmount"):
         order = {"KFI": 0, "APPLICATION": 1, "OFFER": 2, "COMPLETED": 3, "WITHDRAWN": 4}
