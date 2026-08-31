@@ -91,6 +91,68 @@ def _save(fig, path, theme, dpi=220):
     return Path(path)
 
 
+# --------------------------------------------------------------------------- #
+# Plot geometry.
+#
+# A left margin expressed as a FRACTION of the figure scales with the figure,
+# and the thing it has to clear does not. The widest y tick — "£800.0MM" — is
+# about seven tenths of an inch whether it sits beside a 5.8in panel or a
+# 12.25in full-width chart, but 0.145 of the figure reserves 0.84in on the
+# first and 1.78in on the second. That is where the empty left-hand band on
+# Funded Stock and Funded Balance Movement came from: not a chart drawn too
+# small, a gutter sized for a figure three times narrower.
+#
+# So margins are computed from the INCHES the labels actually need and then
+# expressed as a fraction, which keeps a narrow panel exactly as it was and
+# hands the width back on a wide one.
+# --------------------------------------------------------------------------- #
+
+#: Average glyph width as a fraction of the font's point size, for the sans
+#: face the theme uses. Deliberately generous: under-reserving clips a tick,
+#: which is a defect, while over-reserving costs a little width.
+_GLYPH_EM = 0.62
+
+#: Clear air between the longest tick label and the plot's left edge.
+_TICK_GAP_IN = 0.14
+
+
+def _text_in(text: str, pt: float) -> float:
+    """Roughly how wide *text* draws at *pt*, in inches."""
+    return len(str(text or "")) * pt * _GLYPH_EM / 72.0
+
+
+def axis_left(w: float, tick_samples: Sequence[Any], *, pt: float = 9.0,
+              floor_in: float = 0.30, cap_frac: float = 0.34) -> float:
+    """The left margin, as a fraction of *w*, that these tick labels need.
+
+    ``floor_in`` keeps a small chart from crowding its axis; ``cap_frac`` stops
+    a pathological label from eating the plot. Both are in the units they
+    describe — inches for the floor, a fraction for the cap — because that is
+    what each one is actually protecting.
+    """
+    widest = max((_text_in(t, pt) for t in tick_samples if t not in (None, "")),
+                 default=0.0)
+    needed = max(floor_in, widest + _TICK_GAP_IN)
+    return min(cap_frac, needed / max(float(w), 1e-6))
+
+
+def _money_ticks(values: Sequence[Any], fmt) -> List[str]:
+    """Sample tick labels for a value range, formatted the way the axis will.
+
+    The axis formatter runs after the axes exist, so the widest label cannot be
+    measured before choosing the margin. The extremes of the data formatted the
+    same way are what the widest tick will look like.
+    """
+    nums = [float(v) for v in values if v is not None]
+    if not nums:
+        return []
+    lo, hi = min(nums), max(nums)
+    try:
+        return [str(fmt(lo)), str(fmt(hi)), str(fmt((lo + hi) / 2.0))]
+    except Exception:  # noqa: BLE001 - a sample must never break a chart
+        return []
+
+
 def _truncate(label: str, max_chars: int) -> str:
     return label if len(label) <= max_chars else label[:max_chars - 1].rstrip() + "…"
 
@@ -204,9 +266,12 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     axis), with an optional dashed 5-week-average marker — the dashboard's
     KFI/Completions weekly-flow panel."""
     fig = _fig(w, h, theme, dpi)
-    # Left margin fits a full compact-currency tick ('£800.0MM'); at 0.09 the
-    # leading £ was clipped off the axes.
-    ax = fig.add_axes([0.135, 0.16, 0.80, 0.78])
+    # Left margin fits a full compact-currency tick ('£800.0MM'), measured
+    # rather than guessed at a fraction of the figure.
+    _fmt = compact_currency if bar_currency else compact_number
+    left = axis_left(w, _money_ticks([v for v in list(bars) + list(line)
+                                      if v is not None], _fmt), pt=8.5)
+    ax = fig.add_axes([left, 0.16, 0.955 - left, 0.78])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -237,7 +302,7 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     ax2.tick_params(colors=theme.ink_500, labelsize=8.5, length=0)
     ax2.yaxis.set_major_formatter(FuncFormatter(
         lambda v, p: compact_currency(v) if bar_currency else compact_number(v)))
-    idx = _tick_indices(x_labels, w * 0.80, fontsize=8)
+    idx = _tick_indices(x_labels, w * (0.955 - left), fontsize=8)
     ax.set_xticks([x[i] for i in idx])
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8, color=theme.ink_500)
     return _save(fig, path, theme, dpi)
@@ -389,10 +454,26 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
             series=[str(s.get("name", "")) for s in series],
             currency=currency, percent=percent)
     fig = _fig(w, h, theme, dpi)
-    # Left margin fits a full compact-currency tick ('£120.0MM'); the axes top
-    # leaves a clear band for the legend, which is drawn ABOVE the plot rather
-    # than inside it — placed inside, it landed on the series it described.
-    ax = fig.add_axes([0.145, 0.16, 0.825, 0.70 if len(series) > 1 else 0.78])
+    # Left margin fits the widest tick this data will actually draw; the axes
+    # top leaves a clear band for the legend, which is drawn ABOVE the plot
+    # rather than inside it — placed inside, it landed on the series it
+    # described.
+    _vals = [v for sr in series for v in (sr.get("values") or ()) if v is not None]
+    if stack and _vals:
+        # A stacked chart's axis reaches the SUM of the series at a point, not
+        # the largest single value, so the tick it has to clear is wider.
+        _cols = zip(*[[float(v or 0.0) for v in (sr.get("values") or ())]
+                      for sr in series]) if len(series) > 1 else ()
+        _vals = _vals + [sum(col) for col in _cols]
+    if percent:
+        _samples = ["100.0%"]
+    elif currency:
+        _samples = _money_ticks(_vals, compact_currency)
+    else:
+        _samples = _money_ticks(_vals, compact_number)
+    left = axis_left(w, _samples, pt=9.0)
+    ax = fig.add_axes([left, 0.16, 0.965 - left,
+                       0.70 if len(series) > 1 else 0.78])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -463,7 +544,7 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
         dp = 0 if spread >= 6 else (1 if spread >= 0.6 else 2)
         ax.yaxis.set_major_formatter(FuncFormatter(
             lambda v, p: f"{v * 100:.{dp}f}%" if abs(v) <= 1.5 else f"{v:.{dp}f}%"))
-    idx = _tick_indices(x_labels, w * 0.825, fontsize=8.5)
+    idx = _tick_indices(x_labels, w * (0.965 - left), fontsize=8.5)
     ax.set_xticks([x[i] for i in idx])
     ax.set_xticklabels([str(x_labels[i]) for i in idx], fontsize=8.5,
                        color=theme.ink_500)

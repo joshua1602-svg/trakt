@@ -105,9 +105,24 @@ def render_bridge_waterfall(out_path, steps, width_in, height_in, theme=THEME,
               "total": theme.mint}
     fig = plt.figure(figsize=(width_in, height_in), dpi=dpi)
     fig.patch.set_facecolor(theme.bg_panel)
-    # Left margin fits a full compact-currency tick. At 0.11 a book in the
-    # hundreds of millions clipped the leading £ off "£800.0MM".
-    ax = fig.add_axes([0.155, 0.14, 0.815, 0.80])
+    # Left margin fits a full compact-currency tick. A fixed fraction reserved
+    # 1.9in of gutter on a full-width bridge for a label needing 0.7in; it is
+    # measured from the labels the axis will actually draw.
+    from .render import _money_ticks, axis_left
+
+    _tops = []
+    _run = 0.0
+    for _lab, _v, _k in steps:
+        _v = float(_v or 0.0)
+        if _k in ("base", "total"):
+            _run = _v
+        elif _k == "add":
+            _run += _v
+        else:
+            _run -= _v
+        _tops.append(_run)
+    left = axis_left(width_in, _money_ticks(_tops, compact_currency), pt=9.5)
+    ax = fig.add_axes([left, 0.14, 0.965 - left, 0.80])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
