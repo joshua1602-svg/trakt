@@ -56,6 +56,11 @@ class Contributor:
     end: float
     delta: float
     is_other: bool = False
+    #: How many source categories this row stands for. One for a real category;
+    #: for the aggregated "Other" residual, the size of the tail it absorbed —
+    #: which is what makes it possible to state how many categories a movement
+    #: was actually spread across rather than how many the chart had room for.
+    count: int = 1
 
 
 @dataclass(frozen=True)
@@ -135,7 +140,8 @@ def _adapt(key: str, label: str, payload: Mapping[str, Any]) -> MovementBridge:
                     start=float(c.get("start") or 0.0),
                     end=float(c.get("end") or 0.0),
                     delta=float(c.get("delta") or 0.0),
-                    is_other=bool(c.get("isOther")))
+                    is_other=bool(c.get("isOther")),
+                    count=max(1, int(c.get("count") or 1)))
         for c in payload.get("contributions") or payload.get("contributors") or ())
     start = payload.get("start") or {}
     end = payload.get("end") or {}
@@ -276,7 +282,16 @@ def shape(bridge: MovementBridge):
 
     rows = [{"label": c.category, "value": c.delta} for c in bridge.contributors
             if not c.is_other]
-    return MAT.classify(rows, base=bridge.opening)
+    # THE TAIL IS PART OF THE MOVEMENT. "Other" is a top-N presentation bucket,
+    # not a category, so it must not be ranked as one — but leaving it out of
+    # the denominator makes every share a share of the named categories only,
+    # and the executive summary then quotes a total the movement page
+    # contradicts. It is carried as residual: never a leader, always in the
+    # total.
+    residual = next((c for c in bridge.contributors if c.is_other), None)
+    return MAT.classify(rows, base=bridge.opening,
+                        residual_magnitude=abs(residual.delta) if residual else 0.0,
+                        residual_count=residual.count if residual else 0)
 
 
 def headline(bridge: MovementBridge) -> Optional[str]:

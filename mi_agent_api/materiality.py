@@ -48,6 +48,15 @@ SEPARATION_MARGIN = 0.20
 #: driver for at all, whatever their internal shape.
 MATERIAL_MOVEMENT_SHARE = 0.005
 
+#: How far a leading GROUP must sit above what an even split would give it
+#: before the movement may be called concentrated. Two of seven categories
+#: carrying 35% of the movement sounds like a finding until you notice an even
+#: split gives those two 28.6%: the group cleared the dominance floor only
+#: because it had two members and the floor does not count members. Requiring a
+#: multiple of the even split is what makes "concentrated" mean something at
+#: every category count.
+UNIFORM_LIFT = 1.5
+
 #: Classifications.
 SHAPE_DRIVEN = "driven"                    # one contributor leads materially
 SHAPE_CONCENTRATED = "concentrated"        # a few lead together
@@ -126,13 +135,22 @@ def classify(rows: Sequence[Any], *, label_key: str = "label",
              value_key: str = "value", base: Optional[float] = None,
              dominance_share: float = DOMINANCE_SHARE,
              separation_margin: float = SEPARATION_MARGIN,
-             material_share: float = MATERIAL_MOVEMENT_SHARE) -> Shape:
+             material_share: float = MATERIAL_MOVEMENT_SHARE,
+             uniform_lift: float = UNIFORM_LIFT,
+             residual_magnitude: float = 0.0,
+             residual_count: int = 0) -> Shape:
     """Classify a contribution set.
 
     ``base`` is the opening balance the movement is measured against, where the
     caller has one. Supplying it enables the immateriality test: a movement worth
     a twentieth of a percent of the book has no driver worth naming, however
     lopsided its internal split.
+
+    ``residual_magnitude`` / ``residual_count`` describe movement the caller has
+    aggregated away — a top-N chart's "Other" bucket. It cannot be a leader,
+    because it is not a category, but it is movement: counted in the total, in
+    the category count and in the even split. Omitting it inflates every share
+    and lets a leader look dominant over a book it does not dominate.
     """
     contributions = _as_contributions(rows, label_key=label_key, value_key=value_key)
     contributions = [c for c in contributions if c.magnitude > 0]
@@ -140,7 +158,10 @@ def classify(rows: Sequence[Any], *, label_key: str = "label",
         return Shape(shape=SHAPE_EMPTY)
 
     ordered = sorted(contributions, key=lambda c: c.magnitude, reverse=True)
-    total = sum(c.magnitude for c in ordered)
+    residual = abs(float(residual_magnitude or 0.0))
+    residual_n = max(0, int(residual_count or 0))
+    total = sum(c.magnitude for c in ordered) + residual
+    population = len(ordered) + residual_n
     leader = ordered[0]
     runner_up = ordered[1] if len(ordered) > 1 else None
     leader_share = leader.magnitude / total if total else 0.0
@@ -159,7 +180,7 @@ def classify(rows: Sequence[Any], *, label_key: str = "label",
 
     common = dict(leader=leader, runner_up=runner_up, leader_share=leader_share,
                   separation=separation, total_magnitude=round(total, 2),
-                  contributor_count=len(ordered), leading_group=tuple(group))
+                  contributor_count=population, leading_group=tuple(group))
 
     if base:
         try:
@@ -168,11 +189,20 @@ def classify(rows: Sequence[Any], *, label_key: str = "label",
         except (TypeError, ValueError):
             pass
 
-    if len(ordered) == 1:
+    if population == 1:
         return Shape(shape=SHAPE_DRIVEN, **common)
     if leader_share >= dominance_share and separation >= separation_margin:
         return Shape(shape=SHAPE_DRIVEN, **common)
-    if len(group) <= max(2, len(ordered) // 3) and leader_share >= dominance_share / 2:
+    # A GROUP IS ONLY CONCENTRATED IF IT BEATS AN EVEN SPLIT. The dominance
+    # floor is a share, and a share is easy for a group to clear simply by
+    # having members: two of seven categories reach 28.6% by doing nothing at
+    # all. Measuring the group against what uniformity would hand it is what
+    # separates a real concentration from an artefact of the group size.
+    group_share = (sum(c.magnitude for c in group) / total) if total else 0.0
+    even_split = len(group) / population
+    if (len(group) <= max(2, len(ordered) // 3)
+            and leader_share >= dominance_share / 2
+            and group_share >= even_split * uniform_lift):
         return Shape(shape=SHAPE_CONCENTRATED, **common)
     return Shape(shape=SHAPE_DISTRIBUTED, **common)
 

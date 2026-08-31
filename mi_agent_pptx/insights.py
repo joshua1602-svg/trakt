@@ -149,7 +149,17 @@ def movement_drivers(ctx: Mapping[str, Any], movement) -> Result:
         return [], [Omission(MOVEMENT_DRIVERS,
                              "no governed attribution is available for this "
                              "period.", OMITTED_UNAVAILABLE)]
-    # Prefer the dimensions an investor asks about first.
+    # "CONCENTRATED" IS A CLAIM, NOT A HEADING. This card said "Movement was
+    # concentrated by region" whenever any category had moved at all, and then
+    # named the largest — on a book where seven regions each grew between £3.7m
+    # and £4.4m. Every word of it was arithmetically true and the reader, who
+    # cannot see the other six numbers, was invited to act on a difference the
+    # data does not support. It is the first page of the pack. The governed
+    # materiality rules already decide this for the movement pages; the
+    # executive summary now reads the same classification, so the two can never
+    # describe one movement two ways.
+    from mi_agent_api import materiality as MAT
+
     for key in ("region", "broker", "ticket", "ltv"):
         bridge = bridges.get(key)
         if bridge is None:
@@ -157,25 +167,51 @@ def movement_drivers(ctx: Mapping[str, Any], movement) -> Result:
         ups, downs = bridge.movers(limit=1)
         if not ups and not downs:
             continue
-        parts = []
-        if ups:
-            parts.append(f"{ups[0].category} contributed the largest increase "
-                         f"({_mv._signed(ups[0].delta)})")
-        if downs:
-            parts.append(f"{downs[0].category} the largest reduction "
-                         f"({_mv._signed(downs[0].delta)})")
+        outcome = _mv.shape(bridge)
+        if outcome is None or outcome.shape in (MAT.SHAPE_EMPTY,
+                                                MAT.SHAPE_IMMATERIAL):
+            continue
+        headline = MAT.describe(outcome, dimension=bridge.label, money=money)
+        if headline is None:
+            continue
+        noun = bridge.label.lower()
+        window = (f", measured across {noun} between {bridge.start_period} "
+                  f"and {bridge.end_period}.")
+        if outcome.has_driver:
+            parts = []
+            if ups:
+                parts.append(f"{ups[0].category} contributed the largest increase "
+                             f"({_mv._signed(ups[0].delta)})")
+            if downs:
+                parts.append(f"{downs[0].category} the largest reduction "
+                             f"({_mv._signed(downs[0].delta)})")
+            summary = "; ".join(parts) + window
+        elif outcome.shape == MAT.SHAPE_CONCENTRATED:
+            summary = ("; ".join(
+                f"{c.label} {_mv._signed(c.value)}"
+                for c in outcome.leading_group[:3]) + window)
+        else:
+            # No driver. The spread IS the finding, and saying so needs the
+            # number that made it one — otherwise a reader reads "broadly
+            # distributed" as the pack having nothing to say.
+            leader = outcome.leader
+            summary = (f"The largest single contribution was "
+                       f"{money(leader.magnitude)} from {leader.label}, "
+                       f"{(outcome.leader_share or 0.0) * 100:.0f}% of the "
+                       f"{money(outcome.total_magnitude)} moved" + window)
         return [_insight(
-            ctx, MOVEMENT_DRIVERS,
-            f"Movement was concentrated by {bridge.label.lower()}.",
-            "; ".join(parts) + f", measured across {bridge.label.lower()} "
-            f"between {bridge.start_period} and {bridge.end_period}.",
+            ctx, MOVEMENT_DRIVERS, headline, summary,
             contributors={c.category: c.delta for c in bridge.contributors
                           if not c.is_other},
             metrics={"dimension": bridge.dimension_col,
-                     "net_change": bridge.total_delta},
+                     "net_change": bridge.total_delta,
+                     "shape": outcome.shape,
+                     "leader_share": outcome.leader_share},
             methodology={"source": "governed funded attribution bridge",
                          "basis": "per-category deltas sum exactly to the "
-                                  "headline movement"},
+                                  "headline movement; the shape of the "
+                                  "contribution set is classified by the "
+                                  "governed materiality rules"},
         )], []
     return [], [Omission(MOVEMENT_DRIVERS,
                          "no dimension moved materially over the period.",

@@ -227,3 +227,81 @@ def test_7_the_route_still_returns_a_downloadable_pack(simple):
     # than drawn empty.
     assert len(titles) == 7, titles
     assert "Data and Methodology" in titles, titles
+
+
+# --------------------------------------------------------------------------- #
+# 5. "CONCENTRATED" IS A CLAIM ABOUT THE DATA.
+# --------------------------------------------------------------------------- #
+
+def test_8_a_near_uniform_spread_is_not_called_concentrated():
+    """Catches: seven regions moving £3.7m-£4.4m reported as a concentration.
+
+    The dominance floor is a share, and a GROUP clears a share by having
+    members: two of seven categories reach 28.6% of the movement by doing
+    nothing at all, so a 35% floor was crossed by a spread that is barely
+    distinguishable from uniform. The leading group must beat what an even
+    split would hand it.
+    """
+    from mi_agent_api import materiality as MAT
+
+    # Six regions between £3.4m and £3.9m — the shape the shipped pack hit. The
+    # top two reach 35.6% of the movement, which cleared the dominance floor
+    # with two members while an even split already hands two of six 33.3%.
+    spread = [{"label": f"R{i}", "value": v} for i, v in
+              enumerate((3.9, 3.8, 3.6, 3.5, 3.4, 3.4))]
+    assert MAT.classify(spread).shape == MAT.SHAPE_DISTRIBUTED
+
+    # And the seven-way £3.7-4.4m spread the module was written for.
+    assert MAT.classify(
+        [{"label": f"R{i}", "value": v} for i, v in
+         enumerate((4.4, 4.3, 4.1, 4.0, 3.9, 3.8, 3.7))]
+    ).shape == MAT.SHAPE_DISTRIBUTED
+
+    # A real concentration still reads as one: two of seven carrying 60%.
+    real = [{"label": f"R{i}", "value": v} for i, v in
+            enumerate((6.0, 6.0, 1.0, 1.0, 1.0, 1.0, 4.0))]
+    assert MAT.classify(real).shape in (MAT.SHAPE_CONCENTRATED, MAT.SHAPE_DRIVEN)
+
+
+def test_9_the_aggregated_tail_counts_toward_the_movement():
+    """Catches: a leader called dominant over a book it does not dominate.
+
+    "Other" is a top-N presentation bucket. Ranking it as a category would be
+    wrong; dropping it from the denominator is worse, because every share then
+    becomes a share of the named categories only and the executive summary
+    quotes a movement total the movement page contradicts.
+    """
+    from mi_agent_api import materiality as MAT
+
+    named = [{"label": "A", "value": 4.0}, {"label": "B", "value": 2.0}]
+    without = MAT.classify(named)
+    assert without.shape == MAT.SHAPE_DRIVEN
+    assert without.leader_share == pytest.approx(4.0 / 6.0)
+
+    # The same two categories, with £14m of movement aggregated away behind
+    # them across five more categories. A leads nothing.
+    with_tail = MAT.classify(named, residual_magnitude=14.0, residual_count=5)
+    assert with_tail.shape == MAT.SHAPE_DISTRIBUTED
+    assert with_tail.leader_share == pytest.approx(4.0 / 20.0)
+    assert with_tail.contributor_count == 7
+    assert with_tail.total_magnitude == pytest.approx(20.0)
+
+
+def test_10_the_executive_summary_quotes_the_packs_own_movement(rich):
+    """Catches: two totals for one movement in one pack.
+
+    The summary's movement share was computed over the named categories only,
+    so it printed "£21.6m moved" on the page facing a stock page that says the
+    book moved £24.8MM. A funder reading both finds the pack disagreeing with
+    itself.
+    """
+    import re
+
+    text = deck_text(generate_and_download())
+    quoted = re.findall(r"of the £([\d.]+)m moved", text)
+    if not quoted:
+        pytest.skip("this book's movement has a named driver, not a spread")
+    stock = re.findall(r"\(\+£([\d.]+)MM\)", text)
+    assert stock, "no stock movement figure to reconcile against"
+    assert float(quoted[0]) == pytest.approx(float(stock[0]), abs=0.15), (
+        f"summary says £{quoted[0]}m moved; the stock page says £{stock[0]}MM")
