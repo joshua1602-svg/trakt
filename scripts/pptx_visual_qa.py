@@ -253,7 +253,19 @@ def write_pipeline(root: Path, client: str, weeks=_PIPE_WEEKS):
         folder.mkdir(parents=True, exist_ok=True)
         rows = []
         for i in range(28 + w * 4):
-            stage = _STAGES[i % len(_STAGES)]
+            # A CASE PROGRESSES, AND NEW ONES ARRIVE. The stage used to be a
+            # function of the case index alone, so every case sat in the same
+            # stage for ever: a pipeline in which nothing moves, which is not a
+            # pipeline, and on which the funnel, the conversion rates and the
+            # stage-movement reconciliation all had nothing to measure.
+            #
+            # Each case now joins in its own week and walks the ladder from
+            # there, so every extract carries a mix of stages, cases move
+            # between extracts, and some complete and leave the live stock.
+            joined = i % 5
+            if joined > w:
+                continue                       # not originated yet
+            stage = _STAGES[min(w - joined, len(_STAGES) - 1)]
             rows.append(_pipeline_case(
                 i + 1, w, region=_REGIONS[(i * 3 + w) % len(_REGIONS)],
                 ltv=_LTVS[(i * 2 + w) % len(_LTVS)],
