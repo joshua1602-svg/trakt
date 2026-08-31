@@ -267,3 +267,129 @@ def order_bars(bars: Sequence[Dict[str, Any]], *, dimension: Optional[str] = Non
         row[label_key] = clean_label(bar.get(label_key))
         out.append(row)
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Informativeness — is this dimension worth a panel?
+#
+# A breakdown with one meaningful category is not insight. "Broker / channel:
+# Direct 100%" spends a panel restating a fact the reader already had, and on a
+# four-panel matrix it displaces a dimension that would have said something.
+#
+# This decides, once, whether a distribution has anything to show, and ranks
+# the candidates that do. It reads bars a governed compute function already
+# produced and classifies their SHAPE — no economic value is derived here, and
+# no dimension is named. A book whose exposure genuinely sits in one bucket
+# reports that dimension as uninformative for THIS book, not as unavailable.
+# --------------------------------------------------------------------------- #
+
+#: A dimension needs at least this many categories carrying real weight before a
+#: panel can show a distribution rather than a single bar.
+MIN_MEANINGFUL_CATEGORIES = 2
+
+#: A category is "meaningful" at or above this share of the dimension's total.
+#: Below it, a handful of loans in a second band does not make a distribution:
+#: the panel would draw one full-width bar and a sliver.
+MEANINGFUL_SHARE = 0.02
+
+#: Above this share in a single category the distribution is effectively
+#: degenerate — 99% in one band tells the reader the same thing a single bar
+#: does, at the cost of a panel.
+DEGENERATE_SHARE = 0.98
+
+
+def _bar_values(bars: Sequence[Dict[str, Any]], value_key: str) -> List[float]:
+    out: List[float] = []
+    for bar in bars or ():
+        try:
+            value = float(bar.get(value_key) or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            out.append(value)
+    return out
+
+
+def dispersion(bars: Sequence[Dict[str, Any]], *, value_key: str = "balance"
+               ) -> Dict[str, Any]:
+    """How spread out this distribution is, and whether it can be read.
+
+    ``effectiveCategories`` is the count carrying at least ``MEANINGFUL_SHARE``;
+    ``topShare`` is the largest category's share. ``informative`` is the
+    judgement both feed.
+    """
+    values = _bar_values(bars, value_key)
+    total = sum(values)
+    if not values or total <= 0:
+        return {"categories": len(bars or ()), "effectiveCategories": 0,
+                "topShare": None, "informative": False,
+                "reason": "no positive values to distribute"}
+    shares = sorted((v / total for v in values), reverse=True)
+    effective = sum(1 for s in shares if s >= MEANINGFUL_SHARE)
+    top = shares[0]
+    if effective < MIN_MEANINGFUL_CATEGORIES:
+        reason = (f"the whole balance sits in one category "
+                  f"({top * 100:.0f}%), so there is no distribution to show")
+        informative = False
+    elif top >= DEGENERATE_SHARE:
+        reason = (f"one category carries {top * 100:.0f}% of the balance, so "
+                  f"the distribution restates the total")
+        informative = False
+    else:
+        reason = None
+        informative = True
+    return {"categories": len(values), "effectiveCategories": effective,
+            "topShare": round(top, 6), "informative": informative,
+            "reason": reason}
+
+
+def is_informative(bars: Sequence[Dict[str, Any]], *, value_key: str = "balance"
+                   ) -> bool:
+    """Whether this distribution earns a panel."""
+    return bool(dispersion(bars, value_key=value_key)["informative"])
+
+
+def select_dimensions(candidates: Sequence[Dict[str, Any]], *, want: int,
+                      value_key: str = "balance", bars_key: str = "bars",
+                      key_key: str = "key",
+                      preferred: Sequence[str] = ()) -> Dict[str, Any]:
+    """Pick up to ``want`` informative dimensions, deterministically.
+
+    ``preferred`` is the governed default order — the cuts a reader asks for
+    first. A preferred dimension keeps its place whenever it is informative; the
+    rest are filled from what is left, ranked by how much distribution they
+    carry (effective categories, then evenness). Ties break on the dimension key
+    so the same book always produces the same page.
+
+    Returns ``{"selected": [...], "rejected": [{key, reason}]}``. Nothing is
+    dropped silently: a rejected dimension carries the reason it lost, which is
+    what a methodology ledger prints.
+    """
+    scored, rejected = [], []
+    for entry in candidates or ():
+        key = str(entry.get(key_key) or "")
+        shape = dispersion(entry.get(bars_key) or (), value_key=value_key)
+        if not shape["informative"]:
+            rejected.append({"key": key, "label": entry.get("label"),
+                             "reason": shape["reason"]})
+            continue
+        scored.append((entry, shape, key))
+
+    order = {k: i for i, k in enumerate(preferred)}
+
+    def rank(item):
+        _entry, shape, key = item
+        # Preferred first, in their declared order; then the widest real spread;
+        # then the least top-heavy; then the key, so the result is stable.
+        return (order.get(key, len(order)),
+                -shape["effectiveCategories"],
+                shape["topShare"] if shape["topShare"] is not None else 1.0,
+                key)
+
+    ranked = sorted(scored, key=rank)
+    selected = [entry for entry, _shape, _key in ranked[:max(0, want)]]
+    for entry, shape, key in ranked[max(0, want):]:
+        rejected.append({"key": key, "label": entry.get("label"),
+                         "reason": (f"{len(selected)} more informative "
+                                    f"dimensions were available for this page")})
+    return {"selected": selected, "rejected": rejected}
