@@ -42,8 +42,18 @@ SLIDE_W, SLIDE_H = Emu(12192000), Emu(6858000)   # 13.333in x 7.5in
 # Representative books.
 # --------------------------------------------------------------------------- #
 
-def _loan(i, pid, ptype, *, ltv, balance, region, age, rate, cut, origination):
-    return {
+def _loan(i, pid, ptype, *, ltv, balance, region, age, rate, cut, origination,
+          product=None, joint=None, channel=None):
+    """One loan as a tape would carry it.
+
+    ``product``, ``joint`` and ``channel`` default to the single-product,
+    single-life, direct-only shape most of these fixtures use. A real book is
+    not always that shape, and the pack has to be right for both: the
+    stratification selector must SUPPRESS product on a one-product book and let
+    it compete on a mixed one, and the only way to see that in a rendered pack
+    is to have a fixture of each.
+    """
+    row = {
         "unique_identifier": f"{pid}_L{i:05d}",
         "source_portfolio_id": pid, "source_portfolio_type": ptype,
         "source_portfolio_label": pid.replace("_", " ").title(),
@@ -58,10 +68,20 @@ def _loan(i, pid, ptype, *, ltv, balance, region, age, rate, cut, origination):
         "youngest_borrower_age": age,
         "geographic_region_collateral": region,
         "collateral_geography": region,
-        "origination_channel": "Direct", "broker_channel": "Direct",
-        "product_type": "Lifetime Mortgage",
+        "origination_channel": channel or "Direct",
+        "broker_channel": channel or "Direct",
+        "product_type": product or "Lifetime Mortgage",
         "origination_date": origination, "data_cut_off_date": cut,
     }
+    if joint is not None:
+        # How a tape actually carries single vs joint: ``funded_prep`` derives
+        # ``borrower_type`` from second-applicant presence. A single life has
+        # no second applicant, so the field is ABSENT rather than empty-flagged.
+        if joint:
+            row["borrower_2_DOB"] = "1953-08-11"
+        else:
+            row["borrower_2_DOB"] = ""
+    return row
 
 
 _REGIONS = ["London", "South East", "Wales", "Scotland", "North West",
@@ -94,8 +114,19 @@ def _pid_for(j, books):
     return books[-1][0], books[-1][1]
 
 
+#: The products and channels a MIXED book carries, by constituent book. Keyed
+#: off the book a loan belongs to rather than the loan number, because that is
+#: how a warehouse comes to hold more than one product: it acquired a portfolio
+#: that was originated differently.
+_MIXED_TAPE = {
+    "direct_001": ("Lifetime Mortgage", "Direct"),
+    "acquired_001": ("Retirement Interest Only", "Intermediary"),
+    "direct_002": ("Lifetime Mortgage", "Direct"),
+}
+
+
 def _book(first, last, cut, *, vintages, scale=1.0, seed=7, books=_SINGLE,
-          exit_below=None):
+          exit_below=None, mixed=False):
     """Loans ``first..last`` as at ``cut``.
 
     A loan's IDENTITY and its static attributes — book, region, borrower age,
@@ -115,12 +146,18 @@ def _book(first, last, cut, *, vintages, scale=1.0, seed=7, books=_SINGLE,
         pid, ptype = _pid_for(j, books)
         ltv = _LTVS[(j * 3) % len(_LTVS)]
         balance = (85_000 + ((j * 37_000 + seed * 11_000) % 420_000)) * scale
+        product, channel = (_MIXED_TAPE.get(pid, (None, None)) if mixed
+                            else (None, None))
         row = _loan(
             j, pid, ptype, ltv=ltv, balance=float(balance),
             region=_REGIONS[(j * 5) % len(_REGIONS)],
             age=_AGES[(j * 2) % len(_AGES)],
             rate=_RATES[j % len(_RATES)], cut=cut,
-            origination=vintages[(j * 7) % len(vintages)])
+            origination=vintages[(j * 7) % len(vintages)],
+            product=product, channel=channel,
+            # Joint on roughly two loans in five, and a FUNCTION OF THE LOAN so
+            # a loan keeps its borrower structure across every period.
+            joint=(((j * 13) % 5) < 2) if mixed else None)
         if exit_below is not None and j < exit_below:
             kind = j % 3
             if kind == 0:
@@ -140,6 +177,16 @@ _SEASONED_VINTAGES = ["2019-03-01", "2020-07-01", "2021-05-01",
                       "2022-09-01", "2023-06-01", "2024-04-01"]
 _GROWING_VINTAGES = ["2022-05-01", "2023-08-01", "2024-06-01",
                      "2025-09-01", "2026-03-01"]
+
+#: Fixtures whose tape carries more than one product, both origination
+#: channels, and second-applicant details. Only the seasoned MULTI-book
+#: portfolio does, which is the realistic case: a warehouse holding acquired
+#: alongside direct originations is where a mixed tape actually comes from.
+#:
+#: The others stay single-product, direct-only and single-life ON PURPOSE —
+#: without them there is no fixture proving the selector SUPPRESSES a
+#: one-category dimension in a rendered pack.
+_MIXED_BOOKS = frozenset({"multi_seasoned"})
 
 BOOKS = {
     # A — a newly originated single book. One period: no history, no movement.
@@ -188,7 +235,8 @@ BOOKS = {
 
 
 def write_book(root: Path, client: str, key: str) -> Path:
-    periods, books, _ = BOOKS[key]
+    periods, books, _ = BOOKS[key][:3]
+    mixed = key in _MIXED_BOOKS
     for idx, (run_id, date, first, last, vintages) in enumerate(periods):
         central = root / client / run_id / "central"
         central.mkdir(parents=True, exist_ok=True)
@@ -196,7 +244,7 @@ def write_book(root: Path, client: str, key: str) -> Path:
         nxt = periods[idx + 1][2] if idx + 1 < len(periods) else None
         pd.DataFrame(_book(first, last, date, vintages=vintages,
                            scale=1.0 + 0.03 * idx, seed=7 + idx,
-                           books=books, exit_below=nxt)).to_csv(
+                           books=books, exit_below=nxt, mixed=mixed)).to_csv(
             central / _CENTRAL, index=False)
     return root
 
