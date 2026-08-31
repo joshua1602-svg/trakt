@@ -1858,17 +1858,47 @@ class DeckBuilder:
                        "color": ser.get("color")}
                       for ser in cs["series"]]
             path = self.work / f"{cs['id']}.png"
-            if not single:
-                R.draw_lines(path, x, series, iw, ih, theme=self.theme,
-                             currency=cs.get("currency", True),
-                             percent=cs.get("percent", False),
-                             area=cs.get("area", False), chart_id=cs["id"])
-            else:
+            if single:
                 render_placeholder_png(path, "", "Insufficient reporting history "
                                        "(needs ≥2 periods)", theme=self.theme,
                                        width_in=iw, height_in=ih)
+                self._place(s, path, il, it, iw, ih)
+                continue
+            # A MEASURE THAT DID NOT MOVE IS NOT A TREND. A weighted rate that
+            # travelled four thousandths of a point drew a dramatic-looking
+            # zigzag against three axis labels all reading "6.62%" — the chart
+            # magnified noise into a story and then could not label it. Saying
+            # it held is the honest version, and takes the same space.
+            travel = self._travel([v for ser in series for v in ser["values"]])
+            if travel is not None and travel < self.FLAT_SERIES_TRAVEL:
+                self._text(s, il, it + Inches(0.10),
+                           Inches(float(iw)), Inches(0.9),
+                           f"{cs['series'][0].get('name', 'This measure')} held "
+                           f"steady across the period, moving less than "
+                           f"{self.FLAT_SERIES_TRAVEL * 100:.1f}% of its own "
+                           f"level. A trend chart of it would magnify noise.",
+                           size=10.5, color=self.theme.ink_400, spacing=1.15)
+                continue
+            R.draw_lines(path, x, series, iw, ih, theme=self.theme,
+                         currency=cs.get("currency", True),
+                         percent=cs.get("percent", False),
+                         area=cs.get("area", False), chart_id=cs["id"])
             self._place(s, path, il, it, iw, ih)
         return single
+
+    #: Below this movement, against the measure's own level, a series is flat
+    #: and a trend chart of it magnifies noise. The same test the cohort hero
+    #: curve uses, so "did this move" means one thing across the pack.
+    FLAT_SERIES_TRAVEL = 0.005
+
+    @staticmethod
+    def _travel(values):
+        """How far a series moves across the period, against its own level."""
+        real = [float(v) for v in values if v is not None]
+        if len(real) < 2:
+            return None
+        level = max(abs(sum(real) / len(real)), 1e-9)
+        return (max(real) - min(real)) / level
 
     def slide_funded_evolution(self, spec):
         s = self._slide()

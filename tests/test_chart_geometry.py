@@ -98,3 +98,40 @@ def test_a_broken_formatter_never_breaks_a_chart():
 
     assert R._money_ticks([1.0, 2.0], boom) == []
     assert R._money_ticks([], str) == []
+
+
+# --------------------------------------------------------------------------- #
+# A measure that did not move is not a trend.
+# --------------------------------------------------------------------------- #
+
+def test_a_flat_series_is_recognised_as_flat():
+    """Catches: a weighted rate that travelled four thousandths of a point,
+    drawn as a dramatic zigzag against three axis labels all reading "6.62%".
+
+    The chart magnified noise into a story and then could not label it.
+    """
+    from mi_agent_pptx.deck import DeckBuilder
+
+    flat = [6.6231, 6.6229, 6.6234, 6.6228]
+    moved = [50.4, 50.3, 50.45, 50.6, 50.4]
+    assert DeckBuilder._travel(flat) < DeckBuilder.FLAT_SERIES_TRAVEL
+    assert DeckBuilder._travel(moved) >= DeckBuilder.FLAT_SERIES_TRAVEL
+
+
+def test_travel_is_measured_against_the_series_own_level():
+    """A rate moving 0.01 and a balance moving £1m are judged on one scale."""
+    from mi_agent_pptx.deck import DeckBuilder
+
+    assert DeckBuilder._travel([100.0, 101.0]) == pytest.approx(
+        DeckBuilder._travel([1_000_000.0, 1_010_000.0]), rel=1e-6)
+    assert DeckBuilder._travel([1.0]) is None
+    assert DeckBuilder._travel([None, None]) is None
+
+
+def test_the_flat_test_matches_the_cohort_hero_test():
+    """"Did this move" means one thing across the pack."""
+    from mi_agent_pptx import cohorts as CO
+    from mi_agent_pptx.deck import DeckBuilder
+
+    values = [10.0, 10.4, 10.2]
+    assert DeckBuilder._travel(values) == pytest.approx(CO._travel(values))
