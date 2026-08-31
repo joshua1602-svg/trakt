@@ -326,6 +326,12 @@ class DeckBuilder:
     RISK_STRIP_TOP = 6.58
     RISK_STRIP_CLEARANCE = 0.26
 
+    #: Headline tiles on the executive page. One row, always full: a partial
+    #: second row leaves a hole beside it, and the tiles are in priority order
+    #: so filling the row keeps the measures that matter. Six is the widest a
+    #: compact currency value still reads at across the content width.
+    EXEC_MAX_TILES = 6
+
     #: Vertical room one bar-list row needs to stay readable, in inches. Derived
     #: from the renderer: the label and the mono value are ~9pt, and below this
     #: they begin to collide with the rows above and beneath them.
@@ -593,6 +599,13 @@ class DeckBuilder:
                     "hint": None if k.get("delta") else k.get("hint"),
                     "available": k.get("available", True)}
 
+        # SIX MEASURES, IN PRIORITY ORDER, AND NOTHING TO FILL A GRID.
+        # The page used to carry every governed headline it could reach — seven
+        # tiles, laid out four and three, with a hole beside the second row, and
+        # three of them (pipeline balance, weighted expected, forecast funded)
+        # restating one fact the Executive Summary then restated again in words
+        # on the next page. What an opening page owes a reader is the position,
+        # what is coming, and whether anything needs attention.
         tiles = [tile for tile in (
             kpi_tile("balance", "Funded balance"),
             kpi_tile("loans", "Loans funded"),
@@ -615,62 +628,93 @@ class DeckBuilder:
                 return compact_currency(diff) + " vs prior wk", intent
 
             delta, intent = wow(amount, prior.get("pipelineAmount"))
+            # ONE pipeline tile, carrying the case count as its hint. Two tiles
+            # for one lens crowded out the forecast and the risk measure.
             tiles.append({"label": "Pipeline balance",
                           "value": compact_currency(amount),
                           "delta": delta, "deltaIntent": intent,
-                          "hint": None if delta else "current weekly extract"})
-            tiles.append({"label": "Pipeline cases",
-                          "value": compact_number(cases),
-                          "hint": "live origination cases"})
+                          "hint": (None if delta else
+                                   f"{compact_number(cases)} live cases"
+                                   if cases else "current weekly extract")})
 
-        # FORECAST — where the current book plus its pipeline lands.
-        weighted = bridge.get("weightedExpectedFundedAmount")
-        if weighted:
-            tiles.append({"label": "Weighted expected",
-                          "value": compact_currency(weighted),
-                          "hint": "probability-weighted pipeline"})
+        # FORECAST — where the current book plus its pipeline lands. The
+        # weighted-pipeline component is the forecast bridge's own subject and
+        # is stated there; here the reader needs the destination.
+        # A forecast that equals the funded balance is not a forecast — it is
+        # the funded balance again, in a tile that claims to look forward. That
+        # is what a book with no pipeline produced, and it is the same
+        # duplication this page was redesigned to remove.
         forecast_balance = bridge.get("forecastFundedBalance")
-        if forecast_balance:
+        weighted = bridge.get("weightedExpectedFundedAmount") or 0.0
+        if forecast_balance and weighted:
             tiles.append({"label": "Forecast funded",
                           "value": compact_currency(forecast_balance),
                           "hint": "funded + weighted pipeline"})
 
-        # Time to the nearest scale target the run-rate has not yet passed.
+        # RISK, AS A MEASURE RATHER THAN ONLY A SENTENCE. The strip at the foot
+        # of the page names the closest test; a reader scanning tiles should be
+        # able to see there IS a limit position without reading a line of prose.
+        tiles.append(self._headroom_tile())
+
+        # Time to the nearest scale target the run-rate has not yet passed —
+        # last, so it is the tile that gives way when the page is full.
         milestone = self._next_milestone()
         if milestone:
             tiles.append({"label": f"Time to {milestone['label']}",
                           "value": milestone["value"],
                           "hint": milestone.get("hint")})
+        tiles = [t for t in tiles if t]
 
         if not tiles:
             self._placeholder_body(s, "No governed measures resolved for this run.")
             self._footer(s)
             return self._record("executive", spec.get("title"), "", placeholder=True)
 
-        # Balance the grid. Five columns for seven tiles leaves a row of five
-        # and a row of two with a hole beside it; four leaves four and three,
-        # which reads as a block. Never more than five across — narrower than
-        # that and a compact currency value stops fitting its tile.
-        shown = tiles[:10]
-        cols = (len(shown) if len(shown) <= 4
-                else min(5, -(-len(shown) // 2)) if len(shown) <= 8 else 5)
-
-        # BUDGET THE PAGE before drawing it. The tiles, the trends and the risk
-        # strip all have to fit between the header and the footer; sizing the
-        # tiles first and discovering afterwards that nothing fits underneath is
-        # how the trend silently vanished. A second tile row is drawn compact so
-        # the trends keep a usable band.
-        rows_used = (len(shown) + cols - 1) // cols
-        row_height = 1.62 if rows_used == 1 else 1.30
-        tiles_bottom = self._tile_grid(s, shown, top=1.58, cols=cols,
-                                       row_height=row_height)
-        self._executive_trends(s, top=tiles_bottom + 0.28)
+        # ONE ROW, ALWAYS FULL. Seven tiles over four columns left a hole beside
+        # the second row — the visual gap that made this page read as a
+        # compressed web dashboard rather than an opening statement. The tiles
+        # are in priority order, so filling the row keeps the measures that
+        # matter and drops the ones that were there to fill a grid. Six is the
+        # widest a compact currency value still reads at.
+        shown = tiles[:self.EXEC_MAX_TILES]
+        tiles_bottom = self._tile_grid(s, shown, top=1.58, cols=len(shown),
+                                       row_height=1.44)
+        self._executive_trends(s, top=tiles_bottom + 0.30)
 
         # Risk, last: the one line that says whether anything needs attention.
         self._executive_risk_strip(s)
         self._footer(s)
         self._record("executive", spec.get("title"),
                      "Funded, pipeline, forecast and risk on one page.")
+
+    def _headroom_tile(self):
+        """The closest approved limit, as a tile.
+
+        Straight from ``concentration.summarise`` — the same evaluator the risk
+        strip and the Concentration slide read, so the three cannot disagree.
+        ``None`` where no operator-approved configuration is in force: an empty
+        tile saying "no limits" would spend the page's scarcest space on an
+        absence the strip below already states.
+        """
+        from . import concentration as C
+
+        env = self.d.concentration or {}
+        rows = C.adapt_tests(env)
+        if not rows:
+            return None
+        summary = C.summarise(env, rows)
+        closest = summary.get("closest")
+        if not closest or closest.get("utilisation") is None:
+            return None
+        breaches, warnings = summary["breaches"], summary["warnings"]
+        intent = ("negative" if breaches else
+                  "neutral" if warnings else "positive")
+        return {
+            "label": "Closest limit",
+            "value": f"{closest['utilisation']:.0f}%",
+            "hint": f"{closest['label']} utilisation",
+            "deltaIntent": intent,
+        }
 
     def _next_milestone(self):
         """The nearest configured scale target the book has not yet reached.
@@ -723,42 +767,45 @@ class DeckBuilder:
         not a trend, and an empty chart frame on the landing page is worse than
         one fewer chart.
         """
-        height = min(2.30, self.RISK_STRIP_TOP - self.RISK_STRIP_CLEARANCE - top)
+        # The band is whatever is left between the tiles and the risk strip, and
+        # all of it is used. A 2.30in cap left three quarters of an inch of dead
+        # panel under the chart on a page whose whole job is to look deliberate.
+        height = self.RISK_STRIP_TOP - self.RISK_STRIP_CLEARANCE - top
         if height < 1.4:
             return
-        candidates = []
+
+        # ONE TRAJECTORY, FULL WIDTH. Two half-width trends competed for the
+        # centre of the opening page and neither was legible enough to be the
+        # thing a reader takes from it. The portfolio's own trajectory is the
+        # visual that answers "where is this going"; the pipeline's own
+        # trajectory is the subject of the pipeline pages, and its destination
+        # is already on this page as the forecast tile.
         funded_evo = (self.d.funded_evolution or {}).get("periods") or []
-        if len(funded_evo) >= 2:
-            candidates.append(("exec_funded", "Funded balance by period", funded_evo,
-                               "funded_balance", True, False))
         pipe_evo = (self.d.pipeline_evolution or {}).get("periods") or []
-        if len(pipe_evo) >= 2:
-            candidates.append(("exec_pipeline", "Weighted expected pipeline by week",
-                               pipe_evo, "weighted_expected_funded_amount", True, False))
-        if not candidates:
-            return
-        # One trend is CENTRED at two-thirds width. Full width stretches a
-        # single line across thirteen inches and reads as an empty slide with a
-        # line in it; the old half-width box was left-aligned, which left six
-        # inches of bare panel beside it and read as a page that failed to
-        # finish drawing.
-        if len(candidates) == 1:
-            width = (self.CONTENT_R - self.CONTENT_L) * 0.66
-            left = self.CONTENT_L + ((self.CONTENT_R - self.CONTENT_L) - width) / 2
-            boxes = [(Inches(left), Inches(top), Inches(width), Inches(height))]
+        if len(funded_evo) >= 2:
+            cid, title, periods, metric = (
+                "exec_funded", "Funded balance by period", funded_evo,
+                "funded_balance")
+        elif len(pipe_evo) >= 2:
+            # A book with no funded history yet still has a story, and it is the
+            # origination one.
+            cid, title, periods, metric = (
+                "exec_pipeline", "Weighted expected pipeline by week", pipe_evo,
+                "weighted_expected_funded_amount")
         else:
-            boxes = self._chart_boxes(len(candidates), top=top, height=height)
-        for (cid, title, periods, metric, currency, percent), box in zip(candidates, boxes):
-            il, it, iw, ih = self._card(slide, *box, title)
-            x = self._period_labels(periods)
-            values = [(p.get("metrics") or {}).get(metric) for p in periods]
-            if sum(1 for v in values if v is not None) < 2:
-                continue
-            path = self.work / f"{cid}.png"
-            R.draw_lines(path, x, [{"name": title, "values": values}], iw, ih,
-                         theme=self.theme, currency=currency, percent=percent,
-                         area=True, chart_id=cid)
-            self._place(slide, path, il, it, iw, ih)
+            return
+
+        values = [(p.get("metrics") or {}).get(metric) for p in periods]
+        if sum(1 for v in values if v is not None) < 2:
+            return
+        box = (Inches(self.CONTENT_L), Inches(top),
+               Inches(self.CONTENT_R - self.CONTENT_L), Inches(height))
+        il, it, iw, ih = self._card(slide, *box, title)
+        path = self.work / f"{cid}.png"
+        R.draw_lines(path, self._period_labels(periods),
+                     [{"name": title, "values": values}], iw, ih,
+                     theme=self.theme, currency=True, area=True, chart_id=cid)
+        self._place(slide, path, il, it, iw, ih)
 
     def _executive_risk_strip(self, slide):
         """One line on limits, from the governed concentration evaluator.
@@ -792,13 +839,19 @@ class DeckBuilder:
             parts.append(f"{breaches} in breach")
         line = "Concentration — " + ", ".join(parts)
 
+        # The tile above already names the closest test and its utilisation.
+        # Repeating both here spends the page's one risk line restating a tile;
+        # what the tile cannot carry is the DISTANCE to the limit, so that is
+        # what this adds.
         closest = summary.get("closest")
         if closest and closest.get("utilisation") is not None:
-            line += (f". Closest to its limit: {closest['label']} at "
-                     f"{closest['utilisation']:.0f}% utilisation")
             headroom = closest.get("headroom")
             if headroom is not None:
-                line += f" ({C.format_headroom(headroom, closest.get('unit'))} headroom)"
+                line += (f". {C.format_headroom(headroom, closest.get('unit'))} "
+                         f"of headroom on the closest, {closest['label']}")
+            else:
+                line += (f". Closest to its limit: {closest['label']} at "
+                         f"{closest['utilisation']:.0f}% utilisation")
         if summary.get("expected_breaches"):
             line += f". {summary['expected_breaches']} forecast to breach"
 
