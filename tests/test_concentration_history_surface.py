@@ -17,6 +17,7 @@ second owner of it.
 from __future__ import annotations
 
 import sys
+import pathlib
 from pathlib import Path
 
 import pytest
@@ -127,3 +128,57 @@ def test_a_floor_test_and_a_ceiling_test_share_one_scale():
     assert CT.direction_of_travel(20.0, 12.0, 10.0, "min") == CT.DIRECTION_TOWARD
     # The same numbers on a ceiling test are moving away from it.
     assert CT.direction_of_travel(20.0, 12.0, 30.0, "max") == CT.DIRECTION_AWAY
+
+
+# --------------------------------------------------------------------------- #
+# The legend has to be readable, which means it has to fit.
+# --------------------------------------------------------------------------- #
+
+def test_a_long_series_name_is_never_cropped_mid_word():
+    """Catches: "Scotland conce".
+
+    Four concentration tests named after regions do not fit on one legend row
+    at readable type. The fitter must take a second row rather than run the
+    last entry off the figure — a cropped covenant name is worse than a
+    two-row legend.
+    """
+    from mi_agent_pptx import render as R
+
+    names = ["London concentration", "Wales concentration",
+             "South East concentration", "Scotland concentration"]
+    pt, rows = R._legend_fit(names, 5.9)
+    per_row = -(-len(names) // rows)
+    widest = max(R._text_in(n, pt) + R._LEGEND_CHROME_IN for n in names)
+    assert widest * per_row <= 5.9, (pt, rows, widest * per_row)
+
+
+def test_two_short_names_still_take_one_row():
+    """The fitter must not spend a second row it does not need — the band it
+    reserves comes out of the chart's own height."""
+    from mi_agent_pptx import render as R
+    assert R._legend_fit(["Funded balance", "Pipeline"], 5.9)[1] == 1
+
+
+def test_the_legend_never_shrinks_below_readable_type():
+    """A legend nobody can read is not a fit. Where names cannot be made to
+    fit, the fitter stops at the floor and takes the rows instead."""
+    from mi_agent_pptx import render as R
+    pt, _rows = R._legend_fit(["x" * 90] * 4, 3.0)
+    assert pt >= min(R._LEGEND_PT)
+
+
+def test_the_reserved_band_grows_with_the_rows(tmp_path):
+    """A wrapped row must be allowed for, or it prints over the chart.
+
+    Drawn end to end because the band and the legend are set in two different
+    places, and the bug this replaces was exactly them disagreeing.
+    """
+    from mi_agent_pptx import render as R
+
+    path = R.draw_lines(
+        tmp_path / "legend.png", ["2026-01", "2026-02", "2026-03"],
+        [{"name": f"{n} concentration test", "values": [10.0, 11.0, 12.0]}
+         for n in ("London", "Wales", "South East", "Scotland")],
+        6.5, 3.62, currency=False, zero_based=True,
+        reference={"value": 100.0, "label": "limit"})
+    assert pathlib.Path(path).exists()

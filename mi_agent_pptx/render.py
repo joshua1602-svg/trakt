@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextvars
 from contextlib import contextmanager
+import math
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -520,6 +521,31 @@ def _currency_tick_formatter(ax, series, stack):
     return lambda v, p: f"{_cur.current_symbol()}{v / unit:,.{dp}f}{suffix}"
 
 
+#: Legend type may shrink to fit, but not below the point at which a funder
+#: cannot read the series name it labels.
+_LEGEND_PT = (8.5, 8.0, 7.5, 7.0)
+#: Swatch, its gap, and the gap to the next entry, per legend entry.
+_LEGEND_CHROME_IN = 0.34
+
+
+def _legend_fit(names: Sequence[str], avail_in: float):
+    """Return ``(fontsize, rows)`` for a one-line-per-row legend that fits.
+
+    Tries each permitted size on one row, then on two. Falls back to the
+    smallest size and two rows, which is the most a chart panel can carry
+    before the legend is competing with the data for the page.
+    """
+    if not names or avail_in <= 0:
+        return _LEGEND_PT[0], 1
+    for rows in (1, 2):
+        per_row = math.ceil(len(names) / rows)
+        for pt in _LEGEND_PT:
+            widest = max(_text_in(n, pt) + _LEGEND_CHROME_IN for n in names)
+            if widest * per_row <= avail_in:
+                return pt, rows
+    return _LEGEND_PT[-1], 2
+
+
 def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                w: float, h: float, *, theme: PptxTheme = THEME,
                currency: bool = True, percent: bool = False, area: bool = False,
@@ -564,7 +590,15 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
     # is. A 0.70 axes height reserves 0.72in on a full-height chart and 0.48in
     # on a quadrant panel, and the legend text needs the same room in both:
     # on the four-panel pipeline quadrant it was clipped along its top edge.
-    legend_in = 0.30 if len(series) > 1 else 0.0
+    # THE LEGEND HAS TO FIT THE FIGURE, not just the row it is asked for.
+    # ``ncol=len(series)`` alone ran a four-series legend off the right edge and
+    # the last name was cropped mid-word ("Scotland conce"). Measure what the
+    # names need, shrink the type to the readable floor, and only then take a
+    # second row — reserving the band for it, since the band is what stopped the
+    # wrapped row from printing over the chart.
+    legend_pt, legend_rows = _legend_fit(
+        [str(sr.get("name", "")) for sr in series], w * (1.0 - left) - 0.06)
+    legend_in = (0.30 * legend_rows) if len(series) > 1 else 0.0
     top_frac = max(0.55, 1.0 - (legend_in + 0.05) / max(float(h), 0.1))
     ax = fig.add_axes([left, 0.16, 0.965 - left, top_frac - 0.16])
     ax.set_facecolor(theme.bg_panel)
@@ -661,12 +695,13 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
                     zorder=4)
 
     if len(series) > 1:
-        # ONE row. At ncol=3 a fourth series wrapped onto a second row that the
-        # axes' headroom did not allow for, and the wrapped entry printed over
-        # the row above it.
+        # The row count and type size were measured above, against the width
+        # this figure actually has. A wrapped row is allowed for in the band, so
+        # it no longer prints over the chart it describes.
         leg = ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.02),
-                        fontsize=8.5 if len(series) <= 4 else 7.5, frameon=False,
-                        ncol=len(series), handlelength=1.4, columnspacing=1.4)
+                        fontsize=legend_pt, frameon=False,
+                        ncol=math.ceil(len(series) / legend_rows),
+                        handlelength=1.4, columnspacing=1.4)
         for t in leg.get_texts():
             t.set_color(theme.ink_300)
     return _save(fig, path, theme, dpi)
