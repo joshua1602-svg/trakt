@@ -162,54 +162,55 @@ def attach_history(rows: Sequence[Dict[str, Any]],
         row["prior_date"] = prior.get("reportingDate")
         row["prior_status"] = normalise_status(prior.get("status"))
         row["periods_observed"] = len(points)
+        # The engine's classification travels with the row.
+        row["direction"] = sr.get("direction")
     return out
 
 
-def travel(row: Mapping[str, Any]) -> Optional[str]:
-    """"toward the limit" / "away from the limit" / "broadly unchanged".
+def attach_stress(rows: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Add the governed stress effect to each row."""
+    from mi_agent_api.concentration_tests_api import stress_effect
 
-    Direction is expressed against the LIMIT, not against the number, because
-    the governed operator decides which way is worse: a ``min`` test moving down
-    is moving toward its floor. A move smaller than a fiftieth of the limit is
-    not a direction — it is the book's ordinary noise — and is reported as
-    unchanged rather than dressed up as a trend.
+    out = []
+    for row in rows:
+        row = dict(row)
+        row["stress_effect"] = stress_effect(
+            row.get("value"), row.get("stress_value"), row.get("limit"),
+            row.get("operator", "max"))
+        out.append(row)
+    return out
+
+
+#: The engine's direction codes, in the words the page uses. The engine decides
+#: WHICH WAY a test moved — against its limit, so a floor test falling is
+#: deteriorating; this layer decides only what to call that.
+_TRAVEL_WORDING = {
+    "toward_limit": "toward the limit",
+    "away_from_limit": "away from the limit",
+    "broadly_unchanged": "broadly unchanged",
+}
+
+_STRESS_WORDING = {
+    "eases": ("converting the whole pipeline would dilute this test, "
+              "not stress it"),
+    "no_effect": "the stress does not move this test",
+}
+
+
+def travel(row: Mapping[str, Any]) -> Optional[str]:
+    """The governed direction of travel, in words, or ``None``.
+
+    Reads ``direction`` from the concentration history service. It is NOT
+    recomputed here: which way is worse is a property of the governed operator,
+    and a presentation layer that decided it from the number alone inverted
+    every minimum-type test.
     """
-    prior, current, limit = (_num(row.get("prior_value")), _num(row.get("value")),
-                             _num(row.get("limit")))
-    if prior is None or current is None:
-        return None
-    delta = current - prior
-    tolerance = abs(limit) * 0.02 if limit else 0.0
-    if abs(delta) <= tolerance:
-        return "broadly unchanged"
-    worse_is_higher = str(row.get("operator") or "max").lower() != "min"
-    toward = (delta > 0) if worse_is_higher else (delta < 0)
-    return "toward the limit" if toward else "away from the limit"
+    return _TRAVEL_WORDING.get(str(row.get("direction") or ""))
 
 
 def stress_note(row: Mapping[str, Any]) -> Optional[str]:
-    """What the all-pipeline-converts stress actually did to this test.
-
-    The stress adds the whole pipeline to the book, and for a test whose
-    denominator grows faster than its numerator that DILUTES the concentration:
-    the stressed figure comes out below the current one. Printing that number
-    beside the word "stress" reads as a fault. It is not — it is a real property
-    of the test — so it is stated rather than shown bare, and a stress that
-    changes nothing is not presented as a result at all.
-    """
-    current, stressed = _num(row.get("value")), _num(row.get("stress_value"))
-    if current is None or stressed is None:
-        return None
-    limit = _num(row.get("limit"))
-    tolerance = abs(limit) * 0.005 if limit else 0.0
-    if abs(stressed - current) <= tolerance:
-        return "the stress does not move this test"
-    worse_is_higher = str(row.get("operator") or "max").lower() != "min"
-    eased = (stressed < current) if worse_is_higher else (stressed > current)
-    if eased:
-        return ("converting the whole pipeline would dilute this test, not "
-                "stress it")
-    return None
+    """What the stress did, in words, where it did not behave like one."""
+    return _STRESS_WORDING.get(str(row.get("stress_effect") or ""))
 
 
 def rank_key(row: Mapping[str, Any]):

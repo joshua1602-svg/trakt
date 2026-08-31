@@ -2748,7 +2748,7 @@ class DeckBuilder:
         # service, which re-evaluates today's approved configuration against
         # each historical frame — so "moved toward the limit" is a statement
         # about the book, not about a changed definition.
-        rows = C.attach_history(rows, self.d.concentration_history)
+        rows = C.attach_stress(C.attach_history(rows, self.d.concentration_history))
         summary = C.summarise(env, rows)
         top = C.select_tests(rows)
         forward = C.forward_states_available(env)

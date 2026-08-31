@@ -537,6 +537,79 @@ def compute_pipeline_drivers(output_root, client_id: str,
     return out
 
 
+#: A move smaller than this share of the limit is the book's ordinary noise, not
+#: a direction. Expressed against the LIMIT rather than the value so a test with
+#: a wide limit and a test with a narrow one are held to the same standard.
+DIRECTION_TOLERANCE = 0.02
+
+DIRECTION_TOWARD = "toward_limit"
+DIRECTION_AWAY = "away_from_limit"
+DIRECTION_UNCHANGED = "broadly_unchanged"
+
+#: Converting the whole pipeline can DILUTE a test whose denominator grows
+#: faster than its numerator. That is a real property, not a fault, and it is
+#: named rather than shown as a stress figure below the current one.
+STRESS_TIGHTENS = "tightens"
+STRESS_EASES = "eases"
+STRESS_INERT = "no_effect"
+
+
+def direction_of_travel(prior, current, limit, operator: str = "max"):
+    """Which way a test moved, MEASURED AGAINST ITS LIMIT.
+
+    The governed operator decides which way is worse, and this is the whole
+    reason the classification cannot be "did the number go up". A ``min`` test
+    is a FLOOR: falling toward it is deteriorating, exactly as rising toward a
+    ceiling is. Reading direction off the number alone inverts every floor test
+    in the pack.
+
+    Returns ``None`` when there is no prior to compare against — a single
+    observation has no direction, and inventing one is worse than silence.
+    """
+    values = []
+    for candidate in (prior, current):
+        try:
+            values.append(None if candidate is None else float(candidate))
+        except (TypeError, ValueError):
+            values.append(None)
+    prior_v, current_v = values
+    if prior_v is None or current_v is None:
+        return None
+    try:
+        limit_v = float(limit) if limit is not None else None
+    except (TypeError, ValueError):
+        limit_v = None
+
+    delta = current_v - prior_v
+    tolerance = abs(limit_v) * DIRECTION_TOLERANCE if limit_v else 0.0
+    if abs(delta) <= tolerance:
+        return DIRECTION_UNCHANGED
+    worse_is_higher = str(operator or "max").lower() != "min"
+    toward = (delta > 0) if worse_is_higher else (delta < 0)
+    return DIRECTION_TOWARD if toward else DIRECTION_AWAY
+
+
+def stress_effect(current, stressed, limit, operator: str = "max"):
+    """What the all-pipeline-converts stress did to this test."""
+    try:
+        current_v = None if current is None else float(current)
+        stressed_v = None if stressed is None else float(stressed)
+    except (TypeError, ValueError):
+        return None
+    if current_v is None or stressed_v is None:
+        return None
+    try:
+        limit_v = float(limit) if limit is not None else None
+    except (TypeError, ValueError):
+        limit_v = None
+    tolerance = abs(limit_v) * 0.005 if limit_v else 0.0
+    if abs(stressed_v - current_v) <= tolerance:
+        return STRESS_INERT
+    worse_is_higher = str(operator or "max").lower() != "min"
+    eased = (stressed_v < current_v) if worse_is_higher else (stressed_v > current_v)
+    return STRESS_EASES if eased else STRESS_TIGHTENS
+
+
 @_perf.stage_fn("concentration_history")
 def compute_history(output_root, client_id: str, to_run_id: Optional[str],
                     *, scope=None, test_id: Optional[str] = None,
@@ -589,6 +662,12 @@ def compute_history(output_root, client_id: str, to_run_id: Optional[str],
                 "value": row["currentValue"],
                 "status": row["status"],
             })
+        # PRIOR, and which way the test travelled. Computed here so the
+        # dashboard and the pack cannot classify the same movement differently,
+        # and so a FLOOR test's direction is decided by the governed operator
+        # rather than by whether the number happened to rise.
+        prior_value = points[-2]["value"] if len(points) >= 2 else None
+        current_value = points[-1]["value"] if points else None
         series.append({
             "testId": t.test_id,
             "displayName": t.display_name,
@@ -597,6 +676,11 @@ def compute_history(output_root, client_id: str, to_run_id: Optional[str],
             "operator": t.operator,
             "warningFraction": t.warning_fraction,
             "points": points,
+            "priorValue": prior_value,
+            "priorPeriod": (points[-2].get("reportingDate")
+                            if len(points) >= 2 else None),
+            "direction": direction_of_travel(prior_value, current_value,
+                                             t.threshold, t.operator),
         })
     return {"available": True, "series": series,
             "configurationVersion": config.version,

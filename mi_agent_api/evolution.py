@@ -1477,6 +1477,37 @@ def pipeline_funnel_evolution(pipeline_root: str | os.PathLike, client_id: str,
 # --------------------------------------------------------------------------- #
 # Forecast bridge evolution (funded balance + weighted pipeline, per funded run)
 # --------------------------------------------------------------------------- #
+#: A forecast track record needs more than one observation.
+FORECAST_ACCURACY_MIN_OBSERVATIONS = 2
+
+
+def _forecast_accuracy(errors) -> Dict[str, Any]:
+    """Summarise per-period forecast error into a track record.
+
+    ``errors`` is ``[(period, error_pct)]``. Returns the structured finding —
+    never a sentence: the presentation layer decides wording, the engine decides
+    what is true.
+    """
+    values = [e for _p, e in errors]
+    if len(values) < FORECAST_ACCURACY_MIN_OBSERVATIONS:
+        return {
+            "available": False,
+            "observations": len(values),
+            "reason": (f"a forecast track record needs at least "
+                       f"{FORECAST_ACCURACY_MIN_OBSERVATIONS} periods carrying a "
+                       f"prior forecast; {len(values)} available"),
+        }
+    worst_period, worst = max(errors, key=lambda e: abs(e[1]))
+    return {
+        "available": True,
+        "observations": len(values),
+        "biasPct": round(sum(values) / len(values), 2),
+        "errorPct": round(sum(abs(v) for v in values) / len(values), 2),
+        "worstPct": round(worst, 2),
+        "worstPeriod": worst_period,
+    }
+
+
 def forecast_evolution(output_root: str | os.PathLike,
                        pipeline_root: str | os.PathLike, client_id: str,
                        to_run_id: Optional[str] = None, *,
@@ -1545,11 +1576,34 @@ def forecast_evolution(output_root: str | os.PathLike,
             round(float(actual) - float(prior), 2)
             if prior is not None and actual is not None else None)
 
+    # -- FORECAST ACCURACY: an ENGINE measure, not a slide's arithmetic ------
+    # Percentage error per period, and the track record over them. Both were
+    # computed in the PPTX layer (``mi_agent_pptx.forecast_accuracy``), which
+    # meant the one number a funder uses to judge the forecaster lived in a
+    # renderer and React could not have shown it at all. No new economics: the
+    # inputs are the prior forecast and the actual, already reconciled above.
+    for period in periods:
+        metrics = period["metrics"]
+        prior, actual = metrics.get("prior_forecast"), metrics.get("funded_balance")
+        metrics["forecast_error_pct"] = (
+            round((float(actual) - float(prior)) / abs(float(prior)) * 100.0, 4)
+            if prior not in (None, 0) and actual is not None else None)
+
+    errors = [(p["period"], p["metrics"]["forecast_error_pct"]) for p in periods
+              if p["metrics"].get("forecast_error_pct") is not None]
+
     return {
         "dataset": "forecast",
         "portfolioId": client_id,
         "toRunId": to_run_id,
         "periods": periods,
+        #: The forecaster's track record. ``bias`` is the mean SIGNED error and
+        #: says which way it leans; ``error`` is the mean ABSOLUTE error and says
+        #: how far off it typically was. A negative bias means the forecast ran
+        #: high. Reported only from two observations: one period in which a
+        #: forecast happened to be close is luck, and calling that a mean error
+        #: dresses a coincidence as a property of the process.
+        "forecastAccuracy": _forecast_accuracy(errors),
         #: Periods carrying a testable prior forecast. A forecast-vs-actual view
         #: needs at least one; a track record needs more than one.
         "priorForecastPeriods": sum(
