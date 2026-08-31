@@ -250,9 +250,47 @@ def _fmt_decimal(value: Optional[float]) -> str:
     return "—" if value is None else f"{value:.1f}"
 
 
+# --------------------------------------------------------------------------- #
+# MEASURE BASIS — stated, because these measures legitimately do not tie.
+#
+# A reader who divides "average loan balance" by "weighted average property
+# value" expects to land on "weighted average current LTV". They do not, and on
+# a real book the gap is large — 15.2 percentage points on the QA fixture. There
+# are two independent reasons, and BOTH are correct behaviour:
+#
+#   1. WEIGHTING. Average loan balance is unweighted, one vote per loan.
+#      Property value is balance-weighted, one vote per pound. Averages over
+#      different populations do not divide into one another.
+#
+#   2. AVERAGE OF RATIOS vs RATIO OF AVERAGES. The LTV tile is the mean of each
+#      loan's own LTV — the typical POUND's gearing. Dividing the two money
+#      tiles gives the ratio of the aggregates — the BOOK's gearing. They are
+#      different economic statements and differ by Jensen's inequality on any
+#      book with dispersion.
+#
+# The fix is therefore NOT to redefine weighted average LTV so the tiles tie.
+# It is to say what each measure is, on the measure, so no reasonable reader
+# infers an algebraic relationship that was never claimed.
+# --------------------------------------------------------------------------- #
+
+#: Weighting bases, in the words a funder reads.
+BASIS_UNWEIGHTED = "per loan, unweighted"
+BASIS_BALANCE_WEIGHTED = "balance-weighted"
+BASIS_RATIO_OF_AGGREGATES = "ratio of aggregates"
+BASIS_COUNT_SHARE = "share of loans, unweighted"
+
+
 def _kpi(kpi_id: str, label: str, value: str, *, fmt: str, raw: Optional[float],
          available: bool = True, delta: Optional[str] = None,
-         delta_intent: Optional[str] = None, hint: Optional[str] = None) -> Dict[str, Any]:
+         delta_intent: Optional[str] = None, hint: Optional[str] = None,
+         basis: Optional[str] = None, numerator: Optional[str] = None,
+         denominator: Optional[str] = None) -> Dict[str, Any]:
+    """One governed KPI tile.
+
+    ``basis`` / ``numerator`` / ``denominator`` state HOW the measure was formed.
+    They are part of the measure, not decoration: two tiles on one page with
+    different weighting bases are only honest if each says which it used.
+    """
     return {
         "id": kpi_id,
         "label": label,
@@ -263,6 +301,9 @@ def _kpi(kpi_id: str, label: str, value: str, *, fmt: str, raw: Optional[float],
         "delta": delta,
         "deltaIntent": delta_intent,
         "hint": hint,
+        "basis": basis,
+        "numerator": numerator,
+        "denominator": denominator,
     }
 
 
@@ -782,7 +823,9 @@ def compute_funded_snapshot(
         wavg = _weighted_average(df["current_loan_to_value"], bal_series)
         pts = _to_points(wavg, _hint_scale(contract, "current_loan_to_value"))
         kpis.append(_kpi("wa_current_ltv", "Weighted avg current LTV",
-                         _fmt_pct_points(pts), fmt="pct", raw=pts))
+                         _fmt_pct_points(pts), fmt="pct", raw=pts,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (loan LTV × balance)", denominator="Σ balance"))
     else:
         kpis.append(_kpi("wa_current_ltv", "Weighted avg current LTV", "—",
                          fmt="pct", raw=None, available=False,
@@ -794,31 +837,44 @@ def compute_funded_snapshot(
         wavg = _weighted_average(df["original_loan_to_value"], bal_series)
         pts = _to_points(wavg, _hint_scale(contract, "original_loan_to_value"))
         kpis.append(_kpi("wa_original_ltv", "Weighted avg original LTV",
-                         _fmt_pct_points(pts), fmt="pct", raw=pts))
+                         _fmt_pct_points(pts), fmt="pct", raw=pts,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (loan original LTV × balance)",
+                         denominator="Σ balance"))
 
     # Average loan balance.
     avg_balance = balance / loan_count if loan_count else None
     kpis.append(_kpi("avg_balance", "Average loan balance", _fmt_gbp(avg_balance),
-                     fmt="gbp", raw=round(avg_balance, 2) if avg_balance is not None else None))
+                     fmt="gbp", raw=round(avg_balance, 2) if avg_balance is not None else None,
+                     basis=BASIS_UNWEIGHTED,
+                     numerator="Σ balance", denominator="loan count"))
 
     # Weighted-average current interest rate (optional).
     if _has_values(df, "current_interest_rate"):
         wavg = _weighted_average(df["current_interest_rate"], bal_series)
         pts = _to_points(wavg, _hint_scale(contract, "current_interest_rate"))
         kpis.append(_kpi("wa_rate", "Weighted avg interest rate",
-                         _fmt_pct_points(pts), fmt="pct", raw=pts))
+                         _fmt_pct_points(pts), fmt="pct", raw=pts,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (loan rate × balance)", denominator="Σ balance"))
 
     # Weighted-average months on book (optional).
     if _has_values(df, "months_on_book"):
         wavg = _weighted_average(df["months_on_book"], bal_series)
         kpis.append(_kpi("wa_months_on_book", "Weighted avg months on book",
-                         _fmt_decimal(wavg), fmt="number", raw=wavg))
+                         _fmt_decimal(wavg), fmt="number", raw=wavg,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (months on book × balance)",
+                         denominator="Σ balance"))
 
     # Weighted-average youngest borrower age (optional).
     if _has_values(df, "youngest_borrower_age"):
         wavg = _weighted_average(df["youngest_borrower_age"], bal_series)
         kpis.append(_kpi("wa_age", "Weighted avg youngest age",
-                         _fmt_decimal(wavg), fmt="number", raw=wavg))
+                         _fmt_decimal(wavg), fmt="number", raw=wavg,
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (youngest age × balance)",
+                         denominator="Σ balance"))
 
     # Single-borrower share (optional). ``borrower_type`` is the prepared
     # single/joint dimension (derived from second-applicant presence for ERM,
@@ -831,7 +887,10 @@ def compute_funded_snapshot(
             pct = single / int(known.sum()) * 100.0
             kpis.append(_kpi("pct_single_borrowers", "Single borrowers",
                              _fmt_pct_points(pct), fmt="pct", raw=round(pct, 1),
-                             hint=f"{single:,d} of {int(known.sum()):,d} loans"))
+                             hint=f"{single:,d} of {int(known.sum()):,d} loans",
+                             basis=BASIS_COUNT_SHARE,
+                             numerator="loans with a single borrower",
+                             denominator="loans whose borrower type is known"))
 
     # Balance-weighted average property value (optional). Uses the same current
     # valuation input as NNEG/LTV, so it generalises to any collateralised book.
@@ -840,7 +899,26 @@ def compute_funded_snapshot(
         kpis.append(_kpi("wa_property_value", "Weighted avg property value",
                          _fmt_gbp(wavg), fmt="gbp",
                          raw=round(wavg, 2) if wavg is not None else None,
-                         hint="balance-weighted current valuation"))
+                         hint="balance-weighted current valuation",
+                         basis=BASIS_BALANCE_WEIGHTED,
+                         numerator="Σ (valuation × balance)", denominator="Σ balance"))
+
+    # AGGREGATE GEARING — the BOOK's LTV, as distinct from the typical pound's.
+    # Σ balance / Σ valuation: the ratio of aggregates a reader gets by dividing
+    # the two money tiles. It is surfaced under its OWN name rather than used to
+    # redefine weighted average LTV, because the two answer different questions
+    # and a funder may legitimately want either. Built from governed aggregates
+    # already computed here; no new primitive.
+    if _has_values(df, "current_valuation_amount"):
+        val_total = float(_num(df["current_valuation_amount"]).sum())
+        if val_total > 0:
+            gearing = balance / val_total * 100.0
+            kpis.append(_kpi("aggregate_gearing", "Aggregate gearing (book LTV)",
+                             _fmt_pct_points(gearing), fmt="pct",
+                             raw=round(gearing, 4),
+                             basis=BASIS_RATIO_OF_AGGREGATES,
+                             numerator="Σ balance", denominator="Σ valuation",
+                             hint="the book's LTV, not the typical loan's"))
 
     # ---- month-on-month change vs the prior available run -------------------
     monthly_change: Optional[Dict[str, Any]] = None

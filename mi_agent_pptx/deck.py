@@ -216,12 +216,27 @@ class DeckBuilder:
                    color=self.theme.ink_100 if avail else self.theme.ink_500)
         y = t + Inches(1.02)
         delta, intent = tile.get("delta"), tile.get("deltaIntent")
+        # THE MEASURE'S BASIS, on the measure. Two tiles on one page with
+        # different weighting bases are only honest if each says which it used —
+        # a reader who divides an unweighted mean by a balance-weighted one and
+        # lands 15 points from the LTV tile has been misled by the layout, not
+        # by any single number.
+        #
+        # It takes the HINT's slot rather than a line of its own: the tile has
+        # room for one sub-line, and where a measure has both they say the same
+        # thing ("balance-weighted current valuation" under "balance-weighted").
+        # A delta still outranks both — a movement is news, a basis is a
+        # standing property.
+        basis = tile.get("basis")
         if delta:
             color = {"positive": self.theme.mint, "negative": self.theme.rose}.get(
                 intent, self.theme.ink_400)
             arrow = {"positive": "▲ ", "negative": "▼ "}.get(intent, "")
             self._text(slide, l + pad, y, iw, Inches(0.3), f"{arrow}{delta}",
                        size=9.5, color=color, bold=True)
+        elif basis:
+            self._text(slide, l + pad, y, iw, Inches(0.3), str(basis),
+                       size=7.5, color=self.theme.ink_500, italic=True)
         elif tile.get("hint"):
             self._text(slide, l + pad, y, iw, Inches(0.3), str(tile["hint"]),
                        size=9, color=self.theme.ink_400)
@@ -3088,12 +3103,23 @@ class DeckBuilder:
             left.append("   Constituent books are reported as at different dates;")
             left.append("   the total combines them.")
 
+        # THE CLAIM MATCHES THE EVIDENCE. The pack used to assert that every
+        # figure was "identical to the management dashboard". That is true of the
+        # tiles, stratifications, cross-tabs, cohort series, concentration tests
+        # and the balance bridge — and was NOT true while economic values were
+        # still derived independently downstream of the engine. The composition
+        # shares, forecast accuracy and limit direction have since moved to
+        # shared owners; a handful of derivations remain, so the claim states
+        # what is provable today rather than what will be provable when they do.
         right = ["BASIS OF PREPARATION",
-                 "   Figures are produced by the governed MI calculations and are",
-                 "   identical to the management dashboard for the same portfolio",
-                 "   and reporting date.",
+                 "   Figures are generated deterministically from governed MI",
+                 "   outputs using shared reporting definitions, so this pack and",
+                 "   the management dashboard read the same measures for the same",
+                 "   portfolio and reporting date.",
                  "   Commentary is generated deterministically from those figures.",
-                 "   No language model is used in its production."]
+                 "   No language model is used in its production.",
+                 "   Averages are stated with their weighting basis. Measures on",
+                 "   different bases are not intended to divide into one another."]
         conc = self.d.concentration or {}
         if conc.get("tests"):
             from . import concentration as C

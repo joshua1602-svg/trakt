@@ -669,7 +669,15 @@ def _nneg_metrics(df) -> Dict[str, Any]:
     return {
         "nneg_exposure": round(exposure, 2),
         "nneg_headroom": round(float((v - b).sum()), 2),
+        # A RATIO OF AGGREGATES — the pool's gearing, complement of Σb/Σv. It is
+        # deliberately NOT the same basis as ``wa_ltv`` in the same payload,
+        # which is the balance-weighted mean of each loan's own LTV. Two
+        # LTV-shaped figures, two bases, both correct; a reader who assumes one
+        # is 100% minus the other will be wrong by the Jensen gap, so the basis
+        # travels with the measure.
         "nneg_headroom_pct": (round(1.0 - float(b.sum()) / vsum, 6) if vsum else None),
+        "nneg_headroom_pct_basis": "ratio of aggregates (1 - Σ balance / Σ valuation)",
+        "wa_ltv_basis": "balance-weighted mean of loan-level LTV",
     }
 
 
