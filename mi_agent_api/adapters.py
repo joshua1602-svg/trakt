@@ -278,6 +278,9 @@ def _table_artifact(
                     "format": fmt,
                     # Storage scale so React renders fraction percents as points.
                     "scale": h.get("scale"),
+                    # Engine-owned: may this column be summed across rows? A
+                    # money-formatted average may not, however it is displayed.
+                    "additive": is_additive_measure(col),
                 }
             )
     source = _source(spec, ctx, "MI Agent · table")
@@ -291,6 +294,14 @@ def _table_artifact(
         "mock": False,
         "columns": columns,
         "rows": rows,
+        # A table carries the FULL result — it is the artifact the chart's cap
+        # exists to preserve detail against — so its population is complete.
+        "population": {
+            "returnedCount": len(rows),
+            "totalCount": int(qr.get("row_count", len(rows)) or len(rows)),
+            "truncated": False,
+            "populationComplete": True,
+        },
     }
 
 

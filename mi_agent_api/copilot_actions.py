@@ -123,6 +123,18 @@ class CopilotSupportingArtifact(BaseModel):
     truncated: bool = False
     totalRows: Optional[int] = Field(
         None, description="Total rows the MI engine produced before any cap.")
+    additive: Optional[Dict[str, bool]] = Field(
+        None, description=(
+            "Per-column: may this column be SUMMED across rows? Decided by the "
+            "aggregation that produced it, never by how it is formatted — a "
+            "money-formatted AVERAGE is not additive. Do not add up a column "
+            "marked false; adding averages produces a total that does not "
+            "exist."))
+    populationComplete: Optional[bool] = Field(
+        None, description=(
+            "True when these rows represent the whole population, so a "
+            "part-to-whole percentage over them is meaningful. False when the "
+            "engine dropped a tail: do not compute any share from these rows."))
 
 
 class CopilotMiAnswer(BaseModel):
@@ -319,8 +331,15 @@ def _supporting_values(artifacts: List[Dict[str, Any]]
                 kind="kpi", title=normalise_payload(art.get("title")), kpis=kpis))
         elif kind in ("table", "chart"):
             all_rows = art.get("rows") or []
-            total = len(all_rows)
-            truncated = total > _MAX_SUPPORTING_ROWS
+            # The population the ENGINE produced, which is not the same as the
+            # rows in hand: the chart adapter may already have capped a
+            # high-cardinality bar before this layer sees it. Reporting
+            # ``totalRows`` as ``len(rows)`` told the caller a 10-row chart of a
+            # 13-broker book was complete.
+            engine_population = art.get("population") or {}
+            total = int(engine_population.get("totalCount") or len(all_rows))
+            already_capped = bool(engine_population.get("truncated"))
+            truncated = already_capped or len(all_rows) > _MAX_SUPPORTING_ROWS
             rows = normalise_payload(all_rows[:_MAX_SUPPORTING_ROWS])
             columns: List[str] = []
             raw_cols = art.get("columns") or []
@@ -331,12 +350,28 @@ def _supporting_values(artifacts: List[Dict[str, Any]]
             title = normalise_payload(art.get("title"))
             if truncated:
                 notes.append(
-                    f"'{title or kind}': showing the first {_MAX_SUPPORTING_ROWS} of "
-                    f"{total} rows (Copilot response limit). Totals and percentages "
-                    f"are computed over all {total} rows.")
+                    f"'{title or kind}': showing {len(rows)} of {total} rows. "
+                    f"Every figure in the answer is computed over all {total} "
+                    f"rows by the Trakt engine; do not recompute totals or "
+                    f"percentages from the rows shown.")
+            # The same semantics React consumes. Copilot is a language model
+            # holding a table: it must be told which columns can be added and
+            # whether the rows are the whole population, or the honest answer to
+            # "what share is this?" is unavailable to it.
+            hints = art.get("displayHints") or {}
+            by_column = {str(c.get("key")): c for c in (art.get("columns") or ())
+                         if isinstance(c, dict)}
+            additive = {
+                c: bool((hints.get(c) or by_column.get(c) or {}).get("additive"))
+                for c in (columns or [])} or None
             out.append(CopilotSupportingArtifact(
                 kind=kind, title=title, columns=columns or None,
-                rows=rows, truncated=truncated, totalRows=total))
+                rows=rows, truncated=truncated, totalRows=total,
+                additive=additive,
+                populationComplete=(
+                    bool(engine_population.get("populationComplete"))
+                    if engine_population and not truncated
+                    else (False if truncated else None))))
         # validation artifacts are surfaced via the typed `validation` field
     return out, notes
 
