@@ -2326,29 +2326,59 @@ class DeckBuilder:
                     "COMPLETED": "#e0a458", "WITHDRAWN": "#eb6f6f"}
 
     def slide_pipeline_evolution(self, spec):
+        """Pipeline Evolution — *how is origination changing?*
+
+        A 2 x 2 of the governed weekly series, on the same grammar as the funded
+        evolution page: the stock, the population that carries it, what the
+        stock is expected to convert to, and how it is distributed across
+        stages. Two panels only ever showed half of that — a reader could see
+        the balance move without seeing whether it was more cases or bigger
+        ones, which is the first question an origination story raises.
+
+        Every value is a governed weekly metric; nothing is derived here beyond
+        drawing.
+        """
         s = self._slide()
         self._header(s, spec.get("title", "Pipeline Evolution"),
-                     "Pipeline stock over time", accent=self.theme.peri)
+                     "Pipeline stock, population and conversion over time",
+                     accent=self.theme.peri)
         evo = self.d.pipeline_evolution or {}
         periods = evo.get("periods", [])
         single = bool(evo.get("singlePeriod")) or len(periods) < 2
-        boxes = self._chart_boxes(2)
         x = [str(p.get("week") or p.get("period")) for p in periods]
 
-        il, it, iw, ih = self._card(s, *boxes[0], "Pipeline amount by week")
-        p1 = self.work / "pevo_amt.png"
-        if not single:
-            R.draw_lines(p1, x, [{"name": "Pipeline amount",
-                                  "values": [(p.get("metrics") or {}).get("pipeline_amount")
-                                             for p in periods]}],
-                         iw, ih, theme=self.theme, currency=True, area=True)
-        else:
-            render_placeholder_png(p1, "", "Insufficient reporting history (needs ≥2 weeks)",
-                                   theme=self.theme, width_in=iw, height_in=ih)
-        self._place(s, p1, il, it, iw, ih)
+        def metric(key):
+            return [(p.get("metrics") or {}).get(key) for p in periods]
+
+        # The three governed weekly series, plus the stage composition below.
+        quadrant = [
+            ("pevo_amt", "Pipeline amount by week", metric("pipeline_amount"),
+             True, False),
+            ("pevo_cases", "Pipeline cases by week",
+             metric("pipeline_case_count"), False, False),
+            ("pevo_weighted", "Weighted expected funding by week",
+             metric("weighted_expected_funded_amount"), True, False),
+        ]
+        quadrant = [q for q in quadrant
+                    if sum(1 for v in q[2] if v is not None) >= 2] or quadrant[:1]
+        boxes = self._matrix_boxes(4, top=1.62, height=4.96)
+
+        for (cid, title, values, currency, percent), box in zip(quadrant, boxes):
+            il, it, iw, ih = self._card(s, *box, title)
+            path = self.work / f"{cid}.png"
+            if not single:
+                R.draw_lines(path, x, [{"name": title, "values": values}],
+                             iw, ih, theme=self.theme, currency=currency,
+                             percent=percent, area=True, chart_id=cid)
+            else:
+                render_placeholder_png(
+                    path, "", "Insufficient reporting history (needs ≥2 weeks)",
+                    theme=self.theme, width_in=iw, height_in=ih)
+            self._place(s, path, il, it, iw, ih)
 
         # Pipeline by stage over time — EXCLUDING the KFI line (dashboard view).
-        il, it, iw, ih = self._card(s, *boxes[1], "Pipeline by stage over time")
+        il, it, iw, ih = self._card(s, *boxes[len(quadrant)],
+                                    "Pipeline by stage over time")
         p2 = self.work / "pevo_stage.png"
         by_stage = evo.get("byStage", [])
         if not single and by_stage:

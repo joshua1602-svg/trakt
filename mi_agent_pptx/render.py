@@ -559,8 +559,13 @@ def draw_lines(path, x_labels: Sequence[str], series: Sequence[Dict[str, Any]],
     else:
         _samples = _money_ticks(_vals, compact_number)
     left = axis_left(w, _samples, pt=9.0)
-    ax = fig.add_axes([left, 0.16, 0.965 - left,
-                       0.70 if len(series) > 1 else 0.78])
+    # THE LEGEND BAND IS INCHES, NOT A FRACTION — same reason the left margin
+    # is. A 0.70 axes height reserves 0.72in on a full-height chart and 0.48in
+    # on a quadrant panel, and the legend text needs the same room in both:
+    # on the four-panel pipeline quadrant it was clipped along its top edge.
+    legend_in = 0.30 if len(series) > 1 else 0.0
+    top_frac = max(0.55, 1.0 - (legend_in + 0.05) / max(float(h), 0.1))
+    ax = fig.add_axes([left, 0.16, 0.965 - left, top_frac - 0.16])
     ax.set_facecolor(theme.bg_panel)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)

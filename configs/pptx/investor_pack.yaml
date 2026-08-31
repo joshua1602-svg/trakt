@@ -248,6 +248,16 @@ slides:
     keys: [ltv, ticket, age, region, rate, product, borrower_type, broker]
     when: "has_pipeline and pipeline_amount >= 1000000"
 
+  # HOW ORIGINATION IS CHANGING. A 2 x 2 of the governed weekly series — the
+  # stock, the population carrying it, what it is expected to convert to, and
+  # how it distributes across stages. The handler existed and no slide used it,
+  # so the pack could show what the pipeline IS and never how it MOVED.
+  - id: pipeline_evolution
+    type: pipeline_evolution
+    title: "Pipeline Evolution"
+    question: "How is origination changing week to week?"
+    when: "has_pipeline_history"
+
   # HOW CASES ARE PROGRESSING. The funnel above measures conversion as weekly
   # FLOW; this is the case-level reconciliation between two extracts, on counts
   # and on money, with departures split by where the case actually went. It

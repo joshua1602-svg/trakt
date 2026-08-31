@@ -2,7 +2,7 @@
   "new_book_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/new_book_gbp.pptx",
-    "slides": 15,
+    "slides": 16,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -13,6 +13,7 @@
       "Pipeline Overview",
       "Origination Funnel",
       "Pipeline Stratifications",
+      "Pipeline Evolution",
       "Pipeline Stage Movement",
       "Origination Flow \u2014 KFIs & Completions",
       "Forecast Bridge \u2014 Funded to Forecast",
@@ -25,7 +26,7 @@
   "seasoned_book_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/seasoned_book_gbp.pptx",
-    "slides": 19,
+    "slides": 20,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -39,6 +40,7 @@
       "Pipeline Overview",
       "Origination Funnel",
       "Pipeline Stratifications",
+      "Pipeline Evolution",
       "Pipeline Stage Movement",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Forecast Evolution \u2014 Actual vs Prior Forecast",
@@ -52,7 +54,7 @@
   "multi_seasoned_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/multi_seasoned_gbp.pptx",
-    "slides": 20,
+    "slides": 21,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -66,6 +68,7 @@
       "Pipeline Overview",
       "Origination Funnel",
       "Pipeline Stratifications",
+      "Pipeline Evolution",
       "Pipeline Stage Movement",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Forward View by Constituent Book",
@@ -80,7 +83,7 @@
   "multi_growing_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/multi_growing_gbp.pptx",
-    "slides": 20,
+    "slides": 21,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -94,6 +97,7 @@
       "Pipeline Overview",
       "Origination Funnel",
       "Pipeline Stratifications",
+      "Pipeline Evolution",
       "Pipeline Stage Movement",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Forward View by Constituent Book",
