@@ -34,12 +34,21 @@ EXPECTED_COUNTS = {
     "2026-05-29": {"KFI": 1, "APPLICATION": 1, "OFFER": 3,
                    "COMPLETED": 2, "WITHDRAWN": 1},
 }
+#: LIVE pipeline stock — cases still capable of becoming funded loans.
+#:
+#: These were the whole extract until the live/terminal split. From week four
+#: the fixture carries two Completed and one Withdrawn case; a completed case
+#: has funded and sits in the funded book, and a withdrawn case has gone away,
+#: so neither is stock. ``EXPECTED_EXTRACT_CASES`` keeps the population the
+#: extract carries, which is what the flow and conversion measures read.
 EXPECTED_CASES = {"2026-05-01": 6, "2026-05-08": 7, "2026-05-15": 8,
-                  "2026-05-22": 8, "2026-05-29": 8}
+                  "2026-05-22": 5, "2026-05-29": 5}
+EXPECTED_EXTRACT_CASES = {"2026-05-01": 6, "2026-05-08": 7, "2026-05-15": 8,
+                          "2026-05-22": 8, "2026-05-29": 8}
 #: Loan amounts are 100k..800k by case, so each subtotal names its cases.
 EXPECTED_AMOUNT = {"2026-05-01": 2_300_000.0, "2026-05-08": 2_800_000.0,
-                   "2026-05-15": 3_600_000.0, "2026-05-22": 3_600_000.0,
-                   "2026-05-29": 3_600_000.0}
+                   "2026-05-15": 3_600_000.0, "2026-05-22": 2_400_000.0,
+                   "2026-05-29": 2_400_000.0}
 
 
 @pytest.fixture(scope="module")
@@ -92,10 +101,22 @@ def test_the_movements_the_fixture_exists_to_provide(evo):
     # COMPLETION and WITHDRAWAL appear only once cases reach them.
     assert "COMPLETED" not in by["2026-05-15"] and "WITHDRAWN" not in by["2026-05-15"]
     assert by["2026-05-22"]["COMPLETED"] == 2 and by["2026-05-22"]["WITHDRAWN"] == 1
-    # STASIS: the population is flat across the last three weeks even though the
-    # stage mix is not — a series that only ever grows proves less.
-    assert counts["2026-05-15"] == counts["2026-05-22"] == counts["2026-05-29"]
+    # STASIS: the EXTRACT population is flat across the last three weeks even
+    # though the stage mix is not — a series that only ever grows proves less.
+    # Read off the reconciliation block, which describes the extract as read.
+    extract = {p["week"]: p["reconciliation"]["total_records"] for p in evo["periods"]}
+    assert extract["2026-05-15"] == extract["2026-05-22"] == extract["2026-05-29"]
     assert by["2026-05-22"] != by["2026-05-29"]
+    # And the LIVE series rises then falls as cases terminate, which is a
+    # stronger shape for this fixture to provide than a flat tail: a stock
+    # measure that never falls would not distinguish the two populations at all.
+    assert counts["2026-05-15"] > counts["2026-05-22"]
+    assert counts["2026-05-22"] == counts["2026-05-29"]
+    live = {p["week"]: p["reconciliation"]["live_records"] for p in evo["periods"]}
+    terminal = {p["week"]: p["reconciliation"]["terminal_records"] for p in evo["periods"]}
+    for week in WEEKS:
+        assert live[week] + terminal[week] == extract[week], week
+        assert live[week] == counts[week], week
 
 
 def test_the_fixture_needs_no_production_branch():
