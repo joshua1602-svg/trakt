@@ -130,6 +130,21 @@ slides:
     question: "Where does funded exposure sit, and how has that moved?"
     when: "has_funded_history"
 
+  # HOW THE BOOK'S CHARACTERISTICS MOVED, as distinct from where its stock
+  # sits. Funded Stock above is the constituent-book series; this is the
+  # portfolio's own measures over time — balance, population, weighted LTV and
+  # weighted rate — which is where "is the book getting riskier" is answered.
+  # The handler existed and no slide used it.
+  #
+  # Four periods, not two: a four-panel trend page drawn from three points is
+  # thinner than the stock page it sits beside, and the pack would then be
+  # longer without being better.
+  - id: funded_evolution
+    type: funded_evolution
+    title: "Funded Evolution"
+    question: "How have the book's characteristics moved over time?"
+    when: "has_funded_history and funded_periods >= 4"
+
   # ONE 2 x 2 matrix of the four dimensions an investor asks first.
   - id: stratification_funded
     type: strat_barlists
@@ -213,23 +228,6 @@ slides:
     question: "What is likely to fund next?"
     when: "has_pipeline"
 
-  - id: funnel
-    type: funnel
-    title: "Origination Funnel"
-    question: "How does the pipeline convert?"
-    # BOTH pipeline facts are required. `has_funnel` is true whenever weekly
-    # extracts exist, which outlives the pipeline snapshot the conversion page
-    # actually draws from; without the snapshot the handler has a funnel with no
-    # stages. And conversion is a page about origination: on a book whose
-    # pipeline is a rounding error against the funded balance, how it converts
-    # is not one of the nine questions this pack answers.
-    # `has_pipeline_history` matters as much as the rest. This page is about
-    # CONVERSION, and conversion is measured from weekly flow. With a single
-    # extract the handler falls back to cases-by-stage, which is the stage
-    # ladder already on Pipeline Overview in a different unit — the duplication
-    # a starter pack exists to avoid.
-    when: "has_pipeline and has_funnel and has_pipeline_history and pipeline_share >= 0.05"
-
   # WHAT IS ABOUT TO FUND, on the same four-panel grammar as the funded book,
   # so a reader compares the two lenses without relearning the page. `keys` is
   # the PREFERRED order; a dimension with nothing to distribute gives its slot
@@ -269,11 +267,36 @@ slides:
     question: "What happened to pipeline cases between reporting periods?"
     when: "has_pipeline_movement"
 
-  - id: origination_flow
-    type: origination_flow
-    title: "Origination Flow — KFIs & Completions"
-    question: "What is the weekly origination run-rate?"
-    when: "has_pipeline_history and pipeline_share >= 0.15"
+  - id: funnel
+    type: funnel
+    title: "Origination Funnel"
+    question: "How does the pipeline convert?"
+    # BOTH pipeline facts are required. `has_funnel` is true whenever weekly
+    # extracts exist, which outlives the pipeline snapshot the conversion page
+    # actually draws from; without the snapshot the handler has a funnel with no
+    # stages. And conversion is a page about origination: on a book whose
+    # pipeline is a rounding error against the funded balance, how it converts
+    # is not one of the nine questions this pack answers.
+    # `has_pipeline_history` matters as much as the rest. This page is about
+    # CONVERSION, and conversion is measured from weekly flow. With a single
+    # extract the handler falls back to cases-by-stage, which is the stage
+    # ladder already on Pipeline Overview in a different unit — the duplication
+    # a starter pack exists to avoid.
+    when: "has_pipeline and has_funnel and has_pipeline_history and pipeline_share >= 0.05 and not has_pipeline_movement"
+    # Pipeline Stage Movement answers "how are cases progressing" with a
+    # reconciled case-level identity, on counts AND money, with departures split
+    # by destination. This page answers the same question from weekly flow, and
+    # on a book where the KFI-to-completion lag is not estimable it can only
+    # offer unlagged ratios. Where the reconciliation exists it is the better
+    # page, and running both spends two slides on one question.
+    superseded_by: pipeline_movement
+
+  # Origination Flow (KFI / completion weekly bars with a cumulative line) is
+  # NOT in the starter pack. The Pipeline Evolution quadrant is gated on the
+  # same fact and plots the same weekly series plus two this page does not
+  # carry, so it could only ever restate a page the reader already has. The
+  # `origination_flow` handler remains available for an origination-focused
+  # configuration.
 
   # ======================================================================
   # 5 — FORECAST

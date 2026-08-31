@@ -213,7 +213,12 @@ def test_pipeline_sections_appear_when_a_source_exists(run_root, pipeline_root):
     data = _data(run_root, pipeline_root=pipeline_root)
     assert data.pipeline
     ids = {s["id"] for s in select_slides(_slides(), data)[0]}
-    assert "pipeline" in ids and "funnel" in ids
+    # The pipeline section is present; which page answers "how is it
+    # progressing" depends on whether case identity is governable for this
+    # book — Pipeline Stage Movement supersedes the flow-based funnel where it
+    # is.
+    assert "pipeline" in ids
+    assert ids & {"funnel", "pipeline_movement"}, ids
 
 
 def test_pipeline_sections_are_omitted_with_a_reason_when_absent(run_root):

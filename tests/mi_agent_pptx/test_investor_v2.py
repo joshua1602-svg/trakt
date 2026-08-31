@@ -320,7 +320,12 @@ def test_pipeline_present_includes_the_pipeline_sections(mixed_run, pipeline_roo
     kept, _omitted = select_slides(_slides(), data)
     ids = {s["id"] for s in kept}
     assert "pipeline" in ids
-    assert "funnel" in ids
+    # HOW THE PIPELINE PROGRESSES, by whichever page answers it for this book.
+    # Origination Funnel measures conversion from weekly FLOW; Pipeline Stage
+    # Movement reconciles the same question case by case and supersedes it
+    # where a stable case identifier exists. The durable property is that the
+    # question is answered, not which page answers it.
+    assert ids & {"funnel", "pipeline_movement"}, ids
 
     # And the pipeline is narrated as an outlook, labelled direct-origination only.
     outlook = [i for i in data.insights["insights"]
