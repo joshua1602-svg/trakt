@@ -366,6 +366,86 @@ def select_cohorts(formation: Formation,
     return chosen, [r.vintage for r in material[limit:]]
 
 
+#: How much a measure has to move across seasoning before plotting it answers
+#: anything. Expressed against the measure's own level, so a 50% LTV moving one
+#: point and a £10m balance moving £200k are judged on the same scale.
+HERO_MIN_TRAVEL = 0.01
+
+#: The seasoning question, in the order the measures answer it. Risk and
+#: performance first: "how are vintages behaving as they season" is a question
+#: about credit, and a balance curve answers it only when the balance is what
+#: moved. Loan survival is read off the point rather than the metric bag.
+HERO_PREFERENCE: Tuple[str, ...] = (
+    "nneg_headroom_pct", "wa_ltv", "loan_retention", "wa_interest_rate",
+    "funded_balance", "loan_count",
+)
+
+#: Labels and formats for the measures a hero curve can carry.
+HERO_LABELS: Dict[str, Tuple[str, str]] = {
+    "nneg_headroom_pct": ("NNEG headroom by periods since formation", "pct"),
+    "wa_ltv": ("Weighted average current LTV by periods since formation", "pct"),
+    "loan_retention": ("Loan survival by periods since formation", "pct"),
+    "wa_interest_rate": ("Weighted average rate by periods since formation", "pct"),
+    "funded_balance": ("Funded balance by periods since formation", "gbp"),
+    "loan_count": ("Loans by periods since formation", "count"),
+}
+
+
+def _series_values(cohort: CohortSeries, metric: str) -> List[Optional[float]]:
+    """One cohort's values for a metric, over its live periods.
+
+    ``loan_retention`` lives on the point rather than in the metric bag — it is
+    a property of the pool, not a measure of the loans in it — so it is read
+    from there.
+    """
+    if metric == "loan_retention":
+        return [p.loan_retention for p in cohort.live]
+    return [p.metrics.get(metric) for p in cohort.live]
+
+
+def _travel(values: Sequence[Optional[float]]) -> Optional[float]:
+    """How far a measure moves across seasoning, against its own level."""
+    real = [float(v) for v in values if v is not None]
+    if len(real) < 2:
+        return None
+    level = max(abs(sum(real) / len(real)), 1e-9)
+    return (max(real) - min(real)) / level
+
+
+def hero_metric(series: Sequence[CohortSeries]) -> Optional[Tuple[str, str, str]]:
+    """The measure whose curve actually answers the seasoning question.
+
+    Returns ``(metric, title, format)`` or ``None`` where nothing moves.
+
+    Funded balance used to be the hero unconditionally, which on a stable book
+    drew four nearly flat lines: arithmetically true, and an answer to no
+    question a reader has. A measure earns the curve by being AVAILABLE for
+    these cohorts and by MOVING as they season; among those that qualify the
+    governed preference order decides, so the choice is a property of the book
+    rather than of the renderer.
+
+    Availability comes from what the governed service actually emitted for
+    these cohorts — no capability is inferred here, and nothing branches on
+    what kind of book this is.
+    """
+    if not series:
+        return None
+    scored: Dict[str, float] = {}
+    for metric in HERO_PREFERENCE:
+        travels = [t for t in (_travel(_series_values(c, metric)) for c in series)
+                   if t is not None]
+        if not travels:
+            continue
+        best = max(travels)
+        if best >= HERO_MIN_TRAVEL:
+            scored[metric] = best
+    if not scored:
+        return None
+    metric = next(m for m in HERO_PREFERENCE if m in scored)
+    title, fmt = HERO_LABELS.get(metric, (metric, "gbp"))
+    return metric, title, fmt
+
+
 def plottable(series: Sequence[CohortSeries]) -> List[CohortSeries]:
     """The cohorts a seasoning slide may draw.
 

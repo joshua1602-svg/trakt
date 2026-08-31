@@ -2043,19 +2043,39 @@ class DeckBuilder:
             return self._record("cohort_progression", spec.get("title"), "",
                                 placeholder=True)
 
-        # -- balance curves, indexed to formation ----------------------------
+        # -- the measure that actually seasons, indexed to formation ---------
+        # Funded balance used to be the hero unconditionally, which on a stable
+        # book drew four nearly flat lines — true, and an answer to no question
+        # a reader has. The curve goes to the governed measure that is available
+        # for these cohorts AND moves as they age.
         boxes = self._chart_boxes(2, top=1.62, height=3.62)
-        il, it, iw, ih = self._card(s, *boxes[0],
-                                    "Funded balance by reporting periods since formation")
-        p1 = self.work / "cohort_prog_balance.png"
+        hero = CO.hero_metric(live)
         longest = max(len(x.live) for x in live)
-        R.draw_lines(p1, [str(i) for i in range(longest)],
-                     [{"name": x.vintage,
-                       "values": [x.value("funded_balance", i) if i < len(x.live)
-                                  else None for i in range(longest)]}
-                      for x in live],
-                     iw, ih, theme=self.theme, currency=True)
-        self._place(s, p1, il, it, iw, ih)
+        if hero:
+            metric, title, fmt = hero
+            il, it, iw, ih = self._card(s, *boxes[0], title)
+            p1 = self.work / "cohort_prog_hero.png"
+            R.draw_lines(
+                p1, [str(i) for i in range(longest)],
+                [{"name": x.vintage,
+                  "values": [(CO._series_values(x, metric)[i]
+                              if i < len(x.live) else None)
+                             for i in range(longest)]}
+                 for x in live],
+                iw, ih, theme=self.theme, currency=(fmt == "gbp"),
+                percent=(fmt == "pct"), chart_id="cohort_prog_hero")
+            self._place(s, p1, il, it, iw, ih)
+        else:
+            # Nothing moved. That IS the finding, and it is worth more than a
+            # flat chart of it.
+            il, it, iw, ih = self._card(
+                s, *boxes[0], "Seasoning across the governed cohort measures")
+            self._text(s, il, it + Inches(0.22), Inches(iw), Inches(1.0),
+                       "No governed cohort measure has moved materially since "
+                       "these vintages formed. The pools are stable on balance, "
+                       "loan count, weighted LTV and rate alike; the table "
+                       "beside this states each vintage at formation and today.",
+                       size=11, color=self.theme.ink_400, spacing=1.15)
 
         # -- how each pool has changed since formation ------------------------
         # Titled for what the table measures rather than for "retention": the
