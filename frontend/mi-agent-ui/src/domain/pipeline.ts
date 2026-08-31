@@ -58,6 +58,13 @@ export interface DimensionBucket {
   caseCount: number;
   pipelineAmount: number;
   weightedExpectedFundedAmount: number | null;
+  /**
+   * Present on the forecast cuts: the funded exposure that already exists,
+   * beside the weighted pipeline expected to arrive. The two sum to
+   * `pipelineAmount` (the forecast), so a consumer can draw what the forecast
+   * is MADE OF rather than only where it lands.
+   */
+  fundedAmount?: number;
   /** Set on an aggregated "Other" row when a breakdown is capped to top 10. */
   isOther?: boolean;
   categoriesIncluded?: number;

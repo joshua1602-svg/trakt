@@ -1,4 +1,4 @@
-import type { ForecastSnapshot } from "@/domain";
+import type { DimensionBucket, ForecastSnapshot } from "@/domain";
 import { ForecastBridgeCard } from "@/components/ForecastBridgeCard";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
@@ -28,14 +28,24 @@ export function ForecastView({
   const bridge = forecast?.forecastBridge ?? null;
   const breakdowns = forecast?.forecastBreakdowns;
 
-  const byRegion: BarDatum[] = (breakdowns?.byRegionCapped ?? []).map((r) => ({
-    label: r.key,
-    value: r.pipelineAmount,
-  }));
-  const byLtv: BarDatum[] = (breakdowns?.byLtvBucketCapped ?? []).map((r) => ({
-    label: r.key,
-    value: r.pipelineAmount,
-  }));
+  // A forecast bar is drawn as its PARTS where the payload carries them: the
+  // funded exposure that exists today, and the weighted pipeline expected to
+  // arrive. Those are facts of different certainty and a funder is buying one
+  // of them. Both come from the engine — nothing is derived here.
+  const stacked = (r: DimensionBucket): BarDatum => {
+    const funded = r.fundedAmount;
+    const expected = r.weightedExpectedFundedAmount ?? 0;
+    return {
+      label: r.key,
+      value: r.pipelineAmount,
+      parts: funded == null ? undefined : [
+        { label: "Current funded", value: funded, className: "bg-peri-400/70" },
+        { label: "Expected additions", value: expected, className: "bg-mint-400/80" },
+      ],
+    };
+  };
+  const byRegion: BarDatum[] = (breakdowns?.byRegionCapped ?? []).map(stacked);
+  const byLtv: BarDatum[] = (breakdowns?.byLtvBucketCapped ?? []).map(stacked);
   const byMonth: BarDatum[] = (breakdowns?.byCompletionMonth ?? []).map((m) => ({
     label: m.month,
     value: m.weightedExpectedFundedAmount,
@@ -52,6 +62,16 @@ export function ForecastView({
           <p className="mt-0.5 text-[11px] text-ink-400">
             Funded actual exposure + probability-weighted pipeline (derived).
           </p>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-ink-400">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-3 rounded-sm bg-peri-400/70" />
+              Current funded
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-3 rounded-sm bg-mint-400/80" />
+              Expected additions
+            </span>
+          </div>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {byRegion.length > 0 && (
               <Panel title="Forecast balance by region">

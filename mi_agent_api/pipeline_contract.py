@@ -909,6 +909,11 @@ def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
         "caseCount": sum(r["caseCount"] for r in tail),
         "pipelineAmount": other_amount,
         "weightedExpectedFundedAmount": other_weighted,
+        # Any additional additive component the caller carried (the forecast
+        # cuts carry ``fundedAmount`` beside the total) is aggregated the same
+        # way, so a capped row's parts still sum to its total.
+        **{key: round(sum(float(r.get(key) or 0.0) for r in tail), 2)
+           for key in ("fundedAmount",) if any(key in r for r in tail)},
         "isOther": True,
         "categoriesIncluded": len(tail),
         "sharePct": round(other_amount / total_amount * 100, 1),

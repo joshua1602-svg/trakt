@@ -339,9 +339,17 @@ def forecast_breakdowns(funded_df: Optional[pd.DataFrame],
     # surface that draws it. Without this the Forecast view's LTV cut was the one
     # banded chart in the product still ordered by size.
     def _cap(rows, dimension):
+        # THE PARTS TRAVEL WITH THE TOTAL. The capped form dropped
+        # ``fundedAmount``, so a consumer could draw the forecast but not what
+        # it is made of — and a forecast bar drawn as one block shows the
+        # destination while hiding how much of it already exists. Both parts are
+        # carried through the cap, and the aggregated "Other" row sums them the
+        # same way it sums the total.
         capped = cap_breakdown(
             [{"key": r["key"], "caseCount": 0, "pipelineAmount": r["forecastAmount"],
-              "weightedExpectedFundedAmount": r["weightedPipelineAmount"]} for r in rows], 10)
+              "fundedAmount": r["fundedAmount"],
+              "weightedExpectedFundedAmount": r["weightedPipelineAmount"]}
+             for r in rows], 10)
         return _presentation.order_bars(capped, dimension=dimension,
                                         label_key="key")
     return {

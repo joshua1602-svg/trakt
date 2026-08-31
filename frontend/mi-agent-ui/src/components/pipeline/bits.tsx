@@ -61,6 +61,13 @@ export interface BarDatum {
   /** Optional secondary value rendered to the right (e.g. weighted £). */
   secondary?: string;
   count?: number;
+  /**
+   * The parts this bar is made of, in stacking order. Supplied together they
+   * must sum to `value`; a bar drawn as one block shows the destination and
+   * hides the journey, which on a forecast cut is the whole question — how
+   * much of this exposure exists today, and how much is expected to arrive.
+   */
+  parts?: { label: string; value: number; className: string }[];
 }
 
 /**
@@ -102,11 +109,22 @@ export function BarList({
             <span className="truncate text-[11px] text-ink-300" title={d.label}>
               {d.label}
             </span>
-            <div className="h-3.5 overflow-hidden rounded-sm bg-navy-800/70">
-              <div
-                className="h-full rounded-sm bg-peri-400/70"
-                style={{ width: `${Math.max(2, (d.value / max) * 100)}%` }}
-              />
+            <div className="flex h-3.5 overflow-hidden rounded-sm bg-navy-800/70">
+              {d.parts && d.parts.length > 0 ? (
+                d.parts.map((part) => (
+                  <div
+                    key={part.label}
+                    className={`h-full ${part.className}`}
+                    title={`${part.label}: ${render(part.value)}`}
+                    style={{ width: `${Math.max(0, (part.value / max) * 100)}%` }}
+                  />
+                ))
+              ) : (
+                <div
+                  className="h-full rounded-sm bg-peri-400/70"
+                  style={{ width: `${Math.max(2, (d.value / max) * 100)}%` }}
+                />
+              )}
             </div>
             <span className="text-right font-mono text-[11px] tabular-nums text-ink-200">
               {render(d.value)}

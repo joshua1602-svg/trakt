@@ -2746,9 +2746,21 @@ class DeckBuilder:
                 # than compressing seven rows into an inch, which produced
                 # overlapping labels.
                 capacity = self._barlist_capacity(float(cbox[3]) / EMU_IN)
-                self._barlist_card(s, cbox, label,
-                                   self._fit_bars(rows, capacity), "balance",
-                                   cid=cid, dimension=dim)
+                drawn = self._fit_bars(rows, capacity)
+                # Stack the bar into its parts wherever the payload carries
+                # them, so the reader sees where exposure sits TODAY and where
+                # the pipeline is expected to add it.
+                if all("funded" in r for r in drawn):
+                    il, it, iw, ih = self._card(s, *cbox, label)
+                    path = self.work / f"{cid}.png"
+                    R.draw_stacked_barlist(
+                        path, drawn, self._forecast_segments, iw, ih,
+                        theme=self.theme, total_key="balance",
+                        dimension=dim, chart_id=cid)
+                    self._place(s, path, il, it, iw, ih)
+                else:
+                    self._barlist_card(s, cbox, label, drawn, "balance",
+                                       cid=cid, dimension=dim)
         self._footer(s)
         self._record("forecast_bridge", spec.get("title"), "", placeholder=False)
 
@@ -2759,6 +2771,12 @@ class DeckBuilder:
         ``workspace.forecast_breakdowns`` is the SAME payload the dashboard's
         Forecast view renders. The capped form (top 10 + Other) is preferred so
         a long region list stays legible, exactly as it does on screen.
+
+        Each row carries the forecast AND its two parts — the funded exposure
+        that exists today, and the weighted pipeline expected to arrive. A bar
+        drawn as one block shows the destination and hides the journey, and
+        those two parts are facts of different certainty. Both come from the
+        payload; nothing is derived here.
         """
         rows = (breakdowns or {}).get(capped_key) or (breakdowns or {}).get(full_key) or []
         out = []
@@ -2768,8 +2786,27 @@ class DeckBuilder:
                 value = row.get("pipelineAmount")
             if value is None:
                 continue
-            out.append({"label": str(row.get("key", "")), "balance": float(value)})
+            funded = row.get("fundedAmount")
+            expected = row.get("weightedPipelineAmount")
+            if expected is None:
+                expected = row.get("weightedExpectedFundedAmount")
+            entry = {"label": str(row.get("key", "")), "balance": float(value)}
+            if funded is not None or expected is not None:
+                entry["funded"] = float(funded or 0.0)
+                entry["expected"] = float(expected or 0.0)
+            out.append(entry)
         return out
+
+    #: The two parts of a forecast bar. Funded exposure is an actual; the
+    #: weighted pipeline is an expectation, and the colours say which is which
+    #: — the deck's mint is reserved for forward-looking measures everywhere
+    #: else in the pack.
+    @property
+    def _forecast_segments(self):
+        return ({"key": "funded", "label": "Current funded",
+                 "color": self.theme.peri},
+                {"key": "expected", "label": "Expected additions",
+                 "color": self.theme.mint})
 
     def slide_forecast_projection(self, spec):
         s = self._slide()

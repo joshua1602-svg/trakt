@@ -228,6 +228,93 @@ def draw_barlist(path, rows: Sequence[Dict[str, Any]], value_key: str, w: float,
     return _save(fig, path, theme, dpi)
 
 
+def draw_stacked_barlist(path, rows: Sequence[Dict[str, Any]],
+                         segments: Sequence[Dict[str, Any]], w: float, h: float,
+                         *, theme: PptxTheme = THEME, currency: bool = True,
+                         label_key: str = "label", total_key: str = "total",
+                         dpi: int = 220, chart_id: Optional[str] = None,
+                         dimension: Optional[str] = None) -> Path:
+    """A bar list whose bar is BUILT from its parts.
+
+    ``segments`` is ``[{key, label, color}]`` in stacking order; each row
+    carries a value under every segment key, and the row's ``total_key`` is
+    what the parts must sum to. The right-hand figure is that total.
+
+    A forecast bar drawn as one block shows the destination and hides the
+    journey: the reader cannot see how much of a category's forecast exposure
+    is already funded and how much is expected to arrive. Those are different
+    facts with different certainty, and a funder is buying one of them.
+
+    Nothing is summed here beyond drawing: the caller supplies the parts and
+    the total, both from the governed payload, and a row whose parts do not
+    reach its total is drawn short rather than rescaled — a chart must not
+    hide a reconciliation failure.
+    """
+    rows = [r for r in rows if r is not None]
+    _record("stacked_barlist", chart_id, dimension=dimension,
+            categories=[str(r.get(label_key, "")) for r in rows],
+            values=[r.get(total_key) for r in rows],
+            segments=[str(sg.get("key")) for sg in segments], currency=currency)
+    fig = _fig(w, h, theme, dpi)
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.set_facecolor(theme.bg_panel)
+    ax.set_xlim(0, 1)
+    ax.axis("off")
+    if not rows:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center",
+                color=theme.ink_500, fontsize=12)
+        return _save(fig, path, theme, dpi)
+
+    fmt: Callable = compact_currency if currency else compact_number
+    totals = [float(r.get(total_key) or 0.0) for r in rows]
+    labels = [str(r.get(label_key, "")) for r in rows]
+    n = len(rows)
+    vmax = max(max(totals), 1.0)
+    pad_top, pad_bot = 0.16, 0.05
+    band = (1.0 - pad_top - pad_bot) / max(n, 1)
+    bar_h = min(band * 0.62, 0.135)
+    label_x, tx0, tx1 = 0.005, 0.385, 0.86
+    tw = tx1 - tx0
+    row_in = band * h
+    font = max(7.5, min(10.5, row_in * 72.0 * 0.52))
+    max_chars = max(10, int((tx0 - label_x) * w * 72 / (font * 0.56)))
+
+    for i, (lab, total) in enumerate(zip(labels, totals)):
+        yc = 1.0 - pad_top - (i + 0.5) * band
+        y0 = yc - bar_h / 2
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (tx0, y0), tw, bar_h, boxstyle="round,pad=0,rounding_size=0.012",
+            linewidth=0, facecolor=theme.bg_panel_alt, alpha=0.7,
+            mutation_aspect=h / w, zorder=1))
+        cursor = tx0
+        for sg in segments:
+            value = float(rows[i].get(sg["key"]) or 0.0)
+            if value <= 0:
+                continue
+            width = tw * max(value / vmax, 0.0)
+            ax.add_patch(mpatches.Rectangle(
+                (cursor, y0), width, bar_h, linewidth=0,
+                facecolor=sg.get("color") or theme.peri, alpha=0.92, zorder=2))
+            cursor += width
+        ax.text(label_x, yc, _truncate(lab, max_chars), va="center", ha="left",
+                color=theme.ink_300, fontsize=font, zorder=3)
+        ax.text(0.995, yc, fmt(total), va="center", ha="right",
+                color=theme.ink_100, fontsize=font, fontproperties=_MONO_FP,
+                zorder=3)
+
+    # The key, above the bars: two colours mean nothing without it.
+    x = tx0
+    for sg in segments:
+        ax.add_patch(mpatches.Rectangle(
+            (x, 1.0 - pad_top + 0.035), 0.018, 0.045, linewidth=0,
+            facecolor=sg.get("color") or theme.peri, alpha=0.92, zorder=3))
+        ax.text(x + 0.026, 1.0 - pad_top + 0.058, str(sg.get("label", "")),
+                va="center", ha="left", color=theme.ink_400,
+                fontsize=max(7.5, font - 1.0), zorder=3)
+        x += 0.026 + len(str(sg.get("label", ""))) * 0.0105 + 0.03
+    return _save(fig, path, theme, dpi)
+
+
 
 def _tick_indices(x_labels: Sequence[str], axis_width_in: float,
                   fontsize: float = 8.5) -> List[int]:
