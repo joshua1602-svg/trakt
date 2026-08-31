@@ -386,8 +386,13 @@ def compute_forecast_bridge(
     prob_summary: Dict[str, Any] = {}
     prob_basis = "none"
     if pipeline_available:
+        # LIVE stock on both. The bridge asks what the CURRENT pipeline could add
+        # to the funded book; a completed case has already been added, and
+        # including it bridged the funded book to itself plus its own arrivals.
         pipeline_amount = float(pipeline_report.get("total_pipeline_amount") or 0.0)
-        pipeline_case_count = int(pipeline_report.get("row_count") or len(pipeline_df))
+        pipeline_case_count = int(pipeline_report.get("live_row_count")
+                                  or pipeline_report.get("row_count")
+                                  or len(pipeline_df))
         weighted = pipeline_report.get("weighted_expected_funded_amount")
         weighted = float(weighted) if weighted is not None else 0.0
         stage_breakdown = (pipeline_snapshot or {}).get("stageBreakdown", [])

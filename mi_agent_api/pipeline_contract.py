@@ -681,7 +681,9 @@ def compute_prior_week_aggregates(
             prior, as_of_date=extract_date, historical_model=historical_model)
     except Exception:  # noqa: BLE001 - a bad prior file must not break the snapshot
         return None
-    cases = int(report.get("row_count", len(df)))
+    # Measured on the SAME live population as the current snapshot, or the
+    # week-on-week delta compares live stock against extract rows.
+    cases = int(report.get("live_row_count", report.get("row_count", len(df))))
     return {
         "snapshotDate": extract_date or prior.get("pipeline_source_folder_date"),
         "sourceFile": Path(prior.get("source_file", "")).name or None,
@@ -968,10 +970,20 @@ def compute_pipeline_snapshot(
         "duplicatesExcluded": src.get("duplicates_excluded"),
         "primarySourcePreference": src.get("primary_source_preference"),
         "sourceFoldersIncluded": src.get("source_folders_included", []),
-        "pipelineRowCount": int(report.get("row_count", len(df))),
+        # LIVE STOCK. ``row_count`` is every row in the extract, terminal cases
+        # included — a data-quality figure, not an economic one. The headline
+        # count is the live population, matching ``total_pipeline_amount``.
+        "pipelineRowCount": int(report.get("live_row_count",
+                                           report.get("row_count", len(df)))),
         "pipelineAmount": report.get("total_pipeline_amount"),
         "expectedFundedAmount": report.get("expected_funded_amount"),
         "weightedExpectedFundedAmount": weighted,
+        # The correction, stated so it is auditable from the payload alone.
+        "pipelineExtractRowCount": int(report.get("row_count", len(df))),
+        "pipelineTerminalRowCount": int(report.get("terminal_row_count", 0) or 0),
+        "pipelineExtractAmount": report.get("total_extract_amount"),
+        "pipelineTerminalStageCounts": report.get("terminal_stage_counts", {}),
+        "pipelineLiveStages": report.get("live_stages", []),
         # Prior weekly extract aggregates for week-on-week tile deltas (null when
         # no earlier weekly snapshot exists — the UI shows "No prior week").
         "priorWeek": prior_week,

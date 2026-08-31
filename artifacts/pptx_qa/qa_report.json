@@ -75,7 +75,7 @@
   "multi_growing_gbp": {
     "ok": true,
     "deck": "/home/user/trakt/artifacts/pptx_qa/multi_growing_gbp.pptx",
-    "slides": 19,
+    "slides": 18,
     "titles": [
       "TRAKT \u00b7 MI AGENT",
       "Executive Position",
@@ -90,7 +90,6 @@
       "Origination Funnel",
       "Forecast Bridge \u2014 Funded to Forecast",
       "Forward View by Constituent Book",
-      "Forecast Projection \u2014 Run-Rate Scale-Up",
       "Forecast Evolution \u2014 Actual vs Prior Forecast",
       "Cohort Progression",
       "Portfolio Health and Watch Items",

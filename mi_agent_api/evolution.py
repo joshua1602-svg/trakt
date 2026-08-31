@@ -934,14 +934,22 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
             "week": edate,
             "metrics": {
                 "pipeline_amount": (round(float(amount), 2) if amount is not None else None),
-                "pipeline_case_count": int(report.get("row_count", len(df))),
+                # LIVE stock, matching ``pipeline_amount``. Counting the whole
+                # extract here plotted a case count against a live balance.
+                "pipeline_case_count": int(report.get("live_row_count",
+                                                      report.get("row_count", len(df)))),
                 "weighted_expected_funded_amount": (round(float(weighted), 2)
                                                     if weighted is not None else None),
             },
             "reconciliation": {
                 "dataset": "pipeline",
                 "extract_date": edate,
+                # The RECONCILIATION block describes the extract as read, so it
+                # keeps the full row count and states the live split beside it.
                 "total_records": int(report.get("row_count", len(df))),
+                "live_records": int(report.get("live_row_count",
+                                               report.get("row_count", len(df)))),
+                "terminal_records": int(report.get("terminal_row_count", 0) or 0),
                 "total_balance": (round(float(amount), 2) if amount is not None else None),
                 "coverage_by_balance_pct": 100.0,
                 "missing_measure_fields": [],

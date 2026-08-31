@@ -36,9 +36,24 @@ if str(_ROOT) not in sys.path:
 _FIXTURE = _ROOT / "tests" / "fixtures" / "pipeline_history_5w"
 
 #: The fixture's five governed extracts, from its movement table.
+#:
+#: These are LIVE PIPELINE STOCK — cases still capable of becoming funded loans.
+#: They were previously the whole extract, which counted a completed case (which
+#: has funded, and is in the funded book) and a withdrawn case (which has gone
+#: away) as pipeline. Read straight off the fixture's own Status column:
+#:
+#:     week          rows  live      live amt       all amt
+#:     2026-05-01       6     6     2,300,000     2,300,000
+#:     2026-05-08       7     7     2,800,000     2,800,000
+#:     2026-05-15       8     8     3,600,000     3,600,000
+#:     2026-05-22       8     5     2,400,000     3,600,000   2 Completed, 1 Withdrawn
+#:     2026-05-29       8     5     2,400,000     3,600,000   2 Completed, 1 Withdrawn
+#:
+#: The first three weeks are unchanged because the fixture has no terminal case
+#: until week four — which is what makes this fixture worth asserting against.
 WEEKS = ("2026-05-01", "2026-05-08", "2026-05-15", "2026-05-22", "2026-05-29")
-EXPECTED_AMOUNT = [2_300_000.0, 2_800_000.0, 3_600_000.0, 3_600_000.0, 3_600_000.0]
-EXPECTED_COUNT = [6, 7, 8, 8, 8]
+EXPECTED_AMOUNT = [2_300_000.0, 2_800_000.0, 3_600_000.0, 2_400_000.0, 2_400_000.0]
+EXPECTED_COUNT = [6, 7, 8, 5, 5]
 
 #: The funded side: two synthetic month-end runs, so a monthly series has two
 #: points and a weekly one would have none.
