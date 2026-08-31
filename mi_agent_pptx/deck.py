@@ -3210,9 +3210,15 @@ class DeckBuilder:
 
         right.extend(self._capability_lines())
 
+        # THE OMISSIONS GO ON THE LEFT. They are a statement about SCOPE, which
+        # is what the left column is, and the right column already carries the
+        # basis, the coverage and every measure this book cannot report — it ran
+        # off the bottom of the slide and over the footer, so the sections a
+        # reader most needs to see listed were the ones printed past the edge of
+        # the page. The left column was two-thirds empty throughout.
         if self.omissions:
-            right.append("")
-            right.append("SECTIONS NOT INCLUDED")
+            left.append("")
+            left.append("SECTIONS NOT INCLUDED")
             # GROUPED BY REASON. Three consecutive lines repeating "the pipeline
             # is small relative to the funded book" spend three of the six lines
             # this block has room for on one fact, and push other sections behind
@@ -3227,10 +3233,10 @@ class DeckBuilder:
                     grouped.append((o.reason, [o.title]))
             shown, hidden = grouped[:6], grouped[6:]
             for reason, titles in shown:
-                right.append(f"   {', '.join(titles)}: {reason}.")
+                left.append(f"   {', '.join(titles)}: {reason}.")
             if hidden:
                 count = sum(len(t) for _r, t in hidden)
-                right.append(f"   and {count} further section(s).")
+                left.append(f"   and {count} further section(s).")
 
         self._column_text(s, left, Inches(0.6), Inches(6.0))
         self._column_text(s, right, Inches(6.95), Inches(5.85))
@@ -3294,9 +3300,40 @@ class DeckBuilder:
             budget -= 1
         return lines
 
+    #: The methodology column's box, in inches. Text does not shrink to fit a
+    #: PowerPoint textbox: it simply draws past the bottom, over the footer and
+    #: off the slide, and python-pptx reports nothing. The height is a real
+    #: limit and has to be treated as one.
+    _COLUMN_TOP, _COLUMN_HEIGHT = 1.6, 5.3
+
+    @staticmethod
+    def _column_extent(lines, width_in: float, size: float) -> float:
+        """Roughly how tall this column will render, in inches.
+
+        Wrapping is estimated rather than measured — the renderer is the only
+        thing that knows for certain — so it is deliberately pessimistic: a
+        column judged slightly too tall loses half a point of type, while one
+        judged too short runs off the page.
+        """
+        per_line = max(10.0, width_in * 125.0 / size)   # chars that fit on a line
+        total = 0.0
+        for line in lines:
+            heading = bool(line) and line == line.upper() and not line.startswith(" ")
+            pt = (size - 1) if heading else size
+            wraps = max(1, -(-len(line) // int(per_line)))
+            total += wraps * (pt * 1.25) / 72.0 + (5 if heading else 2) / 72.0
+        return total
+
     def _column_text(self, slide, lines, left, width):
         """A column of the methodology page; section headings pick up the accent."""
-        box = slide.shapes.add_textbox(left, Inches(1.6), width, Inches(5.3))
+        width_in = int(width) / EMU_IN
+        size = 10.0
+        for candidate in (10.0, 9.5, 9.0, 8.5, 8.0):
+            size = candidate
+            if self._column_extent(lines, width_in, candidate) <= self._COLUMN_HEIGHT:
+                break
+        box = slide.shapes.add_textbox(left, Inches(self._COLUMN_TOP), width,
+                                       Inches(self._COLUMN_HEIGHT))
         tf = box.text_frame
         tf.word_wrap = True
         for i, line in enumerate(lines):
@@ -3304,7 +3341,7 @@ class DeckBuilder:
             run = para.add_run()
             run.text = line
             heading = bool(line) and line == line.upper() and not line.startswith(" ")
-            run.font.size = Pt(9 if heading else 10)
+            run.font.size = Pt(size - 1 if heading else size)
             run.font.bold = heading
             run.font.name = self.theme.font_sans
             run.font.color.rgb = self._rgb(

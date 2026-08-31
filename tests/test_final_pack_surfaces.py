@@ -348,3 +348,47 @@ def test_11_no_tile_caption_is_drawn_outside_its_panel(rich):
                     f"{bottom:.2f}in, past its panel at "
                     f"{min(h[1] for h in hosts):.2f}in")
     assert not overflows, "\n".join(overflows)
+
+
+def test_12_the_methodology_columns_stay_on_the_slide(rich):
+    """Catches: "SECTIONS NOT INCLUDED" printed over the footer and off the page.
+
+    PowerPoint text does not shrink to fit its box — it draws past the bottom,
+    over the footer and off the slide, and python-pptx reports nothing. The
+    right column carried the basis, the coverage, every measure the book cannot
+    report AND every omitted section while the left column sat two-thirds
+    empty, so the sections a reader most needs listed were the ones off the
+    page. The omissions are scope, and now sit with the rest of the scope.
+    """
+    import io
+
+    import pptx as _pptx
+    from pptx.util import Emu
+
+    from mi_agent_pptx.deck import DeckBuilder
+
+    deck = _pptx.Presentation(io.BytesIO(generate_and_download()))
+    checked = 0
+    for slide in deck.slides:
+        heads = [sh.text_frame.text for sh in slide.shapes
+                 if sh.has_text_frame and sh.text_frame.text.strip()]
+        if not heads or "Data and Methodology" not in heads[0]:
+            continue
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            paras = shape.text_frame.paragraphs
+            sizes = [r.font.size.pt for p in paras for r in p.runs
+                     if r.font.size is not None]
+            if len(paras) < 4 or not sizes:
+                continue
+            lines = [p.text for p in paras]
+            body = max(sizes)
+            assert min(sizes) >= 8.0, f"type below the floor: {min(sizes)}pt"
+            extent = DeckBuilder._column_extent(
+                lines, int(shape.width) / 914400, body)
+            assert extent <= DeckBuilder._COLUMN_HEIGHT + 0.01, (
+                f"a methodology column renders {extent:.2f}in into a "
+                f"{DeckBuilder._COLUMN_HEIGHT}in box: {lines[0]!r}")
+            checked += 1
+    assert checked >= 2, "the methodology page's two columns were not found"
