@@ -331,6 +331,22 @@ class DeckBuilder:
     #: they begin to collide with the rows above and beneath them.
     ROW_PITCH_IN = 0.19
 
+    @staticmethod
+    def _fit_bars(rows, capacity: int, *, value_key: str = "balance"):
+        """``rows`` reduced to ``capacity`` bars WITHOUT losing any value.
+
+        NEVER DROP A ROW SILENTLY. Truncating the list left six bars under a
+        heading a reader adds up, £11.8m short of the total they close on, with
+        nothing on the page saying a row had been cut. The remainder is
+        aggregated instead, so the bars still account for the whole.
+        """
+        if capacity < 2 or len(rows) <= capacity:
+            return list(rows)
+        rest = rows[capacity - 1:]
+        return list(rows[:capacity - 1]) + [{
+            "label": f"Other ({len(rest)})",
+            value_key: sum(float(r.get(value_key) or 0.0) for r in rest)}]
+
     def _barlist_capacity(self, height_in: float, *, minimum: int = 3) -> int:
         """How many bars a panel of this height can carry legibly."""
         usable = max(0.0, height_in - 0.42)          # card title + padding
@@ -2439,7 +2455,10 @@ class DeckBuilder:
             ("fc_ltv", "Forecast balance by LTV band", by_ltv, "ltv"),
         ) if rows]
 
-        bridge_h = 2.72 if cuts else 4.64
+        # The cuts beneath need room for every band a governed stratification
+        # carries; the bridge gives up a quarter-inch rather than the cuts
+        # dropping a region off the bottom of the panel.
+        bridge_h = 2.46 if cuts else 4.64
         box = (Inches(self.CONTENT_L), Inches(1.92),
                Inches(self.CONTENT_R - self.CONTENT_L), Inches(bridge_h))
         il, it, iw, ih = self._card(s, *box,
@@ -2457,7 +2476,8 @@ class DeckBuilder:
                 # than compressing seven rows into an inch, which produced
                 # overlapping labels.
                 capacity = self._barlist_capacity(float(cbox[3]) / EMU_IN)
-                self._barlist_card(s, cbox, label, rows[:capacity], "balance",
+                self._barlist_card(s, cbox, label,
+                                   self._fit_bars(rows, capacity), "balance",
                                    cid=cid, dimension=dim)
         self._footer(s)
         self._record("forecast_bridge", spec.get("title"), "", placeholder=False)

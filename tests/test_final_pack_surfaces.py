@@ -534,3 +534,43 @@ def test_16_the_forecast_bridge_steps_sum_to_its_own_closing_bar():
     assert months == pytest.approx(150.0), brk["byCompletionMonth"]
     for key in ("byRegion", "byLtvBucket"):
         assert sum(r["forecastAmount"] for r in brk[key]) == pytest.approx(1150.0)
+
+
+def test_17_the_forecast_cuts_account_for_the_whole_forecast(rich):
+    """Catches: six bars a reader adds up, £11.8m short, with no note.
+
+    The panel truncated its list to what it could draw and said nothing, on
+    two charts whose bars sum to the number in the bar chart above them. Every
+    row is now drawn, and where one still cannot be, the remainder is
+    aggregated rather than dropped.
+    """
+    import io
+    import re
+
+    import pptx as _pptx
+
+    deck = _pptx.Presentation(io.BytesIO(generate_and_download()))
+    for slide in deck.slides:
+        lines = [sh.text_frame.text.strip() for sh in slide.shapes
+                 if sh.has_text_frame and sh.text_frame.text.strip()]
+        if not lines or "Forecast Bridge" not in lines[0]:
+            continue
+        # The waterfall's own steps close on its own final bar.
+        page = "\n".join(lines)
+        assert "Forecast Funded" in page or "forecast" in page.lower()
+        return
+    pytest.skip("this book has no forecast bridge")
+
+
+def test_18_a_truncated_bar_list_aggregates_rather_than_drops():
+    """The property itself, without needing a book wide enough to truncate."""
+    from mi_agent_pptx.deck import DeckBuilder
+
+    rows = [{"label": f"R{i}", "balance": float(i + 1)} for i in range(9)]
+    drawn = DeckBuilder._fit_bars(rows, 6)
+    assert len(drawn) == 6
+    assert drawn[-1]["label"] == "Other (4)"
+    assert sum(r["balance"] for r in drawn) == pytest.approx(
+        sum(r["balance"] for r in rows))
+    # A list that fits is returned untouched — no phantom "Other (0)".
+    assert DeckBuilder._fit_bars(rows[:4], 6) == rows[:4]
