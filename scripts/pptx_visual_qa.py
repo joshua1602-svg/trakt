@@ -215,8 +215,21 @@ _STAGES = ("KFI", "APPLICATION", "OFFER", "COMPLETED")
 
 
 def _pipeline_case(i, week_index, *, region, ltv, balance, stage, prob):
+    """One live pipeline case.
+
+    ``Account Number`` is the contract's own alias for
+    ``pipeline_case_identifier``, and it is what a real lender extract carries
+    (see ``tests/fixtures/pipeline_history_5w``, which maps it cleanly). The
+    fixture used to write ``unique_identifier`` — the ESMA RREL1 name for a
+    FUNDED underlying exposure, which is not a pre-funding case key and is not
+    an alias here. That made the prepared frame case-anonymous, which is a
+    property of this fixture and was never a property of the contract.
+
+    The id is a function of the CASE, not of the week, so a case persists across
+    extracts and its amount can move without changing who it is.
+    """
     return {
-        "unique_identifier": f"P{week_index}{i:04d}",
+        "Account Number": f"ACC{i:05d}",
         "current_outstanding_balance": balance,
         "current_principal_balance": balance,
         "current_valuation_amount": balance / (ltv / 100.0),

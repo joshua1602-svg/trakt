@@ -892,6 +892,151 @@ def funded_cohort_progression(output_root: str | os.PathLike, client_id: str, *,
     }
 
 
+#: The identity column a case-level pipeline comparison keys on. It is the
+#: contract's own natural key, carried from the source — NOT a hash. That
+#: matters: ``snapshot.keys.make_pipeline_opportunity_id`` hashes mutable
+#: business attributes including ``loan_amount``, so an amount amendment changes
+#: the key and one case reads as an exit plus an arrival with no amount
+#: movement — destroying exactly the leg this measure exists to report.
+_PIPELINE_ID = "pipeline_case_identifier"
+
+
+def _case_index(df, id_col: str = _PIPELINE_ID):
+    """``df`` keyed by case identity, or ``None`` when identity is not governed."""
+    if df is None or id_col not in getattr(df, "columns", ()):
+        return None
+    ids = df[id_col].astype(str).str.strip()
+    if not bool(ids.notna().any()) or (ids == "").all():
+        return None
+    if ids.duplicated().any():
+        return None                     # not an identity; refuse rather than guess
+    out = df.copy()
+    out.index = ids
+    return out
+
+
+def pipeline_stage_movement(pipeline_root: str | os.PathLike, client_id: str,
+                            *, to_run_id: Optional[str] = None,
+                            historical_model: Optional[Dict[str, Any]] = None
+                            ) -> Dict[str, Any]:
+    """Per-stage opening-to-closing reconciliation between two weekly extracts.
+
+    For each live stage, on both counts and amounts::
+
+        opening live + arrivals - departures +/- amount change on stayers
+            = closing live
+
+    This is a COMPOSITION of data the pipeline path already produces: two
+    prepared weekly extracts, joined on the governed case identifier. No new
+    analytic, no new model, no new primitive. Departures are split by where the
+    case actually went — on to another stage, completed, withdrawn, or absent
+    from the extract entirely — because "left the stage" and "left the pipeline"
+    are different events and a funnel that conflates them cannot be read.
+
+    Returns ``available: False`` with a reason wherever identity cannot be
+    governed. There is deliberately no fallback: without a stable case key the
+    only honest answer is that this cannot be reported.
+    """
+    from . import pipeline_contract as pipeline_mod
+    from . import pipeline_prep as prep_mod
+
+    inv = pipeline_mod.weekly_extract_inventory(pipeline_root, client_id)
+    extracts = list(inv.get("extracts") or ())
+    cut_ym = pipeline_mod._year_month(str(to_run_id)) if to_run_id else None
+    if cut_ym:
+        extracts = [e for e in extracts
+                    if not (e.get("pipeline_extract_date")
+                            and e["pipeline_extract_date"][:7] > cut_ym)]
+    if len(extracts) < 2:
+        return {"available": False,
+                "reason": ("a stage movement needs two governed weekly extracts; "
+                           f"{len(extracts)} available"),
+                "extractsAvailable": len(extracts)}
+
+    frames = []
+    for ext in extracts[-2:]:
+        try:
+            df, _report = pipeline_mod.load_prepared_pipeline(
+                ext, historical_model=historical_model)
+        except Exception as exc:  # noqa: BLE001
+            return {"available": False,
+                    "reason": f"a weekly extract could not be prepared: {exc}"}
+        frames.append((ext.get("pipeline_extract_date"), df))
+
+    (open_week, open_df), (close_week, close_df) = frames
+    opening = _case_index(open_df)
+    closing = _case_index(close_df)
+    if opening is None or closing is None:
+        return {"available": False,
+                "reason": ("case-level movement needs a stable, unique "
+                           f"{_PIPELINE_ID!r} in both weekly extracts; the "
+                           "governed pipeline contract did not resolve one"),
+                "openingWeek": open_week, "closingWeek": close_week}
+
+    def _stage(frame, key):
+        value = frame["pipeline_stage"].get(key) if "pipeline_stage" in frame.columns else None
+        return str(value).upper() if value is not None else "ABSENT"
+
+    def _amount(frame, keys):
+        if not keys or _BALANCE not in frame.columns:
+            return 0.0
+        return round(float(coerce_numeric(frame.loc[sorted(keys), _BALANCE]).sum()), 2)
+
+    open_keys, close_keys = set(opening.index), set(closing.index)
+    stages: List[Dict[str, Any]] = []
+    for stage in prep_mod.ACTIVE_STAGES:
+        was = {k for k in open_keys if _stage(opening, k) == stage}
+        now = {k for k in close_keys if _stage(closing, k) == stage}
+        arrived, departed, stayed = now - was, was - now, was & now
+
+        destinations: Dict[str, Dict[str, Any]] = {}
+        for key in departed:
+            where = _stage(closing, key) if key in close_keys else "ABSENT"
+            bucket = destinations.setdefault(
+                where, {"stage": where, "caseCount": 0, "amount": 0.0, "_keys": set()})
+            bucket["caseCount"] += 1
+            bucket["_keys"].add(key)
+        for bucket in destinations.values():
+            bucket["amount"] = _amount(opening, bucket.pop("_keys"))
+
+        opening_amount = _amount(opening, was)
+        closing_amount = _amount(closing, now)
+        arrivals_amount = _amount(closing, arrived)
+        departures_amount = _amount(opening, departed)
+        amount_change = round(_amount(closing, stayed) - _amount(opening, stayed), 2)
+        identity = round(opening_amount + arrivals_amount - departures_amount
+                         + amount_change, 2)
+        stages.append({
+            "stage": stage,
+            "openingCaseCount": len(was), "openingAmount": opening_amount,
+            "arrivalCaseCount": len(arrived), "arrivalAmount": arrivals_amount,
+            "departureCaseCount": len(departed), "departureAmount": departures_amount,
+            "persistingCaseCount": len(stayed), "amountChangeOnPersisting": amount_change,
+            "closingCaseCount": len(now), "closingAmount": closing_amount,
+            "departuresByDestination": sorted(destinations.values(),
+                                              key=lambda d: -d["amount"]),
+            "residual": round(identity - closing_amount, 2),
+            "reconciles": abs(identity - closing_amount) <= 0.01,
+        })
+
+    return {
+        "available": True,
+        "openingWeek": open_week, "closingWeek": close_week,
+        "identifierField": _PIPELINE_ID,
+        "openingCaseCount": len(open_keys), "closingCaseCount": len(close_keys),
+        "persistingCaseCount": len(open_keys & close_keys),
+        "stages": stages,
+        "reconciles": all(st["reconciles"] for st in stages),
+        "lineage": {
+            "identity": ("opening live + arrivals - departures "
+                         "+/- amount change on persisting cases = closing live"),
+            "source": "two governed weekly pipeline extracts, joined on case identity",
+            "note": ("Departures are split by where the case went. A case that "
+                     "left a stage has not necessarily left the pipeline."),
+        },
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Pipeline evolution (governed weekly extracts)
 # --------------------------------------------------------------------------- #
