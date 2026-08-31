@@ -305,3 +305,46 @@ def test_10_the_executive_summary_quotes_the_packs_own_movement(rich):
     assert stock, "no stock movement figure to reconcile against"
     assert float(quoted[0]) == pytest.approx(float(stock[0]), abs=0.15), (
         f"summary says £{quoted[0]}m moved; the stock page says £{stock[0]}MM")
+
+
+# --------------------------------------------------------------------------- #
+# 6. A CAPTION BELONGS INSIDE ITS OWN TILE.
+# --------------------------------------------------------------------------- #
+
+def test_11_no_tile_caption_is_drawn_outside_its_panel(rich):
+    """Catches: "2 portfolio types" printed across the bottom edge of its card.
+
+    A tile's hint line is drawn 1.02in from the tile top and stands 0.30in
+    tall, so a strip shorter than 1.34in puts the caption outside the panel it
+    describes. Two slides shipped with a 1.10in and a 1.16in strip carrying
+    hints. The height is now a property of the strip rather than of each
+    caller's memory, and this reads it back off the rendered file.
+    """
+    import io
+
+    import pptx as _pptx
+    from pptx.util import Emu
+
+    deck = _pptx.Presentation(io.BytesIO(generate_and_download()))
+    overflows = []
+    for index, slide in enumerate(deck.slides, 1):
+        panels = [(Emu(sh.top).inches, Emu(sh.top + sh.height).inches,
+                   Emu(sh.left).inches, Emu(sh.left + sh.width).inches)
+                  for sh in slide.shapes
+                  if not (sh.has_text_frame and sh.text_frame.text.strip())]
+        for sh in slide.shapes:
+            if not (sh.has_text_frame and sh.text_frame.text.strip()):
+                continue
+            top, bottom = Emu(sh.top).inches, Emu(sh.top + sh.height).inches
+            left = Emu(sh.left).inches
+            # A text box belongs to the smallest panel it starts inside. Full
+            # -height backgrounds are not tiles, so only panels under 3in count.
+            hosts = [p for p in panels
+                     if p[0] <= top + 0.01 <= p[1] and p[2] <= left + 0.01 <= p[3]
+                     and (p[1] - p[0]) < 3.0]
+            if hosts and bottom > min(h[1] for h in hosts) + 0.03:
+                overflows.append(
+                    f"slide {index}: {sh.text_frame.text[:30]!r} runs to "
+                    f"{bottom:.2f}in, past its panel at "
+                    f"{min(h[1] for h in hosts):.2f}in")
+    assert not overflows, "\n".join(overflows)

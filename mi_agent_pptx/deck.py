@@ -333,12 +333,21 @@ class DeckBuilder:
                           Inches(width), Inches(panel_h)))
         return boxes
 
+    #: A tile carrying a hint line needs this much height: the hint is drawn at
+    #: 1.02in from the tile top and stands 0.30in tall, so anything shorter puts
+    #: it outside its own panel and onto whatever the slide drew underneath.
+    #: Enforced here rather than left to each caller, because two slides shipped
+    #: with a short strip and a hint before anyone read the printed page.
+    HINTED_TILE_HEIGHT = 1.34
+
     def _strip(self, tiles, *, top: float = 1.58, height: float = 1.45):
         """A KPI row on the same grid the charts use.
 
         Returns parallel sequences so a caller can ``zip`` them with its tiles;
         the columns are the grid's, never a per-slide constant.
         """
+        if any((t or {}).get("hint") for t in tiles):
+            height = max(height, self.HINTED_TILE_HEIGHT)
         cols = self._grid(len(tiles))
         return ([Inches(l) for l, _w in cols],
                 [Inches(top)] * len(tiles),
@@ -897,7 +906,7 @@ class DeckBuilder:
                                 spec.get("title"), "Single portfolio.")
 
         # -- 2. the split, as one proportional bar ----------------------------
-        self._composition_bar(s, slices, p, top=2.90)
+        self._composition_bar(s, slices, p, top=3.06)
 
         # -- 3. one card per portfolio type -----------------------------------
         # Cards, not columns: with more than two types a shared-row table forces
