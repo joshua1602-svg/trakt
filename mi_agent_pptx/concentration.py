@@ -78,6 +78,26 @@ def format_measure(value: Optional[float], unit: Optional[str]) -> str:
     return f"{v:,.1f}"
 
 
+def format_headroom(value: Optional[float], unit: Optional[str]) -> str:
+    """Distance to the limit, in the unit that distance is actually measured in.
+
+    Headroom is a DIFFERENCE between two values, not a value. For a percentage
+    test that difference is percentage points, and printing it with a percent
+    sign puts two incompatible percentages on the same line: a reader who has
+    just been told London is 47% utilised then reads "16.0% of headroom" as a
+    share of something. It is 16.0 points of exposure share. Currency and count
+    tests have no such ambiguity — a difference of pounds is pounds — so they
+    keep their own formatting unchanged.
+    """
+    v = _num(value)
+    if v is None:
+        return "—"
+    u = str(unit or "").strip().lower()
+    if u in ("percent", "percentage", "pct", "%", "percentage_points", "pp"):
+        return f"{v:.1f}pp"
+    return format_measure(v, unit)
+
+
 def _state(row: Mapping[str, Any], key: str) -> Dict[str, Any]:
     block = row.get(key)
     return dict(block) if isinstance(block, Mapping) else {}

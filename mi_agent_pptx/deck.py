@@ -269,6 +269,19 @@ class DeckBuilder:
     #: at 12.78in, a third of an inch of visible misalignment.
     CONTENT_L = 0.55
     CONTENT_R = 12.78
+
+    #: The governed health checks the watchlist runs, named on the page. A
+    #: reader cannot tell "nothing was flagged" from "nothing was checked"
+    #: unless the pack says which checks ran, so the same list is printed
+    #: whether or not any of them cleared its materiality threshold.
+    GOVERNED_CHECKS = (
+        "Concentration limits — current, expected and stress",
+        "Reporting-date consistency across constituent books",
+        "Portfolio-type balance movement",
+        "Composition shift by region, channel, LTV and ticket band",
+        "Weighted-average LTV movement",
+        "Reporting-dimension coverage",
+    )
     COLUMN_GAP = 0.28
 
     def _grid(self, n: int, *, gap: Optional[float] = None):
@@ -736,7 +749,7 @@ class DeckBuilder:
                      f"{closest['utilisation']:.0f}% utilisation")
             headroom = closest.get("headroom")
             if headroom is not None:
-                line += f" ({C.format_measure(headroom, closest.get('unit'))} headroom)"
+                line += f" ({C.format_headroom(headroom, closest.get('unit'))} headroom)"
         if summary.get("expected_breaches"):
             line += f". {summary['expected_breaches']} forecast to breach"
 
@@ -1233,12 +1246,18 @@ class DeckBuilder:
         window = self._movement_window(moved[0]) if moved else "Balance by dimension"
         default_strap = ("Pipeline balance by dimension" if lens == "pipeline"
                          else "Balance by dimension")
-        self._header(s, spec.get("title", "Stratifications"),
-                     ("Composition and period movement" if moved
-                      else default_strap), accent=self.theme.peri)
 
         # A 2 x 2 matrix leaves no room for a takeaway strip; two panels do.
         has_takeaways = bool(moved) and len(strats) <= 2
+        # THE STRAPLINE DESCRIBES THE PAGE, NOT THE DATA BEHIND IT. A four-panel
+        # matrix suppresses the movement strip for room, and a subtitle that
+        # still promised "period movement" would send a reader hunting the page
+        # for a view that is not on it. Movement is available either way — it is
+        # decomposed on Funded Balance Movement — so the honest strapline here
+        # is the one that names what these panels actually show.
+        self._header(s, spec.get("title", "Stratifications"),
+                     ("Composition and period movement" if has_takeaways
+                      else default_strap), accent=self.theme.peri)
         chart_h = 3.62 if has_takeaways else 4.95
         ph = True
         if len(strats) == 1:
@@ -2653,10 +2672,33 @@ class DeckBuilder:
         left_w = 7.7 if watch else 6.02
         obs_l = 8.5 if watch else 6.78
         obs_w = (self.CONTENT_R - 8.5) if watch else 6.02
+        # ... and to what there ISN'T. The reverse case was not handled: watch
+        # items beside an observations panel whose only content was the words
+        # "None recorded." left a reader looking at four inches of empty box on
+        # the page that is supposed to say what needs attention. With nothing to
+        # observe there is no second column, and the watch stack takes the page.
+        show_obs = bool(observations) or not watch
+        if watch and not show_obs:
+            left_w = self.CONTENT_R - self.CONTENT_L
         if watch:
             items = watch[:5]
-            pitch = band / len(items)
+            # The pitch is capped so a short list stays a short list. Spreading
+            # one item over the whole band drew a card at the top of four inches
+            # of nothing; the group is sized to the items and centred in the
+            # band instead. At four and five items the cap does not bind and the
+            # layout is unchanged.
+            pitch = min(band / len(items), 1.42)
             row_h = min(1.30, pitch - 0.10)
+            used = (len(items) - 1) * pitch + row_h
+            # WHAT ELSE WAS TESTED. A page headed "requiring attention" that
+            # shows one item tells a reader what was flagged and nothing about
+            # how much was checked to flag it. Where the stack leaves room, the
+            # governed checks are named underneath — the same list the all-clear
+            # branch prints, because it is the same set of checks either way.
+            # Where it does not, the stack is centred rather than left hanging
+            # at the top of the band.
+            checks_room = (band - used) >= 2.50
+            top = BAND_TOP if checks_room else BAND_TOP + max(0.0, (band - used) / 2)
             for i, item in enumerate(items):
                 t = Inches(top + i * pitch)
                 accent = colour.get(item.severity, self.theme.ink_400)
@@ -2697,18 +2739,33 @@ class DeckBuilder:
                        Inches(0.28), "CHECKS PERFORMED", size=8.5,
                        color=self.theme.peri, bold=True)
             # Naming the checks is what separates "all clear" from "nothing ran".
-            for i, line in enumerate((
-                    "Concentration limits — current, expected and stress",
-                    "Reporting-date consistency across constituent books",
-                    "Portfolio-type balance movement",
-                    "Composition shift by region, channel, LTV and ticket band",
-                    "Weighted-average LTV movement",
-                    "Reporting-dimension coverage")):
+            for i, line in enumerate(self.GOVERNED_CHECKS):
                 self._text(s, Inches(0.95), Inches(3.48 + i * 0.34),
                            Inches(left_w - 0.7), Inches(0.3), f"·  {line}",
                            size=9.5, color=self.theme.ink_400)
 
+        if watch and checks_room:
+            cy = BAND_TOP + used + 0.34
+            self._text(s, Inches(0.85), Inches(cy), Inches(left_w - 0.6),
+                       Inches(0.28), "CHECKS PERFORMED", size=8.5,
+                       color=self.theme.peri, bold=True)
+            self._text(s, Inches(0.85), Inches(cy + 0.28), Inches(left_w - 0.6),
+                       Inches(0.28),
+                       "Every governed check below ran for this period. Those "
+                       "that cleared their materiality threshold are listed "
+                       "above; the rest did not.",
+                       size=9, color=self.theme.ink_500, italic=True)
+            for i, line in enumerate(self.GOVERNED_CHECKS):
+                self._text(s, Inches(0.95), Inches(cy + 0.64 + i * 0.30),
+                           Inches(left_w - 0.7), Inches(0.28), f"·  {line}",
+                           size=9.5, color=self.theme.ink_400)
+
         # Observations column.
+        if not show_obs:
+            self._footer(s)
+            self._record(spec.get("id", "watchlist"), spec.get("title"),
+                         f"{len(watch)} watch item(s).")
+            return
         self._panel(s, Inches(obs_l), Inches(BAND_TOP), Inches(obs_w), Inches(band),
                     fill=self.theme.bg_panel, line=self.theme.line)
         self._text(s, Inches(obs_l + 0.22), Inches(1.78), Inches(obs_w - 0.4),
@@ -2885,7 +2942,7 @@ class DeckBuilder:
             values.append((C.format_measure(r["limit"], r["unit"]),
                            self.theme.ink_300))
             if not (forward and historic):
-                values.append((f"{r['headroom']:.1f}"
+                values.append((C.format_headroom(r["headroom"], r["unit"])
                                if r["headroom"] is not None else "—",
                                self.theme.ink_300))
             for i, ((value, colour), (_label, dx, cw, align)) in enumerate(
@@ -2909,7 +2966,7 @@ class DeckBuilder:
                 pass
             elif not detail:
                 status_line += (
-                    f" · {C.format_measure(abs(r['headroom']), r['unit'])} "
+                    f" · {C.format_headroom(abs(r['headroom']), r['unit'])} "
                     + ("of headroom" if r["headroom"] >= 0 else "beyond the limit"))
             if r.get("expected_breach") and r.get("breach_horizon"):
                 status_line += f" now · forecast breach {r['breach_horizon']}"
@@ -2940,7 +2997,7 @@ class DeckBuilder:
                         f"{C.format_measure(r['stress_value'], r['unit'])}"))
                 if (not bits or (forward and historic)) and r["headroom"] is not None:
                     bits.append(
-                        f"{C.format_measure(abs(r['headroom']), r['unit'])} "
+                        f"{C.format_headroom(abs(r['headroom']), r['unit'])} "
                         + ("of headroom remaining" if r["headroom"] >= 0
                            else "beyond the limit"))
                 if bits:
