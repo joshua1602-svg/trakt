@@ -157,17 +157,22 @@ slides:
   # of the same book is a deep-dive page, not a starter-pack page: it is
   # included only where the book is large enough for the second cut to change a
   # funding decision.
+  #
+  # `continues` withholds whatever the page above drew, so this one shows the
+  # NEXT most informative cuts. Without it both pages rank the same candidates
+  # by the same rule and print the same four panels under two titles.
   - id: stratification_funded_ii
     type: strat_barlists
     title: "Funded Stratifications — Secondary Dimensions"
     question: "What else characterises the book?"
     lens: funded
+    continues: stratification_funded
     keys: [rate, vintage, broker, borrower_type]
     # `constituent_books <= 1`: on a multi-book pack the composition page has
     # already spent a page enumerating what the portfolio is made of, and a
     # second aggregate cut of the same four-plus-four dimensions is then the
     # least valuable page in the deck.
-    when: "has_stratifications and funded_balance >= 100000000 and constituent_books <= 1"
+    when: "has_stratifications and informative_dimensions > 4 and funded_balance >= 100000000 and constituent_books <= 1"
 
   # Paired dimensions. On a small book the cells are too thin for the crossing
   # to be read as anything but noise, so the page is earned by size.

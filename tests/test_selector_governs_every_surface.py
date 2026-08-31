@@ -243,3 +243,92 @@ def test_the_clause_counts_the_panels_actually_drawn():
     """"Ranked below the 4 drawn here" has to be the number on the page."""
     assert "below the 2 drawn" in D.strat_ledger_note(
         [_rej("ticket", "By ticket size", P.REASON_LOWER_RANKED)], [], drawn=2)
+
+
+# --------------------------------------------------------------------------- #
+# The deep-dive page.
+# --------------------------------------------------------------------------- #
+
+def _strat(key, label, *pairs):
+    return {"key": key, "label": label, "bars": bars(*pairs)}
+
+
+def _spread(seed):
+    """Seven bands with a real spread, varied by seed so pages differ."""
+    return tuple((f"b{i}", 30 + ((i * seed) % 17)) for i in range(7))
+
+
+def test_the_deep_dive_page_draws_what_the_page_above_did_not():
+    """THE DEFECT THE INFORMATION-FIRST RULE INTRODUCED.
+
+    The two stratification pages used to differ only because they preferred
+    different orders. Once preference stopped deciding the outcome, both ranked
+    the same candidates by the same rule and printed the SAME FOUR PANELS under
+    two titles — a page of the pack spent restating the page before it.
+
+    The deep dive continues instead: it is handed the same candidates minus
+    whatever the first page drew.
+    """
+    from mi_agent_pptx.deck import DeckBuilder
+
+    builder = object.__new__(DeckBuilder)
+    builder._strat_drawn = {"stratification_funded": ("ltv", "age", "region",
+                                                      "vintage")}
+    candidates = [_strat(k, f"By {k}", *_spread(i + 2)) for i, k in enumerate(
+        ("ltv", "age", "region", "vintage", "rate", "ticket", "product"))]
+    remaining = [st for st in candidates
+                 if st["key"] not in builder._strat_drawn["stratification_funded"]]
+    assert {st["key"] for st in remaining} == {"rate", "ticket", "product"}
+
+    out = P.select_dimensions(remaining, want=4, value_key="balance",
+                              preferred=("rate", "vintage", "broker"))
+    drawn = {e["key"] for e in out["selected"]}
+    assert not (drawn & set(builder._strat_drawn["stratification_funded"]))
+
+
+def test_the_config_tells_the_deep_dive_which_page_it_continues():
+    """A continuation that is not declared is a continuation that stops
+    happening the moment the pages are reordered."""
+    import yaml
+    spec = yaml.safe_load(
+        (_ROOT / "configs" / "pptx" / "investor_pack.yaml").read_text())
+    slides = {s["id"]: s for s in spec["slides"]}
+    deep = slides["stratification_funded_ii"]
+    assert deep.get("continues") == "stratification_funded"
+    assert deep["continues"] in slides, "it continues a page that does not exist"
+
+
+def test_the_deep_dive_is_omitted_when_there_is_nothing_left_to_show():
+    """Continuing from a book with only four informative cuts leaves nothing.
+
+    An empty deep-dive page is worse than no deep-dive page, so the condition
+    counts what the book supports and the slide is omitted WITH ITS REASON.
+    """
+    import yaml
+    from mi_agent_pptx import composition as C
+
+    spec = yaml.safe_load(
+        (_ROOT / "configs" / "pptx" / "investor_pack.yaml").read_text())
+    when = {s["id"]: s.get("when", "")
+            for s in spec["slides"]}["stratification_funded_ii"]
+    assert "informative_dimensions" in when, when
+
+    facts = {"has_stratifications": True, "informative_dimensions": 4,
+             "funded_balance": 500_000_000, "constituent_books": 1}
+    assert C.evaluate_condition(when, facts) is False
+    facts["informative_dimensions"] = 7
+    assert C.evaluate_condition(when, facts) is True
+
+
+def test_the_dimension_count_uses_the_shared_informativeness_rule():
+    """Counted by the same rule the slides select with, or the page can be
+    promised content the selector then declines to draw."""
+    from mi_agent_pptx import composition as C
+
+    funded = {"stratifications": [
+        _strat("ltv", "By LTV", ("a", 30), ("b", 25), ("c", 25), ("d", 20)),
+        _strat("broker", "By broker", ("Direct", 100)),          # one category
+        _strat("region", "By region", ("L", 40), ("W", 35), ("S", 25)),
+        {"key": "status", "label": "By status", "bars": []},     # not supplied
+    ]}
+    assert C._informative_dimensions(funded) == 2

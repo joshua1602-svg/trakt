@@ -109,6 +109,21 @@ def _periods(payload: Any, minimum: int = 2) -> bool:
     return len(payload.get("periods") or ()) >= minimum
 
 
+
+def _informative_dimensions(funded: Mapping[str, Any]) -> int:
+    """How many governed dimensions this book can actually distribute on.
+
+    The shared rule in ``mi_agent_api.presentation``, applied to the same
+    stratification payload the slides read — so the condition that decides
+    whether a page exists and the selector that fills it cannot disagree.
+    """
+    from mi_agent_api import presentation as _sel
+
+    return sum(1 for st in (funded.get("stratifications") or ())
+               if isinstance(st, Mapping) and st.get("bars")
+               and _sel.is_informative(st.get("bars") or (), value_key="balance"))
+
+
 def _cohort_progression_ready(data: Any) -> bool:
     """True when the governed static pool has something to season.
 
@@ -157,6 +172,12 @@ def build_facts(data: Any) -> Dict[str, Any]:
         # -- funded ---------------------------------------------------------
         "has_funded": bool(funded.get("kpis")),
         "has_stratifications": bool(funded.get("stratifications")),
+        # HOW MANY CUTS THE BOOK ACTUALLY SUPPORTS, by the same shared rule the
+        # slides select with. A deep-dive stratification page continues from the
+        # page above it, so it has content only where more informative
+        # dimensions exist than the first page could draw. Counting them here
+        # lets the page be OMITTED with a reason rather than drawn empty.
+        "informative_dimensions": _informative_dimensions(funded),
         "has_movement": bool(ctx and any(s.has_movement for s in ctx.type_slices)),
         # Governed attribution across at least one dimension.
         "has_attribution": any(getattr(b, "available", False)
@@ -535,6 +556,8 @@ _CONDITION_WORDING: Dict[str, str] = {
                                "projection",
     "has_forecast_history": "no prior run published a forecast to test",
     "has_stratifications": "the funded tape carries no stratification dimensions",
+    "informative_dimensions": ("the book distributes on no more dimensions than "
+                               "the page above already draws"),
     "type_count > 1 or portfolio_count > 1": "one portfolio and one portfolio "
                                             "type are in scope",
     "funded_periods >= 2": "fewer than two reporting periods are available",

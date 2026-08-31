@@ -125,6 +125,9 @@ class DeckBuilder:
         #: appendix so an omission is never silent).
         self.omissions: List[Any] = []
         self.facts: Dict[str, Any] = {}
+        #: Dimensions each stratification slide drew, by slide id. A deep-dive
+        #: page reads this to continue from the page above rather than repeat it.
+        self._strat_drawn: Dict[str, Any] = {}
 
     # ------------------------------------------------------------- pptx scaffold
     def _rgb(self, hx):
@@ -1387,6 +1390,18 @@ class DeckBuilder:
         from mi_agent_api import presentation as _sel
 
         strats = [st for st in strats if st.get("bars")]
+        # A DEEP-DIVE PAGE CONTINUES; IT DOES NOT REPEAT. ``continues`` names an
+        # earlier stratification slide, and the dimensions that slide drew are
+        # withheld from this one so the second cut is the NEXT most informative
+        # set rather than the same four under a different title.
+        #
+        # This page used to be different purely because it preferred a different
+        # order. Once preference stopped deciding the outcome, both pages ranked
+        # the same candidates the same way and drew the same four panels — the
+        # deep dive has to be told what has already been spent.
+        taken = self._strat_drawn.get(spec.get("continues") or "", ())
+        if taken:
+            strats = [st for st in strats if st.get("key") not in taken]
         chosen = _sel.select_dimensions(strats, want=4, value_key="balance",
                                         preferred=tuple(spec.get("keys") or ()))
         rejected = chosen["rejected"]
@@ -1452,6 +1467,8 @@ class DeckBuilder:
             self._placeholder_body(
                 s, f"No {lens} stratifications for this run.")
         self._footer(s)
+        self._strat_drawn[str(spec.get("id") or "strat")] = tuple(
+            st.get("key") for st in strats)
         self._record(spec.get("id", "strat"), spec.get("title"),
                      window if moved else "", placeholder=ph)
 
