@@ -35,8 +35,8 @@ from mi_agent.concentration_tests.forward import (
     RISK_LIMITATION, RISK_LOW_EXPECTED_HEADROOM, RISK_STRESS_ONLY,
 )
 from mi_agent_api.insight_contract import (
-    CONVERSION_CONTEXT, DATA_QUALITY, LTV_MIX_SHIFT, SEVERITY_ATTENTION,
-    SEVERITY_CONCERN, TICKET_MIX_SHIFT, WEIGHTED_LTV,
+    CONVERSION_CONTEXT, DATA_QUALITY, LTV_MIX_SHIFT, RISK_LIMIT_TRANSITION,
+    SEVERITY_ATTENTION, SEVERITY_CONCERN, TICKET_MIX_SHIFT, WEIGHTED_LTV,
 )
 
 from . import deep_links, formatting as fmt, recommendation
@@ -75,6 +75,10 @@ _LINK_CATEGORY = {
 #: the update can be believed at all and therefore outranks everything but a
 #: live breach.
 _INSIGHT_RISKS: Dict[str, Tuple[int, str]] = {
+    # A test that CROSSED a limit this period ranks with a current breach: it is
+    # the event a monthly reader most needs, and it is already graded by the
+    # approved concentration configuration rather than by this package.
+    RISK_LIMIT_TRANSITION: (1, "current_breach"),
     DATA_QUALITY: (2, "data_quality"),
     CONVERSION_CONTEXT: (7, "conversion"),
     WEIGHTED_LTV: (8, "ltv_mix"),
@@ -168,7 +172,12 @@ def _collect(inputs: GovernedInputs) -> List[Dict[str, Any]]:
             "test_id": risk.get("testId"),
         })
 
-    for insight in inputs.insights():
+    # Weekly and monthly insights are both eligible: an approved update is
+    # pipeline, funded or both, and a risk finding is a risk finding whichever
+    # side produced it. The two lists stay separate on ``inputs`` so a funded
+    # figure can never acquire a pipeline date, and are merged only here, where
+    # the question is what to warn about rather than what a number means.
+    for insight in list(inputs.insights()) + list(inputs.funded_insights()):
         insight_type = str(insight.get("insight_type") or "")
         if insight_type not in _INSIGHT_RISKS:
             continue

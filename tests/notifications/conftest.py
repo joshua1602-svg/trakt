@@ -143,9 +143,47 @@ def funded_inputs(**overrides) -> GovernedInputs:
     inputs.concentration = {"available": True, "reportingDate": "2026-07-31",
                             "tests": [], "emergingRisks": [],
                             "states": {"available": True}}
+    inputs.funded_brief = funded_brief_for(inputs)
     for key, value in overrides.items():
         setattr(inputs, key, value)
     return inputs
+
+
+def funded_brief_for(inputs: GovernedInputs) -> dict:
+    """The monthly brief, built by the REAL generators over these inputs.
+
+    Not a hand-written payload. The funded card now takes its observations from
+    the governed monthly insight set, so a fixture that invented that set would
+    be asserting against wording no generator produces — and the last defect
+    this suite missed was exactly a fixture supplying evidence production does
+    not. Running the generators costs nothing and cannot drift from them.
+    """
+    from mi_agent_api import insight_engine as engine
+    from mi_agent_api import insight_generators_funded as fgen
+    from mi_agent_api.insight_contract import build_brief
+
+    ctx = {"tenant_id": inputs.tenant_id, "portfolio_id": inputs.portfolio_id,
+           "portfolio_context": inputs.portfolio_context, "run_id": None,
+           "as_of_date": inputs.source_dates.get("funded_as_of"),
+           "comparison_date": inputs.source_dates.get("funded_comparison")}
+
+    produced, omissions = [], []
+    for step in (
+        lambda: fgen.funded_movement(ctx, inputs.funded_movement),
+        lambda: fgen.ltv_movement(ctx, inputs.funded_movement),
+        lambda: fgen.risk_limit_transitions(ctx, inputs.concentration),
+    ):
+        ins, omit = step()
+        produced.extend(ins)
+        omissions.extend(omit)
+
+    kept, capped = engine.select_funded(produced)
+    return build_brief(
+        kept, omissions + capped, tenant_id=inputs.tenant_id,
+        portfolio_id=inputs.portfolio_id,
+        portfolio_context=inputs.portfolio_context,
+        as_of_date=ctx["as_of_date"], comparison_date=ctx["comparison_date"],
+        source_dates=dict(inputs.source_dates))
 
 
 def concentration_risk(*, expected_breach: bool = True) -> dict:

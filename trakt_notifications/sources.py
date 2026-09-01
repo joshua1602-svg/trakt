@@ -34,6 +34,7 @@ CAP_FUNNEL = "origination funnel and conversion"
 CAP_PIPELINE_EVOLUTION = "pipeline five-week comparison"
 CAP_FUNDED_MOVEMENT = "funded period movement"
 CAP_CONTRIBUTORS = "concentration contributor attribution"
+CAP_MONTHLY_BRIEF = "monthly funded brief"
 
 #: Risk domains a Risk Review MUST have evaluated before it may state a clear
 #: position. Concentration is the only one today: it is the domain that carries
@@ -72,6 +73,12 @@ class GovernedInputs:
     #: can never come from two different resolutions of the same week.
     pipeline_evolution: Optional[Dict[str, Any]] = None
     funded_movement: Optional[Dict[str, Any]] = None
+    #: The governed MONTHLY insight set, the funded analogue of ``brief``. Kept
+    #: separate rather than merged into it: a weekly pipeline insight and a
+    #: monthly funded insight describe different periods over different
+    #: populations, and one list would let a consumer read a pipeline date onto
+    #: a funded figure.
+    funded_brief: Optional[Dict[str, Any]] = None
     #: test_id -> governed contributor aggregates (never per-case drivers).
     contributors: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
@@ -95,6 +102,13 @@ class GovernedInputs:
     def omission(self, insight_type: str) -> Optional[Dict[str, Any]]:
         return next((o for o in ((self.brief or {}).get("omitted") or [])
                      if o.get("insight_type") == insight_type), None)
+
+    def funded_insights(self) -> List[Dict[str, Any]]:
+        return list((self.funded_brief or {}).get("insights") or [])
+
+    def funded_insight(self, insight_type: str) -> Optional[Dict[str, Any]]:
+        return next((i for i in self.funded_insights()
+                     if i.get("insight_type") == insight_type), None)
 
 
 def _safe(inputs: GovernedInputs, capability: str,
@@ -321,6 +335,8 @@ def _resolve_funded_side(inputs: GovernedInputs, output_root: Optional[str],
     if not output_root:
         inputs.unavailable[CAP_FUNDED_MOVEMENT] = (
             "no governed funded output root is configured for this deployment")
+        inputs.unavailable[CAP_MONTHLY_BRIEF] = (
+            "no governed funded output root is configured for this deployment")
         return
 
     movement = _safe(inputs, CAP_FUNDED_MOVEMENT,
@@ -334,6 +350,41 @@ def _resolve_funded_side(inputs: GovernedInputs, output_root: Optional[str],
     if movement and movement.get("available"):
         inputs.source_dates["funded_as_of"] = movement.get("currentReportingDate")
         inputs.source_dates["funded_comparison"] = movement.get("priorReportingDate")
+
+    # THE governed monthly insight set — the funded analogue of the weekly
+    # brief. Resolved with the concentration snapshot already in hand, so the
+    # risk-limit transitions the month reports are read from the SAME evaluation
+    # the Risk Review is graded against.
+    _resolve_monthly_brief(inputs, output_root, funded_run_id, scope)
+
+
+def _resolve_monthly_brief(inputs: GovernedInputs, output_root: Optional[str],
+                           funded_run_id: Optional[str], scope: Any) -> None:
+    """The Monthly Funded Brief, resolved once for this approved update."""
+    from mi_agent_api import insight_engine as engine
+
+    brief = _safe(inputs, CAP_MONTHLY_BRIEF, lambda: engine.build_funded(
+        output_root, inputs.portfolio_id, tenant_id=inputs.tenant_id,
+        to_run_id=funded_run_id, scope=inputs.portfolio_context,
+        concentration_snapshot=inputs.concentration))
+    inputs.funded_brief = brief
+    if not brief:
+        return
+
+    if brief.get("status") == "unavailable":
+        inputs.unavailable[CAP_MONTHLY_BRIEF] = (
+            brief.get("reason") or "the monthly funded brief was unavailable")
+    elif brief.get("status") == "partial":
+        # Same discipline as the weekly side: a partial brief is usable, but the
+        # reader is told which sections are missing before any clear-state claim.
+        for omitted in brief.get("omitted") or []:
+            if omitted.get("category") == "error":
+                inputs.unavailable[str(omitted.get("insight_type"))] = (
+                    omitted.get("reason") or "this check could not be produced")
+    inputs.source_dates.update(
+        {k: v for k, v in (brief.get("source_dates") or {}).items() if v})
+    inputs.methodology_versions["funded_insight_contract"] = \
+        brief.get("brief_version")
 
 
 #: How a required domain is shown to have been evaluated. One entry per member

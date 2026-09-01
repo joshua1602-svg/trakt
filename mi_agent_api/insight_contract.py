@@ -51,10 +51,28 @@ CONVERSION_CONTEXT = "CONVERSION_CONTEXT"
 CONCENTRATION_PROXIMITY = "CONCENTRATION_PROXIMITY"
 DATA_QUALITY = "DATA_QUALITY"
 
+# --------------------------------------------------------------------------- #
+# Funded (monthly) types.
+#
+# The weekly types above describe a pipeline: a stock of cases that has not
+# funded yet. These describe the book itself, and they are separate types rather
+# than the same ones over different data because a reader must never have to ask
+# which of the two a figure refers to. A pipeline that grew and a funded book
+# that grew are different events with different consequences.
+# --------------------------------------------------------------------------- #
+FUNDED_MOVEMENT = "FUNDED_MOVEMENT"
+FUNDED_COMPOSITION = "FUNDED_COMPOSITION"
+UNDERLYING_BOOK_MOVEMENT = "UNDERLYING_BOOK_MOVEMENT"
+FUNDED_MIX_SHIFT = "FUNDED_MIX_SHIFT"
+FUNDED_LTV_MOVEMENT = "FUNDED_LTV_MOVEMENT"
+RISK_LIMIT_TRANSITION = "RISK_LIMIT_TRANSITION"
+
 INSIGHT_TYPES = (
     PIPELINE_MOVEMENT, TICKET_SIZE, WEIGHTED_LTV, TICKET_MIX_SHIFT,
     LTV_MIX_SHIFT, COMPLETIONS_MOVEMENT, CONVERSION_CONTEXT,
     CONCENTRATION_PROXIMITY, DATA_QUALITY,
+    FUNDED_MOVEMENT, FUNDED_COMPOSITION, UNDERLYING_BOOK_MOVEMENT,
+    FUNDED_MIX_SHIFT, FUNDED_LTV_MOVEMENT, RISK_LIMIT_TRANSITION,
 )
 
 # --------------------------------------------------------------------------- #
@@ -71,13 +89,25 @@ SEVERITY_RANK = {SEVERITY_CONCERN: 3, SEVERITY_ATTENTION: 2, SEVERITY_INFO: 1}
 #: above everything because one is a contractual exposure and the other governs
 #: whether the rest of the brief can be believed.
 TYPE_PRIORITY = {
+    # A limit CROSSING outranks proximity to one: proximity is a level a reader
+    # may already know, a transition is an event that happened this period.
+    RISK_LIMIT_TRANSITION: 110,
     CONCENTRATION_PROXIMITY: 100,
     DATA_QUALITY: 90,
+    # Composition above the headline it decomposes. On a month with an
+    # acquisition the headline movement is the least informative true statement
+    # available, and a brief that led with it would be leading with the number a
+    # reader is most likely to misread.
+    FUNDED_COMPOSITION: 85,
+    FUNDED_MOVEMENT: 80,
+    UNDERLYING_BOOK_MOVEMENT: 78,
     PIPELINE_MOVEMENT: 70,
     COMPLETIONS_MOVEMENT: 65,
     CONVERSION_CONTEXT: 60,
+    FUNDED_LTV_MOVEMENT: 45,
     TICKET_SIZE: 40,
     WEIGHTED_LTV: 38,
+    FUNDED_MIX_SHIFT: 32,
     TICKET_MIX_SHIFT: 30,
     LTV_MIX_SHIFT: 28,
 }

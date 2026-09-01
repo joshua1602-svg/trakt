@@ -65,8 +65,8 @@ def rank_key(insight: Insight) -> Tuple[int, int, str, str]:
     )
 
 
-def select(insights: List[Insight], *, limits: Optional[Dict[str, Any]] = None
-           ) -> Tuple[List[Insight], List[Omission]]:
+def _select_with(insights: List[Insight], lim: Dict[str, Any]
+                 ) -> Tuple[List[Insight], List[Omission]]:
     """Order, cap per type, cut to the brief limit.
 
     Anything dropped by a cap becomes an explicit omission — a brief that
@@ -74,7 +74,6 @@ def select(insights: List[Insight], *, limits: Optional[Dict[str, Any]] = None
     be. ``priority`` is stamped here rather than by the generators, so ordering
     can be tuned without changing what an insight claims about itself.
     """
-    lim = limits or cfg.brief_limits()
     max_total = int(lim.get("max_insights", 8))
     per_type = lim.get("max_per_type") or {}
 
@@ -102,6 +101,24 @@ def select(insights: List[Insight], *, limits: Optional[Dict[str, Any]] = None
         for t, n in sorted(dropped.items())
     ]
     return kept, omissions
+
+
+def select(insights: List[Insight], *, limits: Optional[Dict[str, Any]] = None
+           ) -> Tuple[List[Insight], List[Omission]]:
+    """Weekly selection. Unchanged: the weekly brief's caps, by default."""
+    return _select_with(insights, limits or cfg.brief_limits())
+
+
+def select_funded(insights: List[Insight], *,
+                  limits: Optional[Dict[str, Any]] = None
+                  ) -> Tuple[List[Insight], List[Omission]]:
+    """Monthly selection. Same ordering rule, the monthly brief's caps.
+
+    One selector, two limit sets — rather than two selectors — because the
+    ORDER is the thing that must not diverge: severity, then type priority, then
+    a deterministic tiebreak. Only how many survive it differs.
+    """
+    return _select_with(insights, limits or cfg.funded_brief_limits())
 
 
 # --------------------------------------------------------------------------- #
@@ -272,4 +289,260 @@ def build(root: str, client_id: str, *, tenant_id: str,
             "forecast_observation_window_end":
                 ((data.get("concentration") or {}).get("forecast") or {})
                 .get("observationWindowEnd"),
+        })
+
+
+# --------------------------------------------------------------------------- #
+# The monthly funded brief
+#
+# A deliberate sibling of ``build`` rather than a mode of it. The two resolve
+# different sources over different periods (weekly extracts against monthly
+# runs), and folding them into one function with a flag is how a funded figure
+# eventually acquires a pipeline date. What they DO share is the contract, the
+# ordering rule, the omission discipline and the failure isolation — all reached
+# through the same helpers below.
+# --------------------------------------------------------------------------- #
+#: Governed funded dimensions the mix generator asks about, with the label a
+#: reader sees. Every one is a prepared column ``funded_prep`` already
+#: materialises (``CORE_FUNDED_DIMENSIONS``) — nothing here derives a dimension.
+FUNDED_MIX_DIMENSIONS: List[Tuple[str, str]] = [
+    ("product", "Product"),
+    ("geographic_region_obligor", "Region"),
+    ("ltv_bucket", "LTV band"),
+    ("age_bucket", "Borrower age band"),
+    ("borrower_type", "Borrower structure"),
+    ("vintage_year", "Origination vintage"),
+    ("source_portfolio_id", "Source portfolio"),
+]
+
+#: Candidate columns per logical dimension, first present wins. Mirrors the
+#: ``group`` kind in ``funded_prep._DIM_SPEC``: a tape may carry region as any of
+#: three columns and product under either of two, and a mix answer must not
+#: depend on which one arrived.
+_MIX_COLUMNS: Dict[str, Tuple[str, ...]] = {
+    "product": ("erm_product_type", "product_type", "product"),
+    "geographic_region_obligor": ("geographic_region_obligor",
+                                  "geographic_region_collateral",
+                                  "collateral_geography"),
+}
+
+
+def _mix_shifts(current, prior, *, source_dates: Dict[str, Any]
+                ) -> List[Dict[str, Any]]:
+    """Share-of-balance movement per governed dimension, largest band each.
+
+    Grouping is ``evolution._group_balance`` — the same function the funded
+    bridge groups with, including its ``Unknown / Missing`` handling — so a mix
+    share and a bridge contribution can never be computed two ways.
+
+    Only the single largest band move per dimension is returned. A list of every
+    band that twitched is noise: the generator's job is to say what changed, and
+    on a seven-band LTV split six of the moves are the mechanical complement of
+    the seventh.
+    """
+    from . import evolution as evolution_mod
+
+    out: List[Dict[str, Any]] = []
+    if current is None or prior is None:
+        return out
+
+    for dimension, label in FUNDED_MIX_DIMENSIONS:
+        candidates = _MIX_COLUMNS.get(dimension, (dimension,))
+        col = next((c for c in candidates
+                    if c in getattr(current, "columns", ())
+                    and c in getattr(prior, "columns", ())), None)
+        if col is None:
+            continue
+
+        cur_groups = evolution_mod._group_balance(current, col)
+        pri_groups = evolution_mod._group_balance(prior, col)
+        cur_total, pri_total = sum(cur_groups.values()), sum(pri_groups.values())
+        if not cur_total or not pri_total:
+            continue
+
+        best: Optional[Dict[str, Any]] = None
+        # Sorted, and the comparison is strict, so a tie resolves to the first
+        # category by name rather than to whatever order a set happened to
+        # iterate in. On a two-band dimension the two moves are exact
+        # complements and equally true, so which one is reported must at least
+        # be the SAME one on every run — the selector below is deterministic and
+        # would be undermined by a non-deterministic input. Same tie rule as
+        # ``movement_detail.rank_contributors``: magnitude, then name ascending.
+        for category in sorted(set(cur_groups) | set(pri_groups), key=str):
+            cur_bal = cur_groups.get(category, 0.0)
+            pri_bal = pri_groups.get(category, 0.0)
+            change_pp = (cur_bal / cur_total - pri_bal / pri_total) * 100.0
+            if best is None or abs(change_pp) > abs(best["share_change_pp"]):
+                best = {
+                    "dimension": dimension, "dimension_label": label,
+                    "column": col, "category": str(category),
+                    "current_balance": round(cur_bal, 2),
+                    "prior_balance": round(pri_bal, 2),
+                    "current_share_pct": round(cur_bal / cur_total * 100.0, 2),
+                    "prior_share_pct": round(pri_bal / pri_total * 100.0, 2),
+                    "share_change_pp": round(change_pp, 2),
+                    "source_dates": dict(source_dates),
+                }
+        if best is not None:
+            out.append(best)
+    return out
+
+
+@_perf.stage_fn("funded_brief_resolve")
+def resolve_funded_inputs(output_root, client_id: str, *,
+                          to_run_id: Optional[str] = None,
+                          lens_filters: Optional[Dict[str, Any]] = None,
+                          concentration: Optional[Dict[str, Any]] = None,
+                          scope: Optional[Any] = None) -> Dict[str, Any]:
+    """Gather every governed input the funded generators need, once.
+
+    The two period frames are resolved ONCE, through
+    ``evolution.funded_frames``, and shared by the decomposition, the underlying
+    lens and the mix shifts. ``period_movement`` and the concentration snapshot
+    come from their existing services untouched.
+    """
+    from . import evolution as evolution_mod
+    from . import funded_composition as comp
+    from . import movement_summary as movement_mod
+
+    out: Dict[str, Any] = {"concentration": concentration}
+
+    out["movement"] = _safe("funded period movement", lambda: movement_mod.period_movement(
+        output_root, client_id, to_run_id=to_run_id, lens_filters=lens_filters))
+
+    frames = _safe("funded frames", lambda: evolution_mod.funded_frames(
+        output_root, client_id, to_run_id, scope=scope), default=[]) or []
+    scoped = []
+    for f in frames:
+        d = evolution_mod._scope_frame_lens(f.get("df"), lens_filters)
+        if d is not None and len(d):
+            scoped.append({**f, "df": d})
+
+    if len(scoped) < 2:
+        out["decomposition"] = {
+            "available": False,
+            "reason": ("at least two governed funded reporting periods are "
+                       "needed to decompose a movement")}
+        out["frames"] = (None, None)
+        return out
+
+    cur, pri = scoped[-1], scoped[-2]
+    out["frames"] = (cur["df"], pri["df"])
+    out["as_of_date"] = cur.get("reporting_date")
+    out["comparison_date"] = pri.get("reporting_date")
+    out["run_id"] = cur.get("run_id")
+    source_dates = {"funded_as_of": out["as_of_date"],
+                    "funded_comparison": out["comparison_date"]}
+
+    decomposition = _safe("funded composition",
+                          lambda: comp.decompose(cur["df"], pri["df"]))
+    if decomposition:
+        decomposition.update({
+            "currentReportingDate": out["as_of_date"],
+            "priorReportingDate": out["comparison_date"],
+        })
+    out["decomposition"] = decomposition or {
+        "available": False, "reason": "the funded movement could not be decomposed"}
+
+    # The underlying book, resolved ONLY when something was added — the lens is
+    # the existing one, over the continuing portfolio ids.
+    out["underlying"] = None
+    underlying_filters = comp.underlying_lens_filters(out["decomposition"] or {})
+    if underlying_filters:
+        underlying = _safe("underlying book", lambda: comp.decompose(
+            evolution_mod._scope_frame_lens(cur["df"], underlying_filters),
+            evolution_mod._scope_frame_lens(pri["df"], underlying_filters)))
+        if underlying:
+            underlying.update({
+                "currentReportingDate": out["as_of_date"],
+                "priorReportingDate": out["comparison_date"],
+            })
+        out["underlying"] = underlying
+
+    out["mix_shifts"] = _safe("funded mix", lambda: _mix_shifts(
+        cur["df"], pri["df"], source_dates=source_dates), default=[])
+    return out
+
+
+@_perf.stage_fn("funded_brief_build")
+def build_funded(output_root, client_id: str, *, tenant_id: str,
+                 to_run_id: Optional[str] = None,
+                 lens_filters: Optional[Dict[str, Any]] = None,
+                 scope: Optional[str] = None,
+                 concentration_snapshot: Optional[Dict[str, Any]] = None,
+                 resolved: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """The Monthly Funded Brief for one portfolio scope and one reporting period.
+
+    ``resolved`` lets a caller that has already gathered the inputs pass them in
+    rather than have them resolved twice — the same courtesy ``build`` extends
+    through ``concentration_snapshot``.
+    """
+    from . import insight_generators_funded as fgen
+
+    conf = cfg.load()
+    ctx_scope = scope or "total"
+    data = resolved or resolve_funded_inputs(
+        output_root, client_id, to_run_id=to_run_id, lens_filters=lens_filters,
+        concentration=concentration_snapshot)
+
+    ctx = {
+        "tenant_id": tenant_id, "portfolio_id": client_id,
+        "portfolio_context": ctx_scope, "run_id": data.get("run_id"),
+        "as_of_date": data.get("as_of_date"),
+        "comparison_date": data.get("comparison_date"),
+    }
+
+    movement = data.get("movement")
+    if not (movement or {}).get("available") and \
+            not (data.get("decomposition") or {}).get("available"):
+        return build_brief(
+            [], [], tenant_id=tenant_id, portfolio_id=client_id,
+            portfolio_context=ctx_scope, as_of_date=data.get("as_of_date"),
+            comparison_date=data.get("comparison_date"),
+            config_source=conf.get("source"), status="unavailable",
+            reason=((movement or {}).get("reason")
+                    or "No comparable governed funded reporting period is available."))
+
+    steps: List[Tuple[str, Callable[[], Any]]] = [
+        ("FUNDED_MOVEMENT", lambda: fgen.funded_movement(ctx, movement)),
+        ("FUNDED_COMPOSITION",
+         lambda: fgen.funded_composition(ctx, data.get("decomposition"))),
+        ("UNDERLYING_BOOK_MOVEMENT",
+         lambda: fgen.underlying_book(ctx, data.get("decomposition"),
+                                      data.get("underlying"))),
+        ("FUNDED_MIX_SHIFT", lambda: fgen.mix_shift(ctx, data.get("mix_shifts"))),
+        ("FUNDED_LTV_MOVEMENT", lambda: fgen.ltv_movement(ctx, movement)),
+        ("RISK_LIMIT_TRANSITION",
+         lambda: fgen.risk_limit_transitions(ctx, data.get("concentration"))),
+    ]
+
+    produced: List[Insight] = []
+    omissions: List[Omission] = []
+    failures = 0
+    for label, step in steps:
+        try:
+            ins, omit = step()
+            produced.extend(ins)
+            omissions.extend(omit)
+        except Exception as exc:  # noqa: BLE001 - one section must not cost the rest
+            failures += 1
+            logger.warning("funded brief: %s generator failed: %s", label, exc)
+            omissions.append(Omission(
+                label, "This insight could not be produced for this period.",
+                OMITTED_ERROR))
+
+    kept, capped = select_funded(produced, limits=conf.get("funded_brief"))
+    omissions.extend(capped)
+
+    return build_brief(
+        kept, omissions, tenant_id=tenant_id, portfolio_id=client_id,
+        portfolio_context=ctx_scope, as_of_date=data.get("as_of_date"),
+        comparison_date=data.get("comparison_date"), run_id=data.get("run_id"),
+        config_source=conf.get("source"),
+        status="partial" if failures else "success",
+        reason=(f"{failures} insight type(s) could not be produced."
+                if failures else None),
+        source_dates={
+            "funded_as_of": data.get("as_of_date"),
+            "funded_comparison": data.get("comparison_date"),
         })

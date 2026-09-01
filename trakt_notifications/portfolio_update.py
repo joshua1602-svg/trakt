@@ -30,7 +30,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from mi_agent_api.insight_contract import (
-    COMPLETIONS_MOVEMENT, CONVERSION_CONTEXT, PIPELINE_MOVEMENT,
+    COMPLETIONS_MOVEMENT, CONVERSION_CONTEXT, FUNDED_MOVEMENT,
+    PIPELINE_MOVEMENT,
 )
 
 from . import deep_links, formatting as fmt
@@ -39,7 +40,8 @@ from .contract import (
     UPDATE_COMBINED, UPDATE_FUNDED, UPDATE_PIPELINE,
 )
 from .sources import (
-    CAP_FUNDED_MOVEMENT, CAP_PIPELINE_EVOLUTION, GovernedInputs,
+    CAP_FUNDED_MOVEMENT, CAP_MONTHLY_BRIEF, CAP_PIPELINE_EVOLUTION,
+    GovernedInputs,
 )
 
 #: Metric keys on the governed ``fiveWeekAverage`` block.
@@ -369,7 +371,18 @@ def _funded_lead(inputs: GovernedInputs, update_type: str,
 
 def _funded_items(inputs: GovernedInputs, insight_ids: List[str]
                   ) -> "tuple[List[MessageItem], List[MessageItem]]":
-    """``(observations, disclosures)`` — disclosures survive the item cap."""
+    """``(observations, disclosures)`` — disclosures survive the item cap.
+
+    Observations are taken from the governed MONTHLY insight set, in the order
+    the engine ranked them, so what a card leads with is what the materiality
+    layer judged most material. Before the funded generators existed this
+    printed every figure it could reach unconditionally, and a £4k month and a
+    £24m month produced identical bullets.
+
+    The headline levels still come straight from ``period_movement``: they are
+    the position, not an observation about it, and the lead sentence states them
+    whether or not the month was material.
+    """
     movement = inputs.funded_movement or {}
     if not movement.get("available"):
         reason = inputs.unavailable.get(CAP_FUNDED_MOVEMENT) or movement.get("reason")
@@ -381,6 +394,7 @@ def _funded_items(inputs: GovernedInputs, insight_ids: List[str]
     current = movement.get("current") or {}
     delta = movement.get("delta") or {}
     items: List[MessageItem] = []
+    disclosures: List[MessageItem] = []
 
     loans = current.get("loan_count")
     loans_delta = delta.get("loan_count")
@@ -391,8 +405,65 @@ def _funded_items(inputs: GovernedInputs, insight_ids: List[str]
         text += "."
         items.append(MessageItem(text=text, metric="loan_count", raw=loans))
 
-    # Direct / acquired contribution — the governed cohort decomposition,
-    # which reconciles to the consolidated movement.
+    # The governed monthly insights, already ranked and already gated. Their own
+    # summaries are used verbatim: the generator owns the metric's units and its
+    # wording, and re-phrasing here is how two channels start disagreeing.
+    for insight in inputs.funded_insights():
+        if insight.get("insight_type") == FUNDED_MOVEMENT:
+            # Stated by the lead sentence already.
+            continue
+        summary = insight.get("summary")
+        if not summary:
+            continue
+        insight_ids.append(str(insight.get("insight_id")))
+        items.append(MessageItem(
+            text=summary,
+            metric=str(insight.get("insight_type")).lower(),
+            raw=(insight.get("metrics") or {}).get("movement"),
+            insight_id=str(insight.get("insight_id"))))
+
+    # The attribution lines the card carried before the monthly generators
+    # existed, kept as the fallback for when the gated set gave the card nothing
+    # to say — a deployment that has not enabled the generators, or a month in
+    # which every observation fell below its threshold. FUNDED_COMPOSITION and
+    # the region FUNDED_MIX_SHIFT are the gated versions of exactly these two
+    # facts, so they would be duplication where those ran; where they did not,
+    # these are still the best attribution available and dropping them would be
+    # a capability loss rather than a materiality gate.
+    #
+    # The test is whether an OBSERVATION survived, not whether the insight list
+    # is empty: a month can produce a headline-movement insight and nothing
+    # else, and the headline is already the lead sentence.
+    gated_observations = bool(items[1:] if loans is not None else items)
+    if not gated_observations:
+        items.extend(_ungated_attribution(movement))
+
+    if inputs.missing(CAP_MONTHLY_BRIEF):
+        disclosures.append(MessageItem(
+            text=("The monthly portfolio review was unavailable for this "
+                  f"update: {inputs.unavailable[CAP_MONTHLY_BRIEF]}."),
+            metric="monthly_brief", unavailable=True))
+    elif inputs.funded_brief and not gated_observations:
+        # A month where everything was below threshold is a real answer, and a
+        # card that simply omitted the section would look like one that failed.
+        disclosures.append(MessageItem(
+            text="No material developments were identified in the funded book "
+                 "this period.",
+            metric="funded_immaterial"))
+    return items, disclosures
+
+
+def _ungated_attribution(movement: Dict[str, Any]) -> List[MessageItem]:
+    """Cohort and regional attribution straight from the governed movement.
+
+    Ungated by design — this is the pre-materiality behaviour, reached only when
+    the monthly insight set produced nothing to say. Both figures come from
+    ``period_movement`` unchanged; neither is computed here.
+    """
+    items: List[MessageItem] = []
+    current = movement.get("current") or {}
+    delta = movement.get("delta") or {}
+
     cohorts = [c for c in (movement.get("cohortMovements") or [])
                if c.get("delta")]
     if cohorts:
@@ -416,7 +487,7 @@ def _funded_items(inputs: GovernedInputs, insight_ids: List[str]
             text=(f"Largest regional contribution: {primary['region']} at "
                   f"{fmt.signed_money(primary.get('delta'))}."),
             metric="region_contribution", raw=primary.get("delta")))
-    return items, []
+    return items
 
 
 # --------------------------------------------------------------------------- #

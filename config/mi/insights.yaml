@@ -92,6 +92,64 @@ insights:
     # object instead of silence, so the absence of a warning is a statement.
     emit_when_clean: false
 
+  # =======================================================================
+  # FUNDED (monthly)
+  # =======================================================================
+  # The monthly review had no materiality layer at all: the funded card stated
+  # its figures unconditionally, so a £4k month and a £24m month produced the
+  # same bullets. These are the gates that make a quiet month readable AS a
+  # quiet month.
+  #
+  # Deliberately LOWER than the weekly gates. A funded book is a stock reported
+  # monthly and moves less than a pipeline does in a week; reusing the weekly
+  # numbers here would suppress months that are worth reading.
+
+  # ---- Headline funded movement ------------------------------------------
+  # One gate, not the pipeline's two. The pipeline's second gate measures the
+  # change against the STOCK because the change is a flow into it; for a book
+  # measured against its own opening balance the two gates are one number.
+  funded_movement:
+    min_change_pct: 1.0
+
+  # ---- Composition -------------------------------------------------------
+  # `min_component_share_of_gross_pct` decides which components are worth
+  # NAMING; the full decomposition is always carried and always reconciles, so
+  # this suppresses a sentence, never a number.
+  #
+  # `dominant_addition_share_pct` is the share of the MOVEMENT an added
+  # portfolio must account for before the review leads with it. Share of the
+  # movement rather than of the book, because the question is whether the
+  # period is explained by the addition — not whether the addition is large.
+  funded_composition:
+    min_component_share_of_gross_pct: 5.0
+    dominant_addition_share_pct: 50.0
+
+  # ---- Portfolio mix -----------------------------------------------------
+  # One gate for every governed dimension — product, geography, LTV band,
+  # borrower age band, borrower structure, vintage, source portfolio. They are
+  # the same question asked of different columns and a threshold each would be
+  # six numbers nobody could keep consistent.
+  funded_mix:
+    min_share_change_pp: 3.0
+
+  # ---- Weighted-average LTV ----------------------------------------------
+  # Tighter than the weekly pipeline gate (1.0pp): a funded book's WA LTV moves
+  # with amortisation and valuation rather than with which cases arrived, so a
+  # half-point month-on-month move is already a real change in the book.
+  funded_ltv:
+    min_change_pp: 0.5
+
+  # ---- Risk-limit transitions --------------------------------------------
+  # NOT a threshold, and deliberately the only key here. The statuses, the
+  # limits and the transitions between them belong to the operator-approved
+  # concentration configuration; a threshold in this file would be a second
+  # risk framework quietly disagreeing with the first. All this decides is
+  # whether an IMPROVEMENT earns a card — and it does, because a review that
+  # only ever delivers bad news teaches its reader that silence means nothing
+  # happened.
+  risk_limit_transition:
+    report_improvements: true
+
 # ---- Brief-level limits ---------------------------------------------------
 brief:
   max_insights: 8
@@ -105,3 +163,18 @@ brief:
     PIPELINE_MOVEMENT: 1
     COMPLETIONS_MOVEMENT: 1
     CONVERSION_CONTEXT: 1
+
+# ---- Monthly brief limits -------------------------------------------------
+# Richer than the weekly brief because the month is. More risk transitions
+# above all: a month can cross several limits, and reporting three of four
+# would be the omission a reader most needs not to have.
+funded_brief:
+  max_insights: 12
+  max_per_type:
+    RISK_LIMIT_TRANSITION: 4
+    CONCENTRATION_PROXIMITY: 2
+    FUNDED_COMPOSITION: 1
+    FUNDED_MOVEMENT: 1
+    UNDERLYING_BOOK_MOVEMENT: 1
+    FUNDED_LTV_MOVEMENT: 1
+    FUNDED_MIX_SHIFT: 3

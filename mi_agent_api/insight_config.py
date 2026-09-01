@@ -69,6 +69,22 @@ DEFAULTS: Dict[str, Any] = {
         "max_duplicate_id_share_pct": 1.0,
         "emit_when_clean": False,
     },
+
+    # ---- Funded (monthly) --------------------------------------------------
+    # Lower than the weekly gates by design. A funded book is a stock reported
+    # monthly, so it moves less than a pipeline does in a week, and a threshold
+    # tuned for weekly flow would suppress a month worth reading.
+    "funded_movement": {"min_change_pct": 1.0},
+    "funded_composition": {
+        "min_component_share_of_gross_pct": 5.0,
+        "dominant_addition_share_pct": 50.0,
+    },
+    "funded_mix": {"min_share_change_pp": 3.0},
+    "funded_ltv": {"min_change_pp": 0.5},
+    # Not a threshold: the statuses and transitions are the approved
+    # concentration configuration's. This decides only whether an IMPROVEMENT is
+    # worth a card, and defaults to yes.
+    "risk_limit_transition": {"report_improvements": True},
 }
 
 BRIEF_DEFAULTS: Dict[str, Any] = {
@@ -83,6 +99,23 @@ BRIEF_DEFAULTS: Dict[str, Any] = {
         "PIPELINE_MOVEMENT": 1,
         "COMPLETIONS_MOVEMENT": 1,
         "CONVERSION_CONTEXT": 1,
+    },
+}
+
+#: The monthly review is richer than the weekly one and its limits say so. More
+#: total, more risk transitions (a month can cross several limits and reporting
+#: three of four would be the omission a reader most needs not to have), and
+#: several mix shifts because the dimensions are independent questions.
+FUNDED_BRIEF_DEFAULTS: Dict[str, Any] = {
+    "max_insights": 12,
+    "max_per_type": {
+        "RISK_LIMIT_TRANSITION": 4,
+        "CONCENTRATION_PROXIMITY": 2,
+        "FUNDED_COMPOSITION": 1,
+        "FUNDED_MOVEMENT": 1,
+        "UNDERLYING_BOOK_MOVEMENT": 1,
+        "FUNDED_LTV_MOVEMENT": 1,
+        "FUNDED_MIX_SHIFT": 3,
     },
 }
 
@@ -131,6 +164,8 @@ def load(path: Optional[Path | str] = None, *, refresh: bool = False
     cfg = {
         "insights": _merge(DEFAULTS, (raw or {}).get("insights")),
         "brief": _merge(BRIEF_DEFAULTS, (raw or {}).get("brief")),
+        "funded_brief": _merge(FUNDED_BRIEF_DEFAULTS,
+                               (raw or {}).get("funded_brief")),
         "source": str(resolved) if resolved.exists() else "defaults",
         "version": (raw or {}).get("version", 1),
     }
@@ -145,6 +180,10 @@ def thresholds(section: str, path: Optional[Path | str] = None) -> Dict[str, Any
 
 def brief_limits(path: Optional[Path | str] = None) -> Dict[str, Any]:
     return load(path).get("brief", {}) or {}
+
+
+def funded_brief_limits(path: Optional[Path | str] = None) -> Dict[str, Any]:
+    return load(path).get("funded_brief", {}) or {}
 
 
 def reset_cache() -> None:
