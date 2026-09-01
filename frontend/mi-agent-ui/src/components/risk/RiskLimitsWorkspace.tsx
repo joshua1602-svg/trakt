@@ -216,6 +216,21 @@ function EmergingRisks({
   );
 }
 
+/**
+ * The concentration table's column tracks, shared by the header row and every
+ * body row.
+ *
+ * The last track is PINNED rather than `auto`. Each row is its own grid, so an
+ * `auto` risk column sized itself to that row's own chip — a row carrying
+ * "EXPECTED BREACH" left ~80px less for its six other columns than a row
+ * carrying "OK", and every row (and the header) resolved its columns to a
+ * different x. The figures were right-aligned inside cells that were not in
+ * the same place, so nothing lined up down the table. 10.5rem clears the
+ * widest label in RISK_CHIP with room to spare.
+ */
+const CONCENTRATION_GRID =
+  "grid-cols-[1.7fr_repeat(4,minmax(76px,1fr))_minmax(64px,0.8fr)_10.5rem]";
+
 export function RiskLimitsWorkspace({
   client,
   portfolioId,
@@ -537,7 +552,7 @@ export function RiskLimitsWorkspace({
       {/* Three-state comparison table */}
       <Card className="p-3" testId="concentration-table">
         <div
-          className="grid grid-cols-[1.7fr_repeat(4,minmax(76px,1fr))_minmax(64px,0.8fr)_auto] items-end gap-2 border-b border-[var(--color-line-soft)] px-1 pb-2 text-[10px] uppercase tracking-wider text-ink-500"
+          className={`grid ${CONCENTRATION_GRID} items-end gap-2 border-b border-[var(--color-line-soft)] px-1 pb-2 text-[10px] uppercase tracking-wider text-ink-500`}
           role="row"
         >
           <span>Test</span>
@@ -582,7 +597,7 @@ export function RiskLimitsWorkspace({
                 t.expectedBreach ? ", breach expected" : ""
               }${t.fullPipelineBreach && !t.expectedBreach && t.status !== "breach"
                 ? ", stress-only breach" : ""}`}
-              className={`grid w-full grid-cols-[1.7fr_repeat(4,minmax(76px,1fr))_minmax(64px,0.8fr)_auto] items-center gap-2 border-b border-[var(--color-line-soft)] px-1 py-2 text-left text-[12px] last:border-0 hover:bg-navy-800/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-peri-400 ${
+              className={`grid w-full ${CONCENTRATION_GRID} items-center gap-2 border-b border-[var(--color-line-soft)] px-1 py-2 text-left text-[12px] last:border-0 hover:bg-navy-800/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-peri-400 ${
                 selectedId === t.testId ? "bg-navy-800/60" : ""
               }`}
             >
