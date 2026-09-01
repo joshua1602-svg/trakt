@@ -75,9 +75,22 @@ MEASURE = "current_outstanding_balance"
 STAGE = "pipeline_stage"
 
 #: (payload key, frame column) for each contributor dimension.
+#:
+#: ``product_type`` is a governed pipeline dimension (config/mi/pipeline_field_
+#: contract.yaml) that the preparation layer already materialises, and product is
+#: the first thing a reader asks about a pipeline that grew — "which product
+#: drove it" is a different question from "which broker" and the two answers
+#: routinely disagree. It was absent here only because the first two dimensions
+#: were the ones the concentration tests needed.
+#:
+#: Everything below consumes this tuple by iteration, so a dimension is added by
+#: naming it: the case-level projection, the ranking, the reassignment counts and
+#: the empty-payload shape all follow. Consumers read contributors by key, so a
+#: third key is additive for them too.
 DIMENSIONS: Tuple[Tuple[str, str], ...] = (
     ("brokers", "broker_channel"),
     ("regions", "geographic_region_obligor"),
+    ("products", "product_type"),
 )
 
 #: Label for a blank / missing dimension value. Never dropped, never merged.

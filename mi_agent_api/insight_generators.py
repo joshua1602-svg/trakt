@@ -69,8 +69,19 @@ def direction(v: Optional[float]) -> str:
 
 
 def _names(rows: Optional[List[Dict[str, Any]]], n: int = 2) -> str:
-    """The leading contributor names, for a summary sentence."""
-    items = [str(r.get("name")) for r in (rows or [])[:n] if r.get("name")]
+    """The leading contributor names, for a summary sentence.
+
+    The ``Unknown`` bucket is skipped. It is a real analytical fact — the
+    movement of cases whose value for this dimension is blank, and it is
+    deliberately never dropped from the attribution — but it is not the name of
+    a driver, and "growth was led by Unknown" reads as an answer when it is the
+    absence of one. It stays in ``contributors`` for anyone reconciling; it just
+    never gets NAMED.
+    """
+    from .movement_detail import UNKNOWN
+
+    items = [str(r.get("name")) for r in (rows or [])
+             if r.get("name") and str(r.get("name")) != UNKNOWN][:n]
     if not items:
         return ""
     if len(items) == 1:
@@ -122,12 +133,20 @@ def pipeline_movement(ctx: Dict[str, Any], detail: Optional[Dict[str, Any]]) -> 
 
     brokers = (detail.get("contributors") or {}).get("brokers") or []
     regions = (detail.get("contributors") or {}).get("regions") or []
+    products = (detail.get("contributors") or {}).get("products") or []
     counts = detail.get("counts") or {}
     lead = _names(brokers)
     summary = (f"Pipeline {direction(change)} by {money(abs(change or 0))} to "
                f"{money(value)}.")
     if lead:
         summary += f" Largest contributors: {lead}."
+    # Product is stated separately from the broker lead rather than folded into
+    # it. "Broker A and Lump Sum" reads as two contributors to one movement when
+    # they are two decompositions OF that movement, each summing to the whole —
+    # so a reader would double-count them.
+    product_lead = _names(products, n=1)
+    if product_lead:
+        summary += f" Largest product movement: {product_lead}."
     if counts.get("change"):
         summary += (f" Case count {direction(counts['change'])} by "
                     f"{abs(counts['change'])}.")
@@ -148,10 +167,12 @@ def pipeline_movement(ctx: Dict[str, Any], detail: Optional[Dict[str, Any]]) -> 
             "change_share_of_pipeline_pct": (round(share_pct, 2)
                                              if share_pct is not None else None),
         },
-        contributors={"brokers": brokers[:3], "regions": regions[:3]},
+        contributors={"brokers": brokers[:3], "regions": regions[:3],
+                      "products": products[:3]},
         components=detail.get("components") or {},
         methodology={**(detail.get("methodology") or {}),
-                     "reconciliation": "contributors sum to the headline change"},
+                     "reconciliation": ("contributors sum to the headline change "
+                                        "within each dimension independently")},
         source_dates=detail.get("source_dates") or {},
         deep_link="/mi/pipeline",
         **_base(ctx),
@@ -336,6 +357,7 @@ def completions_movement(ctx: Dict[str, Any],
 
     brokers = (detail.get("contributors") or {}).get("brokers") or []
     regions = (detail.get("contributors") or {}).get("regions") or []
+    products = (detail.get("contributors") or {}).get("products") or []
     counts = detail.get("counts") or {}
     lead = _names(brokers)
     summary = (f"Completed-stage value {direction(change)} by "
@@ -356,7 +378,8 @@ def completions_movement(ctx: Dict[str, Any],
             "current_completed_case_count": counts.get("current"),
             "case_count_change": counts.get("change"),
         },
-        contributors={"brokers": brokers[:3], "regions": regions[:3]},
+        contributors={"brokers": brokers[:3], "regions": regions[:3],
+                      "products": products[:3]},
         components=detail.get("components") or {},
         methodology=detail.get("methodology") or {},
         source_dates=detail.get("source_dates") or {},

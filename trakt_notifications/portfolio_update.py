@@ -299,14 +299,19 @@ def _movement_item(inputs: GovernedInputs,
     contributors = insight.get("contributors") or {}
     brokers = contributors.get("brokers") or []
     regions = contributors.get("regions") or []
+    products = contributors.get("products") or []
     metrics = insight.get("metrics") or {}
     change = metrics.get("change")
 
     lead_broker = (brokers[0].get("name") if brokers else None)
     lead_region = (regions[0].get("name") if regions else None)
+    lead_product = (products[0].get("name") if products else None)
 
     direction_word = "Growth" if (change or 0) >= 0 else "The reduction"
-    named = [n for n in (lead_broker, lead_region) if n]
+    # Product first: it is the decomposition a reader acts on, and the one the
+    # weekly review is expected to lead with. Each named contributor is the
+    # largest mover in its OWN dimension, not an additive share of the total.
+    named = [n for n in (lead_product, lead_broker, lead_region) if n]
     if named:
         text = (f"{direction_word} of {fmt.money(abs(change or 0))} was led by "
                 f"{' and '.join(named)}.")
