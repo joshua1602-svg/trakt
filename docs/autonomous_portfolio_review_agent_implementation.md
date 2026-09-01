@@ -317,11 +317,33 @@ authority, the prefix only a fallback.
 
 ## H. Regression
 
-**Targeted, before and after.** The same suites were run on `origin/main` and on
-HEAD: `tests/notifications/`, `tests/operations_control/`,
+**Targeted, before and after.** The same suites were run on `origin/main` (in a
+worktree) and on HEAD: `tests/notifications/`, `tests/operations_control/`,
 `tests/concentration_tests/`, `mi_agent_api/tests/`, `mi_agent/tests/`, the
 agent-tool and A2A suites, the readiness suites, and the movement/receipt
-suites. Results are recorded in §H.1.
+suites.
+
+| | Baseline (`origin/main`) | HEAD |
+|---|---|---|
+| passed | 4,214 | **4,285** (+71) |
+| failed | 22 | **21** |
+| skipped / xfailed | 316 / 7 | 316 / 7 |
+| duration | 11:00 | 10:59 |
+
+**New failures introduced: none.** The failure lists were diffed test by test;
+`comm -13` over the two sorted lists is empty. All 21 HEAD failures are present
+on clean `main` — they live in `test_mi_predicate_extraction`,
+`test_mi_trust_hardening`, `test_p0_execution_receipt`,
+`test_p1c_ranked_movement`, `test_parser_cost_hardening`,
+`test_chat_routing_e2e`, `test_currency_authority`,
+`test_pipeline_stage_transition`, `test_single_parse_and_substitution` and
+`test_conversion2_period_movement`, none of which this work touches.
+
+The 22nd baseline failure —
+`test_registry_governance::test_checked_in_registry_matches_generator` — is **not
+a fix**. It asserts an absolute path against the checked-in registry, so it fails
+from any worktree and passes only when run from `/home/user/trakt`. Verified by
+running it standalone on both: it fails on HEAD too.
 
 **Not completed:** the entire repository suite. It is simulation-heavy and did
 not finish in the time available; two full runs reached ~10% after fifteen
