@@ -1,0 +1,68 @@
+# =========================================================================
+# MI Query Agent — stage-movement NEAR-NEIGHBOUR protection bank. FROZEN.
+# =========================================================================
+#
+# Thirteen questions that sit next to pipeline stage movement in ordinary
+# business language and are NOT it. Each already has a governed owner; the
+# stage-movement capability must leave every one of them exactly where it is.
+#
+# The assertion is ROUTE PRESERVATION, not plausibility. `route` and `ok` are
+# captured at the starting SHA and compared after; an answer that still looks
+# reasonable but arrived from a different owner is a hijack and fails.
+#
+# Recorded per question:
+#   why      the business reason this is not a stage transition
+version: 1
+cases:
+- id: NN01
+  why: pipeline stock by stage — a position, not a movement
+  formulations:
+  - {id: NN01A, q: "Show pipeline amount by stage."}
+- id: NN02
+  why: single-stage stock — one stage named, no movement
+  formulations:
+  - {id: NN02A, q: "How much pipeline is currently in Offer?"}
+- id: NN03
+  why: the stage axis, no stage and no movement
+  formulations:
+  - {id: NN03A, q: "What is pipeline by stage?"}
+- id: NN04
+  why: pipeline evolution route — a time series, not a transition
+  formulations:
+  - {id: NN04A, q: "Show pipeline evolution."}
+- id: NN05
+  why: funded-book period change — no pipeline stage in the sentence
+  formulations:
+  - {id: NN05A, q: "How has pipeline balance changed this month?"}
+- id: NN06
+  why: cohort conversion owns "conversion"
+  formulations:
+  - {id: NN06A, q: "What is the conversion rate?"}
+- id: NN07
+  why: cohort conversion owns "conversion", including its change
+  formulations:
+  - {id: NN07A, q: "How has conversion changed?"}
+- id: NN08
+  why: funded balance movement — the funded bridge, not the pipeline
+  formulations:
+  - {id: NN08A, q: "What is funded balance movement?"}
+- id: NN09
+  why: funded balance attribution — the bridge route
+  formulations:
+  - {id: NN09A, q: "Why did funded balance increase?"}
+- id: NN10
+  why: a dimensional movement breakdown, no pipeline stage
+  formulations:
+  - {id: NN10A, q: "Show movement by region."}
+- id: NN11
+  why: forecast route
+  formulations:
+  - {id: NN11A, q: "What is forecast funded balance?"}
+- id: NN12
+  why: pipeline case counts by week — evolution, not transition
+  formulations:
+  - {id: NN12A, q: "Show weekly pipeline cases."}
+- id: NN13
+  why: two stages named, but the question asks for CONVERSION between them
+  formulations:
+  - {id: NN13A, q: "What is the KFI to Offer conversion rate?"}

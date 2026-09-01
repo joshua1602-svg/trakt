@@ -10,6 +10,8 @@ import { ForecastView } from "@/components/ForecastView";
 import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPanel";
 import { CohortsPanel } from "@/components/CohortsPanel";
 import { EvolutionPanel } from "@/components/EvolutionPanel";
+import { StageTransitionPanel } from "@/components/pipeline/StageTransitionPanel";
+import { enhancedHoversEnabled } from "@/lib/featureFlags";
 import { RiskLimitsWorkspace } from "@/components/risk/RiskLimitsWorkspace";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
@@ -65,13 +67,13 @@ const VIEW_CAPABILITY: Record<string, string> = {
 
 const VIEW_SUBTITLES: Record<string, string> = {
   funded: "Funded book — the funded-loan book as of the selected reporting date: stratifications, geographic exposure, time-series evolution and static-pool cohorts.",
-  pipeline: "Pipeline — the open origination pipeline: current stratifications, and its evolution (stock levels over time and the weekly origination funnel flow).",
+  pipeline: "Pipeline — the open origination pipeline: current stratifications, its evolution (stock levels over time and the weekly origination funnel flow), and the case-level stage movement between the two latest governed extracts.",
   forecast: "Forecast — forward projection from the latest run (funded + weighted pipeline + run-rate scale-up), and how the forecast has moved across runs.",
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
 };
 
 type FundedTab = "strat" | "geo" | "evo" | "cohorts";
-type PipelineTab = "strat" | "evo";
+type PipelineTab = "strat" | "evo" | "movement";
 type ForecastTab = "projection" | "evolution";
 
 const WORKSPACE_VIEWS: WorkspaceView[] = ["funded", "pipeline", "forecast", "risk_limits"];
@@ -96,7 +98,7 @@ function readNavParams(): {
     return {
       view: pick("view", WORKSPACE_VIEWS),
       funded: pick("ftab", ["strat", "geo", "evo", "cohorts"] as const),
-      pipeline: pick("ptab", ["strat", "evo"] as const),
+      pipeline: pick("ptab", ["strat", "evo", "movement"] as const),
       forecast: pick("xtab", ["projection", "evolution"] as const),
       scope: p.get("scope"),
     };
@@ -112,6 +114,8 @@ export function AppShell() {
   // A production build that silently fell back to the mock (VITE_AGENT_API_URL
   // unset) must be unmistakable — never let canned demo data pass for live MI.
   const agentMisconfigured = useMemo(() => resolveAgentClientConfig().misconfigured, []);
+  // Build-time flag, read once — the same switch the movement hovers use.
+  const enhancedHovers = useMemo(() => enhancedHoversEnabled(), []);
   const ws = useWorkspace(client);
 
   // The `"<client_id>/<run_id>"` id used by the evolution / risk / extrapolation
@@ -338,14 +342,14 @@ export function AppShell() {
               artifact workspace below. Collapsible to focus the chart area. */}
           <section
             data-testid="core-dashboard"
-            className="mx-6 mt-5 rounded-2xl border border-[var(--surface-dashboard-line)] bg-[var(--surface-dashboard)] shadow-sm"
+            className="mx-6 mt-[var(--gap-region)] rounded-2xl border border-[var(--surface-dashboard-line)] bg-[var(--surface-dashboard)] shadow-sm"
           >
             <header className="flex items-center justify-between gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-peri-300">
                   <LayoutDashboard size={18} />
                 </div>
-                <h2 className="text-base font-semibold text-ink-100">Core Dashboard</h2>
+                <h2 className="t-title">Core Dashboard</h2>
               </div>
               <button
                 type="button"
@@ -353,7 +357,7 @@ export function AppShell() {
                 aria-label={dashCollapsed ? "Expand core dashboard" : "Collapse core dashboard"}
                 aria-expanded={!dashCollapsed}
                 data-testid="core-dashboard-toggle"
-                className="inline-flex items-center rounded-md px-1.5 py-1 text-ink-400 hover:text-ink-100"
+                className="inline-flex items-center rounded-md px-1.5 py-1 text-ink-400 transition-colors hover:text-ink-100"
               >
                 <ChevronDown size={15} className={dashCollapsed ? "-rotate-90 transition-transform" : "transition-transform"} />
               </button>
@@ -361,7 +365,10 @@ export function AppShell() {
             {/* Dashboard navigation: the lens tabs span the full panel width.
                 The portfolio-scope selector lives in the permanent header. */}
             {!dashCollapsed && (
-              <div className="flex flex-wrap items-center gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
+              // The tier-1 rail carries its own baseline rule, so the wrapper
+              // no longer draws a second one directly beneath it. The tabs run
+              // to the panel edge — a section rail, not a tray sitting in a row.
+              <div className="flex flex-wrap items-center px-2">
                 <ViewToggle
                   active={ws.activeView}
                   onChange={ws.setActiveView}
@@ -373,16 +380,16 @@ export function AppShell() {
               </div>
             )}
             {!dashCollapsed && (
-              <p className="px-4 pt-3 text-[11px] text-ink-500" data-testid="view-subtitle">
+              <p className="t-micro px-5 pt-[var(--gap-group)]" data-testid="view-subtitle">
                 {VIEW_SUBTITLES[ws.activeView]}
               </p>
             )}
             {dashCollapsed ? (
-              <p className="px-4 py-3 text-[11px] text-ink-500">
+              <p className="t-micro px-5 py-4">
                 Core Dashboard collapsed — expand to show the {ws.activeView} view.
               </p>
             ) : (
-              <div className="space-y-4 p-4">
+              <div className="stack-section p-5 pt-[var(--gap-group)]">
                 {/* Discovery failure (API unreachable / unauthorised) renders as
                     a visible error — never a bare "No client" header. */}
                 {ws.portfolios.length === 0 && ws.portfoliosError && (
@@ -401,7 +408,7 @@ export function AppShell() {
                     Risk Limits lives ONCE, as the top-level tab (no duplicate
                     sub-tab entry pointing at the same workspace). */}
                 {ws.activeView === "funded" && (
-                  <div className="space-y-4">
+                  <div className="stack-section">
                     <SubTabs ariaLabel="Funded sub-view" testId="funded-subtabs"
                       active={fundedTab} onChange={setFundedTab}
                       tabs={[
@@ -449,12 +456,13 @@ export function AppShell() {
                     does not, the banner above carries the business explanation and
                     no empty analysis is drawn. */}
                 {ws.activeView === "pipeline" && ws.capabilityEnabled("pipeline") && (
-                  <div className="space-y-4">
+                  <div className="stack-section">
                     <SubTabs ariaLabel="Pipeline sub-view" testId="pipeline-subtabs"
                       active={pipelineTab} onChange={setPipelineTab}
                       tabs={[
                         { id: "strat", label: "Stratifications" },
                         { id: "evo", label: "Evolution" },
+                        { id: "movement", label: "Stage Movement" },
                       ]} />
                     <KeepMounted active={pipelineTab === "strat"} testId="pipeline-strat-pane">
                       {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
@@ -475,12 +483,24 @@ export function AppShell() {
                         tabs={["pipeline", "origination"]} client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
                     </KeepMounted>
+                    {/* Stage Movement — the GROSS question ("what happened to
+                        cases?"), which Evolution's stock series cannot answer.
+                        Its own sub-tab rather than a fifth card under Evolution:
+                        it is a different question, not another trend line. The
+                        component and its governed payload are unchanged. */}
+                    <KeepMounted active={pipelineTab === "movement"} testId="pipeline-movement-pane">
+                      <StageTransitionPanel
+                        key={`stx-${ws.dataVersion}-${ws.selectedContextId}`}
+                        client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId}
+                        enabled={enhancedHovers} />
+                    </KeepMounted>
                   </div>
                 )}
 
                 {/* FORECAST — projection · forecast evolution */}
                 {ws.activeView === "forecast" && ws.capabilityEnabled("consolidated_forecast") && (
-                  <div className="space-y-4">
+                  <div className="stack-section">
                     <SubTabs ariaLabel="Forecast sub-view" testId="forecast-subtabs"
                       active={forecastTab} onChange={setForecastTab}
                       tabs={[
@@ -520,7 +540,7 @@ export function AppShell() {
               clearly divided from the core dashboard above. */}
           <div
             data-testid="artifact-region"
-            className="mx-6 mb-6 mt-4 rounded-2xl border border-[var(--surface-artifact-line)] border-l-2 border-l-[var(--surface-artifact-accent)] bg-[var(--surface-artifact)] shadow-sm"
+            className="mx-6 mb-6 mt-[var(--gap-region)] rounded-2xl border border-[var(--surface-artifact-line)] border-l-2 border-l-[var(--surface-artifact-accent)] bg-[var(--surface-artifact)] shadow-sm"
             style={{ backgroundImage: "linear-gradient(var(--surface-artifact-tint), var(--surface-artifact-tint))" }}
           >
             <ArtifactCanvas

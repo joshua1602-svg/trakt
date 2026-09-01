@@ -48,11 +48,11 @@ export function PipelineSnapshotPanel({
 
   if (loading && !snapshot) {
     return (
-      <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">
+      <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/50 p-6">
         <div className="h-4 w-48 animate-pulse rounded bg-navy-700/60" />
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-[var(--gap-section)] grid grid-cols-2 gap-[var(--gap-group)] lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded-lg bg-navy-800/50" />
+            <div key={i} className="h-[104px] animate-pulse rounded-lg bg-navy-800/60" />
           ))}
         </div>
       </section>
@@ -63,11 +63,11 @@ export function PipelineSnapshotPanel({
 
   if (!snapshot.ok) {
     return (
-      <section className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-5 text-[13px] text-amber-300/90">
-        <div className="flex items-center gap-2 font-medium">
+      <section className="rounded-xl border border-amber-400/25 border-l-2 border-l-amber-400 bg-amber-400/5 p-5 text-[var(--fs-body)] text-amber-300/90">
+        <div className="flex items-center gap-2 font-semibold">
           <AlertTriangle size={15} /> Pipeline Snapshot unavailable
         </div>
-        <p className="mt-1 text-amber-300/70">{snapshot.error ?? "No pipeline data for this reporting date."}</p>
+        <p className="mt-[var(--gap-hair)] text-amber-300/70">{snapshot.error ?? "No pipeline data for this reporting date."}</p>
       </section>
     );
   }
@@ -130,17 +130,17 @@ export function PipelineSnapshotPanel({
   );
 
   return (
-    <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">
+    <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/50 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700/70 text-peri-300">
             <GitBranch size={17} />
           </div>
           <div className="leading-tight">
-            <h2 className="text-sm font-semibold text-ink-100">Pipeline Snapshot</h2>
-            <p className="text-[11px] text-ink-400">
+            <h2 className="t-title">Pipeline Snapshot</h2>
+            <p className="t-micro mt-1">
               Origination pipeline (pre-funded) · weekly operational view · as of{" "}
-              <span className="font-medium text-ink-300">
+              <span className="t-num font-semibold text-ink-200">
                 {snapshot.pipelineAsOfDate ?? snapshot.runId}
               </span>
               {snapshot.pipelineSourceFolderDate &&
@@ -153,9 +153,9 @@ export function PipelineSnapshotPanel({
         <Badge tone={dq.tone}>Data quality · {dq.label}</Badge>
       </div>
 
-      <TimingDisclosureBanner timing={snapshot.pipelineTiming} className="mt-3" />
+      <TimingDisclosureBanner timing={snapshot.pipelineTiming} className="mt-[var(--gap-group)]" />
 
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="mt-[var(--gap-section)] grid grid-cols-2 gap-[var(--gap-group)] lg:grid-cols-3 xl:grid-cols-4">
         <StatTile label="Pipeline cases" value={cases.toLocaleString("en-GB")}
           delta={casesDelta.delta} deltaIntent={casesDelta.deltaIntent} />
         <StatTile label="Total pipeline amount" value={formatGBP(amount)}
@@ -182,7 +182,7 @@ export function PipelineSnapshotPanel({
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-[var(--gap-section)] grid grid-cols-1 gap-[var(--gap-group)] lg:grid-cols-2">
         <Panel title="Pipeline amount by stage">
           <BarList data={stageByAmount} format="gbp" />
         </Panel>
@@ -207,20 +207,20 @@ export function PipelineSnapshotPanel({
       </div>
 
       {snapshot.dataQuality.length > 0 && (
-        <div className="mt-3">
+        <div className="mt-[var(--gap-section)]">
           <button
             type="button"
             onClick={() => setShowDiagnostics((s) => !s)}
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-500 hover:text-ink-300"
+            className="t-label inline-flex items-center gap-1.5 text-ink-500 transition-colors hover:text-ink-200"
           >
             <ChevronDown size={13} className={cn("transition-transform", !showDiagnostics && "-rotate-90")} />
             Technical details ({snapshot.dataQuality.length})
           </button>
           {showDiagnostics && (
-            <ul className="mt-1.5 list-disc space-y-0.5 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/60 px-5 py-2 text-[11px] text-ink-400">
+            <ul className="t-micro mt-[var(--gap-tight)] list-disc space-y-1 rounded-lg bg-navy-950/60 px-5 py-3">
               {snapshot.dataQuality.map((d, i) => (
                 <li key={i}>
-                  <span className="uppercase text-ink-500">[{d.severity}]</span> {d.detail}
+                  <span className="font-semibold uppercase tracking-[var(--tracking-caps)] text-ink-400">[{d.severity}]</span> {d.detail}
                 </li>
               ))}
             </ul>
@@ -233,8 +233,12 @@ export function PipelineSnapshotPanel({
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 p-3.5">
-      <div className="mb-2.5 text-[11px] font-medium uppercase tracking-wider text-ink-400">{title}</div>
+    // Structure from a ruled caption and space, not from another nested box:
+    // the panel already sits inside a framed section.
+    <div className="rounded-lg bg-navy-950/40 p-4">
+      <div className="t-label mb-[var(--gap-tight)] border-b border-[var(--color-line-soft)] pb-2">
+        {title}
+      </div>
       {children}
     </div>
   );
