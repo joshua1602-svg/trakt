@@ -1,0 +1,231 @@
+# =========================================================================
+# MI Query Agent — MULTIVARIATE PIPELINE audit bank. FROZEN before execution.
+# =========================================================================
+#
+# Ten core business questions x 3-4 realistic formulations. Each core question
+# tests a DISTINCT analytical construction, not a lexical permutation.
+#
+# WHAT "MULTIVARIATE" MEANS HERE: combining governed concepts WITHIN the
+# pipeline dataset — stage + dimension/filter + measure, optionally with time or
+# grouping. This is NOT stage movement: no question asks how cases moved from
+# one stage to another. The distinction the bank preserves throughout is
+#
+#     CURRENT POSITION   vs   HISTORICAL COMPARISON   vs   STAGE-TO-STAGE MOVEMENT
+#
+# and only the first two appear here.
+#
+# THE ORACLE IS ARITHMETIC ON THE GOVERNED PREPARED FRAME, computed by
+# `scripts/prove_multivariate_pipeline_fixture.py` from
+# `tests/fixtures/pipeline_multivariate` — 40 cases at 2026-06-26, four extracts
+# across a month boundary. Every `expected` below is that script's output.
+#
+# THE FIXTURE IS DISCRIMINATING BY CONSTRUCTION, which is what lets this bank
+# detect a SILENTLY DROPPED FILTER rather than reward it:
+#
+#     Offer total balance          4,960,000     Offer joint only   2,960,000
+#     Application total balance    4,345,000     London only        1,910,000
+#     Offer WA LTV                    58.383%    unweighted mean       53.100%
+#
+# `must` / `must_not` are graded on the ANSWER TEXT. `must_not` carries the
+# figure the answer would show if the second concept had been dropped — so a
+# plausible whole-stage or unweighted answer fails rather than passes.
+#
+# `expect: DELIVER` means the governed data supports the question. Where the
+# right outcome is genuinely a refusal or a clarification, `expect` says so and
+# the audit grades the refusal as the correct outcome — see Q9.
+version: 1
+fixture: tests/fixtures/pipeline_multivariate
+as_of: "2026-06-26"
+cases:
+
+# ---- Q1 stage + borrower type + balance --------------------------------- #
+- id: MV01
+  business_question: How much of the pipeline in Offer stage is joint borrowers?
+  construction: stage filter + categorical filter + balance
+  expect: DELIVER
+  expected: "GBP 2,960,000 across 6 cases"
+  ambiguity: >-
+    "How much of" is ambiguous between an ABSOLUTE BALANCE and a SHARE. The
+    canonical is recorded as ambiguous; the three variants below each name the
+    balance explicitly, so they are unambiguous. MV02 asks the share.
+  must: ["3.0MM", "6 loans"]
+  must_all: true
+  must_not: ["5.0MM", "10 loans"]
+  formulations:
+  - {id: MV01A, q: "How much of the pipeline in Offer stage is joint borrowers?"}
+  - {id: MV01B, q: "What is the Offer-stage balance for joint borrowers?"}
+  - {id: MV01C, q: "How much joint-borrower pipeline is currently at Offer?"}
+  - {id: MV01D, q: "What balance in Offer relates to joint borrowers?"}
+
+# ---- Q2 stage + borrower type + share ----------------------------------- #
+- id: MV02
+  business_question: What percentage of Offer-stage pipeline is joint borrowers?
+  construction: stage filter + categorical filter + share of stage total
+  expect: DELIVER
+  expected: "59.68% — 2,960,000 of 4,960,000"
+  denominator: TOTAL OFFER PIPELINE, not total pipeline and not a top-N subset
+  must: ["59.7"]
+  must_all: true
+  must_not: ["19.2", "100%", "18.8"]
+  formulations:
+  - {id: MV02A, q: "What percentage of Offer-stage pipeline is joint borrowers?"}
+  - {id: MV02B, q: "What share of Offer pipeline is joint borrowers?"}
+  - {id: MV02C, q: "Of the pipeline currently at Offer, how much is joint borrower exposure as a percentage?"}
+  - {id: MV02D, q: "What proportion of Offer-stage balance relates to joint borrowers?"}
+
+# ---- Q3 stage + region + balance ---------------------------------------- #
+- id: MV03
+  business_question: How much Application-stage pipeline is in London?
+  construction: stage filter + region filter + balance
+  expect: DELIVER
+  expected: "GBP 1,910,000 across 4 cases"
+  must: ["1.9MM", "4 loans"]
+  must_all: true
+  must_not: ["4.3MM", "12 loans"]
+  formulations:
+  - {id: MV03A, q: "How much Application-stage pipeline is in London?"}
+  - {id: MV03B, q: "What is the Application pipeline balance for London?"}
+  - {id: MV03C, q: "How much pipeline at Application is in London?"}
+  - {id: MV03D, q: "Show Application-stage exposure in London."}
+
+# ---- Q4 stage + region grouping ----------------------------------------- #
+- id: MV04
+  business_question: Show Offer-stage pipeline by region.
+  construction: stage filter + one-dimensional grouping + balance
+  expect: DELIVER
+  expected: >-
+    six regions: London 1,930,000 · North West 960,000 · South East 940,000 ·
+    Scotland 450,000 · Midlands 360,000 · Wales 320,000
+  min_rows: 5
+  must: []
+  must_receipt: ["grouped by", "Region", "Pipeline Stage = OFFER"]
+  must_not: []
+  formulations:
+  - {id: MV04A, q: "Show Offer-stage pipeline by region."}
+  - {id: MV04B, q: "Break down Offer pipeline by region."}
+  - {id: MV04C, q: "What is the regional split of pipeline currently at Offer?"}
+  - {id: MV04D, q: "Show Offer-stage balance across regions."}
+
+# ---- Q5 stage + LTV threshold ------------------------------------------- #
+- id: MV05
+  business_question: How much Offer-stage pipeline has LTV above 60%?
+  construction: stage filter + numeric threshold + balance
+  expect: DELIVER
+  expected: "GBP 2,790,000 across 4 cases"
+  note: >-
+    The governed pipeline LTV is a RATIO (0.31-0.78), so a correct answer has to
+    compare 60% against 0.60. A threshold applied against 60 selects nothing.
+  must: ["2.8MM", "4 loans"]
+  must_all: true
+  must_not: ["5.0MM", "10 loans"]
+  formulations:
+  - {id: MV05A, q: "How much Offer-stage pipeline has LTV above 60%?"}
+  - {id: MV05B, q: "What balance at Offer has an LTV greater than 60%?"}
+  - {id: MV05C, q: "How much pipeline currently at Offer is above 60% LTV?"}
+  - {id: MV05D, q: "Show Offer-stage exposure with LTV over 60%."}
+
+# ---- Q6 stage + LTV grouping -------------------------------------------- #
+- id: MV06
+  business_question: Show Application-stage pipeline by LTV band.
+  construction: stage filter + governed bucket grouping + balance
+  expect: DELIVER
+  expected: "bands over 4,345,000: <=50% 1,590,000 · 50-60% 620,000 · 60-70% 2,135,000"
+  min_rows: 2
+  must: []
+  must_receipt: ["grouped by", "LTV Bucket", "Pipeline Stage = APPLICATION"]
+  must_not: []
+  formulations:
+  - {id: MV06A, q: "Show Application-stage pipeline by LTV band."}
+  - {id: MV06B, q: "Break down Application pipeline by LTV bucket."}
+  - {id: MV06C, q: "What is the LTV distribution of pipeline currently at Application?"}
+  - {id: MV06D, q: "Show Application-stage balance across LTV bands."}
+
+# ---- Q7 stage + weighted metric ----------------------------------------- #
+- id: MV07
+  business_question: What is WA LTV for Offer-stage pipeline?
+  construction: stage filter + balance-weighted average
+  expect: DELIVER
+  expected: "58.383% (balance-weighted). The UNWEIGHTED mean is 53.1% and is WRONG."
+  must: ["58.4"]
+  must_all: true
+  must_not: ["53.1"]
+  formulations:
+  - {id: MV07A, q: "What is WA LTV for Offer-stage pipeline?"}
+  - {id: MV07B, q: "What is the weighted average LTV of pipeline at Offer?"}
+  - {id: MV07C, q: "Give me Offer-stage WA LTV."}
+  - {id: MV07D, q: "What is average LTV, weighted by balance, for Offer cases?"}
+
+# ---- Q8 stage + dimension + weighted metric ------------------------------ #
+- id: MV08
+  business_question: What is WA LTV for joint borrowers in Application?
+  construction: stage filter + categorical filter + balance-weighted average
+  expect: DELIVER
+  expected: >-
+    53.671% (balance-weighted, joint only). Dropping the borrower filter gives
+    55.915%; using an unweighted mean gives 49.714%. Both are WRONG.
+  must: ["53.7", "7 loans"]
+  must_all: true
+  must_not: ["55.9", "49.7", "12 loans"]
+  formulations:
+  - {id: MV08A, q: "What is WA LTV for joint borrowers in Application?"}
+  - {id: MV08B, q: "What is the weighted average LTV of joint-borrower Application cases?"}
+  - {id: MV08C, q: "Give me Application-stage WA LTV for joint borrowers."}
+  - {id: MV08D, q: "For joint borrowers at Application, what is WA current LTV?"}
+
+# ---- Q9 stage + historical comparison ------------------------------------ #
+- id: MV09
+  business_question: >-
+    How much pipeline is in Application stage and how does that compare with the
+    previous month?
+  construction: stage stock + historical comparison (NOT stage-to-stage movement)
+  expect: DELIVER_OR_CLARIFY
+  expected: >-
+    Latest 4,345,000 at 2026-06-26. The only governed extract in the prior month
+    is 2026-05-29 at 3,075,000, a rise of 1,270,000. If current Query semantics
+    carry no governed definition of "previous month" for weekly pipeline
+    extracts, an honest refusal or clarification is the CORRECT outcome; a
+    silently substituted prior WEEK (2026-06-12) is WRONG.
+  substituted_period_is_wrong: "prior week 2026-06-12"
+  must: ["4.3MM"]
+  must_all: true
+  must_receipt: ["Pipeline Stage = APPLICATION"]
+  must_not: []
+  formulations:
+  - {id: MV09A, q: "How much pipeline is in Application stage and how does that compare with the previous month?"}
+  - {id: MV09B, q: "What is Application pipeline now versus a month ago?"}
+  - {id: MV09C, q: "Compare current Application-stage balance with the previous month."}
+  - {id: MV09D, q: "How has Application-stage pipeline changed over the last month?"}
+
+# ---- Q10 two-dimensional grouping ---------------------------------------- #
+- id: MV10
+  business_question: Show pipeline by stage and borrower type.
+  construction: two-dimensional grouping (stage x borrower type) + balance
+  expect: DELIVER
+  expected: >-
+    ten cells: OFFER joint 2,960,000 / single 2,000,000 · APPLICATION joint
+    2,450,000 / single 1,895,000 · KFI joint 1,345,000 / single 1,650,000 ·
+    COMPLETED joint 1,360,000 / single 750,000 · WITHDRAWN joint 190,000 /
+    single 800,000
+  min_rows: 6
+  must: []
+  must_receipt: ["grouped by", "Pipeline Stage", "Borrower Type"]
+  must_not: []
+  formulations:
+  - {id: MV10A, q: "Show pipeline by stage and borrower type."}
+  - {id: MV10B, q: "Break down pipeline balance by stage and single versus joint borrower."}
+  - {id: MV10C, q: "Show pipeline across stage and borrower type."}
+  - {id: MV10D, q: "What does pipeline look like by stage and joint/single status?"}
+
+# ---- Q11 optional: stage + ticket band ----------------------------------- #
+- id: MV11
+  business_question: How much Offer-stage pipeline is on cases over 500k?
+  construction: stage filter + measure threshold on the measure itself + balance
+  expect: DELIVER
+  expected: "GBP 2,790,000 across 4 cases"
+  must: ["2.8MM", "4 loans"]
+  must_all: true
+  must_not: ["5.0MM", "10 loans"]
+  formulations:
+  - {id: MV11A, q: "How much Offer-stage pipeline is on cases over 500k?"}
+  - {id: MV11B, q: "What is the Offer-stage balance for loans above 500,000?"}
+  - {id: MV11C, q: "Show Offer pipeline where the loan amount exceeds 500k."}
