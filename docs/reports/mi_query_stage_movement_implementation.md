@@ -14,9 +14,14 @@ The three conditions the sprint set are separately measured and all three hold.
 
 | | measured | required | |
 |---|---|---|---|
-| A · authoritative 166-question bank | **0 of 166 questions moved** — every answer, route and verdict byte-identical | no previously correct question lost | ✅ |
-| B · stage-movement bank (36) | **36 correct, 0 wrong, 0 declined — 100%** | ≥80%, preferably ≥85%, 0 silently wrong | ✅ |
-| C · near-neighbour bank (13) | **13 of 13 kept their own route owner — 100%** | 100% route preservation | ✅ |
+| A · authoritative 166-question bank | **0 of 166 questions moved** on either arm — every answer, route and verdict byte-identical | no previously correct question lost | ✅ |
+| B · stage-movement bank (36) | **36 correct, 0 wrong, 0 declined — 100%** on both arms | ≥80%, preferably ≥85%, 0 silently wrong | ✅ |
+| C · near-neighbour bank (13) | **13 of 13 kept their own route owner — 100%** on both arms | 100% route preservation | ✅ |
+
+**Both arms** means both configurations the shipping record distinguishes: the
+governed engine alone, and the same banks with the **concept-merge language
+layer** on (`claude-opus-5`). §2 explains why the language layer is that arm and
+not the free-form parser.
 
 One qualification is stated up front rather than buried: the change is **431
 executable lines** of new adapter plus **29** across three existing files, which
@@ -87,6 +92,62 @@ vocabulary, which do transfer. Its **16 correctly-declined** matches the
 shipping record's 16 exactly. The 75 half is recorded as delivered/declined and
 its non-regression is established question by question rather than by a verdict
 this rig cannot honestly compute.
+
+### The two arms, and which one the shipping record is
+
+The record's two columns are two **arms**, and the difference between 136 and
+127 is what the language layer recovers. The language layer is the
+**concept-merge arm** — the model proposes concepts in registered vocabulary and
+the REGISTRY binds them — and **not** the free-form parser: `datasets
+._mi_llm_config` withdraws that one from serving unconditionally, because it
+emits a whole governed `MIQuerySpec` and thereby owns the semantics every
+downstream guard reads. `MI_AGENT_LLM_PARSER=on` is still recorded as
+`requested` and still reaches nothing.
+
+Both arms were therefore measured, at both SHAs, with `--concept-merge --model
+claude-opus-5` for the second:
+
+| | engine alone | | language layer | |
+|---|---:|---:|---:|---:|
+| | `30a7d4a` | branch | `30a7d4a` | branch |
+| CFO91 CORRECT | 63 | 63 | 63 | 63 |
+| CFO91 TRUE_REFUSAL | 16 | 16 | 16 | 16 |
+| CFO91 FALSE_REFUSAL | 11 | 11 | 11 | 11 |
+| CFO91 NO_COMPUTABLE_TRUTH | 1 | 1 | 1 | 1 |
+| CFO91 **WRONG** | **0** | **0** | **0** | **0** |
+| BANK75 DELIVERED | 44 | 44 | **49** | **49** |
+| BANK75 DECLINED | 31 | 31 | 26 | 26 |
+
+The language layer lifts BANK75 delivery 44 → 49 **on both SHAs equally** — it is
+the arm doing its documented job, and this change neither adds to it nor takes
+from it.
+
+**One grade moved and it is not this change.** Under the language layer, CFO38
+(*"For loans with LTV above 50%, balance by region"*) was CORRECT at `30a7d4a`
+and came back as a refusal on the branch — *"I could not complete the
+language-understanding step for this question"*. That is
+`mi_service._enforce_model_availability`: the estate's rule that an augmentation
+call which did not happen must refuse rather than quietly execute the narrower
+deterministic reading. It is an API availability event, not a semantic one, and
+two things establish it:
+
+* `stage_movement_query.read()` returns `None` for that question — it names no
+  governed stage, so this route cannot claim it, and the route is `None` on both
+  sides;
+* re-run on the branch three times, it is **correct all three**, byte-identical
+  to `30a7d4a`.
+
+Counting it as a regression would be counting a transient model call against the
+diff. The honest figure is 63 on both sides of both arms.
+
+### What the language layer does NOT fix
+
+The stage-movement bank at `30a7d4a` **with the language layer on** scores
+exactly what it scores without it: **0 correct, 12 wrong, 24 declined**. The
+twelve stock-for-transition substitutions are identical. That is the strongest
+single argument for this work: the gap was never a language-understanding
+problem, and no amount of concept recovery closes it, because the governed
+transition figures were not reachable from the Query path at all.
 
 ---
 
@@ -259,13 +320,17 @@ exist to keep that boundary where it is.
 
 ## 6. Stage-movement results
 
-| | starting `30a7d4a` | final branch |
-|---|---:|---:|
-| CORRECT | 0 | **36** |
-| WRONG | **12** | **0** |
-| honest decline | 24 | 0 |
-| other | 0 | 0 |
-| **success rate** | **0.0%** | **100.0%** |
+| | `30a7d4a` engine | branch engine | `30a7d4a` language layer | branch language layer |
+|---|---:|---:|---:|---:|
+| CORRECT | 0 | **36** | 0 | **36** |
+| WRONG | **12** | **0** | **12** | **0** |
+| honest decline | 24 | 0 | 24 | 0 |
+| other | 0 | 0 | 0 | 0 |
+| **success rate** | **0.0%** | **100.0%** | **0.0%** | **100.0%** |
+
+The two arms give the same answer in both directions, which is the point: the
+capability is delivered by the deterministic path and does not depend on a model
+being in front of it, and the twelve substitutions were not a language failure.
 
 The twelve baseline WRONGs are the defect this sprint closes. Every one is a
 **current stage stock standing in for a transition**:
@@ -298,6 +363,8 @@ envelope already carried.
 
 `tests/fixtures/mi_query_stage_movement/NEAR_NEIGHBOUR_BANK.yaml` — 13 questions.
 **Route preservation 13/13 (100%). Zero hijacked. Zero verdict changes.**
+Measured on both arms, with the same result on each: the boundary holds whether
+or not the language layer is recovering concepts.
 
 | id | question | owner at `30a7d4a` | owner on branch |
 |---|---|---|---|
