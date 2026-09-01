@@ -221,7 +221,9 @@ def run_assessment(session: GovernedSession, *,
                    model: str = DEFAULT_MODEL,
                    max_steps: int = DEFAULT_MAX_STEPS,
                    client: Any = None,
-                   on_step: Optional[Callable[[int, str], None]] = None
+                   on_step: Optional[Callable[[int, str], None]] = None,
+                   system_prompt: str = SYSTEM_PROMPT,
+                   submit_tool: Optional[Dict[str, Any]] = None,
                    ) -> AgentRun:
     """Run one autonomous assessment.
 
@@ -229,11 +231,26 @@ def run_assessment(session: GovernedSession, *,
     model decides again. Nothing here inspects what the model asked for or
     steers it toward a metric — the only control is the step ceiling, which
     exists so a confused run costs a bounded amount rather than an unbounded one.
-    """
-    import anthropic
 
-    client = client or anthropic.Anthropic()
-    tools = governed_tool_schemas() + [SUBMIT_TOOL]
+    ``system_prompt`` and ``submit_tool`` are parameters so a second autonomous
+    review — a period review rather than a readiness assessment — reuses THIS
+    loop rather than growing a second one beside it. They default to the
+    readiness values, so that agent is untouched. What must not become a
+    parameter is anything that would let a caller steer the investigation: there
+    is deliberately no metric list, no ordering and no first call here, because
+    a loop that accepts one is executing a checklist.
+    """
+    if client is None:
+        # Imported only when one has to be BUILT. ``client`` is the injection
+        # seam that lets the loop, the session and the whole governed path be
+        # exercised against a scripted model, and an unconditional import made
+        # the SDK a test dependency of code that never called it.
+        import anthropic
+
+        client = anthropic.Anthropic()
+    submit = submit_tool or SUBMIT_TOOL
+    submit_name = submit["name"]
+    tools = governed_tool_schemas() + [submit]
 
     opening = (
         f"{objective}\n\n"
@@ -251,7 +268,7 @@ def run_assessment(session: GovernedSession, *,
         run.steps = step
         response = client.messages.create(
             model=model, max_tokens=DEFAULT_MAX_TOKENS,
-            system=SYSTEM_PROMPT, tools=tools, messages=messages)
+            system=system_prompt, tools=tools, messages=messages)
         usage["input_tokens"] += response.usage.input_tokens
         usage["output_tokens"] += response.usage.output_tokens
 
@@ -271,12 +288,12 @@ def run_assessment(session: GovernedSession, *,
         for block in tool_uses:
             if on_step:
                 on_step(step, block.name)
-            if block.name == "submit_assessment":
+            if block.name == submit_name:
                 run.assessment = dict(block.input)
                 run.stopped_reason = "submitted"
                 finished = True
                 results.append({"type": "tool_result", "tool_use_id": block.id,
-                                "content": "Assessment recorded."})
+                                "content": "Recorded."})
                 continue
             payload = session.call(block.name, dict(block.input or {}))
             results.append({
