@@ -9,6 +9,29 @@ Purpose: distinguish **intentional governed operating controls** from
 
 ---
 
+## 0a. Status — what was subsequently implemented
+
+A narrow Day-1 hardening sprint has since acted on part of this review. The
+owner fixed two policy questions first: a structural core-canonical failure is
+absolutely non-overrideable, and a business-rule exception may be accepted by
+the operator (no admin required) provided it is documented and contained.
+
+| Finding | Status |
+|---|---|
+| **2. Gate 3 exception — structural failures eligible (B)** | **Fixed.** Gate 3's blocking findings are split into structural and business rule using the Validation Agent's own issue types. A structural finding offers no acceptance at any scope, and the engine refuses one that reaches it from an earlier round |
+| **2. Gate 3 exception — controls incomplete (C)** | **Fixed.** The findings are shown before the question can be answered, a justification is mandatory, an answer outside the two offered options is refused, the accepted findings are recorded on the rule, and the stage reports `approved` naming what was accepted, by whom and why — never "All checks passed" |
+| **5. Interrupted-run recovery** | **Fixed to the Day-1 requirement.** No safe manual procedure existed — proven — so a rerun now restores the delivery's files from the governed location already recorded against them. Restart-then-"Run again" produces byte-identical output to an uninterrupted run. Automatic detection remains deferred |
+| **1. Changing an approved decision** | **Deferred.** Recorded as a Day-1 operating limitation: a wrongly approved standing mapping needs administrative correction |
+| **3. File-role learning** | **Deferred.** One operator click per period; not a safety issue |
+| **4. `last_successful_reporting_period`** | **Deferred** to the monitoring dashboard |
+| **6. Client-config fallback** | **Deferred**, and recorded as mandatory before a second commercial client |
+| XSD preview regression | **Deferred.** No operator path depends on it |
+
+The operator-facing summary is `occ_day1_operating_model.md`. The analysis below
+is unchanged and remains the evidence for these decisions.
+
+---
+
 ## 0. Headline
 
 Two of the six P1 findings turn out to be *less* serious than certified, one
