@@ -299,10 +299,12 @@ def answer_mapping_queue(env, client_id: str, workflow_id: str, *,
     engine, store = env["engine"], env["store"]
     counts = {"mapped": 0, "static": 0, "not_applicable": 0}
     for d in store.open_decisions(client_id, workflow_id):
-        # Publication is approved explicitly, and a regulatory enum translation
-        # is a different question with different answers — neither belongs in
-        # the mapping queue.
-        if d["kind"] in ("publication", "enum"):
+        # Publication is approved explicitly, a regulatory enum translation is a
+        # different question with different answers, and a validation exception
+        # is a judgement about findings rather than a mapping — none belongs in
+        # the mapping queue. (The engine now refuses an exception answered with
+        # anything but its own two options, so sweeping it here would raise.)
+        if d["kind"] in ("publication", "enum", "validation_exception"):
             continue
         subject = d.get("subject") or {}
         if subject.get("artefact") in ("regulatory_no_data", "regulatory_source",

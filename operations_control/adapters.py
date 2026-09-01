@@ -37,6 +37,7 @@ from .contracts import (
     KIND_TRANSFORMATION,
     KIND_VALIDATION_EXCEPTION,
     OUTCOME_MI_ANNEX2,
+    ST_APPROVED,
     ST_BLOCKED,
     ST_COMPLETED,
     ST_NEEDS_REVIEW,
@@ -138,6 +139,92 @@ class GovernedAdapters(AgentAdapters):
     def project(self, central_canonical: str, out_dir: Path, regime: str) -> StepResult:
         return self._observe("project",
                              lambda: self.inner.project(central_canonical, out_dir, regime))
+
+
+# --------------------------------------------------------------------------- #
+# Gate 3 findings: structural vs business rule
+# --------------------------------------------------------------------------- #
+
+#: The Validation Agent's own issue types for a core_canonical field that is
+#: absent or entirely blank. These are not rules the data failed — they are data
+#: that is not there, so no rationale can make the canonical complete and no
+#: exception may accept them. Everything else Gate 3 blocks on is a rule a
+#: present value failed, which is what the exception mechanism exists for.
+STRUCTURAL_ISSUE_TYPES = ("missing_core_canonical_value", "missing_required_value")
+
+VALIDATION_ISSUES_FILE = "43_validation_issues.csv"
+
+
+def _truthy(v: Any) -> bool:
+    return str(v).strip().lower() in ("true", "1", "yes")
+
+
+def read_validation_findings(work_dir: Optional[Path]
+                             ) -> Dict[str, List[Dict[str, str]]]:
+    """Gate 3's own blocking findings, split into structural and business rule.
+
+    Reads the Validation Agent's issue register rather than forming a second
+    opinion: ``blocking_for_validation`` is the agent's decision about what stops
+    the canonical, and ``issue_type`` is its description of what kind of problem
+    it is. Returns ``{"structural": [...], "business": [...]}``; an unreadable or
+    absent register yields both empty, which leaves the caller's existing
+    behaviour unchanged.
+    """
+    out: Dict[str, List[Dict[str, str]]] = {"structural": [], "business": []}
+    if not work_dir:
+        return out
+    path = _find_artifact(Path(work_dir), VALIDATION_ISSUES_FILE)
+    if path is None:
+        return out
+    try:
+        import csv
+        with path.open(newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+    except Exception:  # noqa: BLE001 — never fail a run over the register
+        return out
+    for r in rows:
+        if not _truthy(r.get("blocking_for_validation")):
+            continue
+        item = {"rule": str(r.get("validation_rule_id") or "").strip(),
+                "field": str(r.get("field") or r.get("canonical_field") or "").strip(),
+                "issue_type": str(r.get("issue_type") or "").strip(),
+                "severity": str(r.get("severity") or "").strip(),
+                "description": str(r.get("description") or "").strip(),
+                "owner": str(r.get("downstream_owner") or "").strip()}
+        key = ("structural" if item["issue_type"] in STRUCTURAL_ISSUE_TYPES
+               else "business")
+        out[key].append(item)
+    return out
+
+
+#: What the orchestrator records against the run when it proceeds past a
+#: validation halt on an approved exception.
+FORCE_PUBLISH_MARKER = "FORCE-PUBLISHED past validation exceptions:"
+
+
+def _accepted_findings(state: RunState) -> List[str]:
+    """The findings an operator accepted, read back off the orchestrator's own
+    blocker record so the stage can keep reporting them after the rerun."""
+    out: List[str] = []
+    for b in list(getattr(state, "blockers", []) or []):
+        text = str(b)
+        if FORCE_PUBLISH_MARKER not in text:
+            continue
+        detail = text.split(FORCE_PUBLISH_MARKER, 1)[1].strip()
+        out.extend(s.strip() for s in detail.split(";") if s.strip())
+    return out
+
+
+def structural_finding_sentences(findings: List[Dict[str, str]]) -> List[str]:
+    """One plain sentence per structural finding, naming the field."""
+    out: List[str] = []
+    for f in findings:
+        field = (f.get("field") or "a required field").replace("_", " ")
+        if f.get("rule", "").startswith("CORE002"):
+            out.append(f"Every record is missing a value for {field}.")
+        else:
+            out.append(f"The data does not contain {field}.")
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -668,27 +755,73 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
     steps_present = tr.status != STEP_PENDING or va.status != STEP_PENDING \
         or workflow.outcome == OUTCOME_MI_ANNEX2
     if va.status == STEP_DONE:
-        gar(STAGE_VALIDATION, ST_COMPLETED, "All checks passed.",
-            outputs=[va.output_path or ""])
+        # A step the orchestrator force-completed past a validation exception is
+        # NOT a clean pass, and must never say so: the operator accepted named
+        # findings, and the record has to keep saying that.
+        accepted = _accepted_findings(state)
+        if accepted:
+            gar(STAGE_VALIDATION, ST_APPROVED,
+                f"{len(accepted)} check{'s' if len(accepted) != 1 else ''} did "
+                "not pass and you accepted them for this delivery.",
+                why="The report is prepared on figures you have accepted with "
+                    "a reason, not on figures that passed.",
+                warnings=accepted,
+                outputs=[va.output_path or ""])
+        else:
+            gar(STAGE_VALIDATION, ST_COMPLETED, "All checks passed.",
+                outputs=[va.output_path or ""])
     elif va.status == STEP_HALTED:
-        gar(STAGE_VALIDATION, ST_NEEDS_REVIEW,
-            "Some figures did not pass Trakt's checks and need your review.",
-            why="Publishing figures that fail checks could mislead the "
-                "report's readers.",
-            decisions=[DecisionRequired(
-                decision_id=f"{wid}_validation_exception",
-                kind=KIND_VALIDATION_EXCEPTION,
-                title="Review the flagged checks",
-                question="Some checks did not pass. Do you want Trakt to "
-                         "continue and prepare the report anyway?",
-                blocking=True,
-                options=[{"value": "proceed", "label": "Continue — I accept "
-                                                       "the flagged items"},
-                         {"value": "stop", "label": "Stop — this needs fixing "
-                                                    "at source"}],
-                default_scope="file",
-                subject={"artefact": "validation_halt"})],
-            blockers=language.humanise_blockers(va.blockers))
+        found = read_validation_findings(work_dir)
+        structural, business = found["structural"], found["business"]
+        if structural:
+            # Structural findings are not exceptions. A core field that is absent
+            # or entirely blank makes the canonical economically incomplete, and
+            # no rationale can complete it — so no acceptance is offered, at any
+            # scope, to anyone. The route forward is to correct the source, the
+            # mapping or the value and run it again.
+            sentences = structural_finding_sentences(structural)
+            extra = (f" {len(business)} other check"
+                     f"{'s' if len(business) != 1 else ''} also did not pass."
+                     if business else "")
+            gar(STAGE_VALIDATION, ST_BLOCKED,
+                ("The delivery is missing information the report cannot be "
+                 "produced without." + extra),
+                why="These are not figures that look wrong — they are figures "
+                    "that are not there. The file, the column mapping or the "
+                    "values need correcting before Trakt can continue.",
+                blockers=sentences,
+                evidence=[{"label": "What is missing", "kind": "table",
+                           "data": [{"Field": f["field"],
+                                     "Check": f["rule"],
+                                     "Problem": f["description"]}
+                                    for f in structural]}])
+        else:
+            gar(STAGE_VALIDATION, ST_NEEDS_REVIEW,
+                "Some figures did not pass Trakt's checks and need your review.",
+                why="Publishing figures that fail checks could mislead the "
+                    "report's readers.",
+                decisions=[DecisionRequired(
+                    decision_id=f"{wid}_validation_exception",
+                    kind=KIND_VALIDATION_EXCEPTION,
+                    title="Review the flagged checks",
+                    question="Some checks did not pass. Do you want Trakt to "
+                             "continue and prepare the report anyway?",
+                    blocking=True,
+                    affected_record_count=len(business),
+                    observed_values=[f["field"] for f in business if f["field"]],
+                    options=[{"value": "proceed", "label": "Continue — I accept "
+                                                           "the flagged items"},
+                             {"value": "stop", "label": "Stop — this needs "
+                                                        "fixing at source"}],
+                    default_scope="file",
+                    evidence=[{"label": "What did not pass", "kind": "table",
+                               "data": [{"Field": f["field"],
+                                         "Check": f["rule"],
+                                         "Problem": f["description"]}
+                                        for f in business]}],
+                    subject={"artefact": "validation_halt",
+                             "findings": business})],
+                blockers=language.humanise_blockers(va.blockers))
     elif tr.status == STEP_HALTED and not mapping_settled:
         # Gate 2 refused an unready Gate 1 package. That is the mapping queue
         # talking, not a data-quality problem — say so, and leave the decision

@@ -480,6 +480,12 @@ def build_validation_package(
     # value-level failures/warnings -> new validation issues
     _check_to_issue_type = {
         "presence": "missing_required_value",
+        # A core_canonical field that is absent or entirely blank. Distinct from
+        # every other check: it is not a rule the data failed, it is data that is
+        # not there. Without its own issue type it fell through to the default
+        # below and described itself as a cross-field rule failure, which is both
+        # untrue and indistinguishable from a business-rule finding downstream.
+        "core_canonical_presence": "missing_core_canonical_value",
         "type_date": "invalid_date",
         "type_numeric": "invalid_number",
         "type_boolean": "invalid_boolean",
