@@ -9,8 +9,19 @@ Prior reports: `pipeline_stage_transition_engine.md`, `pipeline_stage_transition
 
 ## 1. Verdict
 
-**CERTIFIED on substance. One requirement of the brief was deliberately not
-implemented, and that is the subject of §3.**
+**CERTIFIED.**
+
+The brief's transport requirement — that PPTX acquire the data over HTTP — was
+raised as a concern, and the decision has since been taken to **keep PPTX
+generation in-process**: the certification requirement is ONE GOVERNED
+ANALYTICAL IMPLEMENTATION and IDENTICAL OUTPUT SEMANTICS, not one shared
+transport. React consumes the capability through the existing API route; PPTX
+calls the same governed resolver in-process, consistent with the Azure Functions
+architecture. §3 records the evidence behind that decision.
+
+In-process is acceptable **only** because PPTX delegates to the same governed
+resolver the API uses, and creates no second analytical implementation. Both of
+those are conditions, not observations — §5 enforces them by test.
 
 > The PPTX Pipeline Stage Movement slide consumes the EXACT SAME governed
 > stage-transition response used by the production React Dashboard.
@@ -43,14 +54,20 @@ chain to the rendered slide.
 
 ---
 
-## 3. The transport requirement — not implemented, and why
+## 3. Why PPTX stays in-process
 
-The brief requires the deck to obtain the data by calling
-`GET /mi/insight/movement-detail` over HTTP, and forbids `mi_api._stage_transitions`
-from invoking the engine directly.
+The brief initially required the deck to obtain the data by calling
+`GET /mi/insight/movement-detail` over HTTP. That would break the deck in
+production. The evidence below was gathered and put to the reader, and the
+decision taken was to **keep generation in-process**:
 
-**I did not implement this.** It would break the deck in production. The
-evidence, gathered before deciding:
+> *Leave PPTX generation in-process. Do not introduce an HTTP dependency. The
+> certification requirement is one governed analytical implementation and
+> identical output semantics, not one shared transport. […] In-process is
+> acceptable only because PPTX delegates to the same governed resolver used by
+> the API.*
+
+The evidence:
 
 **a. The deck deliberately has no web stack.** `mi_agent_pptx/mi_api.py`'s own
 module docstring states the design:
@@ -105,11 +122,12 @@ movement-detail        (in-process, no HTTP stack)
    React                     PPTX
 ```
 
-**If the HTTP transport is nonetheless required**, it is a deployment decision
-rather than a code change, and it needs answers to: which host the Function App
-would call, how it authenticates, and what the deck should do when that call
-fails. I have not implemented it, and would not without those answers. Say the
-word and I will.
+**The condition attached to the decision** — that in-process is acceptable only
+while PPTX delegates to the same governed resolver and creates no second
+analytical implementation — is enforced by the guards in §5, and those guards
+were mutation-tested. If the deck ever starts computing its own answer, or
+drifts onto a different producer, the suite fails rather than the drift being
+found in a later review.
 
 ---
 
@@ -249,11 +267,11 @@ unchanged.
 | engine → route → React and engine → same producer → PPTX carry identical values | **CERTIFIED** — byte-identical, live |
 | Rendered slide shows those values | **CERTIFIED** |
 | PPTX performs no analytical work of its own | **CERTIFIED** — structurally, mutation-tested |
-| PPTX acquires data over HTTP from `/mi/insight/movement-detail` | **NOT IMPLEMENTED** — §3 |
+| PPTX acquires data over HTTP | **NOT REQUIRED** — in-process retained by decision (§3); the requirement is one implementation, not one transport |
+| PPTX delegates to the same governed resolver as the API | **CERTIFIED** — the condition the in-process decision rests on |
 | No new HTTP routes | **0** |
 | No engine / React / MI Query / other-slide changes | **CONFIRMED** — 1 file added, 0 production files changed |
 
-**Merge recommendation: YES**, subject to the reader accepting §3. The deck and
-the dashboard already serve one governed answer from one producer; this sprint
-makes that a property the estate enforces rather than a fact it happens to
-exhibit.
+**Merge recommendation: YES.** The deck and the dashboard serve one governed
+answer from one producer; this sprint makes that a property the estate enforces
+rather than a fact it happens to exhibit.
