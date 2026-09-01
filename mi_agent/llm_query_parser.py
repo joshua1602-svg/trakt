@@ -521,6 +521,31 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
         for bare, bucket in (("age", "age_bucket"),):
             if bucket in fields and bare not in terms_map:
                 terms_map[bare] = bucket
+    # A NOMINAL GROUPING REQUEST IS THE SAME REQUEST AS `by <dimension>`.
+    #
+    # "LTV DISTRIBUTION" and "by LTV band" ask for one thing. The second
+    # answered with five bands; the first answered `Weighted-average Current
+    # LTV: 55.9%` — a single scalar for a question about a shape, with no
+    # warning. A bare numeric term is deliberately NOT promoted to its bucket
+    # outside a grouping chart (that is what keeps "average LTV" a measure), so
+    # "ltv" was read as the measure and the axis was simply lost.
+    #
+    # DIMENSION-GROUNDED: the promotion is the existing governed
+    # `_NUMERIC_AXIS_BUCKET` map, and it only happens when that bucket
+    # dimension exists in the registry. Where no governed dimension resolves,
+    # nothing is manufactured and the current refusal stands.
+    #
+    # NOT A BROADENING OF "distribution": the noun claims an axis only when the
+    # sentence contains NO axis marker of its own. "What is the balance
+    # distribution BY REGION?" and "the distribution of balance ACROSS regions"
+    # already name their axis, so they are left exactly as they are — which is
+    # also what stops this rule duplicating or displacing a dimension the
+    # reader asked for.
+    elif not _lexical.AXIS_MARKER_RE.search(q or ""):
+        for bare, bucket in _NUMERIC_AXIS_BUCKET.items():
+            if (bucket in fields and bare not in terms_map
+                    and _asks_for_a_shape(q, bare)):
+                terms_map[bare] = bucket
     from .portfolio_lens import mask_scope_phrases  # local: avoids a cycle
 
     remaining = q
@@ -2046,6 +2071,37 @@ def _detect_ranking(q: str) -> Tuple[bool, str, Optional[int]]:
 # Bare numeric-axis terms (NOT explicitly bucketed) -> the bucket dimension they
 # group into when used as a categorical grouping segment, plus a resolver for the
 # underlying numeric field (used for bubble axes).
+#: The nouns that ask for a SHAPE rather than a number. Deliberately short:
+#: each one is a word whose whole job in the sentence is to request a breakdown,
+#: and `across` is absent because it is already an `AXIS_MARKERS` entry.
+#:
+#: "spread" was drafted here and REMOVED after measurement: "Show the LTV
+#: SPREAD of Offer pipeline" was refused with "I understood that you asked
+#: about spread, but I could not confirm it was applied" — in lending a spread
+#: is a governed rate concept, and this list is not entitled to take the word.
+_SHAPE_NOUNS = ("distribution", "split", "breakdown")
+
+_SHAPE_NOUN_RE = re.compile(
+    r"\b(?:" + "|".join(_SHAPE_NOUNS) + r")\b", re.I)
+
+
+def _asks_for_a_shape(q: str, term: str) -> bool:
+    """Does a shape noun stand directly after ``term`` in ``q``?
+
+    "LTV distribution" asks for the shape of LTV; "the distribution of the book
+    by LTV band" already names its axis and is not read here. Only the words
+    BETWEEN the term and the noun are examined, and only a determiner may stand
+    there, so an unrelated later "split" cannot reach back and claim a measure.
+    """
+    match = re.search(r"\b" + re.escape(str(term).lower()) + r"\b",
+                      (q or "").lower())
+    if not match:
+        return False
+    tail = (q or "")[match.end():match.end() + 40].lower()
+    return bool(re.match(r"\s*(?:the\s+|a\s+|an\s+)?(?:"
+                         + "|".join(_SHAPE_NOUNS) + r")\b", tail))
+
+
 _NUMERIC_AXIS_BUCKET = {
     "ltv": "ltv_bucket",
     "loan to value": "ltv_bucket",

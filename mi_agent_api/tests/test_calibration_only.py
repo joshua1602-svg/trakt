@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Calibration: equivalent wording reaching the SAME existing construction.
 
+CALIBRATION B — a nominal grouping request is the same request as `by <dim>`.
+    "Show Application-stage pipeline BY LTV BAND" answered with five bands.
+    "What is the LTV DISTRIBUTION of pipeline at Application?" answered
+    `Weighted-average Current LTV: 55.9%` — one scalar for a question about a
+    shape, with no warning that the axis had been dropped.
+
 CALIBRATION A — an adjectival qualifier is a narrowing, not an axis.
     "What share of Offer-STAGE pipeline is joint borrowers?" was refused with
     "'share borrowers' is not a governed measure", while the identical question
@@ -176,6 +182,77 @@ class TestWholeBookShareDenominatorIsUnchanged(unittest.TestCase):
     def test_a_whole_book_threshold_share_is_unchanged(self):
         text = answer("What proportion of the book is above 60% LTV?")
         self.assertIn("Population Total: 640", text)
+
+
+# --------------------------------------------------------------------------- #
+# CALIBRATION B — the shape noun
+# --------------------------------------------------------------------------- #
+class TestNominalGroupingReachesTheExistingConstruction(unittest.TestCase):
+
+    def test_a_distribution_is_grouped_not_scalar(self):
+        text = answer("What is the LTV distribution of pipeline currently at "
+                      "Application?")
+        self.assertIn("grouped by LTV Bucket", text)
+        self.assertIn("Pipeline Stage = APPLICATION", text)
+
+    def test_it_reaches_the_same_axis_the_explicit_wording_reaches(self):
+        """"LTV distribution" and "by LTV band" are one request."""
+        for question in ("What is the LTV distribution of pipeline at "
+                         "Application?",
+                         "Show Application-stage pipeline by LTV band."):
+            with self.subTest(question=question):
+                self.assertIn("grouped by LTV Bucket", answer(question))
+
+    def test_the_axis_is_a_governed_bucket_dimension(self):
+        """Dimension-grounded: the promotion is the existing governed map, and
+        a measure with no bucket dimension is never given a manufactured one."""
+        from mi_agent.llm_query_parser import _NUMERIC_AXIS_BUCKET
+
+        self.assertEqual(_NUMERIC_AXIS_BUCKET["ltv"], "ltv_bucket")
+        self.assertEqual(_NUMERIC_AXIS_BUCKET["age"], "age_bucket")
+
+
+class TestTheShapeNounDoesNotBroaden(unittest.TestCase):
+
+    def test_a_sentence_that_names_its_own_axis_is_left_alone(self):
+        """"by region" and "across regions" already say where to group. The
+        shape noun must not displace or duplicate the axis the reader asked
+        for, so it never fires when an axis marker is present."""
+        for question in ("What is the balance distribution by region?",
+                         "What is the distribution of balance across regions?"):
+            with self.subTest(question=question):
+                env = ask(question)
+                self.assertNotIn("LTV Bucket", env.get("answer") or "")
+                self.assertNotIn("Ticket", env.get("answer") or "")
+
+    def test_spread_is_not_a_shape_noun(self):
+        """MEASURED, AND THE REASON THE LIST IS SHORT. In lending a spread is a
+        governed rate concept; the calibration is not entitled to the word."""
+        from mi_agent.llm_query_parser import _SHAPE_NOUNS
+
+        self.assertNotIn("spread", _SHAPE_NOUNS)
+        env = ask("Show the LTV spread of Offer pipeline.")
+        self.assertNotIn("grouped by", env.get("answer") or "")
+
+    def test_a_scalar_measure_is_still_a_scalar(self):
+        """No shape noun, no axis. This is the line the calibration walks."""
+        for question in ("What is the average LTV?",
+                         "What is WA LTV for Offer-stage pipeline?"):
+            with self.subTest(question=question):
+                text = answer(question)
+                self.assertNotIn("grouped by", text)
+                self.assertIn("Weighted-average", text)
+
+    def test_the_shape_noun_must_stand_directly_after_the_measure(self):
+        """Only a determiner may intervene, so an unrelated later "split"
+        cannot reach back and claim a measure."""
+        from mi_agent.llm_query_parser import _asks_for_a_shape
+
+        self.assertTrue(_asks_for_a_shape("what is the ltv distribution?", "ltv"))
+        self.assertTrue(_asks_for_a_shape("show the ltv breakdown", "ltv"))
+        self.assertFalse(_asks_for_a_shape(
+            "what is the ltv for loans we split out?", "ltv"))
+        self.assertFalse(_asks_for_a_shape("what is the average ltv?", "ltv"))
 
 
 if __name__ == "__main__":
