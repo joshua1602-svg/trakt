@@ -1,8 +1,77 @@
 # MI Query Agent — pipeline stage movement
 
-Starting SHA `30a7d4a` · branch `claude/mi-query-stage-movement-cqko43` ·
-four commits · fixture `tests/fixtures/pipeline_transition_2w` ·
-deterministic parser, no network, no model call.
+| | |
+|---|---|
+| starting SHA | `30a7d4a` — the **merged, in-production MI Query Agent**, plus the governed stage-transition engine merged in #385 |
+| branch | `claude/mi-query-stage-movement-cqko43` |
+| fixtures | `tests/fixtures/pipeline_transition_2w` (governed pipeline), seeded funded tape across five month-ends |
+| arms measured | governed engine alone **and** the concept-merge language layer (`claude-opus-5`) |
+
+---
+
+## 0. What was done, and what was tested
+
+### What was done
+
+**One new user-facing ability: natural-language questions about pipeline
+stage-to-stage movement.** Nothing else was added, and no existing capability
+was changed in what it answers.
+
+Before this change the MI Query Agent could not answer *"how many cases moved
+from KFI to Application?"*. Measured at `30a7d4a`, twelve of the thirty-six
+questions in the new bank were answered with the **current stage stock** — a
+different number answering a different question — and the other twenty-four were
+refused.
+
+The governed stage-transition capability that computes the right answer has been
+merged since #385 and already serves React and the PPTX deck. This work makes MI
+Query its **third consumer**. It adds:
+
+* `mi_agent_api/stage_movement_query.py` — a recognise/handle pair registered in
+  the existing recogniser registry. It **computes nothing**: no snapshot load,
+  no case matching, no stage comparison, no arrival/departure/stayer counting,
+  no amount amendment, no reconciliation. Every figure is a key lookup on the
+  governed payload.
+* 29 executable lines across three existing files: the registry entry, two
+  route registrations plus one evidence alignment in the execution receipt, and
+  one deference in the analytical planner.
+
+It adds **no** parser change, **no** new spec field, **no** second plan, **no**
+second stage vocabulary and **no** second engine. The stage-transition engine,
+React, PPTX, OCC, Annex 2, funded analytics, forecast, concentration and cohort
+are untouched — verified by diff (§11).
+
+### What was tested
+
+Five instruments, each answering a different question. All were run at **both**
+SHAs so every number below is a before-and-after, not a standalone score.
+
+| # | instrument | what it establishes | result |
+|---|---|---|---|
+| 1 | authoritative **166**-question bank (`BANK75` + frozen `CFO91`) | the shipped agent did not get worse | **0 of 166 questions moved** — every answer, route and verdict byte-identical |
+| 2 | **stage-movement** bank, 9 business questions × 4 formulations = 36 | the new ability works | **0 → 36 correct**; 12 wrong → **0 wrong** |
+| 3 | **near-neighbour** bank, 13 questions | nothing was hijacked | **13/13 kept their own route owner** |
+| 4 | targeted unit/integration tests | the delegation and the refusals are pinned | **26 passed** (+16 subtests) |
+| 5 | `MI_REGRESSION_MANIFEST.txt`, 278 files | nothing else broke | §12 |
+
+Instruments 1–3 were additionally run on **both arms** — engine alone and with
+the concept-merge language layer — because the shipping record distinguishes
+them and because a capability that only works with a model in front of it is a
+different claim from one that works without.
+
+### What was NOT done
+
+* **The broad "summarise pipeline stage movement" question is excluded**, by
+  decision. It cannot be bound without widening generic movement semantics that
+  pipeline evolution and period movement already own (§5, §10).
+* **The shipping 136/166 absolute score was not re-measured**, because the book
+  it was measured on is not in this repository. Per-question continuity was
+  measured instead, which is the stronger statement (§2).
+* **No pre-existing test failure was fixed.** One genuine new failure was found
+  and fixed; everything else in §12 predates this branch.
+* **A parser defect was found and left open** — a refusal that makes a false
+  claim about the client's data. It is worked around only where this route can
+  prove it accounted for the span (§10).
 
 ---
 
