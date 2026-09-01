@@ -10,6 +10,8 @@ import { ForecastView } from "@/components/ForecastView";
 import { ForecastExtrapolationPanel } from "@/components/ForecastExtrapolationPanel";
 import { CohortsPanel } from "@/components/CohortsPanel";
 import { EvolutionPanel } from "@/components/EvolutionPanel";
+import { StageTransitionPanel } from "@/components/pipeline/StageTransitionPanel";
+import { enhancedHoversEnabled } from "@/lib/featureFlags";
 import { RiskLimitsWorkspace } from "@/components/risk/RiskLimitsWorkspace";
 import { GeographyPanel } from "@/components/GeographyPanel";
 import { ViewToggle } from "@/components/ViewToggle";
@@ -65,13 +67,13 @@ const VIEW_CAPABILITY: Record<string, string> = {
 
 const VIEW_SUBTITLES: Record<string, string> = {
   funded: "Funded book — the funded-loan book as of the selected reporting date: stratifications, geographic exposure, time-series evolution and static-pool cohorts.",
-  pipeline: "Pipeline — the open origination pipeline: current stratifications, and its evolution (stock levels over time and the weekly origination funnel flow).",
+  pipeline: "Pipeline — the open origination pipeline: current stratifications, its evolution (stock levels over time and the weekly origination funnel flow), and the case-level stage movement between the two latest governed extracts.",
   forecast: "Forecast — forward projection from the latest run (funded + weighted pipeline + run-rate scale-up), and how the forecast has moved across runs.",
   risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
 };
 
 type FundedTab = "strat" | "geo" | "evo" | "cohorts";
-type PipelineTab = "strat" | "evo";
+type PipelineTab = "strat" | "evo" | "movement";
 type ForecastTab = "projection" | "evolution";
 
 const WORKSPACE_VIEWS: WorkspaceView[] = ["funded", "pipeline", "forecast", "risk_limits"];
@@ -96,7 +98,7 @@ function readNavParams(): {
     return {
       view: pick("view", WORKSPACE_VIEWS),
       funded: pick("ftab", ["strat", "geo", "evo", "cohorts"] as const),
-      pipeline: pick("ptab", ["strat", "evo"] as const),
+      pipeline: pick("ptab", ["strat", "evo", "movement"] as const),
       forecast: pick("xtab", ["projection", "evolution"] as const),
       scope: p.get("scope"),
     };
@@ -112,6 +114,8 @@ export function AppShell() {
   // A production build that silently fell back to the mock (VITE_AGENT_API_URL
   // unset) must be unmistakable — never let canned demo data pass for live MI.
   const agentMisconfigured = useMemo(() => resolveAgentClientConfig().misconfigured, []);
+  // Build-time flag, read once — the same switch the movement hovers use.
+  const enhancedHovers = useMemo(() => enhancedHoversEnabled(), []);
   const ws = useWorkspace(client);
 
   // The `"<client_id>/<run_id>"` id used by the evolution / risk / extrapolation
@@ -455,6 +459,7 @@ export function AppShell() {
                       tabs={[
                         { id: "strat", label: "Stratifications" },
                         { id: "evo", label: "Evolution" },
+                        { id: "movement", label: "Stage Movement" },
                       ]} />
                     <KeepMounted active={pipelineTab === "strat"} testId="pipeline-strat-pane">
                       {!ws.forecast && !ws.forecastLoading && ws.forecastError && (
@@ -474,6 +479,18 @@ export function AppShell() {
                       <EvolutionPanel key={`evo-pipeline-${ws.dataVersion}-${ws.selectedContextId}`} heading={false}
                         tabs={["pipeline", "origination"]} client={client} portfolioId={workspacePortfolioId}
                         portfolioContext={ws.selectedContextId} />
+                    </KeepMounted>
+                    {/* Stage Movement — the GROSS question ("what happened to
+                        cases?"), which Evolution's stock series cannot answer.
+                        Its own sub-tab rather than a fifth card under Evolution:
+                        it is a different question, not another trend line. The
+                        component and its governed payload are unchanged. */}
+                    <KeepMounted active={pipelineTab === "movement"} testId="pipeline-movement-pane">
+                      <StageTransitionPanel
+                        key={`stx-${ws.dataVersion}-${ws.selectedContextId}`}
+                        client={client} portfolioId={workspacePortfolioId}
+                        portfolioContext={ws.selectedContextId}
+                        enabled={enhancedHovers} />
                     </KeepMounted>
                   </div>
                 )}
