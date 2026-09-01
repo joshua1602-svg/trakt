@@ -1,0 +1,274 @@
+{
+  "as_of_date": "2026-06-12",
+  "available": true,
+  "comparison_date": "2026-06-05",
+  "counts": {
+    "change": -2,
+    "comparison": 12,
+    "current": 10
+  },
+  "departures": [
+    {
+      "case_count": 1,
+      "governed_outcome": "unclassified_departure",
+      "outcome_evidence": "none",
+      "prior_amount": 1300000.0,
+      "source_stage": "APPLICATION"
+    },
+    {
+      "case_count": 1,
+      "governed_outcome": "unclassified_departure",
+      "outcome_evidence": "none",
+      "prior_amount": 1200000.0,
+      "source_stage": "OFFER"
+    },
+    {
+      "case_count": 1,
+      "governed_outcome": "COMPLETED",
+      "outcome_evidence": "prior_terminal_stage",
+      "prior_amount": 1000000.0,
+      "source_stage": "COMPLETED"
+    },
+    {
+      "case_count": 1,
+      "governed_outcome": "WITHDRAWN",
+      "outcome_evidence": "prior_terminal_stage",
+      "prior_amount": 1100000.0,
+      "source_stage": "WITHDRAWN"
+    }
+  ],
+  "detail_type": "PIPELINE_STAGE_TRANSITION",
+  "event_totals": {
+    "departure": {
+      "case_count": 4,
+      "latest_amount": 0.0,
+      "prior_amount": 4600000.0
+    },
+    "new_arrival": {
+      "case_count": 2,
+      "latest_amount": 1050000.0,
+      "prior_amount": 0.0
+    },
+    "stage_transition": {
+      "case_count": 5,
+      "latest_amount": 3010000.0,
+      "prior_amount": 3000000.0
+    },
+    "stayer": {
+      "case_count": 3,
+      "latest_amount": 600000.0,
+      "prior_amount": 600000.0
+    }
+  },
+  "identifier": "pipeline_case_identifier",
+  "measure": "current_outstanding_balance",
+  "methodology": {
+    "capability_definition": "Gross case-level stage transitions between the latest governed pipeline snapshot and the immediately prior one, matched on pipeline_case_identifier. Every case is classified exactly once as a new arrival, a stayer, a stage transition or a departure. This capability owns no existing pipeline metric.",
+    "departure_outcome_basis": "The governed terminal stage the case was last recorded at. Absence from the latest snapshot is NOT treated as evidence of an outcome; such a case is reported as unclassified_departure.",
+    "duplicate_case_identifiers": {
+      "comparison": 0,
+      "current": 0
+    },
+    "identity_basis": "pipeline_case_identifier",
+    "identity_note": "An amount amendment never changes case identity: a case whose stage and amount both change stays one case with one transition and one amount change.",
+    "movement_basis": "gross",
+    "stage_vocabulary": "mi_agent_api.pipeline_prep.canonical_stage",
+    "terminal_stages": [
+      "COMPLETED",
+      "WITHDRAWN"
+    ],
+    "unmatched_comparison": {
+      "amount": 0.0,
+      "cases": 0
+    },
+    "unmatched_current": {
+      "amount": 0.0,
+      "cases": 0
+    },
+    "version": "1"
+  },
+  "new_arrivals": [
+    {
+      "case_count": 1,
+      "destination_stage": "KFI",
+      "latest_amount": 900000.0
+    },
+    {
+      "case_count": 1,
+      "destination_stage": "APPLICATION",
+      "latest_amount": 150000.0
+    }
+  ],
+  "portfolio_id": "client_001",
+  "reason": null,
+  "reason_code": null,
+  "reconciliation": {
+    "amount_identity": "opening_amount + new_arrival_amount + transferred_in_latest_amount - transferred_out_prior_amount - departure_prior_amount + stayer_amount_change = closing_amount",
+    "amount_reconciliation_residual": 0.0,
+    "amount_tolerance": 0.01,
+    "by_stage": [
+      {
+        "amount_reconciliation_residual": 0.0,
+        "closing_amount": 1220000.0,
+        "closing_case_count": 3,
+        "count_reconciliation_residual": 0,
+        "departure_prior_amount": 0.0,
+        "departures": 0,
+        "new_arrival_amount": 900000.0,
+        "new_arrivals": 1,
+        "opening_amount": 1200000.0,
+        "opening_case_count": 4,
+        "stage": "KFI",
+        "stayer_amount_change": 20000.0,
+        "stayers": 2,
+        "transferred_in_latest_amount": 0.0,
+        "transferred_out_prior_amount": 900000.0,
+        "transitions_in": 0,
+        "transitions_out": 2
+      },
+      {
+        "amount_reconciliation_residual": 0.0,
+        "closing_amount": 1350000.0,
+        "closing_case_count": 4,
+        "count_reconciliation_residual": 0,
+        "departure_prior_amount": 1300000.0,
+        "departures": 1,
+        "new_arrival_amount": 150000.0,
+        "new_arrivals": 1,
+        "opening_amount": 2900000.0,
+        "opening_case_count": 4,
+        "stage": "APPLICATION",
+        "stayer_amount_change": -20000.0,
+        "stayers": 1,
+        "transferred_in_latest_amount": 920000.0,
+        "transferred_out_prior_amount": 1300000.0,
+        "transitions_in": 2,
+        "transitions_out": 2
+      },
+      {
+        "amount_reconciliation_residual": 0.0,
+        "closing_amount": 1290000.0,
+        "closing_case_count": 2,
+        "count_reconciliation_residual": 0,
+        "departure_prior_amount": 1200000.0,
+        "departures": 1,
+        "new_arrival_amount": 0.0,
+        "new_arrivals": 0,
+        "opening_amount": 2000000.0,
+        "opening_case_count": 2,
+        "stage": "OFFER",
+        "stayer_amount_change": 0.0,
+        "stayers": 0,
+        "transferred_in_latest_amount": 1290000.0,
+        "transferred_out_prior_amount": 800000.0,
+        "transitions_in": 2,
+        "transitions_out": 1
+      },
+      {
+        "amount_reconciliation_residual": 0.0,
+        "closing_amount": 800000.0,
+        "closing_case_count": 1,
+        "count_reconciliation_residual": 0,
+        "departure_prior_amount": 1000000.0,
+        "departures": 1,
+        "new_arrival_amount": 0.0,
+        "new_arrivals": 0,
+        "opening_amount": 1000000.0,
+        "opening_case_count": 1,
+        "stage": "COMPLETED",
+        "stayer_amount_change": 0.0,
+        "stayers": 0,
+        "transferred_in_latest_amount": 800000.0,
+        "transferred_out_prior_amount": 0.0,
+        "transitions_in": 1,
+        "transitions_out": 0
+      },
+      {
+        "amount_reconciliation_residual": 0.0,
+        "closing_amount": 0.0,
+        "closing_case_count": 0,
+        "count_reconciliation_residual": 0,
+        "departure_prior_amount": 1100000.0,
+        "departures": 1,
+        "new_arrival_amount": 0.0,
+        "new_arrivals": 0,
+        "opening_amount": 1100000.0,
+        "opening_case_count": 1,
+        "stage": "WITHDRAWN",
+        "stayer_amount_change": 0.0,
+        "stayers": 0,
+        "transferred_in_latest_amount": 0.0,
+        "transferred_out_prior_amount": 0.0,
+        "transitions_in": 0,
+        "transitions_out": 0
+      }
+    ],
+    "count_identity": "opening_case_count + new_arrivals + transitions_in - transitions_out - departures = closing_case_count",
+    "count_reconciliation_residual": 0,
+    "global": {
+      "classified_events": 14,
+      "duplicate_classifications": 0,
+      "in_both": 8,
+      "latest_only": 2,
+      "latest_population": 10,
+      "prior_only": 4,
+      "prior_population": 12,
+      "residual": 0,
+      "union_population": 14
+    }
+  },
+  "scope": "total",
+  "source_dates": {
+    "forecast_generated_at": null,
+    "funded_as_of": null,
+    "pipeline_as_of": "2026-06-12",
+    "pipeline_comparison": "2026-06-05"
+  },
+  "sources": {
+    "comparison": "M2L_KFI_and_Pipeline_2026_06_05.csv",
+    "current": "M2L_KFI_and_Pipeline_2026_06_12.csv"
+  },
+  "stage_field": "pipeline_stage",
+  "stayers": [
+    {
+      "amount_change": 20000.0,
+      "case_count": 2,
+      "latest_amount": 320000.0,
+      "prior_amount": 300000.0,
+      "stage": "KFI"
+    },
+    {
+      "amount_change": -20000.0,
+      "case_count": 1,
+      "latest_amount": 280000.0,
+      "prior_amount": 300000.0,
+      "stage": "APPLICATION"
+    }
+  ],
+  "transitions": [
+    {
+      "amount_change": 20000.0,
+      "case_count": 2,
+      "destination_stage": "APPLICATION",
+      "latest_amount": 920000.0,
+      "prior_amount": 900000.0,
+      "source_stage": "KFI"
+    },
+    {
+      "amount_change": -10000.0,
+      "case_count": 2,
+      "destination_stage": "OFFER",
+      "latest_amount": 1290000.0,
+      "prior_amount": 1300000.0,
+      "source_stage": "APPLICATION"
+    },
+    {
+      "amount_change": 0.0,
+      "case_count": 1,
+      "destination_stage": "COMPLETED",
+      "latest_amount": 800000.0,
+      "prior_amount": 800000.0,
+      "source_stage": "OFFER"
+    }
+  ]
+}

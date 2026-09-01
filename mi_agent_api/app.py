@@ -1091,36 +1091,67 @@ def movement_detail(detailType: str,
     from . import movement_detail as detail_mod
     if not detail_mod.enhanced_hovers_enabled():
         raise HTTPException(status_code=404, detail="movement detail is not enabled")
-    if detailType not in (detail_mod.DETAIL_PIPELINE, detail_mod.DETAIL_COMPLETIONS):
+    # PIPELINE_STAGE_TRANSITION is the governed GROSS decomposition of the same
+    # two snapshots the two NET detail types describe. It is served here rather
+    # than from a route of its own because this route already IS the movement
+    # owner, parameterised by detail type — the extension point the capability
+    # was built with. No new route, no second client, one contract.
+    if detailType not in (detail_mod.DETAIL_PIPELINE, detail_mod.DETAIL_COMPLETIONS,
+                          detail_mod.DETAIL_STAGE_TRANSITION):
         raise HTTPException(status_code=400,
                             detail=f"unknown detailType {detailType!r}")
+    transitions = detailType == detail_mod.DETAIL_STAGE_TRANSITION
+
+    def _no_detail(reason: str, reason_code: str) -> Dict[str, Any]:
+        """The right controlled envelope for this detail type — never a partial.
+
+        The transition capability carries its own typed availability contract
+        (``reason_code``), so it must not be refused through the movement
+        envelope, whose shape a transition consumer does not read.
+        """
+        scope_id = resolved.scope.context_id if resolved else None
+        if transitions:
+            return detail_mod.stage_transition_unavailable(
+                cid, scope=scope_id, as_of=asOf,
+                reason_code=reason_code, reason=reason)
+        return detail_mod.unavailable(detailType, cid, as_of=asOf,
+                                      scope=scope_id, reason=reason)
 
     cid, _funded_trid = _evo_ids(portfolioId, client_id, None, None)
     # Weekly pipeline data, so the FUNDED reporting date must not truncate it —
     # the same rule the pipeline evolution and funnel routes follow.
     resolved, refusal = _pipeline_scope_gate(
         portfolioContext, cid, "movement_detail", portfolioId=cid,
-        detailType=detailType, available=False, contributors={})
+        detailType=detailType, available=False,
+        # Each detail type is refused in the shape its own consumer reads.
+        **({"transitions": [], "new_arrivals": [], "stayers": [],
+            "departures": [], "reconciliation": None} if transitions
+           else {"contributors": {}}))
     if refusal is not None:
         return refusal
     root = _pipeline_discovery_root()
     if not root:
-        return detail_mod.unavailable(
-            detailType, cid, as_of=asOf,
-            scope=(resolved.scope.context_id if resolved else None),
-            reason="No governed pipeline root is configured.")
+        return _no_detail("No governed pipeline root is configured.",
+                          detail_mod.REASON_NO_COMPARISON)
     etag = http_cache.begin(
         request, route="mi.insight.movement-detail",
         scope=f"{portfolioContext or 'total'}|{detailType}|{asOf or 'latest'}",
         identity=http_cache.dataset_identity(cid, _funded_trid,
                                              include_pipeline=True))
     try:
-        result = detail_mod.resolve_movement_detail(
-            root, cid, detailType, as_of=asOf,
-            # Shares the frames the chart already prepared instead of preparing
-            # every extract again under a different key (the Phase 1B-1 defect).
-            historical_model=_pipeline_history(cid),
-            scope=(resolved.scope.context_id if resolved else None))
+        # Both resolvers read the SAME governed extracts through the SAME
+        # `select_pair` neighbour rule and the SAME prepared, cached frames.
+        # Shares the frames the chart already prepared instead of preparing
+        # every extract again under a different key (the Phase 1B-1 defect).
+        scope_id = resolved.scope.context_id if resolved else None
+        if transitions:
+            result = detail_mod.resolve_stage_transition_detail(
+                root, cid, as_of=asOf,
+                historical_model=_pipeline_history(cid), scope=scope_id)
+        else:
+            result = detail_mod.resolve_movement_detail(
+                root, cid, detailType, as_of=asOf,
+                historical_model=_pipeline_history(cid), scope=scope_id)
         if resolved is not None:
             result["portfolioScope"] = resolved.scope.to_dict()
         return http_cache.finish(response, etag, result)
@@ -1128,10 +1159,9 @@ def movement_detail(detailType: str,
         raise
     except Exception as exc:  # noqa: BLE001 - an optional hover must never 500
         logger.warning("movement detail failed: %s", exc)
-        return detail_mod.unavailable(
-            detailType, cid, as_of=asOf,
-            scope=(resolved.scope.context_id if resolved else None),
-            reason="Movement detail could not be produced for this point.")
+        return _no_detail(
+            "Movement detail could not be produced for this point.",
+            detail_mod.REASON_NO_COMPARISON)
 
 
 @app.get("/mi/insights/weekly-brief")

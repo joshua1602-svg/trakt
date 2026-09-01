@@ -20,6 +20,7 @@ import type {
   MIQuerySpec,
   MovementDetail,
   MovementDetailType,
+  StageTransitionDetail,
   WeeklyBrief,
   PipelineEvolution,
   PipelineFunnelEvolution,
@@ -30,6 +31,8 @@ import type {
   RiskLimitsSnapshot,
   SnapshotIndex,
 } from "@/domain";
+// A value, not a type: the detail type this route is called with.
+import { DETAIL_STAGE_TRANSITION } from "@/domain";
 import { isArtifact } from "@/domain";
 import { AgentError, type AgentClient } from "./AgentClient";
 import { authorizationHeaders } from "@/auth/tokenProvider";
@@ -241,6 +244,16 @@ export class HttpAgentClient implements AgentClient {
     return this.getJson<MovementDetail>(
       `/mi/insight/movement-detail?${this.scoped(portfolioId, portfolioContext,
         { detailType, asOf })}`, signal);
+  }
+
+  /** The SAME route as `getMovementDetail`, under the transition detail type.
+   * The response is the engine payload verbatim — nothing is reshaped here. */
+  getStageTransitionDetail(portfolioId: string, asOf?: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<StageTransitionDetail> {
+    return this.getJson<StageTransitionDetail>(
+      `/mi/insight/movement-detail?${this.scoped(portfolioId, portfolioContext,
+        { detailType: DETAIL_STAGE_TRANSITION, asOf })}`, signal);
   }
 
   getWeeklyBrief(portfolioId: string, portfolioContext?: string, asOf?: string,
