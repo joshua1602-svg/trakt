@@ -932,6 +932,26 @@ class OpsEngine:
         staging = self._staging_dir(run)
         staging.mkdir(parents=True, exist_ok=True)
 
+        # The staging root is scratch. A worker recycle takes the delivery's
+        # files with it while the run record survives, so "Run again" would
+        # otherwise restart a run whose inputs are no longer on disk. Put them
+        # back from the governed location recorded when they were received.
+        if run.batch_id:
+            batch = self.intake.load_batch(run.client_id, run.batch_id)
+            if batch is not None:
+                report = self.intake.restage_missing_files(batch)
+                if report["missing"]:
+                    self._park(run, RUN_BLOCKED)
+                    names = ", ".join(m["filename"] for m in report["missing"])
+                    run.blockers = [
+                        f"This delivery's files are no longer available "
+                        f"({names}). Send the files again to start a new "
+                        f"delivery for this period."]
+                    self.store.save_workflow(run)
+                    self.store.append_event(run, "restage_failed",
+                                            detail=report)
+                    return
+
         # Materialise applicable approved rules into client memory (existing
         # MappingMemoryStore artefact) before the agents run.
         applicable = self.rules.applicable(
@@ -1030,6 +1050,7 @@ class OpsEngine:
         work_dir = (Path(state.out_root) / state.run_id / "portfolios"
                     / run.portfolio_id)
         results = translate_run_state(run, state, work_dir)
+        self._restate_accepted_findings(run, results)
         open_blocking = False
         blocked = False
         for stage, gar in results.items():
@@ -1879,6 +1900,41 @@ class OpsEngine:
                     "OPS_CODE_NOT_PERMITTED",
                     f"The regulator does not accept that code for this field. "
                     f"Permitted: {allowed}.", 400)
+        if doc.get("kind") == KIND_VALIDATION_EXCEPTION:
+            # Two answers exist: accept these findings for this delivery, or
+            # stop. Anything else is not a disposition of the finding, and
+            # recording it would leave a resolved exception that says nothing
+            # about what was decided.
+            offered = {str(o.get("value")) for o in (doc.get("options") or [])}
+            if offered and chosen not in offered:
+                raise OpsError(
+                    "OPS_VALUE_NOT_PERMITTED",
+                    "Choose whether to accept these checks for this delivery "
+                    f"or stop. Permitted: {', '.join(sorted(offered))}.", 400)
+        if (doc.get("kind") == KIND_VALIDATION_EXCEPTION
+                and chosen == "proceed"):
+            # A structural finding is never acceptable, whoever asks and however
+            # the question reached them. The stage does not offer the action, and
+            # this refuses it again at the point of approval — so a decision
+            # raised before the data changed cannot be used to accept one now.
+            structural = self._structural_findings(run)
+            if structural:
+                fields = ", ".join(sorted({f["field"] for f in structural
+                                           if f.get("field")})) or "a required field"
+                raise OpsError(
+                    "OPS_STRUCTURAL_FAILURE_NOT_WAIVABLE",
+                    "This cannot be accepted as an exception: the report needs "
+                    f"{fields}, and the delivery does not contain it. Correct "
+                    "the file, the column mapping or the value and run it "
+                    "again.", 409)
+            # An exception is a documented business decision. Without a reason it
+            # is an undocumented one, and the record would carry no statement of
+            # why anyone accepted it.
+            if not str(reason or "").strip():
+                raise OpsError(
+                    "OPS_REASON_REQUIRED",
+                    "Say why these checks are being accepted for this "
+                    "delivery.", 400)
         if doc.get("kind") == KIND_PUBLICATION and not chosen:
             chosen = "publish"
         if not chosen:
@@ -1998,9 +2054,24 @@ class OpsEngine:
                 desc = (f"Read '{subject.get('source_value')}' as '{value}' for "
                         f"{subject.get('field', 'this field')}.")
         elif kind == KIND_VALIDATION_EXCEPTION:
+            # Record WHICH findings were accepted, not merely that some were.
+            # Without them the audit trail says an exception was approved and
+            # cannot say what it excepted.
+            findings = [f for f in (subject.get("findings") or [])
+                        if isinstance(f, dict)]
+            accepted = [{"rule": f.get("rule", ""), "field": f.get("field", ""),
+                         "issue_type": f.get("issue_type", ""),
+                         "description": f.get("description", "")}
+                        for f in findings]
             payload = {"check": subject.get("artefact", "validation"),
-                       "disposition": value, "justification": reason}
-            desc = "Accepted flagged checks for this delivery."
+                       "disposition": value, "justification": reason,
+                       "accepted_findings": accepted,
+                       "reporting_period": run.reporting_period or "",
+                       "workflow_id": run.workflow_id}
+            named = ", ".join(sorted({f["field"] for f in accepted
+                                      if f.get("field")}))
+            desc = (f"Accepted flagged checks on {named} for this delivery."
+                    if named else "Accepted flagged checks for this delivery.")
             scope = "file"      # validation exceptions never generalise silently
         elif kind == KIND_CLIENT_RULE:
             payload = {"setting": subject.get("setting", ""), "value": value}
@@ -2233,6 +2304,52 @@ class OpsEngine:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(text, encoding="utf-8")
         return dest
+
+    def _restate_accepted_findings(self, run: WorkflowRun,
+                                   results: Dict[str, Any]) -> None:
+        """Name the findings an operator accepted, on the validation stage.
+
+        The stage already reports that checks were accepted rather than passed —
+        it reads that off the orchestrator's own record. What the orchestrator
+        cannot supply is WHICH findings, and who accepted them: that is on the
+        approved decision. Without this the record says an exception was made
+        and cannot say what for.
+        """
+        gar = results.get(STAGE_VALIDATION)
+        if gar is None or gar.status != ST_APPROVED:
+            return
+        lines: List[str] = []
+        for d in self.store.list_decisions(run.client_id,
+                                           workflow_id=run.workflow_id):
+            if (d.get("kind") != KIND_VALIDATION_EXCEPTION
+                    or d.get("status") != DEC_APPROVED
+                    or d.get("resolution_value") != "proceed"):
+                continue
+            for f in ((d.get("subject") or {}).get("findings") or []):
+                if not isinstance(f, dict):
+                    continue
+                field = str(f.get("field") or "").replace("_", " ")
+                lines.append(
+                    f"{f.get('rule', 'A check')} on {field or 'the data'} did "
+                    f"not pass and was accepted: {f.get('description', '')}"
+                    .strip())
+            who, when = d.get("resolved_by", ""), d.get("resolved_at", "")
+            why = d.get("resolution_reason", "")
+            if who:
+                lines.append(f"Accepted by {who} on {when}: {why}")
+        if lines:
+            gar.warnings = lines
+
+    def _structural_findings(self, run: WorkflowRun) -> List[Dict[str, str]]:
+        """Gate 3's blocking findings that no exception may accept.
+
+        Read from the Validation Agent's own issue register for this run, using
+        the same reader the stage uses, so the operator screen and the approval
+        gate can never disagree about what is structural.
+        """
+        from .adapters import read_validation_findings
+        work_dir = self._staging_dir(run)
+        return read_validation_findings(work_dir)["structural"]
 
     def _validation_exception_approved(self, run: WorkflowRun) -> bool:
         for d in self.store.list_decisions(run.client_id,

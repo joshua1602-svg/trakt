@@ -1130,3 +1130,13 @@ def audit(client: str, workflow_id: Optional[str] = None,
         rows = [r for r in rows if r.get("workflow_id") == workflow_id]
     return {"ok": True, "audit": rows,
             "chain_intact": eng.store.verify_audit_chain(client)}
+
+
+# MI Query live telemetry — the Day-1 calibration surface. Registered last so it
+# can read `app` and `get_engine` above. Deliberately a separate module: it is
+# one governed record type and its review, not part of the wider operations
+# console, and the future system dashboard should link to it rather than absorb
+# it.
+from . import mi_query_routes  # noqa: E402
+
+mi_query_routes.register(app, get_engine)
