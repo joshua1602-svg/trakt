@@ -50,7 +50,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple
@@ -1074,13 +1074,38 @@ def _execute_grouped_measure_set(spec, work, semantics, warnings,
 
 
 def _execute_share(spec, df, work, semantics, warnings, balance_col):
-    """A governed share: the filtered population over the WHOLE-BOOK population.
+    """A governed share: the filtered population over the population it is OF.
 
     Two populations, both computed here from the same frame, so the denominator
     can never drift from the numerator. Basis is the balance measure when one is
     named and loan count otherwise. Returns None when the denominator is zero or
     unavailable — a share with no denominator is refused, never reported as 0%.
+
+    THE DENOMINATOR IS THE POPULATION THE QUESTION NAMED. "What proportion of
+    the book is drawdown?" names the book, and the denominator is the whole
+    frame — which is every share this executor has ever computed, and is what
+    an empty `share_denominator_filters` still produces. "What share of Offer
+    pipeline is joint borrowers?" names the Offer pipeline, and dividing by the
+    whole book answered 19.2% for a governed 59.68%. The narrowing is decided by
+    the parser from the "share of ..." phrase and applied here with the SAME
+    mask builder the numerator uses, so the two populations cannot drift.
     """
+    selection = set(getattr(spec, "share_selection_fields", None) or ())
+    denominator_filters = {k: v for k, v in (spec.filters or {}).items()
+                           if k not in selection} if selection else {}
+    if denominator_filters:
+        # THE SAME NARROWING MACHINERY THE NUMERATOR USES, so the two
+        # populations cannot drift: one spec, one `_apply_filters`, two filter
+        # sets. A denominator that narrows to nothing is left alone, so the
+        # existing "denominator is zero" refusal still governs.
+        narrowed = _apply_filters(df.copy(), replace(spec, filters=denominator_filters),
+                                  semantics, [])
+        if len(narrowed):
+            warnings.append(
+                "share denominator: the population the question named (%s) — "
+                "%d of %d rows"
+                % (", ".join(sorted(denominator_filters)), len(narrowed), len(df)))
+            df = narrowed
     if spec.metric:
         entry = resolve_semantic_field(spec.metric, semantics)
         canonical = entry.get("canonical_field")

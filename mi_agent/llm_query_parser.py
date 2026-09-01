@@ -2313,6 +2313,55 @@ def _share_request(q: str, semantics: dict, available_columns=None
     return ("balance", _balance_metric(semantics, available_columns))
 
 
+#: WHICH FILTER SELECTS THE NUMERATOR OF A SHARE.
+#:
+#: "What share of X is Y" names two populations. Y selects the numerator; X is
+#: the DENOMINATOR population, and every other narrowing in the sentence belongs
+#: to it. Until this reader existed the denominator was always the whole book,
+#: so "what share of Offer pipeline is joint borrowers?" divided the joint-Offer
+#: balance by the WHOLE pipeline and answered 19.2% where the governed answer is
+#: 59.68%.
+#:
+#: It reads the SELECTION side rather than the population side, which is the
+#: robust direction: a stage, a scope or a threshold may be contributed to
+#: `spec.filters` by an owner other than this module (the governed stage reader
+#: does exactly that), and anything this reader does not claim stays with the
+#: denominator — the safe default, because it reproduces today's behaviour.
+#:
+#: The span is delimited syntactically and handed to the SAME filter resolver
+#: the rest of the parser uses. No new vocabulary: "of the book is drawdown"
+#: yields the product filter as the selection, leaves no contextual narrowing,
+#: and the whole-book denominator is unchanged BY CONSTRUCTION.
+_SHARE_SELECTION_RE = re.compile(
+    r"\b(?:is|are|was|were|relates?\s+to|relate\s+to|comes?\s+from|"
+    r"accounted\s+for|comprises?)\s+(.+?)\s*[?.!]*\s*$", re.I)
+
+
+def _share_selection_fields(q: str, semantics: dict, available_columns,
+                            available_values=None) -> List[str]:
+    """The governed field keys naming the NUMERATOR of a share, if any.
+
+    Returns ``[]`` when the sentence has no selection clause this reader can
+    claim, which leaves the denominator exactly where it has always been.
+    """
+    match = _SHARE_SELECTION_RE.search(q or "")
+    if not match:
+        return []
+    phrase = (match.group(1) or "").strip()
+    if not phrase:
+        return []
+    try:
+        found = _parse_filters(phrase, semantics, available_columns,
+                               unresolved=[], available_values=available_values)
+        structure = _borrower_structure_filter(phrase, semantics, available_columns)
+    except Exception:  # noqa: BLE001 - unreadable selection keeps today's denominator
+        return []
+    keys = set(found or {})
+    if structure is not None and structure[0]:
+        keys |= set(structure[0])
+    return sorted(keys)
+
+
 #: P1D — an AGGREGATE-CONTRIBUTION question.
 #:
 #: "Which region CONTRIBUTES MOST TO the weighted average LTV?" is not "which
@@ -3960,8 +4009,10 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
                     metric=share[1] or _balance_metric(semantics, available_columns),
                     aggregation="share", title=title,
                     filters=share_filters, unavailable_filters=share_unavail,
-                    explanation="Share of the whole book meeting the stated "
-                                "condition (filtered population over total).",
+                    share_selection_fields=_share_selection_fields(
+                        q, semantics, available_columns, available_values),
+                    explanation="Share of the population the question named "
+                                "(filtered population over that population).",
                     output_format="table"),
                     _det_meta("medium", explicit, dim_terms))
             # A GOVERNED SCOPE IS A POPULATION TOO.
@@ -4067,6 +4118,10 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
             intent="summary", chart_type="none", metric=metric, aggregation=agg,
             weight_field=weight, title=title,
             filters=kpi_filters, unavailable_filters=kpi_unavail,
+            share_selection_fields=(
+                _share_selection_fields(q, semantics, available_columns,
+                                        available_values)
+                if agg == "share" else []),
             explanation=f"{agg} of {metric} (single KPI; no grouping dimension "
                         "requested).",
             output_format="table"),
@@ -4103,8 +4158,10 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
                     metric=share[1] or _balance_metric(semantics, available_columns),
                     aggregation="share", title=title,
                     filters=share_filters, unavailable_filters=share_unavail,
-                    explanation="Share of the whole book meeting the stated "
-                                "condition (filtered population over total).",
+                    share_selection_fields=_share_selection_fields(
+                        q, semantics, available_columns, available_values),
+                    explanation="Share of the population the question named "
+                                "(filtered population over that population).",
                     output_format="table"),
                     _det_meta("medium", explicit, dim_terms))
         # An explicit COUNT is a measure the user NAMED, not the absence of one.

@@ -319,6 +319,19 @@ class MIQuerySpec:
     measures: List[Dict[str, Any]] = field(default_factory=list)
 
     filters: Dict[str, Any] = field(default_factory=dict)
+    #: WHICH FILTERS SELECT THE NUMERATOR OF A SHARE.
+    #:
+    #: `share` divides one population by another. Until this field existed the
+    #: denominator was ALWAYS the whole book, which is right for "what
+    #: proportion of the book is drawdown?" and wrong for "what share of Offer
+    #: pipeline is joint borrowers?" — the second names its own denominator, and
+    #: answering it over the whole book reported 19.2% for a governed 59.68%.
+    #:
+    #: These keys name the SELECTION side. Everything else in `filters` is the
+    #: population the share is OF, and narrows the denominator. Empty means
+    #: "the whole book", so every existing share is unchanged. Written by
+    #: `llm_query_parser._share_selection_fields`, read by `_execute_share`.
+    share_selection_fields: List[str] = field(default_factory=list)
     top_n: Optional[int] = None
 
     # Ranking / "largest" grammar (ADDITIVE; all optional, no-op by default).

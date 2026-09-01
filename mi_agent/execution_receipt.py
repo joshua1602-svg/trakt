@@ -422,9 +422,57 @@ def book_values(frame, semantics: Mapping[str, Any],
             continue
         # lower-cased key -> the book's OWN spelling, so a resolved value is
         # rendered as the book writes it rather than as the reader typed it.
-        out[key] = {str(v).strip().lower(): str(v).strip()
-                    for v in values if str(v).strip()}
+        catalogue = {str(v).strip().lower(): str(v).strip()
+                     for v in values if str(v).strip()}
+        # ONE DIMENSION DUPLICATED IS NOT TWO DIMENSIONS.
+        #
+        # A preparation layer may publish the same column under a second
+        # governed name — `pipeline_prep._apply_group_aliases` copies
+        # `collateral_geography` into `geographic_region_obligor` and records
+        # the alias — and both names are registered dimensions. Catalogued
+        # twice, every one of their values is claimed by two fields, and
+        # `categorical_spans.value_field` correctly refuses to resolve an
+        # ambiguous narrowing. The premise is false, though: the two names
+        # select IDENTICAL ROWS, so there is no ambiguity to disclose, and the
+        # refusal that followed told the reader their book held no London
+        # loans on a book holding four.
+        #
+        # The test is the DATA, not a list of alias names: a dimension whose
+        # column is element-wise identical to one already catalogued is the
+        # same narrowing under another name, and is catalogued once. Two fields
+        # that genuinely disagree on any row still both appear, and the
+        # ambiguity rule still fires — which is the case that rule exists for.
+        twin = _duplicate_of(frame, column, catalogue, out, semantics)
+        if twin is not None:
+            continue
+        out[key] = catalogue
     return out
+
+
+def _duplicate_of(frame, column: str, catalogue: Mapping[str, str],
+                  kept: Mapping[str, Mapping[str, str]],
+                  semantics: Mapping[str, Any]) -> Optional[str]:
+    """An already-catalogued field whose column is element-wise identical.
+
+    The value-set comparison is the cheap gate; the column comparison is the
+    decision, because two different dimensions can share a vocabulary while
+    disagreeing row by row (an obligor's region and a property's region are the
+    same words about different things, and those must stay two fields).
+    """
+    fields = (semantics or {}).get("fields") or {}
+    for other_key, other in kept.items():
+        if set(other) != set(catalogue):
+            continue
+        other_column = (fields.get(other_key) or {}).get("canonical_field", other_key)
+        if other_column == column:
+            continue
+        try:
+            same = frame[other_column].equals(frame[column])
+        except Exception:  # noqa: BLE001 - an uncomparable column is not a twin
+            continue
+        if same:
+            return other_key
+    return None
 
 
 def book_columns(frame) -> Set[str]:
