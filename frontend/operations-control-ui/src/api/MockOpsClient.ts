@@ -63,6 +63,10 @@ import type {
   WorkflowRow,
   WorkflowStep,
   WorkflowType,
+  MiQueryDetail,
+  MiQueryFilters,
+  MiQueryRow,
+  MiQuerySummary,
 } from "./types";
 
 /** Plain labels for the delivery workflow step states. */
@@ -1494,6 +1498,129 @@ export class MockOpsClient implements OpsClient {
       );
     }
     return deepCopy(rules);
+  }
+
+  // -- MI Query live telemetry ------------------------------------------- #
+  // A handful of representative questions so the review screen can be worked on
+  // without a live deployment: one answered, one refused, one errored.
+  private miQueries: MiQueryDetail[] = [
+    {
+      query_id: "miq_demo_answered", asked_at: new Date(Date.now() - 36e5).toISOString(),
+      client_id: "client_a", portfolio_id: "direct_001", user_id: "alice@lender.example",
+      channel: "react", question: "What is the weighted average LTV?",
+      outcome: "ANSWERED", route: "mi", refusal_reason: null, error_code: null,
+      duration_ms: 812, review: "UNREVIEWED",
+      answer: "Weighted-average Current LTV: 43.5% · 1,204 loans.",
+      interpretation: { metric: "current_loan_to_value", aggregation: "weighted_avg", intent: "summary" },
+      parser: { parser_used: "deterministic" }, capability: "mi.question.answer",
+      execution_mode: null, result_type: "summary", row_count: 1,
+      snapshot_id: "snap_2025_11_30", content_hash: "sha256:abc123",
+      data_source_kind: "platform_canonical", data_source_label: "Funded book",
+      reporting_period: "2025-11-30", dataset_view: "funded", message: null, warnings: [],
+    },
+    {
+      query_id: "miq_demo_refused", asked_at: new Date(Date.now() - 72e5).toISOString(),
+      client_id: "client_a", portfolio_id: "direct_001", user_id: "bruno@lender.example",
+      channel: "react", question: "Can you predict next quarter's defaults?",
+      outcome: "REFUSED", route: null, refusal_reason: "AMBIGUOUS_QUESTION",
+      error_code: null, duration_ms: 91, review: "UNREVIEWED",
+      answer: "", interpretation: {}, parser: { parser_used: "deterministic" },
+      capability: "mi.question.answer", execution_mode: null, result_type: null,
+      row_count: null, snapshot_id: "snap_2025_11_30", content_hash: "sha256:abc123",
+      data_source_kind: "platform_canonical", data_source_label: "Funded book",
+      reporting_period: "2025-11-30", dataset_view: "funded",
+      message: "I couldn't map this question to a governed analytic.", warnings: [],
+    },
+    {
+      query_id: "miq_demo_error", asked_at: new Date(Date.now() - 90e5).toISOString(),
+      client_id: "client_a", portfolio_id: "direct_001", user_id: "alice@lender.example",
+      channel: "react", question: "What is the total balance?",
+      outcome: "ERROR", route: null, refusal_reason: null,
+      error_code: "STORAGE_UNAVAILABLE", duration_ms: 15, review: "UNREVIEWED",
+      answer: "", interpretation: {}, parser: {}, capability: "mi.question.answer",
+      execution_mode: null, result_type: null, row_count: null,
+      snapshot_id: null, content_hash: null, data_source_kind: null,
+      data_source_label: null, reporting_period: null, dataset_view: null,
+      message: "The governed data store is currently unavailable.", warnings: [],
+    },
+  ];
+
+  async getMiQuerySummary(): Promise<MiQuerySummary> {
+    await this.wait();
+    const rows = this.miQueries;
+    const reviewed = rows.filter((r) => r.review !== "UNREVIEWED");
+    const correct = reviewed.filter(
+      (r) => r.review === "CORRECT" || r.review === "APPROPRIATE_REFUSAL",
+    );
+    const problematic = reviewed.filter(
+      (r) => !["CORRECT", "APPROPRIATE_REFUSAL", "NEEDS_INVESTIGATION"].includes(r.review),
+    );
+    const latencies = rows.map((r) => r.duration_ms ?? 0).sort((a, b) => a - b);
+    const pct = (n: number, d: number) => (d ? Math.round((1000 * n) / d) / 10 : null);
+    const breakdown: Record<string, number> = {};
+    reviewed.forEach((r) => {
+      breakdown[r.review] = (breakdown[r.review] ?? 0) + 1;
+    });
+    return {
+      total_questions: rows.length,
+      unique_users: new Set(rows.map((r) => r.user_id)).size,
+      answered: rows.filter((r) => r.outcome === "ANSWERED").length,
+      refused: rows.filter((r) => r.outcome === "REFUSED").length,
+      errors: rows.filter((r) => r.outcome === "ERROR").length,
+      answered_pct: pct(rows.filter((r) => r.outcome === "ANSWERED").length, rows.length),
+      refused_pct: pct(rows.filter((r) => r.outcome === "REFUSED").length, rows.length),
+      error_pct: pct(rows.filter((r) => r.outcome === "ERROR").length, rows.length),
+      unreviewed: rows.length - reviewed.length,
+      reviewed: reviewed.length,
+      reviewed_correct: correct.length,
+      reviewed_problematic: problematic.length,
+      reviewed_correctness_pct: pct(correct.length, reviewed.length),
+      review_breakdown: breakdown,
+      median_latency_ms: latencies.length ? latencies[Math.floor(latencies.length / 2)] : null,
+      p95_latency_ms: latencies.length ? latencies[latencies.length - 1] : null,
+    };
+  }
+
+  async getMiQueries(filters?: MiQueryFilters): Promise<MiQueryRow[]> {
+    await this.wait();
+    let rows = this.miQueries.map((r) => deepCopy(r) as MiQueryRow);
+    if (filters?.outcome) rows = rows.filter((r) => r.outcome === filters.outcome);
+    if (filters?.review === "PROBLEMATIC") {
+      rows = rows.filter(
+        (r) => !["UNREVIEWED", "CORRECT", "APPROPRIATE_REFUSAL"].includes(r.review),
+      );
+    } else if (filters?.review) {
+      rows = rows.filter((r) => r.review === filters.review);
+    }
+    if (filters?.q) {
+      const needle = filters.q.toLowerCase();
+      rows = rows.filter((r) => r.question.toLowerCase().includes(needle));
+    }
+    return rows;
+  }
+
+  async getMiQuery(queryId: string): Promise<MiQueryDetail> {
+    await this.wait();
+    const found = this.miQueries.find((r) => r.query_id === queryId);
+    if (!found) {
+      throw new OpsError("That query could not be found.");
+    }
+    return deepCopy(found);
+  }
+
+  async reviewMiQuery(queryId: string, classification: string, note?: string): Promise<void> {
+    await this.wait();
+    const found = this.miQueries.find((r) => r.query_id === queryId);
+    if (!found) {
+      throw new OpsError("That query could not be found.");
+    }
+    found.review = classification;
+    found.review_detail = {
+      classification,
+      reviewer: "Root Operator",
+      reviewed_at: new Date().toISOString(),
+      note: note ?? null,
+    };
   }
 
   async getRuleHistory(ruleId: string): Promise<Rule[]> {

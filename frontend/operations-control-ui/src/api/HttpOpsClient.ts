@@ -57,6 +57,10 @@ import type {
   StartWorkflowInput,
   Workflow,
   WorkflowRow,
+  MiQueryDetail,
+  MiQueryFilters,
+  MiQueryRow,
+  MiQuerySummary,
 } from "./types";
 
 interface ErrorFields {
@@ -286,6 +290,47 @@ export class HttpOpsClient implements OpsClient {
       })}`,
     );
     return body.rules;
+  }
+
+  async getMiQuerySummary(filters?: MiQueryFilters): Promise<MiQuerySummary> {
+    const body = await this.request<{ summary: MiQuerySummary }>(
+      `/ops/mi-queries/summary${query({ window: filters?.window, client: filters?.client })}`,
+    );
+    return body.summary;
+  }
+
+  async getMiQueries(filters?: MiQueryFilters): Promise<MiQueryRow[]> {
+    const body = await this.request<{ queries: MiQueryRow[] }>(
+      `/ops/mi-queries${query({
+        window: filters?.window,
+        client: filters?.client,
+        outcome: filters?.outcome,
+        user: filters?.user,
+        portfolio: filters?.portfolio,
+        review: filters?.review,
+        q: filters?.q,
+      })}`,
+    );
+    return body.queries;
+  }
+
+  async getMiQuery(queryId: string, client?: string): Promise<MiQueryDetail> {
+    const body = await this.request<{ query: MiQueryDetail }>(
+      `/ops/mi-queries/${encodeURIComponent(queryId)}${query({ client })}`,
+    );
+    return body.query;
+  }
+
+  async reviewMiQuery(
+    queryId: string,
+    classification: string,
+    note?: string,
+    client?: string,
+  ): Promise<void> {
+    await this.request(`/ops/mi-queries/${encodeURIComponent(queryId)}/review`, {
+      method: "POST",
+      body: JSON.stringify({ classification, note, client }),
+    });
   }
 
   async getRuleHistory(ruleId: string): Promise<Rule[]> {

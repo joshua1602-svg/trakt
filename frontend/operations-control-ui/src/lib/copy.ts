@@ -36,6 +36,7 @@ export const copy = {
     admin: "Platform configuration",
     onboarding: "Client onboarding",
     concentration: "Concentration tests",
+    miQueries: "MI Query usage",
     manual: "Manual delivery",
     specialistHeading: "Specialist",
     startNew: "Create a manual delivery",
