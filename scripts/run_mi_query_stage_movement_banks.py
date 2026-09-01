@@ -27,8 +27,22 @@ governed pipeline fixture, before and after, with every answer, route and
 verdict compared question by question. ``--compare`` reports any question whose
 answer, route or verdict moved at all.
 
-Deterministic and offline: the funded tape is seeded, the pipeline extracts are
-the committed fixture, and the free-form LLM parser arm is off.
+    python scripts/run_mi_query_stage_movement_banks.py --out out/lang \\
+        --concept-merge --model claude-opus-5
+
+TWO ARMS, AND WHICH ONE THE SHIPPING RECORD IS. The 136/166 figure was measured
+"with the language layer"; 127/166 was the "governed engine alone". The language
+layer is the CONCEPT-MERGE arm — the model proposes concepts in registered
+vocabulary and the registry binds them — and NOT the free-form parser, which
+`datasets._mi_llm_config` withdraws from serving unconditionally because it
+emits a whole governed spec and thereby owns the semantics. `--concept-merge`
+runs the first; the default runs the second. Both are reported, because a
+capability that only works with a model in front of it is a different claim from
+one that works without.
+
+Deterministic and offline by default: the funded tape is seeded, the pipeline
+extracts are the committed fixture, and the free-form LLM parser arm cannot be
+switched on. `--concept-merge` makes one model call per question.
 """
 
 from __future__ import annotations
@@ -121,8 +135,12 @@ def build_client():
         raise SystemExit("RUN INVALID - the free-form LLM parser arm is live; "
                          "set MI_AGENT_LLM_PARSER=off")
     from fastapi.testclient import TestClient
+    from mi_agent_api import concept_merge_arm as _merge
     from mi_agent_api.app import app
 
+    print("   language layer: %s"
+          % ("concept merge ON · model %s" % _merge.model_name()
+             if _merge.enabled() else "OFF (deterministic arm only)"))
     return TestClient(app)
 
 
@@ -273,8 +291,31 @@ def main(argv=None) -> int:
                     help="an earlier --out directory to diff against")
     ap.add_argument("--only", choices=("166", "stage", "neighbours"),
                     help="run one bank instead of all three")
+    ap.add_argument("--concept-merge", action="store_true",
+                    help="run WITH the language layer — the shipped concept-merge "
+                         "arm, which is the configuration the 136/166 record was "
+                         "measured under. Needs ANTHROPIC_API_KEY and makes one "
+                         "model call per question.")
+    ap.add_argument("--model", help="model for the concept-merge arm "
+                                    "(default: the arm's own default)")
     args = ap.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
+
+    # THE LANGUAGE LAYER IS THE CONCEPT-MERGE ARM, not the free-form parser.
+    # `datasets._mi_llm_config` withdraws the free-form arm from serving
+    # unconditionally — it emits a whole governed spec and owns the semantics —
+    # so `MI_AGENT_LLM_PARSER` cannot turn anything on. The arm that ships, and
+    # the one the shipping record's "with the language layer" column was
+    # measured under, proposes concepts in registered vocabulary and lets the
+    # REGISTRY bind them.
+    if args.concept_merge:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            raise SystemExit("--concept-merge needs ANTHROPIC_API_KEY")
+        os.environ["MI_AGENT_CONCEPT_MERGE"] = "on"
+        if args.model:
+            os.environ["MI_AGENT_CONCEPT_MERGE_MODEL"] = args.model
+    else:
+        os.environ["MI_AGENT_CONCEPT_MERGE"] = "off"
 
     client = build_client()
     failures = 0
