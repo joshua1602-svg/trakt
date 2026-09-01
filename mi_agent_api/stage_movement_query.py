@@ -95,10 +95,15 @@ _TRANSITION_VERBS = ("moved", "move", "moves", "moving", "progressed",
                      "go", "goes", "going", "advanced", "advance", "advances",
                      "advancing", "migrated", "migrate", "migrates")
 
-#: Connectors that make a pair of stages DIRECTIONAL. The source is whichever
-#: stage the sentence puts before the connector.
-_CONNECTORS = ("->", "→", "to", "into", "in to", "onto", "on to", "through to",
-               "reached", "reaching", "reach")
+#: Connectors that are directional ON THEIR OWN. "Offer into Completion" and
+#: "offers reached Completion" can only be read one way.
+_STRONG_CONNECTORS = ("->", "→", "into", "in to", "onto", "on to", "through to",
+                      "reached", "reaching", "reach")
+
+#: "to" is NOT directional on its own — "compare KFI numbers to Offer numbers"
+#: is a comparison, not a movement — so it counts only alongside a transition
+#: verb, or in the "from X to Y" frame where "from" supplies the direction.
+_WEAK_CONNECTORS = ("to",)
 
 _ARRIVAL_WORDS = ("new arrival", "new arrivals", "newly entered", "newly arrived",
                   "entered", "enter", "enters", "entering", "arrived", "arrive",
@@ -195,41 +200,43 @@ def _directional_pair(text: str, mentions: List[Tuple[int, str]]
                       ) -> Optional[Tuple[str, str]]:
     """``(source, destination)`` where the sentence puts two stages in order.
 
-    Two constructions, both explicit:
+    Two distinct governed stages, in text order, with the direction EXPLICIT.
+    One stage is a stock question and belongs to its existing owner; three or
+    more is not a movement this capability can bind, and it declines rather than
+    guessing which pair the reader meant.
 
-      A. a CONNECTOR between two distinct stages — "KFI to Application",
-         "Application into Offer", "Offer -> Completed", "offers reached
-         Completion". The source is the stage before the connector.
-      B. a TRANSITION VERB anywhere, with exactly two distinct stages named —
-         "cases moved from KFI to Application" already matches (A); this covers
-         "which cases progressed, KFI and Application" style orderings where the
-         connector sits elsewhere. Funnel order decides, because a case cannot
-         move backwards through the governed funnel in this construction.
+    Direction is explicit in exactly three ways, and nothing else counts:
 
-    Returns ``None`` unless two DISTINCT governed stages are named. One stage is
-    a stock question and belongs to its existing owner.
+      * a TRANSITION VERB anywhere — "cases moved from KFI to Application";
+      * a STRONG CONNECTOR between the two stages — "Application into Offer",
+        "offers reached Completion", "Offer -> Completed";
+      * the "from X to Y" frame, where "from" before the first stage is what
+        makes the bare "to" directional.
+
+    A bare "to" on its own is deliberately not enough. "Compare KFI numbers to
+    Offer numbers" reads identically to a movement and is a comparison, which
+    `temporal_compare` owns.
     """
-    distinct = []
+    distinct: List[str] = []
     for _, stage in mentions:
         if stage not in distinct:
             distinct.append(stage)
     if len(distinct) != 2:
         return None
 
-    first_pos = {}
+    first_pos: Dict[str, int] = {}
     for pos, stage in mentions:
         first_pos.setdefault(stage, pos)
+    source, destination = sorted(distinct, key=lambda st: first_pos[st])
+    between = text[first_pos[source]:first_pos[destination]]
 
-    a, b = sorted(distinct, key=lambda s: first_pos[s])
-    between = text[first_pos[a]:first_pos[b]]
-    if _has(between, _CONNECTORS) or "->" in between or "→" in between:
-        return a, b
     if _has(text, _TRANSITION_VERBS):
-        from question_interpretation.lexical import canonical_pipeline_stages
-
-        order = {s: i for i, s in enumerate(canonical_pipeline_stages())}
-        src, dst = sorted(distinct, key=lambda s: order.get(s, 99))
-        return src, dst
+        return source, destination
+    if _has(between, _STRONG_CONNECTORS):
+        return source, destination
+    before = text[:first_pos[source]]
+    if _has(between, _WEAK_CONNECTORS) and before.rstrip().endswith("from"):
+        return source, destination
     return None
 
 
@@ -291,9 +298,7 @@ def read(question: Optional[str]) -> Optional[StageMovement]:
     if _has(text, _STAYER_WORDS):
         return StageMovement(subtype=STAYER,
                              measure=_measure_for(text, STAYER), stage=stage)
-    if _has(text, _ARRIVAL_WORDS) and (" new " in text or _has(
-            text, ("entered", "arrived", "arrivals", "arrival", "arriving",
-                   "entering"))):
+    if _has(text, _ARRIVAL_WORDS):
         return StageMovement(subtype=NEW_ARRIVAL,
                              measure=_measure_for(text, NEW_ARRIVAL),
                              destination=stage)
@@ -647,7 +652,8 @@ def _construction_words() -> set:
     words = set()
     for spelling in pipeline_stage_vocabulary():
         words.update(re.findall(r"[a-z]+", spelling.lower()))
-    for group in (_TRANSITION_VERBS, _CONNECTORS, _ARRIVAL_WORDS, _STAYER_WORDS,
+    for group in (_TRANSITION_VERBS, _STRONG_CONNECTORS, _WEAK_CONNECTORS,
+                  _ARRIVAL_WORDS, _STAYER_WORDS,
                   _DEPARTURE_WORDS, _RECONCILIATION_WORDS):
         for term in group:
             words.update(re.findall(r"[a-z]+", term.lower()))

@@ -140,10 +140,13 @@ for. Nothing else in the estate can see it, so nothing else can be changed by it
 **Recognition.** A question is stage movement only when it names governed stages
 in an explicit movement construction:
 
-* **transition** — two *distinct* governed stages with a directional connector
-  between them (`to`, `into`, `->`, `→`, `reached`, `through to`…), or a
-  transition verb (`moved`, `progressed`, `transitioned`, `went`, `advanced`,
-  `migrated`) with exactly two stages, resolved in governed funnel order;
+* **transition** — two *distinct* governed stages in text order with the
+  direction **explicit**, in exactly one of three ways: a transition verb
+  anywhere (`moved`, `progressed`, `transitioned`, `went`, `advanced`,
+  `migrated`); a strong connector between them (`into`, `->`, `→`, `onto`,
+  `through to`, `reached`); or the `from X to Y` frame. A bare `to` is
+  deliberately not enough — *"compare KFI numbers to Offer numbers"* reads
+  identically and is a comparison, which `temporal_compare` owns;
 * **new arrival / stayer / departure / reconciliation** — exactly one governed
   stage plus an explicit arrival, stayer, departure or reconciliation word.
 
