@@ -5,7 +5,7 @@
 | starting SHA | `63ab269` — the head of `claude/mi-query-multivariate-two-defect-fix` (see §0) |
 | latest merged `main` | `95dbbda` |
 | branch | `claude/mi-query-calibration-only` |
-| commits | `b80d4ed` Calibration A · `7d47398` Calibration B |
+| commits | `b80d4ed` Calibration A · `7d47398` Calibration B · `ea418ee` + `063bd0e` test-harness env hygiene |
 | production files changed | **1** · **+44 / −0 executable lines** |
 | new routes / recognisers / executors / semantics | **0** |
 | arms measured | governed engine, and the concept-merge language layer (`claude-opus-5`) |
@@ -581,5 +581,104 @@ and `test_stage_movement_query.py` — **48 passed, 28 subtests**.
 
 ## 16. Broad serial regression
 
-<!-- REGRESSION -->
+Serial, not `xdist`, whose module-level state instability was demonstrated two
+sprints ago. Both SHAs run with the same command from the same working tree —
+`python -m pytest -q` at the repo root — rather than in a worktree, which is
+what produced the spurious absolute-path failure in the previous sprint's
+record.
 
+```
+HEAD      124 failed · 10547 passed · 746 skipped · 15 xfailed   (50m26s)
+63ab269   124 failed · 10523 passed · 746 skipped · 15 xfailed   (52m46s)
+
+failures identical in both       124
+failures ONLY on HEAD (new)        0
+failures ONLY on the baseline      0
+```
+
+**Zero new failures. Zero pre-existing failures fixed or touched.**
+
+(The absolute counts are much larger than the previous sprint's 83/5994 because
+that run collected a narrower set. What matters here is that both sides of
+*this* comparison ran the identical command, and the failing test IDs match
+exactly.)
+
+### The two rounds this took, because the first one was not clean
+
+The first HEAD pass showed **22 failures the baseline did not have**, in
+`test_channel_parity`, `test_concentration_tests_api`, `test_copilot_actions`
+and — oddly — in the previous sprint's own `test_multivariate_two_defect_fix`.
+All 22 passed in isolation. They were not caused by the calibration, and they
+were still mine to fix.
+
+The multivariate test harness builds a module-level client and set five
+environment variables once, then left them standing for the rest of the session.
+That leaks both ways: a later module inherits this book and this pipeline
+fixture, and once another module overwrites those keys the singleton already
+exists so nothing re-applies them. Both were invisible while one module used the
+harness and nothing ran between its first and last test. `test_calibration_only`
+sorts before the modules in the middle, which is what surfaced it.
+
+The env is now re-applied on every call and restored at module teardown
+(`ea418ee`). That left **one** failure, and it was instructive:
+`test_the_easy_auth_guard_exempts_the_agent_prefix`. `mi_agent_api/tests/
+conftest.py` already owns `MI_AGENT_AUTH_ENABLED` through an autouse
+**monkeypatch** fixture that reverts after every test — so the snapshot captured
+the monkeypatched `"false"` and teardown pinned it permanently. That is also why
+the leak never showed at the base SHA: monkeypatch had been quietly cleaning up
+the direct assignment all along. The harness now manages only the three keys it
+introduced (`063bd0e`), and the comparison above is the result.
+
+No production code was involved in either fix.
+
+
+---
+
+## 17. Recommendation
+
+**MERGE ALL.** Both calibrations are safe, both are independently attributable,
+and either could be dropped without the other — but there is no reason to drop
+either.
+
+| condition | measured | |
+|---|---|:--:|
+| no previously correct answer lost, any bank | 166: 0 moved · stage: 0 moved · NN: 0 moved · multivariate: 0 lost | ✅ |
+| Stage Movement 36/36 | **36/36**, both arms | ✅ |
+| near neighbours 13/13 | **13/13** own route, both arms | ✅ |
+| every multivariate change attributable | **14 moved, 14 attributed** (13→A, 1→B) | ✅ |
+| no new silent wrong answers | **2 → 1**; none created | ✅ |
+| MV09A–D temporal unchanged | **byte-identical** | ✅ |
+| no new route / recogniser / executor / semantic | **0 of each** | ✅ |
+| no client-specific or hard-coded stage logic | asserted by test against the source | ✅ |
+| broad serial regression | **124 identical failures, 0 new, 0 fixed** | ✅ |
+| change stays small and concentrated | 1 production file, +44/−0 executable | ✅ |
+
+### What a reviewer should look at rather than take on trust
+
+1. **§0 — the base.** This branch sits on the unmerged audit and the unmerged
+   two-defect fix. Calibration A **must not** ship ahead of the share
+   denominator fix, or the phrasings it recovers will answer 19.2%.
+2. **§6 — the eleven changed receipts.** They stay CORRECT and their figures are
+   unchanged, but a strict reading of the brief's §0 would abort on them. That
+   reading also makes the sprint undeliverable, and the reasoning is set out so
+   it can be overruled.
+3. **§14 — the surviving silent wrong.** `"…as a percentage"` still answers an
+   absolute. Unchanged, not worsened, and deliberately not guessed at.
+
+### What this sprint says about the next one
+
+The two hypotheses in the brief were not the defects. The share vocabulary was
+already complete, and three of the four grouping words already worked. Both real
+causes were **structural readings of an already-understood sentence** — a
+qualifier misread as an axis, and a numeric term whose axis was dropped — and
+neither would have been found by adding synonyms.
+
+The cheapest next wins, in order, are all of that same kind:
+
+* `"currently"` — an unrecognised word that discards the entire query, filters
+  included. It alone accounts for MV04C and part of MV02C's family.
+* `"…as a percentage"` — needs the measure resolved before the share test, which
+  is a sequencing change rather than a vocabulary one.
+* `"borrower-type split"` returning a **region** grouping (§9) — a default-region
+  fallback claiming an axis it was not offered. It is a silent wrong answer today
+  and was not introduced here.
