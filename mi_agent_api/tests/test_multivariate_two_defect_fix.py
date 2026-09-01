@@ -92,11 +92,20 @@ def _client():
         root = Path(tempfile.mkdtemp(prefix="mv_fix_")) / "onboarding_output"
         for run_id, date, rows in runner.MONTHS:
             runner.write_funded_tape(root, run_id, date, rows)
+        # AUTH IS NOT MANAGED HERE, AND THAT IS THE POINT.
+        #
+        # `mi_agent_api/tests/conftest.py` already sets MI_AGENT_AUTH_ENABLED
+        # for this package through an autouse MONKEYPATCH fixture, which reverts
+        # after every test. Setting it here as well looked harmless and was not:
+        # the snapshot below would capture the monkeypatched "false", and
+        # restoring that at teardown makes it PERMANENT — leaking into
+        # `tests/test_agent_identity_and_api.py`, whose easy-auth guard test
+        # asserts the opposite and fails. The conftest owns the key; this
+        # harness manages only what it actually introduced.
+        os.environ.setdefault("MI_AGENT_LLM_PARSER", "off")
         _ENV.update({
             "MI_AGENT_ONBOARDING_OUTPUT_ROOT": str(root),
             "MI_AGENT_PIPELINE_ROOT": str(PIPELINE_FIXTURE),
-            "MI_AGENT_AUTH_ENABLED": "false",
-            "MI_AGENT_LLM_PARSER": os.environ.get("MI_AGENT_LLM_PARSER", "off"),
             "MI_AGENT_CONCEPT_MERGE": "off",
         })
         _apply_env()
