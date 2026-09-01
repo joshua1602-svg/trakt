@@ -36,6 +36,7 @@ from . import covenants as _covenants
 from . import history as _history
 from . import loans as _loans
 from . import movement as _movement
+from . import portfolio_review as _review
 from . import provenance as _provenance
 from . import readiness as _readiness
 
@@ -589,4 +590,115 @@ register(ToolSpec(
     output_schema=_history.DEFAULT_CURE_OUTPUT,
     required_capability=SCOPE_RISK_READ,
     handler=_history.cure_analysis,
+))
+
+# --------------------------------------------------------------------------- #
+# Portfolio review — the primitives a REPORTING PERIOD needs.
+#
+# The tools above answer questions about a funded book, and `period_change`
+# answers whether it moved. A period review needs two things they cannot reach:
+# the weekly pipeline, which no tool touched at all, and WHY the funded book
+# moved, which is a different fact from how much.
+#
+# Five reusable primitives rather than one tool per question: position,
+# movement, conversion, composition, forward risk. "Which product drove the
+# pipeline" and "did London grow" are one `pipeline_movement` call read two
+# ways, and a tool for each would be a checklist wearing a tool surface.
+# --------------------------------------------------------------------------- #
+register(ToolSpec(
+    name="pipeline_position",
+    version="1.0.0",
+    description=(
+        "The current governed weekly pipeline: case count, value, weighted "
+        "expected funding, and the breakdown by stage and expected completion."),
+    agent_guidance=(
+        "Start here for the pipeline, as portfolio_summary starts the funded "
+        "book. The weighted expected funded amount is the pipeline's forecast "
+        "contribution and is NOT funded balance — it is what the book would "
+        "gain if the governed completion probabilities held."),
+    input_schema=_review.POSITION_INPUT,
+    output_schema=_review.POSITION_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_review.pipeline_position,
+))
+
+register(ToolSpec(
+    name="pipeline_movement",
+    version="1.0.0",
+    description=(
+        "Week-on-week pipeline movement with its governed attribution: which "
+        "brokers, regions and products moved the number, and the new / removed "
+        "/ progressed / repriced decomposition behind it."),
+    agent_guidance=(
+        "Each contributor dimension is a separate decomposition of the SAME "
+        "movement and sums to it on its own. Do NOT add a broker's contribution "
+        "to a region's or a product's — they overlap completely. Name one lead "
+        "per dimension. 'completions' measures cases reaching COMPLETED stage, "
+        "which is pipeline progress and not funded balance growth."),
+    input_schema=_review.MOVEMENT_INPUT,
+    output_schema=_review.MOVEMENT_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_review.pipeline_movement,
+))
+
+register(ToolSpec(
+    name="pipeline_conversion",
+    version="1.0.0",
+    description=(
+        "How the pipeline converts: the stage funnel, the governed conversion "
+        "rate over its observation window, and the weekly completion flow."),
+    agent_guidance=(
+        "Read 'sufficient' before quoting any rate. A rate over too few weeks "
+        "is marked insufficient and must not be published as the book's "
+        "conversion — report that the window is too short instead. The rate is "
+        "lagged by the governed KFI-to-completion lag; an unlagged rate would "
+        "be a different, larger number than every other Trakt surface shows."),
+    input_schema=_review.CONVERSION_INPUT,
+    output_schema=_review.CONVERSION_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_review.pipeline_conversion,
+))
+
+register(ToolSpec(
+    name="funded_composition",
+    version="1.0.0",
+    description=(
+        "WHY the funded book moved: new lending, redemptions and exits, "
+        "existing-book movement, and any source portfolio added or disposed of "
+        "this period. Components sum to the movement by construction."),
+    agent_guidance=(
+        "Call this whenever a funded movement needs explaining — the headline "
+        "alone cannot tell organic growth from a book arriving, and describing "
+        "an acquisition month as growth is the single most misleading thing a "
+        "review can do. A portfolio addition is resolved from governed "
+        "identity, NEVER from the size of the movement: a book that doubled "
+        "inside one portfolio produces no addition. An addition whose "
+        "portfolio_type is 'unclassified' is a new source portfolio and you "
+        "must not call it an acquisition. Use underlying_only to read the "
+        "incumbent book with an addition excluded, so a large acquisition "
+        "cannot hide what the existing book did."),
+    input_schema=_review.COMPOSITION_INPUT,
+    output_schema=_review.COMPOSITION_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_review.funded_composition,
+))
+
+register(ToolSpec(
+    name="forward_concentration",
+    version="1.0.0",
+    description=(
+        "Concentration across three separated states: funded (contractual), "
+        "expected_forecast (funded plus probability-weighted pipeline) and "
+        "full_pipeline (funded plus all active pipeline — a stress maximum)."),
+    agent_guidance=(
+        "evaluate_covenants gives the funded verdict; this gives what that "
+        "verdict becomes once the pipeline lands. Never present full_pipeline "
+        "as a forecast — it is a deliberately unrealistic maximum. "
+        "'emerging_risks' is already in the governed rank order (current "
+        "breach, expected breach, low headroom, deterioration, stress-only, "
+        "limitation); take that order as given rather than re-ranking it."),
+    input_schema=_review.FORWARD_INPUT,
+    output_schema=_review.FORWARD_OUTPUT,
+    required_capability=SCOPE_RISK_READ,
+    handler=_review.forward_concentration,
 ))

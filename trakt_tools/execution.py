@@ -121,6 +121,12 @@ class ToolDependencies:
     #: period-change workflow uses, so a trend an agent reads and a trend the
     #: workspace shows come from one set of snapshots.
     loan_history_resolver: Any = None
+    #: Governed weekly pipeline root, for the portfolio-review pipeline tools.
+    #: Production leaves it unset and the handler resolves it through
+    #: ``mi_agent_api.datasets._pipeline_discovery_root`` — the SAME root the
+    #: dashboard, the weekly brief and the notification resolver read, so an
+    #: agent and the workspace see one set of weekly extracts.
+    pipeline_root: Any = None
 
 
 def build_dependencies(
@@ -136,6 +142,7 @@ def build_dependencies(
     drillthrough_evaluator: Any = None,
     period_change_analyser: Any = None,
     loan_history_resolver: Any = None,
+    pipeline_root: Any = None,
 ) -> ToolDependencies:
     """Construct the dependency set for one execution.
 
@@ -150,6 +157,14 @@ def build_dependencies(
         datasets = _datasets
     if output_root is None:
         output_root = datasets._onboarding_output_root()
+    if pipeline_root is None:
+        # Resolved lazily and tolerantly: a deployment with no weekly pipeline
+        # is a normal deployment, and the pipeline tools report the absence
+        # themselves rather than failing every tool execution here.
+        try:
+            pipeline_root = datasets._pipeline_discovery_root()
+        except Exception:  # noqa: BLE001 - no pipeline root is not a fault
+            pipeline_root = None
     return ToolDependencies(
         datasets=datasets,
         runtime_mode=mode or runtime_mode(),
@@ -162,6 +177,7 @@ def build_dependencies(
         drillthrough_evaluator=drillthrough_evaluator,
         period_change_analyser=period_change_analyser,
         loan_history_resolver=loan_history_resolver,
+        pipeline_root=pipeline_root,
     )
 
 

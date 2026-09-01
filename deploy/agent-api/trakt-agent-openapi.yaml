@@ -188,7 +188,7 @@ paths:
                   maximum: 200
                   description: How many leading groups to combine.
                   default: 10
-                filters: &id008
+                filters: &id009
                   type:
                   - object
                   - 'null'
@@ -326,7 +326,7 @@ paths:
               description: The loans contributing to ONE covenant or concentration test's numerator. Use
                 this after evaluate_covenants tells you a test is breached or close to its limit.
               properties:
-                resource: &id007
+                resource: &id008
                   type: string
                   description: The resource the test was evaluated against, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -622,7 +622,7 @@ paths:
               description: 'Apply every configured rulebook to the same measured facts: warehouse criteria,
                 Trakt''s internal screening thresholds, and any supplied securitisation criteria.'
               properties:
-                resource: &id009
+                resource: &id010
                   type: string
                   description: The portfolio resource to assess, as '{tenant}/{kind}/{resource_id}'.
                   pattern: ^[^/]+/[^/]+/[^/]+$
@@ -765,6 +765,125 @@ paths:
           $ref: '#/components/responses/UnknownTool'
         '503':
           $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/forward_concentration:
+    post:
+      operationId: invoke_forward_concentration
+      summary: 'Concentration across three separated states: funded (contractual), expected_forecast (funded
+        plus probability-weighted pipeline) and full_pipeline (funded plus all active pipeline — a stress
+        maximum)'
+      description: 'Concentration across three separated states: funded (contractual), expected_forecast
+        (funded plus probability-weighted pipeline) and full_pipeline (funded plus all active pipeline
+        — a stress maximum).
+
+
+        evaluate_covenants gives the funded verdict; this gives what that verdict becomes once the pipeline
+        lands. Never present full_pipeline as a forecast — it is a deliberately unrealistic maximum. ''emerging_risks''
+        is already in the governed rank order (current breach, expected breach, low headroom, deterioration,
+        stress-only, limitation); take that order as given rather than re-ranking it.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Concentration across three clearly separated portfolio states: funded (contractual),
+                expected_forecast (funded plus pipeline weighted by governed completion probability) and
+                full_pipeline (funded plus 100% of active pipeline — a stress maximum, never a prediction).'
+              properties:
+                resource: &id005
+                  type: string
+                  description: The portfolio to review, as '{tenant}/{kind}/{resource_id}'.
+                  pattern: ^[^/]+/[^/]+/[^/]+$
+                as_of_run_id:
+                  type: string
+                  description: Governed reporting run. Omit for the latest.
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/funded_composition:
+    post:
+      operationId: invoke_funded_composition
+      summary: 'WHY the funded book moved: new lending, redemptions and exits, existing-book movement,
+        and any source portfolio added or disposed of this period'
+      description: 'WHY the funded book moved: new lending, redemptions and exits, existing-book movement,
+        and any source portfolio added or disposed of this period. Components sum to the movement by construction.
+
+
+        Call this whenever a funded movement needs explaining — the headline alone cannot tell organic
+        growth from a book arriving, and describing an acquisition month as growth is the single most
+        misleading thing a review can do. A portfolio addition is resolved from governed identity, NEVER
+        from the size of the movement: a book that doubled inside one portfolio produces no addition.
+        An addition whose portfolio_type is ''unclassified'' is a new source portfolio and you must not
+        call it an acquisition. Use underlying_only to read the incumbent book with an addition excluded,
+        so a large acquisition cannot hide what the existing book did.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'WHY the funded book moved: new lending, redemptions and exits, existing-book
+                movement, and any source portfolio ADDED or DISPOSED of this period. Use this whenever
+                a funded movement needs explaining — the headline alone cannot distinguish organic growth
+                from a book arriving.'
+              properties:
+                resource: *id005
+                as_of_run_id:
+                  type: string
+                  description: Governed reporting run. Omit for the latest.
+                span_periods:
+                  type: integer
+                  minimum: 1
+                  default: 1
+                  description: How many governed reporting periods back to compare. 1 is month-on-month.
+                underlying_only:
+                  type: boolean
+                  default: false
+                  description: True decomposes the EXISTING book only, excluding portfolios added this
+                    period — so an acquisition cannot hide a movement in the incumbent book.
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
   /v1/agent/tools/get_loan:
     post:
       operationId: invoke_get_loan
@@ -787,7 +906,7 @@ paths:
               description: Retrieve ONE loan you are already investigating. For several loans call get_loans
                 once instead — it is the same work in one request.
               properties:
-                resource: &id005
+                resource: &id006
                   type: string
                   description: The resource holding the loans, as '{tenant}/{kind}/{resource_id}'. Call
                     GET /v1/agent/tools to see the resources you may name.
@@ -795,7 +914,7 @@ paths:
                 loan_id:
                   type: string
                   description: The loan identifier.
-                fields: &id006
+                fields: &id007
                   type:
                   - array
                   - 'null'
@@ -867,7 +986,7 @@ paths:
               description: 'Retrieve several loans in ONE call. This is the primitive: to look at more
                 than one loan, call this once rather than get_loan repeatedly.'
               properties:
-                resource: *id005
+                resource: *id006
                 loan_ids:
                   type: array
                   items:
@@ -876,7 +995,7 @@ paths:
                   maxItems: 500
                   description: Loan identifiers, at most 500 per call. Results are returned in the order
                     requested.
-                fields: *id006
+                fields: *id007
                 shape:
                   type: string
                   enum:
@@ -1038,7 +1157,7 @@ paths:
                 which periods are comparable — do not compare figures you gathered from separate calls
                 yourself.
               properties:
-                resource: *id007
+                resource: *id008
                 fields:
                   type:
                   - array
@@ -1059,6 +1178,160 @@ paths:
                   description: Include the balance bridge — how the opening balance became the closing
                     one (redemptions, additions, amortisation).
                   default: true
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/pipeline_conversion:
+    post:
+      operationId: invoke_pipeline_conversion
+      summary: 'How the pipeline converts: the stage funnel, the governed conversion rate over its observation
+        window, and the weekly completion flow'
+      description: 'How the pipeline converts: the stage funnel, the governed conversion rate over its
+        observation window, and the weekly completion flow.
+
+
+        Read ''sufficient'' before quoting any rate. A rate over too few weeks is marked insufficient
+        and must not be published as the book''s conversion — report that the window is too short instead.
+        The rate is lagged by the governed KFI-to-completion lag; an unlagged rate would be a different,
+        larger number than every other Trakt surface shows.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'How the pipeline converts: the stage funnel, the governed conversion rate
+                over its observation window, and the weekly completion flow.'
+              properties:
+                resource: *id005
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/pipeline_movement:
+    post:
+      operationId: invoke_pipeline_movement
+      summary: 'Week-on-week pipeline movement with its governed attribution: which brokers, regions and
+        products moved the number, and the new / removed / progressed / repriced decomposition behind
+        it'
+      description: 'Week-on-week pipeline movement with its governed attribution: which brokers, regions
+        and products moved the number, and the new / removed / progressed / repriced decomposition behind
+        it.
+
+
+        Each contributor dimension is a separate decomposition of the SAME movement and sums to it on
+        its own. Do NOT add a broker''s contribution to a region''s or a product''s — they overlap completely.
+        Name one lead per dimension. ''completions'' measures cases reaching COMPLETED stage, which is
+        pipeline progress and not funded balance growth.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'Week-on-week pipeline movement with its governed attribution: which brokers,
+                regions and PRODUCTS moved the number, and the new / removed / progressed / repriced decomposition
+                behind it.'
+              properties:
+                resource: *id005
+                as_of:
+                  type: string
+                  description: Weekly extract date (YYYY-MM-DD). Omit for the latest governed extract.
+                measure:
+                  type: string
+                  enum:
+                  - pipeline
+                  - completions
+                  default: pipeline
+                  description: '''pipeline'' is open pipeline exposure; ''completions'' is cases reaching
+                    COMPLETED stage — a pipeline-stage measure, NOT funded balance.'
+              additionalProperties: false
+              required:
+              - resource
+      responses:
+        '200':
+          description: The governed result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernedResult'
+        '400':
+          $ref: '#/components/responses/InvalidArguments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/UnknownTool'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agent/tools/pipeline_position:
+    post:
+      operationId: invoke_pipeline_position
+      summary: 'The current governed weekly pipeline: case count, value, weighted expected funding, and
+        the breakdown by stage and expected completion'
+      description: 'The current governed weekly pipeline: case count, value, weighted expected funding,
+        and the breakdown by stage and expected completion.
+
+
+        Start here for the pipeline, as portfolio_summary starts the funded book. The weighted expected
+        funded amount is the pipeline''s forecast contribution and is NOT funded balance — it is what
+        the book would gain if the governed completion probabilities held.
+
+
+        Tool version 1.0.0. Requires the `risk:read` capability against the named resource.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: 'The current governed weekly pipeline position: case count, value, weighted
+                expected funding, and the breakdown by stage.'
+              properties:
+                resource: *id005
+                as_of:
+                  type: string
+                  description: Weekly extract date (YYYY-MM-DD). Omit for the latest governed extract.
               additionalProperties: false
               required:
               - resource
@@ -1271,7 +1544,7 @@ paths:
                 averages, arrears and stage mix.'
               properties:
                 resource: *id002
-                filters: *id008
+                filters: *id009
               additionalProperties: false
               required:
               - resource
@@ -1406,7 +1679,7 @@ paths:
                   maximum: 200
                   description: How many loans to return (at most 200).
                   default: 20
-                filters: *id008
+                filters: *id009
                 include_fields:
                   type:
                   - array
@@ -1464,7 +1737,7 @@ paths:
               description: 'The Securitisation Readiness Framework: what a first-pass review assesses,
                 which of it Trakt can measure deterministically, and which tool supplies each fact.'
               properties:
-                resource: *id009
+                resource: *id010
                 category:
                   type:
                   - string
@@ -1521,7 +1794,7 @@ paths:
               description: 'Measure one or more framework facts using the governed concentration-test
                 metric library. Batch-first: ask for several in one call.'
               properties:
-                resource: *id009
+                resource: *id010
                 requests:
                   type: array
                   minItems: 1
@@ -1585,7 +1858,7 @@ paths:
                 of the regime''s required loan-level fields, separating hard blockers from fields that
                 may report a No-Data value.'
               properties:
-                resource: *id009
+                resource: *id010
                 regime:
                   type: string
                   description: The disclosure regime. ESMA Annex 2 is the loan-level template.
@@ -1651,7 +1924,7 @@ paths:
                   description: Canonical fields to report as balance-weighted averages per category, e.g.
                     ['current_loan_to_value'].
                   default: null
-                filters: *id008
+                filters: *id009
                 limit:
                   type: integer
                   minimum: 1
@@ -1765,7 +2038,7 @@ paths:
               description: 'How old and how good the collateral evidence is: valuation age distribution,
                 method mix and missing-valuation share, all balance-weighted.'
               properties:
-                resource: *id009
+                resource: *id010
                 stale_after_months:
                   type: integer
                   minimum: 1
@@ -1868,7 +2141,7 @@ components:
           - 'null'
         error:
           oneOf:
-          - &id010
+          - &id011
             type: object
             description: A governed failure. Branch on `code`, never on `message`.
             properties:
@@ -1906,7 +2179,7 @@ components:
       - status
       - request_id
       - tenant_id
-    TraktError: *id010
+    TraktError: *id011
     ToolDeclaration:
       type: object
       properties:
@@ -1935,20 +2208,20 @@ components:
   responses:
     InvalidArguments:
       description: TOOL_INPUT_INVALID — `error.details.violations` names the failing arguments.
-      content: &id011
+      content: &id012
         application/json:
           schema:
             $ref: '#/components/schemas/GovernedResult'
     Unauthorized:
       description: The bearer token is missing, invalid or expired.
-      content: *id011
+      content: *id012
     Forbidden:
       description: SCOPE_MISSING, RESOURCE_NOT_AUTHORISED, CAPABILITY_NOT_GRANTED, TENANT_MISMATCH or
         RESOURCE_NOT_PARTITIONABLE. A permission decision — do not retry.
-      content: *id011
+      content: *id012
     UnknownTool:
       description: TOOL_NOT_FOUND — `error.details.available_tools` lists what this deployment serves.
-      content: *id011
+      content: *id012
     Unavailable:
       description: The agent API or the governed data source is not available. Retryable.
-      content: *id011
+      content: *id012
