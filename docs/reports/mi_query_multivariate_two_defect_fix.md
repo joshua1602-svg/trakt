@@ -292,7 +292,31 @@ intact.
 Run serially at both SHAs — not under `xdist`, whose module-level state
 instability was demonstrated in the previous sprint.
 
-<!-- SERIAL-REGRESSION -->
+```
+HEAD      83 failed · 5994 passed · 709 skipped · 15 xfailed   (9m20s)
+95dbbda   83 failed · 5994 passed · 709 skipped · 15 xfailed   (9m15s)
+
+failures identical in both        82
+failures ONLY on HEAD              1   environmental — see below
+failures ONLY on the baseline      1   worktree artefact — see below
+```
+
+**Zero new failures attributable to this change.** Both single-sided failures
+were verified rather than assumed:
+
+* `tests/test_serving_parquet.py::test_the_serving_copy_is_materially_faster_and_smaller`
+  — a performance assertion with a 2x floor. Re-run three times on HEAD: **2.4x
+  pass, 3.0x pass, 1.6x fail**, the failure landing while the language-layer arm
+  was loading the box. Its own docstring says it measures the ORDER of the
+  difference on shared hardware. Nothing in this change touches serving or
+  parquet.
+* `mi_agent/tests/test_registry_governance.py::test_checked_in_registry_matches_generator`
+  — **passes at HEAD** (5 passed). The baseline ran in a git worktree and the
+  checked-in registry records an absolute path, so the comparison was
+  `/home/user/trakt/config/...` against `/tmp/wt_base2/config/...`. A worktree
+  artefact, and explicitly **not** claimed as a fix.
+
+No pre-existing failure was fixed or touched.
 
 ---
 
