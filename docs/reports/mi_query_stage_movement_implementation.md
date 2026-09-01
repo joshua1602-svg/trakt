@@ -92,7 +92,7 @@ governed engine alone, and the same banks with the **concept-merge language
 layer** on (`claude-opus-5`). §2 explains why the language layer is that arm and
 not the free-form parser.
 
-One qualification is stated up front rather than buried: the change is **431
+One qualification is stated up front rather than buried: the change is **432
 executable lines** of new adapter plus **29** across three existing files, which
 exceeds the ~250-line budget in §19. §11 of this report explains exactly where
 those lines are and why the routing part of the work is 29 lines while the
@@ -265,7 +265,7 @@ for. Nothing else in the estate can see it, so nothing else can be changed by it
 
 ## 4. Implementation
 
-### `mi_agent_api/stage_movement_query.py` — new, 744 lines (431 executable)
+### `mi_agent_api/stage_movement_query.py` — new, 750 lines (432 executable)
 
 **Recognition.** A question is stage movement only when it names governed stages
 in an explicit movement construction:
@@ -552,18 +552,18 @@ remains open** and is a candidate for its own piece of work.
 
 | file | status | lines added | executable |
 |---|---|---:|---:|
-| `mi_agent_api/stage_movement_query.py` | new | 744 | 431 |
+| `mi_agent_api/stage_movement_query.py` | new | 750 | 432 |
 | `mi_agent_api/chat_routing.py` | existing | 15 | 15 |
 | `mi_agent/execution_receipt.py` | existing | 31 | 8 |
 | `mi_workflows/analytical/planner.py` | existing | 26 | 6 |
-| **production total** | | **816** | **460** |
+| **production total** | | **822** | **461** |
 | `mi_agent_api/tests/test_stage_movement_query.py` | new test | 430 | |
 | `scripts/run_mi_query_stage_movement_banks.py` | new evidence rig | 334 | |
 | `tests/fixtures/mi_query_stage_movement/*.yaml` | new banks | 224 | |
 
 Zero lines removed anywhere. Nothing existing was rewritten.
 
-**§19 fires: 460 executable lines against a ~250 budget.** Where they are:
+**§19 fires: 461 executable lines against a ~250 budget.** Where they are:
 
 | | executable |
 |---|---:|
@@ -630,19 +630,73 @@ Both were verified by the zero-movement 166 run.
 
 ## 12. Regression
 
+### The three banks and the targeted tests
+
 | suite | result |
 |---|---|
-| stage-movement bank (36) | 36 CORRECT · 0 WRONG · 100% |
-| near-neighbour bank (13) | 13/13 own route · 0 hijacked |
-| authoritative 166 bank | 0 questions moved vs `30a7d4a` |
-| `mi_agent_api/tests/test_stage_movement_query.py` | **26 passed**, 16 subtests passed |
-| `mi_agent_api/tests/test_recogniser_registry.py` | passed |
-| `mi_agent_api/tests/test_pipeline_stage_transition.py` | passed |
-| `mi_agent_api/tests/test_stage_transition_exposure.py` | passed |
-| the three above, together | **96 passed** |
-| `migration_phase0/MI_REGRESSION_MANIFEST.txt` (278 files) | see below |
+| stage-movement bank (36), engine arm | 36 CORRECT · 0 WRONG · **100%** |
+| stage-movement bank (36), language layer | 36 CORRECT · 0 WRONG · **100%** |
+| near-neighbour bank (13), both arms | **13/13** own route · 0 hijacked |
+| authoritative 166 bank, both arms | **0 questions moved** vs `30a7d4a` |
+| `mi_agent_api/tests/test_stage_movement_query.py` | **26 passed**, 16 subtests |
+| `test_recogniser_registry.py` + `test_pipeline_stage_transition.py` + `test_stage_transition_exposure.py` | **96 passed** |
 
-<!-- REGRESSION-MANIFEST -->
+### `MI_REGRESSION_MANIFEST.txt` — 278 files, both SHAs, run SERIALLY
+
+```
+branch    80 failed · 5997 passed · 709 skipped · 15 xfailed   (11m19s)
+30a7d4a   81 failed · 5996 passed · 709 skipped · 15 xfailed   (11m15s)
+
+failures identical in both        80
+failures ONLY on the branch        0
+failures ONLY on 30a7d4a           1   (a worktree artefact — see below)
+```
+
+**Zero new failures. All 80 are present, identically, on the merged main.**
+
+The one main-only failure is not a fix and is not claimed as one:
+`test_checked_in_registry_matches_generator` compares a checked-in registry
+whose `source_registry` field holds an **absolute path**. The baseline ran in a
+git worktree at `/tmp/wt_main`, so the path differed from the committed
+`/home/user/trakt/...`. It passes in the main checkout.
+
+### Why these numbers are the serial ones, and the parallel ones are not reported
+
+The manifest was first run under `pytest-xdist`. It is not a usable instrument
+for this comparison, and the earlier parallel figures in this programme's
+transcripts should not be relied on:
+
+| run | branch failures | "branch-only" | "main-only" |
+|---|---:|---:|---:|
+| `-n 4` | 76 | 3 | 9 |
+| `-n 3` | 81 | 3 | — |
+| `-n 3 --dist loadfile` | 94 | 15 | 13 |
+| **serial** | **80** | **0** | **1 (artefact)** |
+
+The count moves with the distribution strategy and whole file clusters flip in
+BOTH directions. Every "branch-only" cluster it produced passes in isolation on
+the branch — `test_copilot_actions`, `test_performance_budgets` and
+`test_risk_limits_contract` together are 39 passed, 0 failed — so the suite
+carries module-level state that does not survive being split across workers.
+Only the serial run is reported.
+
+### The one genuine failure this change caused, found and fixed
+
+`mi_agent_api/tests/test_portfolio_risk_comparison_route.py::TestRegistration
+::test_existing_route_order_is_preserved` compares the registry against a
+literal list of the twelve migrated chain routes, excluding the routes added
+since. `pipeline_stage_movement` is the fourth such addition and was in neither
+set, so the equality broke. Fixed in `fb85ba9` by adding it to the exclusion set
+(renamed to name what it is). The twelve-route ordering assertion is unchanged
+in strength, and where the new route sits is asserted by its own test.
+
+Two further suspects were investigated and cleared rather than assumed:
+`tests/test_serving_parquet.py` is a performance assertion with a 2x floor that
+failed at 1.4x under load and passes 2.5x / 2.7x / 3.4x on the branch when the
+box is quiet — its own docstring says it measures the ORDER of the difference on
+shared hardware; and `test_blob_trigger_app` passes in isolation on both SHAs.
+
+**No pre-existing failure was fixed or touched**, as the brief requires.
 
 ---
 
@@ -650,12 +704,50 @@ Both were verified by the zero-movement 166 run.
 
 **MERGE.**
 
-The three conditions the sprint set are met and measured separately: existing
-Query quality does not fall (0 of 166 questions moved), the new capability works
-at a rate above the agent's own (100% against a ≥85% preference), and no near
-neighbour is hijacked (13/13). Twelve silent stage-stock substitutions are gone
-and none was created.
+The three conditions the sprint set are met, measured separately, and measured
+on both arms against the merged production agent:
 
-The one thing a reviewer should weigh is scope: 460 executable production lines
-against a ~250 budget, of which 29 are routing and 125 are the deterministic
-answer composition the brief itself requires. §11 sets out the split.
+1. **Existing Query quality does not fall.** 0 of 166 questions moved on either
+   arm — every answer, route and verdict byte-identical. 0 previously correct
+   questions lost, 0 new wrong answers, correctly-declined holds at 16.
+2. **The new capability works at a rate above the agent's own.** 36 of 36
+   (100%) against a ≥85% preference, with 0 wrong, on both arms.
+3. **No near neighbour is hijacked.** 13 of 13 kept their own route owner on
+   both arms.
+
+Beyond the gates: twelve silent stage-stock substitutions are gone and none was
+created; the 278-file regression manifest is unchanged (80 failures, all
+present identically on main, 0 new); and the capability is delivered by the
+deterministic path, so it does not depend on a model being in front of it.
+
+### What a reviewer should weigh before merging
+
+**Scope.** 461 executable production lines against a ~250 budget. 29 of them are
+routing into existing files; 125 are the deterministic answer composition the
+brief itself requires for five governed event classes in counts and in money.
+§11 sets out the full split. This is the one place the sprint's own constraint
+was exceeded, and it was exceeded in composition, not in architecture.
+
+**Two files outside the expected-areas list**, both declared in §11:
+`execution_receipt.py` (+8 executable) and `analytical/planner.py`
+(+6 executable). Each is an alignment between an owner and evidence already in
+the envelope, and each is covered by the zero-movement 166 run.
+
+**An open parser defect this work did not close.** `unknown category: 'offer to
+completion'` produces a refusal that is a false claim about the client's data.
+It is worked around only where this route can prove it accounted for the span,
+and it will still fire for any other route whose construction the parser mangles
+the same way. §10 records it as a candidate for its own piece of work.
+
+### Verified negatives
+
+| | |
+|---|---|
+| stage-transition engine changed | **NO** |
+| React changed | **NO** |
+| PPTX changed | **NO** |
+| OCC / Annex 2 / onboarding changed | **NO** |
+| funded analytics / forecast / concentration / cohort changed | **NO** |
+| Query spec, parser or `parsed_question` changed | **NO** |
+| stage-transition arithmetic performed in Query | **NO** |
+| pre-existing test failures fixed or touched | **NO** |
