@@ -75,12 +75,14 @@ function Row({ label, value, muted, tone }: {
   tone?: "up" | "down" | "flat";
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-1">
-      <span className={cn("text-[12px]", muted ? "text-ink-500" : "text-ink-200")}>
+    <div className="flex items-baseline justify-between gap-3 py-1.5">
+      <span className={cn("t-meta", muted ? "text-ink-500" : "text-ink-300")}>
         {label}
       </span>
+      {/* Colour on a figure states DIRECTION. An unsigned figure stays
+          monochrome — it has no direction to state. */}
       <span className={cn(
-        "shrink-0 font-mono text-[12px] tabular-nums",
+        "t-num shrink-0 text-[var(--fs-meta)] font-semibold",
         tone === "up" ? "text-mint-400"
           : tone === "down" ? "text-rose-400" : "text-ink-100",
       )}>
@@ -96,15 +98,13 @@ function Block({ title, hint, children, empty, testId }: {
 }) {
   return (
     <div data-testid={testId}
-      className="rounded-lg border border-navy-600/70 bg-navy-800/60 p-3">
-      <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-        {title}
-      </div>
-      {hint && <div className="mt-0.5 text-[10px] text-ink-500">{hint}</div>}
-      <div className="mt-2 divide-y divide-navy-700/60">
+      className="rounded-lg bg-navy-800/70 p-4 shadow-[var(--elev-card)]">
+      <div className="t-label">{title}</div>
+      {hint && <div className="t-micro mt-1">{hint}</div>}
+      <div className="mt-[var(--gap-tight)] divide-y divide-[var(--color-line-soft)]">
         {children}
       </div>
-      {empty && <div className="mt-1 text-[11px] text-ink-500">{empty}</div>}
+      {empty && <div className="t-micro mt-[var(--gap-tight)]">{empty}</div>}
     </div>
   );
 }
@@ -130,7 +130,7 @@ export function StageTransitionPanel(props: StageTransitionPanelProps) {
       // consumer that could not tell them apart would read an empty panel as an
       // answer.
       <div data-testid="stage-transitions-loading" className={SHELL}>
-        <div className="text-[12px] text-ink-500">Loading stage movement…</div>
+        <div className="t-meta text-ink-500">Loading stage movement…</div>
       </div>
     );
   }
@@ -141,7 +141,7 @@ export function StageTransitionPanel(props: StageTransitionPanelProps) {
     return (
       <div data-testid="stage-transitions-unavailable" className={SHELL}>
         <Heading detail={detail} />
-        <div className="mt-1 text-[12px] text-ink-500">
+        <div className="t-meta mt-[var(--gap-tight)] text-ink-500">
           {detail?.reason ?? "Stage movement is not available for this window."}
         </div>
       </div>
@@ -150,14 +150,14 @@ export function StageTransitionPanel(props: StageTransitionPanelProps) {
   return <Available detail={detail} measure={measure} onMeasure={setMeasure} />;
 }
 
-const SHELL = "rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-4 lg:col-span-2";
+const SHELL = "rounded-xl border border-[var(--color-line)] bg-navy-900/50 p-5 lg:col-span-2";
 
 function Heading({ detail }: { detail: StageTransitionDetail | null }) {
   return (
-    <div className="text-[12px] font-semibold text-ink-200">
+    <div className="t-title">
       Pipeline stage movement
       {detail?.comparison_date && detail?.as_of_date && (
-        <span className="ml-2 font-normal text-ink-500">
+        <span className="t-num ml-2.5 text-[var(--fs-label)] font-normal tracking-normal text-ink-500">
           {detail.comparison_date} → {detail.as_of_date}
         </span>
       )}
@@ -184,24 +184,25 @@ function Available({ detail, measure, onMeasure }: {
 
   return (
     <div data-testid="stage-transitions" className={SHELL}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="mb-[var(--gap-section)] flex flex-wrap items-center justify-between gap-3">
         <Heading detail={detail} />
-        <div role="tablist" aria-label="Stage movement measure"
-          className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 p-0.5">
+        {/* Tier 3 — the unit this panel is counted in. `nav-unit` is the
+            smallest and the only entirely MONOCHROME control on the page:
+            no accent, hairline-divided, uppercase micro caps. It governs the
+            figures inside one panel, and it must never be mistaken for the
+            view tabs that govern the whole screen. */}
+        <div role="tablist" aria-label="Stage movement measure" className="nav-unit">
           {([["count", "Cases"], ["amount", "Value"]] as const).map(([m, label]) => (
             <button key={m} type="button" role="tab" aria-selected={measure === m}
               onClick={() => onMeasure(m)}
-              className={cn(
-                "rounded-md px-2 py-0.5 text-[11px]",
-                measure === m ? "bg-navy-700 text-ink-100" : "text-ink-400",
-              )}>
+              className={cn("nav-unit-item", measure !== m && "cursor-pointer")}>
               {label}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-[var(--gap-group)] md:grid-cols-2 xl:grid-cols-4">
         <Block title="Moved stage" testId="stx-moves"
           hint="In both snapshots, at a different stage"
           empty={moves.length ? undefined : "No case changed stage."}>
@@ -251,33 +252,39 @@ function Available({ detail, measure, onMeasure }: {
         </Block>
       </div>
 
+      {/* The reconciliation is the analytical payoff of this panel — opening
+          plus every classified movement equals closing — so it is set as
+          primary output, not as a footnote. `data-table` supplies tabular
+          right-aligned figures, an uppercase header set on a structural rule,
+          hairline row separation and row tracking on hover. `data-terminal`
+          marks Closing: the column the whole table resolves to, ruled off and
+          carried at full ink. */}
       {recon && recon.by_stage?.length > 0 && (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[560px] text-[11px]"
+        <div className="mt-[var(--gap-section)] overflow-x-auto">
+          <table className="data-table min-w-[560px]"
             data-testid="stage-transitions-reconciliation">
             <caption className="sr-only">
               Opening to closing case reconciliation by pipeline stage
             </caption>
-            <thead className="text-ink-500">
-              <tr className="text-left">
-                <th scope="col" className="py-1 pr-2 font-medium">Stage</th>
-                {["Opening", "New", "In", "Out", "Left", "Closing"].map((h) => (
-                  <th key={h} scope="col" className="py-1 pl-2 text-right font-medium">{h}</th>
+            <thead>
+              <tr>
+                <th scope="col">Stage</th>
+                {["Opening", "New", "In", "Out", "Left"].map((h) => (
+                  <th key={h} scope="col">{h}</th>
                 ))}
+                <th scope="col" data-terminal>Closing</th>
               </tr>
             </thead>
-            <tbody className="font-mono tabular-nums text-ink-200">
+            <tbody>
               {recon.by_stage.map((r) => (
-                <tr key={r.stage} className="border-t border-navy-700/60">
-                  <th scope="row" className="py-1 pr-2 text-left font-sans font-normal text-ink-300">
-                    {stageLabel(r.stage)}
-                  </th>
-                  <td className="py-1 pl-2 text-right">{r.opening_case_count}</td>
-                  <td className="py-1 pl-2 text-right">{r.new_arrivals}</td>
-                  <td className="py-1 pl-2 text-right">{r.transitions_in}</td>
-                  <td className="py-1 pl-2 text-right">{r.transitions_out}</td>
-                  <td className="py-1 pl-2 text-right">{r.departures}</td>
-                  <td className="py-1 pl-2 text-right text-ink-100">{r.closing_case_count}</td>
+                <tr key={r.stage}>
+                  <th scope="row">{stageLabel(r.stage)}</th>
+                  <td>{r.opening_case_count}</td>
+                  <td>{r.new_arrivals}</td>
+                  <td>{r.transitions_in}</td>
+                  <td>{r.transitions_out}</td>
+                  <td>{r.departures}</td>
+                  <td data-terminal>{r.closing_case_count}</td>
                 </tr>
               ))}
             </tbody>
@@ -287,7 +294,7 @@ function Available({ detail, measure, onMeasure }: {
 
       {/* The residuals are disclosed, never hidden: a non-zero one is a finding
           about the data, and a diagram that does not add up must say so. */}
-      <div className="mt-2 text-[10px] leading-relaxed text-ink-500">
+      <div className="t-micro mt-[var(--gap-group)] border-t border-[var(--color-line-soft)] pt-[var(--gap-tight)]">
         Cases matched on {detail.identifier ?? "the governed case identifier"}
         {detail.counts && ` (${detail.counts.comparison} prior, ${detail.counts.current} latest)`}.
         Every case is classified once. Reconciliation residual{" "}
