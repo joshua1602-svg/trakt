@@ -43,7 +43,14 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from mi_agent_api.tests.test_multivariate_two_defect_fix import (  # noqa: E402
-    answer, ask)
+    answer, ask, restore_env)
+
+
+def tearDownModule():
+    """This module shares the two-defect harness, including its environment.
+    Hand the session back the env it had, or a later module inherits this
+    book and this pipeline fixture — see the note beside `_apply_env` there."""
+    restore_env()
 
 #: The same business question, four ways of naming a ratio of two populations.
 SHARE_WORDS = ("share", "percentage", "proportion", "fraction")

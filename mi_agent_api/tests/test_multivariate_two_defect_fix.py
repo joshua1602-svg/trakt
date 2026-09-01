@@ -44,6 +44,39 @@ AS_OF = "2026-06-30"
 _CLIENT = None
 
 
+#: The environment these tests need, and what it replaced.
+#:
+#: THIS IS SHARED STATE AND IT LEAKS BOTH WAYS. The client is a module-level
+#: singleton, so the env was set ONCE on first use and then left standing for
+#: the rest of the pytest session: a later module inherited this book and this
+#: pipeline fixture, and `test_channel_parity` failed against a tape it never
+#: asked for. The mirror image bit too — once another module had overwritten
+#: these keys, the singleton was already built, so nothing re-applied them and
+#: THESE tests failed instead. Both were invisible while this was the only
+#: module using the harness and nothing ran between its first and last test.
+#:
+#: So the env is re-applied on EVERY call (idempotent and cheap) and restored
+#: at module teardown. `test_calibration_only` shares this harness and does the
+#: same, which is what keeps the two modules from stranding each other.
+_ENV: Dict[str, str] = {}
+_SAVED_ENV: Dict[str, Any] = {}
+
+
+def _apply_env() -> None:
+    for key, value in _ENV.items():
+        _SAVED_ENV.setdefault(key, os.environ.get(key))
+        os.environ[key] = value
+
+
+def restore_env() -> None:
+    """Put back what was there before this module's first request."""
+    for key, value in _SAVED_ENV.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
 def _client():
     global _CLIENT
     if _CLIENT is None:
@@ -59,16 +92,24 @@ def _client():
         root = Path(tempfile.mkdtemp(prefix="mv_fix_")) / "onboarding_output"
         for run_id, date, rows in runner.MONTHS:
             runner.write_funded_tape(root, run_id, date, rows)
-        os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"] = str(root)
-        os.environ["MI_AGENT_PIPELINE_ROOT"] = str(PIPELINE_FIXTURE)
-        os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
-        os.environ.setdefault("MI_AGENT_LLM_PARSER", "off")
-        os.environ["MI_AGENT_CONCEPT_MERGE"] = "off"
+        _ENV.update({
+            "MI_AGENT_ONBOARDING_OUTPUT_ROOT": str(root),
+            "MI_AGENT_PIPELINE_ROOT": str(PIPELINE_FIXTURE),
+            "MI_AGENT_AUTH_ENABLED": "false",
+            "MI_AGENT_LLM_PARSER": os.environ.get("MI_AGENT_LLM_PARSER", "off"),
+            "MI_AGENT_CONCEPT_MERGE": "off",
+        })
+        _apply_env()
         from fastapi.testclient import TestClient
         from mi_agent_api.app import app
 
         _CLIENT = TestClient(app)
+    _apply_env()
     return _CLIENT
+
+
+def tearDownModule():
+    restore_env()
 
 
 def ask(question: str) -> Dict[str, Any]:
