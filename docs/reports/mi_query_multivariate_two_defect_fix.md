@@ -38,9 +38,15 @@ it with no conflict; if it is not, merging this branch brings it along.
 | multivariate (43) | every change attributable to A or B | **5 changes, 5 attributable, 0 unattributed** |
 | silent wrong answers | none new | **3 → 2** |
 | stage + temporal | unchanged | **byte-identical, all four** |
+| language layer agrees | same delta | **24 → 29, same five questions** |
 
 Multivariate went 24 → 29 correct (55.8% → 67.4%), and the entire delta is the
 five questions the two defects owned. No previously correct answer was lost.
+
+Measured on **both** arms independently, and they agree: the governed engine
+(language layer off) and the concept-merge language layer (`claude-opus-5`) each
+move the same five questions and no others. Silent wrong answers fall 3 → 2 on
+the engine and 2 → 1 with the language layer. Full comparison in §6.
 
 ---
 
@@ -348,4 +354,93 @@ every calculation.
 
 ## 6. Recommendation
 
-<!-- RECOMMENDATION -->
+**MERGE.**
+
+Both defects are repaired, on both arms, and nothing else moved. The two arms
+were measured separately because they fail differently: the deterministic
+engine arm is the reproducible instrument, and the concept-merge language layer
+is what actually serves.
+
+### Both arms, side by side
+
+| multivariate 43 | engine before | engine after | language before | language after |
+|---|---:|---:|---:|---:|
+| CORRECT | 24 | **29** | 24 | **29** |
+| WRONG (silent) | 3 | **2** | 2 | **1** |
+| HONEST DECLINE | 12 | 8 | 13 | 9 |
+| SAFE REFUSAL | 4 | 4 | 4 | 4 |
+| correct rate | 55.8% | **67.4%** | 55.8% | **67.4%** |
+| safe rate | 93.0% | **95.3%** | 95.3% | **97.7%** |
+
+The two arms agree on the delta, checked **per question** rather than inferred
+from totals — the language-arm before/after verdicts differ on exactly five
+questions, and they are the same five:
+
+```
+MV02B  WRONG          -> CORRECT      defect A
+MV03A  HONEST_DECLINE -> CORRECT      defect B
+MV03B  HONEST_DECLINE -> CORRECT      defect B
+MV03C  HONEST_DECLINE -> CORRECT      defect B
+MV03D  HONEST_DECLINE -> CORRECT      defect B
+```
+
+Same five questions, same +11.6 points of correctness. The arms differ only in
+MV06C (`"LTV distribution"`), which the language layer already answered before
+this change and still answers after — exactly as the audit recorded. **This change repairs what the language
+layer could not.**
+
+On the regression banks the language arm at HEAD reads:
+
+```
+CFO91   CORRECT 63 · TRUE_REFUSAL 16 · FALSE_REFUSAL 11 · NO_COMPUTABLE_TRUTH 1 · WRONG 0
+BANK75  DELIVERED 49 · DECLINED 26
+stage   36/36        near neighbours  13/13 own route
+```
+
+Stated precisely, because it matters: the **matched** before/after comparison on
+the 166 bank is the engine arm, where every answer, route and verdict is
+byte-identical and **0 questions moved**. The language arm was run at HEAD only
+in this sprint. Its figures sit inside the variance already observed between two
+runs of *identical* code in the previous sprint — CFO91 63 and 62, BANK75 49
+both times — so 63/49 is the shipping record reproduced, not evidence of a
+change. It is a corroboration, not a second controlled experiment, and should
+not be read as one.
+
+### The decision rule, condition by condition
+
+| # | condition | measured | |
+|---:|---|---|:--:|
+| 1 | Defect A repaired | share of Offer that is joint = **59.7%**, denominator 10 Offer cases | ✅ |
+| 2 | Defect B repaired | Application + London = **£1.9MM · 4 loans**; all four MV03 formulations correct | ✅ |
+| 3 | No previously correct answer lost, any bank | 166: 0 moved · stage: 0 moved · neighbours: 0 moved · multivariate: 0 lost | ✅ |
+| 4 | Stage Movement stays 36/36 | **36/36**, both arms | ✅ |
+| 5 | Near neighbours stay 13/13 | **13/13** kept their own owner, both arms | ✅ |
+| 6 | Every multivariate change attributable to A or B | **5 changes, 5 attributed** (MV02B→A; MV03A–D→B), 0 unattributed | ✅ |
+| 7 | No new silent wrong answers | engine **3 → 2**, language **2 → 1**; no question became wrong | ✅ |
+| 8 | Temporal pipeline behaviour unchanged | all four MV09 formulations **byte-identical**, still a safe refusal | ✅ |
+| 9 | No new route, recogniser, interpreter, engine, capability, dataset or API route | **0 of each**; 4 existing files, +84/−7 executable lines | ✅ |
+| 10 | Broad regression shows no new failures | serial run at both SHAs: **82 identical failures**, 1 each side, both verified as artefacts | ✅ |
+
+All ten hold.
+
+### What a reviewer must decide, and it is not the code
+
+One thing in this branch is not a code question. Its first commit (`16cf56a`) is
+the **unmerged audit** — the fixture, the 43-question bank and the two analysis
+scripts. It carries zero production change, and it is also the only instrument
+that can measure either defect. A reviewer should decide deliberately whether to
+take it here or merge it separately; what it must not be is merged by accident.
+Section 0 has the diff proof.
+
+### What this change does not claim
+
+* MV02C (`"…how much is joint borrower exposure as a percentage?"`) is still a
+  silent wrong on the engine arm — a measure-recognition gap that answers an
+  absolute where a percentage was asked. Deferred deliberately: fixing it means
+  touching measure recognition, which is outside these two defects.
+* MV06C (`"LTV distribution"` read as a scalar) is unchanged on both arms.
+* The other audit failures — `"currently"`, `"over 500k"`, bare `"amount"`,
+  `"status"`, and the WA-LTV executor issue — were not touched, by instruction.
+* The two single-sided regression failures are argued as artefacts with evidence
+  (a re-run distribution and a worktree path), not asserted as passes.
+
