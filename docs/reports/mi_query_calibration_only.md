@@ -636,7 +636,12 @@ No production code was involved in either fix.
 
 ## 17. Recommendation
 
-**MERGE ALL.** Both calibrations are safe, both are independently attributable,
+> **SUPERSEDED — see §18.** The verification in §18 found that two of the
+> eleven changed answers moved their measure and their values, which fails
+> the acceptance rule. The standing recommendation is **DO NOT MERGE
+> CALIBRATION A**; Calibration B is untested without it.
+
+**MERGE ALL** *(as originally assessed, before the §18 check)*. Both calibrations are safe, both are independently attributable,
 and either could be dropped without the other — but there is no reason to drop
 either.
 
@@ -682,3 +687,68 @@ The cheapest next wins, in order, are all of that same kind:
 * `"borrower-type split"` returning a **region** grouping (§9) — a default-region
   fallback claiming an axis it was not offered. It is a silent wrong answer today
   and was not introduced here.
+
+---
+
+## 18. Verification of the eleven changed answers — and the finding that blocks Calibration A
+
+Requested check: for each of the eleven previously-correct questions whose answer
+shape changed, compare route, filters, measure, grouping, numeric value and
+rendered answer, and confirm that **no analytical owner, population, measure or
+value changed**. Grouping is expected to change; the other four are not.
+
+Read from the stored bank artefacts — `/tmp/cal_base_mv` (pre-calibration, at
+`63ab269`) against the final post-calibration run — not from re-description.
+
+### The nine that pass
+
+| id | question | route | population (filters) | measure | grouping | value |
+|---|---|:--:|:--:|:--:|---|:--:|
+| MV01B | What is the Offer-stage balance for joint borrowers? | same | same | same | `[pipeline_stage]` → `[]` | £3.0MM · 6 loans |
+| MV03D | Show Application-stage exposure in London. | same | same | same | `[pipeline_stage]` → `[]` | £1.9MM · 4 loans |
+| MV04D | Show Offer-stage balance across regions. | same | same | same | `[pipeline_stage, region]` → `[region]` | 6 groups, values identical |
+| MV05D | Show Offer-stage exposure with LTV over 60%. | same | same | same | `[pipeline_stage]` → `[]` | £2.8MM · 4 loans |
+| MV06D | Show Application-stage balance across LTV bands. | same | same | same | `[pipeline_stage, ltv_bucket]` → `[ltv_bucket]` | 5 groups, values identical |
+| MV07A | What is WA LTV for Offer-stage pipeline? | same | same | same | `[pipeline_stage]` → `[]` | 58.4% · 10 loans |
+| MV07C | Give me Offer-stage WA LTV. | same | same | same | `[pipeline_stage]` → `[]` | 58.4% · 10 loans |
+| MV08C | Give me Application-stage WA LTV for joint borrowers. | same | same | same | `[pipeline_stage]` → `[]` | 53.7% · 7 loans |
+| MV11B | What is the Offer-stage balance for loans above 500,000? | same | same | same | `[pipeline_stage]` → `[]` | £2.8MM · 4 loans |
+
+For MV04D and MV06D the grouped rows are identical value by value — London
+1,930,000 · North West 960,000 …; 60-70% 1,575,000 · 50-60% 1,245,000 — with the
+same `concentration_pct` to ten decimal places. The only difference is the
+removal of the single-valued `pipeline_stage` column. **These nine are
+semantically equivalent.**
+
+### The two that do NOT pass
+
+| id | question | route | population | measure | grouping | value |
+|---|---|:--:|:--:|:--:|---|:--:|
+| **MV04A** | Show Offer-stage pipeline by region. | same | same | **CHANGED** `count` → `sum(balance)` | `[pipeline_stage, region]` → `[region]` | **CHANGED** |
+| **MV06A** | Show Application-stage pipeline by LTV band. | same | same | **CHANGED** `count` → `sum(balance)` | `[pipeline_stage, ltv_bucket]` → `[ltv_bucket]` | **CHANGED** |
+
+The rendered rows are different numbers, not a re-shaping of the same numbers:
+
+```
+MV04A  before  London count 3 · South East count 2 …
+       after   London 1,930,000 · North West 960,000 …
+
+MV06A  before  APPLICATION 50-60% count 4 · 30-40% count 3 …
+       after   60-70% 1,575,000 · 50-60% 1,245,000 …
+```
+
+**The measure and the value both changed on these two. Under the stated
+acceptance rule, Calibration A must not be merged.**
+
+Recorded plainly rather than argued away: the new measure is the one MV04 and
+MV06 actually expect (their `expected` fields are band and region **balances**,
+and both were passing on a row-count check that never looked at the measure), so
+the change reads as a correction. That is an argument for revisiting the rule,
+not for treating the rule as met. It is not met.
+
+### What this does not settle
+
+Calibration B (`7d47398`) is a separate commit whose only moved question is
+MV06C. Whether it stands **without** Calibration A underneath it has not been
+measured — B was implemented and scored on top of A. Do not assume B is
+independently mergeable on that evidence.
