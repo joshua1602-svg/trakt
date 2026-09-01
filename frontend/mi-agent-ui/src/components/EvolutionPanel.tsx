@@ -25,6 +25,7 @@ import { InsightLineChart } from "@/components/insight/InsightLineChart";
 import { ConversionContext } from "@/components/insight/ConversionContext";
 import { InsightStageCard } from "@/components/insight/InsightStageCard";
 import { enhancedHoversEnabled } from "@/lib/featureFlags";
+import { StageTransitionPanel } from "@/components/pipeline/StageTransitionPanel";
 import { DETAIL_COMPLETIONS, DETAIL_PIPELINE } from "@/domain";
 import { cn, formatGBP, formatValue } from "@/lib/utils";
 
@@ -1060,6 +1061,13 @@ export function EvolutionPanel({
                   + " Toggle 'Include KFI' off to read the smaller downstream stages."}
             </p>
           </div>
+
+          {/* The GROSS companion to the stock chart above. The chart says where
+              cases ARE; this says how they GOT there — which moved stage, which
+              arrived, which stayed and which left. Same governed payload the
+              deck renders, fetched through the movement-detail route. */}
+          <StageTransitionPanel client={client} portfolioId={portfolioId}
+            portfolioContext={portfolioContext} enabled={enhancedHovers} />
         </div>
       )}
 

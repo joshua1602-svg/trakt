@@ -156,6 +156,22 @@ slides:
     question: "How is the pipeline trending?"
     when: "has_pipeline_history"
 
+  # 14b ------------------------------------------- Pipeline Stage Movement
+  # The GROSS companion to Pipeline Evolution's stock view: which cases actually
+  # moved between stages, which arrived, which stayed and which left. Rendered
+  # from the governed PIPELINE_STAGE_TRANSITION payload; the deck computes none
+  # of it. Omitted (with the engine's own typed reason) when the governed pair
+  # of extracts cannot be compared.
+  # `when` is the coarse gate only. Whether a transition ANSWER exists is the
+  # engine's own typed decision, and it is applied by the composition guard so
+  # the omission carries the engine's reason ("duplicate case identifiers…")
+  # rather than a generic unmet-condition message.
+  - id: stage_transitions
+    type: stage_transitions
+    title: "Pipeline Stage Movement"
+    question: "What happened to pipeline cases since the last extract?"
+    when: "has_pipeline"
+
   # 15 -------------------------------------------------- Origination Funnel
   - id: funnel
     type: funnel

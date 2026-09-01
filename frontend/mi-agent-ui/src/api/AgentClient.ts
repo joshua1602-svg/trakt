@@ -28,6 +28,7 @@ import type {
   GeoExposure,
   MovementDetail,
   MovementDetailType,
+  StageTransitionDetail,
   WeeklyBrief,
   PipelineEvolution,
   ConcentrationDrillthrough,
@@ -116,6 +117,23 @@ export interface AgentClient {
   getMovementDetail?(portfolioId: string, detailType: MovementDetailType,
                    asOf?: string, portfolioContext?: string,
                    signal?: AbortSignal): Promise<MovementDetail>;
+
+  /**
+   * OPTIONAL governed GROSS stage transitions for one weekly point.
+   *
+   * The SAME endpoint as `getMovementDetail`, under the detail type
+   * `PIPELINE_STAGE_TRANSITION` — no second route and no second client. It is a
+   * separate method purely because the payload is a different SHAPE (a
+   * transition matrix, not a ranked contributor list), so one signature cannot
+   * type both without forcing every existing caller to narrow.
+   *
+   * Optional for the same reason as `getMovementDetail`: the endpoint does not
+   * exist on a deployment that has not enabled the layer, and a rejection means
+   * "no detail", never an error worth surfacing.
+   */
+  getStageTransitionDetail?(portfolioId: string, asOf?: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<StageTransitionDetail>;
 
   /**
    * OPTIONAL Weekly Portfolio Brief (Phase 3A).
