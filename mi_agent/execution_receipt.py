@@ -336,6 +336,12 @@ TEMPORAL_ROUTES = frozenset({
     # capability, which disables working governed analytics rather than
     # preventing a substitution.
     "period_movement",
+    # ``pipeline_stage_movement`` classifies every governed pipeline case across
+    # the two latest weekly extracts and reports the movement between them. It
+    # is a two-snapshot capability by construction — without a prior snapshot it
+    # returns the governed "no comparison" refusal rather than an answer — so a
+    # comparison-period facet on one of its questions is honoured, not lost.
+    "pipeline_stage_movement",
 })
 
 #: Routes that genuinely rank a dimension.
@@ -2851,6 +2857,7 @@ _ROUTE_LABELS = {
     "forecast_extrapolation": "Run-rate extrapolation",
     "portfolio_risk_comparison": "Portfolio comparison",
     "scenario": "Scenario projection",
+    "pipeline_stage_movement": "Governed pipeline stage movement",
     "cohort_progression": "Cohort progression",
     "cohort_conversion": "Cohort conversion",
     "analytical_composition": "Composed governed capabilities",
@@ -3657,6 +3664,30 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             # proves nothing — the bar `reconcile_population` holds two branches
             # above, now held here too.
             if grouping_proven(facet, declared_axes, fields):
+                facet.status, facet.reason = APPLIED, ""
+            elif (facet.kind == KIND_GROUPING
+                  and grouping_proven(facet, declared_population_fields(
+                      population_ledger(envelope)), fields)):
+                # NARROWED TO IS NOT LOST. The negative this branch falls
+                # through to says the answer "covers the whole population" —
+                # and where the route DECLARED, through the population ledger,
+                # that it narrowed on this very field, that sentence is false.
+                #
+                # The facet's own note above records why: the kind is GROUPING
+                # but the term is often a population, so "Reconcile Application
+                # stage" raises a grouping facet on `pipeline_stage` for an
+                # answer that is about exactly one governed stage.
+                #
+                # No new evidence channel and no route name. This reads the
+                # SAME ledger `reconcile_population` two branches above already
+                # reads, through the same primitive — and it is the reading
+                # `question_interpretation.completeness._carried` has always
+                # applied to this same facet kind (`field in applied`, where
+                # `applied` includes `declared_population_fields`). The two
+                # readers of one piece of evidence disagreed; they no longer do.
+                #
+                # RANKING is deliberately excluded: a ranking needs an axis to
+                # order, and narrowing to one value of a field is not one.
                 facet.status, facet.reason = APPLIED, ""
             elif ranked and facet.kind == KIND_RANKING:
                 facet.status = LOST

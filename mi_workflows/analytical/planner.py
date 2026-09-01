@@ -457,6 +457,8 @@ def _plan_pipeline_offer_outlook(question, text, spec, frame, semantics, reading
     if not (_any(text, _COMPLETION_TERMS) or _any(text, _TIMING_TERMS)
             or intent_mod.SIGNAL_FORECAST in reading.signals):
         return None
+    if _stage_movement_route_owns(question):
+        return None
     return AnalyticalPlan(
         intent=INTENT_PIPELINE_OFFER_OUTLOOK,
         required_kinds=(KIND_MEASURE, KIND_FORECAST),
@@ -470,6 +472,30 @@ def _plan_pipeline_offer_outlook(question, text, spec, frame, semantics, reading
                            {"stages": ["OFFER"]},
                            because="how much of it is expected to complete, and when"),
         ))
+
+
+def _stage_movement_route_owns(question) -> bool:
+    """Whether the pipeline stage-movement route already owns this question.
+
+    This plan answers a FORWARD question — what is at offer now, how much of it
+    is expected to complete, and when. "How many cases moved from Offer to
+    Completion?" is the BACKWARD one: a gross count of cases that already made
+    that move between the two latest governed extracts. Both name the offer
+    stage and both mention completion, which is why this builder claimed the
+    second and answered it with the first's forecast: *"Offer stage pipeline is
+    £1.3m across 2 cases. Expected completion amount: £968k"* — for a question
+    whose governed answer is one case and £800k, already completed.
+
+    Asked of the owning route's OWN reader rather than of a copy of its
+    vocabulary, exactly as `_evolution_route_owns` and `_forecast_route_owns`
+    above, so the two cannot drift apart.
+    """
+    try:
+        from mi_agent_api import stage_movement_query as _movement
+
+        return _movement.read(question) is not None
+    except Exception:  # noqa: BLE001 - if we cannot ask, we do not defer
+        return False
 
 
 def _forecast_route_owns(question, spec, reading) -> bool:
