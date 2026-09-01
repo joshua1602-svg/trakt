@@ -2448,6 +2448,27 @@ def _categorical_value_field(value: str, available_values) -> Optional[Tuple[str
     return value_field(value, available_values)
 
 
+def _qualified_by_own_value(q: str, term: str, key: str, available_values
+                            ) -> bool:
+    """Is ``term`` immediately preceded by a governed VALUE of its own field?
+
+    "offer-stage" / "offer stage" -> ``pipeline_stage`` is qualified by one of
+    its own values, so the phrase is a narrowing rather than an axis. The
+    catalogue is the authority on what counts as a value, so no vocabulary is
+    written here. Only the ONE word (or hyphenated word) in front is examined,
+    which is what keeps this an adjectival qualifier rather than a search of
+    the sentence.
+    """
+    if not available_values or not term or not key:
+        return False
+    match = re.search(r"([a-z][a-z_&'-]*)[\s-]+" + re.escape(str(term).lower())
+                      + r"\b", (q or "").lower())
+    if not match:
+        return False
+    resolved = _categorical_value_field(match.group(1), available_values)
+    return bool(resolved) and resolved[0] == key
+
+
 #: "... is drawdown", "... are second home". Bounded to four words so the
 #: complement is a category rather than the rest of the sentence.
 _COPULAR_CATEGORICAL_RE = re.compile(
@@ -3621,6 +3642,33 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         for _key, _term in zip(dim_keys, dim_terms):
             _is_value = _categorical_value_field(_term, available_values) is not None
             if _is_value and str(_term).lower() not in _after_by:
+                _dropped_dimension_terms.append(str(_term))
+                continue
+            # A DIMENSION QUALIFIED BY ONE OF ITS OWN VALUES IS THE SAME
+            # NARROWING, WRITTEN THE OTHER WAY ROUND.
+            #
+            # The rule above drops a term that IS a value ("joint borrower").
+            # The adjectival form puts the value in front of the field's own
+            # noun instead — "OFFER-stage pipeline", "London region", "drawdown
+            # product" — and that spelling survived, so `pipeline_stage` became
+            # the grouping AXIS of a sentence that had already narrowed to one
+            # of its values. It is the reason "What share of Offer-STAGE
+            # pipeline is joint borrowers?" was refused with "'share borrowers'
+            # is not a governed measure" while "Offer pipeline" answered
+            # 59.68%: with a dimension set, the share branch is never reached.
+            # `share`, `percentage`, `proportion` and `fraction` all failed
+            # together and all four worked together, which is what identifies
+            # the qualifier rather than the share vocabulary as the cause.
+            #
+            # PORTABLE BY CONSTRUCTION: the qualifier is recognised by asking
+            # the governed value catalogue whether the preceding word is a
+            # value OF THIS SAME FIELD. No stage name, region or product is
+            # written here, and a lender whose stages are spelled differently
+            # gets the same behaviour. A term inside a grouping clause is
+            # untouched, so "pipeline by stage and borrower type" still groups
+            # by stage.
+            if str(_term).lower() not in _after_by and _qualified_by_own_value(
+                    q, _term, _key, available_values):
                 _dropped_dimension_terms.append(str(_term))
                 continue
             _kept_keys.append(_key)
