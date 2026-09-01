@@ -35,6 +35,20 @@ CAP_PIPELINE_EVOLUTION = "pipeline five-week comparison"
 CAP_FUNDED_MOVEMENT = "funded period movement"
 CAP_CONTRIBUTORS = "concentration contributor attribution"
 
+#: Risk domains a Risk Review MUST have evaluated before it may state a clear
+#: position. Concentration is the only one today: it is the domain that carries
+#: the contractual limits, so "no material risks" said without it is a claim the
+#: evidence does not support.
+#:
+#: This exists because the failure it prevents was REACHABLE, not hypothetical. A
+#: funded-only approval resolved no pipeline side, concentration was therefore
+#: never computed AND never recorded as unavailable, and the Risk Review emitted
+#: the unqualified clear statement on the strength of a check that did not run.
+#: Listing the domain here makes the omission self-reporting, so a future change
+#: that stops resolving one degrades the message instead of silently widening
+#: what it claims.
+REQUIRED_RISK_CAPABILITIES = (CAP_CONCENTRATION,)
+
 
 @dataclass
 class GovernedInputs:
@@ -129,6 +143,14 @@ def resolve(*, tenant_id: str, portfolio_id: str,
         output_root = _safe(inputs, "funded output root",
                             datasets_mod._onboarding_output_root)
 
+    # Concentration is resolved for EVERY update type, before either side, and
+    # exactly once. It is a funded-book measure (it reads ``output_root``), and
+    # the Risk Review needs it whatever was approved — a monthly funded update is
+    # the one most likely to move a concentration test, and was previously the
+    # one that never evaluated any. Resolving it here rather than inside the
+    # pipeline side also means a combined update pays for it once.
+    _resolve_concentration(inputs, output_root, funded_run_id, scope)
+
     if want_pipeline:
         _resolve_pipeline_side(inputs, pipeline_root, output_root,
                                funded_run_id, scope)
@@ -136,6 +158,41 @@ def resolve(*, tenant_id: str, portfolio_id: str,
         _resolve_funded_side(inputs, output_root, funded_run_id, scope)
 
     return inputs
+
+
+def _resolve_concentration(inputs: GovernedInputs, output_root: Optional[str],
+                           funded_run_id: Optional[str], scope: Any) -> None:
+    """Resolve the concentration snapshot, recording every way it can be absent.
+
+    ``_safe`` only records an unavailable capability when the call RAISES. A
+    governed service that returns ``{"available": False, "reason": ...}`` — no
+    approved configuration, no funded run, a tape without the tested fields — is
+    a controlled outcome, not an exception, so it left ``unavailable`` empty and
+    the Risk Review read the absence as a clear position. Both shapes are
+    recorded here, with the service's own reason where it gave one.
+    """
+    if not output_root:
+        inputs.unavailable[CAP_CONCENTRATION] = (
+            "no governed funded output root is configured for this deployment, "
+            "so no concentration test was evaluated")
+        return
+
+    snapshot = _safe(inputs, CAP_CONCENTRATION, lambda: _concentration(
+        output_root, inputs.portfolio_id, funded_run_id, scope))
+    inputs.concentration = snapshot
+
+    if snapshot is None:
+        # _safe has already recorded the capability; nothing to add.
+        return
+    if not snapshot.get("available"):
+        inputs.unavailable[CAP_CONCENTRATION] = (
+            snapshot.get("reason")
+            or "no concentration test could be evaluated for this update")
+        return
+    # A snapshot that resolved is evidence the domain WAS evaluated; clear any
+    # earlier record so a retry does not leave a stale unavailable entry.
+    inputs.unavailable.pop(CAP_CONCENTRATION, None)
+    _resolve_contributors(inputs, output_root, funded_run_id, scope)
 
 
 def _resolve_pipeline_side(inputs: GovernedInputs, pipeline_root: Optional[str],
@@ -160,9 +217,10 @@ def _resolve_pipeline_side(inputs: GovernedInputs, pipeline_root: Optional[str],
     history = _safe(inputs, "pipeline history",
                     lambda: datasets_mod._pipeline_history(inputs.portfolio_id))
 
-    concentration = _safe(inputs, CAP_CONCENTRATION, lambda: _concentration(
-        output_root, inputs.portfolio_id, funded_run_id, scope))
-    inputs.concentration = concentration
+    # Resolved once for the whole update by ``_resolve_concentration``, before
+    # either side ran. Read here rather than recomputed: the brief and the Risk
+    # Review must be looking at one evaluation of one funded position.
+    concentration = inputs.concentration
 
     # ``lag_weeks`` is passed exactly as the dashboard passes it. Omitting it
     # would silently compute the conversion rate UNLAGGED — a different, larger
@@ -207,8 +265,6 @@ def _resolve_pipeline_side(inputs: GovernedInputs, pipeline_root: Optional[str],
         inputs.methodology_versions["insight_contract"] = brief.get("brief_version")
         inputs.methodology_versions["insight_metrics"] = getattr(
             metrics, "METHODOLOGY_VERSION", None)
-
-    _resolve_contributors(inputs, output_root, funded_run_id, scope)
 
 
 def _concentration(output_root: Optional[str], client_id: str,
@@ -280,10 +336,40 @@ def _resolve_funded_side(inputs: GovernedInputs, output_root: Optional[str],
         inputs.source_dates["funded_comparison"] = movement.get("priorReportingDate")
 
 
+#: How a required domain is shown to have been evaluated. One entry per member
+#: of ``REQUIRED_RISK_CAPABILITIES``: the evidence, not the attempt.
+_RISK_EVIDENCE = {
+    CAP_CONCENTRATION: lambda i: bool((i.concentration or {}).get("available")),
+}
+
+
+def unevaluated_risk_domains(inputs: GovernedInputs) -> Dict[str, str]:
+    """Required risk domains with no positive evidence that they ran.
+
+    Deliberately asks for EVIDENCE rather than trusting the absence of an error.
+    A domain that was skipped, that returned a controlled unavailable state, or
+    that a future caller forgets to resolve all look identical here — which is
+    the point. The alternative, inferring "it ran and found nothing" from an
+    empty findings list, is exactly how a check that never executed came to be
+    reported as a clear position.
+    """
+    out: Dict[str, str] = {}
+    for capability in REQUIRED_RISK_CAPABILITIES:
+        evidence = _RISK_EVIDENCE.get(capability)
+        if evidence is not None and evidence(inputs):
+            continue
+        out[capability] = inputs.unavailable.get(capability) or (
+            f"{capability} was not evaluated for this update")
+    return out
+
+
 def unavailable_summary(inputs: GovernedInputs) -> List[str]:
     """Plain-language names of the checks that did not run.
 
-    Sorted so the same set of failures always reads the same way; listed on the
-    card so a clear-state message is never mistaken for a complete one.
+    Includes any required risk domain that cannot show it was evaluated, so the
+    list a clear-state message is gated on can never be shorter than the set of
+    domains actually checked. Sorted, so the same set of failures always reads
+    the same way; listed on the card so a clear-state message is never mistaken
+    for a complete one.
     """
-    return sorted(inputs.unavailable)
+    return sorted(set(inputs.unavailable) | set(unevaluated_risk_domains(inputs)))
