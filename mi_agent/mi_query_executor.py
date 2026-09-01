@@ -1084,7 +1084,7 @@ def _execute_share(spec, df, work, semantics, warnings, balance_col):
     THE DENOMINATOR IS THE POPULATION THE QUESTION NAMED. "What proportion of
     the book is drawdown?" names the book, and the denominator is the whole
     frame — which is every share this executor has ever computed, and is what
-    an empty `share_denominator_filters` still produces. "What share of Offer
+    an empty `share_selection_fields` still produces. "What share of Offer
     pipeline is joint borrowers?" names the Offer pipeline, and dividing by the
     whole book answered 19.2% for a governed 59.68%. The narrowing is decided by
     the parser from the "share of ..." phrase and applied here with the SAME
