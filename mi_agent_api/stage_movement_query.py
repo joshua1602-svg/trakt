@@ -123,11 +123,6 @@ _AMOUNT_WORDS = ("balance", "amount", "value", "amounts", "values", "£", "sum",
 #: Words asking for a COUNT. "How many" is the strongest and is handled apart.
 _COUNT_WORDS = ("how many", "number of", "case count", "count of", "count the")
 
-#: Words that mean the AMENDMENT on cases that did not move, not their stock.
-_AMOUNT_CHANGE_WORDS = ("amount change", "change in", "changed in", "amendment",
-                        "change on", "did .* change", "change in value",
-                        "changed", "change")
-
 #: THE DEFERENCES. A sentence carrying any of these belongs to a route that
 #: already owns it, and this recogniser declines regardless of what else it
 #: sees. Conversion is the cohort route's; forecast, expectation and projection
@@ -612,49 +607,29 @@ def handle(request: Any) -> Optional[Dict[str, Any]]:
     return envelope
 
 
-#: How each governed payload key is labelled and formatted in the table. Keys
-#: absent from here are rendered as text under their own name — nothing is
-#: dropped, and no raw payload key reaches a reader as a column label.
-_COLUMN_LABELS = {
-    "source_stage": ("From", "text"), "destination_stage": ("To", "text"),
-    "stage": ("Stage", "text"), "case_count": ("Cases", "number"),
-    "prior_amount": ("Prior extract", "gbp"),
-    "latest_amount": ("Latest extract", "gbp"),
-    "amount_change": ("Change", "gbp"),
-    "governed_outcome": ("Recorded outcome", "text"),
-    "outcome_evidence": ("Outcome evidence", "text"),
-    "opening_case_count": ("Opening cases", "number"),
-    "closing_case_count": ("Closing cases", "number"),
-    "new_arrivals": ("New arrivals", "number"),
-    "transitions_in": ("Transferred in", "number"),
-    "transitions_out": ("Transferred out", "number"),
-    "departures": ("Departures", "number"), "stayers": ("Stayers", "number"),
-    "opening_amount": ("Opening balance", "gbp"),
-    "closing_amount": ("Closing balance", "gbp"),
-    "new_arrival_amount": ("New arrival balance", "gbp"),
-    "transferred_in_latest_amount": ("Transferred in balance", "gbp"),
-    "transferred_out_prior_amount": ("Transferred out balance", "gbp"),
-    "departure_prior_amount": ("Departure balance", "gbp"),
-    "stayer_amount_change": ("Stayer amount change", "gbp"),
-}
-
 #: Residuals are the capability's own self-proof, not a reader's column.
 _HIDDEN_COLUMNS = ("count_reconciliation_residual",
                    "amount_reconciliation_residual")
 
 
 def _columns(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Table columns for whichever governed keys these rows actually carry."""
+    """Table columns for whichever governed keys these rows actually carry.
+
+    The label and the format are DERIVED from the key rather than listed, so a
+    field the capability adds later appears correctly with no change here — and
+    no raw payload key reaches a reader as a column label.
+    """
     keys: List[str] = []
     for row in rows:
-        for key in row:
-            if key not in keys and key not in _HIDDEN_COLUMNS:
-                keys.append(key)
+        keys.extend(k for k in row if k not in keys and k not in _HIDDEN_COLUMNS)
     out = []
     for key in keys:
-        label, fmt = _COLUMN_LABELS.get(key, (key.replace("_", " ").capitalize(),
-                                              "text"))
-        out.append({"key": key, "label": label,
+        money_col = key.endswith("_amount") or key.endswith("amount_change")
+        counted = key.endswith("_count") or key in (
+            "new_arrivals", "transitions_in", "transitions_out", "departures",
+            "stayers")
+        fmt = "gbp" if money_col else ("number" if counted else "text")
+        out.append({"key": key, "label": key.replace("_", " ").capitalize(),
                     "align": "left" if fmt == "text" else "right",
                     "format": fmt})
     return out
