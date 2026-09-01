@@ -42,7 +42,9 @@ export function KeepMounted({
   if (!everActive.current) return null;
 
   return (
-    <div hidden={!active} data-testid={testId} aria-hidden={!active}>
+    // `stack-group` is the pane's internal rhythm: panels inside one tab are
+    // a group, spaced closer than the sections around them.
+    <div hidden={!active} data-testid={testId} aria-hidden={!active} className="stack-group">
       {children}
     </div>
   );

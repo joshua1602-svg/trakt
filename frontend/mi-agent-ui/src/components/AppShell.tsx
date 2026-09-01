@@ -342,14 +342,14 @@ export function AppShell() {
               artifact workspace below. Collapsible to focus the chart area. */}
           <section
             data-testid="core-dashboard"
-            className="mx-6 mt-5 rounded-2xl border border-[var(--surface-dashboard-line)] bg-[var(--surface-dashboard)] shadow-sm"
+            className="mx-6 mt-[var(--gap-region)] rounded-2xl border border-[var(--surface-dashboard-line)] bg-[var(--surface-dashboard)] shadow-sm"
           >
             <header className="flex items-center justify-between gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-peri-300">
                   <LayoutDashboard size={18} />
                 </div>
-                <h2 className="text-base font-semibold text-ink-100">Core Dashboard</h2>
+                <h2 className="t-title">Core Dashboard</h2>
               </div>
               <button
                 type="button"
@@ -357,7 +357,7 @@ export function AppShell() {
                 aria-label={dashCollapsed ? "Expand core dashboard" : "Collapse core dashboard"}
                 aria-expanded={!dashCollapsed}
                 data-testid="core-dashboard-toggle"
-                className="inline-flex items-center rounded-md px-1.5 py-1 text-ink-400 hover:text-ink-100"
+                className="inline-flex items-center rounded-md px-1.5 py-1 text-ink-400 transition-colors hover:text-ink-100"
               >
                 <ChevronDown size={15} className={dashCollapsed ? "-rotate-90 transition-transform" : "transition-transform"} />
               </button>
@@ -365,7 +365,10 @@ export function AppShell() {
             {/* Dashboard navigation: the lens tabs span the full panel width.
                 The portfolio-scope selector lives in the permanent header. */}
             {!dashCollapsed && (
-              <div className="flex flex-wrap items-center gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
+              // The tier-1 rail carries its own baseline rule, so the wrapper
+              // no longer draws a second one directly beneath it. The tabs run
+              // to the panel edge — a section rail, not a tray sitting in a row.
+              <div className="flex flex-wrap items-center px-2">
                 <ViewToggle
                   active={ws.activeView}
                   onChange={ws.setActiveView}
@@ -377,16 +380,16 @@ export function AppShell() {
               </div>
             )}
             {!dashCollapsed && (
-              <p className="px-4 pt-3 text-[11px] text-ink-500" data-testid="view-subtitle">
+              <p className="t-micro px-5 pt-[var(--gap-group)]" data-testid="view-subtitle">
                 {VIEW_SUBTITLES[ws.activeView]}
               </p>
             )}
             {dashCollapsed ? (
-              <p className="px-4 py-3 text-[11px] text-ink-500">
+              <p className="t-micro px-5 py-4">
                 Core Dashboard collapsed — expand to show the {ws.activeView} view.
               </p>
             ) : (
-              <div className="space-y-4 p-4">
+              <div className="stack-section p-5 pt-[var(--gap-group)]">
                 {/* Discovery failure (API unreachable / unauthorised) renders as
                     a visible error — never a bare "No client" header. */}
                 {ws.portfolios.length === 0 && ws.portfoliosError && (
@@ -405,7 +408,7 @@ export function AppShell() {
                     Risk Limits lives ONCE, as the top-level tab (no duplicate
                     sub-tab entry pointing at the same workspace). */}
                 {ws.activeView === "funded" && (
-                  <div className="space-y-4">
+                  <div className="stack-section">
                     <SubTabs ariaLabel="Funded sub-view" testId="funded-subtabs"
                       active={fundedTab} onChange={setFundedTab}
                       tabs={[
@@ -453,7 +456,7 @@ export function AppShell() {
                     does not, the banner above carries the business explanation and
                     no empty analysis is drawn. */}
                 {ws.activeView === "pipeline" && ws.capabilityEnabled("pipeline") && (
-                  <div className="space-y-4">
+                  <div className="stack-section">
                     <SubTabs ariaLabel="Pipeline sub-view" testId="pipeline-subtabs"
                       active={pipelineTab} onChange={setPipelineTab}
                       tabs={[
@@ -497,7 +500,7 @@ export function AppShell() {
 
                 {/* FORECAST — projection · forecast evolution */}
                 {ws.activeView === "forecast" && ws.capabilityEnabled("consolidated_forecast") && (
-                  <div className="space-y-4">
+                  <div className="stack-section">
                     <SubTabs ariaLabel="Forecast sub-view" testId="forecast-subtabs"
                       active={forecastTab} onChange={setForecastTab}
                       tabs={[
@@ -537,7 +540,7 @@ export function AppShell() {
               clearly divided from the core dashboard above. */}
           <div
             data-testid="artifact-region"
-            className="mx-6 mb-6 mt-4 rounded-2xl border border-[var(--surface-artifact-line)] border-l-2 border-l-[var(--surface-artifact-accent)] bg-[var(--surface-artifact)] shadow-sm"
+            className="mx-6 mb-6 mt-[var(--gap-region)] rounded-2xl border border-[var(--surface-artifact-line)] border-l-2 border-l-[var(--surface-artifact-accent)] bg-[var(--surface-artifact)] shadow-sm"
             style={{ backgroundImage: "linear-gradient(var(--surface-artifact-tint), var(--surface-artifact-tint))" }}
           >
             <ArtifactCanvas
