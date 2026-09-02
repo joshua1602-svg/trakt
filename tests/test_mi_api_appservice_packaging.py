@@ -19,6 +19,14 @@ a guard:
   * **sufficiency** — every third-party distribution reachable from that closure
     must be in ``deploy/trakt-mi-api/requirements.txt``, or the App Service build
     succeeds and the app cannot import.
+  * **economy** — nothing ships that the runtime never opens. The two checks
+    above both ask "is everything NEEDED present?"; neither asks "is everything
+    PRESENT needed?", and that blind spot let 14.5 MB of frozen measurement
+    baselines into a 28.0 MB artefact, unnoticed, because the package list names
+    directories and evidence is committed beside the code it measures. The
+    economy checks read ``package_excludes.txt`` and hold BOTH directions: the
+    declared files must not ship, and — the safety half — nothing declared may be
+    something the staged code actually reads.
 
 Run: python -m pytest tests/test_mi_api_appservice_packaging.py
 """
@@ -37,6 +45,7 @@ from typing import Dict, Set
 _REPO = Path(__file__).resolve().parents[1]
 _MANIFEST = _REPO / "deploy" / "trakt-mi-api" / "package_contents.txt"
 _REQUIREMENTS = _REPO / "deploy" / "trakt-mi-api" / "requirements.txt"
+_EXCLUDES = _REPO / "deploy" / "trakt-mi-api" / "package_excludes.txt"
 _WORKFLOW = _REPO / ".github" / "workflows" / "deploy-mi-api.yml"
 
 #: Third-party import name -> the distribution that provides it. Only the names
@@ -364,3 +373,97 @@ class TestStagedArtefactImports(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _exclude_patterns() -> "list[str]":
+    """Glob patterns from ``package_excludes.txt``; comments and blanks ignored."""
+    out = []
+    for raw in _EXCLUDES.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            out.append(line)
+    return out
+
+
+class TestArtefactEconomy(unittest.TestCase):
+    """Nothing ships that the runtime never opens — and nothing needed is pruned."""
+
+    def test_every_declared_exclusion_matches_something(self):
+        """A pattern that matches nothing is a stale rule, not a protection."""
+        stale = [pat for pat in _exclude_patterns()
+                 if not list(_REPO.glob(pat))]
+        self.assertEqual(stale, [], (
+            f"package_excludes.txt patterns match no file: {stale}. Either the "
+            "file was renamed and the rule is now silently protecting nothing, "
+            "or the rule was never right."))
+
+    def test_no_excluded_file_is_read_by_staged_code(self):
+        """THE SAFETY HALF. Excluding a file the runtime opens recreates exactly
+        the failure `package_contents.txt` exists to prevent: an App Service that
+        starts and 500s on the first request that reaches it.
+
+        Checked by NAME across every staged package's Python — the same evidence
+        that justified each rule. A file loaded by glob or directory walk would
+        not be caught here, so the staged packages are also asserted to contain
+        no such load below."""
+        staged_py = []
+        for top in sorted({p.split("/")[0] for p in _manifest_paths()}):
+            root = _REPO / top
+            if root.is_dir():
+                staged_py.extend(q for q in root.rglob("*.py")
+                                 if "tests" not in q.parts)
+        blobs = {q: q.read_text(encoding="utf-8", errors="ignore")
+                 for q in staged_py}
+        offenders = []
+        for pat in _exclude_patterns():
+            for match in _REPO.glob(pat):
+                name = match.name
+                for path, text in blobs.items():
+                    if name in text:
+                        offenders.append(f"{name} named by {path.relative_to(_REPO)}")
+        self.assertEqual(offenders, [], (
+            "package_excludes.txt would prune file(s) the staged code reads: "
+            f"{offenders}"))
+
+    def test_the_workflow_applies_the_exclusions(self):
+        """A declared rule that the staging step does not read is decoration."""
+        workflow = _WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("package_excludes.txt", workflow, (
+            "deploy-mi-api.yml does not read package_excludes.txt, so the "
+            "declared exclusions never reach the artefact."))
+
+    def test_the_artefact_stays_within_its_weight_budget(self):
+        """A backstop the exclude list cannot give: total staged weight.
+
+        Named patterns only catch the bulk someone thought to name. This catches
+        the next 15 MB whatever it is called. Raise the budget deliberately, with
+        a reason — never to make a red test go green.
+        """
+        budget_mb = 20
+        # TRACKED FILES ONLY. The workflow stages from a fresh checkout, so a
+        # local scratch store or a gitignored fixture is not in the artefact and
+        # must not be in the measurement — otherwise the budget reads whatever
+        # happens to be in a developer's working tree and the number means
+        # nothing. (Measured while writing this: an ignored 27 MB test store made
+        # the same artefact read 38 MB here and 11 MB in CI.)
+        tracked = subprocess.run(
+            ["git", "ls-files", "-z", "--"] + _manifest_paths(),
+            cwd=_REPO, capture_output=True, text=True, check=True)
+        excluded = {q.resolve() for pat in _exclude_patterns()
+                    for q in _REPO.glob(pat)}
+        total = 0
+        for rel in tracked.stdout.split("\0"):
+            if not rel:
+                continue
+            q = _REPO / rel
+            if "tests" in q.parts or q.name.endswith(".pyc"):
+                continue
+            if not q.is_file() or q.resolve() in excluded:
+                continue
+            total += q.stat().st_size
+        size_mb = total / (1024 * 1024)
+        self.assertLess(size_mb, budget_mb, (
+            f"the App Service artefact is {size_mb:.1f} MB, over its {budget_mb} MB "
+            "budget. Every megabyte is uploaded on each deploy and unpacked on "
+            "each cold start. Either it is runtime code that has genuinely grown, "
+            "or it is evidence that belongs in package_excludes.txt."))
