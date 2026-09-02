@@ -921,6 +921,304 @@ QUESTIONS = [
 
 
 
+QUESTIONS += [
+ {
+  "id": "SHIP-SM01-1",
+  "bank": "SHIPPED36",
+  "q": "How many cases moved from KFI to Application?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM01-2",
+  "bank": "SHIPPED36",
+  "q": "How many KFI cases progressed to Application?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM01-3",
+  "bank": "SHIPPED36",
+  "q": "How many cases went from KFI into Application?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM01-4",
+  "bank": "SHIPPED36",
+  "q": "What number of cases transitioned KFI to Application?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM02-1",
+  "bank": "SHIPPED36",
+  "q": "How much balance moved from Application to Offer?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM02-2",
+  "bank": "SHIPPED36",
+  "q": "What value progressed from Application to Offer?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM02-3",
+  "bank": "SHIPPED36",
+  "q": "How much pipeline moved from Application into Offer?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM02-4",
+  "bank": "SHIPPED36",
+  "q": "What amount transitioned from Application to Offer?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM03-1",
+  "bank": "SHIPPED36",
+  "q": "How many cases moved from Offer to Completion?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM03-2",
+  "bank": "SHIPPED36",
+  "q": "How many cases progressed from Offer into Completion?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM03-3",
+  "bank": "SHIPPED36",
+  "q": "What number of offers reached Completion?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM03-4",
+  "bank": "SHIPPED36",
+  "q": "How many cases advanced from Offer to Completed?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM04-1",
+  "bank": "SHIPPED36",
+  "q": "How much balance moved from Offer to Completion?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM04-2",
+  "bank": "SHIPPED36",
+  "q": "How much Offer-stage pipeline reached Completion?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM04-3",
+  "bank": "SHIPPED36",
+  "q": "What amount progressed from Offer to Completion?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM04-4",
+  "bank": "SHIPPED36",
+  "q": "What value went from Offer into Completed?",
+  "family": "transition",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM05-1",
+  "bank": "SHIPPED36",
+  "q": "How many new cases entered KFI?",
+  "family": "new_arrival",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM05-2",
+  "bank": "SHIPPED36",
+  "q": "How many new pipeline cases arrived in KFI?",
+  "family": "new_arrival",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM05-3",
+  "bank": "SHIPPED36",
+  "q": "What number of cases were new arrivals into KFI?",
+  "family": "new_arrival",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM05-4",
+  "bank": "SHIPPED36",
+  "q": "How many cases newly entered the KFI stage?",
+  "family": "new_arrival",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM06-1",
+  "bank": "SHIPPED36",
+  "q": "How many cases stayed in Application?",
+  "family": "stayer",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM06-2",
+  "bank": "SHIPPED36",
+  "q": "How many Application cases remained in Application?",
+  "family": "stayer",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM06-3",
+  "bank": "SHIPPED36",
+  "q": "What number of cases stayed at Application stage?",
+  "family": "stayer",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM06-4",
+  "bank": "SHIPPED36",
+  "q": "How many cases persisted in Application?",
+  "family": "stayer",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM07-1",
+  "bank": "SHIPPED36",
+  "q": "What was the amount change on cases that stayed in Application?",
+  "family": "stayer_amount_change",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM07-2",
+  "bank": "SHIPPED36",
+  "q": "How much did Application stayers change in value?",
+  "family": "stayer_amount_change",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM07-3",
+  "bank": "SHIPPED36",
+  "q": "What was the balance amendment on cases remaining in Application?",
+  "family": "stayer_amount_change",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM07-4",
+  "bank": "SHIPPED36",
+  "q": "How did the value of cases persisting in Application change?",
+  "family": "stayer_amount_change",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM08-1",
+  "bank": "SHIPPED36",
+  "q": "Where did cases leaving Offer go?",
+  "family": "departure",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM08-2",
+  "bank": "SHIPPED36",
+  "q": "Break down departures from Offer by destination.",
+  "family": "departure",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM08-3",
+  "bank": "SHIPPED36",
+  "q": "What happened to cases that left Offer?",
+  "family": "departure",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM08-4",
+  "bank": "SHIPPED36",
+  "q": "Show the destinations of Offer-stage departures.",
+  "family": "departure",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM09-1",
+  "bank": "SHIPPED36",
+  "q": "Reconcile Application stage this period.",
+  "family": "reconciliation",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM09-2",
+  "bank": "SHIPPED36",
+  "q": "Show opening, arrivals, departures and closing for Application.",
+  "family": "reconciliation",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM09-3",
+  "bank": "SHIPPED36",
+  "q": "Reconcile the Application stage from opening to closing.",
+  "family": "reconciliation",
+  "expect": "DELIVER"
+ },
+ {
+  "id": "SHIP-SM09-4",
+  "bank": "SHIPPED36",
+  "q": "Give me the Application stage reconciliation.",
+  "family": "reconciliation",
+  "expect": "DELIVER"
+ }
+]
+
+
+#: THE AUDIT BANK'S `expect` VALUES ARE STALE, AND SILENTLY SO.
+#:
+#: `migration_phase0/STAGE_MOVEMENT_BANK.yaml` was frozen during an AUDIT whose
+#: brief said "do not implement the capability in this task". Its 82 REFUSEs
+#: were correct THEN: the governed layer held per-stage stock and no transition
+#: could be derived from it. The capability shipped afterwards
+#: (`mi_agent_api/stage_movement_query.py`, in the deployed build) and answers
+#: exactly the families those REFUSEs were written against — so grading today's
+#: answers against yesterday's expectations scores the feature WORKING as
+#: OVERREACH, which is the most misleading verdict this probe could produce.
+#:
+#: The families the shipped capability declares, from the nine subtypes in
+#: `tests/fixtures/mi_query_stage_movement/STAGE_MOVEMENT_BANK.yaml`:
+#: transition (count and amount), new_arrival, stayer, stayer_amount_change,
+#: departure, reconciliation. The audit families below map onto those.
+#:
+#: THIS MAPPING IS AN INFERENCE, not a measurement, and it is stated here so it
+#: can be corrected rather than believed. The families left out — J_largest,
+#: K_period_comparison, L_summary, G_completions, H_terminal — are NOT claimed
+#: either way: their rows are graded UNSCORED, because a guess dressed as a
+#: verdict is worse than an honest gap.
+_SHIPPED_FAMILIES = {
+    "A_source_dest_count", "B_source_dest_amount", "C_departures",
+    "D_arrivals", "E_stayers", "F_amendments", "I_reconciliation",
+}
+_STALE_REFUSE_FAMILIES = _SHIPPED_FAMILIES
+
+
+def _expected(item):
+    """What this question SHOULD do against the build being probed."""
+    if item.get("bank") == "SHIPPED36":
+        return "DELIVER"
+    if item.get("bank") == "NEAR28":
+        return "DELIVER"
+    fam = item.get("family")
+    if fam in _STALE_REFUSE_FAMILIES:
+        return "DELIVER"          # the capability now covers this family
+    if item.get("expect") == "DELIVER":
+        return "DELIVER"
+    return "UNSCORED"             # frozen as REFUSE before the capability; unproven now
+
+
 def _locate_app_root() -> None:
     """Put the deployed application on `sys.path`, wherever it was unpacked.
 
@@ -1046,10 +1344,12 @@ def main() -> int:
                           for a in (env.get("artifacts") or [])],
             "ms": int((time.time() - t0) * 1000),
             "family": item.get("family"),
-            "expect": item.get("expect"),
+            "expect_frozen": item.get("expect"),
+            "expect": _expected(item),
             # AGREEMENT, not success. A refusal where the bank expects REFUSE is
             # the right answer and is scored as one.
-            "verdict": ("PASS" if (answered == (item.get("expect") == "DELIVER"))
+            "verdict": ("UNSCORED" if _expected(item) == "UNSCORED"
+                        else "PASS" if (answered == (_expected(item) == "DELIVER"))
                         else ("OVERREACH" if answered else "MISSED")),
         })
         if (i + 1) % 20 == 0:
@@ -1097,6 +1397,8 @@ def main() -> int:
     print("agreement with the bank: PASS %d  MISSED %d  OVERREACH %d"
           % (verdicts.get("PASS", 0), verdicts.get("MISSED", 0),
              verdicts.get("OVERREACH", 0)))
+    print("  (UNSCORED %d — frozen as REFUSE before the capability shipped; "
+          "not graded either way)" % verdicts.get("UNSCORED", 0))
     if out["overreach"]:
         print("OVERREACH (answered where the bank expects a refusal): %s"
               % ", ".join(out["overreach"]))
