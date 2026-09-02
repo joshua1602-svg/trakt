@@ -3686,6 +3686,15 @@ fields:
         priority: Mandatory
     layer: core
     core_canonical: true
+    applicability:
+      equity_release:
+        allowed_missing: true
+        severity_if_missing: warning
+        reason: "Reporting-entity identity is supplied by the governed client
+          configuration and injected at projection (Gate 4); it is not carried on
+          the MI canonical tape. Its presence and ISO 17442 shape are enforced
+          for the regulatory delivery by the Annex 2 preflight
+          (operations_control/annex2/preflight.py), which blocks before projection."
   originator_name:
     allowed_values: null
     category: regulatory
@@ -3709,6 +3718,15 @@ fields:
         priority: Mandatory
     layer: core
     core_canonical: true
+    applicability:
+      equity_release:
+        allowed_missing: true
+        severity_if_missing: warning
+        reason: "Reporting-entity identity is supplied by the governed client
+          configuration and injected at projection (Gate 4); it is not carried on
+          the MI canonical tape. Its presence is enforced for the regulatory
+          delivery by the Annex 2 preflight
+          (operations_control/annex2/preflight.py), which blocks before projection."
   other_industry_code:
     allowed_values: null
     category: analytics
@@ -4792,11 +4810,20 @@ fields:
         severity_if_missing: warning
         nd_default: ND2
         reason: "Equity release (roll-up) products typically have no scheduled interest payments; interest accrues until redemption."
+  # The secondary-income pair is scoped like the rest of the Annex 2 field set.
+  # It was the only pair marked `rre` out of the template's 107 canonical
+  # fields — including its own primary-income twins RREL16 to RREL19, which are
+  # `common`. That left an equity release run projecting 105 of 107 codes: the
+  # two were filtered out of the regime frame entirely, so neither the asset
+  # pack's ND1 nor anything else could reach them, and RREL21 (which auth.099
+  # requires on every record) arrived empty. An equity release loan is a
+  # residential real-estate exposure; there is no scope on which these two
+  # differ from their twins.
   secondary_income:
     allowed_values: null
     category: regulatory
     format: decimal
-    portfolio_type: rre
+    portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
         code: RREL20
@@ -4807,7 +4834,7 @@ fields:
     allowed_values: income_verification
     category: regulatory
     format: list
-    portfolio_type: rre
+    portfolio_type: common
     regime_mapping:
       ESMA_Annex2:
         code: RREL21

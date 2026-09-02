@@ -180,6 +180,11 @@ def run_llm_assisted_mapping(
             ctx_inventory, evidence_rows, mode=mode, client_name=client_id,
             llm_callable=(context_llm_callable if enable_context_resolver else None))
     context = ctx_out["final"]
+    # Carried into the target contract: a regime-required delivery keeps the
+    # regulatory targets in coverage so a column the lender supplied for Annex 2
+    # is recognised rather than dropped. Detection is unaffected — this only
+    # widens what the contract is willing to see.
+    context["regulatory_reporting_enabled"] = bool(regulatory_reporting_enabled)
     context_usage = ctx_out["usage"]
     octx.write_context_artifacts(context, out_dir, deterministic=ctx_out["deterministic"],
                                  llm=ctx_out["llm"])

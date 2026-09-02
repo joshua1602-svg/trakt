@@ -340,6 +340,35 @@ def _snapshot_ref(descriptor: Any, approval_state: Optional[str]) -> SnapshotRef
     )
 
 
+def _finish(result: GovernedResult[Dict[str, Any]],
+            request: MiQueryRequest) -> GovernedResult[Dict[str, Any]]:
+    """The single exit for every governed MI query.
+
+    Emits the existing metadata-only audit line (unchanged), and records the
+    governed telemetry document an operator reviews in OCC. Both are
+    non-raising by construction: neither may turn an answered query into a
+    failed one, and neither changes the result that is returned.
+
+    The OCC imports are deliberately local to this function. The record is an
+    OCC document written into the OCC store, so this module is the writer and
+    ``operations_control`` is the owner — a one-way dependency, declared in
+    deploy/trakt-mi-api/package_contents.txt so the App Service actually ships
+    it. Kept function-local so importing the MI service does not pull the
+    control plane in at module scope.
+    """
+    emit_audit_event(result)
+    try:
+        from operations_control import mi_query_telemetry
+        from operations_control.stores import OpsStore
+        mi_query_telemetry.record(
+            OpsStore.from_env(), result, question=request.question,
+            requested_portfolio=request.effective_portfolio_id())
+    except Exception:  # noqa: BLE001 — telemetry must never fail a query
+        logger.warning("mi query telemetry unavailable for request_id=%s",
+                       result.request_id, exc_info=True)
+    return result
+
+
 def _audit(context: ExecutionContext, *, outcome: str, started_at: str,
            t0: float, portfolio_id: Optional[str], snapshot_id: Optional[str],
            error_code: Optional[str]) -> AuditMetadata:
@@ -445,8 +474,7 @@ def execute_governed_mi_query(
         result = _failure(context, err, started_at=started_at, t0=t0,
                           portfolio_id=requested_portfolio, view=view, req=request,
                           policy=policy)
-        emit_audit_event(result)
-        return result
+        return _finish(result, request)
     except Exception as exc:  # noqa: BLE001 - governance failing is not a raw 500
         # THE ASYMMETRY THIS CLOSES. The block below (source approval) already
         # caught every exception; this one caught only the typed refusal, so a
@@ -467,8 +495,12 @@ def execute_governed_mi_query(
         result = _failure(context, err, started_at=started_at, t0=t0,
                           portfolio_id=requested_portfolio, view=view, req=request,
                           policy=policy)
-        emit_audit_event(result)
-        return result
+        # THROUGH `_finish`, not around it. `main` made this the single exit for
+        # every governed query — the audit line AND the OCC telemetry document an
+        # operator reviews. A new refusal path that returned directly would be
+        # invisible in exactly the surface built to show what the agent did, and
+        # a governance fault is the last thing that should go unrecorded.
+        return _finish(result, request)
 
     # ---- 2. governance: is this dataset allowed to answer? --------------- #
     try:
@@ -484,8 +516,7 @@ def execute_governed_mi_query(
         result = _failure(context, err, started_at=started_at, t0=t0,
                           portfolio_id=authorised.portfolio_id, view=view,
                           req=request, policy=policy)
-        emit_audit_event(result)
-        return result
+        return _finish(result, request)
 
     snapshot = _snapshot_ref(descriptor, approval.state)
     if not approval.approved:
@@ -498,8 +529,7 @@ def execute_governed_mi_query(
                                capability_allowed=True, data_approved=False,
                                notes=(approval.reason,)),
             snapshot=snapshot)
-        emit_audit_event(result)
-        return result
+        return _finish(result, request)
 
     policy = PolicyState(
         runtime_mode=deps.runtime_mode, tenant_authorised=True,
@@ -532,8 +562,9 @@ def execute_governed_mi_query(
         result = _failure(context, err, started_at=started_at, t0=t0,
                           portfolio_id=authorised.portfolio_id, view=view,
                           req=request, policy=policy, snapshot=snapshot)
-        emit_audit_event(result)
-        return result
+        # Same single exit as every other outcome: an analytical fault is a
+        # governed event, and the operator's telemetry has to show it.
+        return _finish(result, request)
 
     ok = bool(payload.get("ok"))
     status = STATUS_SUCCESS if ok else STATUS_ERROR
@@ -559,8 +590,7 @@ def execute_governed_mi_query(
                      portfolio_id=authorised.portfolio_id,
                      snapshot_id=snapshot.snapshot_id,
                      error_code=error.code if error else None))
-    emit_audit_event(result)
-    return result
+    return _finish(result, request)
 
 
 def _scope_ref(payload: Dict[str, Any]) -> Optional[ScopeRef]:
@@ -1450,7 +1480,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         return _error_envelope("Could not load the governed data for this query.",
                                req=req, view=view)
 
-    currency_mod.resolve_and_set(df)
+    currency_mod.resolve_and_set(df, client_id=client_id)
 
     llm_enabled, llm_model = llm_cfg.enabled, llm_cfg.model
     runner = deps.query_runner or run_mi_agent_query

@@ -34,7 +34,9 @@ from engine.onboarding_agent import workflow as wf
 PACK = str(_REPO_ROOT / "synthetic_demo" / "input")
 REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
 ALIASES = str(_REPO_ROOT / "config" / "system")
-REGIME = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
+from tests.annex2_contract_fixture import contract_path
+
+REGIME = contract_path()
 ASSET = str(_REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml")
 
 
@@ -53,7 +55,7 @@ class TestAnnex2TargetLoading(unittest.TestCase):
     def test_regulatory_mode_loads_annex2_codes(self):
         cid, csrc, fields = tcov.load_target_contract("regulatory_mi", {})
         self.assertEqual(cid, "esma_annex_2")
-        self.assertTrue(csrc.endswith("annex2_delivery_rules.yaml"))
+        self.assertIn("annex2_contract", csrc)
         names = {f["target_field"] for f in fields}
         for code in ("RREL1", "RREL2", "RREL6", "RREC9", "RREL16", "RREL40",
                      "RREC8", "RREC15"):
@@ -92,13 +94,23 @@ class TestDefaultApplicationUnit(unittest.TestCase):
         self.assertEqual(r["coverage_status"], tcov.MISSING_REQUIRED)
         self.assertTrue(r["blocking"])
 
-    def test_nd_default_and_value_default_distinct(self):
+    def test_the_contract_carries_no_defaults_and_the_pack_does(self):
+        """The distinction is still real; it just lives in the right place.
+
+        RREL16 takes a no-data code and RREC8 takes a value, and both are
+        statements about UK equity release rather than about ESMA Annex 2 — so
+        both are in the asset pack, and the regime contract states neither.
+        """
+        import yaml as _y
         cid, csrc, fields = tcov.load_target_contract("regulatory_mi", {})
         by = {f["target_field"]: f for f in fields}
-        # RREL16 carries an ND default (ND1); RREC8 carries a non-ND value ("1").
-        self.assertTrue(tcov._is_nd(by["RREL16"]["default_value"]))
-        self.assertEqual(by["RREC8"]["default_value"], "1")
-        self.assertFalse(tcov._is_nd(by["RREC8"]["default_value"]))
+        for code in ("RREL16", "RREC8"):
+            self.assertEqual(by[code]["default_value"], "", code)
+        pack = _y.safe_load(
+            (_REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml")
+            .read_text(encoding="utf-8"))
+        self.assertTrue(tcov._is_nd(pack["nd_defaults"]["primary_income"]))
+        self.assertEqual(str(pack["defaults"]["lien"]), "1")
 
 
 # --------------------------------------------------------------------------- #
@@ -130,41 +142,33 @@ class TestConfigValidationUnit(unittest.TestCase):
         self.assertEqual(row["validation_status"], tcov.VS_VALID)
         self.assertEqual(row["asset_default_value"], "ND5")
 
-    def test_invalid_asset_default_surfaced_synthetic(self):
-        # Option B: a SYNTHETIC fixture that deliberately sets DTI = ND1 while the
-        # regime only allows ND5 must surface invalid_default_not_allowed and must
-        # NOT apply the invalid value. (We do not reintroduce the conflict into the
-        # real product config just to test this behaviour.)
+    def test_an_asset_default_outside_the_regulator_envelope_is_refused(self):
+        """A product may choose within the envelope; it cannot exceed it.
+
+        RREL16 (primary income) is one of the codes the workbook marks
+        ``nd5_allowed: false`` — "not applicable" is not an answer the regulator
+        accepts there. A synthetic asset pack declaring ND5 must be surfaced as
+        invalid and the value must not be applied. The envelope comes from the
+        field universe now, so this is checked against the regulator's own
+        statement rather than against whatever a rules file happened to say.
+        """
         import tempfile
         import textwrap
         from pathlib import Path
         d = Path(tempfile.mkdtemp(prefix="annex2_invalid_"))
-        regime = d / "regime.yaml"
-        regime.write_text(textwrap.dedent("""\
-            regime: ESMA_Annex2
-            field_rules:
-              RREL40:
-                esma_code: RREL40
-                projected_source_field: debt_to_income_ratio
-                mandatory: true
-                enforce_presence: true
-                nd_allowed: [ND5]
-                default_allowed: true
-                default_value: ND5
-        """), encoding="utf-8")
         asset = d / "asset.yaml"
         asset.write_text(textwrap.dedent("""\
             asset_class: equity_release
             defaults: {}
             nd_defaults:
-              debt_to_income_ratio: ND1
+              primary_income: ND5
         """), encoding="utf-8")
-        rows, overlay, _ = tcov.build_annex2_config_validation(str(regime), str(asset))
+        rows, overlay, _ = tcov.build_annex2_config_validation("", str(asset))
         by = {r["esma_code"]: r for r in rows if r["esma_code"]}
-        self.assertEqual(by["RREL40"]["validation_status"], tcov.VS_INVALID)
-        self.assertEqual(by["RREL40"]["asset_default_value"], "ND1")
-        self.assertFalse(overlay["RREL40"].get("valid"))
-        self.assertNotEqual(overlay["RREL40"].get("default_value"), "ND1")
+        self.assertEqual(by["RREL16"]["validation_status"], tcov.VS_INVALID)
+        self.assertEqual(by["RREL16"]["asset_default_value"], "ND5")
+        self.assertFalse(overlay["RREL16"].get("valid"))
+        self.assertNotEqual(overlay["RREL16"].get("default_value"), "ND5")
 
     def test_unknown_and_missing_statuses_present(self):
         statuses = {r["validation_status"] for r in self.rows}
@@ -200,7 +204,7 @@ class TestAnnex2Workflow(unittest.TestCase):
     def test_40_summary_records_contract_and_config_paths(self):
         s = self.summary
         self.assertEqual(s["target_contract_id"], "esma_annex_2")
-        self.assertTrue(s["regime_config_path"].endswith("annex2_delivery_rules.yaml"))
+        self.assertTrue(s["regime_config_path"])
         self.assertTrue(s["asset_config_path"].endswith("product_defaults_ERM.yaml"))
         self.assertEqual(s["annex2_field_count"], len(self.cov["rows"]))
         # Reconciles to 42, rather than asserting a magic number. Both real asset
@@ -217,21 +221,43 @@ class TestAnnex2Workflow(unittest.TestCase):
                          sum(1 for r in val["rows"]
                              if r["validation_status"] == tcov.VS_INVALID))
 
-    def test_40_status_not_ready_when_universe_incomplete(self):
-        # With pending_regime_rule codes in the authoritative universe, the
-        # Annex 2 run must NOT be READY (config completeness gap).
+    def test_40_status_reflects_real_configuration_gaps(self):
+        """Not ready — but for the right reason, and now for a visible one.
+
+        It used to be NEEDS_CONFIGURATION because 37 of the 107 codes had no
+        hand-written rule, so coverage parked them as ``pending_regime_rule``:
+        a statement about the rules file, not about the tape. Every code is
+        governed now, so those codes are assessed against the demo tape like
+        any other — and the ones it does not carry, and which no asset, client
+        or operator layer answers for, surface as BLOCKING Gate 4 decisions
+        instead of sitting in a holding pen. Blocked on a real, listed gap is
+        strictly more honest than not-configured on an accounting artefact.
+        """
         self.assertNotEqual(self.summary["status"], wf.READY)
-        self.assertEqual(self.summary["status"], wf.NEEDS_CONFIGURATION)
-        self.assertGreater(self.summary["annex2_pending_regime_rule_count"], 0)
+        self.assertEqual(self.summary["status"], wf.BLOCKED)
+        self.assertEqual(self.summary["annex2_pending_regime_rule_count"], 0,
+                         "no code is missing from the contract")
+        # Reconciled to the coverage matrix, not pinned to a number: every
+        # blocking decision is a code the tape does not source and no layer
+        # defaults.
+        blocking = {d["target_field"] for d in self.dec["rows"] if d["blocking"]}
+        unmapped = {r["target_field"] for r in self.cov["rows"]
+                    if r["coverage_status"] == tcov.MISSING_REQUIRED}
+        self.assertEqual(blocking, unmapped)
+        self.assertTrue(blocking, "the demo tape does not carry every Annex 2 code")
 
     def test_explicitly_defaulted_fields_not_in_28c(self):
         # A field that is explicitly ND/value defaulted with no confirmation must
         # NOT appear as a Gate 4 decision.
         dec_fields = {d["target_field"] for d in self.dec["rows"]}
         cov_by = {r["target_field"]: r for r in self.cov["rows"]}
+        # Both answers now come from the asset pack rather than the regime
+        # layer, so coverage records them as configured rather than as a regime
+        # default — and neither needs an operator decision.
         self.assertEqual(cov_by["RREL16"]["coverage_status"], tcov.DEFAULTED_ND)
-        self.assertNotIn("RREL16", dec_fields)  # clean ND default, no decision
-        self.assertEqual(cov_by["RREC8"]["coverage_status"], tcov.DEFAULTED_VALUE)
+        self.assertNotIn("RREL16", dec_fields)
+        self.assertEqual(cov_by["RREC8"]["coverage_status"],
+                         tcov.CONFIGURED_STATIC)
         self.assertNotIn("RREC8", dec_fields)
 
     def test_invalid_default_decisions_track_the_config_validation(self):
@@ -391,26 +417,33 @@ class TestAnnex2FieldUniverse(unittest.TestCase):
                      "43_annex2_field_universe_reconciliation_summary.md"):
             self.assertTrue((self.out / name).exists(), name)
 
-    def test_deferred_fields_present_as_deferred(self):
+    def test_attribute_only_codes_are_present_not_dropped(self):
+        """Nothing is deferred any more; three codes have no element at all.
+
+        RREC22 used to be declared deferred by hand. It is one of the three
+        concepts auth.099 carries as a currency attribute of the amount it
+        qualifies, which the contract reads off the schema — so it is present in
+        coverage and marked as having no element of its own, rather than
+        listed somewhere as permitted to be skipped.
+        """
         cov_by = {r["target_field"]: r for r in self.cov["rows"]}
-        # RREC22 is a deferred reconciliation code: present in 28a, not dropped.
-        self.assertIn("RREC22", cov_by)
+        for code in ("RREC22", "RREL18", "RREL28"):
+            self.assertIn(code, cov_by, code)
         deferred_codes = [r["esma_code"] for r in self.recon["rows"]
                           if r["reconciliation_status"] == "deferred_in_regime"]
-        self.assertGreater(len(deferred_codes), 0)
-        # Deferred codes either carry deferred applicability or are source-mapped,
-        # never silently omitted.
-        for code in deferred_codes:
-            self.assertIn(code, cov_by)
+        self.assertEqual(deferred_codes, [],
+                         "no code is deferred by declaration any more")
 
-    def test_pending_codes_appear_as_pending_regime_rule(self):
-        cov_by = {r["target_field"]: r for r in self.cov["rows"]}
+    def test_no_code_is_missing_from_the_contract(self):
+        """The category is empty by construction.
+
+        "Missing from the regime rules" was a real state when the rules were a
+        hand-maintained list of 70. The contract is derived from the workbook
+        universe, so every code the regulator defines is in it.
+        """
         pending = [r["esma_code"] for r in self.recon["rows"]
                    if r["reconciliation_status"] == "missing_from_regime_rules"]
-        self.assertGreater(len(pending), 0)
-        # At least some pending (unruled, no source) carry the pending status.
-        statuses = {cov_by[c]["coverage_status"] for c in pending if c in cov_by}
-        self.assertIn(tcov.PENDING_REGIME_RULE, statuses)
+        self.assertEqual(pending, [])
 
     def test_40_reports_universe_counts(self):
         s = self.summary
@@ -419,10 +452,10 @@ class TestAnnex2FieldUniverse(unittest.TestCase):
                   "annex2_missing_from_28a_count", "annex2_deferred_field_count",
                   "annex2_deliverable_field_count"):
             self.assertIn(k, s)
-        # 70 since Phase 2: RREL20/RREL21 moved out of xml_builder_annex2.py
-        # into declared rules. See docs/annex2_delivery_migration.md.
-        self.assertEqual(s["annex2_regime_rule_count"], 70)
-        self.assertGreater(s["annex2_authoritative_field_count"], 70)
+        # The contract covers the whole workbook universe. It used to cover 70
+        # of 107, and the 37 without an entry were treated as ungoverned.
+        self.assertEqual(s["annex2_regime_rule_count"], 107)
+        self.assertEqual(s["annex2_authoritative_field_count"], 107)
 
     def test_review_pack_shows_universe_reconciliation(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
@@ -450,16 +483,21 @@ class TestAnnex2NdEligibility(unittest.TestCase):
             self.assertTrue((self.out / name).exists(), name)
 
     def test_nd_reconciliation_unit(self):
+        """The reconciliation is now a tautology, and says so.
+
+        It existed to compare a hand-maintained ND list against the workbook's,
+        and found 35 of 70 divergent. The contract takes the envelope FROM the
+        workbook, so every code matches — which is the outcome the report was
+        built to drive towards.
+        """
         rows = tcov.build_annex2_nd_eligibility_reconciliation()
-        by = {r["esma_code"]: r for r in rows}
-        # RREL40: regime restricts to [ND5] but the workbook allows ND1-ND5 too,
-        # so the regime is STRICTER than the authoritative eligibility.
-        self.assertEqual(by["RREL40"]["nd_alignment_status"], "regime_stricter")
-        # Statuses are drawn from the documented vocabulary.
         allowed = {"match", "regime_stricter", "regime_broader", "divergent",
                    "no_regime_rule", "not_in_workbook"}
         for r in rows:
             self.assertIn(r["nd_alignment_status"], allowed)
+        statuses = {r["nd_alignment_status"] for r in rows}
+        self.assertEqual(statuses, {"match"},
+                         "the regime envelope IS the workbook envelope")
 
     def test_regime_broader_is_zero_after_tightening(self):
         s = self.nd["summary"]
@@ -471,35 +509,29 @@ class TestAnnex2NdEligibility(unittest.TestCase):
         for code in ("RREL1", "RREL2", "RREL6", "RREL69", "RREL83"):
             self.assertEqual(by[code]["nd_alignment_status"], "match")
 
-    def test_divergent_and_stricter_surfaced_not_widened(self):
+    def test_nothing_diverges_from_the_workbook_any_more(self):
         s = self.nd["summary"]
-        # Divergent + stricter cases remain (surfaced for review / kept by
-        # policy) — they are NOT auto-widened away.
-        self.assertGreater(s["divergent"], 0)
-        self.assertGreater(s["regime_stricter"], 0)
-        self.assertEqual(self.summary["annex2_nd_divergent_count"], s["divergent"])
-        self.assertEqual(self.summary["annex2_nd_regime_stricter_count"],
-                         s["regime_stricter"])
-        # Divergent cases are flagged for manual review in the workflow warnings.
-        self.assertTrue(any("manual review" in w for w in self.summary["warnings"]))
+        self.assertEqual(s["divergent"], 0)
+        self.assertEqual(s["regime_stricter"], 0)
+        self.assertEqual(s["regime_broader"], 0)
+        self.assertEqual(self.summary["annex2_nd_divergent_count"], 0)
+        self.assertEqual(self.summary["annex2_nd_regime_stricter_count"], 0)
 
-    def test_regime_validation_behaviour_unchanged(self):
-        # 42 config validation uses the regime nd_allowed (RREL40 -> [ND5]) and
-        # the reconciliation is report-only: it does NOT widen the regime rule to
-        # the workbook's ND1-ND5 envelope. That is the assertion. The asset pack
-        # declares ND5, which is inside the narrow rule, so the row is valid —
-        # this once expected invalid, from when the pack declared ND1.
+    def test_the_envelope_the_validator_uses_is_the_regulators(self):
+        """42 validates the asset pack against what ESMA permits.
+
+        It used to validate against a hand-narrowed list — RREL40 restricted to
+        ND5 where the workbook allows ND1 to ND5 — so a product decision inside
+        the regulator's envelope but outside the file's could be called invalid.
+        """
         val = json.loads(
             (self.out / "42_annex2_config_validation.json").read_text())
         rrel40 = next(r for r in val["rows"] if r["esma_code"] == "RREL40")
-        self.assertEqual(rrel40["regime_nd_allowed"], "ND5")
+        self.assertEqual(
+            [c.strip() for c in rrel40["regime_nd_allowed"].split(";")],
+            ["ND1", "ND2", "ND3", "ND4", "ND5"])
         self.assertEqual(rrel40["asset_default_value"], "ND5")
         self.assertEqual(rrel40["validation_status"], tcov.VS_VALID)
-        # The workbook permits more than the regime does, and the regime stays
-        # stricter — the reconciliation reports the gap, it does not close it.
-        align = next(r for r in self.align["rows"] if r["esma_code"] == "RREL40")
-        self.assertEqual(align["alignment_status"], "left_stricter_by_policy")
-        self.assertEqual(align["regime_nd_allowed_after"], "ND5")
 
     def test_review_pack_shows_nd_reconciliation(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
@@ -532,7 +564,8 @@ class TestAnnex2EnumCoverage(unittest.TestCase):
     def test_added_enum_maps_are_within_workbook(self):
         import yaml as _y
         wb = tcov.load_annex2_workbook_universe()[0]
-        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
+        from tests.annex2_contract_fixture import contract_field_rules
+        fr = contract_field_rules()
         for code in ("RREL19", "RREL56", "RREL57", "RREC10", "RREC18"):
             allowed = set(tcov._annex2_workbook_enum_codes(wb[code]["content"]))
             targets = set(fr[code]["transform"]["enum_map"].values())
@@ -580,8 +613,9 @@ class TestAnnex2SemanticMapping(unittest.TestCase):
                      "47_annex2_semantic_mapping_reconciliation_summary.md"):
             self.assertTrue((self.out / name).exists(), name)
 
-    def test_all_70_ruled_codes_checked(self):
-        self.assertEqual(self.sem["summary"]["semantic_rows_total"], 70)
+    def test_every_code_is_semantically_checked(self):
+        """107, not 70: the 37 with no hand-written rule were never checked."""
+        self.assertEqual(self.sem["summary"]["semantic_rows_total"], 107)
 
     def test_all_mappings_now_aligned(self):
         # After the mapping corrections, the previously mismapped codes align.
@@ -597,7 +631,8 @@ class TestAnnex2SemanticMapping(unittest.TestCase):
     def test_47_reads_corrected_rules_from_disk(self):
         # 47 is report-only; it reflects the corrected rules now on disk.
         import yaml as _y
-        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
+        from tests.annex2_contract_fixture import contract_field_rules
+        fr = contract_field_rules()
         self.assertEqual(fr["RREL70"]["projected_source_field"],
                          "reason_for_default_or_foreclosure")
 
@@ -640,7 +675,8 @@ class TestAnnex2MappingProposals(unittest.TestCase):
 
     def test_regime_rules_now_carry_corrected_sources(self):
         import yaml as _y
-        fr = _y.safe_load(open("config/regime/annex2_delivery_rules.yaml"))["field_rules"]
+        from tests.annex2_contract_fixture import contract_field_rules
+        fr = contract_field_rules()
         self.assertEqual(fr["RREL70"]["projected_source_field"],
                          "reason_for_default_or_foreclosure")
         self.assertEqual(fr["RREL14"]["projected_source_field"], "credit_impaired_obligor")
@@ -729,13 +765,20 @@ class TestAnnex2ConfigAlignment(unittest.TestCase):
         for code in ("RREL35", "RREL40"):
             row = next(r for r in self.val["rows"] if r["esma_code"] == code)
             self.assertEqual(row["validation_status"], tcov.VS_VALID, code)
-        # The mapping is declared, not inferred: "Bullet" is a real key.
+        # The mapping is declared, not inferred, in both halves: "Bullet" is a
+        # real key of the generic RREL35 enum map (from the governed enum
+        # configuration, where it means BLLT), and the ERM pack states the
+        # product-specific override in its own file.
         import yaml as _yaml
-        rules = _yaml.safe_load(
-            (_REPO_ROOT / "config" / "regime"
-             / "annex2_delivery_rules.yaml").read_text(encoding="utf-8"))
-        enum_map = rules["field_rules"]["RREL35"]["transform"]["enum_map"]
-        self.assertIn("Bullet", enum_map)
+        from engine.regime_contract import build_contract
+        enum_map = build_contract().fields["RREL35"].enum_map
+        self.assertEqual(enum_map.get("Bullet"), "BLLT")
+        pack = _yaml.safe_load(
+            (_REPO_ROOT / "config" / "asset"
+             / "product_defaults_ERM.yaml").read_text(encoding="utf-8"))
+        self.assertEqual(
+            pack["reporting_policy"]["enum_overrides"]["amortisation_type"]["Bullet"],
+            "OTHR")
 
     def test_any_conflict_that_survives_requires_manual_review(self):
         """Whatever ends up here is never auto-applied."""
@@ -755,7 +798,15 @@ class TestAnnex2ConfigAlignment(unittest.TestCase):
                          sum(1 for r in self.align["rows"]
                              if r["alignment_status"] == "asset_default_conflict"))
         self.assertEqual(s["annex2_asset_default_conflict_count"], 0)
-        self.assertGreater(s["annex2_alignment_manual_review_count"], 0)
+        # Manual review is for rows the run refuses to auto-resolve. It used to
+        # be non-zero because the hand-maintained ND sets diverged from the
+        # workbook in 35 places; the contract takes the envelope from the
+        # workbook, so there is nothing left to adjudicate. Reconciled to the
+        # rows rather than asserting a count the configuration no longer earns.
+        self.assertEqual(s["annex2_alignment_manual_review_count"],
+                         sum(1 for r in self.align["rows"]
+                             if r["requires_manual_review"]))
+        self.assertEqual(s["annex2_alignment_manual_review_count"], 0)
 
     def test_review_pack_shows_alignment_review(self):
         html = (self.out / "08_onboarding_review_pack.html").read_text()
@@ -851,13 +902,15 @@ class TestAnnex2CompletenessIsConfigDriven(unittest.TestCase):
             (cls.out / "43_annex2_field_universe_reconciliation.json").read_text())["summary"]
 
     def test_completeness_governed_by_workbook_universe_and_config(self):
-        # The workbook universe + config reconciliation determine completeness:
-        # the universe is fully known (107) and mapped, but not fully configured,
-        # so the run is NEEDS_CONFIGURATION — independent of any schema check.
+        # The workbook universe + config reconciliation still determine
+        # completeness, and still do so without any schema check. What changed
+        # is where the incompleteness shows: no code is missing from the regime
+        # contract any more (it is derived from this very universe), so the run
+        # is not-ready because of the tape's own unmapped mandatory codes.
         self.assertEqual(self.recon["authoritative_field_count"], 107)
         self.assertEqual(self.recon["registry_gap_count"], 0)
-        self.assertGreater(self.recon["missing_from_regime_rules_count"], 0)
-        self.assertEqual(self.summary["status"], "NEEDS_CONFIGURATION")
+        self.assertEqual(self.recon["missing_from_regime_rules_count"], 0)
+        self.assertEqual(self.summary["status"], "BLOCKED")
 
     def test_onboarding_does_not_emit_or_gate_on_xsd(self):
         # Onboarding produces no XSD/schema-validation artefact and never reports

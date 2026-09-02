@@ -15,7 +15,7 @@ export function Card({
     <div
       data-testid={testId}
       className={cn(
-        "rounded-xl border border-[var(--color-line)] bg-navy-900/70 backdrop-blur-sm",
+        "rounded-xl border border-[var(--color-line)] bg-navy-900/70 shadow-[var(--elev-card)] backdrop-blur-sm",
         className,
       )}
     >
@@ -34,16 +34,17 @@ export function Badge({
   className?: string;
 }) {
   const tones: Record<string, string> = {
-    neutral: "bg-navy-800 text-ink-300 border-[var(--color-line)]",
-    navy: "bg-navy-700/60 text-peri-200 border-navy-600",
-    mint: "bg-mint-400/10 text-mint-400 border-mint-400/30",
-    amber: "bg-amber-400/10 text-amber-400 border-amber-400/30",
-    rose: "bg-rose-400/10 text-rose-400 border-rose-400/30",
+    neutral: "bg-transparent text-ink-400 border-[var(--color-line)]",
+    navy: "bg-navy-700/50 text-peri-200 border-navy-600",
+    mint: "bg-mint-400/10 text-mint-400 border-mint-400/35",
+    amber: "bg-amber-400/10 text-amber-400 border-amber-400/35",
+    rose: "bg-rose-400/10 text-rose-400 border-rose-400/35",
   };
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+        "inline-flex items-center gap-1 rounded-md border px-2 py-[3px]",
+        "text-[var(--fs-micro)] font-semibold uppercase tracking-[var(--tracking-caps)]",
         tones[tone],
         className,
       )}
@@ -75,7 +76,7 @@ export function IconButton({
       className={cn(
         "inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-ink-400 transition-colors",
         "hover:border-[var(--color-line)] hover:bg-navy-800 hover:text-ink-100",
-        active && "border-peri-400/40 bg-navy-700/60 text-peri-300",
+        active && "border-peri-400/50 bg-navy-700 text-peri-200",
         className,
       )}
     >

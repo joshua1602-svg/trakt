@@ -35,7 +35,7 @@ here is exercised by the framework; nothing is re-implemented.
 | Governed limit library | `config/risk/concentration_test_library.yaml` + `mi_agent/concentration_tests/` | Declares *what a test is* (field roles, evaluator, parameter schema). Client thresholds arrive as an operator-approved `ActiveConfiguration`. |
 | Limit evaluation | `mi_agent/concentration_tests/evaluation.py::evaluate_active_tests` | `pass` / `warning` / `breach` / `unavailable`, fail-closed. |
 | Regime projection | `engine/gate_4_projection/regime_projector.py` | Canonical → ESMA Annex 2/3/4/8/9. |
-| Delivery normalisation | `engine/gate_4b_delivery/annex2_delivery_normalizer.py` | Applies `config/regime/annex2_delivery_rules.yaml`. **Every ND code the delivery route applies is decided here or is already in the projected input** — since Phase 2, the builder injects none for RREL20/RREL21. |
+| Delivery normalisation | `engine/gate_4b_delivery/annex2_delivery_normalizer.py` | Applies the effective Annex 2 contract derived by `engine/regime_contract`. **Every ND code the delivery route applies is decided here or is already in the projected input** — since Phase 2, the builder injects none for RREL20/RREL21. |
 | Regulatory artefact | `engine/gate_5_delivery/xml_builder_annex2.py`, `xml_builder.py` | XML + XSD validation for Annex 2; generic builder for the other annexes. Invents no value: an unplaceable value routes to NoData where the mapping permits one, otherwise the run fails. |
 
 ### Findings that shaped the design

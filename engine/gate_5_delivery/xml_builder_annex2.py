@@ -267,13 +267,19 @@ def _coerce_record_value_for_branch(code: str, value: str) -> str:
     function's own docstring specified all along — and if the mapping offers no
     NoData branch, the builder raises rather than inventing a value.
 
-    Returning ``""`` hands the value to :func:`select_specs_for_value`, which
-    picks the NoData branch for an empty value where the workbook provides one
-    and otherwise leaves the field unmapped; ``apply_record_code`` then raises
-    for a mandatory field with no valid branch. Fabrication is never an option.
+    An ND code passes through untouched: it is the NoData branch of the same
+    choice, which the workbook offers and the regulator permits, so routing it
+    "to NoData" is exactly what carrying it forward does.
+
+    Returning ``""`` for anything else leaves the field unmapped, and
+    ``apply_record_code`` raises for a mandatory field with no value.
+    Fabrication is never an option.
     """
     v = _safe_str(value)
-    if code == "RREL12" and v and not _is_iso_year(v):
+    # A no-data code is not a malformed year — it is the OTHER branch of the
+    # same choice, and the regulator permits it here. Coercing it away left the
+    # field blank and the builder refused a return whose value was correct.
+    if code == "RREL12" and v and not _is_iso_year(v) and not _is_nd(v):
         _INSTR.record_routed_to_nodata(
             field_code=code, original_value=v,
             row_identifier=_CURRENT_ROW_ID,
@@ -642,7 +648,7 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
     previously wrote ``ND5`` into both children itself, which made a regulatory
     judgement a hardcoded line in an XML builder rather than a governed rule
     anyone could read or approve. Whichever no-data code is correct now comes
-    from ``config/regime/annex2_delivery_rules.yaml`` (RREL20 / RREL21), is
+    from the effective Annex 2 contract (RREL20 / RREL21), is
     applied by Gate 4b, and arrives here as data like every other field.
 
     The builder holds no opinion on which code that is, and must not acquire
@@ -673,7 +679,7 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
                 "with neither a value nor a NoData branch. The XSD requires "
                 "ScndryOblgrIncm/IncmVal, and the builder no longer invents an "
                 "ND code for it. Declare RREL20 in "
-                "config/regime/annex2_delivery_rules.yaml with "
+                "the effective Annex 2 contract with "
                 "default_allowed: true and a default_value your product "
                 "rationale supports (ND1 = not collected because the "
                 "underwriting criteria did not require it; ND5 = not "
@@ -688,7 +694,7 @@ def _ensure_scndry_oblgr_incm_defaults(record_node: etree._Element, ns: str, ord
                 "reached the builder with neither a value nor a NoData branch. "
                 "The XSD requires ScndryOblgrIncm/Vrfctn, and the builder no "
                 "longer invents an ND code for it. Declare RREL21 in "
-                "config/regime/annex2_delivery_rules.yaml with "
+                "the effective Annex 2 contract with "
                 "default_allowed: true and default_value: ND5.")
 
 

@@ -33,6 +33,16 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
+def _derived_annex2_contract_path() -> str:
+    """The effective Annex 2 contract, materialised for a path-taking caller.
+
+    Derived from the field universe, the fields registry, the mapping workbook
+    and the XSD. There is no delivery-rules file to read.
+    """
+    from engine.regime_contract.annex2_contract import materialised_contract_path
+    return materialised_contract_path()
+
+
 from engine.delivery_xml_agent import gate5_adapter as g5
 from engine.delivery_xml_agent.delivery_readiness import compute_delivery_readiness
 
@@ -391,7 +401,7 @@ def _build_delivery_frame(
             "delivery_status": delivery_status,
             "delivery_value": delivery_value,
             "delivery_blocker_type": blocker_type,
-            "delivery_rule_id": f"annex2_delivery_rules::{code}" if rule else "",
+            "delivery_rule_id": f"annex2_contract::{code}" if rule else "",
             "xml_path": xml_path,
             "xml_record_group": xml_group,
             "xsd_type": xsd_type,
@@ -585,7 +595,7 @@ def build_delivery_package(
     repo_root = Path(__file__).resolve().parents[2]
     regime_config_path = (regime_config_path
                           or proj_manifest.get("regime_config_path", "")
-                          or str(repo_root / "config" / "regime" / "annex2_delivery_rules.yaml"))
+                          or _derived_annex2_contract_path())
     esma_code_order_path = (esma_code_order_path
                             or proj_manifest.get("esma_code_order_path", "")
                             or str(repo_root / "config" / "system" / "esma_code_order.yaml"))

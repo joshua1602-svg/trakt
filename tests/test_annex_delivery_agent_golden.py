@@ -39,8 +39,13 @@ from engine.annex_delivery_agent.persistence import DeliveryRunStore
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 CI_FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "annex2_projected_ci.csv"
-SOURCE_FIXTURE = (_REPO_ROOT / "synthetic_demo" / "output"
-                  / "SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv")
+#: The scale tier is generated from the CI fixture. It used to be generated from
+#: the synthetic demo projection, which predates the 107-code contract: that tape
+#: leaves 24 mandatory codes unanswered because they are portfolio decisions no
+#: layer has made for it, and the retired delivery-rules file used to fill them
+#: with a regime-level default on the lender's behalf. A governed projection is
+#: the right seed for a scale reproduction; an ungoverned one was never the point.
+SOURCE_FIXTURE = CI_FIXTURE
 
 #: The historically recorded full-scale run this tier reproduces.
 HISTORICAL = {
@@ -80,11 +85,28 @@ def _prepare(projected: Path, store_root: Path) -> DeliveryResult:
 # --------------------------------------------------------------------------- #
 
 
+def _nd_in_non_emitting_codes(fixture: Path) -> int:
+    """No-data values in the prepared data for codes auth.099 has no element for.
+
+    The three are currency qualifiers carried as an XML attribute of the amount
+    they describe, so they can hold a currency but not a no-data code.
+    """
+    import csv
+
+    from engine.regime_contract import build_contract
+
+    codes = [c for c, f in build_contract().fields.items() if not f.emitting]
+    with fixture.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    return sum(1 for r in rows for c in codes
+               if str(r.get(c, "")).strip().upper().startswith("ND"))
+
+
 @pytest.mark.skipif(not CI_FIXTURE.is_file(), reason="CI fixture missing")
 def test_ci_regression_route_is_intact(tmp_path):
     """The route runs end to end and the schema accepts the result.
 
-    Deliberately not a performance test: five records say nothing about an
+    Deliberately not a performance test: thirty records say nothing about an
     11,035-record run.
     """
     expected_records = len(CI_FIXTURE.read_text().strip().splitlines()) - 1
@@ -93,12 +115,25 @@ def test_ci_regression_route_is_intact(tmp_path):
     assert result.status in (DeliveryStatus.PREPARED, DeliveryStatus.PREPARED_WITH_WARNINGS)
     assert result.schema_validation.valid is True, "XSD validation must pass"
     assert result.record_count == expected_records
-    assert result.projected_field_count == 104
+    assert result.projected_field_count == 107
     assert Path(result.artefact.path).is_file()
 
     recon = result.transformation_evidence["nd_reconciliation"]
     assert recon["unattributed"] == 0
-    assert recon["attributed_as_automatic"] == recon["difference_added_by_builder"]
+    # The builder invents no no-data value of its own — the property this line
+    # has always been about. It used to be written as an equality against
+    # ``difference_added_by_builder``, which held only while that difference was
+    # non-negative. It is negative here: the prepared data carries 30 no-data
+    # values the report does not, one per record for RREL18 (Primary Income
+    # Currency). auth.099 carries the three currency concepts as an ATTRIBUTE of
+    # the amount they qualify, and an attribute has nowhere to put ND1 — so the
+    # shortfall is the schema's shape, not a lost value, and it is asserted as
+    # exactly that rather than absorbed into an equality that no longer means
+    # anything.
+    assert recon["attributed_as_automatic"] == 0
+    shortfall = -recon["difference_added_by_builder"]
+    assert shortfall == _nd_in_non_emitting_codes(CI_FIXTURE), (
+        "a no-data value went missing from a code the schema does emit")
 
 
 @pytest.mark.skipif(not SOURCE_FIXTURE.is_file(), reason="synthetic projected data missing")
@@ -108,7 +143,7 @@ def test_ci_regression_is_deterministic(tmp_path):
     second = _prepare(SOURCE_FIXTURE, tmp_path / "b")
     assert first.run_id == second.run_id
     assert first.artefact.sha256 == second.artefact.sha256
-    assert first.record_count == second.record_count == 36
+    assert first.record_count == second.record_count == 30
 
 
 # --------------------------------------------------------------------------- #

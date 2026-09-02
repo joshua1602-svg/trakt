@@ -130,7 +130,20 @@ class TestSnapshotsEndpoint(unittest.TestCase):
         # "Client: acquired_001 · Scope: Total" is unrepresentable.
         self.assertEqual(len(resp["portfolios"]), 1)
         pf = resp["portfolios"][0]
-        self.assertEqual(pf["client_id"], "platform")   # no MI_AGENT_CLIENT_ID set
+        # CHANGED DELIBERATELY. This asserted `client_id == "platform"` with the
+        # comment "no MI_AGENT_CLIENT_ID set" — it pinned the reported defect:
+        # with the variable unset, blob discovery labelled the book with a
+        # literal placeholder ("Client: Platform" in the header) while every
+        # other surface resolved a real client through
+        # `dependencies.default_tenant_id`. Discovery now uses that same
+        # resolver, so an unset variable yields the deployment's tenant, not a
+        # placeholder. See mi_agent_api/tests/test_client_identity.py.
+        from mi_agent_api.dependencies import default_tenant_id
+        self.assertEqual(pf["client_id"], default_tenant_id())
+        self.assertNotEqual(pf["client_id"], "platform")
+        # And the client is NAMED, not rendered as an identifier.
+        self.assertEqual(pf["label"], "ERE Funding - Equity Release Mortgages")
+        self.assertEqual(pf["client_name"], pf["label"])
         run_dates = [r["reporting_date"] for r in pf["runs"]]
         self.assertEqual(run_dates, ["2025-10-31", "2025-11-30"])   # > 1 run, sorted
         # Oct = whole canonical: direct (2 × 5M) + acquired (1 × 2M).

@@ -256,17 +256,28 @@ def _load_field_contract(paths: Dict[str, Path]) -> List[Dict[str, Any]]:
 # Value resolution for downstream defaults / static / ND values
 # --------------------------------------------------------------------------- #
 
-def _build_regime_defaults(regime_cfg: Optional[dict]) -> Dict[str, Dict[str, Any]]:
-    """Map esma_code -> {default_value, nd_allowed, projected_source_field, has_enum_map}."""
+def _build_regime_defaults(regime_cfg: Optional[dict] = None) -> Dict[str, Dict[str, Any]]:
+    """What the regime says about each code, from the effective Annex 2 contract.
+
+    ``esma_code -> {nd_allowed, projected_source_field, has_enum_map}``.
+
+    There is deliberately no ``default_value`` here. A no-data code or a fallback
+    is a DECISION about a particular book — which layer it belongs to (the asset
+    class, the client, or an operator confirming a portfolio fact) is settled
+    before this stage, and all three already reach the frame through the asset
+    pack and the effective client configuration above. The regime says what is
+    PERMITTED; it does not choose. ``regime_cfg`` is accepted and ignored.
+    """
+    from engine.regime_contract.annex2_contract import contract
+
     out: Dict[str, Dict[str, Any]] = {}
-    for code, rule in ((regime_cfg or {}).get("field_rules", {}) or {}).items():
-        rule = rule or {}
-        out[str(code)] = {
-            "default_value": rule.get("default_value", ""),
-            "default_allowed": bool(rule.get("default_allowed", False)),
-            "nd_allowed": rule.get("nd_allowed", []) or [],
-            "projected_source_field": rule.get("projected_source_field", ""),
-            "has_enum_map": bool((rule.get("transform") or {}).get("enum_map")),
+    for fc in contract().fields.values():
+        out[fc.esma_code] = {
+            "default_value": "",
+            "default_allowed": False,
+            "nd_allowed": list(fc.nd_allowed),
+            "projected_source_field": fc.canonical_field,
+            "has_enum_map": bool(fc.enum_map),
         }
     return out
 
@@ -285,7 +296,8 @@ def _resolve_value(
       1. value already carried in the handoff contract (selected_value_sample);
       2. asset-class config default (product_defaults_ERM.yaml);
       3. asset-class ND default;
-      4. regime config default_value (annex2_delivery_rules.yaml).
+    There is no regime tier: the regime states what a field may contain, not
+    what this book reports.
 
     Returns ``(value, value_source)``; value is "" when nothing resolves.
     """
@@ -295,9 +307,9 @@ def _resolve_value(
         return str(asset_defaults[canonical]).strip(), "asset_config_default"
     if canonical in asset_nd_defaults and not _is_blank(asset_nd_defaults[canonical]):
         return str(asset_nd_defaults[canonical]).strip(), "asset_config_nd_default"
-    rd = regime_defaults.get(str(esma_code), {})
-    if not _is_blank(rd.get("default_value")):
-        return str(rd["default_value"]).strip(), "regime_config_default"
+    # There is deliberately no regime tier below this. The regime states what a
+    # field may contain, never what this book reports; a value with no asset,
+    # client or operator owner is surfaced rather than invented.
     return "", ""
 
 
@@ -381,8 +393,6 @@ def build_transformation_package(
     repo_root = Path(__file__).resolve().parents[2]
     asset_config_path = asset_config_path or handoff.get("asset_config_path", "") or str(
         repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
-    regime_config_path = regime_config_path or handoff.get("regime_config_path", "") or str(
-        repo_root / "config" / "regime" / "annex2_delivery_rules.yaml")
     registry_path = registry_path or handoff.get("registry_path", "") or str(
         repo_root / "config" / "system" / "fields_registry.yaml")
     if registry_path and not Path(registry_path).is_absolute() and not Path(registry_path).exists():
@@ -393,8 +403,7 @@ def build_transformation_package(
     asset_cfg = _read_yaml(Path(asset_config_path)) or {}
     asset_defaults = asset_cfg.get("defaults", {}) or {}
     asset_nd_defaults = asset_cfg.get("nd_defaults", {}) or {}
-    regime_cfg = _read_yaml(Path(regime_config_path)) or {}
-    regime_defaults = _build_regime_defaults(regime_cfg)
+    regime_defaults = _build_regime_defaults()
 
     # --- 2) load the central canonical tape (NO Gate 1 re-run) ---
     if not paths["central_tape"].exists():
@@ -437,6 +446,16 @@ def build_transformation_package(
 
     # 7. Apply Gate 2 config-driven asset defaults (reuse) as a backstop fill.
     g2.apply_defaults(df, asset_defaults)
+
+    # 7b. Equivalent-field fill (``transformations.copy_if_missing``). Declared in
+    #     the estate's client configs since inception but never executed, so the
+    #     relationship it states was silently not applied. For equity release the
+    #     asset layer declares current_principal_balance <- current_outstanding_balance:
+    #     an ERM rolls interest up, so the lender reports ONE balance and a
+    #     principal-only split does not exist. Fills blanks only — a real source
+    #     value always wins — and copies nothing when the source is itself absent,
+    #     so a tape carrying neither balance still fails the core contract.
+    copy_results = _apply_copy_if_missing(df, asset_cfg, issues)
 
     # 8. Canonical enum normalisation (internal standardisation; not projection).
     enum_report = g2.normalize_enums(df, asset_cfg)
@@ -802,14 +821,78 @@ def _materialise_fields(
         col = df[canonical].astype("string")
         blank_mask = col.isna() | (col.str.strip() == "") | (col.str.strip() == "<NA>")
         if blank_mask.any():
+            # An ND code is a STRING sentinel ("ND1" = not collected), and the
+            # regulator asks for it in numeric and date fields as readily as in
+            # text ones. Writing it into a column pandas has typed Int64 or
+            # float64 raises, so the column is widened first. Only reached for a
+            # partially-populated numeric column: an all-blank one is already
+            # object dtype. The value is never coerced or rounded — it must reach
+            # the XML exactly as the regulator defined it.
+            if not _fits_dtype(df[canonical], value):
+                df[canonical] = df[canonical].astype(object)
             df.loc[blank_mask, canonical] = value
         results[tf] = {"value_source": source, "materialised": True, "value": value}
     return results
 
 
+def _fits_dtype(series: "pd.Series", value: Any) -> bool:
+    """Can ``value`` be stored in ``series`` without changing its dtype?"""
+    if series.dtype == object:
+        return True
+    try:
+        series.dtype.type(value)   # numpy/pandas extension dtypes both accept this
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 # --------------------------------------------------------------------------- #
 # Operator-approved source-value normalisation
 # --------------------------------------------------------------------------- #
+
+def _apply_copy_if_missing(
+    df: pd.DataFrame, config: Optional[Dict[str, Any]], issues: _IssueLog,
+) -> Dict[str, Dict[str, Any]]:
+    """Fill a canonical field from a declared equivalent when it is blank.
+
+    Reads ``transformations.copy_if_missing`` — ``{target: source}`` — from the
+    supplied config layer. This states a genuine economic equivalence for the
+    asset class (an equity-release loan rolls interest up, so the outstanding
+    balance IS the exposure and no separate principal balance is reported).
+
+    Deliberately conservative: only blank target cells are filled, only from a
+    non-blank source cell, and a target with no source column present is left
+    untouched so the core-canonical contract still catches it.
+    """
+    rules = ((config or {}).get("transformations") or {}).get("copy_if_missing") or {}
+    results: Dict[str, Dict[str, Any]] = {}
+    for target, source in rules.items():
+        target, source = str(target).strip(), str(source).strip()
+        if not target or not source or source not in df.columns:
+            continue
+        if target not in df.columns:
+            df[target] = pd.NA
+        src = df[source]
+        blank_target = df[target].apply(_is_blank)
+        fill_mask = blank_target & ~src.apply(_is_blank)
+        filled = int(fill_mask.sum())
+        if not filled:
+            continue
+        df.loc[fill_mask, target] = src[fill_mask]
+        results[target] = {"transformation_status": TS_COPIED,
+                           "default_source": f"copy_if_missing:{source}",
+                           "rows_filled": filled}
+        issues.add(
+            severity="info", field=target, canonical_field=target, esma_code="",
+            issue_type="equivalent_field_copied",
+            source_value_sample=source,
+            description=f"{filled} row(s) filled from '{source}' "
+                        f"(transformations.copy_if_missing)",
+            blocking_for_validation=False, blocking_for_projection=False,
+            recommended_action="none — declared equivalence for this asset class",
+            downstream_owner=OWN_TRANSFORMATION)
+    return results
+
 
 def _apply_source_value_rules(
     df: pd.DataFrame, contract_rows: List[Dict[str, Any]], issues: _IssueLog,
@@ -1182,21 +1265,11 @@ def _finalise_contract(
                 issue_id = res.get("issue_id", "")
 
         elif cls == oh.HC_TRANSFORMATION_REQUIRED:
-            # Derivation owned by transformation. Where a deterministic regime
-            # default exists we materialise it; otherwise we surface, never guess.
+            # Derivation owned by transformation. A value is materialised only
+            # from the asset, client or operator layers above; where none owns
+            # it we surface the gap rather than let the regime invent one.
             owner = OWN_TRANSFORMATION
-            rd = regime_defaults.get(str(esma_code), {})
-            if not _is_blank(rd.get("default_value")) and not _col_sample(df, canonical):
-                if canonical and canonical not in df.columns:
-                    df[canonical] = pd.NA
-                if canonical:
-                    col = df[canonical].astype("string")
-                    blank = col.isna() | (col.str.strip() == "") | (col.str.strip() == "<NA>")
-                    if blank.any():
-                        df.loc[blank, canonical] = str(rd["default_value"]).strip()
-                status = TS_DERIVED
-                value_source = "regime_config_default"
-            elif _col_sample(df, canonical):
+            if _col_sample(df, canonical):
                 status = TS_DERIVED
             else:
                 status = TS_SEMANTIC_DERIVATION

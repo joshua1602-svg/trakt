@@ -42,6 +42,10 @@ property_type:
     PCMM: PCMM
     Other: OTHR
     OTHR: OTHR
+    R1: RHOS
+    R2: RFLT
+    C1: PCMM
+    C2: BIZZ
 
 customer_type:
   manual:
@@ -54,6 +58,8 @@ employment_status:
     Retired: PNNR
     Employed: EMUK
     Self employed: SFEM
+    manual: OTHR
+    MANUAL: OTHR
 
 amortisation_type:
   manual:
@@ -67,11 +73,18 @@ amortisation_type:
     FRENCH: FRENCH
     Other: OTHER
     OTHER: OTHER
+    French: FRXX
+    German: DEXX
+    "Fixed amortisation schedule": FIXE
+    Bullet: BLLT
+    Other: OTHR
 
 current_valuation_method:
   manual:
     Full survey: FIEI
     automated valuation: AUVM
+    "Full survey": FOEI
+    "full survey": FOEI
 
 collateral_type:
   manual:
@@ -100,8 +113,67 @@ interest_rate_type:
     Variable: FLIF
     FXRL: FXRL
     FLIF: FLIF
+    fixed: FXRL
 
 original_valuation_method:
   manual:
     Full survey: FIEI
     automated valuation: AUVM
+
+# ---------------------------------------------------------------------------
+# Relocated from the Annex 2 delivery rules (contract migration)
+# ---------------------------------------------------------------------------
+# SOURCE VOCABULARY: a lender's word for a value the regulator names with a
+# code. These sat in the regime rules beside 167 identity pass-throughs of
+# codes the XSD already enumerates. The pass-throughs are the schema's own
+# business and are gone; the part that is genuinely a translation belongs
+# here, where every other source-word mapping lives.
+#
+# Nothing here can widen the regulator's vocabulary: a target the schema's own
+# enumeration does not contain is dropped when the contract is built.
+
+account_status:
+  manual:
+    Active: PERF
+    active: PERF
+    Redeemed: RDMD
+    redeemed: RDMD
+
+scheduled_principal_payment_frequency:
+  manual:
+    Monthly: MNTH
+    monthly: MNTH
+    Quarterly: QUTR
+    quarterly: QUTR
+
+scheduled_interest_payment_frequency:
+  manual:
+    Monthly: MNTH
+    monthly: MNTH
+    Quarterly: QUTR
+    quarterly: QUTR
+
+current_interest_rate_index:
+  manual:
+    SONIA: EONS
+    sonia: EONS
+
+current_interest_rate_index_tenor:
+  manual:
+    "1M": MNTH
+    "3M": QUTR
+    "6M": SEMI
+    "12M": YEAR
+
+origination_channel:
+  manual:
+    Direct: DRCT
+    direct: DRCT
+    IFA: BROK
+    Broker: BROK
+    broker: BROK
+
+occupancy_type:
+  manual:
+    "Owner Occupied": POWN
+    "owner occupied": POWN

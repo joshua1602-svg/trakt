@@ -9,7 +9,7 @@ current Delivery/XML readiness blocker groups.
 
 This encodes the per-code remediation *classification* (the judgement) as data,
 reads the authoritative field labels from ``annex2_field_universe.yaml`` and the
-canonical names from ``annex2_delivery_rules.yaml``, and writes a deterministic
+canonical names from the effective Annex 2 contract, and writes a deterministic
 CSV. It does NOT generate XML and does NOT mutate any pipeline artefact.
 
 Run:
@@ -25,7 +25,6 @@ import yaml
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _UNIVERSE = _REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml"
-_REGIME = _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
 _OUT = _REPO_ROOT / "output" / "config_review" / "minimum_xml_preview_remediation_matrix.csv"
 
 COLUMNS = [
@@ -248,8 +247,11 @@ _CLASS = [
 
 
 def _canonical_lookup():
-    regime = yaml.safe_load(_REGIME.read_text(encoding="utf-8")) or {}
-    rules = regime.get("field_rules", {}) or {}
+    import sys
+    if str(_REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPO_ROOT))
+    from engine.regime_contract import as_delivery_rules, build_contract
+    rules = as_delivery_rules(build_contract())["field_rules"]
     universe = (yaml.safe_load(_UNIVERSE.read_text(encoding="utf-8")) or {}).get("fields", {})
     def canonical(code: str) -> str:
         r = rules.get(code) or {}

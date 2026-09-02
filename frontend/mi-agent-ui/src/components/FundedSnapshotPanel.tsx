@@ -9,7 +9,8 @@ import {
   Minus,
 } from "lucide-react";
 import type { FundedSnapshot, SnapshotKPI } from "@/domain";
-import { BarList, type BarDatum } from "@/components/pipeline/bits";
+import { BarList, MeasureToggle, BAR_MEASURE_LABEL, BAR_MEASURE_FORMAT,
+  type BarDatum, type BarMeasure } from "@/components/pipeline/bits";
 import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -18,32 +19,38 @@ function deltaColour(intent?: SnapshotKPI["deltaIntent"]) {
     ? "text-mint-400"
     : intent === "negative"
       ? "text-rose-400"
-      : "text-ink-400";
+      : "text-ink-500";
 }
 
 function KpiTile({ kpi }: { kpi: SnapshotKPI }) {
   const Icon = kpi.deltaIntent === "positive" ? ArrowUpRight : kpi.deltaIntent === "negative" ? ArrowDownRight : Minus;
   const dim = kpi.available === false;
   return (
-    // Elevated tile: a step lighter than the panel behind it, with a visible
-    // border + top highlight so the KPI grid reads as raised cards.
+    // Same treatment as the pipeline StatTile, from the same tokens: a
+    // discrete raised panel whose leading rail takes a colour only where
+    // there is a direction to report.
     <div
       className={cn(
-        "rounded-lg border border-navy-600/70 bg-navy-800/80 p-3.5 shadow-sm",
-        "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+        "rounded-lg border-l-2 bg-navy-800 p-4 shadow-[var(--elev-card)]",
+        kpi.deltaIntent === "positive" ? "border-l-mint-400/60"
+          : kpi.deltaIntent === "negative" ? "border-l-rose-400/60"
+          : "border-l-[var(--color-line-strong)]",
         dim && "opacity-60",
       )}
     >
-      <div className="text-[11px] font-medium uppercase tracking-wider text-ink-400">{kpi.label}</div>
-      <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-ink-100">{kpi.value}</div>
-      <div className="mt-1.5 flex items-center gap-1.5">
+      <div className="t-label">{kpi.label}</div>
+      <div className="t-figure mt-[var(--gap-tight)]">{kpi.value}</div>
+      <div className="mt-[var(--gap-tight)] flex flex-wrap items-baseline gap-x-2 gap-y-1">
         {kpi.delta && (
-          <span className={cn("inline-flex items-center gap-0.5 text-xs font-medium", deltaColour(kpi.deltaIntent))}>
-            <Icon size={13} strokeWidth={2.5} />
+          <span className={cn(
+            "inline-flex items-center gap-1 text-[var(--fs-label)] font-semibold",
+            deltaColour(kpi.deltaIntent),
+          )}>
+            <Icon size={13} strokeWidth={2.75} />
             {kpi.delta}
           </span>
         )}
-        {kpi.hint && <span className="text-[11px] text-ink-500">{kpi.hint}</span>}
+        {kpi.hint && <span className="t-micro">{kpi.hint}</span>}
       </div>
     </div>
   );
@@ -56,10 +63,15 @@ function KpiTile({ kpi }: { kpi: SnapshotKPI }) {
 export function FundedSnapshotPanel({
   snapshot,
   loading,
+  onDrill,
 }: {
   snapshot: FundedSnapshot | null;
   loading?: boolean;
+  /** Selecting a band. The handler owns what a selection means; this panel
+   *  never derives a population itself. */
+  onDrill?: (dimension: string, band: string) => void;
 }) {
+  const [measure, setMeasure] = useState<BarMeasure>("balance");
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   if (loading && !snapshot) {
@@ -103,15 +115,15 @@ export function FundedSnapshotPanel({
   });
 
   return (
-    <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">
+    <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/50 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700/70 text-peri-300">
             <Landmark size={17} />
           </div>
           <div className="leading-tight">
-            <h2 className="text-sm font-semibold text-ink-100">Funded Book Snapshot</h2>
-            <p className="text-[11px] text-ink-400">
+            <h2 className="t-title">Funded Book Snapshot</h2>
+            <p className="t-micro mt-1">
               Funded Portfolio · <span className="font-medium text-ink-300">{portfolio.label}</span>
             </p>
           </div>
@@ -129,34 +141,51 @@ export function FundedSnapshotPanel({
                 Updating for new selection…
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line-soft)] bg-navy-900/60 px-2.5 py-1 text-[11px] font-medium text-ink-200">
-              <CalendarDays size={13} className="text-peri-300" />
+            <span className="t-num inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-950/70 px-2.5 py-1 text-[var(--fs-label)] font-medium text-ink-300">
+              <CalendarDays size={13} className="text-ink-500" />
               Reporting Date · {reporting}
             </span>
           </span>
-          <span className="text-[10px] text-ink-500">
+          <span className="t-micro">
             {prior ? `vs prior run · ${prior.reporting_date ?? prior.run_id}` : "No prior reporting date available"}
           </span>
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="mt-[var(--gap-section)] grid grid-cols-2 gap-[var(--gap-group)] lg:grid-cols-3 xl:grid-cols-4">
         {kpis.map((kpi) => (
           <KpiTile key={kpi.id} kpi={kpi} />
         ))}
       </div>
 
       {(snapshot.stratifications?.length ?? 0) > 0 && (
-        <div className="mt-4">
-          <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-            Stratifications · balance by dimension
+        <div className="mt-[var(--gap-section)]">
+          <div className="mb-[var(--gap-group)] flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] pb-[var(--gap-tight)]">
+            <div className="t-label">
+              Stratifications · {BAR_MEASURE_LABEL[measure].toLowerCase()} by dimension
+            </div>
+            {/* Presentation-only view switch on the shared bar-list seam.
+                Balance, share and count are all already in the stratification
+                payload — nothing is recomputed in the browser. */}
+            <MeasureToggle
+              measures={["balance", "share", "count"]}
+              active={measure}
+              onChange={setMeasure}
+              label="Stratification measure"
+              testIdPrefix="strat-measure"
+            />
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-[var(--gap-group)] md:grid-cols-2 xl:grid-cols-3">
             {snapshot.stratifications!.map((s) => {
               // Natural bucket order (LTV %, age, vintage year, rate… else
               // alphabetical; Unknown last) + label tidy-ups ("2008.0" → "2008").
               const data: BarDatum[] = sortStratBars(s.bars).map((b) => ({
-                label: cleanBucketLabel(b.label), value: b.balance, count: b.count,
+                label: cleanBucketLabel(b.label),
+                // The selected measure, read straight from the payload.
+                value: measure === "balance" ? b.balance
+                  : measure === "share" ? b.sharePct
+                  : b.count,
+                count: b.count,
               }));
               // The backend decides whether a dimension is available, entirely
               // null, not supplied for these portfolios, or only partially
@@ -168,22 +197,29 @@ export function FundedSnapshotPanel({
                 <div key={s.key}
                   data-testid={`strat-${s.key}`}
                   data-availability={state}
-                  className="rounded-lg border border-navy-600/60 bg-navy-800/50 p-3 shadow-sm">
-                  <div className="mb-2 flex items-baseline justify-between gap-2">
-                    <span className="text-[11px] font-medium text-ink-300">{s.label}</span>
+                  className="rounded-lg bg-navy-800/70 p-4 shadow-[var(--elev-card)]">
+                  <div className="mb-[var(--gap-tight)] flex items-baseline justify-between gap-2 border-b border-[var(--color-line-soft)] pb-2">
+                    <span className="t-label">{s.label}</span>
                     {state === "partially_available" && (
-                      <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-amber-200/90">
+                      <span className="rounded-full border border-amber-400/35 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[var(--tracking-caps)] text-amber-400">
                         Partial
                       </span>
                     )}
                   </div>
-                  {drawable ? <BarList data={data} format="gbp" /> : (
-                    <p className="py-3 text-[11px] leading-relaxed text-ink-500">
+                  {drawable ? (
+                    <BarList
+                      data={data}
+                      format={BAR_MEASURE_FORMAT[measure]}
+                      onSelect={onDrill && ((label) => onDrill(s.label, label))}
+                      selectTitle={(label) => `Ask the MI engine about ${label}`}
+                    />
+                  ) : (
+                    <p className="t-micro py-3">
                       {s.reason ?? "Not available for the selected portfolios."}
                     </p>
                   )}
                   {drawable && s.reason && (
-                    <p className="mt-2 text-[10px] leading-relaxed text-ink-500">{s.reason}</p>
+                    <p className="t-micro mt-[var(--gap-tight)]">{s.reason}</p>
                   )}
                 </div>
               );

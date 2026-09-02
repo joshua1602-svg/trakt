@@ -6,20 +6,59 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/** Format a number as GBP, compacting large magnitudes (e.g. £124.6MM). */
+/**
+ * The reporting currency in force, as told to us by the API.
+ *
+ * The browser does NOT decide the economic currency. The governed client
+ * configuration owns it (`portfolio.base_currency`), the API resolves it once
+ * per request and states it in the response envelope, and this module holds the
+ * answer so the money formatters agree with the server-formatted KPI strings.
+ * The GBP default only applies until the first envelope arrives.
+ */
+let displayCurrency = "GBP";
+
+/** Adopt the reporting currency an API response declared. Display-only. */
+export function setDisplayCurrency(code?: string | null): void {
+  if (typeof code === "string" && /^[A-Z]{3}$/.test(code.trim().toUpperCase())) {
+    displayCurrency = code.trim().toUpperCase();
+  }
+}
+
+export function getDisplayCurrency(): string {
+  return displayCurrency;
+}
+
+/** Symbol for the reporting currency; falls back to the code when unknown. */
+function currencySymbol(): string {
+  const symbols: Record<string, string> = {
+    GBP: "£", EUR: "€", USD: "$", JPY: "¥", CHF: "CHF ",
+    AUD: "A$", CAD: "C$", NZD: "NZ$", SEK: "kr ", NOK: "kr ", DKK: "kr ",
+  };
+  return symbols[displayCurrency] ?? `${displayCurrency} `;
+}
+
+/**
+ * Format a monetary amount in the reporting currency, compacting large
+ * magnitudes (e.g. £124.6MM). Named for its original GBP-only behaviour, which
+ * it still produces for a GBP book.
+ */
 export function formatGBP(value: number, opts?: { compact?: boolean }): string {
+  const symbol = currencySymbol();
   if (opts?.compact ?? true) {
     const abs = Math.abs(value);
-    if (abs >= 1e9) return `£${(value / 1e9).toFixed(2)}BN`;
-    if (abs >= 1e6) return `£${(value / 1e6).toFixed(1)}MM`;
-    if (abs >= 1e3) return `£${(value / 1e3).toFixed(0)}K`;
+    if (abs >= 1e9) return `${symbol}${(value / 1e9).toFixed(2)}BN`;
+    if (abs >= 1e6) return `${symbol}${(value / 1e6).toFixed(1)}MM`;
+    if (abs >= 1e3) return `${symbol}${(value / 1e3).toFixed(0)}K`;
   }
   return new Intl.NumberFormat("en-GB", {
     style: "currency",
-    currency: "GBP",
+    currency: displayCurrency,
     maximumFractionDigits: 0,
   }).format(value);
 }
+
+/** Preferred name for new call sites; `formatGBP` is the historical alias. */
+export const formatMoney = formatGBP;
 
 export function formatPct(value: number, dp = 1): string {
   return `${value >= 0 ? "" : ""}${value.toFixed(dp)}%`;

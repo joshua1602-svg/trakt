@@ -23,7 +23,8 @@ _OUT = REPO_ROOT / "synthetic_demo" / "output"
 SYNTH_CSV = _OUT / "SYNTHETIC_ERE_Portfolio_012026_canonical_typed.csv"
 PROJECTED_CSV = _OUT / "SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv"
 DELIVERY_CSV = _OUT / "SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_delivery_ready.csv"
-DELIVERY_RULES = REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
+from tests.annex2_contract_fixture import contract_path
+DELIVERY_RULES = Path(contract_path())
 
 _NUTS_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{1,4}$")
 _READABLE_REGIONS = {"london", "south east", "south west", "west midlands",

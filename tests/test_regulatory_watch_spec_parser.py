@@ -221,7 +221,7 @@ def test_nd_permissions_agree_with_the_committed_field_universe(real_spec):
 def test_currency_attribute_codes_are_absent_exactly_as_documented(real_spec):
     """RREL18 / RREL28 / RREC22 carry no XML path in the ESMA workbook.
 
-    ``config/regime/annex2_delivery_rules.yaml`` documents these three as
+    The ESMA mapping workbook documents these three as
     currency ATTRIBUTES rather than elements, stating they have zero paths in
     the workbook. The normalizer reaches the same conclusion independently.
     """
@@ -458,7 +458,7 @@ def test_currency_is_a_required_xml_attribute_on_the_amount_type():
 
     ``ActiveOrHistoricCurrencyAndAmount`` is xs:simpleContent extending a
     decimal with ``Ccy`` ``use="required"``. A currency therefore cannot be an
-    element, which is exactly what config/regime/annex2_delivery_rules.yaml's
+    element, which is exactly what the effective Annex 2 contract's
     representation block documents for RREL18 / RREL28 / RREC22.
     """
     from lxml import etree

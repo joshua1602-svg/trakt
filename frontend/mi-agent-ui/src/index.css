@@ -4,47 +4,114 @@
  * Trakt MI Agent — enterprise design tokens
  * Palette derived from analytics/charts_plotly.py:
  *   PRIMARY  #232D55 (Trakt navy)   SECONDARY #919DD1 (periwinkle)
+ *
+ * Register: institutional terminal. Structure comes from SPACING,
+ * WEIGHT and CONTRAST. Colour is reserved for state and emphasis —
+ * accent hues are never used decoratively.
  * ------------------------------------------------------------------ */
 @theme {
-  --color-navy-950: #0c1024;
-  --color-navy-900: #11162e;
-  --color-navy-850: #161c38;
-  --color-navy-800: #1b2240;
-  --color-navy-700: #232d55;
-  --color-navy-600: #2f3a68;
+  /* --- Surface ladder ------------------------------------------------
+     Five deliberate steps from page ground to raised control. Each step
+     is a visible increment, so elevation alone can separate a card from
+     the panel behind it without a border doing the work. */
+  --color-navy-950: #090c1c; /* page ground */
+  --color-navy-900: #0e1226; /* region panel */
+  --color-navy-850: #131834; /* inset / table head */
+  --color-navy-800: #191f3f; /* raised card */
+  --color-navy-700: #232d55; /* active control fill */
+  --color-navy-600: #303b6b; /* control border */
   --color-navy-500: #3d4a82;
 
+  /* --- Accent: STATE ONLY -------------------------------------------
+     Periwinkle marks selection and emphasis. It is not a surface tint
+     and not a decorative fill. */
+  --color-peri-500: #7b8ac9;
   --color-peri-400: #919dd1;
   --color-peri-300: #aab4dd;
   --color-peri-200: #c6cdea;
 
+  /* --- Semantic: direction and severity ------------------------------ */
   --color-mint-400: #36c2a8;
   --color-amber-400: #e0a93b;
   --color-rose-400: #e0607a;
 
-  --color-ink-100: #eef1f8;
-  --color-ink-300: #b8c0d6;
-  --color-ink-400: #8c95b0;
-  --color-ink-500: #6b7493;
+  /* --- Ink ramp ------------------------------------------------------
+     Six separated steps rather than four bunched ones. Contrast on the
+     region panel runs ≈16.4 / 12.7 / 7.9 / 4.8 / 3.7 / 2.2 : 1, so a
+     figure, its label and its footnote cannot be confused for each
+     other. ink-200 and ink-600 were referenced across the app but never
+     defined — they are defined here. */
+  --color-ink-50: #ffffff; /* nothing above a headline figure */
+  --color-ink-100: #f0f3fb; /* figures, terminal column, active tab */
+  --color-ink-200: #ced6ec; /* table body, primary reading text */
+  --color-ink-300: #9fa9c6; /* row headers, secondary text */
+  --color-ink-400: #78829f; /* field labels, inactive tabs */
+  --color-ink-500: #656e8d; /* footnotes, hints, provenance */
+  --color-ink-600: #454d66; /* disabled only */
 
-  --color-line: #232b48;
-  --color-line-soft: #1c2440;
+  /* --- Rules ---------------------------------------------------------
+     Three weights so a hairline between rows and a structural division
+     between sections are not the same mark. */
+  --color-line-soft: #1b2240; /* hairline: row separation */
+  --color-line: #262f52; /* default: panel + control edges */
+  --color-line-strong: #38436f; /* structural: column headers, tier-1 rail */
 
   /* Region surfaces (A — clear UI division). Core dashboard reads as a neutral
      panel; the artifact workspace + agent chat carry a faint blue-grey tint so
      the three working areas are visually distinct without over-saturated navy. */
-  --surface-dashboard: #12152b;        /* neutral, near-black panel */
+  --surface-dashboard: #0f1328; /* neutral, near-black panel */
   --surface-dashboard-line: #283154;
-  --surface-artifact: #23262f;         /* restrained neutral grey (distinct from the navy dashboard + teal chat) */
+  --surface-artifact: #1f222c; /* restrained neutral grey (distinct from the navy dashboard + teal chat) */
   --surface-artifact-tint: rgba(150, 155, 170, 0.05);
-  --surface-artifact-line: #383c47;
-  --surface-artifact-accent: #6b7180;  /* neutral grey accent rail */
-  --surface-chat: #131a33;             /* faint blue-grey, chat column */
+  --surface-artifact-line: #343845;
+  --surface-artifact-accent: #656b7a; /* neutral grey accent rail */
+  --surface-chat: #101731; /* faint blue-grey, chat column */
   --surface-chat-line: #243059;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+}
+
+/* ------------------------------------------------------------------ *
+ * Type scale — six steps, each a clear jump from the last. Sizes are
+ * paired with a weight and a colour role, because a scale that only
+ * varies size still reads flat.
+ * ------------------------------------------------------------------ */
+:root {
+  --fs-micro: 0.625rem; /* 10px — footnotes, residuals, unit switch */
+  --fs-label: 0.6875rem; /* 11px — field labels (uppercase, tracked) */
+  --fs-meta: 0.75rem; /* 12px — table body, secondary nav */
+  --fs-body: 0.8125rem; /* 13px — reading text, primary nav */
+  --fs-lede: 0.9375rem; /* 15px — section titles */
+  --fs-figure: 1.625rem; /* 26px — card values */
+
+  --tracking-label: 0.1em; /* uppercase field labels */
+  --tracking-caps: 0.06em; /* uppercase micro switches */
+  --tracking-figure: -0.02em; /* large numerals close up */
+
+  /* --- Spacing rhythm ------------------------------------------------
+     A 4-step scale with real distance between the steps, so the gap
+     BETWEEN sections is unmistakably larger than the gap WITHIN one and
+     the page parses before any text is read. */
+  --gap-hair: 0.375rem; /* 6px  — inside a row */
+  --gap-tight: 0.625rem; /* 10px — between rows of a group */
+  --gap-group: 1.125rem; /* 18px — between groups in a section */
+  --gap-section: 2rem; /* 32px — between sections */
+  --gap-region: 2.75rem; /* 44px — between page regions */
+
+  /* --- Elevation ----------------------------------------------------- */
+  --elev-card: inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  --elev-thumb: inset 0 1px 0 rgba(170, 180, 221, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+  --elev-inset: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+
+  /* --- Focus ---------------------------------------------------------
+     One ring, everywhere, keyboard-only. */
+  --focus-color: var(--color-peri-300);
+  --focus-width: 2px;
+  --focus-offset: 2px;
 }
 
 html,
@@ -57,14 +124,22 @@ body {
   margin: 0;
   background: radial-gradient(
       1200px 600px at 80% -10%,
-      rgba(145, 157, 209, 0.08),
+      rgba(145, 157, 209, 0.07),
       transparent 60%
     ),
     var(--color-navy-950);
-  color: var(--color-ink-100);
+  color: var(--color-ink-200);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: "cv05", "ss01", "tnum";
+  font-feature-settings: "cv05", "ss01", "tnum", "lnum";
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Keyboard focus is deliberate and identical across every control. Mouse
+   users never see it; keyboard users always do. */
+:where(a, button, [role="tab"], [tabindex], input, select, textarea):focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
 }
 
 /* Tight, professional scrollbars */
@@ -82,6 +157,313 @@ body {
 }
 *::-webkit-scrollbar-thumb:hover {
   background: var(--color-navy-500);
+}
+
+@layer components {
+  /* ================================================================ *
+   * TYPOGRAPHIC ROLES
+   * Named by what the text IS, not by how big it is, so the scale
+   * stays coherent on screens nobody is currently looking at.
+   * ================================================================ */
+
+  /* Field label. Letter-spaced uppercase — the register's caption. */
+  .t-label {
+    font-size: var(--fs-label);
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    color: var(--color-ink-400);
+  }
+
+  /* Footnote / provenance / residual. Quietest step on the page. */
+  .t-micro {
+    font-size: var(--fs-micro);
+    line-height: 1.55;
+    color: var(--color-ink-500);
+  }
+
+  /* Secondary reading text and dense table bodies. */
+  .t-meta {
+    font-size: var(--fs-meta);
+    line-height: 1.45;
+    color: var(--color-ink-300);
+  }
+
+  /* Primary reading text. */
+  .t-body {
+    font-size: var(--fs-body);
+    line-height: 1.5;
+    color: var(--color-ink-200);
+  }
+
+  /* Section title. */
+  .t-title {
+    font-size: var(--fs-lede);
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--color-ink-100);
+  }
+
+  /* Headline figure. Mono + tabular so a column of them is scannable. */
+  .t-figure {
+    font-family: var(--font-mono);
+    font-size: var(--fs-figure);
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: var(--tracking-figure);
+    color: var(--color-ink-100);
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  /* Any numeral that sits in a column. */
+  .t-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+
+  /* ================================================================ *
+   * SPACING RHYTHM
+   * Two stack primitives. The section gap is ~3x the group gap, which
+   * is what makes the structure legible before the text is.
+   * ================================================================ */
+  .stack-section > * + * {
+    margin-top: var(--gap-section);
+  }
+  .stack-group > * + * {
+    margin-top: var(--gap-group);
+  }
+  .stack-tight > * + * {
+    margin-top: var(--gap-tight);
+  }
+
+  /* ================================================================ *
+   * NAVIGATION — THREE RANKS, THREE MECHANISMS
+   *
+   * The tiers are told apart by KIND of treatment, not by degree of
+   * the same treatment, so the hierarchy reads without labels:
+   *
+   *   1  SECTION   full-bleed rail, selection marked by an accent
+   *                underline on a structural baseline
+   *   2  VIEW      contained segmented track, selection marked by a
+   *                raised thumb inside a recessed well
+   *   3  UNIT      hairline-divided micro switch, uppercase, entirely
+   *                monochrome — no accent at all
+   * ================================================================ */
+
+  /* ---- Tier 1: section rail -------------------------------------- */
+  .nav-primary {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--color-line-strong);
+  }
+  .nav-primary-item {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.6875rem 1rem 0.625rem;
+    font-size: var(--fs-body);
+    font-weight: 500;
+    color: var(--color-ink-400);
+    background: transparent;
+    transition:
+      color 120ms ease,
+      background-color 120ms ease;
+  }
+  /* The rank marker. Always present, coloured only when selected, so
+     nothing shifts between states. */
+  .nav-primary-item::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 2px;
+    background: transparent;
+    transition: background-color 120ms ease;
+  }
+  .nav-primary-item:hover:not([aria-disabled="true"]):not([aria-selected="true"]) {
+    color: var(--color-ink-200);
+    background: rgba(145, 157, 209, 0.05);
+  }
+  .nav-primary-item:hover:not([aria-disabled="true"]):not([aria-selected="true"])::after {
+    background: var(--color-line-strong);
+  }
+  .nav-primary-item[aria-selected="true"] {
+    color: var(--color-ink-100);
+    font-weight: 600;
+    background: linear-gradient(
+      to bottom,
+      rgba(145, 157, 209, 0.02),
+      rgba(145, 157, 209, 0.13)
+    );
+  }
+  .nav-primary-item[aria-selected="true"]::after {
+    background: var(--color-peri-300);
+  }
+  .nav-primary-item[aria-disabled="true"] {
+    color: var(--color-ink-600);
+    cursor: not-allowed;
+  }
+
+  /* ---- Tier 2: view segmented control ----------------------------- */
+  .nav-secondary {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 8px;
+    background: var(--color-navy-950);
+    box-shadow: var(--elev-inset);
+  }
+  .nav-secondary-item {
+    border-radius: 5px;
+    padding: 0.3125rem 0.75rem;
+    font-size: var(--fs-meta);
+    font-weight: 500;
+    color: var(--color-ink-400);
+    background: transparent;
+    transition:
+      color 120ms ease,
+      background-color 120ms ease;
+  }
+  .nav-secondary-item:hover:not([aria-selected="true"]) {
+    color: var(--color-ink-200);
+    background: rgba(255, 255, 255, 0.04);
+  }
+  .nav-secondary-item[aria-selected="true"] {
+    color: var(--color-ink-100);
+    font-weight: 600;
+    background: var(--color-navy-700);
+    box-shadow: var(--elev-thumb);
+  }
+
+  /* ---- Tier 3: unit switch ---------------------------------------- */
+  .nav-unit {
+    display: inline-flex;
+    align-items: stretch;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: 5px;
+  }
+  .nav-unit-item {
+    padding: 0.1875rem 0.5rem;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
+    color: var(--color-ink-500);
+    background: transparent;
+    transition:
+      color 120ms ease,
+      background-color 120ms ease;
+  }
+  .nav-unit-item + .nav-unit-item {
+    border-left: 1px solid var(--color-line);
+  }
+  .nav-unit-item:hover:not([aria-selected="true"]) {
+    color: var(--color-ink-300);
+    background: rgba(255, 255, 255, 0.03);
+  }
+  .nav-unit-item[aria-selected="true"] {
+    color: var(--color-ink-100);
+    background: var(--color-navy-700);
+  }
+  /* The switch is inside the control, so the focus ring goes round the
+     whole switch rather than clipping at the segment edge. */
+  .nav-unit:has(.nav-unit-item:focus-visible) {
+    outline: var(--focus-width) solid var(--focus-color);
+    outline-offset: var(--focus-offset);
+  }
+  .nav-unit-item:focus-visible {
+    outline: none;
+  }
+
+  /* ================================================================ *
+   * DATA TABLE
+   * The analytical payoff, treated as primary output: tabular figures,
+   * right-aligned, a structural rule under the column headers, hairline
+   * row separation, and a terminal column that is visibly the answer.
+   * ================================================================ */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+
+  .data-table thead th {
+    padding: 0 0.625rem 0.5rem;
+    font-size: var(--fs-micro);
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--color-ink-400);
+    text-align: right;
+    border-bottom: 1px solid var(--color-line-strong);
+  }
+  /* The stub column names the row; it is text, and it reads left. It also
+     absorbs all the slack, so the figure columns shrink to their content and
+     cluster on the right instead of drifting apart across a wide panel —
+     a row of figures has to be readable in one fixation, not scanned. */
+  .data-table thead th:first-child {
+    width: 100%;
+    padding-left: 0;
+    text-align: left;
+  }
+  .data-table thead th:not(:first-child) {
+    width: 1%;
+    min-width: 4.25rem;
+  }
+
+  .data-table tbody th,
+  .data-table tbody td {
+    padding: 0.4375rem 0.625rem;
+    font-size: var(--fs-meta);
+    border-bottom: 1px solid var(--color-line-soft);
+  }
+  .data-table tbody th {
+    padding-left: 0;
+    font-family: var(--font-sans);
+    font-weight: 500;
+    color: var(--color-ink-300);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .data-table tbody td {
+    font-family: var(--font-mono);
+    color: var(--color-ink-200);
+    text-align: right;
+  }
+  .data-table tbody tr:last-child th,
+  .data-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  /* Row tracking: the whole row lifts, so the eye can cross a wide table
+     without losing its place. */
+  .data-table tbody tr:hover th,
+  .data-table tbody tr:hover td {
+    background: rgba(145, 157, 209, 0.06);
+    color: var(--color-ink-100);
+  }
+
+  /* Terminal column — what the table was built to deliver. Separated by
+     a rule, carried at full ink and heavier weight. */
+  .data-table [data-terminal] {
+    padding-left: 0.875rem;
+    padding-right: 0;
+  }
+  .data-table tbody td[data-terminal] {
+    font-weight: 600;
+    color: var(--color-ink-100);
+    box-shadow: inset 1px 0 0 var(--color-line);
+  }
+  .data-table thead th[data-terminal] {
+    color: var(--color-ink-200);
+  }
 }
 
 @keyframes fade-in {

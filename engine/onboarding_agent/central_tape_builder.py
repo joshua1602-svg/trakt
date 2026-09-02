@@ -244,21 +244,112 @@ def _loan_key_hints(project_dir: Path) -> Dict[Tuple[str, str], str]:
     return hints
 
 
-def _resolve_key_column(
-    df: pd.DataFrame, file_sheet: Tuple[str, str],
-    loan_key_hints: Dict[Tuple[str, str], str], alias_loan_cols: set,
-) -> Optional[str]:
-    """Resolve the loan-id key column: onboarding hint -> alias -> name list."""
+def _approved_loan_key(overrides: Dict[str, Any]) -> str:
+    """The source column an operator APPROVED as the loan identifier, if any.
+
+    Read from the same approved-overrides artefact the mapper already consults,
+    so an operator decision governs the tape's identity the way it governs every
+    other field.
+    """
+    for group in ("user_overrides", "approved_high_confidence_mappings"):
+        for o in (overrides or {}).get(group, []) or []:
+            if str((o or {}).get("canonical_field", "")) == "loan_identifier":
+                col = str((o or {}).get("source_column", "")).strip()
+                if col:
+                    return col
+    return ""
+
+
+def _loan_key_candidates(df: pd.DataFrame, file_sheet: Tuple[str, str],
+                         loan_key_hints: Dict[Tuple[str, str], str],
+                         alias_loan_cols: set) -> List[str]:
+    """Every column in this frame that could plausibly BE the loan key.
+
+    More than one means a real question — an account reference, a policy number
+    and a customer identifier are all unique per row, and only one of them keys
+    the loan. Choosing the customer would key MI on the borrower, which silently
+    merges a borrower's several loans.
+    """
+    out: List[str] = []
+
+    def add(col: Optional[str]) -> None:
+        if col is not None and col not in out:
+            out.append(col)
+
     hint = loan_key_hints.get(file_sheet) if loan_key_hints else None
     if hint:
         for c in df.columns:
             if _norm(c) == _norm(hint):
-                return c
+                add(c)
     if alias_loan_cols:
         for c in df.columns:
             if _alias_norm(c) in alias_loan_cols:
+                add(c)
+    add(_find_key_column(df, _LOAN_KEY_NAMES))
+    # The three mechanisms above are all name-driven, so they agree whenever a
+    # lender's headers are unhelpful in the same way — and a tape whose loan
+    # reference is ACCT_REF, whose borrower is CUST_ID and whose servicing key
+    # is ROLL_NO is exactly that case: only CUST_ID contains a recognised word,
+    # so the customer is chosen unanimously and silently. Add the columns that
+    # LOOK like reference codes as a matter of fact rather than vocabulary:
+    # unique for every row, never empty, and not numbers or dates. This never
+    # selects anything; it only decides whether there is a question to ask.
+    out.extend(c for c in _reference_code_columns(df) if c not in out)
+    return out
+
+
+def _reference_code_columns(df: pd.DataFrame) -> List[str]:
+    """Columns of unique, non-empty, non-numeric, non-date codes."""
+    found: List[str] = []
+    rows = len(df)
+    if rows == 0:
+        return found
+    for c in df.columns:
+        s = df[c]
+        if s.isna().any() or s.nunique(dropna=False) != rows:
+            continue
+        if pd.api.types.is_numeric_dtype(s) or pd.api.types.is_datetime64_any_dtype(s):
+            continue
+        values = s.astype(str).str.strip()
+        if (values == "").any():
+            continue
+        # A column of pure numbers held as text is an amount or a count as
+        # often as it is a reference; requiring a non-digit keeps this to
+        # things that read as codes.
+        if not values.str.contains(r"[^0-9.\-]", regex=True).all():
+            continue
+        if _looks_like_dates(values):
+            continue
+        found.append(c)
+    return found
+
+
+def _looks_like_dates(values: "pd.Series") -> bool:
+    try:
+        parsed = pd.to_datetime(values, errors="coerce", format="mixed")
+    except Exception:  # noqa: BLE001
+        return False
+    return bool(parsed.notna().mean() > 0.9)
+
+
+def _resolve_key_column(
+    df: pd.DataFrame, file_sheet: Tuple[str, str],
+    loan_key_hints: Dict[Tuple[str, str], str], alias_loan_cols: set,
+    approved_key: str = "",
+) -> Optional[str]:
+    """Resolve the loan-id key column.
+
+    Order: an operator's approved choice first, then the onboarding hint, alias
+    and name list. The approved choice comes first because it is the only one of
+    the four that is a decision rather than an inference.
+    """
+    if approved_key:
+        for c in df.columns:
+            if _norm(c) == _norm(approved_key):
                 return c
-    return _find_key_column(df, _LOAN_KEY_NAMES)
+    candidates = _loan_key_candidates(df, file_sheet, loan_key_hints,
+                                      alias_loan_cols)
+    return candidates[0] if candidates else None
 
 
 def _find_key_column(df: pd.DataFrame, names: List[str]) -> Optional[str]:
@@ -369,15 +460,57 @@ _CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "system"
 _CONFIG_PATH = _CONFIG_DIR / "onboarding_agent.yaml"
 
 
+#: Modes whose run produces the central lender tape, and therefore consumes the
+#: target-coverage matrix, the entity-key resolution and the reporting-period
+#: gate. A regime-required delivery is graded against the regulatory contract but
+#: still produces ONE canonical that both management information and the Annex 2
+#: delivery are made from, so it needs all of this too.
+_CENTRAL_TAPE_MODES = ("mi_only", "mna_dd", "regulatory_mi")
+
 # Coverage statuses (28a) the central tape consumes as RESOLVED selections.
 _COV_SOURCE_MAPPED = {"source_mapped", "source_mapped_with_alternatives"}
 _COV_CONSTANT = {"defaulted_value", "configured_static", "defaulted_ND"}
 _COV_DERIVED = "derived"
 
 
+_REGIME_CODE_TO_FIELD: Optional[Dict[str, str]] = None
+
+
+def _regime_code_to_field(registry_fields: Dict[str, Any]) -> Dict[str, str]:
+    """``{ESMA code: canonical field}`` from the registry's own regime mappings.
+
+    The target-coverage matrix names its rows by the CONTRACT's vocabulary: the
+    MI contract uses canonical field names, the regulatory contract uses ESMA
+    codes. The central tape is canonical either way, so a regulatory coverage
+    matrix has to be read back through the registry rather than ignored — which
+    is what used to happen, and is why a regulatory-only field resolved by Gate 1
+    never reached the canonical.
+    """
+    global _REGIME_CODE_TO_FIELD
+    if _REGIME_CODE_TO_FIELD is not None:
+        return _REGIME_CODE_TO_FIELD
+    out: Dict[str, str] = {}
+    for name, spec in (registry_fields or {}).items():
+        for mapping in ((spec or {}).get("regime_mapping") or {}).values():
+            code = (mapping or {}).get("code")
+            if code:
+                out.setdefault(str(code), str(name))
+    _REGIME_CODE_TO_FIELD = out
+    return out
+
+
+def _canonical_target(target_field: str, registry_fields: Dict[str, Any]) -> str:
+    """The canonical field a 28a row is about, whichever vocabulary named it."""
+    t = str(target_field or "").strip()
+    if not t or t in (registry_fields or {}):
+        return t
+    return _regime_code_to_field(registry_fields).get(t, "")
+
+
 def _coverage_selections(
     coverage_rows: List[Dict[str, Any]],
     inventory_by_name: Dict[str, Dict[str, Any]],
+    registry_fields: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Dict[str, "_Source"], Dict[str, Any], Dict[str, str]]:
     """Turn the resolved 28a coverage matrix into authoritative selections.
 
@@ -395,7 +528,7 @@ def _coverage_selections(
     constants: Dict[str, Any] = {}
     derive_from: Dict[str, str] = {}
     for r in coverage_rows or []:
-        canon = r.get("target_field", "")
+        canon = _canonical_target(r.get("target_field", ""), registry_fields or {})
         status = r.get("coverage_status", "")
         if not canon:
             continue
@@ -647,7 +780,7 @@ def _build_lender_tape(
         return spe._norm_col(classification) in pipeline_roles
 
     forced, tape_constants, tape_derivations = _coverage_selections(
-        coverage_rows or [], inventory_by_name)
+        coverage_rows or [], inventory_by_name, registry_fields)
     for canon, src in forced.items():
         if not in_lender_scope(canon):
             continue
@@ -716,6 +849,11 @@ def _build_lender_tape(
     frames: Dict[Tuple[str, str], pd.DataFrame] = {}
     key_cols: Dict[Tuple[str, str], str] = {}
     load_debug: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    # An operator's approved answer to "which column IS the loan?", and the
+    # files where that question has more than one plausible answer and nobody
+    # has given one.
+    approved_loan_key = _approved_loan_key(overrides)
+    ambiguous_loan_keys: List[Dict[str, Any]] = []
     excluded_sources: List[Dict[str, Any]] = []
     plays = {_play_key(s) for srcs in field_sources.values() for s in srcs}
     for (fname, sheet) in plays:
@@ -757,13 +895,32 @@ def _build_lender_tape(
                 continue
         ent = _entity_for((fname, sheet))
         key = None
-        if ent.get("key_column"):
+        # An operator's approved choice outranks every inference, including the
+        # cross-file entity-key resolution: it is the only one of them that is a
+        # decision rather than a guess.
+        if approved_loan_key:
+            for c in df.columns:
+                if _norm(c) == _norm(approved_loan_key):
+                    key = c
+                    break
+        if key is None and ent.get("key_column"):
             for c in df.columns:
                 if _norm(c) == _norm(ent["key_column"]):
                     key = c
                     break
         if key is None:
-            key = _resolve_key_column(df, (fname, sheet), loan_key_hints, alias_loan_cols)
+            key = _resolve_key_column(df, (fname, sheet), loan_key_hints,
+                                      alias_loan_cols)
+        if not approved_loan_key:
+            # Several columns could be the loan key and nobody has said which.
+            # The tape still builds on the resolved one, but the ambiguity is
+            # recorded instead of being settled by column order.
+            cands = _loan_key_candidates(df, (fname, sheet), loan_key_hints,
+                                         alias_loan_cols)
+            if len(cands) > 1:
+                ambiguous_loan_keys.append({
+                    "source_file": fname, "source_sheet": sheet,
+                    "selected": key or "", "candidates": cands})
         dbg["key_column"] = key or ""
         dbg["key_resolution_basis"] = (ent.get("basis", "entity_key_resolution")
                                        if ent.get("key_column") else "profile/alias/name")
@@ -971,6 +1128,16 @@ def _build_lender_tape(
             "issue_type": issue, "description": desc,
             "candidate_actions": "; ".join(actions), "blocking": blocking,
         })
+
+    for amb in ambiguous_loan_keys:
+        new_gap("high", "loan", "loan_identifier", amb["source_file"],
+                amb["selected"], "ambiguous_loan_key",
+                f"More than one column could be the loan identifier "
+                f"({', '.join(amb['candidates'])}). "
+                f"'{amb['selected']}' was used. If that is the borrower or the "
+                "policy holder rather than the loan, every figure in this "
+                "report is grouped by the wrong thing.",
+                ["map_source_column", "confirm_selected"], False)
 
     conflict_count = 0
     populated_cells = 0
@@ -1577,7 +1744,7 @@ def build_central_tapes(
     # whose 28a target fields are canonical field names; the regulatory (Annex 2)
     # contract uses ESMA codes and keeps the legacy generic tape unchanged.
     coverage_rows: List[Dict[str, Any]] = []
-    if mode in ("mi_only", "mna_dd"):
+    if mode in _CENTRAL_TAPE_MODES:
         coverage_doc = _load_json(project_dir / "28a_target_coverage_matrix.json") or {}
         coverage_rows = (coverage_doc.get("rows", [])
                          if isinstance(coverage_doc, dict) else [])
@@ -1600,7 +1767,7 @@ def build_central_tapes(
     # Consumed for the MI central-tape flow only; regulatory (Annex 2) is untouched.
     entity_keys: Dict[Tuple[str, str], Dict[str, Any]] = {}
     period_gate: Dict[str, Any] = {}
-    if mode in ("mi_only", "mna_dd"):
+    if mode in _CENTRAL_TAPE_MODES:
         from . import entity_key_resolver as _ekr
         entity_keys = _ekr.load_resolution(project_dir)
         # Reporting-period eligibility (04c): the lender-tape universe is built from

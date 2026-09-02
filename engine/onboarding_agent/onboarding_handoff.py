@@ -421,7 +421,7 @@ def _build_completion_checklist(
              "paths": {}, "summary": {}}
     try:
         repo_root = Path(__file__).resolve().parents[2]
-        regime_path = regime_config_path or str(repo_root / "config" / "regime" / "annex2_delivery_rules.yaml")
+        regime_path = regime_config_path or ""   # the Annex 2 contract is derived
         asset_path = asset_config_path or str(repo_root / "config" / "asset" / "product_defaults_ERM.yaml")
         registry_path = registry or str(repo_root / "config" / "system" / "fields_registry.yaml")
         if registry_path and not Path(registry_path).is_absolute() and not Path(registry_path).exists():

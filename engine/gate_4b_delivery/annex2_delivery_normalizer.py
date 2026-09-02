@@ -124,9 +124,16 @@ def apply_precision(value: str, total_digits: Optional[int], fraction_digits: Op
     except InvalidOperation:
         return None, f"Value '{raw}' is not numeric"
 
+    # ``fractionDigits`` is a MAXIMUM in XML Schema, not a fixed width. A value
+    # the lender supplied to two decimal places must reach the regulator with
+    # two, not padded out to the schema's ceiling — padding is a change to the
+    # client's data with no basis in the schema. So round only what is longer
+    # than the schema allows, and leave everything else exactly as supplied.
     if fraction_digits is not None:
-        quant = Decimal("1").scaleb(-fraction_digits)
-        dec = dec.quantize(quant, rounding=ROUND_HALF_UP)
+        exponent = -dec.as_tuple().exponent
+        if exponent > int(fraction_digits):
+            quant = Decimal("1").scaleb(-int(fraction_digits))
+            dec = dec.quantize(quant, rounding=ROUND_HALF_UP)
 
     rendered = format(dec, "f")
     if "." in rendered:
@@ -213,7 +220,7 @@ def _build_outputs(input_csv: Path, output_dir: Path) -> Dict[str, Path]:
 #   * present_in_input  — the projected CSV already carried an ND code. That is
 #     upstream truth (registry/projector), not a delivery decision.
 #   * applied_by_rules  — this normaliser substituted an ND because a DECLARED
-#     rule in annex2_delivery_rules.yaml said to (``default_allowed`` +
+#     rule in the effective contract said to (``default_allowed`` +
 #     ``default_value``). Governed and auditable, but still a value the client
 #     did not supply.
 #
@@ -229,22 +236,38 @@ INSTRUMENTATION_SCHEMA_VERSION = 1
 COERCION_RECORD_CAP = 5000
 
 
+def _contract_module():
+    """Import the regime contract, whatever this script's working directory is."""
+    try:
+        from engine.regime_contract import annex2_contract
+    except ModuleNotFoundError:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+        from engine.regime_contract import annex2_contract
+    return annex2_contract
+
+
+def effective_contract_rules() -> Dict[str, Any]:
+    """The Annex 2 contract, derived from the authoritative sources.
+
+    The regime's requirements are not this stage's to author. They are the field
+    universe's ND envelope, the registry's canonical binding, the workbook's
+    multiplicity and the XSD's types — assembled by
+    :mod:`engine.regime_contract.annex2_contract` and handed here in the shape
+    this normaliser already reads.
+    """
+    return _contract_module().as_delivery_rules()
+
+
 def non_emitting_codes(rules: Dict[str, Any]) -> List[str]:
     """Codes the XSD carries as an ATTRIBUTE rather than an element.
 
-    Derived from the declared representation model
-    (``reconciliation_scope.representation``), never from a hard-coded list, so
-    adding a concept is configuration rather than code. Any entry whose
-    ``representation_type`` is not an element cannot produce an XML node of its
-    own, so its values are disclosed separately and excluded from the XML
-    tie-out.
+    Answered by the schema: a workbook code whose path the XSD does not define
+    as an element cannot produce a node of its own, so its values are disclosed
+    separately and excluded from the XML tie-out. Nothing declares this; it is
+    read off auth.099 itself. The argument is kept for call compatibility and
+    deliberately unused.
     """
-    model = ((rules.get("reconciliation_scope") or {}).get("representation") or {})
-    return sorted(
-        code for code, meta in model.items()
-        if isinstance(meta, dict)
-        and str(meta.get("representation_type", "")).strip().lower() == "xml_attribute"
-    )
+    return list(_contract_module().contract().non_emitting_codes())
 
 
 class _DeliveryInstrumentation:
@@ -296,7 +319,7 @@ class _DeliveryInstrumentation:
     def set_non_emitting_fields(self, codes: Any) -> None:
         """Codes the XSD represents as an ATTRIBUTE rather than an element.
 
-        Declared in ``annex2_delivery_rules.yaml::reconciliation_scope
+        Read off the XSD by the effective contract (see ``non_emitting
         .non_emitting_fields`` with the schema evidence. A value in one of these
         columns is legitimate delivery-ready data that produces no XML node, so
         it must be disclosed but excluded from the XML tie-out.
@@ -340,7 +363,7 @@ class _DeliveryInstrumentation:
                 "nd_on_emitting_fields": in_input_total + by_rule_total - ne_total,
                 "non_emitting_by_field": ne_by_field,
                 "non_emitting_fields_declared": sorted(non_emitting),
-                "basis": "Codes listed in annex2_delivery_rules.yaml::"
+                "basis": "Codes the XSD defines no element for: "
                          "reconciliation_scope.non_emitting_fields are carried by "
                          "the XSD as a Ccy attribute on the amount they qualify, "
                          "not as an element. A currency is due only where an "
@@ -449,8 +472,16 @@ def _normalize_field(
                 lower_map = {str(k).lower(): str(v) for k, v in mapping.items()}
                 direct = lower_map.get(current.lower())
             if direct is None:
-                # enum_map is a strict controlled vocabulary. geography_map is a
-                # best-effort LEGACY label->code/year translation: a value that
+                # A value the regulator's own code list does not contain is
+                # ALWAYS rejected. That is an invariant of a regulatory
+                # delivery, not a policy anyone should be able to switch off, so
+                # it is stated here in code and nowhere in configuration. The
+                # vocabulary comes from the XSD enumeration for the code,
+                # extended only by approved translations of the lender's own
+                # words — so this rejects exactly what the schema would reject.
+                #
+                # geography_map is a best-effort LEGACY label->code/year
+                # translation: a value that
                 # is not a known legacy label is already a valid geography value
                 # (e.g. a NUTS3 code "TLG31" or classification year "2021") and
                 # passes through unchanged. Shape is enforced downstream (XSD).
@@ -547,11 +578,11 @@ def _transform_reason(rule: Dict[str, Any]) -> str:
     transforms = rule.get("transform") if isinstance(rule.get("transform"), dict) else {}
     applied = sorted(str(k) for k in transforms)
     if applied:
-        return ("annex2_delivery_rules.yaml field_rules transform: "
+        return ("effective Annex 2 contract, transform: "
                 + ", ".join(applied))
     if "precision" in rule:
-        return "annex2_delivery_rules.yaml field_rules precision"
-    return "annex2_delivery_rules.yaml field_rules normalisation"
+        return "effective Annex 2 contract, XSD precision"
+    return "effective Annex 2 contract, normalisation"
 
 
 def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.DataFrame, List[Issue], Dict[str, Any]]:
@@ -621,12 +652,17 @@ def normalize_delivery(df: pd.DataFrame, rules: Dict[str, Any]) -> Tuple[pd.Data
 def main() -> None:
     ap = argparse.ArgumentParser(description="Annex2 delivery normalizer (Gate 4b)")
     ap.add_argument("--input", required=True, help="Projected Annex2 CSV")
-    ap.add_argument("--rules", required=True, help="annex2_delivery_rules.yaml")
+    ap.add_argument("--rules", default=None,
+                    help=("Effective Annex 2 contract to normalise against. "
+                          "Omit to derive it from the authoritative sources "
+                          "(field universe, registry, workbook, XSD, enum "
+                          "configuration, asset pack). Supply one only to add a "
+                          "client or operator layer the derivation cannot see."))
     ap.add_argument("--output-dir", required=True, help="Output directory")
     args = ap.parse_args()
 
     input_csv = Path(args.input)
-    rules_path = Path(args.rules)
+    rules_path = Path(args.rules) if args.rules else None
     output_dir = Path(args.output_dir)
 
     if not input_csv.exists():
@@ -635,7 +671,7 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     outputs = _build_outputs(input_csv, output_dir)
 
-    rules = load_yaml(rules_path)
+    rules = load_yaml(rules_path) if rules_path else effective_contract_rules()
     df = pd.read_csv(input_csv, dtype=str).fillna("")
 
     logging.info("[Gate 4b] Delivery normalization started: %s", input_csv)
@@ -646,7 +682,7 @@ def main() -> None:
 
     report = {
         "input": str(input_csv),
-        "rules": str(rules_path),
+        "rules": str(rules_path) if rules_path else rules.get("generated_by", "derived"),
         "outputs": {k: str(v) for k, v in outputs.items()},
         **summary,
     }

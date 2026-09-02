@@ -25,7 +25,7 @@ What it deliberately does **not** reuse (deferred — see
     and the Gate 5 XML builder.
 
 Instead this adapter builds a **rich projection index** from the new authoritative
-regime contract ``config/regime/annex2_delivery_rules.yaml::field_rules`` (the
+effective Annex 2 regime contract's ``field_rules`` (the
 same file Gate 4b consumes), keyed by ESMA code, carrying the
 ``projected_source_field`` (canonical name), ND/default eligibility and the
 explicit, safe value transforms (``enum_map`` / ``geography_map``).

@@ -153,7 +153,20 @@ def resolve_tape_path(output_root: str | os.PathLike, client_id: str, run_id: st
 # Discovery
 # --------------------------------------------------------------------------- #
 def _portfolio_label(client_id: str) -> str:
-    return str(client_id).upper()
+    """The client's governed name where one is declared, else the identifier.
+
+    See :mod:`mi_agent_api.client_identity` — the name is read only from
+    governed per-client sources, never derived from the tape.
+    """
+    from . import client_identity
+    return client_identity.portfolio_label(client_id)
+
+
+def _governed_client_name(client_id: str) -> Optional[str]:
+    """The governed name alone, or ``None`` — so a surface can tell a NAME from
+    an identifier without re-deriving one."""
+    from . import client_identity
+    return client_identity.governed_client_name(client_id)
 
 
 def discover_snapshots(output_root: str | os.PathLike) -> Dict[str, Any]:
@@ -184,7 +197,9 @@ def discover_snapshots(output_root: str | os.PathLike) -> Dict[str, Any]:
             "current_outstanding_balance": round(_balance_sum(df), 2),
         }
         pf = portfolios.setdefault(
-            client_id, {"client_id": client_id, "label": _portfolio_label(client_id), "runs": {}}
+            client_id,
+            {"client_id": client_id, "label": _portfolio_label(client_id),
+             "client_name": _governed_client_name(client_id), "runs": {}},
         )
         pf["runs"][run_id] = run
 
@@ -194,7 +209,8 @@ def discover_snapshots(output_root: str | os.PathLike) -> Dict[str, Any]:
             pf["runs"].values(),
             key=lambda r: (r["reporting_date"] or "", r["run_id"]),
         )
-        out.append({"client_id": pf["client_id"], "label": pf["label"], "runs": runs})
+        out.append({"client_id": pf["client_id"], "label": pf["label"],
+                    "client_name": pf["client_name"], "runs": runs})
     out.sort(key=lambda p: p["client_id"])
     return {"portfolios": out}
 
@@ -342,6 +358,12 @@ _STRAT_DIMS = [
 ]
 _EQUITY_BINS = [0, 5, 10, 20, 30, 50, 101]
 _EQUITY_LABELS = ["<5%", "5–10%", "10–20%", "20–30%", "30–50%", "50%+"]
+#: The canonical rate-band column materialised by ``funded_prep`` from
+#: ``config/mi/buckets.yaml``. This is the sole economic definition.
+_INTEREST_RATE_BUCKET = "interest_rate_bucket"
+
+#: Backwards-compatible fallback bands, used ONLY when a frame carries no
+#: canonical bucket column (i.e. it never went through funded_prep).
 _RATE_BINS = [0, 3, 4, 5, 6, 7, 8, 100]
 _RATE_LABELS = ["<3%", "3–4%", "4–5%", "5–6%", "6–7%", "7–8%", "8%+"]
 
@@ -354,7 +376,12 @@ def _strat_series(df: pd.DataFrame, key: str, scope=None):
     from analytics_lib.numeric import coerce_numeric
     if key in ("ltv", "age"):
         from . import cohorts as _cohorts  # identical banding as the cohort lens
-        series, _header = _cohorts._dimension_series(df, key, "Y")
+        # P0-1: the FUNDED book is stratified on CURRENT LTV — the same basis the
+        # MI Query Agent and Copilot answer "balance by LTV band" from. The
+        # cohort lens keeps its origination basis (a static pool is defined at
+        # origination); only the column selection differs, never the banding.
+        series, _header = _cohorts._dimension_series(
+            df, key, "Y", ltv_basis=_cohorts.LTV_BASIS_CURRENT)
         return series
     if key == "region":
         return region_series(df, scope)
@@ -383,12 +410,27 @@ def _strat_series(df: pd.DataFrame, key: str, scope=None):
         if "protected_equity_flag" in df.columns and df["protected_equity_flag"].notna().any():
             return df["protected_equity_flag"].astype("string")
         return None
-    if key == "rate" and "current_interest_rate" in df.columns:
-        r = coerce_numeric(df["current_interest_rate"])
-        if r.notna().sum() == 0:
-            return None
-        points = r.where(r.abs() > 1.5, r * 100.0)  # fraction (0.05) -> points (5.0)
-        return pd.cut(points, _RATE_BINS, labels=_RATE_LABELS, right=False).astype("string")
+    if key == "rate":
+        # P0-3: the canonical ``interest_rate_bucket`` (config/mi/buckets.yaml,
+        # materialised by funded_prep) is the SOLE economic definition of a rate
+        # band, and is what the MI Query Agent and Copilot answer from. Consume
+        # it whenever the prep produced it.
+        if _INTEREST_RATE_BUCKET in df.columns:
+            banded = df[_INTEREST_RATE_BUCKET].astype("string")
+            if banded.notna().any():
+                return banded
+        # Explicit backwards-compatible fallback ONLY: a frame that never went
+        # through funded_prep (so carries no canonical bucket) still gets bars
+        # rather than an empty chart. These bands are not a second definition —
+        # they exist so a non-prepared tape degrades visibly, not silently.
+        if "current_interest_rate" in df.columns:
+            r = coerce_numeric(df["current_interest_rate"])
+            if r.notna().sum() == 0:
+                return None
+            points = r.where(r.abs() > 1.5, r * 100.0)  # fraction (0.05) -> points (5.0)
+            return pd.cut(points, _RATE_BINS, labels=_RATE_LABELS,
+                          right=False).astype("string")
+        return None
     return None
 
 
@@ -574,7 +616,7 @@ def compute_funded_snapshot(
     can disclose which portfolios supplied each stratification.
     """
     # Resolve the display currency from this run's tape (falls back to GBP).
-    currency_mod.resolve_and_set(df)
+    currency_mod.resolve_and_set(df, client_id=client_id)
     contract = build_dataset_contract(df, semantics, prep_report)
     warnings: List[str] = []
     diagnostics: List[str] = []
@@ -734,6 +776,10 @@ def compute_funded_snapshot(
         ),
         "loan_count": loan_count,
         "current_outstanding_balance": round(balance, 2),
+        # The governed reporting currency for this client, resolved above from
+        # the approved client configuration. The browser DISPLAYS this; it never
+        # decides it.
+        "currencyCode": currency_mod.current_code(),
         "kpis": kpis,
         "stratifications": _funded_stratifications(df, scope),
         "monthly_change": monthly_change,

@@ -3,8 +3,20 @@ import { Check, ChevronDown, Layers } from "lucide-react";
 import type { SnapshotPortfolio } from "@/domain";
 import { cn, formatHeading } from "@/lib/utils";
 
-/** Friendly display name: "acquired_001" / "CLIENT_001" → "Acquired 001". */
-function displayName(label?: string | null): string {
+/**
+ * What to call this client.
+ *
+ * A GOVERNED name is rendered exactly as it was approved — "ERE Funding -
+ * Equity Release Mortgages" is a name, and title-casing a lowercased copy of it
+ * would produce something the client never approved. Only an IDENTIFIER is
+ * prettified: "acquired_001" / "CLIENT_001" → "Acquired 001", which is what
+ * this surface has always shown for a deployment that declares no name.
+ */
+function displayName(portfolio?: Pick<SnapshotPortfolio, "label" | "client_name"> | null): string {
+  if (!portfolio) return "";
+  const governed = portfolio.client_name?.trim();
+  if (governed) return governed;
+  const label = portfolio.label;
   if (!label) return "";
   return formatHeading(label.toLowerCase()) || label;
 }
@@ -47,13 +59,18 @@ export function PortfolioSelector({
       <button
         type="button"
         onClick={() => !single && setOpen((o) => !o)}
-        className="flex items-center gap-2.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 px-3 py-1.5 text-left transition-colors hover:border-navy-500"
+        className="flex max-w-[16rem] items-center gap-2.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 px-3 py-1.5 text-left transition-colors hover:border-navy-500"
       >
         <Layers size={15} className="text-peri-300" />
-        <div className="leading-tight">
+        <div className="min-w-0 leading-tight">
           <div className="text-[10px] uppercase tracking-wider text-ink-500">Client</div>
-          <div className="text-[13px] font-medium text-ink-100">
-            {active ? displayName(active.label) : "No client"}
+          {/* A governed name can be long; it truncates rather than pushing the
+              header around, and carries the full name as a tooltip. */}
+          <div
+            className="truncate text-[13px] font-medium text-ink-100"
+            title={active ? displayName(active) : undefined}
+          >
+            {active ? displayName(active) : "No client"}
           </div>
         </div>
         {!single && (
@@ -74,7 +91,9 @@ export function PortfolioSelector({
               className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-navy-800"
             >
               <div className="flex-1">
-                <div className="text-[13px] font-medium text-ink-100">{displayName(p.label)}</div>
+                <div className="truncate text-[13px] font-medium text-ink-100" title={displayName(p)}>
+                  {displayName(p)}
+                </div>
                 <div className="text-[10px] text-ink-400">{p.runs.length} reporting run{p.runs.length === 1 ? "" : "s"}</div>
               </div>
               {p.client_id === active?.client_id && <Check size={14} className="text-peri-300" />}

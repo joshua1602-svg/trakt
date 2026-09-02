@@ -184,7 +184,7 @@ def test_ensure_scndry_oblgr_incm_defaults_adds_nd5_choice_nodes() -> None:
         _ensure_scndry_oblgr_incm_defaults(record, ns, order_index)
     message = str(excinfo.value)
     assert "RREL20" in message
-    assert "annex2_delivery_rules.yaml" in message, (
+    assert "effective Annex 2 contract" in message, (
         "the refusal must name the file that fixes it, not just the problem")
 
     # With the rule-supplied ND5 present as data — which is what Gate 4b now

@@ -202,10 +202,15 @@ export interface ValidationArtifact extends ArtifactBase {
 
 /* ------------------------------- Risk ------------------------------- */
 
-/** One concentration / limit group row (mirrors RiskMonitorResult frame). */
+/** One concentration / limit group row (mirrors RiskMonitorResult frame).
+ *
+ * `balance` is OPTIONAL and, when present, is an absolute currency amount in
+ * the response's own units — never a share, and never a value in millions.
+ * A percentage-unit limit test carries no numerator balance, so it omits the
+ * field rather than borrowing it to hold a share. */
 export interface RiskGroup {
   name: string;
-  balance: number;
+  balance?: number;
   share: number; // 0–1
   status: RagStatus;
   limit?: number; // 0–1, for limit mode

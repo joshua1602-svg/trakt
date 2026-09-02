@@ -374,23 +374,28 @@ class TestRecordedLimitations(unittest.TestCase):
         parsed = to_decimal(pd.Series(["1,234,567.89"]))
         self.assertAlmostEqual(float(parsed.iloc[0]), 1234567.89, places=2)
 
-    def test_the_exposure_delivery_rules_enumerate_one_client_lei(self):
-        """The shared delivery rules validate the originator LEI as an ENUM.
+    def test_the_originator_lei_is_validated_by_shape_not_by_a_guest_list(self):
+        """The defect this used to pin, gone at the source.
 
-        An identifier is being checked for membership of a list rather than for
-        its shape, so every other originator's LEI blocks delivery. The
-        framework works around it with a run-scoped overlay through the existing
-        ``--annex2-delivery-rules`` option rather than editing the regulatory
-        contract; this pins the current behaviour.
+        The retired delivery-rules file validated RREL83 by membership of a
+        hand-maintained ``enum_map`` that held one client's LEI, so every other
+        originator's LEI blocked delivery and the simulator needed a run-scoped
+        overlay to get past it. The effective contract takes RREL83 from the
+        schema, where it is a pattern-constrained identifier — so any valid LEI
+        passes, no LEI is enumerated, and the overlay is gone with it.
         """
         rules = yaml.safe_load(
-            (_REPO / "config" / "regime" / "annex2_delivery_rules.yaml")
+            Path(__import__("tests.annex2_contract_fixture", fromlist=["x"]).contract_path())
             .read_text(encoding="utf-8"))
-        enum_map = ((rules["field_rules"]["RREL83"].get("transform") or {})
-                    .get("enum_map") or {})
-        self.assertTrue(enum_map, "RREL83 has no enum map at all")
-        self.assertLessEqual(len(enum_map), 4,
-                             "RREL83 still enumerates specific LEIs")
+        rrel83 = rules["field_rules"]["RREL83"]
+        enum_map = ((rrel83.get("transform") or {}).get("enum_map") or {})
+        self.assertEqual(enum_map, {}, "RREL83 still enumerates specific LEIs")
+        regex = (rrel83.get("validators") or {}).get("regex") or ""
+        self.assertTrue(regex, "RREL83 has no shape check")
+        import re as _re
+        self.assertTrue(_re.match(regex, "2138LTM0000000000199"))
+        self.assertTrue(_re.match(regex, "213800ABCDE123456701"))
+        self.assertFalse(_re.match(regex, "not-an-lei"))
 
     def test_the_canonical_model_has_no_funded_spv_field(self):
         """``spv_id`` is a reserved snapshot column and a governed risk role, but

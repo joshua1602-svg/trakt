@@ -42,8 +42,9 @@ if str(_REPO_ROOT) not in sys.path:
 
 from engine.delivery_xml_agent import delivery_xml_agent as da
 from engine.delivery_xml_agent import preview_readiness as pr
+from tests.annex2_contract_fixture import contract_path
 
-REGIME = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
+REGIME = contract_path()
 REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
 UNIVERSE = str(_REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml")
 POLICY = str(_REPO_ROOT / "config" / "delivery" / "xml_preview_policy.yaml")

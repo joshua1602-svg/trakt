@@ -19,6 +19,13 @@ export interface SnapshotRun {
 export interface SnapshotPortfolio {
   client_id: string;
   label: string;
+  /**
+   * The client's GOVERNED name, when the deployment declares one. Present means
+   * "this is a name, render it as written"; absent means the label is an
+   * identifier and the browser may prettify it. The browser never derives a
+   * name — see mi_agent_api/client_identity.py for where one comes from.
+   */
+  client_name?: string | null;
   /** Ordered oldest → newest by reporting date. */
   runs: SnapshotRun[];
 }
@@ -67,6 +74,9 @@ export interface FundedSnapshot {
   prior: { run_id: string; reporting_date: string | null } | null;
   loan_count: number;
   current_outstanding_balance: number;
+  /** The governed reporting currency for this client (ISO code). The browser
+   *  displays this; the approved client configuration decides it. */
+  currencyCode?: string;
   kpis: SnapshotKPI[];
   /** Point-in-time balance/share breakdowns by dimension (may be empty). */
   stratifications?: FundedStratification[];

@@ -1,0 +1,1672 @@
+{
+ "codes": {
+  "RREC1": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": false,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/ScrtstnIdr"
+  },
+  "RREC10": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/NrgyPrfrmncCertVal"
+  },
+  "RREC11": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/NrgyPrfrmncCertPrvdrNm"
+  },
+  "RREC12": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/LnToVal"
+  },
+  "RREC13": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnAmt"
+  },
+  "RREC14": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnMtd"
+  },
+  "RREC15": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/CurInf/ValtnDt"
+  },
+  "RREC16": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/LnToVal"
+  },
+  "RREC17": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnAmt"
+  },
+  "RREC18": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnMtd"
+  },
+  "RREC19": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Valtn/InfAtOrgtn/ValtnDt"
+  },
+  "RREC2": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrId/NewUndrlygXpsrIdr"
+  },
+  "RREC20": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Nfrcmnt/SaleDt"
+  },
+  "RREC21": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Nfrcmnt/SalePric"
+  },
+  "RREC23": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/GuarntrTp"
+  },
+  "RREC3": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollIdr/OrgnlIdr"
+  },
+  "RREC4": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollIdr/NewIdr"
+  },
+  "RREC5": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/CollTp"
+  },
+  "RREC6": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/TrtrlUnitClssfctn"
+  },
+  "RREC7": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/OccpncyTp"
+  },
+  "RREC8": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/CmonData/LienVal"
+  },
+  "RREC9": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/Coll/CollCmonData/Dtls/PrprtyTp"
+  },
+  "RREL1": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": false,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/ScrtstnIdr"
+  },
+  "RREL10": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/Resdt"
+  },
+  "RREL11": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/Clssfctn"
+  },
+  "RREL12": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/TrtrlUnit/ClssfctnYr"
+  },
+  "RREL13": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/AddtlCmonData/MplyntSts"
+  },
+  "RREL14": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/AddtlCmonData/CdtImprdOblgr"
+  },
+  "RREL15": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/CstmrTp"
+  },
+  "RREL16": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/IncmVal"
+  },
+  "RREL17": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/Tp"
+  },
+  "RREL19": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/PmryOblgrIncm/Vrfctn"
+  },
+  "RREL2": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrId/OrgnlUndrlygXpsrIdr"
+  },
+  "RREL20": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/ScndryOblgrIncm/IncmVal"
+  },
+  "RREL21": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/OblgrDtls/FinDtls/ScndryOblgrIncm/Vrfctn"
+  },
+  "RREL22": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/SpclSchme"
+  },
+  "RREL23": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/OrgtnDt"
+  },
+  "RREL24": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/MtrtyDt"
+  },
+  "RREL25": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IssncAndMtrtyDtls/OrgnlTerm"
+  },
+  "RREL26": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/OrgtnChanl"
+  },
+  "RREL27": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/Purp"
+  },
+  "RREL29": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/OrgnlPrncplBal"
+  },
+  "RREL3": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrId/NewUndrlygXpsrIdr"
+  },
+  "RREL30": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/CurPrncplBal"
+  },
+  "RREL31": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/PrrPrncplBal"
+  },
+  "RREL32": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/PrpssUndrlygXpsr"
+  },
+  "RREL33": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/TtlCdtLmt"
+  },
+  "RREL34": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/BalDtls/PurchsPric"
+  },
+  "RREL35": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/AmtstnTp"
+  },
+  "RREL36": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/GracePrdEndDt"
+  },
+  "RREL37": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/SchdldPmtFrqcy"
+  },
+  "RREL38": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/CmonData/IntrstPmtFrqcy"
+  },
+  "RREL39": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PmtDtls/PmtDue"
+  },
+  "RREL4": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrId/OrgnlOblgrIdr"
+  },
+  "RREL40": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/DebtToIncm"
+  },
+  "RREL41": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/RpmtDtls/BllnAmt"
+  },
+  "RREL42": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/Tp"
+  },
+  "RREL43": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurRate"
+  },
+  "RREL44": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurIndx"
+  },
+  "RREL45": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CmonData/CurTnor"
+  },
+  "RREL46": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/CurIntrstRateMrgn"
+  },
+  "RREL47": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/RstIntrvl"
+  },
+  "RREL48": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/Cap"
+  },
+  "RREL49": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/AddtlCmonData/Flr"
+  },
+  "RREL5": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrId/NewOblgrIdr"
+  },
+  "RREL50": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/FrstRvsnData/Mrgn"
+  },
+  "RREL51": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/FrstRvsnData/IntrstRvsnDt"
+  },
+  "RREL52": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ScndRvsnData/Mrgn"
+  },
+  "RREL53": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ScndRvsnData/IntrstRvsnDt"
+  },
+  "RREL54": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ThrdRvsnData/Mrgn"
+  },
+  "RREL55": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/ThrdRvsnData/IntrstRvsnDt"
+  },
+  "RREL56": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndx"
+  },
+  "RREL57": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/UndrlygXpsrDtls/IntrstRateDtls/RvisdIntrstRateIndxTnor"
+  },
+  "RREL58": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PmtDtls/NbOfPmtsBfrScrtstn"
+  },
+  "RREL59": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/AllwdPerYr"
+  },
+  "RREL6": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": false,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/CutOffDt"
+  },
+  "RREL60": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/LckOutEndDt"
+  },
+  "RREL61": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/Fee"
+  },
+  "RREL62": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/FeeEndDt"
+  },
+  "RREL63": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/LatstDt"
+  },
+  "RREL64": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/PrepmtDtls/PrepmtCmonData/CmltvAmt"
+  },
+  "RREL65": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/RstrgDt"
+  },
+  "RREL66": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/DtLastInArrears"
+  },
+  "RREL67": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/ArrearsBal/Amt"
+  },
+  "RREL68": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/ArrearsDtls/NbOfDaysInArrears"
+  },
+  "RREL69": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/AcctSts"
+  },
+  "RREL7": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/ActvtyDtDtls/PoolAddtnDt"
+  },
+  "RREL70": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/DfltOrFrclsrRsn"
+  },
+  "RREL71": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/GrssDflt"
+  },
+  "RREL72": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/CmonData/DtOfDflt"
+  },
+  "RREL73": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/AllctdLoss"
+  },
+  "RREL74": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/RcvrsData/CmltvRcvrs"
+  },
+  "RREL75": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/DfltDtls/Ltgtn"
+  },
+  "RREL76": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/Rcrs"
+  },
+  "RREL77": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 0,
+    "PRF": 0
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/Dpst"
+  },
+  "RREL78": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/RskDtls/InsrncOrInvstmtPrvdr"
+  },
+  "RREL79": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/Nm"
+  },
+  "RREL8": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/ActvtyDtDtls/RpDt"
+  },
+  "RREL80": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/LEICd"
+  },
+  "RREL81": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/OrgnlLndr/CtryOfDmcl"
+  },
+  "RREL82": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/Orgtr/Nm"
+  },
+  "RREL83": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/Orgtr/LEI"
+  },
+  "RREL84": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/InstnlDtls/Orgtr/CtryOfDmcl"
+  },
+  "RREL9": {
+   "blank_min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "min_occ": {
+    "NPRF": 1,
+    "PRF": 1
+   },
+   "modes": [
+    "PRF",
+    "NPRF"
+   ],
+   "record_anchored": true,
+   "value_path": "/Document/ScrtstnNonAsstBckdComrclPprUndrlygXpsrRpt/NewCrrctn/ScrtstnRpt/UndrlygXpsrRcrd/UndrlygXpsrData/ResdtlRealEsttLn/PrfrmgLn/UndrlygXpsrCmonData/PrfrmncDtls/GnlAttrbts/RedDt"
+  }
+ },
+ "note": "Generated from the mapping workbook by engine/regime_contract/workbook_index.py. Do not edit. A stale source_sha256 makes every consumer rebuild from the workbook instead of reading this file.",
+ "sheet": "DRAFT1auth.099.001.04",
+ "source": "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx",
+ "source_sha256": "983e33c851a6621af6b91e43bf032f6ecde5be1fc62770fd1c233789b287676b"
+}

@@ -167,6 +167,11 @@ def build_facts(data: Any) -> Dict[str, Any]:
         # -- pipeline --------------------------------------------------------
         "has_pipeline": bool(getattr(data, "pipeline", {}) or {}),
         "has_pipeline_history": _periods(getattr(data, "pipeline_evolution", {})),
+        # The engine's OWN typed availability decides this. The deck never
+        # re-derives whether a transition answer exists — a second opinion here
+        # could contradict the payload it is about to render.
+        "has_stage_transitions": bool(
+            (getattr(data, "stage_transitions", {}) or {}).get("available")),
         "has_funnel": bool((getattr(data, "funnel", {}) or {}).get("series")
                            or (getattr(data, "pipeline", {}) or {}).get("stageBreakdown")),
         # -- forecast / risk --------------------------------------------------
@@ -242,6 +247,13 @@ _GUARDS: Dict[str, Callable[[Mapping[str, Any], Any], Optional[str]]] = {
                             else "no governed pipeline source for this book"),
     "origination_flow": lambda s, d: (None if (getattr(d, "funnel", {}) or {}).get("series")
                                       else "weekly origination flow needs at least 2 pipeline extracts"),
+    # The engine's typed unavailability IS the omission reason — a duplicate
+    # identifier or a single snapshot is disclosed in the reader's words rather
+    # than being restated as a generic "no data".
+    "stage_transitions": lambda s, d: (
+        None if (getattr(d, "stage_transitions", {}) or {}).get("available")
+        else ((getattr(d, "stage_transitions", {}) or {}).get("reason")
+              or "no governed pair of weekly pipeline extracts to compare")),
     # A bridge with no weighted pipeline is Funded → Funded: it restates the
     # balance rather than bridging to anything, so it is not a forecast.
     "forecast_bridge": lambda s, d: (

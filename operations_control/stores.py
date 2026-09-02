@@ -105,6 +105,19 @@ class OpsLayout:
     def decisions_prefix(self, client_id: str) -> str:
         return self._c(client_id, "decisions")
 
+    # -- approved onboarding decisions -------------------------------------- #
+    def approved_decisions_uri(self, client_id: str, portfolio_id: str,
+                               dataset: str, filename: str) -> str:
+        """Durable home for the approved mapping contract of ONE source.
+
+        Scoped by client + portfolio + dataset because that is the granularity
+        at which a schema is stable: next month's file for the same source
+        answers to the same decisions, and no other client's or portfolio's
+        source can ever read it.
+        """
+        return self._c(client_id, "approved-decisions",
+                       portfolio_id or "_", dataset or "funded", filename)
+
     # -- rules -------------------------------------------------------------- #
     def _rules_base(self, client_id: Optional[str]) -> str:
         return self._c(client_id or GLOBAL_SCOPE_DIR, "rules")
@@ -144,6 +157,22 @@ class OpsLayout:
 
     def history_prefix(self, client_id: str) -> str:
         return self._c(client_id, "history")
+
+    # -- MI Query telemetry -------------------------------------------------- #
+    def mi_query_uri(self, client_id: str, day: str, query_id: str) -> str:
+        """One governed record per MI Query question.
+
+        Partitioned by UTC day so "the last 24 / 72 hours" reads a handful of
+        prefixes instead of the client's whole history — the only access pattern
+        this needs to be efficient for.
+        """
+        return self._c(client_id, "mi-queries", day, f"{query_id}.json")
+
+    def mi_query_day_prefix(self, client_id: str, day: str) -> str:
+        return self._c(client_id, "mi-queries", day)
+
+    def mi_query_prefix(self, client_id: str) -> str:
+        return self._c(client_id, "mi-queries")
 
     # -- indexes (small, rebuildable) --------------------------------------- #
     def client_index_uri(self) -> str:
@@ -483,6 +512,48 @@ class OpsStore:
                          reporting_period: str) -> Optional[Dict[str, Any]]:
         return _read_json(self.storage,
                           self.layout.publication_uri(client_id, reporting_period))
+
+    # -- MI Query telemetry -------------------------------------------------- #
+    def save_mi_query(self, doc: Dict[str, Any]) -> None:
+        """Persist one MI Query telemetry record.
+
+        Client-scoped by construction: the record is filed under its own
+        client's prefix, so the tenancy rules that already govern every other
+        document in this container govern this one too.
+        """
+        _write_json(self.storage,
+                    self.layout.mi_query_uri(doc["client_id"], doc["day"],
+                                             doc["query_id"]),
+                    doc)
+
+    def load_mi_query(self, client_id: str, query_id: str
+                      ) -> Optional[Dict[str, Any]]:
+        for uri in self.storage.list(self.layout.mi_query_prefix(client_id)):
+            if uri.endswith(f"/{query_id}.json"):
+                return _read_json(self.storage, uri)
+        return None
+
+    def list_mi_queries(self, client_id: str, *, days: Optional[List[str]] = None,
+                        limit: int = 2000) -> List[Dict[str, Any]]:
+        """Telemetry records for a client, newest first.
+
+        ``days`` restricts the read to those UTC day partitions; omitted, the
+        client's whole history is read. Bounded so a pathological prefix cannot
+        turn one operator page load into an unbounded scan.
+        """
+        prefixes = ([self.layout.mi_query_day_prefix(client_id, d) for d in days]
+                    if days else [self.layout.mi_query_prefix(client_id)])
+        out: List[Dict[str, Any]] = []
+        for prefix in prefixes:
+            for uri in self.storage.list(prefix):
+                if not uri.endswith(".json"):
+                    continue
+                doc = _read_json(self.storage, uri)
+                if doc:
+                    out.append(doc)
+                if len(out) >= limit:
+                    break
+        return sorted(out, key=lambda d: d.get("asked_at", ""), reverse=True)
 
     def list_publications(self, client_id: str) -> List[Dict[str, Any]]:
         out = []

@@ -17,6 +17,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from trakt_core.context import ExecutionContext
 from trakt_core.errors import ErrorCode, TraktError
@@ -40,6 +41,24 @@ RECORD_TAG = f"{{{ANNEX2_NAMESPACE}}}UndrlygXpsrRcrd"
 
 pytestmark = pytest.mark.skipif(
     not CI_FIXTURE.is_file(), reason="Annex 2 CI fixture is not present")
+
+
+def _nd_in_non_emitting_codes(fixture: Path) -> int:
+    """No-data values in the prepared data for codes auth.099 has no element for.
+
+    The three are currency qualifiers carried as an XML attribute of the amount
+    they describe, so they can hold a currency but not a no-data code — and a
+    no-data value against one of them cannot reach the report.
+    """
+    import csv
+
+    from engine.regime_contract import build_contract
+
+    codes = [c for c, f in build_contract().fields.items() if not f.emitting]
+    with fixture.open(newline="", encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    return sum(1 for r in rows for c in codes
+               if str(r.get(c, "")).strip().upper().startswith("ND"))
 
 
 def _ctx(tenant: str = "ERE") -> ExecutionContext:
@@ -68,12 +87,27 @@ class TestAuthoritativeComponents:
         assert d.validator == "lxml.etree.XMLSchema"
 
     @pytest.mark.parametrize("attribute", [
-        "delivery_rules", "field_universe", "code_order", "enum_mapping",
-        "mapping_workbook", "xsd",
+        "field_universe", "code_order", "enum_mapping", "mapping_workbook", "xsd",
     ])
     def test_default_paths_exist_in_this_repository(self, attribute):
         assert Path(getattr(Annex2Paths(), attribute)).is_file(), (
             f"{attribute} must point at a real repository file, not an invented copy")
+
+    def test_the_delivery_contract_is_derived_and_has_no_file(self):
+        """``delivery_rules`` is the one path with nothing behind it.
+
+        It used to name a hand-maintained YAML that stated Annex 2 truth for a
+        second time. There is no such file: the contract is derived, per run,
+        from the field universe, the registry, the mapping workbook and the XSD.
+        The default is empty and the provider resolves it lazily, so a stale
+        path can no longer be picked up by accident.
+        """
+        from engine.regime_contract import build_contract
+
+        assert Annex2Paths().delivery_rules == ""
+        assert not (_REPO_ROOT / "config" / "regime"
+                    / "annex2_delivery_rules.yaml").exists()
+        assert len(build_contract().fields) == 107
 
     def test_default_paths_match_the_proven_orchestrator_route(self):
         paths = Annex2Paths()
@@ -267,7 +301,7 @@ class TestAnnex2Route:
     def test_configuration_versions_cover_every_annex2_input(self, prepared):
         _, _, result = prepared
         assert set(result.configuration_versions) >= {
-            "annex2_delivery_rules", "annex2_field_universe", "esma_code_order",
+            "annex2_contract", "annex2_field_universe", "esma_code_order",
             "enum_mapping", "annex2_mapping_workbook", "annex2_xsd"}
         assert all(v not in ("missing", "unset")
                    for v in result.configuration_versions.values())
@@ -281,16 +315,27 @@ class TestAnnex2Route:
 
 class TestAnnex2Evidence:
     def test_no_data_insertion_is_counted_and_reconciled(self, prepared):
+        """The count reconciles in both directions, and each has a meaning.
+
+        The report may carry FEWER no-data values than the prepared data: the
+        three currency concepts auth.099 expresses as an attribute of the amount
+        they qualify have nowhere to put one. It must never carry MORE unless
+        the builder put them there and disclosed doing so. Both halves are
+        stated, rather than one inequality that only held while the difference
+        happened to be non-negative.
+        """
         _, _, result = prepared
-        evidence = result.transformation_evidence
-        recon = evidence["nd_reconciliation"]
-        assert recon["no_data_values_in_report"] >= recon["no_data_values_in_prepared_data"]
+        recon = result.transformation_evidence["nd_reconciliation"]
         assert (recon["difference_added_by_builder"]
                 == recon["no_data_values_in_report"]
                 - recon["no_data_values_in_prepared_data"])
         assert recon["unattributed"] == 0, (
             "every no-data value must be attributed to the data or to the builder")
-        assert recon["attributed_as_automatic"] == recon["difference_added_by_builder"]
+        assert recon["attributed_as_automatic"] == max(
+            recon["difference_added_by_builder"], 0)
+        shortfall = max(-recon["difference_added_by_builder"], 0)
+        assert shortfall == _nd_in_non_emitting_codes(CI_FIXTURE), (
+            "a no-data value went missing from a code the schema does emit")
 
     def test_builder_inserted_nd5_is_disclosed_with_its_rule(self, prepared):
         """Whatever the builder inserts must be disclosed with its rule.
@@ -313,16 +358,16 @@ class TestAnnex2Evidence:
         """Phase 2: the builder adds no no-data node of its own.
 
         This is the assertion that replaced "ScndryOblgrIncm must appear in the
-        automatic fills". RREL20/RREL21 are now declared in
-        ``config/regime/annex2_delivery_rules.yaml`` and arrive as data, so the
-        builder inserts nothing and the reconciliation closes at zero.
+        automatic fills". RREL20/RREL21 are now answered by the equity-release
+        asset pack and arrive as data, so the builder inserts nothing and the
+        reconciliation closes at zero.
         """
         _, _, result = prepared
         recon = result.transformation_evidence["nd_reconciliation"]
-        assert recon["no_data_values_in_report"] == recon["no_data_values_in_prepared_data"]
-        assert recon["difference_added_by_builder"] == 0
+        assert recon["difference_added_by_builder"] <= 0, "the builder added one"
         assert recon["attributed_as_automatic"] == 0
         assert recon["unattributed"] == 0
+        assert recon["attributed_as_sourced"] == recon["no_data_values_in_report"]
         assert recon["per_field_in_prepared_data"]["RREL20"] > 0
         assert recon["per_field_in_prepared_data"]["RREL21"] > 0
 
@@ -346,11 +391,28 @@ class TestAnnex2Evidence:
         assert "one_record_per_row" in names
         assert "single_collateral_per_exposure" in names
 
-    def test_unsupported_fields_are_listed(self, prepared):
+    def test_unsupported_fields_are_exactly_the_codes_the_data_omits(self, prepared):
+        """Reconciled to the frame, not asserted to be non-empty.
+
+        "Unsupported" here means a universe code the prepared data carries no
+        column for. This fixture is a governed projection over the full 107-code
+        contract, so the list is empty — which is the outcome the disclosure
+        exists to drive towards, not a lost check. What must hold is that the
+        list IS the set of absent codes, and that anything in it is described.
+        """
+        import csv
+
         _, _, result = prepared
         unsupported = result.transformation_evidence["unsupported_fields"]
-        assert unsupported
         assert all(u["field_code"] and u["reason"] for u in unsupported)
+
+        universe = yaml.safe_load(
+            (_REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml")
+            .read_text(encoding="utf-8"))["fields"]
+        with CI_FIXTURE.open(newline="", encoding="utf-8") as fh:
+            columns = set(next(iter(csv.reader(fh))))
+        assert ({u["field_code"] for u in unsupported}
+                == {str(c) for c in universe} - columns)
 
     def test_operator_warnings_are_plain_english(self, prepared):
         _, _, result = prepared
@@ -460,8 +522,7 @@ class TestAnnex2Coercion:
         coercions = {c["field_code"]: c
                      for c in (result.transformation_evidence or {}).get("coercions", ())}
         assert coercions.get("RREL12", {}).get("generated_value") != "2026", (
-            "the RREL12 -> '2026' fabrication is gone from both the builder "
-            "and config/regime/annex2_delivery_rules.yaml")
+            "the RREL12 -> '2026' fabrication is gone from the builder")
 
     def test_instrumentation_leaves_the_builder_unpatched(self, prepared):
         """The observers must be removed once a build finishes."""
@@ -499,7 +560,7 @@ class TestAnnex2Publication:
         # than omitting the key.
         assert package["automatic_value_evidence"]["automatic_fill_count"] == 0
         assert package["automatic_value_evidence"]["nd_reconciliation"][
-            "difference_added_by_builder"] == 0
+            "difference_added_by_builder"] <= 0
         assert package["operator_approval"]["decided_by"] == "ERE-operator"
         assert Path(published.publication["receipt"]["artefact"]).is_file()
 

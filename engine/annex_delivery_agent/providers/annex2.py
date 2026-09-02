@@ -37,6 +37,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
+def _derived_contract_path() -> str:
+    """The effective Annex 2 contract, materialised for a path-taking caller."""
+    from engine.regime_contract.annex2_contract import materialised_contract_path
+    return materialised_contract_path()
+
+
 from ..contracts import (
     AnnexDefinition, ArtefactRef, DeliveryRequest, SchemaValidationResult,
     config_fingerprints, file_sha256,
@@ -86,7 +92,10 @@ class Annex2Paths:
     not copied to an alternative location.
     """
 
-    delivery_rules: str = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
+    #: Empty means "derive it". The Annex 2 contract comes from the field
+    #: universe, the registry, the workbook and the XSD; there is no
+    #: delivery-rules file. Resolved lazily so importing this module is cheap.
+    delivery_rules: str = ""
     field_universe: str = str(_REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml")
     code_order: str = str(_REPO_ROOT / "config" / "system" / "esma_code_order.yaml")
     enum_mapping: str = str(_REPO_ROOT / "config" / "system" / "enum_mapping.yaml")
@@ -99,7 +108,8 @@ class Annex2Paths:
     def with_overrides(self, options: Mapping[str, Any],
                        client_config: Optional[str]) -> "Annex2Paths":
         return Annex2Paths(
-            delivery_rules=str(options.get("delivery_rules") or self.delivery_rules),
+            delivery_rules=str(options.get("delivery_rules") or self.delivery_rules
+                               or _derived_contract_path()),
             field_universe=str(options.get("field_universe") or self.field_universe),
             code_order=str(options.get("code_order") or self.code_order),
             enum_mapping=str(options.get("enum_mapping") or self.enum_mapping),
@@ -111,7 +121,7 @@ class Annex2Paths:
 
     def fingerprint_map(self) -> Dict[str, str]:
         paths = {
-            "annex2_delivery_rules": self.delivery_rules,
+            "annex2_contract": self.delivery_rules,
             "annex2_field_universe": self.field_universe,
             "esma_code_order": self.code_order,
             "enum_mapping": self.enum_mapping,
@@ -136,7 +146,7 @@ ANNEX2_DEFINITION = AnnexDefinition(
     validator="lxml.etree.XMLSchema",
     schema_reference="config/system/DRAFT1auth.099.001.04_1.3.0.xsd",
     field_universe_reference="config/regime/annex2_field_universe.yaml",
-    rules_reference="config/regime/annex2_delivery_rules.yaml",
+    rules_reference="engine.regime_contract.annex2_contract (derived)",
     code_order_reference="config/system/esma_code_order.yaml",
     configuration_references=(
         "config/system/enum_mapping.yaml",
@@ -174,7 +184,7 @@ class Annex2Provider(AnnexProvider):
         self.paths = self._base_paths.with_overrides(
             request.options or {}, request.client_config_reference)
 
-        require_file(report, check="annex2_delivery_rules", path=self.paths.delivery_rules,
+        require_file(report, check="annex2_contract", path=self.paths.delivery_rules,
                      what="the Annex 2 delivery rules", annex_name=ANNEX_NAME)
         require_file(report, check="annex2_field_universe", path=self.paths.field_universe,
                      what="the Annex 2 field universe", annex_name=ANNEX_NAME)
@@ -708,7 +718,7 @@ def _fill_reason(path: Tuple[str, ...]) -> str:
     """Name the builder rule responsible for an automatic no-data insertion."""
     # ``ScndryOblgrIncm`` used to be named here. Since Phase 2 the builder does
     # not fill it: RREL20/RREL21 are declared in
-    # ``config/regime/annex2_delivery_rules.yaml``, so the path is sourced from
+    # the effective Annex 2 contract, so the path is sourced from
     # the prepared data and never reaches this attribution — and a run that
     # somehow lacked them would be refused by the builder, not filled.
     joined = "/".join(path)

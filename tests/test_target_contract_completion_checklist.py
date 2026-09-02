@@ -38,7 +38,9 @@ from engine.onboarding_agent import onboarding_handoff as oh
 
 REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
 ASSET = str(_REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml")
-REGIME = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
+from tests.annex2_contract_fixture import contract_path
+
+REGIME = contract_path()
 UNIVERSE = str(_REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml")
 
 
@@ -139,12 +141,14 @@ class TestAssetSpecificity(unittest.TestCase):
         erm = {x["esma_code"]: x for x in _checklist()}["RREL40"]
         self.assertEqual(erm["field_disposition"], tcc.D_ND_POLICY_SELECTED)
         self.assertEqual(erm["disposition_source"], "asset_config")
-        # Bare asset config: it falls back to the REGIME-configured default (ND5
-        # lives in annex2_delivery_rules, not in engine code) — different source.
+        # Bare asset config: there is no regime default to fall back to. The
+        # regime states that ND is PERMITTED for this field; choosing it is a
+        # policy decision belonging to the asset class or the client, and with
+        # neither declared the checklist asks for one rather than answering.
         bare = {x["esma_code"]: x for x in _checklist(
             asset_cfg={"defaults": {}, "nd_defaults": {}},
             asset_class="residential_mortgage")}["RREL40"]
-        self.assertEqual(bare["disposition_source"], "regime_config")
+        self.assertEqual(bare["disposition_source"], "policy_gap")
 
     def test_field_without_any_selection_needs_asset_policy(self):
         # RREL27 permits ND but has no regime default and no asset/client policy

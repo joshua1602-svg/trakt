@@ -40,9 +40,9 @@ from engine.transformation_agent.transformation_agent import HandoffValidationEr
 
 REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
 ASSET = str(_REPO_ROOT / "config" / "asset" / "product_defaults_ERM.yaml")
-REGIME = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
+from tests.annex2_contract_fixture import contract_path
 
-
+REGIME = contract_path()
 # --------------------------------------------------------------------------- #
 # Synthetic handoff package builder
 # --------------------------------------------------------------------------- #

@@ -171,6 +171,18 @@ export function withCache(
             ? fetchDetail(portfolioId, detailType, asOf, portfolioContext, signal)
             : Promise.reject(new Error("movement detail is not supported"));
         }),
+    // Same discipline as the movement detail above: one in-flight request per
+    // (portfolio, week, scope), shared and cached, so a panel that re-renders
+    // never refetches the window it is already showing.
+    getStageTransitionDetail: (portfolioId, asOf, portfolioContext, signal) =>
+      resource(
+        `stageTransitionDetail|${portfolioId}|${asOf ?? "latest"}|${portfolioContext ?? ""}`,
+        () => {
+          const fetchDetail = client.getStageTransitionDetail?.bind(client);
+          return fetchDetail
+            ? fetchDetail(portfolioId, asOf, portfolioContext, signal)
+            : Promise.reject(new Error("stage transition detail is not supported"));
+        }),
     getRiskLimits: (portfolioId, portfolioContext, signal) =>
       resource(`riskLimits|${portfolioId}|${portfolioContext ?? ""}`,
         () => client.getRiskLimits(portfolioId, portfolioContext, signal)),

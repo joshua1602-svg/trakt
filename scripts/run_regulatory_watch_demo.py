@@ -9,7 +9,7 @@ Runs the whole Stage 1 flow locally and offline::
 The candidate is built by applying ONE controlled regulatory change to a COPY
 of the vendored ESMA schema: the code value ``FXRL`` ("fixed rate loan") is
 withdrawn from ``InterestRateType2Code``. That is a change Trakt is genuinely
-exposed to — ``config/regime/annex2_delivery_rules.yaml`` maps the ERM
+exposed to — the effective Annex 2 contract maps the ERM
 back-book default ``interest_rate_type = Fixed`` onto ``FXRL`` for RREL42 — so
 the demo shows a delta with real implementation consequences rather than a
 cosmetic one.
