@@ -25,7 +25,11 @@ USAGE
 -----
     python live_bank_probe.py --scope direct --out /home/probe_result.json
 
-    --scope     portfolio context: direct | acquired | total   (default: direct)
+    --scope     source-portfolio lens: direct | acquired | total | a cohort id
+                (default: direct). Sent as `sourcePortfolioLens`, which is the
+                field `QueryRequest` actually declares — an unrecognised name is
+                dropped in silence by the request model and the run quietly
+                measures the whole book instead.
     --out       where to write the JSON                        (required)
     --limit     first N questions only, for a quick smoke test
     --as-of     reporting date override, e.g. 2026-06-30
@@ -77,6 +81,34 @@ def _keys(value):
     if isinstance(value, (list, tuple)):
         return [str(v) for v in value]
     return []
+
+
+def _scope_applied(env, meta):
+    """What scope the ANSWER actually covers — never what we asked for.
+
+    The requested lens travelling in the body is not evidence that it was
+    applied. Two independent witnesses are recorded here, because different
+    routes leave different traces:
+
+      * routed answers carry `portfolioScope`, stamped by
+        `mi_service._stamp_routed_scope` with the scope the answer HAS
+        (an un-narrowed route is stamped Total, deliberately);
+      * executed answers realise the lens as a provenance filter, so
+        `portfolio_id` appears in `filter_fields`, recorded separately.
+
+    `fell_back_to_total` is the one that matters most: it is the platform
+    saying it could not honour the requested context and widened.
+    """
+    scope = env.get("portfolioScope")
+    if not isinstance(scope, dict):
+        return {"lens_applied": meta.get("lensApplied")}
+    return {
+        "context_id": scope.get("context_id"),
+        "context_kind": scope.get("context_kind"),
+        "requested_context_id": scope.get("requested_context_id"),
+        "fell_back_to_total": scope.get("fell_back_to_total"),
+        "lens_applied": meta.get("lensApplied"),
+    }
 
 
 QUESTIONS = [
@@ -971,7 +1003,7 @@ def main() -> int:
     rows = []
     asked = QUESTIONS[: args.limit] if args.limit else QUESTIONS
     for i, item in enumerate(asked):
-        payload = {"question": item["q"], "portfolioContext": args.scope}
+        payload = {"question": item["q"], "sourcePortfolioLens": args.scope}
         if args.as_of:
             payload["asOfDate"] = args.as_of
         t0 = time.time()
@@ -1020,6 +1052,7 @@ def main() -> int:
             "aggregation": spec.get("aggregation"),
             "dimensions": _keys(spec.get("dimensions") or spec.get("dimension")),
             "filter_fields": _keys(spec.get("filters")),
+            "scope_applied": _scope_applied(env, meta),
             "coverage": coverage,
             "artefacts": [{"type": a.get("type"), "rows": len(a.get("rows") or [])}
                           for a in (env.get("artifacts") or [])],
@@ -1029,6 +1062,30 @@ def main() -> int:
             print("  %d/%d" % (i + 1, len(asked)), flush=True)
 
     answered = sum(1 for r in rows if r.get("answered"))
+
+    # DID THE LENS ACTUALLY BIND? The requested scope travels in the body; that
+    # is a request, not a result. An unknown field would be dropped silently by
+    # the request model and every question would run over the whole book — the
+    # precise failure this run exists to avoid. So the file records the evidence
+    # and the operator is told before they read anything into the numbers.
+    widened = [r["id"] for r in rows
+               if (r.get("scope_applied") or {}).get("fell_back_to_total")]
+    narrowed = sum(1 for r in rows
+                   if "portfolio_id" in (r.get("filter_fields") or [])
+                   or (r.get("scope_applied") or {}).get("context_kind")
+                   not in (None, "total"))
+    context["scope_evidence"] = {
+        "requested": args.scope,
+        "answers_showing_a_narrowed_scope": narrowed,
+        "answers_that_fell_back_to_total": widened,
+    }
+    if args.scope != "total" and answered and not narrowed:
+        # Only meaningful when something answered: a run where every question
+        # refused never got far enough to resolve a scope, and warning there
+        # would cry wolf on exactly the runs whose refusals matter most.
+        print("\n*** WARNING: %d answers, none showing the %s lens applied. "
+              "Treat this run as whole-book. ***" % (answered, args.scope))
+
     out = {"context": context, "answered": answered, "total": len(rows),
            "rows": rows}
     with open(args.out, "w") as fh:
