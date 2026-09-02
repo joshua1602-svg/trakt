@@ -1,0 +1,156 @@
+# =========================================================================
+# MI Query Agent — pipeline stage-movement acceptance bank. FROZEN.
+# =========================================================================
+#
+# Nine business questions a portfolio manager asks about how pipeline cases
+# moved between two governed weekly extracts, each in four independent natural
+# formulations. Written BEFORE the recogniser existed, from the business
+# question, not from what the implementation happens to recognise.
+#
+# THE ORACLE IS ARITHMETIC ON A FIXED FIXTURE, not an opinion.
+# `tests/fixtures/pipeline_transition_2w` — fourteen cases across two Fridays,
+# 2026-06-05 (prior) and 2026-06-12 (latest):
+#
+#     KFI -> APPLICATION      2 cases   prior 900,000    latest 920,000
+#     APPLICATION -> OFFER    2 cases   prior 1,300,000  latest 1,290,000
+#     OFFER -> COMPLETED      1 case    prior 800,000    latest 800,000
+#     new arrivals into KFI   1 case    900,000
+#     new arrivals into APPLICATION  1 case   150,000
+#     stayers in APPLICATION  1 case    300,000 -> 280,000, change -20,000
+#     stayers in KFI          2 cases   300,000 -> 320,000, change +20,000
+#     departures from OFFER   1 case    1,200,000, outcome unclassified
+#     APPLICATION reconciliation  opening 4, +1 new, +2 in, -2 out, -1 departure,
+#                                 closing 4
+#
+# `must` are substrings the answer has to carry for the delivery to count as
+# answering the question that was asked. `must_not` are substrings that would
+# make the answer a different, wrong answer — above all a CURRENT STAGE STOCK
+# figure standing in for a transition.
+#
+# `expect: DELIVER` means the governed stage-transition capability supports this
+# question on this fixture and an honest agent answers it. There is no question
+# here whose right answer is a refusal; a refusal is a MISS, recorded as a
+# wording gap rather than quietly reclassified as correct.
+version: 1
+window:
+  comparison: "2026-06-05"
+  latest: "2026-06-12"
+  fixture: tests/fixtures/pipeline_transition_2w
+cases:
+
+# ---- Q1 source -> destination case count -------------------------------- #
+- id: SM01
+  business_question: How many cases moved from KFI to Application?
+  subtype: transition
+  expect: DELIVER
+  must: ["2"]
+  must_not: ["1 loan"]
+  formulations:
+  - {id: SM01A, q: "How many cases moved from KFI to Application?"}
+  - {id: SM01B, q: "How many KFI cases progressed to Application?"}
+  - {id: SM01C, q: "How many cases went from KFI into Application?"}
+  - {id: SM01D, q: "What number of cases transitioned KFI to Application?"}
+
+# ---- Q2 source -> destination balance ----------------------------------- #
+- id: SM02
+  business_question: How much balance moved from Application to Offer?
+  subtype: transition
+  expect: DELIVER
+  must: ["1.3"]
+  must_not: []
+  formulations:
+  - {id: SM02A, q: "How much balance moved from Application to Offer?"}
+  - {id: SM02B, q: "What value progressed from Application to Offer?"}
+  - {id: SM02C, q: "How much pipeline moved from Application into Offer?"}
+  - {id: SM02D, q: "What amount transitioned from Application to Offer?"}
+
+# ---- Q3 completion flow, cases ------------------------------------------ #
+- id: SM03
+  business_question: How many cases moved from Offer to Completion?
+  subtype: transition
+  expect: DELIVER
+  must: ["1"]
+  must_not: []
+  formulations:
+  - {id: SM03A, q: "How many cases moved from Offer to Completion?"}
+  - {id: SM03B, q: "How many cases progressed from Offer into Completion?"}
+  - {id: SM03C, q: "What number of offers reached Completion?"}
+  - {id: SM03D, q: "How many cases advanced from Offer to Completed?"}
+
+# ---- Q4 completion flow, balance ---------------------------------------- #
+- id: SM04
+  business_question: How much balance moved from Offer to Completion?
+  subtype: transition
+  expect: DELIVER
+  must: ["800"]
+  must_not: []
+  formulations:
+  - {id: SM04A, q: "How much balance moved from Offer to Completion?"}
+  - {id: SM04B, q: "How much Offer-stage pipeline reached Completion?"}
+  - {id: SM04C, q: "What amount progressed from Offer to Completion?"}
+  - {id: SM04D, q: "What value went from Offer into Completed?"}
+
+# ---- Q5 new arrivals ----------------------------------------------------- #
+- id: SM05
+  business_question: How many new cases entered KFI?
+  subtype: new_arrival
+  expect: DELIVER
+  must: ["1"]
+  must_not: []
+  formulations:
+  - {id: SM05A, q: "How many new cases entered KFI?"}
+  - {id: SM05B, q: "How many new pipeline cases arrived in KFI?"}
+  - {id: SM05C, q: "What number of cases were new arrivals into KFI?"}
+  - {id: SM05D, q: "How many cases newly entered the KFI stage?"}
+
+# ---- Q6 stayers, cases --------------------------------------------------- #
+- id: SM06
+  business_question: How many cases stayed in Application?
+  subtype: stayer
+  expect: DELIVER
+  must: ["1"]
+  must_not: []
+  formulations:
+  - {id: SM06A, q: "How many cases stayed in Application?"}
+  - {id: SM06B, q: "How many Application cases remained in Application?"}
+  - {id: SM06C, q: "What number of cases stayed at Application stage?"}
+  - {id: SM06D, q: "How many cases persisted in Application?"}
+
+# ---- Q7 amount change on stayers ----------------------------------------- #
+- id: SM07
+  business_question: What was the amount change on cases that stayed in Application?
+  subtype: stayer_amount_change
+  expect: DELIVER
+  must: ["20"]
+  must_not: []
+  formulations:
+  - {id: SM07A, q: "What was the amount change on cases that stayed in Application?"}
+  - {id: SM07B, q: "How much did Application stayers change in value?"}
+  - {id: SM07C, q: "What was the balance amendment on cases remaining in Application?"}
+  - {id: SM07D, q: "How did the value of cases persisting in Application change?"}
+
+# ---- Q8 departures by destination ---------------------------------------- #
+- id: SM08
+  business_question: Where did cases leaving Offer go?
+  subtype: departure
+  expect: DELIVER
+  must: ["1"]
+  must_not: []
+  formulations:
+  - {id: SM08A, q: "Where did cases leaving Offer go?"}
+  - {id: SM08B, q: "Break down departures from Offer by destination."}
+  - {id: SM08C, q: "What happened to cases that left Offer?"}
+  - {id: SM08D, q: "Show the destinations of Offer-stage departures."}
+
+# ---- Q9 stage reconciliation --------------------------------------------- #
+- id: SM09
+  business_question: Reconcile Application stage this period.
+  subtype: reconciliation
+  expect: DELIVER
+  must: ["4"]
+  must_not: []
+  formulations:
+  - {id: SM09A, q: "Reconcile Application stage this period."}
+  - {id: SM09B, q: "Show opening, arrivals, departures and closing for Application."}
+  - {id: SM09C, q: "Reconcile the Application stage from opening to closing."}
+  - {id: SM09D, q: "Give me the Application stage reconciliation."}

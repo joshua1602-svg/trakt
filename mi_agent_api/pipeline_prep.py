@@ -384,6 +384,22 @@ def canonical_stage(value: Any) -> str:
     return _STAGE_CANON.get(_norm(value), "UNKNOWN")
 
 
+#: Funnel position of each bucket, so the canonical stage order is DERIVED from
+#: the one governed bucket map rather than restated as a second list.
+_BUCKET_ORDER = {"early": 0, "mid": 1, "late": 2, "completed": 3, "withdrawn": 4}
+
+
+def canonical_stage_order() -> Tuple[str, ...]:
+    """The governed stage set in funnel order, terminal states last.
+
+    Derived from ``_STAGE_BUCKET`` — the same single map ``canonical_stage``
+    normalises onto — so a product that adds a stage gets the ordering without
+    any caller declaring a second stage vocabulary.
+    """
+    return tuple(sorted(_STAGE_BUCKET,
+                        key=lambda s: (_BUCKET_ORDER.get(_STAGE_BUCKET[s], 9), s)))
+
+
 # Stages that are open and forecast-relevant (vs COMPLETED / WITHDRAWN / UNKNOWN).
 ACTIVE_STAGES = ("KFI", "APPLICATION", "OFFER")
 

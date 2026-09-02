@@ -109,8 +109,14 @@ def is_blank(x: Any) -> bool:
         return True
     if isinstance(x, float) and pd.isna(x):
         return True
+    # pandas' own missing singletons are NOT floats, and str(pd.NA) is "<NA>" —
+    # so a core column held in a nullable dtype (Float64/Int64/string) that is
+    # entirely empty used to pass CORE002 silently. Identity checks rather than
+    # pd.isna, which returns an ARRAY (not a truth value) for array-likes.
+    if x is pd.NA or x is pd.NaT:
+        return True
     s = str(x).strip()
-    return s == "" or s.lower() == "nan"
+    return s == "" or s.lower() in ("nan", "<na>", "nat")
 
 
 def is_nd(x: Any) -> bool:
@@ -296,12 +302,15 @@ def validate_core_presence(
         else:
             add_violation(vs, "CORE001", "error", c, None, "Missing required core_canonical field (column not present).")
 
-    if missing_cols:
-        # If columns are missing, we cannot safely do row-level checks for those columns.
-        return vs
+    # Row-level checks cannot run for a column that is not there — but that is a
+    # reason to skip THOSE columns, not every column. Returning here meant a
+    # single applicability-permitted absence (e.g. the originator identity, which
+    # only warns) suppressed the blank-value check for every other core field, so
+    # an entirely empty balance column passed CORE002 unnoticed.
+    missing = set(missing_cols)
 
     # 2) Blank values / ND values
-    for c in required:
+    for c in (f for f in required if f not in missing):
         meta = reg_fields.get(c, {}) or {}
         app = get_applicability(meta, portfolio_type)
         allowed_missing = bool(app.get("allowed_missing", False))

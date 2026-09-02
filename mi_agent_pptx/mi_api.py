@@ -60,6 +60,11 @@ class DashboardData:
     forecast: Dict[str, Any] = field(default_factory=dict)        # /mi/forecast/snapshot
     funded_evolution: Dict[str, Any] = field(default_factory=dict)
     pipeline_evolution: Dict[str, Any] = field(default_factory=dict)
+    #: Governed GROSS stage transitions between the latest weekly pipeline
+    #: extract and the one before it (/mi/insight/movement-detail,
+    #: detailType=PIPELINE_STAGE_TRANSITION). The deck renders this payload; it
+    #: never derives a transition, an arrival or a departure of its own.
+    stage_transitions: Dict[str, Any] = field(default_factory=dict)
     funnel: Dict[str, Any] = field(default_factory=dict)
     forecast_evolution: Dict[str, Any] = field(default_factory=dict)
     cohorts: Dict[str, Any] = field(default_factory=dict)
@@ -717,6 +722,9 @@ def build_dashboard_data(
                                 portfolio_context))
         data.pipeline_evolution = _guard(data, "pipeline_evolution",
                                          lambda: _pipeline_evo(prow, pipe_cid, history))
+        data.stage_transitions = _guard(
+            data, "stage_transitions",
+            lambda: _stage_transitions(prow, pipe_cid, history))
         data.funnel = _guard(data, "funnel", lambda: _funnel(prow, pipe_cid, history))
         data.forecast_evolution = _guard(data, "forecast_evolution",
                                          lambda: _forecast_evo(out_root, prow, cid, rid, history))
@@ -997,6 +1005,20 @@ def _funded_evo(out_root, cid, rid, funded_cuts, scope=None, context_id=None):
 def _pipeline_evo(prow, cid, history):
     from mi_agent_api import evolution
     return evolution.pipeline_evolution(prow, cid, None, historical_model=history)
+
+
+def _stage_transitions(prow, cid, history):
+    """The governed gross stage-transition detail for the latest weekly pair.
+
+    Same governed resolver the React panel reaches through
+    ``/mi/insight/movement-detail``, and the same ``historical_model`` the other
+    pipeline payloads pass, so it reads the frames this run has ALREADY prepared
+    rather than preparing them again under a different cache key. The deck
+    performs no transition arithmetic of its own.
+    """
+    from mi_agent_api import movement_detail
+    return movement_detail.resolve_stage_transition_detail(
+        prow, cid, historical_model=history)
 
 
 def _funnel(prow, cid, history):

@@ -83,6 +83,20 @@ class AssemblerAgentResult:
 # Routing helpers
 # --------------------------------------------------------------------------- #
 
+def _asset_pack_for(portfolio_type: str) -> Optional[str]:
+    """The asset pack registered for ``portfolio_type``, or None.
+
+    A portfolio type with no registered pack runs without the layer; that is a
+    supported state, not an error.
+    """
+    try:
+        from engine.orchestrator.trakt_run import ASSET_PACKS
+    except Exception:  # noqa: BLE001 — the layer is optional by design
+        return None
+    pack = ASSET_PACKS.get((portfolio_type or "").strip().lower())
+    return str(pack) if pack and Path(pack).exists() else None
+
+
 def build_regime_command(
     central_canonical: Union[str, Path],
     out_dir: Union[str, Path],
@@ -96,19 +110,33 @@ def build_regime_command(
     output_prefix: Optional[str] = None,
     allow_unreviewed: bool = False,
     python: Optional[str] = None,
+    product_defaults: Optional[str] = None,
 ) -> List[str]:
     """Build the command to run the EXISTING regime projector over the central
-    canonical. Orchestration only — the projector logic is unchanged."""
+    canonical. Orchestration only — the projector logic is unchanged.
+
+    ``product_defaults`` is the asset pack for this portfolio type — the
+    reusable product layer that states what is true of every loan of this KIND
+    regardless of who lends it (an equity release loan has no scheduled
+    maturity, no rate cap, no grace period). The projector has always accepted
+    it; this route never passed it, so every run reaching here was projected
+    without the product layer and every one of those facts arrived at the
+    regulator empty. Resolved from the SAME registry of asset packs the
+    orchestrator uses, so a portfolio type gains its pack in one place.
+    """
     cmd = [
         python or sys.executable, str(_REGIME_PROJECTOR), str(central_canonical),
         "--regime", regime,
         "--registry", registry or str(_CONFIG_ROOT / "system" / "fields_registry.yaml"),
         "--enum-mapping", enum_mapping or str(_CONFIG_ROOT / "system" / "enum_mapping.yaml"),
-        "--config", config or str(_CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"),
+        "--config", config or "",
         "--template-order", template_order or str(_CONFIG_ROOT / "system" / "esma_code_order.yaml"),
         "--portfolio-type", portfolio_type,
         "--output-dir", str(out_dir),
     ]
+    pack = product_defaults or _asset_pack_for(portfolio_type)
+    if pack:
+        cmd += ["--product-defaults", str(pack)]
     if output_prefix:
         cmd += ["--output-prefix", output_prefix]
     if allow_unreviewed:

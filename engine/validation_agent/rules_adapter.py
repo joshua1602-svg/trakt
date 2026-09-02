@@ -79,7 +79,7 @@ def load_field_universe(universe_path: str) -> Dict[str, Dict[str, Any]]:
     Returns ``{code: {field_name, nd1_4_allowed, nd5_allowed, nd_allowed, ...}}``.
     The ND envelope here (``nd1_4_allowed`` / ``nd5_allowed``) is the authoritative
     regulatory source and is used as fallback metadata when a code has no full
-    runtime rule in ``annex2_delivery_rules.yaml → field_rules``.
+    entry in the effective Annex 2 contract.
     """
     try:
         import yaml
@@ -101,66 +101,44 @@ def load_field_universe(universe_path: str) -> Dict[str, Dict[str, Any]]:
 
 
 def build_regime_index(
-    regime_cfg: Optional[dict],
+    regime_cfg: Optional[dict] = None,
     *,
     field_universe: Optional[Dict[str, Dict[str, Any]]] = None,
     code_to_canonical: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    """Index regime field rules by canonical field name (projected_source_field).
+    """Index the effective Annex 2 contract by canonical field name.
 
-    ``field_rules`` from ``annex2_delivery_rules.yaml`` are the **active runtime
-    rules**. When ``field_universe`` (+ a ``code_to_canonical`` map) is supplied,
-    the authoritative workbook ND envelope is merged in two ways:
+    The contract is derived from the sources that own each fact — the field
+    universe's ND envelope, the registry's canonical binding, the workbook's
+    multiplicity and the XSD's patterns — so a canonical field reports as exactly
+    one ESMA code here and in delivery. It used to be indexed from a
+    hand-maintained delivery-rules file, which bound two canonical fields to the
+    wrong code and disagreed with the workbook on 28 mandatory flags.
 
-      * for codes that already have a runtime rule, an empty ``nd_allowed`` is
-        backfilled from the workbook ND flags (the rule still wins where set);
-      * for codes that have **no** runtime rule at all (e.g. RREL15, RREL24),
-        a fallback entry is synthesised so ND/default eligibility is visible at
-        runtime without hand-authoring a full rule.
-
-    ``nd_source`` records where the ND envelope came from (``field_rules`` or
-    ``field_universe``) for diagnostic evidence.
+    The keyword arguments are accepted and ignored: callers that still pass a
+    loaded rules document or a universe get the derived contract regardless.
     """
-    field_universe = field_universe or {}
-    code_to_canonical = code_to_canonical or {}
+    from engine.regime_contract.annex2_contract import contract
 
     out: Dict[str, Dict[str, Any]] = {}
-    for code, rule in ((regime_cfg or {}).get("field_rules", {}) or {}).items():
-        rule = rule or {}
-        canonical = rule.get("projected_source_field", "")
-        if canonical:
-            nd_allowed = rule.get("nd_allowed", []) or []
-            nd_source = "field_rules"
-            wb = field_universe.get(str(code), {})
-            if not nd_allowed and wb.get("nd_allowed"):
-                nd_allowed = wb["nd_allowed"]
-                nd_source = "field_universe"
-            out[canonical] = {
-                "esma_code": code,
-                "mandatory": bool(rule.get("mandatory", False)),
-                "enforce_presence": bool(rule.get("enforce_presence", False)),
-                "nd_allowed": nd_allowed,
-                "default_allowed": bool(rule.get("default_allowed", False)),
-                "regex": (rule.get("validators", {}) or {}).get("regex", ""),
-                "nd_source": nd_source,
-                "rule_source": "field_rules",
-            }
-
-    # Fallback: synthesise entries for workbook codes with no runtime rule so the
-    # ND envelope is visible to validation/diagnostics. field_rules always wins.
-    for code, wb in field_universe.items():
-        canonical = code_to_canonical.get(str(code), "")
-        if not canonical or canonical in out:
+    for fc in contract().fields.values():
+        if not fc.canonical_field:
             continue
-        out[canonical] = {
-            "esma_code": code,
-            "mandatory": False,
-            "enforce_presence": False,
-            "nd_allowed": wb.get("nd_allowed", []) or [],
+        out[fc.canonical_field] = {
+            "esma_code": fc.esma_code,
+            "mandatory": bool(fc.mandatory),
+            "enforce_presence": bool(fc.enforce_presence),
+            "nd_allowed": list(fc.nd_allowed),
+            # A value is never defaulted by the contract: defaults belong to the
+            # product pack, the client configuration and approved decisions,
+            # which reach the frame before validation sees it.
             "default_allowed": False,
-            "regex": "",
+            "regex": fc.pattern,
+            # The historical diagnostic labels. Both are now always the same:
+            # the no-data envelope is the workbook-derived field universe's, and
+            # the entry is the derived contract's.
             "nd_source": "field_universe",
-            "rule_source": "field_universe",
+            "rule_source": "regime_contract",
         }
     return out
 
@@ -368,6 +346,67 @@ def validate_uniqueness(df: pd.DataFrame, id_fields: List[str]) -> List[Dict[str
 # --------------------------------------------------------------------------- #
 # Cross-field business rules
 # --------------------------------------------------------------------------- #
+
+def validate_core_canonical_presence(
+    df: pd.DataFrame,
+    registry_fields: Dict[str, Any],
+    portfolio_type: str,
+) -> List[Dict[str, Any]]:
+    """Enforce the canonical core-field contract at Gate 3.
+
+    This does NOT define a second core-field list. It reuses the authoritative
+    definition that already lives in :mod:`engine.gate_3_validation.validate_canonical`
+    — ``core_canonical: true`` in the field registry, scoped to the run's
+    portfolio type by ``select_fields_for_portfolio`` and relaxed only by each
+    field's own ``applicability`` block — and translates its CORE001/CORE002
+    violations into the Validation Agent's result rows.
+
+    Before this, the authoritative validator was reachable only from the Gate 3
+    *CLI* and from the OCC Agent's rehearsal path, so the agentic chain could
+    return ``ready_for_validation_complete`` on a canonical with no balance at
+    all. An ``error`` violation is blocking for validation, which is what makes
+    readiness fail; a ``warning`` (an applicability-permitted absence) is not.
+    """
+    core_required = vc.get_core_required_fields(
+        vc.select_fields_for_portfolio({"fields": registry_fields}, portfolio_type))
+    violations = vc.validate_core_presence(
+        df, core_required, registry_fields, portfolio_type)
+
+    # One result row per (field, rule) — a CORE002 violation is raised per row by
+    # the authoritative validator, so collapse to a count rather than emitting
+    # thousands of rows for one empty column.
+    grouped: Dict[tuple, Dict[str, Any]] = {}
+    for v in violations:
+        key = (v.rule_id, v.field, v.severity)
+        entry = grouped.setdefault(key, {"count": 0, "messages": []})
+        entry["count"] += 1
+        if len(entry["messages"]) < 5:
+            entry["messages"].append(v.message)
+
+    results: List[Dict[str, Any]] = []
+    row_count = int(len(df))
+    checked: set = set()
+    for (rule_id, field, severity), entry in sorted(grouped.items()):
+        blocking = severity == "error"
+        checked.add(field)
+        results.append(_result(
+            f"{rule_id}-{field}", field, field, "", "core_canonical_presence",
+            "fail" if blocking else "warning", severity,
+            row_count, entry["count"] if blocking else 0,
+            0 if blocking else entry["count"],
+            entry["messages"], blocking, blocking,
+            notes=f"{rule_id}: authoritative core_canonical contract "
+                  f"(portfolio_type={portfolio_type or 'unscoped'})"))
+
+    # A passing row per clean core field, so the contract is visible in the
+    # validation results even when nothing is wrong.
+    for field in sorted(set(core_required) - checked):
+        results.append(_result(
+            f"CORE-OK-{field}", field, field, "", "core_canonical_presence",
+            "pass", "info", row_count, 0, 0, [], False, False,
+            notes="core_canonical field present and populated"))
+    return results
+
 
 def validate_business_rules(df: pd.DataFrame) -> List[Dict[str, Any]]:
     """Canonical, configurable cross-field business rules checkable at this stage.

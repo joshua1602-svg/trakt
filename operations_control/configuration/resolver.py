@@ -328,8 +328,6 @@ class EffectiveConfigResolver:
         return {
             "registry": str(dest / "config/system/fields_registry.yaml"),
             "aliases_dir": str(dest / "config/system"),
-            "regime_config": str(dest /
-                                 "config/regime/annex2_delivery_rules.yaml"),
             "asset_config": str(dest /
                                 "config/asset/product_defaults_ERM.yaml"),
             "client_config": str(client_cfg),

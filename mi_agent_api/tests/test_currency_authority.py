@@ -42,12 +42,28 @@ def _config(tmp_path: Path, body: str) -> str:
 # The governed configuration is the authority
 # --------------------------------------------------------------------------- #
 def test_client_1_gbp_comes_from_the_governed_client_configuration():
-    """The shipped client configuration declares it; nothing infers it."""
-    location = currency_mod.client_config_path("ERE")
-    assert location and location.endswith(".yaml")
+    """The shipped client configuration declares it; nothing infers it.
+
+    CHANGED DELIBERATELY (main). This resolved through ``client_id="ERE"``,
+    which reached the shipped file only via a fallback to the incumbent lender's
+    config for ANY identified client — the fallback main has since removed,
+    because it meant a second client silently reported under ERE Funding's
+    configured currency. The governed fact under test is unchanged: the shipped
+    configuration declares GBP, and it answers for the client it is named for.
+    """
+    location = currency_mod.client_config_path("ERM_UK")
+    assert location and location.endswith("config_client_ERM_UK.yaml")
     doc = currency_mod._load_client_config(location)
     assert doc.get("portfolio", {}).get("base_currency") == "GBP"
-    assert currency_mod.governed_currency_code("ERE") == "GBP"
+    assert currency_mod.governed_currency_code("ERM_UK") == "GBP"
+
+
+def test_a_client_with_no_configuration_of_its_own_inherits_nothing():
+    """The removed fallback, pinned as removed: an identified client with no
+    governed configuration gets no governed currency, rather than the incumbent
+    lender's. It falls through to the tape and the platform default."""
+    assert currency_mod.client_config_path("some_other_lender") is None
+    assert currency_mod.governed_currency_code("some_other_lender") is None
 
 
 def test_governed_configuration_outranks_the_tape(tmp_path, monkeypatch):

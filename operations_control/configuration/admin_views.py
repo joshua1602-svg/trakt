@@ -69,7 +69,9 @@ REGIME_MODEL: Dict[str, Dict[str, Any]] = {
         "description": "Underlying exposure reporting for non-ABCP "
                        "securitisations.",
         "field_universe_file": "config/regime/annex2_field_universe.yaml",
-        "delivery_rules_file": "config/regime/annex2_delivery_rules.yaml",
+        # The delivery contract is DERIVED from the field universe, the fields
+        # registry, the mapping workbook and the XSD — there is no file.
+        "delivery_rules_file": "",
         "code_order_file": "config/system/esma_code_order.yaml",
         "schema_contract_file": "config/delivery/annex2_xml_structure_contract.yaml",
     },
@@ -109,7 +111,6 @@ FILE_LABELS: Dict[str, str] = {
     "config/system/onboarding_modes.yaml": "Onboarding modes",
     "config/system/run_context_policy.yaml": "Run policy",
     "config/regime/annex2_field_universe.yaml": "Annex 2 field list",
-    "config/regime/annex2_delivery_rules.yaml": "Annex 2 delivery rules",
     "config/regime/onboarding_standing_fields.yaml": "Standing field definitions",
     "config/asset/product_profiles.yaml": "Product profiles",
     "config/asset/product_defaults_ERM.yaml": "Equity release defaults",
@@ -238,13 +239,13 @@ def describe_regimes(pkgs: ConfigPackageStore,
     out: List[Dict[str, Any]] = []
     for regime_id, spec in REGIME_MODEL.items():
         universe = _yaml_of(active, spec["field_universe_file"])
-        rules = _yaml_of(active, spec["delivery_rules_file"])
+        from engine.regime_contract.annex2_contract import (
+            as_delivery_rules, contract)
+        rules = as_delivery_rules()
         field_rules = rules.get("field_rules") or {}
         nd_allowed = sorted({nd for r in field_rules.values()
                              if isinstance(r, dict)
                              for nd in (r.get("nd_allowed") or [])})
-        recon = rules.get("reconciliation_scope") or {}
-        default_policy = rules.get("default_policy") or {}
         schema = _schema_metadata(repo, spec.get("schema_contract_file", ""))
         code_order = _code_order_metadata(pkgs, spec.get("code_order_file", ""))
         compatible = [{"id": aid, "label": a["label"]}
@@ -258,7 +259,7 @@ def describe_regimes(pkgs: ConfigPackageStore,
             "description": spec["description"],
             "layer": LAYER_REGIME,
             "active_version": active["version"],
-            "package_version": rules.get("version"),
+            "package_version": None,     # derived, so it has no version of its own
             "status": active.get("status", STATUS_ACTIVE),
             "validated": bool(active.get("validated")),
             "draft_version": (draft or {}).get("version"),
@@ -270,10 +271,11 @@ def describe_regimes(pkgs: ConfigPackageStore,
             },
             "code_order": code_order,
             "validation_policy": {
-                "unknown_values": default_policy.get("unknown_values") or "",
-                "apply_defaults_only_if_explicit":
-                    bool(default_policy.get("apply_defaults_only_if_explicit")),
-                "deferred_fields": recon.get("deferred_fields") or [],
+                # A value the regulator's own code list does not contain is
+                # always rejected — an invariant of the delivery, not a setting.
+                "unknown_values": "reject",
+                "apply_defaults_only_if_explicit": True,
+                "attribute_only_fields": contract().non_emitting_codes(),
                 "rule_count": len(field_rules),
             },
             "no_data_policy": {

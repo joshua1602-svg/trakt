@@ -20,7 +20,7 @@ Date: 2026-06-16
      placement from `code_order` / `esma_model_structure` / ESMA code, NOT
      `workbook_semantic`) and validates against the XSD.
 - **Commands run:**
-  - Onboarding (corrected): `python -m engine.onboarding_agent.workflow ... --regime-config config/regime/annex2_delivery_rules.yaml ...`
+  - Onboarding (corrected): `python -m engine.onboarding_agent.workflow ...` — the Annex 2 contract is derived, so no `--regime-config` is needed
   - Gate 4b: `python engine/gate_4b_delivery/annex2_delivery_normalizer.py --input <projected.csv> --rules <rules.yaml> --output-dir <dir>`
   - Gate 5: `python engine/gate_5_delivery/xml_builder_annex2.py --input <delivery_ready.csv> --output annex2.xml --mapping-workbook "DRAFT1auth.099.001.04_non-ABCP Underlying Exposure Report_Version_1.3.1.xlsx" --sheet DRAFT1auth.099.001.04 --code-order-yaml config/system/esma_code_order.yaml --xsd config/system/DRAFT1auth.099.001.04_1.3.0.xsd`
   - Fixtures: projected CSV `synthetic_demo/output/SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv`.

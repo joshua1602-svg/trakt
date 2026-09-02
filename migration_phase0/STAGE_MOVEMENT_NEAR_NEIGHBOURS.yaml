@@ -1,0 +1,57 @@
+# =========================================================================
+# Stage-movement ADVERSARIAL NEAR NEIGHBOURS — FROZEN before execution.
+# =========================================================================
+#
+# Same format and same oracle as `CFO_ACCEPTANCE_BANK.yaml`. These questions
+# MUST NOT be captured by any future stage-movement support.
+#
+# THE PROTECTED ASSET HERE IS THE ROUTE, NOT ONLY THE VERDICT. Each of these
+# resolves today to a governed owner — pipeline evolution, the origination
+# funnel, cohort conversion, funded movement, concentration, forecast, the
+# point-in-time engine. The observed route for every one is recorded in
+# docs/reports/mi_query_stage_movement_question_bank.md section 10 and is the
+# regression baseline: an implementation that changes any of them has widened
+# generic "movement" and must be stopped under the pre-registered abort
+# condition, EVEN IF the verdict below still passes.
+#
+# `expect` is the governed-availability judgement, written before execution.
+version: 1
+questions:
+
+# ---- pipeline stock and evolution: must stay with their owners ------------ #
+- {q: "How has pipeline balance moved this month?", family: N_pipeline_evolution, expect: DELIVER}
+- {q: "Show pipeline evolution.", family: N_pipeline_evolution, expect: DELIVER}
+- {q: "What is pipeline by stage?", family: N_stage_stock, expect: DELIVER}
+- {q: "Show pipeline amount by stage.", family: N_stage_stock, expect: DELIVER}
+- {q: "How much pipeline is currently in Offer?", family: N_stage_stock, expect: DELIVER}
+- {q: "What is the current pipeline amount?", family: N_stage_stock, expect: DELIVER}
+- {q: "How much balance is in Application?", family: N_stage_stock, expect: DELIVER}
+- {q: "What is the Offer-stage balance?", family: N_stage_stock, expect: DELIVER}
+- {q: "What percentage of pipeline is in KFI?", family: N_stage_stock, expect: DELIVER}
+- {q: "Show weekly pipeline cases.", family: N_pipeline_evolution, expect: DELIVER}
+- {q: "How has the pipeline grown?", family: N_pipeline_evolution, expect: DELIVER}
+- {q: "Show pipeline case count over time.", family: N_pipeline_evolution, expect: DELIVER}
+
+# ---- conversion: the canonical cohort-tracked owner ----------------------- #
+- {q: "What is the conversion rate?", family: N_conversion, expect: DELIVER}
+- {q: "How has conversion changed?", family: N_conversion, expect: DELIVER}
+- {q: "What is the KFI to completion conversion rate?", family: N_conversion, expect: DELIVER}
+
+# ---- funded movement: must never become pipeline stage movement ----------- #
+- {q: "What is funded balance movement?", family: N_funded_movement, expect: DELIVER}
+- {q: "Why did funded balance increase?", family: N_funded_movement, expect: DELIVER}
+- {q: "Show movement by region.", family: N_funded_movement, expect: DELIVER}
+- {q: "Show balance movement by portfolio.", family: N_funded_movement, expect: DELIVER}
+- {q: "How many funded loans were added?", family: N_funded_movement, expect: DELIVER}
+- {q: "How did the book move last month?", family: N_funded_movement, expect: DELIVER}
+
+# ---- other governed "movement" senses that must not be broadened ---------- #
+- {q: "What is movement in LTV?", family: N_other_movement, expect: DELIVER}
+- {q: "How has regional concentration moved?", family: N_other_movement, expect: DELIVER}
+- {q: "How has average LTV changed since last month?", family: N_other_movement, expect: DELIVER}
+- {q: "Show balance by region.", family: N_other_movement, expect: DELIVER}
+
+# ---- forecast: forward, not historical movement --------------------------- #
+- {q: "What is the forecast funded balance?", family: N_forecast, expect: DELIVER}
+- {q: "How much of the pipeline is expected to complete?", family: N_forecast, expect: DELIVER}
+- {q: "When will we reach 700 loans?", family: N_forecast, expect: DELIVER}

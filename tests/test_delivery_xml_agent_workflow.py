@@ -37,7 +37,9 @@ from engine.delivery_xml_agent import delivery_xml_agent as da
 from engine.delivery_xml_agent.delivery_xml_agent import ProjectionHandoffError
 
 REGISTRY = str(_REPO_ROOT / "config" / "system" / "fields_registry.yaml")
-REGIME = str(_REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml")
+from tests.annex2_contract_fixture import contract_path
+
+REGIME = contract_path()
 UNIVERSE = str(_REPO_ROOT / "config" / "regime" / "annex2_field_universe.yaml")
 
 # --------------------------------------------------------------------------- #

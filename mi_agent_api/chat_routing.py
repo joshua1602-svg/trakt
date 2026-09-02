@@ -44,6 +44,7 @@ from . import period_change_route as _period_change
 from . import analytical_plan as _plan
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
+from . import stage_movement_query as _stage_movement
 from . import workspace as _workspace
 from .recogniser_registry import (
     REGISTRY,
@@ -3729,6 +3730,20 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 semantics=r.semantics,
                 interpretation=r.resolve_interpretation())),
+
+        # 12. Pipeline stage MOVEMENT — the governed stage-transition capability
+        #     as a chat consumer. LAST, and on DEFAULT_CONFIDENCE, so every
+        #     recogniser above keeps every question it already owns; a stage
+        #     question only reaches here because nothing else claimed it.
+        #
+        #     It answers ONE thing nothing above can: a GROSS case-level
+        #     movement between the two latest governed weekly extracts. Measured
+        #     at the starting SHA, "How many cases went from KFI into
+        #     Application?" was answered with the CURRENT KFI STOCK — three
+        #     loans, for a question whose governed answer is two transitions.
+        #     Stock standing in for a transition is the substitution this entry
+        #     removes; it computes none of the analysis itself.
+        _stage_movement.recogniser(),
     ])
     return registry
 

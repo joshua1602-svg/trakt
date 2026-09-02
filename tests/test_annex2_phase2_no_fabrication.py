@@ -9,9 +9,14 @@ rules. Two properties matter and both are pinned here:
    routed to NoData where the mapping permits one, and otherwise the run fails
    visibly. It is never replaced with a plausible-looking substitute.
 2. **The regulatory answer is configuration.** "There is no secondary obligor,
-   so this is not applicable" is now a readable, reviewable rule in
-   ``config/regime/annex2_delivery_rules.yaml`` — not a hardcoded line in an
+   so this is not applicable" is now a readable, reviewable entry in
+   ``config/asset/product_defaults_ERM.yaml`` — not a hardcoded line in an
    XML builder.
+
+The regime rules file those points once named has since been retired: Annex 2
+requirements are derived from the field universe, the fields registry, the
+mapping workbook and the XSD, and the VALUES — the no-data answers — live in the
+asset pack, the client configuration and approved operator decisions.
 
 Output neutrality is asserted end-to-end by the 105/107 benchmark
 (``docs/annex2_delivery_migration.md``), whose XML SHA-256 is unchanged.
@@ -36,7 +41,20 @@ if str(_REPO) not in sys.path:
 
 _NORMALIZER = _REPO / "engine" / "gate_4b_delivery" / "annex2_delivery_normalizer.py"
 _BUILDER = _REPO / "engine" / "gate_5_delivery" / "xml_builder_annex2.py"
-_RULES = _REPO / "config" / "regime" / "annex2_delivery_rules.yaml"
+_ASSET_PACK = _REPO / "config" / "asset" / "product_defaults_ERM.yaml"
+
+
+def _contract_rules() -> dict:
+    """The effective Annex 2 contract, in the delivery-rules document shape.
+
+    Annex 2 requirements are derived from the field universe, the fields
+    registry, the mapping workbook and the XSD — there is no rules file. What
+    the contract deliberately does NOT carry is values: a default or a no-data
+    code belongs to the asset pack, the client configuration or an approved
+    operator decision, so the tests below look for those in their own layers.
+    """
+    from engine.regime_contract.annex2_contract import as_delivery_rules
+    return as_delivery_rules()
 _XSD = _REPO / "config" / "system" / "DRAFT1auth.099.001.04_1.3.0.xsd"
 
 
@@ -72,14 +90,30 @@ class TestRrel12IsNeverFabricated(unittest.TestCase):
         self.assertEqual(report["coercions"]["count"], 0)
 
     def test_an_invalid_value_never_becomes_2026(self):
-        """The exact defect, pinned."""
-        for bad in ("not-a-year", "20211", "ND5", "21", "two thousand"):
+        """The exact defect, pinned.
+
+        ``ND5`` is deliberately not in this list: a no-data code is the OTHER
+        branch of the same schema choice, not a malformed year, and coercing it
+        away left the field blank and the builder refusing a value that was
+        correct. It is covered by its own test below.
+        """
+        for bad in ("not-a-year", "20211", "21", "two thousand"):
             BUILD._INSTR.reset()
             result = BUILD._coerce_record_value_for_branch("RREL12", bad)
             self.assertNotEqual(result, "2026",
                                 f"{bad!r} was fabricated into a year")
             self.assertEqual(result, "",
                              "an unplaceable value must be routed, not altered")
+
+    def test_a_permitted_no_data_code_passes_through(self):
+        """RREL12's schema type is a choice: a four-digit year, or no-data."""
+        for nd in ("ND1", "ND5"):
+            BUILD._INSTR.reset()
+            self.assertEqual(BUILD._coerce_record_value_for_branch("RREL12", nd), nd)
+            self.assertEqual(
+                BUILD._INSTR.to_dict()["routed_to_nodata"]["count"], 0,
+                "carrying an approved no-data code forward is not an "
+                "automatic intervention")
 
     def test_the_hardcoded_year_is_gone_from_the_source(self):
         source = _BUILDER.read_text(encoding="utf-8")
@@ -157,8 +191,8 @@ class TestUnplaceableValuesFailVisibly(unittest.TestCase):
             BUILD._ensure_scndry_oblgr_incm_defaults(record, ns, order_index)
         message = str(ctx.exception)
         self.assertIn("RREL20", message)
-        self.assertIn("annex2_delivery_rules.yaml", message,
-                      "the refusal must point at the governed rule")
+        self.assertIn("effective Annex 2 contract", message,
+                      "the refusal must point at the governed contract")
         # ...and it must not have written the node it refused to decide.
         self.assertEqual(
             root.xpath("//*[local-name()='NoData' and text()='ND5']"), [])
@@ -178,7 +212,9 @@ class TestUnplaceableValuesFailVisibly(unittest.TestCase):
 class TestSecondaryIncomeRulesAreDeclared(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))["field_rules"]
+        cls.rules = _contract_rules()["field_rules"]
+        cls.pack = yaml.safe_load(_ASSET_PACK.read_text(encoding="utf-8")) or {}
+        cls.pack_nd = cls.pack.get("nd_defaults") or {}
 
     def test_both_codes_are_declared(self):
         for code in ("RREL20", "RREL21"):
@@ -193,11 +229,10 @@ class TestSecondaryIncomeRulesAreDeclared(unittest.TestCase):
         methodology. Full reasoning in
         tests/test_annex2_secondary_income_applicability.py.
         """
-        for code in ("RREL20", "RREL21"):
-            rule = self.rules[code]
-            self.assertTrue(rule["default_allowed"])
-            self.assertEqual(rule["default_value"], "ND1")
-            self.assertIn("ND1", rule["nd_allowed"])
+        for code, canonical in (("RREL20", "secondary_income"),
+                                ("RREL21", "secondary_income_verification")):
+            self.assertEqual(self.pack_nd.get(canonical), "ND1", canonical)
+            self.assertIn("ND1", self.rules[code]["nd_allowed"], code)
 
     def test_the_whole_income_family_shares_one_rationale(self):
         """Primary and secondary income are treated alike, because the reason
@@ -207,14 +242,16 @@ class TestSecondaryIncomeRulesAreDeclared(unittest.TestCase):
         nd5_allowed FALSE — so a secondary field answering ND5 on the identical
         rationale would be inconsistent.
         """
-        for code in ("RREL19", "RREL20", "RREL21"):
-            self.assertEqual(self.rules[code]["default_value"], "ND1", code)
+        for canonical in ("primary_income_verification", "secondary_income",
+                          "secondary_income_verification"):
+            self.assertEqual(self.pack_nd.get(canonical), "ND1", canonical)
 
     def test_nd5_stays_permitted_even_though_it_is_not_the_default(self):
-        """The workbook allows ND5 here; configuration chooses ND1.
+        """The workbook allows ND5 here; the ASSET PACK chooses ND1.
 
         A different book whose secondary-income field genuinely does not apply
-        can still declare ND5 without a code change.
+        can still declare ND5 without a code change — the regulator's envelope
+        is wider than the product's choice, and the contract states the envelope.
         """
         for code in ("RREL20", "RREL21"):
             self.assertIn("ND5", self.rules[code]["nd_allowed"])
@@ -224,6 +261,9 @@ class TestSecondaryIncomeRulesAreDeclared(unittest.TestCase):
                          "ScndryOblgrIncm/IncmVal")
         self.assertEqual(self.rules["RREL21"]["workbook_semantic"],
                          "ScndryOblgrIncm/Vrfctn")
+        # ...and they are read off the workbook path, not typed in.
+        from engine.regime_contract import workbook_index as _wb
+        self.assertTrue(_wb.value_path("RREL20").endswith("ScndryOblgrIncm/IncmVal"))
 
     def test_the_projected_source_fields_are_named(self):
         self.assertEqual(self.rules["RREL20"]["projected_source_field"],
@@ -255,11 +295,25 @@ class TestSecondaryIncomeRulesAreDeclared(unittest.TestCase):
         """RREL20 is IncmVal, a monetary amount — not a {LIST} field."""
         self.assertNotIn("enum_map", self.rules["RREL20"].get("transform") or {})
 
-    def test_they_do_not_enforce_a_projected_source(self):
-        """No canonical source exists; requiring one would fail every run."""
+    def test_the_schema_requires_them_and_the_asset_pack_answers(self):
+        """The schema's requirement and the product's answer, kept apart.
+
+        These codes ARE mandatory — auth.099 says so, and the contract now says
+        what the schema says rather than what a rule file once claimed. What
+        makes a run pass is not a softened requirement but the asset pack's
+        answer: equity-release underwriting does not use borrower income, so
+        the product declares ND1 and the projector applies it before delivery.
+        """
+        # RREL21 is [1..1] in the workbook; RREL20 has an optional branch. The
+        # contract reports each as the workbook does, rather than flattening
+        # both to whatever a rule file happened to say.
+        from engine.regime_contract import workbook_index as _wb
         for code in ("RREL20", "RREL21"):
-            self.assertFalse(self.rules[code].get("enforce_presence", False))
-            self.assertFalse(self.rules[code].get("mandatory", False))
+            self.assertEqual(self.rules[code]["mandatory"],
+                             _wb.is_mandatory(code), code)
+        self.assertTrue(self.rules["RREL21"]["mandatory"])
+        for canonical in ("secondary_income", "secondary_income_verification"):
+            self.assertEqual(self.pack_nd.get(canonical), "ND1", canonical)
 
     def test_the_xsd_actually_mandates_the_element(self):
         """The basis for defaulting rather than omitting, read from the schema."""
@@ -451,7 +505,7 @@ class TestFieldProvenanceIsReported(unittest.TestCase):
         ``canonical_transform.py`` — the stage that POPULATES this field —
         documents the opposite policy outright.
         """
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+        rules = _contract_rules()
         rule = rules["field_rules"]["RREL12"]
         transform = rule.get("transform") or {}
         self.assertNotIn("geography_map", transform,
@@ -465,7 +519,7 @@ class TestFieldProvenanceIsReported(unittest.TestCase):
         Any rule translating a readable region label into a bare year is
         inventing a classification vintage from something that cannot imply one.
         """
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+        rules = _contract_rules()
         offenders = []
         for code, rule in (rules.get("field_rules") or {}).items():
             if not isinstance(rule, dict):
@@ -486,46 +540,54 @@ class TestFieldProvenanceIsReported(unittest.TestCase):
         worse than the fabrication: a region label would reach Gate 5 unchecked
         instead of being caught at Gate 4b.
         """
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+        rules = _contract_rules()
         pattern = (rules["field_rules"]["RREL12"].get("validators") or {}).get("regex")
-        self.assertTrue(pattern, "the RREL12 year guard must remain declared")
-        for good in ("2021", "2013", "ND1"):
+        self.assertTrue(pattern, "the RREL12 year guard must remain")
+        # ND is handled before validators, so the pattern guards VALUES only.
+        for good in ("2021", "2013"):
             self.assertTrue(re.fullmatch(pattern, good), good)
         for bad in ("West Midlands", "London", "GBZZZ", "TLG31", "20211"):
             self.assertIsNone(re.fullmatch(pattern, bad), bad)
 
     def test_an_unmappable_rrel12_value_fails_rather_than_becoming_a_year(self):
         """Behavioural: the governed failure, end to end through Gate 4b."""
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
-        only = {"defaults": rules.get("defaults", {}),
-                "field_rules": {"RREL12": rules["field_rules"]["RREL12"]}}
+        rules = _contract_rules()
+        only = {"field_rules": {"RREL12": rules["field_rules"]["RREL12"]}}
         frame = pd.DataFrame({"RREL12": ["2021", "West Midlands", "ND1", ""]})
         out, issues, summary = NORM.normalize_delivery(frame, only)
 
         self.assertEqual(list(out["RREL12"]), ["2021", "West Midlands", "ND1", ""],
                          "no value may be substituted, not even the invalid one")
         errors = [i for i in issues if i.field == "RREL12" and i.severity == "error"]
-        self.assertEqual([i.row_index for i in errors], [1])
-        self.assertEqual(errors[0].issue_type, "pattern")
+        by_row = {i.row_index: i.issue_type for i in errors}
+        # Row 1 is unrepresentable; row 3 is blank, and RREL12 is mandatory in
+        # the workbook — so Gate 4b reports BOTH, which is the point: what Gate 5
+        # would refuse is refused here first.
+        self.assertEqual(by_row, {1: "pattern", 3: "mandatory_missing"})
         self.assertEqual(summary["preflight"]["status"], "FAIL",
                          "an unrepresentable value must fail the run")
         self.assertEqual(
             summary["delivery_instrumentation"]["coercions"]["count"], 0,
             "nothing was invented")
 
-    def test_the_production_rules_declare_exactly_two_defaulted_codes(self):
-        """Pins the benchmark's 105 + 2. A third would change the headline."""
-        rules = yaml.safe_load(_RULES.read_text(encoding="utf-8"))
+    def test_the_contract_declares_no_defaults_at_all(self):
+        """Values are not the regime's to give.
+
+        The benchmark's 105 + 2 split came from two ND defaults written into the
+        regime rules. Those decisions now sit in the asset pack, where "for an
+        equity release book, secondary income is ND1" is a statement about the
+        product rather than about ESMA Annex 2. The contract states only what the
+        regulator permits, so it carries no value for any code.
+        """
+        rules = _contract_rules()
         defaulted = sorted(
             code for code, rule in (rules.get("field_rules") or {}).items()
             if isinstance(rule, dict)
-            and rule.get("default_allowed")
-            and not rule.get("enforce_presence", rule.get("mandatory", False))
-            and str(rule.get("default_value") or "").strip())
-        self.assertEqual(defaulted, ["RREL20", "RREL21"],
-                         "the set of rule-populated Annex 2 fields changed; "
-                         "re-state the benchmark split in "
-                         "docs/annex2_delivery_migration.md")
+            and (rule.get("default_allowed") or rule.get("default_value")))
+        self.assertEqual(defaulted, [],
+                         "the Annex 2 contract must carry no values; a default "
+                         "belongs to the asset pack, the client configuration "
+                         "or an approved operator decision")
 
 
 # --------------------------------------------------------------------------- #

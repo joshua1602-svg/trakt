@@ -3,6 +3,7 @@ import { NavLink, Link } from "react-router-dom";
 import {
   Home,
   ListChecks,
+  MessageSquare,
   GitBranch,
   BookOpen,
   Clock,
@@ -37,6 +38,9 @@ const MANUAL_FIRST_NAV: NavEntry[] = [
   { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
   // The concentration-test review surface: client covenants become governed tests.
   { to: "/concentration", label: copy.nav.concentration, icon: Gauge, end: false },
+  // Live MI Query usage — what real users asked and whether the answers were
+  // good. A calibration surface, not the system dashboard.
+  { to: "/mi-queries", label: copy.nav.miQueries, icon: MessageSquare, end: false },
 ];
 
 /**
@@ -50,6 +54,9 @@ const AGENT_FIRST_NAV: NavEntry[] = [
   { to: "/onboarding", label: copy.nav.onboarding, icon: Building2, end: false },
   // Onboarding produces the proposals; this is where they are decided.
   { to: "/concentration", label: copy.nav.concentration, icon: Gauge, end: false },
+  // Live MI Query usage — what real users asked and whether the answers were
+  // good. A calibration surface, not the system dashboard.
+  { to: "/mi-queries", label: copy.nav.miQueries, icon: MessageSquare, end: false },
   { to: "/reviews", label: copy.nav.review, icon: ListChecks, end: false },
   { to: "/workflows", label: copy.nav.workflows, icon: GitBranch, end: false },
   { to: "/history", label: copy.nav.history, icon: Clock, end: false },

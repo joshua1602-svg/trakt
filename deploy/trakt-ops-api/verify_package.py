@@ -38,7 +38,15 @@ REQUIRED_ROUTER_ROUTES = (
 #: be present in the artefact next to the code.
 REQUIRED_FILES = (
     "config/system/fields_registry.yaml",
-    "config/regime/annex2_delivery_rules.yaml",
+    # The Annex 2 delivery contract is DERIVED at runtime rather than stored, so
+    # what has to travel in the artefact is the set of authoritative sources it
+    # is derived from — see engine/regime_contract. The cached workbook index is
+    # among them because the mapping workbook itself is not shipped.
+    "config/regime/annex2_field_universe.yaml",
+    "config/generated/annex2_workbook_index.json",
+    "config/system/DRAFT1auth.099.001.04_1.3.0.xsd",
+    "config/system/enum_mapping.yaml",
+    "config/system/enum_synonyms.yaml",
     "config/asset/product_profiles.yaml",
     # The governed concentration-test metric registry, resolved relative to the
     # artefact root by mi_agent.concentration_tests.library.

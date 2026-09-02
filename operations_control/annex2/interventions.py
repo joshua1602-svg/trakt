@@ -50,7 +50,7 @@ def _csv_nd_count_for(delivery_csv: Path, fields: tuple) -> int:
     """ND cells the delivery CSV itself supplies for the named fields.
 
     Phase 2: RREL20/RREL21 are declared in
-    ``config/regime/annex2_delivery_rules.yaml`` and populated by Gate 4b, so
+    the effective Annex 2 contract and populated by Gate 4b, so
     the ND nodes under ``ScndryOblgrIncm`` in the XML are now SOURCED, not
     builder-inserted. Counting XML nodes alone can no longer tell the two
     apart — this is what distinguishes them.
@@ -66,12 +66,15 @@ def _csv_nd_count_for(delivery_csv: Path, fields: tuple) -> int:
 
 
 def _rrel12_coercion_count(delivery_csv: Path) -> int:
-    """Rows whose RREL12 value is not a 4-digit year.
+    """Rows whose RREL12 value can enter neither of its branches.
 
-    Phase 2: the builder no longer coerces these to a constant year — it routes
-    them to the NoData branch. The count is still worth reporting, because a
-    value that cannot enter its typed branch is an operator-visible event; only
-    the treatment changed.
+    RREL12's schema type is a choice between a four-digit year and a no-data
+    code. A value that is neither cannot be placed, and the builder routes it to
+    no-data rather than inventing a year — an operator-visible event worth
+    counting. An approved no-data code is NOT one of those: it is the other
+    branch of the same choice, carried through untouched, and counting it as an
+    automatic intervention would tell an operator their own decision had been
+    overridden.
     """
     import pandas as pd
     total = 0
@@ -79,8 +82,11 @@ def _rrel12_coercion_count(delivery_csv: Path) -> int:
                              chunksize=20000):
         if "RREL12" not in chunk.columns:
             return 0
-        vals = chunk["RREL12"].fillna("")
-        total += int((~vals.str.fullmatch(r"\d{4}") & (vals != "")).sum())
+        vals = chunk["RREL12"].fillna("").str.strip()
+        unplaceable = (~vals.str.fullmatch(r"\d{4}")
+                       & ~vals.str.upper().str.fullmatch(r"ND[1-5](-\d{4}-\d{2}-\d{2})?")
+                       & (vals != ""))
+        total += int(unplaceable.sum())
     return total
 
 
@@ -126,36 +132,15 @@ def _scan_xml(xml_path: Path) -> Dict[str, int]:
     return counts
 
 
-#: Fallback only. The authority is the declared representation model in
-#: ``config/regime/annex2_delivery_rules.yaml::reconciliation_scope.representation``,
-#: read by :func:`_non_emitting_codes`. This tuple exists so the evidence
-#: document still reconciles if the rules file cannot be read, and must stay in
-#: step with it — a test asserts they agree.
-NON_EMITTING_CODES_FALLBACK = ("RREL18", "RREL28", "RREC22")
-
-
 def _non_emitting_codes() -> tuple:
-    """Codes carried by the XSD as an attribute, from governed configuration.
+    """Codes the XSD carries as an attribute rather than an element.
 
-    A value in one of these delivery-ready columns legitimately produces NO XML
-    node, so it must be excluded from the XML tie-out or the reconciliation
-    reports a phantom shortfall.
+    Read off auth.099 by the effective Annex 2 contract: a workbook code whose
+    path the schema does not define as an element cannot produce a node of its
+    own. Nothing declares this and no fallback list is needed.
     """
-    try:
-        import yaml
-        rules_path = (Path(__file__).resolve().parents[2]
-                      / "config" / "regime" / "annex2_delivery_rules.yaml")
-        model = ((yaml.safe_load(rules_path.read_text(encoding="utf-8")) or {})
-                 .get("reconciliation_scope") or {}).get("representation") or {}
-        codes = tuple(sorted(
-            c for c, m in model.items()
-            if isinstance(m, dict)
-            and str(m.get("representation_type", "")).strip().lower() == "xml_attribute"))
-        if codes:
-            return codes
-    except Exception:  # noqa: BLE001 - evidence must still be produced
-        pass
-    return NON_EMITTING_CODES_FALLBACK
+    from engine.regime_contract.annex2_contract import contract
+    return tuple(contract().non_emitting_codes())
 
 
 def analyse(delivery_csv: Path, xml_path: Path) -> Dict[str, Any]:

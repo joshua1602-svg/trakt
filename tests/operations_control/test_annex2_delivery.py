@@ -6,6 +6,7 @@ of the authoritative normaliser + builder + XSD."""
 from __future__ import annotations
 
 import json
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -199,53 +200,88 @@ class TestPreflight:
 
 
 class TestFailurePaths:
-    def test_normalisation_block_parks_workflow(self, store, source_registry,
-                                                delivery_dir):
+    """A regulatory failure withholds the regulatory artefact — and only that.
+
+    Management information and the Annex 2 delivery are two products of one
+    validated canonical and they fail for different reasons. These runs reached
+    the delivery chain, so the canonical already passed Gates 1 to 3; the
+    figures are sound and the regulator's own formatting is not. Destroying
+    valid MI over that would be a self-inflicted outage.
+    """
+
+    def test_normalisation_block_holds_the_delivery_not_the_report(
+            self, store, source_registry, delivery_dir):
         engine = make_engine(store, source_registry,
                              annex2_scenario="normalise_block")
         run = _annex2_run(engine, delivery_dir)
         final = start_and_wait(engine, run)
-        assert final.status == RUN_BLOCKED
         assert final.stage_status("delivery_prep") == "blocked"
+        assert not (final.annex2 or {}).get("xml")
+        # ...and the management report is offered for approval as usual.
+        assert final.status == RUN_NEEDS_REVIEW
+        assert final.stage_status("publication") == "ready"
         gar = store.load_result("client_a", run.workflow_id, "delivery_prep")
         from operations_control import language
         for text in (gar.summary, *gar.blockers):
             assert language.is_operator_safe(text), text
 
-    def test_xsd_failure_parks_workflow(self, store, source_registry,
-                                        delivery_dir):
+    def test_xsd_failure_holds_the_delivery_not_the_report(
+            self, store, source_registry, delivery_dir):
         engine = make_engine(store, source_registry, annex2_scenario="xsd_fail")
         run = _annex2_run(engine, delivery_dir)
         final = start_and_wait(engine, run)
-        assert final.status == RUN_BLOCKED
         assert final.stage_status("xml_delivery") == "blocked"
+        assert final.status == RUN_NEEDS_REVIEW
+        assert final.stage_status("publication") == "ready"
+
+    def test_publishing_after_a_regulatory_hold_carries_no_xml(
+            self, store, source_registry, delivery_dir):
+        """The published record must not imply a delivery that never happened."""
+        engine = make_engine(store, source_registry, annex2_scenario="xsd_fail")
+        run = _annex2_run(engine, delivery_dir)
+        final = start_and_wait(engine, run)
+        pub = engine.approve_publication(client_id="client_a",
+                                         workflow_id=final.workflow_id,
+                                         actor="Ops")
+        assert pub["status"] == "published"
+        assert not (pub.get("annex2") or {}).get("xml")
 
 
 class TestPopulationReconciliation:
-    def test_no_blockers_and_correct_classifications(self):
-        from operations_control.annex2.population import (
-            assess_population, reconciliation_document)
+    def test_the_structural_assessment_covers_the_whole_universe(self):
+        """With no frame the assessment is structural: what the regulator
+        requires and permits. Nothing is blocking, because without data there is
+        nothing yet to be missing."""
+        from operations_control.annex2.population import reconciliation_document
         doc = reconciliation_document()
         assert doc["universe_count"] == 107
         assert doc["blocking_count"] == 0
         rows = {r["annex2_code"]: r for r in doc["rows"]}
-        # RREL20/21: optional and ND-permitted, so not blockers. Since Phase 2
-        # they are RULE-governed rather than builder-covered — declared in
-        # annex2_delivery_rules.yaml with default_value: ND5 — and the
-        # classifier must attribute them to the rule, not to the builder.
+        # RREL20/21 permit a no-data code, and the answer for this asset class
+        # comes from the product pack — never from the builder.
         for code in ("RREL20", "RREL21"):
             assert rows[code]["blocking"] is False
-            mechanism = rows[code]["population_mechanism"]
-            assert "builder" not in mechanism, (
-                f"{code} is no longer populated by the builder: {mechanism}")
-            assert "no-data" in mechanism, mechanism
-        # Unruled-but-registry-mapped codes do not block (rule count is not
-        # a completeness measure).
-        unruled = [r for r in doc["rows"]
-                   if r["population_mechanism"] == "projected registry mapping"]
-        assert unruled and all(not r["blocking"] for r in unruled)
-        # Deferred code recorded as such.
-        assert rows["RREC22"]["applicability"] == "deferred"
+            assert "builder" not in rows[code]["population_mechanism"]
+        # The three currency concepts have no element of their own, read off
+        # the schema rather than declared anywhere.
+        attribute_only = [r["annex2_code"] for r in doc["rows"]
+                          if "attribute" in r["population_mechanism"]]
+        assert sorted(attribute_only) == ["RREC22", "RREL18", "RREL28"]
+
+    def test_a_blank_mandatory_field_is_reported_against_a_real_frame(self):
+        """The assessment that matters: against the frame to be delivered.
+
+        A column exists for every registry-mapped code, so "the column is there"
+        never meant "a value will reach the regulator". Assessed against a frame,
+        a required field with no value is reported — which is what the XML
+        builder would refuse."""
+        import pandas as pd
+        from operations_control.annex2.population import reconciliation_document
+        frame = Path(tempfile.mkdtemp()) / "projected.csv"
+        pd.DataFrame({"RREL2": ["EXP-1"], "RREL12": [""]}).to_csv(frame, index=False)
+        doc = reconciliation_document(projected_csv=str(frame))
+        assert "RREL12" in doc["blocking_codes"]
+        assert doc["blocking_count"] >= 1
 
     def test_reconciliation_persisted_per_run(self, store, source_registry,
                                               delivery_dir):
@@ -256,25 +292,35 @@ class TestPopulationReconciliation:
         assert recon_path.exists()
         doc = json.loads(recon_path.read_text())
         assert doc["universe_count"] == 107
+        assert doc["assessed_against"], (
+            "the reconciliation must name the frame it assessed")
         audits = [a for a in store.list_audit("client_a")
                   if a["event"] == "annex2_population_reconciliation"]
-        assert audits and audits[-1]["detail"]["blocking_count"] == 0
+        assert audits and "blocking_count" in audits[-1]["detail"]
 
 
 class TestRealComponentsMiniGolden:
-    """Real subprocess run of the authoritative normaliser + builder + XSD on
-    the committed synthetic projection (36 records). Proves the correct
-    scripts, rules, workbook and XSD are invoked and that validation passes."""
+    """Real subprocess run of the authoritative normaliser + builder + XSD.
+
+    The frame is Client B's own projection, taken from the traced production
+    route after its operator answered the regulatory questions — so it is a
+    governed delivery, not a demo artefact whose gaps a regime-level default
+    once filled on the lender's behalf. Proves the correct scripts, contract,
+    workbook and XSD are invoked and that validation passes."""
 
     @pytest.fixture()
     def real_outcome(self, tmp_path):
         from operations_control.annex2.stages import Annex2Stages
-        projected = Path("synthetic_demo/output/"
-                         "SYNTHETIC_ERE_Portfolio_012026_ESMA_Annex2_projected.csv")
-        assert projected.exists()
+        projected = Path("tests/fixtures/annex2_projected_client_b.csv")
+        # The contract this portfolio's delivery was normalised against: the
+        # derived Annex 2 contract with Client B's approved translations merged
+        # in, exactly as OCC materialises it per run.
+        contract = Path("tests/fixtures/annex2_effective_contract_client_b.yaml")
+        assert projected.exists() and contract.exists()
         stages = Annex2Stages()
         norm = stages.run_normalisation(projected_csv=str(projected),
-                                        out_dir=tmp_path / "delivery")
+                                        out_dir=tmp_path / "delivery",
+                                        rules_path=contract)
         xml = None
         if norm.ok:
             xml = stages.run_xml(
@@ -287,12 +333,12 @@ class TestRealComponentsMiniGolden:
         assert norm.ok, norm.blockers
         assert norm.summary == ("Annex 2 data has been prepared for XML "
                                 "generation.")
-        assert norm.metrics["output_records"] == 36
-        assert "annex2_delivery_rules.yaml" in norm.metrics["rules_version"] \
-            or norm.metrics["rules_version"].startswith("annex2_delivery_rules")
+        assert norm.metrics["output_records"] == 30
+        assert norm.metrics["rules_version"]
+        assert not norm.blockers
         assert xml is not None and xml.ok, (xml and xml.blockers)
         assert xml.metrics["xsd_result"] == "PASSED"
-        assert xml.metrics["records"] == 36
+        assert xml.metrics["records"] == 30
         assert xml.metrics["xml_sha256"].startswith("sha256:")
         assert xml.metrics["xsd"].startswith("DRAFT1auth.099.001.04_1.3.0.xsd")
         assert Path(xml.artefacts["xml"]).name == "annex2_submission.xml"
@@ -301,14 +347,13 @@ class TestRealComponentsMiniGolden:
         norm, xml = real_outcome
         assert xml is not None and xml.ok
         iv = json.loads(Path(xml.artefacts["interventions"]).read_text())
-        # Phase 2: the builder injects NOTHING on this PRF fixture. The
-        # secondary-income ND5 pair used to be counted here (2 x 36 = 72); it
-        # is now supplied by the declared delivery rules and arrives in the
+        # The builder injects NOTHING. The secondary-income pair used to be
+        # counted here; it is now supplied by the ASSET PACK and arrives in the
         # delivery CSV, so attributing it to the builder would be false.
         sec = [i for i in iv["interventions"] if i["code"] == "RREL20/RREL21"]
         assert sec == [], (
-            "RREL20/RREL21 come from annex2_delivery_rules.yaml now; the "
-            "builder must not be credited with inserting them")
+            "RREL20/RREL21 come from the ERM asset pack now; the builder must "
+            "not be credited with inserting them")
         assert iv["nodata_injected_by_builder"] == 0
         # Currency attributes stamped by the builder are informational evidence.
         ccy = [i for i in iv["interventions"] if i["code"] == "Amt@Ccy"]
@@ -319,9 +364,13 @@ class TestRealComponentsMiniGolden:
         assert "No automatic values were inserted" in iv["summary_sentence"]
         assert "passed schema validation" in xml.summary
         assert "require review" not in xml.summary.lower()
-        # The reconciliation still has to close: every ND node in the XML is
-        # accounted for by the delivery CSV.
-        assert iv["nodata_in_xml"] == iv["nodata_in_delivery_csv"]
+        # The reconciliation still has to close, comparing like with like: an
+        # ND on a concept the schema carries as an attribute produces no XML
+        # node, so the tie-out is against the EMITTING count.
+        assert iv["nodata_in_xml"] == iv["nodata_in_delivery_csv_emitting"]
+        assert (iv["nodata_in_delivery_csv"]
+                == iv["nodata_in_delivery_csv_emitting"]
+                + iv["nodata_on_non_emitting_fields"])
 
     def test_wrong_xsd_fails_closed(self, tmp_path, real_outcome):
         from operations_control.annex2.stages import Annex2Stages

@@ -179,7 +179,8 @@ class RealAgentAdapters(AgentAdapters):
                  enable_llm_advisor: bool = False,
                  enable_llm_mapping_review: bool = False,
                  llm_mapping_profile: str = "low",
-                 managed_service: bool = False):
+                 managed_service: bool = False,
+                 regulatory_reporting_enabled: bool = False):
         self.registry = registry
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
@@ -217,6 +218,13 @@ class RealAgentAdapters(AgentAdapters):
         # (data_cut_off_date, …) MUST originate from the blob event / folder period,
         # never a CLI-supplied value — so cli_fallback provenance is impossible here.
         self.managed_service = managed_service
+        # regulatory_reporting_enabled: this delivery owes an Annex 2 return, so
+        # regulatory-category fields stay in Gate 1's field scope and reach the
+        # canonical. It widens SCOPE, not requirements — nothing regulatory
+        # becomes a mandatory lender source — and the canonical keeps management
+        # semantics, because the contract is still the MI one. ESMA codes and ND
+        # sentinels belong to Gate 4's projection, not to the canonical.
+        self.regulatory_reporting_enabled = regulatory_reporting_enabled
 
     def onboard(self, spec: PortfolioSpec, work_dir: Path) -> StepResult:
         """Run onboarding for one portfolio. The ``mode`` is the MI-vs-regime
@@ -270,6 +278,7 @@ class RealAgentAdapters(AgentAdapters):
             reporting_date=(self.reporting_period or ""),
             reporting_period=(self.reporting_period or ""),
             managed_service=self.managed_service,
+            regulatory_reporting_enabled=self.regulatory_reporting_enabled,
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":
@@ -280,7 +289,12 @@ class RealAgentAdapters(AgentAdapters):
                 storage_backend="local", input_uri="", output_uri="")
             res = central_tape_builder.build_central_tapes(
                 str(project_dir), run_paths,
-                self.registry or "config/system/fields_registry.yaml", mode="mi_only")
+                self.registry or "config/system/fields_registry.yaml", mode="mi_only",
+                # The tape resolves its own field scope, so it needs the same
+                # answer Gate 1 was given: a regime-required delivery keeps
+                # regulatory-category fields, or they are dropped here after
+                # surviving everywhere else.
+                regulatory_reporting_enabled=self.regulatory_reporting_enabled)
             if is_pipeline:
                 # Pipeline deliverable: the central PIPELINE tape (18a) + materialised
                 # sources. NEVER gate on the funded lender tape (empty for a

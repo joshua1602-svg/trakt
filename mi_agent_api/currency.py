@@ -66,14 +66,14 @@ def set_currency(code: Optional[str]) -> None:
 
 #: Where the governed client configuration lives. A deployment points this at
 #: the configuration onboarding GENERATED for the client (the same artefact
-#: ``operations_control.configuration.resolver`` treats as the client layer);
-#: absent that, the repository client config is the governed client layer, which
-#: is exactly the precedence the OCC resolver itself applies. Mirrors the
-#: existing ``TRAKT_PORTFOLIO_REGISTRY`` convention, so every governed config in
-#: this estate is located the same way and none depends on the working directory.
+#: ``operations_control.configuration.resolver`` treats as the client layer).
+#: There is deliberately NO default file: a client either has a governed
+#: configuration or it does not, and one lender's configuration must never
+#: answer for another. Mirrors the existing ``TRAKT_PORTFOLIO_REGISTRY``
+#: convention, so every governed config in this estate is located the same way
+#: and none depends on the working directory.
 ENV_CLIENT_CONFIG = "TRAKT_MI_CLIENT_CONFIG"
 _CONFIG_ROOT = Path(__file__).resolve().parents[1] / "config" / "client"
-_DEFAULT_CLIENT_CONFIG = _CONFIG_ROOT / "config_client_ERM_UK.yaml"
 
 #: Governed keys carrying the client's base / reporting currency, in precedence
 #: order. ``portfolio.base_currency`` is the required OCC standing field;
@@ -103,9 +103,12 @@ def client_config_path(client_id: Optional[str] = None) -> Optional[str]:
     per_client = _CONFIG_ROOT / f"config_client_{client_id}.yaml"
     if per_client.exists():
         return str(per_client)
-    # The repository client layer, which is what the OCC configuration resolver
-    # also falls back to for a client with no onboarding-generated config.
-    return str(_DEFAULT_CLIENT_CONFIG) if _DEFAULT_CLIENT_CONFIG.exists() else None
+    # A client with no governed configuration of its own has no governed answer.
+    # There used to be a fallback to the incumbent lender's file here, which
+    # meant a second client silently reported under ERE Funding's configured
+    # currency. Returning None sends the caller to the tape and the platform
+    # default, which is what "not configured" should look like.
+    return None
 
 
 @lru_cache(maxsize=8)

@@ -24,8 +24,10 @@ import type {
   SnapshotIndex,
   MovementDetail,
   MovementDetailType,
+  StageTransitionDetail,
   WeeklyBrief,
 } from "@/domain";
+import { DETAIL_STAGE_TRANSITION } from "@/domain";
 import { buildAgentResponse } from "@/data/mockResponses";
 import { MOCK_SNAPSHOT_INDEX, mockSnapshot } from "@/data/mockSnapshots";
 import { mockForecastSnapshot } from "@/data/mockForecast";
@@ -156,6 +158,29 @@ export class MockAgentClient implements AgentClient {
       counts: null,
       contributors: {},
       components: null,
+    });
+  }
+
+  /** No governed weekly pair in the demo dataset, so the capability reports
+   * itself unavailable through the engine's OWN typed reason code rather than
+   * an empty matrix, which would read as "nothing moved". */
+  getStageTransitionDetail(portfolioId: string): Promise<StageTransitionDetail> {
+    return Promise.resolve({
+      detail_type: DETAIL_STAGE_TRANSITION,
+      portfolio_id: portfolioId,
+      scope: "total",
+      as_of_date: null,
+      comparison_date: null,
+      available: false,
+      reason: "Stage transitions are not available in the demo dataset.",
+      reason_code: "no_prior_snapshot",
+      counts: null,
+      transitions: [],
+      new_arrivals: [],
+      stayers: [],
+      departures: [],
+      event_totals: null,
+      reconciliation: null,
     });
   }
 

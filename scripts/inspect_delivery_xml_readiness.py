@@ -46,20 +46,31 @@ if str(_REPO_ROOT) not in sys.path:
 
 from engine.delivery_xml_agent.remediation import group_delivery_issues  # noqa: E402
 
-_DEFAULT_REGIME = _REPO_ROOT / "config" / "regime" / "annex2_delivery_rules.yaml"
 
 
 def _falsey(v: Any) -> bool:
     return str(v).strip().lower() in ("false", "0", "no", "")
 
 
-def _load_field_rules(regime_config_path: str | Path) -> Dict[str, Dict[str, Any]]:
-    try:
-        cfg = yaml.safe_load(Path(regime_config_path).read_text(encoding="utf-8")) or {}
-    except Exception:
-        return {}
-    rules = cfg.get("field_rules")
-    return {str(k): (v or {}) for k, v in rules.items()} if isinstance(rules, dict) else {}
+def _load_field_rules(regime_config_path: str | Path = "") -> Dict[str, Dict[str, Any]]:
+    """The effective Annex 2 contract, as ``{code: rule}``.
+
+    A path may still be given — a run's own materialised contract, so the
+    inspection reports the regex and enum that run actually applied — but with
+    none, the contract is derived from the authoritative sources rather than
+    read from a stored file.
+    """
+    if str(regime_config_path).strip():
+        try:
+            cfg = yaml.safe_load(
+                Path(regime_config_path).read_text(encoding="utf-8")) or {}
+        except Exception:
+            cfg = {}
+        rules = cfg.get("field_rules")
+        if isinstance(rules, dict):
+            return {str(k): (v or {}) for k, v in rules.items()}
+    from engine.regime_contract import as_delivery_rules, build_contract
+    return as_delivery_rules(build_contract())["field_rules"]
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -126,7 +137,7 @@ def format_invalid_detail(
     # default to the regime config the agent actually used (from 60), else repo default.
     if regime_config_path is None:
         manifest = _read_json(d / "60_delivery_manifest.json")
-        regime_config_path = manifest.get("regime_config_path") or _DEFAULT_REGIME
+        regime_config_path = manifest.get("regime_config_path") or ""
     rules = _load_field_rules(regime_config_path)
 
     out: Dict[str, Dict[str, Any]] = {}
@@ -422,8 +433,9 @@ def main(argv=None) -> int:
                     help="Drill into delivery_invalid rows: per-code failing value "
                     "sample(s) and the violated regime regex/enum.")
     ap.add_argument("--regime-config", default="",
-                    help="Regime rules YAML for the regex/enum lookup "
-                    "(defaults to the path recorded in 60_delivery_manifest.json).")
+                    help="A materialised Annex 2 contract for the regex/enum "
+                    "lookup (defaults to the path recorded in "
+                    "60_delivery_manifest.json, then to the derived contract).")
     ap.add_argument("--samples", type=int, default=3,
                     help="Max distinct failing value samples per code (default 3).")
     ap.add_argument("--preview", action="store_true",

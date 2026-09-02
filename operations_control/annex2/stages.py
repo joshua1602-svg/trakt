@@ -22,7 +22,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 NORMALIZER = REPO / "engine/gate_4b_delivery/annex2_delivery_normalizer.py"
 XML_BUILDER = REPO / "engine/gate_5_delivery/xml_builder_annex2.py"
-RULES_PATH = REPO / "config/regime/annex2_delivery_rules.yaml"
+#: The Annex 2 contract is DERIVED (engine.regime_contract.annex2_contract), not
+#: read from a file. OCC materialises it per run, with the portfolio's approved
+#: decisions merged in, and hands that artefact to Gate 4b.
 XSD_PATH = REPO / "config/system/DRAFT1auth.099.001.04_1.3.0.xsd"
 WORKBOOK = REPO / ("DRAFT1auth.099.001.04_non-ABCP Underlying Exposure "
                    "Report_Version_1.3.1.xlsx")
@@ -125,11 +127,18 @@ class Annex2Stages:
             report=report)
 
     def run_normalisation(self, *, projected_csv: str, out_dir: Path,
-                          rules_path: Path = RULES_PATH) -> StageOutcome:
-        """Invoke the EXISTING Gate 4b delivery normaliser, unmodified."""
+                          rules_path: Optional[Path] = None) -> StageOutcome:
+        """Invoke the EXISTING Gate 4b delivery normaliser, unmodified.
+
+        With no ``rules_path`` the normaliser derives the contract itself; OCC
+        passes the run's materialised contract so the approved decisions for this
+        portfolio are part of it.
+        """
         out_dir.mkdir(parents=True, exist_ok=True)
         cmd = [sys.executable, str(NORMALIZER), "--input", str(projected_csv),
-               "--rules", str(rules_path), "--output-dir", str(out_dir)]
+               "--output-dir", str(out_dir)]
+        if rules_path:
+            cmd += ["--rules", str(rules_path)]
         t0 = time.time()
         proc = subprocess.run(cmd, capture_output=True, text=True,
                               cwd=str(REPO))
@@ -147,7 +156,8 @@ class Annex2Stages:
         counts = self._frame_counts(projected_csv,
                                     str(delivery[0]) if delivery else "")
         metrics = {"elapsed_s": elapsed, "returncode": proc.returncode,
-                   "rules_version": _file_version(rules_path), **counts}
+                   "rules_version": (_file_version(rules_path) if rules_path
+                                     else "derived"), **counts}
         artefacts = {
             "delivery_ready_csv": str(delivery[0]) if delivery else "",
             "delivery_report": str(report_p[0]) if report_p else "",
@@ -191,16 +201,17 @@ class Annex2Stages:
                       if "XSD" in ln][-3:]
             if tmp_xml.exists():
                 tmp_xml.unlink()          # never leave a non-validated XML
+            blockers, evidence = self._translate_builder_failure(
+                (proc.stderr or "") + "\n" + (proc.stdout or ""))
             return StageOutcome(
                 ok=False, blocking=True,
                 summary="The Annex 2 XML could not be created or did not "
                         "pass the regulator's format check.",
-                blockers=["The generated file did not pass the regulator's "
-                          "format check. This needs attention before it can "
-                          "be prepared again."],
+                blockers=blockers, evidence=evidence,
                 metrics={"elapsed_s": elapsed, "returncode": proc.returncode,
                          "xsd": _file_version(xsd_path)},
                 report={"stdout_tail": (proc.stdout or "")[-1500:],
+                        "stderr_tail": (proc.stderr or "")[-1500:],
                         "xsd_lines": detail})
         tmp_xml.replace(final_xml)         # atomic finalisation
         xml_hash = _sha256(final_xml)
@@ -242,6 +253,40 @@ class Annex2Stages:
 
     # -- helpers -------------------------------------------------------- #
     @staticmethod
+    def _translate_builder_failure(output: str):
+        """Builder refusals -> an operator sentence plus answerable evidence.
+
+        A mandatory field the builder finds blank is the same situation the
+        projection guards report, so it is described the same way and answered
+        by the same decisions: a no-data code where the rules permit one, a
+        source column or a pool-level value where they do not.
+        """
+        import re as _re
+        from . import nd_treatments as _nd
+        blockers: List[str] = []
+        evidence: List[Dict[str, Any]] = []
+        for m in _re.finditer(
+                r"Mandatory (record|header) field '([A-Z]{3,5}\d{1,3})' is blank",
+                output):
+            level, code = m.group(1), m.group(2)
+            field = _nd.field_for_esma_code(code)
+            friendly = (field or code).replace("_", " ")
+            blockers.append(
+                f"The regulator requires {friendly} on every "
+                f"{'record' if level == 'record' else 'report'} and this "
+                "delivery has no value for it.")
+            evidence.append({"label": "Regulatory field with no value",
+                             "kind": "text",
+                             "data": {"field": field, "esma_code": code,
+                                      "level": level,
+                                      "found": "blank on every row"}})
+        if not blockers:
+            blockers.append("The generated file did not pass the regulator's "
+                            "format check. This needs attention before it can "
+                            "be prepared again.")
+        return blockers, evidence
+
+    @staticmethod
     def _translate_projection_failure(stderr: str):
         """Known projector refusals -> actionable operator sentences; the raw
         detail goes to collapsed evidence only."""
@@ -260,6 +305,20 @@ class Annex2Stages:
                              "data": {"field": m.group(1),
                                       "values": (values.group(1)
                                                  if values else "")}})
+        m2 = _re.search(
+            r"mandatory record-level field '([A-Z]{3,5}\d{1,3})' is blank", stderr)
+        if m2 and not blockers:
+            from . import nd_treatments as _nd
+            code = m2.group(1)
+            field = _nd.field_for_esma_code(code)
+            friendly = (field or code).replace("_", " ")
+            blockers.append(
+                f"The regulator requires {friendly} on every record and this "
+                "delivery has no value for it.")
+            evidence.append({"label": "Regulatory field with no value",
+                             "kind": "text",
+                             "data": {"field": field, "esma_code": code,
+                                      "found": "blank on every row"}})
         elif "ScrtstnIdr" in stderr or "RREL1" in stderr:
             blockers.append(
                 "The securitisation identifier could not be derived. Check "
@@ -322,4 +381,28 @@ class Annex2Stages:
         evidence.append({"label": "Delivery check findings", "kind": "table",
                          "data": [{"category": c, "severity": s, "count": n}
                                   for (c, s), n in sorted(by_cat_sev.items())]})
+        # Which values, in which field. The counts alone say a delivery cannot
+        # be prepared without saying what an operator could do about it — and
+        # every one of these is answerable: the lender's word needs the
+        # regulator's code. Named per field, in the same shape the projection
+        # failure uses, so one decision-builder serves both.
+        from . import nd_treatments as _nd
+        by_field: Dict[str, List[str]] = {}
+        for r in rows:
+            if (r.get("issue_type") or "").strip().lower() != "enum":
+                continue
+            if (r.get("severity") or "").strip().lower() != "error":
+                continue
+            code = (r.get("field") or "").strip()
+            value = (r.get("input_value") or "").strip()
+            if not code or not value:
+                continue
+            canonical = _nd.field_for_esma_code(code) or code
+            seen = by_field.setdefault(canonical, [])
+            if value not in seen:
+                seen.append(value)
+        for canonical, values in sorted(by_field.items()):
+            evidence.append({"label": "Values needing mapping", "kind": "text",
+                             "data": {"field": canonical,
+                                      "values": ", ".join(values[:20])}})
         return warnings, blockers, evidence

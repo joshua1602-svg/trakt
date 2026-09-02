@@ -37,6 +37,7 @@ from .contracts import (
     KIND_TRANSFORMATION,
     KIND_VALIDATION_EXCEPTION,
     OUTCOME_MI_ANNEX2,
+    ST_APPROVED,
     ST_BLOCKED,
     ST_COMPLETED,
     ST_NEEDS_REVIEW,
@@ -66,7 +67,15 @@ STEP_TO_STAGE = {
     "project": STAGE_PROJECTION,
 }
 
+#: The onboarding agent's action for "this required field lives in THAT source
+#: column". It is the one action that needs a value from the operator beyond the
+#: choice itself — the column name — so OCC carries it explicitly.
+#: (engine.onboarding_agent.target_first_decisions.SUPPORTED_ACTIONS)
+ACTION_PROVIDE_SOURCE_MAPPING = "provide_source_mapping"
+
 DECISIONS_FILE = "34_target_first_decisions.yaml"
+OVERRIDES_FILE = "12_approved_mapping_overrides.yaml"
+TAPE_GAPS_FILE = "18c_central_tape_gaps.csv"
 APPROVED_DECISIONS_FILE = "34_target_first_decisions_approved.yaml"
 REVIEW_QUEUE_FILE = "33_mapping_review_queue.json"
 LLM_RECS_FILE = "36_target_first_llm_recommendations.json"
@@ -133,6 +142,92 @@ class GovernedAdapters(AgentAdapters):
 
 
 # --------------------------------------------------------------------------- #
+# Gate 3 findings: structural vs business rule
+# --------------------------------------------------------------------------- #
+
+#: The Validation Agent's own issue types for a core_canonical field that is
+#: absent or entirely blank. These are not rules the data failed — they are data
+#: that is not there, so no rationale can make the canonical complete and no
+#: exception may accept them. Everything else Gate 3 blocks on is a rule a
+#: present value failed, which is what the exception mechanism exists for.
+STRUCTURAL_ISSUE_TYPES = ("missing_core_canonical_value", "missing_required_value")
+
+VALIDATION_ISSUES_FILE = "43_validation_issues.csv"
+
+
+def _truthy(v: Any) -> bool:
+    return str(v).strip().lower() in ("true", "1", "yes")
+
+
+def read_validation_findings(work_dir: Optional[Path]
+                             ) -> Dict[str, List[Dict[str, str]]]:
+    """Gate 3's own blocking findings, split into structural and business rule.
+
+    Reads the Validation Agent's issue register rather than forming a second
+    opinion: ``blocking_for_validation`` is the agent's decision about what stops
+    the canonical, and ``issue_type`` is its description of what kind of problem
+    it is. Returns ``{"structural": [...], "business": [...]}``; an unreadable or
+    absent register yields both empty, which leaves the caller's existing
+    behaviour unchanged.
+    """
+    out: Dict[str, List[Dict[str, str]]] = {"structural": [], "business": []}
+    if not work_dir:
+        return out
+    path = _find_artifact(Path(work_dir), VALIDATION_ISSUES_FILE)
+    if path is None:
+        return out
+    try:
+        import csv
+        with path.open(newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+    except Exception:  # noqa: BLE001 — never fail a run over the register
+        return out
+    for r in rows:
+        if not _truthy(r.get("blocking_for_validation")):
+            continue
+        item = {"rule": str(r.get("validation_rule_id") or "").strip(),
+                "field": str(r.get("field") or r.get("canonical_field") or "").strip(),
+                "issue_type": str(r.get("issue_type") or "").strip(),
+                "severity": str(r.get("severity") or "").strip(),
+                "description": str(r.get("description") or "").strip(),
+                "owner": str(r.get("downstream_owner") or "").strip()}
+        key = ("structural" if item["issue_type"] in STRUCTURAL_ISSUE_TYPES
+               else "business")
+        out[key].append(item)
+    return out
+
+
+#: What the orchestrator records against the run when it proceeds past a
+#: validation halt on an approved exception.
+FORCE_PUBLISH_MARKER = "FORCE-PUBLISHED past validation exceptions:"
+
+
+def _accepted_findings(state: RunState) -> List[str]:
+    """The findings an operator accepted, read back off the orchestrator's own
+    blocker record so the stage can keep reporting them after the rerun."""
+    out: List[str] = []
+    for b in list(getattr(state, "blockers", []) or []):
+        text = str(b)
+        if FORCE_PUBLISH_MARKER not in text:
+            continue
+        detail = text.split(FORCE_PUBLISH_MARKER, 1)[1].strip()
+        out.extend(s.strip() for s in detail.split(";") if s.strip())
+    return out
+
+
+def structural_finding_sentences(findings: List[Dict[str, str]]) -> List[str]:
+    """One plain sentence per structural finding, naming the field."""
+    out: List[str] = []
+    for f in findings:
+        field = (f.get("field") or "a required field").replace("_", " ")
+        if f.get("rule", "").startswith("CORE002"):
+            out.append(f"Every record is missing a value for {field}.")
+        else:
+            out.append(f"The data does not contain {field}.")
+    return out
+
+
+# --------------------------------------------------------------------------- #
 # Decision extraction from onboarding artefacts
 # --------------------------------------------------------------------------- #
 
@@ -185,7 +280,15 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
             options = []
             for a in (d.get("options") or d.get("available_actions")
                       or d.get("actions") or []):
-                options.append({"value": str(a), "label": _action_label(str(a))})
+                # The coverage matrix labels the action "map_source_column";
+                # the apply step calls it "provide_source_mapping". Offer the
+                # name the engine will actually execute, or the operator picks
+                # an option that silently applies to nothing.
+                a = _ENGINE_ACTION.get(str(a), str(a))
+                options.append({"value": a, "label": _action_label(a)})
+            if not any(o["value"] == "defer" for o in options):
+                options.append({"value": "defer",
+                                "label": _action_label("defer")})
             rec: Dict[str, Any] = {}
             advisory = llm.get(did)
             unsafe = _looks_unsafe(d)
@@ -267,12 +370,148 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
                     subject={"artefact": "mapping_review_queue",
                              "source_column": src, "candidate": tgt,
                              "group": group}))
+
+    # 3. Which column IS the loan? Several columns in a lender's tape are unique
+    # per row — an account reference, a policy number, a customer identifier —
+    # and only one of them keys the loan. Gate 1 records the ambiguity rather
+    # than settling it by column order; this is where a person settles it.
+    out.extend(_loan_key_decisions(work_dir, workflow))
     return out
+
+
+def _loan_key_decisions(work_dir: Optional[Path],
+                        workflow: WorkflowRun) -> List[DecisionRequired]:
+    if not work_dir:
+        return []
+    path = _find_artifact(Path(work_dir), TAPE_GAPS_FILE)
+    if path is None:
+        return []
+    try:
+        import csv
+        with path.open(encoding="utf-8", newline="") as fh:
+            rows = [r for r in csv.DictReader(fh)
+                    if r.get("issue_type") == "ambiguous_loan_key"]
+    except Exception:  # noqa: BLE001
+        return []
+    out: List[DecisionRequired] = []
+    for r in rows:
+        selected = str(r.get("source_column") or "")
+        # The description carries the candidates in parentheses; the file column
+        # carries the one that was used.
+        import re
+        m = re.search(r"\(([^)]*)\)", str(r.get("description") or ""))
+        candidates = [c.strip() for c in (m.group(1).split(",") if m else [])
+                      if c.strip()]
+        if selected and selected not in candidates:
+            candidates.insert(0, selected)
+        if len(candidates) < 2:
+            continue
+        options = [{"value": c,
+                    "label": (f"{c} — the one Trakt used" if c == selected
+                              else c)} for c in candidates]
+        out.append(DecisionRequired(
+            decision_id=f"{workflow.workflow_id}_loankey_{_slug(selected)}",
+            kind=KIND_FIELD_MAPPING,
+            title="Confirm which column identifies the loan",
+            question=("More than one column in this file is unique for every "
+                      "row, so more than one could be the loan reference. "
+                      "Which one is it? If Trakt groups by the borrower "
+                      "instead of the loan, a borrower's separate loans are "
+                      "merged and every figure in the report changes."),
+            blocking=False,
+            recommendation=({"source": "deterministic", "value": selected,
+                             "checked": True} if selected else {}),
+            options=options,
+            evidence=[{"label": "What Trakt found", "kind": "text",
+                       "data": {"file": r.get("source_file", ""),
+                                "candidates": ", ".join(candidates),
+                                "used": selected}}],
+            allowed_scopes=["portfolio", "client"],
+            default_scope="portfolio",
+            subject={"artefact": "central_tape_gaps",
+                     "source_column": selected,
+                     "canonical_field": "loan_identifier"}))
+    return out
+
+
+def _coverage_evidence(handoff: Dict[str, Any],
+                       summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Gate 1's target-coverage numbers, shown as the Review Centre's evidence.
+
+    Straight from the handoff manifest — no recomputation, so what the operator
+    reads is what Gate 2 will act on.
+    """
+    if not handoff:
+        return []
+    rows = [
+        ("Decisions still open", handoff.get("operator_decision_pending_count")),
+        ("Of those, blocking", handoff.get("blocking_decision_count")),
+        ("Approved decisions applied", handoff.get("approved_decision_applied_count")),
+        ("Target fields with no disposition",
+         summary.get("unresolved_disposition_count")),
+        ("Blocking the data checks", summary.get("blocking_for_validation_count")),
+    ]
+    data = {label: value for label, value in rows if value is not None}
+    if not data:
+        return []
+    return [{"label": "What Gate 1 found", "kind": "table", "data": data}]
+
+
+#: Placeholders the projector prints when a field simply has no value.
+_ABSENT = ("null", "none", "nan", "na", "<na>", "nat", "-", "")
+
+
+def _all_absent(raw: str) -> bool:
+    """True when every "unmapped value" is really just an absent one."""
+    values = [v.strip().strip("'\"").lower() for v in str(raw).split(",")]
+    return all(v in _ABSENT for v in values)
 
 
 def _looks_unsafe(d: Dict[str, Any]) -> bool:
     s = str(d.get("backstop_status") or d.get("safety") or "").upper()
     return s in ("UNSAFE", "BLOCKED")
+
+
+#: Gate 1 publishes its own verdict in the handoff manifest. These are the keys
+#: the Review Centre reports; OCC never recomputes them.
+HANDOFF_FILE = "24_onboarding_handoff_manifest.json"
+
+
+def read_handoff(work_dir: Optional[Path],
+                 onboard_readiness: Optional[Dict[str, Any]] = None
+                 ) -> Dict[str, Any]:
+    """Gate 1's own readiness verdict, as Gate 1 wrote it.
+
+    The Operations Control Centre reports what the Onboarding Agent found; it
+    does not form a second opinion about mapping success. Returns ``{}`` when
+    there is no manifest, which callers must treat as "nothing claimed" rather
+    than "everything fine".
+    """
+    path: Optional[Path] = None
+    ref = (onboard_readiness or {}).get("mi_handoff") or \
+        (onboard_readiness or {}).get("handoff_manifest")
+    if ref:
+        cand = Path(str(ref))
+        if cand.exists():
+            path = cand
+    if path is None and work_dir:
+        path = _find_artifact(Path(work_dir), HANDOFF_FILE)
+    if path is None:
+        return {}
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def handoff_ready(handoff: Dict[str, Any]) -> bool:
+    """True only when Gate 1 SAYS the package is ready for Gate 2.
+
+    Absent manifest -> not ready. Gate 2 enforces the same contract itself; this
+    is the reporting side of that decision, so it must fail the same way.
+    """
+    return bool(handoff.get("ready_for_transformation_validation"))
 
 
 def _workflow_summary_status(work_dir: Optional[Path]) -> str:
@@ -336,6 +575,16 @@ def _friendly(field: str) -> str:
         if not f:
             return "a required regulatory field"
     return f.replace("_", " ").strip() or "this field"
+
+
+#: Coverage-matrix action label -> the action name the apply step supports.
+_ENGINE_ACTION = {
+    "map_source_column": ACTION_PROVIDE_SOURCE_MAPPING,
+    "confirm_ND_code": "confirm_default_or_nd",
+    "set_derivation_or_default": "configure_static_value",
+    "accept_mapping": "confirm_selected",
+    "ignore": "mark_not_applicable",
+}
 
 
 def _action_label(action: str) -> str:
@@ -411,6 +660,19 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
     onboard = p.step("onboard")
     ob_status = _stage_status_for_step(onboard.status)
 
+    # Gate 1's OWN verdict. A completed onboard step does not mean the mapping
+    # is settled: Gate 1 routinely finishes, writes its tape, and declares
+    # ready_for_transformation_validation=false with a queue of blocking
+    # decisions. Reading the manifest is what lets the Review Centre report
+    # what Gate 1 found instead of asserting that everything matched.
+    handoff = read_handoff(work_dir, onboard.readiness)
+    hs = handoff.get("target_contract_completion_summary") or {}
+    blocking_decisions = int(handoff.get("blocking_decision_count") or 0)
+    pending_decisions = int(handoff.get("operator_decision_pending_count") or 0)
+    mapping_settled = (onboard.status == STEP_DONE
+                       and (handoff_ready(handoff) if handoff else True)
+                       and blocking_decisions == 0)
+
     # Understanding.
     if onboard.status == STEP_DONE:
         loan_count = (onboard.readiness or {}).get("loan_count")
@@ -437,11 +699,33 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
             else "Waiting to read the files.")
 
     # Mapping.
-    if onboard.status == STEP_DONE:
+    mapping_why = ("Matching each file column to the right meaning is what "
+                   "makes the reports correct.")
+    if mapping_settled:
+        applied = int(handoff.get("approved_decision_applied_count") or 0)
         gar(STAGE_MAPPING, ST_COMPLETED,
-            "All fields were matched using your approved rules.",
-            why="Matching each file column to the right meaning is what makes "
-                "the reports correct.")
+            ("Every field was matched, using the "
+             f"{applied} decision{'s' if applied != 1 else ''} you have already "
+             "approved." if applied else
+             "Every field was matched automatically."),
+            why=mapping_why,
+            evidence=_coverage_evidence(handoff, hs))
+    elif onboard.status == STEP_DONE:
+        # Gate 1 finished but says the package is NOT ready. Report its numbers
+        # and offer its queue; Gate 2 will refuse the package until they are
+        # answered, so hiding them just strands the run.
+        decisions = extract_mapping_decisions(work_dir, workflow) if work_dir else []
+        n = len(decisions) or blocking_decisions or pending_decisions
+        gar(STAGE_MAPPING,
+            ST_NEEDS_REVIEW if decisions else ST_BLOCKED,
+            (f"Trakt matched most columns, but {n} "
+             f"need{'s' if n == 1 else ''} your decision before the figures "
+             "can be checked."),
+            why=mapping_why,
+            decisions=decisions,
+            evidence=_coverage_evidence(handoff, hs),
+            blockers=([] if decisions else language.humanise_blockers(
+                ["onboarding handoff not ready for transformation/validation"])))
     elif onboard.status in (STEP_HALTED, STEP_FAILED):
         decisions = extract_mapping_decisions(work_dir, workflow) if work_dir else []
         if decisions:
@@ -471,27 +755,80 @@ def translate_run_state(workflow: WorkflowRun, state: RunState,
     steps_present = tr.status != STEP_PENDING or va.status != STEP_PENDING \
         or workflow.outcome == OUTCOME_MI_ANNEX2
     if va.status == STEP_DONE:
-        gar(STAGE_VALIDATION, ST_COMPLETED, "All checks passed.",
-            outputs=[va.output_path or ""])
+        # A step the orchestrator force-completed past a validation exception is
+        # NOT a clean pass, and must never say so: the operator accepted named
+        # findings, and the record has to keep saying that.
+        accepted = _accepted_findings(state)
+        if accepted:
+            gar(STAGE_VALIDATION, ST_APPROVED,
+                f"{len(accepted)} check{'s' if len(accepted) != 1 else ''} did "
+                "not pass and you accepted them for this delivery.",
+                why="The report is prepared on figures you have accepted with "
+                    "a reason, not on figures that passed.",
+                warnings=accepted,
+                outputs=[va.output_path or ""])
+        else:
+            gar(STAGE_VALIDATION, ST_COMPLETED, "All checks passed.",
+                outputs=[va.output_path or ""])
     elif va.status == STEP_HALTED:
-        gar(STAGE_VALIDATION, ST_NEEDS_REVIEW,
-            "Some figures did not pass Trakt's checks and need your review.",
-            why="Publishing figures that fail checks could mislead the "
-                "report's readers.",
-            decisions=[DecisionRequired(
-                decision_id=f"{wid}_validation_exception",
-                kind=KIND_VALIDATION_EXCEPTION,
-                title="Review the flagged checks",
-                question="Some checks did not pass. Do you want Trakt to "
-                         "continue and prepare the report anyway?",
-                blocking=True,
-                options=[{"value": "proceed", "label": "Continue — I accept "
-                                                       "the flagged items"},
-                         {"value": "stop", "label": "Stop — this needs fixing "
-                                                    "at source"}],
-                default_scope="file",
-                subject={"artefact": "validation_halt"})],
-            blockers=language.humanise_blockers(va.blockers))
+        found = read_validation_findings(work_dir)
+        structural, business = found["structural"], found["business"]
+        if structural:
+            # Structural findings are not exceptions. A core field that is absent
+            # or entirely blank makes the canonical economically incomplete, and
+            # no rationale can complete it — so no acceptance is offered, at any
+            # scope, to anyone. The route forward is to correct the source, the
+            # mapping or the value and run it again.
+            sentences = structural_finding_sentences(structural)
+            extra = (f" {len(business)} other check"
+                     f"{'s' if len(business) != 1 else ''} also did not pass."
+                     if business else "")
+            gar(STAGE_VALIDATION, ST_BLOCKED,
+                ("The delivery is missing information the report cannot be "
+                 "produced without." + extra),
+                why="These are not figures that look wrong — they are figures "
+                    "that are not there. The file, the column mapping or the "
+                    "values need correcting before Trakt can continue.",
+                blockers=sentences,
+                evidence=[{"label": "What is missing", "kind": "table",
+                           "data": [{"Field": f["field"],
+                                     "Check": f["rule"],
+                                     "Problem": f["description"]}
+                                    for f in structural]}])
+        else:
+            gar(STAGE_VALIDATION, ST_NEEDS_REVIEW,
+                "Some figures did not pass Trakt's checks and need your review.",
+                why="Publishing figures that fail checks could mislead the "
+                    "report's readers.",
+                decisions=[DecisionRequired(
+                    decision_id=f"{wid}_validation_exception",
+                    kind=KIND_VALIDATION_EXCEPTION,
+                    title="Review the flagged checks",
+                    question="Some checks did not pass. Do you want Trakt to "
+                             "continue and prepare the report anyway?",
+                    blocking=True,
+                    affected_record_count=len(business),
+                    observed_values=[f["field"] for f in business if f["field"]],
+                    options=[{"value": "proceed", "label": "Continue — I accept "
+                                                           "the flagged items"},
+                             {"value": "stop", "label": "Stop — this needs "
+                                                        "fixing at source"}],
+                    default_scope="file",
+                    evidence=[{"label": "What did not pass", "kind": "table",
+                               "data": [{"Field": f["field"],
+                                         "Check": f["rule"],
+                                         "Problem": f["description"]}
+                                        for f in business]}],
+                    subject={"artefact": "validation_halt",
+                             "findings": business})],
+                blockers=language.humanise_blockers(va.blockers))
+    elif tr.status == STEP_HALTED and not mapping_settled:
+        # Gate 2 refused an unready Gate 1 package. That is the mapping queue
+        # talking, not a data-quality problem — say so, and leave the decision
+        # to the mapping stage rather than raising a second, competing one.
+        gar(STAGE_VALIDATION, ST_WAITING,
+            "The checks are waiting for the mapping decisions above.",
+            why="Trakt will not check figures whose meaning is still unsettled.")
     elif va.status == STEP_FAILED or tr.status in (STEP_HALTED, STEP_FAILED):
         src = va if va.status == STEP_FAILED else tr
         gar(STAGE_VALIDATION, ST_BLOCKED,
