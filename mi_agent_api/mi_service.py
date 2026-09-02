@@ -768,6 +768,31 @@ def _parser_provenance(workflow: Dict[str, Any]) -> Dict[str, Any]:
             "specialist_intent_carried": parse_meta.get("specialist_intent_carried") or []}
 
 
+def _route_stated_reason(envelope: Dict[str, Any]) -> Optional[str]:
+    """The refusal a ROUTE authored for itself, if it authored one.
+
+    A route that declines writes its own sentence and marks the envelope
+    `controlledRefusal` / `controlledUnsupported`. That sentence names the
+    actual obstacle — a dimension the book does not govern, a scope with no
+    declared asset class, a comparison where no category moved — and the facet
+    guard downstream cannot know any of it.
+
+    Read from the envelope rather than re-derived: the marks and the message are
+    both set by the route, so this asks the route what it did rather than
+    guessing from the words it used.
+    """
+    if not isinstance(envelope, dict) or envelope.get("ok"):
+        return None
+    meta = envelope.get("metadata") or {}
+    marked = (envelope.get("controlledRefusal")
+              or (meta.get("controlledRefusal") if isinstance(meta, dict) else None)
+              or (meta.get("controlledUnsupported") if isinstance(meta, dict) else None))
+    if not marked:
+        return None
+    reason = envelope.get("error") or envelope.get("answer")
+    return str(reason).strip() or None if reason else None
+
+
 def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                          route: Optional[str], semantics: Dict[str, Any],
                          frame, parsed=None) -> Dict[str, Any]:
@@ -961,8 +986,26 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         if verdict in (receipt_mod.VERDICT_REFUSE,
                        receipt_mod.VERDICT_CLARIFY):
             routed["ok"] = False
-            routed["error"] = message
-            routed["answer"] = message
+            # A ROUTE THAT ALREADY REFUSED KEEPS ITS OWN REASON. This guard
+            # exists to stop a DELIVERED answer standing when a facet it was
+            # asked for never reached the calculation. Where the route has
+            # already declined and written why, replacing that sentence swaps a
+            # specific cause for a general one — measured on the live book,
+            #
+            #   route:   "I could not rank movement by region: no category
+            #             moved that way."
+            #   reader:  "I understood that you asked for ranking by region and
+            #             region, but that could not be applied..."
+            #
+            # and the useful half survived only as `ranking unavailable:
+            # no_category_moved_that_way` in the warnings, which is a code, in a
+            # field no channel renders. The facet message is kept as a warning
+            # so nothing is lost; only which sentence leads changes, and the
+            # verdict — already a refusal — does not change at all.
+            _own = _route_stated_reason(routed)
+            if not _own:
+                routed["error"] = message
+                routed["answer"] = message
             routed["artifacts"] = []
             routed["controlledRefusal"] = True
             routed["clarificationRequested"] = (

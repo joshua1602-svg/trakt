@@ -288,15 +288,15 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
         )
     vals = coerce_numeric(df[value_col])
     if aggregation == "sum":
-        return float(vals.sum())
+        return _scalar(vals.sum(), aggregation, len(vals))
     if aggregation == "avg":
-        return float(vals.mean())
+        return _scalar(vals.mean(), aggregation, len(vals))
     if aggregation == "median":
-        return float(vals.median())
+        return _scalar(vals.median(), aggregation, len(vals))
     if aggregation == "min":
-        return float(vals.min())
+        return _scalar(vals.min(), aggregation, len(vals))
     if aggregation == "max":
-        return float(vals.max())
+        return _scalar(vals.max(), aggregation, len(vals))
     if aggregation == "weighted_avg":
         if not weight_col:
             raise MIQueryExecutionError("weighted_avg requires a weight field")
@@ -307,6 +307,47 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
             return float("nan")
         return float((vals[mask] * w[mask]).sum() / denom)
     raise MIQueryExecutionError(f"Unsupported aggregation: {aggregation!r}")
+
+
+def _scalar(value: Any, aggregation: str, rows: int) -> float:
+    """A pandas aggregate as a float, or a typed refusal when it is not one.
+
+    WHY THIS EXISTS. `coerce_numeric` returns a pandas NULLABLE dtype, and a
+    nullable series that is empty — or all-null — aggregates to `pd.NA`, not to
+    `nan`. `float(pd.NA)` raises `TypeError`, which is not an
+    `MIQueryExecutionError`, so it escaped the executor's own error handling
+    entirely and reached the request as an unexplained fault:
+
+        TypeError: float() argument must be a string or a real number,
+                   not 'NAType'
+        -> "The MI Agent could not complete this query."
+
+    Measured on the live book: "how much outstanding balance do we have where
+    borrower age exceeds 75 and LTV is over 40%?" — a question whose filter
+    matches no rows in the Direct portfolio, which is a FACT about that book and
+    not a fault. Its near-identical sibling refused properly, naming the filter,
+    because it happened to route somewhere that checked first.
+
+    The message says "no rows" deliberately: `mi_service._error_code_for` reads
+    that phrase out of the validation errors and classifies the outcome
+    NO_MATCHING_RECORDS, which is what actually happened, rather than
+    CALCULATION_FAILED, which is what a crash looks like.
+
+    ONE OWNER for every scalar aggregation. `sum` is included even though an
+    empty sum is 0 rather than NA — a guard that covers four of five sites is
+    the shape this defect had in the first place.
+    """
+    if value is None or value is pd.NA or (
+            isinstance(value, float) and value != value and rows == 0):
+        raise MIQueryExecutionError(
+            "no rows to aggregate: %s over %d row(s) is undefined, so no "
+            "figure was produced" % (aggregation, rows))
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise MIQueryExecutionError(
+            "no rows to aggregate: %s produced a non-numeric result over "
+            "%d row(s)" % (aggregation, rows)) from None
 
 
 def _metric_col_name(value_col: Optional[str], aggregation: str,

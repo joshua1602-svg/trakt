@@ -386,6 +386,127 @@ def _is_portfolio_summary(question: str, spec=None) -> bool:
     return not _names_something_else(question, spec)
 
 
+#: Pipeline-shaped ways of asking for the book's overall position, on top of
+#: `_SUMMARY_INTENT`. Held SEPARATELY and never merged into that list: every
+#: word here is gated behind "the question names the pipeline dataset", so
+#: nothing funded can be reached by adding to it. Merging them would make
+#: "what does the book look like" a summary on the funded side too, which is a
+#: change to a question that already answers.
+_PIPELINE_SUMMARY_INTENT = (
+    "look like", "looks like", "progression", "shape of", "state of",
+    "where is the pipeline", "how is the pipeline",
+)
+
+
+def _is_pipeline_summary(question: str, spec=None) -> bool:
+    """A summary request about the PIPELINE, which the funded summary declines.
+
+    `portfolio_summary` answers from `output_root` and has no pipeline frame, so
+    `_names_another_dataset` makes it decline every pipeline question — correctly,
+    and measured: "Summarise the current pipeline." was once answered *"the
+    portfolio holds 640 loans with a funded balance of [figure]"*, from the funded
+    book. What that guard has never had is a sibling to hand the question TO, so
+    a pipeline summary fell through to the generic executor and, for "What does
+    the current pipeline look like?", was declined as unmappable.
+
+    The set claimed here is exactly the set the funded summary refuses for naming
+    the pipeline. It takes nothing from the funded side by construction: the
+    dataset owner has to say PIPELINE before any word below is even consulted.
+    """
+    try:
+        from . import workspace as _ws
+
+        if _ws.resolve_dataset(question) != "pipeline":
+            return False
+    except Exception as exc:  # noqa: BLE001 - eligibility never breaks a query
+        _logger.info("dataset-intent read unavailable for %r: %s", question, exc)
+        return False
+    q = f" {question.lower().strip()} "
+    if not any(m in q for m in _SUMMARY_INTENT + _PIPELINE_SUMMARY_INTENT):
+        return False
+    # The same three exclusions the funded summary applies, for the same
+    # reasons: a stratification, a movement question and a prior-period
+    # comparison are each owned elsewhere and are not summaries.
+    if " by " in q or any(m in q for m in _MOVEMENT_MARKERS):
+        return False
+    if any(m in q for m in _PRIOR_PERIOD_MARKERS):
+        return False
+    return True
+
+
+def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
+                            source_lens=None) -> Optional[Dict[str, Any]]:
+    """The pipeline's governed headline position — the funded summary's sibling.
+
+    IT COMPUTES NOTHING. Every figure is a key on the payload
+    `pipeline_contract.compute_pipeline_snapshot` already produces for
+    `/mi/pipeline/snapshot`, which is what the dashboard's pipeline tiles render.
+    A second arithmetic here would be a second source for numbers the estate
+    already has one owner for, and the two would drift.
+
+    SCOPE IS NOT CLAIMED. The governed weekly extract carries no
+    source-portfolio provenance, so a pipeline answer is whole-platform whatever
+    lens is selected. That is disclosed rather than implied — the same sentence
+    every other pipeline-sourced route uses — and `lens_applied=False` makes the
+    envelope say so too.
+
+    Returns ``None`` where the snapshot is unavailable, which defers to the
+    existing path rather than inventing an answer or an error.
+    """
+    try:
+        from . import datasets as ds_mod
+        from . import pipeline_contract as pipeline_mod
+        from .datasets import load_mi_semantics, semantics_path
+    except Exception as exc:  # noqa: BLE001 - a route never breaks the chat
+        _logger.info("pipeline summary unavailable: %s", exc)
+        return None
+
+    try:
+        source = ds_mod._resolve_pipeline_source(client_id, run_id)
+        if source is None:
+            return None
+        history = ds_mod._pipeline_history(source.get("client_id", client_id))
+        df, report = pipeline_mod.load_prepared_pipeline(
+            source, historical_model=history)
+        snapshot = pipeline_mod.compute_pipeline_snapshot(
+            df, report, load_mi_semantics(semantics_path()),
+            client_id=source.get("client_id", client_id),
+            run_id=run_id or source.get("run_id", ""), source=source)
+    except Exception as exc:  # noqa: BLE001 - defer, never fail the request
+        _logger.info("pipeline summary could not be built: %s", exc)
+        return None
+
+    cases = snapshot.get("pipelineRowCount")
+    if not cases:
+        return None
+    as_of = _date_label(snapshot.get("pipelineAsOfDate"))
+    parts = [f"At the weekly extract of {as_of} the pipeline holds "
+             f"{_count(cases)} cases with a total pipeline amount of "
+             f"{_gbp(snapshot.get('pipelineAmount'))}."]
+
+    stages = [b for b in (snapshot.get("stageBreakdown") or []) if b]
+    if stages:
+        named = ", ".join(
+            f"{b.get('stage')} {_count(b.get('count'))}" for b in stages[:6])
+        parts.append(f"By stage: {named}.")
+    weighted = snapshot.get("weightedExpectedFundedAmount")
+    if weighted:
+        parts.append(f"Weighted expected funded amount is {_gbp(weighted)}.")
+
+    artifacts = []
+    if stages:
+        artifacts.append({"type": "table", "title": "Pipeline by stage",
+                          "rows": [dict(b) for b in stages]})
+    return _envelope(
+        ok=True, question=question, spec=spec_dict, artifacts=artifacts,
+        answer=" ".join(parts), route="pipeline_summary",
+        lens_applied=False,
+        warnings=["Scope not narrowed: the governed weekly pipeline extract "
+                  "carries no source-portfolio provenance, so this position is "
+                  "the whole platform pipeline and is NOT narrowed to a "
+                  "selected book."])
+
+
 def _is_period_movement(question: str) -> bool:
     """A "what has changed versus the prior month" request.
 
@@ -3682,6 +3803,23 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 source_lens=r.source_lens,
                 interpretation=r.resolve_interpretation())),
+
+        # 8a-bis. THE PIPELINE'S headline position — the funded summary's
+        #     sibling. `portfolio_summary` above declines every pipeline
+        #     question because it reads `output_root` and has no pipeline
+        #     frame; until now nothing caught what it dropped, so a pipeline
+        #     summary fell through to the generic executor. This claims exactly
+        #     that set: the dataset owner must say PIPELINE before its
+        #     vocabulary is even consulted, so it can take nothing from the
+        #     funded side. Priority sits beside the funded summary, not above
+        #     it — the two recognise disjoint sets and cannot both fire.
+        Recogniser(
+            name="pipeline_summary", priority=81, lens_aware=False,
+            description="Current governed headline position of the pipeline.",
+            recognise=lambda r: _is_pipeline_summary(r.question, r.spec),
+            handle=lambda r: _route_pipeline_summary(
+                r.question, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, source_lens=r.source_lens)),
 
         # 8b. Governed Period Change Analysis — the first workflow layer built on
         #     the Business Semantics Registry. It sits AFTER the two composite

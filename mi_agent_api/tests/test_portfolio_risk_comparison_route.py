@@ -86,7 +86,16 @@ class TestRegistration:
         """
         added_since_the_migration = {prc.WORKFLOW_ID, "concentration_analysis",
                                      "analytical_composition",
-                                     "pipeline_stage_movement"}
+                                     "pipeline_stage_movement",
+                                     # The funded summary's sibling, added for
+                                     # the pipeline questions that route
+                                     # declines for naming another dataset. It
+                                     # sits beside `portfolio_summary` and
+                                     # recognises a disjoint set, so it cannot
+                                     # change how the chain answers anything;
+                                     # its placement has its own test in
+                                     # `test_pipeline_summary_route.py`.
+                                     "pipeline_summary"}
         names = [n for n in REGISTRY.names()
                  if n not in added_since_the_migration]
         assert names == [
