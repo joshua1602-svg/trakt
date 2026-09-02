@@ -123,6 +123,9 @@ export interface StaticPoolPeriod {
   reportingDate?: string | null;
   monthsSinceEntry?: number | null;
   survivingLoanCount: number;
+  /** The vintage was still originating at this date, so the pool was not yet
+   *  fixed and retention / exits are not reported for it. */
+  forming?: boolean;
   currentBalance: number;
   loanRetention?: number | null;
   balanceRetention?: number | null;
@@ -133,6 +136,12 @@ export interface StaticPoolPeriod {
 }
 
 export interface CohortStaticPool {
+  /** The date the vintage stopped originating; the pool is fixed from here. */
+  formationEnd?: string | null;
+  /** True once a fixed pool exists (the vintage has finished forming). */
+  poolAnchored?: boolean;
+  /** How many reported periods pre-date formation completing. */
+  formingPeriods?: number;
   dataset: "cohort_static_pool";
   portfolioId: string;
   cohortBasis: string;

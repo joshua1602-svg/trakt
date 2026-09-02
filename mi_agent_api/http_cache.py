@@ -255,6 +255,16 @@ def _dataset_identity_uncached(client_id: Optional[str], run_id: Optional[str],
     # change must produce a different validator. Absent config contributes a
     # stable marker rather than nothing, so identity stays establishable.
     identity.append(("config", config_fingerprint(client_id)))
+    # The client's governed NAME is rendered in the response envelope, and it
+    # resolves from per-client sources the config fingerprint above does not
+    # cover (the tenant registry, config/clients/<id>/client.yaml). Fold the
+    # resolved name itself in — it is short, exact, and changes only when the
+    # governed answer changes.
+    try:
+        from . import client_identity as _identity
+        identity.append(("client_name", _identity.governed_client_name(client_id) or "-"))
+    except Exception:  # noqa: BLE001 - identity must never fail a read
+        identity.append(("client_name", "-"))
     try:
         root = datasets_mod._onboarding_output_root()
     except Exception:  # noqa: BLE001

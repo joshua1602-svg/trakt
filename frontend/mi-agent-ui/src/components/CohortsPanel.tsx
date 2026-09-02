@@ -49,6 +49,12 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
   }, [client, portfolioId, portfolioContext, grain]);
 
   const vintages = useMemo(() => formation?.vintages ?? [], [formation]);
+  // Share of the book AT ENTRY. Summed from the balances the engine returned;
+  // it is a presentation ratio over one table, not a new economic measure.
+  const totalEntryBalance = useMemo(
+    () => vintages.reduce((sum, v) => sum + (v.originalBalance ?? 0), 0),
+    [vintages],
+  );
   // Default to the OLDEST vintage: it has the most seasoning to show.
   const selected = vintage || vintages[0]?.vintage || "";
 
@@ -96,7 +102,13 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
                 <th className="px-3 py-2 text-left font-medium">Vintage</th>
                 <th className="px-3 py-2 text-right font-medium">Loans entering</th>
                 <th className="px-3 py-2 text-right font-medium">Balance at entry</th>
-                <th className="px-3 py-2 text-right font-medium">WA original LTV</th>
+                <th className="px-3 py-2 text-right font-medium">Share of book</th>
+                <th className="px-3 py-2 text-right font-medium"
+                  title="Weighted-average LTV at origination. Only vintages whose tape supplies an original LTV can report one — an acquired book usually cannot.">
+                  WA original LTV</th>
+                <th className="px-3 py-2 text-right font-medium"
+                  title="Weighted-average CURRENT LTV of the loans as they entered the book. Available for every vintage, including acquired ones with no origination LTV.">
+                  WA LTV at entry</th>
                 <th className="px-3 py-2 text-right font-medium">WA rate</th>
               </tr>
             </thead>
@@ -109,7 +121,12 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
                   <td className="px-3 py-1.5 text-left font-medium text-ink-100">{v.vintage}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{v.originalLoanCount.toLocaleString("en-GB")}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{gbp(v.originalBalance)}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">
+                    {totalEntryBalance
+                      ? `${((v.originalBalance / totalEntryBalance) * 100).toFixed(1)}%`
+                      : "—"}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{pct(v.waOriginalLtv)}</td>
+                  <td className="px-3 py-1.5 text-right text-ink-200">{pct(v.waEntryLtv)}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{pct(v.waRate)}</td>
                 </tr>
               ))}
@@ -151,8 +168,17 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
             </thead>
             <tbody>
               {(pool?.periods ?? []).map((p) => (
-                <tr key={p.period} className="border-b border-[var(--color-line-soft)] last:border-0">
-                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">{p.period}</td>
+                <tr key={p.period}
+                  className="border-b border-[var(--color-line-soft)] last:border-0">
+                  <td className="px-3 py-1.5 text-left font-medium text-ink-100">
+                    {p.period}
+                    {p.forming && (
+                      <span
+                        title="The vintage was still originating at this date, so the pool was not yet fixed and there is no survival rate to report."
+                        className="ml-2 rounded-full border border-peri-400/30 bg-peri-400/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-peri-200"
+                      >Forming</span>
+                    )}
+                  </td>
                   <td className="px-3 py-1.5 text-right text-ink-400">
                     {p.monthsSinceEntry == null ? "—" : `+${p.monthsSinceEntry} mo`}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{p.survivingLoanCount.toLocaleString("en-GB")}</td>
@@ -168,8 +194,11 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
         </div>
       )}
       <p className="text-[10px] text-ink-500">
-        The pool is fixed at formation: a falling count is redemption or exit, and it can
-        never rise. Balance retention above 100% is interest roll-up, not new lending.
+        The pool is fixed once the vintage stops originating{pool?.formationEnd
+          ? ` (${pool.formationEnd})` : ""}. From that point a falling count is redemption
+        or exit and the count can never rise; balance retention above 100% is interest
+        roll-up, not new lending. Periods marked <span className="text-peri-200">Forming</span>{" "}
+        pre-date that: the vintage was still admitting loans, so no retention is shown.
       </p>
     </div>
   );

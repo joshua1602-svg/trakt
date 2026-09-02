@@ -9,7 +9,8 @@ import {
   Minus,
 } from "lucide-react";
 import type { FundedSnapshot, SnapshotKPI } from "@/domain";
-import { BarList, type BarDatum } from "@/components/pipeline/bits";
+import { BarList, MeasureToggle, BAR_MEASURE_LABEL, BAR_MEASURE_FORMAT,
+  type BarDatum, type BarMeasure } from "@/components/pipeline/bits";
 import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -59,15 +60,6 @@ function KpiTile({ kpi }: { kpi: SnapshotKPI }) {
  * The deterministic funded-portfolio snapshot shown on the landing page BEFORE
  * any AI query. Clearly labelled as funded-book MI (not the origination pipeline).
  */
-/** Which already-computed measure the stratification bars display. */
-export type StratMeasure = "balance" | "share" | "count";
-
-const MEASURE_LABEL: Record<StratMeasure, string> = {
-  balance: "Balance",
-  share: "% of book",
-  count: "Loans",
-};
-
 export function FundedSnapshotPanel({
   snapshot,
   loading,
@@ -79,7 +71,7 @@ export function FundedSnapshotPanel({
    *  never derives a population itself. */
   onDrill?: (dimension: string, band: string) => void;
 }) {
-  const [measure, setMeasure] = useState<StratMeasure>("balance");
+  const [measure, setMeasure] = useState<BarMeasure>("balance");
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   if (loading && !snapshot) {
@@ -170,30 +162,18 @@ export function FundedSnapshotPanel({
         <div className="mt-[var(--gap-section)]">
           <div className="mb-[var(--gap-group)] flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-line)] pb-[var(--gap-tight)]">
             <div className="t-label">
-              Stratifications · {MEASURE_LABEL[measure].toLowerCase()} by dimension
+              Stratifications · {BAR_MEASURE_LABEL[measure].toLowerCase()} by dimension
             </div>
-            {/* Presentation-only view switch. Balance, share and count are all
-                already in the stratification payload the deterministic engine
-                returned — nothing is recomputed in the browser. */}
-            {/* Tier 3 — which unit the bars are drawn in. Same `nav-unit`
-                treatment as the stage-movement Cases/Value switch, because it
-                is the same rank of control: it governs the figures in one
-                section, not the screen. */}
-            <div role="group" aria-label="Stratification measure" className="nav-unit">
-              {(Object.keys(MEASURE_LABEL) as StratMeasure[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={measure === m}
-                  aria-selected={measure === m}
-                  data-testid={`strat-measure-${m}`}
-                  onClick={() => setMeasure(m)}
-                  className={cn("nav-unit-item", measure !== m && "cursor-pointer")}
-                >
-                  {MEASURE_LABEL[m]}
-                </button>
-              ))}
-            </div>
+            {/* Presentation-only view switch on the shared bar-list seam.
+                Balance, share and count are all already in the stratification
+                payload — nothing is recomputed in the browser. */}
+            <MeasureToggle
+              measures={["balance", "share", "count"]}
+              active={measure}
+              onChange={setMeasure}
+              label="Stratification measure"
+              testIdPrefix="strat-measure"
+            />
           </div>
           <div className="grid grid-cols-1 gap-[var(--gap-group)] md:grid-cols-2 xl:grid-cols-3">
             {snapshot.stratifications!.map((s) => {
@@ -229,7 +209,7 @@ export function FundedSnapshotPanel({
                   {drawable ? (
                     <BarList
                       data={data}
-                      format={measure === "balance" ? "gbp" : measure === "share" ? "pct" : "count"}
+                      format={BAR_MEASURE_FORMAT[measure]}
                       onSelect={onDrill && ((label) => onDrill(s.label, label))}
                       selectTitle={(label) => `Ask the MI engine about ${label}`}
                     />

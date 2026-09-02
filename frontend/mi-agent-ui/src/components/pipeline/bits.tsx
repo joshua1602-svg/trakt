@@ -83,6 +83,69 @@ export interface BarDatum {
  * across the whole list and every bar track is identical — bars stay
  * apples-to-apples regardless of how long each row's value text is.
  */
+/** Which already-computed measure a bar list displays. Presentation only: every
+ *  measure named here is a field the deterministic engine already returned in
+ *  the same payload — switching never re-aggregates anything in the browser. */
+export type BarMeasure = "balance" | "share" | "count";
+
+export const BAR_MEASURE_LABEL: Record<BarMeasure, string> = {
+  balance: "Balance",
+  share: "% of book",
+  count: "Count",
+};
+
+/** The render format each measure needs. */
+export const BAR_MEASURE_FORMAT: Record<BarMeasure, "gbp" | "pct" | "count"> = {
+  balance: "gbp",
+  share: "pct",
+  count: "count",
+};
+
+/**
+ * A measure switch for bar lists. ``measures`` names only what the payload
+ * actually carries, so a breakdown without a count simply never offers one.
+ */
+export function MeasureToggle({
+  measures,
+  active,
+  onChange,
+  label = "Measure",
+  testIdPrefix,
+}: {
+  measures: readonly BarMeasure[];
+  active: BarMeasure;
+  onChange: (m: BarMeasure) => void;
+  label?: string;
+  testIdPrefix: string;
+}) {
+  if (measures.length < 2) return null;
+  return (
+    // Tier 3 — which unit the bars are drawn in. The same `nav-unit` treatment
+    // as the stage-movement Cases/Value switch, because it is the same rank of
+    // control: it governs the figures in one section, not the screen.
+    //
+    // `aria-selected` is what the `nav-unit-item` styling keys off, and
+    // `aria-pressed` is what a toggle button owes assistive technology. Both,
+    // deliberately — dropping either loses the active state for one audience.
+    <div role="group" aria-label={label} className="nav-unit">
+      {measures.map((m) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={active === m}
+          aria-selected={active === m}
+          data-testid={`${testIdPrefix}-${m}`}
+          onClick={() => onChange(m)}
+          className={cn("nav-unit-item", active !== m && "cursor-pointer")}
+        >
+          {BAR_MEASURE_LABEL[m]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
 export function BarList({
   data,
   format = "gbp",

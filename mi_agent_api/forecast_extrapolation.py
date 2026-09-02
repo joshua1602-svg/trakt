@@ -80,28 +80,109 @@ def completion_history(funded_periods: List[Dict[str, Any]]) -> List[Dict[str, A
 # --------------------------------------------------------------------------- #
 # Model A — completion run-rate extrapolation
 # --------------------------------------------------------------------------- #
+#: Balance growth is only a PROXY for completions: it also carries interest
+#: roll-up and, decisively, any portfolio onboarded in one step. Distinguishing
+#: a trend from a step needs at least three observations, so below this the
+#: proxy publishes no run-rate at all.
+_MIN_PROXY_OBSERVATIONS = 3
+
+#: A proxy observation this many times the median of the others is a step
+#: change (a book arriving), not a month of lending, and is excluded.
+_STEP_CHANGE_MULTIPLE = 3.0
+
+
+def _screen_proxy_observations(obs: List[float]) -> Tuple[List[float], List[int]]:
+    """Drop balance-growth observations that cannot be organic lending.
+
+    A portfolio onboarded in a single period shows up as one enormous
+    month-on-month balance jump. Averaged into a run-rate it produces a growth
+    rate the book has never achieved, so it is excluded and disclosed rather
+    than smoothed. Needs enough observations to have a median to judge against.
+    """
+    if len(obs) < _MIN_PROXY_OBSERVATIONS:
+        return obs, []
+    kept, excluded = [], []
+    for i, value in enumerate(obs):
+        others = [o for j, o in enumerate(obs) if j != i and o > 0]
+        if not others:
+            kept.append(value)
+            continue
+        median = sorted(others)[len(others) // 2]
+        if median > 0 and value > median * _STEP_CHANGE_MULTIPLE:
+            excluded.append(i)
+        else:
+            kept.append(value)
+    return (kept or obs), excluded
+
+
 def run_rate_model(current_balance: float, completions: List[float], *,
                    reporting_period: Optional[str] = None,
-                   thresholds: Optional[List[float]] = None) -> Dict[str, Any]:
-    """Completion run-rate forecast with downside / base / upside scenario bands."""
+                   thresholds: Optional[List[float]] = None,
+                   observed_monthly_completions: Optional[float] = None,
+                   completion_basis: Optional[str] = None) -> Dict[str, Any]:
+    """Completion run-rate forecast with downside / base / upside scenario bands.
+
+    ``observed_monthly_completions`` is the GOVERNED completion run-rate, taken
+    from the pipeline's own COMPLETED weekly flow. Where it exists it is the
+    signal, because it measures loans that actually completed. ``completions``
+    (month-on-month funded balance growth) is only a proxy for the same thing
+    and is used when no funnel is available — screened, and never from fewer
+    than three observations, because a single onboarded portfolio is
+    indistinguishable from a month of lending in a two-point series.
+    """
     thresholds = thresholds or _THRESHOLDS
     obs = [c for c in completions if c is not None]
     n = len(obs)
+
+    # --- Preferred signal: completions the pipeline actually observed. ------ #
+    if observed_monthly_completions is not None and observed_monthly_completions > 0:
+        base = round(float(observed_monthly_completions), 2)
+        return _assemble_run_rate(
+            current_balance, base, thresholds, reporting_period,
+            observed_months=n, sufficient=True, lookbacks={},
+            downside=round(base * 0.75, 2), upside=round(base * 1.25, 2),
+            scenario_basis="75% / 125% of the observed completion run-rate",
+            completion_signal=(completion_basis
+                               or "governed weekly completion flow (pipeline COMPLETED stage)"),
+            caveats=[], excluded=[])
+
+    # --- Fallback: month-on-month funded balance growth, screened. ---------- #
     if n == 0:
         return {"model": "completion_run_rate", "available": False,
                 "status": "insufficient_data",
                 "caveat": "No completion history (need at least two funded runs).",
                 "observedMonths": 0}
+    if n < _MIN_PROXY_OBSERVATIONS:
+        return {
+            "model": "completion_run_rate", "available": False,
+            "status": "insufficient_data",
+            "observedMonths": n,
+            "completionSignal": "month-on-month funded balance growth (proxy)",
+            "caveat": (
+                f"Only {n} month-on-month observation(s) of funded balance growth, and no "
+                "observed completion flow to measure against. Balance growth also carries "
+                "interest roll-up and any portfolio onboarded in one step, so a run-rate "
+                f"built on fewer than {_MIN_PROXY_OBSERVATIONS} observations could report "
+                "growth the book has never achieved. No run-rate is published."),
+            "caveats": [
+                "A scale-up run-rate needs either observed completion flow from the "
+                "pipeline, or at least three months of funded history to tell a trend "
+                "from a one-off portfolio arrival."],
+        }
+
+    kept, excluded = _screen_proxy_observations(obs)
+    obs = kept
+    n_kept = len(obs)
 
     # Lookback averages where enough history exists.
     lookbacks: Dict[str, float] = {}
     for w in _LOOKBACKS:
-        if n >= w:
+        if n_kept >= w:
             window = obs[-w:]
             lookbacks[f"{w}w"] = round(sum(window) / w, 2)
 
-    base = round(sum(obs[-min(5, n):]) / min(5, n), 2)  # recent average
-    sufficient = n >= 3
+    base = round(sum(obs[-min(5, n_kept):]) / min(5, n_kept), 2)  # recent average
+    sufficient = n_kept >= 3
     if sufficient:
         downside = round(_percentile(obs, 0.25), 2)
         upside = round(_percentile(obs, 0.75), 2)
@@ -110,26 +191,51 @@ def run_rate_model(current_balance: float, completions: List[float], *,
         downside = round(base * 0.75, 2)
         upside = round(base * 1.25, 2)
         scenario_basis = "75% / 125% of the base run-rate (insufficient history for percentiles)"
-    # Guard against a non-positive base making the projection meaningless.
-    scenarios = {"downside": max(downside, 0.0), "base": max(base, 0.0),
-                 "upside": max(upside, 0.0)}
-
-    projected = _project_series(current_balance, scenarios, reporting_period)
-    milestones = _milestones(current_balance, scenarios, reporting_period, thresholds)
 
     caveats: List[str] = []
     if not sufficient:
         caveats.append("Fewer than 3 monthly completion observations — scenario bands "
                        "are indicative (75%/125% of base), not statistically validated.")
+    return _assemble_run_rate(
+        current_balance, base, thresholds, reporting_period,
+        observed_months=n, sufficient=sufficient, lookbacks=lookbacks,
+        downside=downside, upside=upside, scenario_basis=scenario_basis,
+        completion_signal="month-on-month funded balance growth (proxy)",
+        caveats=caveats, excluded=excluded)
+
+
+def _assemble_run_rate(current_balance: float, base: float, thresholds: List[float],
+                       reporting_period: Optional[str], *, observed_months: int,
+                       sufficient: bool, lookbacks: Dict[str, float],
+                       downside: float, upside: float, scenario_basis: str,
+                       completion_signal: str, caveats: List[str],
+                       excluded: List[int]) -> Dict[str, Any]:
+    """Project, find milestones and package — shared by both completion signals."""
+    # Guard against a non-positive base making the projection meaningless.
+    scenarios = {"downside": max(downside, 0.0), "base": max(base, 0.0),
+                 "upside": max(upside, 0.0)}
+    projected = _project_series(current_balance, scenarios, reporting_period)
+    milestones = _milestones(current_balance, scenarios, reporting_period, thresholds)
+
+    caveats = list(caveats)
     if base <= 0:
         caveats.append("Recent net completions are flat or negative; milestone dates "
                        "are unavailable until the run-rate turns positive.")
+    if excluded:
+        caveats.append(
+            f"{len(excluded)} period(s) of funded balance growth were excluded from the "
+            "run-rate as step changes — growth of that size is a portfolio arriving, not "
+            "a month of lending, and averaging it in would report growth the book has "
+            "never achieved.")
+    if all(m.get("reached") for m in milestones):
+        caveats.append("The book already exceeds every configured funding threshold, so "
+                       "the milestone table has no dates left to project.")
 
     return {
         "model": "completion_run_rate",
         "available": True,
         "status": "ok" if sufficient else "limited_history",
-        "observedMonths": n,
+        "observedMonths": observed_months,
         "lookbackAverages": lookbacks,
         "baseMonthlyRunRate": base,
         "annualisedRunRate": round(base * 12, 2),
@@ -137,12 +243,13 @@ def run_rate_model(current_balance: float, completions: List[float], *,
         "scenarioBasis": scenario_basis,
         "projectedBalances": projected,
         "milestones": milestones,
+        "excludedObservations": excluded,
         "assumptions": {
             "lookbackWindowsMonths": list(_LOOKBACKS),
-            "observedMonths": n,
+            "observedMonths": observed_months,
             "horizonMonths": _HORIZON_MONTHS,
             "currentFundedBalance": round(current_balance, 2),
-            "completionSignal": "month-on-month funded balance growth",
+            "completionSignal": completion_signal,
         },
         "caveats": caveats,
     }
@@ -407,15 +514,6 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
                  "NOT the full scale-up forecast."),
     }
 
-    # Model A — completion run-rate.
-    comp = completion_history(funded_periods)
-    model_a = run_rate_model(
-        current_balance, [c["completion_amount"] for c in comp],
-        reporting_period=reporting_period,
-        thresholds=sorted({float(t) for t in _THRESHOLDS}
-                          | {float(t) for t in (extra_thresholds or ())}))
-    model_a["completionHistory"] = comp
-
     # Model B — KFI conversion. Uses the RECENT weekly completion-vs-KFI rate
     # (from the governed funnel, lagged by the KFI→completion timeline) applied
     # to the current KFI stock, replenished by the KFI inflow run-rate.
@@ -438,6 +536,28 @@ def build_extrapolation(output_root, pipeline_root, client_id: str,
     weekly_inflow = kfi_summary.get("fiveWeekAvgFlowValue")
     weekly_rate_pct = completed_conv.get("weeklyRateValue")
     weekly_conv = (weekly_rate_pct / 100.0) if weekly_rate_pct is not None else None
+
+    # Model A — completion run-rate. The signal is the completions the pipeline
+    # actually OBSERVED (its COMPLETED weekly flow, the same series the Pipeline
+    # → Evolution tab charts), so the two surfaces reconcile by construction.
+    # Month-on-month funded balance growth is only a proxy for that, and carries
+    # interest roll-up and any portfolio onboarded in one step, so it is the
+    # fallback rather than the signal.
+    completed_summary = (fsum.get("COMPLETED", {}) or {})
+    weekly_completions = completed_summary.get("fiveWeekAvgFlowValue")
+    observed_monthly = (float(weekly_completions) * _MONTHS_PER_WEEK
+                        if weekly_completions is not None and weekly_completions > 0
+                        else None)
+    comp = completion_history(funded_periods)
+    model_a = run_rate_model(
+        current_balance, [c["completion_amount"] for c in comp],
+        reporting_period=reporting_period,
+        thresholds=sorted({float(t) for t in _THRESHOLDS}
+                          | {float(t) for t in (extra_thresholds or ())}),
+        observed_monthly_completions=observed_monthly,
+        completion_basis=("observed completion flow — 5-week average of the pipeline's "
+                          "COMPLETED stage, annualised to a month"))
+    model_a["completionHistory"] = comp
     rate_weeks = completed_conv.get("weeksInWindow")
     min_rate_weeks = completed_conv.get("minWeeks", 3)
     model_b = _withdraw_kfi_model(
