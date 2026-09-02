@@ -913,6 +913,7 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
     geo_report = normalize_geography(df, pt, config)
     if geo_report:
         deriv_report.setdefault("derived", {})["geography"] = geo_report
+
     
     # 4. REPORTING DATE (Config-Driven Priority)
     # PRIORITY 1: Config Override (The 5% Case)
@@ -943,6 +944,24 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
         df["data_cut_off_date"] = df["data_cut_off_date"].apply(
             lambda x: smart_parse_cutoff_date(x, default_year=context_year)
         )
+
+    # 5. Governed canonical derivations this module does not own.
+    #    Gate 2 keeps its own balance / LTV / geography rules; anything else the
+    #    governed library declares is applied here BY NAME, so one canonical field
+    #    never ends up with two conventions. Runs last because a rule computed
+    #    "as at the cut-off date" needs the cut-off date to have been resolved —
+    #    running it earlier would age every borrower against an unparsed value.
+    #    Additive and null-preserving: a rule whose inputs are absent reports why
+    #    and changes nothing.
+    try:
+        from engine.transformation_agent import canonical_derivations as _cd
+        lib = _cd.apply_selected_derivations(df, _GATE2_LIBRARY_DERIVATIONS)
+    except Exception as exc:  # noqa: BLE001 — additive layer, never fatal
+        deriv_report.setdefault("skipped", {})["canonical_derivations"] = str(exc)
+    else:
+        for target, outcome in lib.items():
+            bucket = "derived" if outcome.get("applied") else "skipped"
+            deriv_report.setdefault(bucket, {})[target] = outcome
 
     return deriv_report
 
@@ -1031,6 +1050,67 @@ def apply_config_defaults(df: pd.DataFrame, config: dict) -> dict:
             df.loc[mask, field] = default_value
     return report
 
+#: Governed derivations Gate 2 takes from the shared library rather than
+#: reimplementing. Gate 2 owns LTV and the balance identities itself, so they are
+#: deliberately not in this list.
+_GATE2_LIBRARY_DERIVATIONS = ("youngest_borrower_age",)
+
+
+def resolve_portfolio_defaults(config: dict, source_portfolio_id: str) -> Dict[str, Any]:
+    """The fill-if-missing defaults configured for ONE source portfolio.
+
+    A managed-service client is several books, and a fact that is true of one is
+    not a fact about the client. The acquired book the seller delivered with no
+    origination-channel column has one channel — itself — and saying so is a
+    portfolio statement, not a client one, so it is configured per portfolio::
+
+        portfolio_defaults:
+          acquired_001:
+            broker_channel: Acquired_001
+
+    Adding ``acquired_002`` is a configuration line. Nothing here knows the name
+    of any portfolio.
+    """
+    if not isinstance(config, dict) or not source_portfolio_id:
+        return {}
+    block = config.get("portfolio_defaults") or {}
+    if not isinstance(block, dict):
+        return {}
+    wanted = str(source_portfolio_id).strip().lower()
+    for pid, defaults in block.items():
+        if str(pid).strip().lower() == wanted and isinstance(defaults, dict):
+            return dict(defaults)
+    return {}
+
+
+def apply_portfolio_defaults(df: pd.DataFrame, config: dict,
+                             source_portfolio_id: str) -> dict:
+    """Fill blanks in this portfolio's configured default fields.
+
+    Precedence is: a mapped source value, then the configured portfolio default,
+    then nothing. A real value is never overwritten, and the report distinguishes
+    a defaulted value from a sourced one so provenance survives — a broker channel
+    that came from configuration must never read as one the lender stated.
+    """
+    defaults = resolve_portfolio_defaults(config, source_portfolio_id)
+    applied: Dict[str, Any] = {}
+    for field, value in defaults.items():
+        if field not in df.columns:
+            df[field] = pd.NA
+        mask = df[field].isna() | (df[field].astype(str).str.strip().isin(("", "nan", "None")))
+        filled = int(mask.sum())
+        if filled:
+            df.loc[mask, field] = value
+        applied[field] = {
+            "value": value,
+            "rows_filled": filled,
+            "rows_kept_source_value": int(len(df) - filled),
+            "value_origin": "portfolio_default",
+            "source_portfolio_id": source_portfolio_id,
+        }
+    return {"portfolio_defaults": applied} if applied else {}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Canonical transform (frozen v1.9)")
     ap.add_argument("canonical_csv")
@@ -1116,6 +1196,12 @@ def main() -> None:
     # 6. Defaults
     defaults_report = apply_config_defaults(df, config)
 
+    # 6b. Portfolio-scoped defaults (fill-if-missing). Applied after the client
+    #     defaults so the more specific statement wins, and keyed on the run's
+    #     own source_portfolio_id so no other book can be touched by them.
+    _prov_pid = getattr(args, "source_portfolio_id", "") or ""
+    portfolio_defaults_report = apply_portfolio_defaults(df, config, _prov_pid)
+
     # 7. Source-portfolio provenance — stamp every row from run-level metadata.
     # Authoritative: overwrites any provenance columns so the canonical truth set
     # always carries a clean source-cohort tag. Optional here for back-compat;
@@ -1144,6 +1230,7 @@ def main() -> None:
         **deriv_report,
         **enum_norm_report,
         **defaults_report,
+        **portfolio_defaults_report,
         **provenance_report,
     }
 

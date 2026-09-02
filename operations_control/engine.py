@@ -899,6 +899,11 @@ class OpsEngine:
                 # snapshot, never live repository YAML.
                 registry=snap.get("registry"),
                 aliases_dir=snap.get("aliases_dir", "config/system"),
+                # The effective CLIENT configuration the resolver already
+                # materialises. It was written on every run and read by nothing,
+                # so the client's own value rules and portfolio defaults could
+                # not reach transformation.
+                client_config=snap.get("client_config"),
                 processing_mode=("deterministic" if deterministic
                                  else "source_onboarding"),
                 mapping_config_path=(str(approved) if approved else None),
@@ -2226,6 +2231,15 @@ class OpsEngine:
                "_doc": "Approved by operators in the Operations Control "
                        "Centre; regenerated from the governed rule store on "
                        "every approval.",
+               # The scope this contract was approved FOR. Stamped so a consumer
+               # can refuse to apply one book's approved decisions to another:
+               # a contract that cannot prove its scope is exactly what a
+               # mis-filed one looks like, and Gate 1 fails closed on both.
+               "contract_scope": {
+                   "client_id": run.client_id,
+                   "portfolio_id": run.portfolio_id,
+                   "dataset": run.delivery.get("dataset", "funded"),
+               },
                "user_overrides": [
                    # The tape builder needs BOTH a file and a column before it
                    # treats an override as a real source, so a single-file

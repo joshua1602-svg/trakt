@@ -73,10 +73,56 @@ defaults:
   originator_name: "ERE Funding Limited"                            # RREL82
   originator_establishment_country: "GB"                            # RREL84
 
+# --- APPROVED MAPPING CONTRACT (Client Specific) ---
+# Which source column means which canonical field is decided ONCE, during
+# onboarding, by the mapping model and a human operator, and recorded by the
+# Operations Control Centre as 12_approved_mapping_overrides.yaml. For the books
+# below that decision is the mapping authority: a run without it is refused
+# rather than falling back to alias and fuzzy header matching, because falling
+# back is what silently remapped four separate product concepts onto two
+# canonical fields.
+#
+# Other clients are unaffected: with no `mapping` block, nothing is required and
+# Gate 1 behaves exactly as before.
+mapping:
+  require_approved_contract: true
+  # Scope the requirement to the books that have been through OCC approval.
+  # Remove the list to require an approved contract for every portfolio.
+  approved_contract_portfolios:
+    - direct_001
+    - acquired_001
+
+# --- PORTFOLIO DEFAULTS (fill-if-missing, per source portfolio) ---
+# A fact about ONE book, not about the client. The acquired portfolio was bought
+# as a whole and the seller's extract carries no origination-channel column: the
+# channel for every loan in it is the portfolio itself. Stated here so the value
+# is a governed configuration decision with its own provenance
+# (value_origin: portfolio_default), never a literal in code and never confused
+# with a channel the lender actually reported.
+#
+# A mapped source value ALWAYS wins; this only fills blanks. Onboarding
+# acquired_002 is one more entry here and no code change.
+portfolio_defaults:
+  acquired_001:
+    broker_channel: Acquired_001
+
 # --- TRANSFORMATIONS (Client Specific) ---
 transformations:
   copy_if_missing:
     current_principal_balance: current_outstanding_balance
+
+  # Source VALUE normalisation — not a header-mapping decision. This client's
+  # policy administration system writes "Inforce" for a live policy; the
+  # canonical account status for an active loan is "A". Recorded here, scoped to
+  # this client, rather than in the shared enum library where it would speak for
+  # every lender.
+  #
+  # "D" is deliberately absent: its meaning on this book has not been confirmed,
+  # and a status is not a field to guess at. It stays unnormalised and visible.
+  canonical_enum_normalization:
+    account_status:
+      Inforce: A
+      A: A
 
 # --- ENRICHMENT (Client Specific) ---
 enrichment:

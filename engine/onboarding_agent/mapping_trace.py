@@ -42,6 +42,9 @@ from .file_profiler import redact_value
 
 # method (from MappingCandidate) -> selection reason category.
 _METHOD_REASON = {
+    # The selection reason vocabulary already names this one; until Gate 1 could
+    # carry an approved decision there was no method that produced it.
+    "operator_approved": "approved_override",
     "exact": "registry_match",
     "normalized": "registry_match",
     "alias": "alias_match",

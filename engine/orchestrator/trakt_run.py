@@ -214,6 +214,51 @@ def _script(name: str) -> str:
     return str(path)
 
 
+def approved_contract_required(config: Optional[dict], source_portfolio_id: str) -> bool:
+    """Whether this run's source portfolio is governed by an approved contract.
+
+    Read from the client configuration, so enabling it is a per-client decision
+    and every other client keeps today's behaviour::
+
+        mapping:
+          require_approved_contract: true
+          approved_contract_portfolios: [direct_001, acquired_001]
+
+    With ``approved_contract_portfolios`` present the requirement applies to
+    those source portfolios only; omit the list to require a contract for every
+    portfolio of the client.
+    """
+    mapping_cfg = ((config or {}).get("mapping") or {}) if isinstance(config, dict) else {}
+    if not bool(mapping_cfg.get("require_approved_contract", False)):
+        return False
+    scoped = mapping_cfg.get("approved_contract_portfolios") or []
+    if not scoped:
+        return True
+    wanted = str(source_portfolio_id or "").strip().lower()
+    return wanted in {str(p).strip().lower() for p in scoped}
+
+
+def _approved_mapping_cli_passthrough(args, required: bool) -> List[str]:
+    """Re-emit the approved-contract flags for the Gate 1 subprocess, including
+    the run scope Gate 1 checks the contract against."""
+    out: List[str] = []
+    for path in (getattr(args, "approved_mappings", None) or []):
+        out += ["--approved-mappings", str(Path(path).resolve())]
+    if required:
+        out += ["--require-approved-mappings"]
+    # Scope is stated by the caller, never inferred: the client identity a
+    # contract is written under belongs to the governance layer that approved it
+    # (the OCC client_id), not to whichever config file this run happens to load.
+    for flag, value in (
+        ("--approved-scope-client", getattr(args, "approved_scope_client", "") or ""),
+        ("--approved-scope-portfolio", getattr(args, "source_portfolio_id", "") or ""),
+        ("--approved-scope-dataset", getattr(args, "approved_scope_dataset", "") or ""),
+    ):
+        if value:
+            out += [flag, str(value)]
+    return out
+
+
 def _provenance_cli_passthrough(args) -> List[str]:
     """Re-emit the provenance flags so the canonical_transform subprocess stamps
     the same source-cohort tag the orchestrator validated."""
@@ -421,6 +466,28 @@ def run_common_gates(py: str, args, input_path: Path, out_dir: Path, val_dir: Pa
         "--output-dir", str(out_dir),
         "--aliases-dir", str(CONFIG_ROOT / "system"),
     ]
+    # Operator-approved mapping contract (tier 0 at Gate 1). Required-but-absent
+    # is a governed failure BEFORE Gate 1 runs, so no canonical is produced from
+    # automated matching in place of an approved decision.
+    approved_required = bool(getattr(args, "approved_contract_required", False))
+    approved_paths = list(getattr(args, "approved_mappings", None) or [])
+    if approved_required and not approved_paths:
+        raise RuntimeError(
+            "[Gate 1] Approved mapping contract required but not supplied for "
+            f"source portfolio '{getattr(args, 'source_portfolio_id', '') or '<unset>'}'. "
+            "This client/portfolio is governed by an approved onboarding contract "
+            "(mapping.require_approved_contract in the client config), so mapping "
+            "by alias or fuzzy matching is refused. Supply the OCC artefact with "
+            "--approved-mappings 12_approved_mapping_overrides.yaml, or run with "
+            "--no-require-approved-contract if this portfolio is genuinely "
+            "ungoverned.")
+    missing = [a for a in approved_paths if not Path(a).exists()]
+    if missing:
+        raise RuntimeError(
+            f"[Gate 1] Approved mapping contract not found: {missing}. Refusing "
+            "to run with a silently empty approved contract.")
+    gate1_cmd += _approved_mapping_cli_passthrough(args, approved_required)
+
     # Client onboarding-contract alias overlay (optional; nothing changes when
     # unset, which is every standard run).
     for extra in (getattr(args, "extra_aliases_dir", None) or []):
@@ -1106,6 +1173,31 @@ examples:
              "the global alias files at Gate 1 (the client's approved onboarding "
              "contract). Repeatable; later directories win.",
     )
+    ap.add_argument(
+        "--approved-mappings", dest="approved_mappings", action="append", default=[],
+        help="APPROVED mapping contract (12_approved_mapping_overrides.yaml) from "
+             "the Operations Control Centre, passed to Gate 1 as tier-0 mapping "
+             "authority. Repeatable. Never route an approved contract through "
+             "--extra-aliases-dir: an alias ranks BELOW canonical-name matching, "
+             "an approved decision above everything.",
+    )
+    ap.add_argument(
+        "--require-approved-contract", dest="require_approved_contract",
+        action="store_true", default=None,
+        help="Fail closed when this client/portfolio has no usable approved "
+             "mapping contract. Defaults to the client config's "
+             "mapping.require_approved_contract for the run's source portfolio.",
+    )
+    ap.add_argument(
+        "--no-require-approved-contract", dest="require_approved_contract",
+        action="store_false",
+        help="Override the client config and run without an approved contract.",
+    )
+    ap.add_argument("--approved-scope-client", dest="approved_scope_client", default="",
+                    help="Client id the approved contract must be scoped to "
+                         "(the governance client_id, e.g. ERE).")
+    ap.add_argument("--approved-scope-dataset", dest="approved_scope_dataset", default="",
+                    help="Dataset the approved contract must be scoped to (funded|pipeline).")
     ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
     ap.add_argument(
         "--product-defaults", dest="product_defaults", default=None,
@@ -1179,6 +1271,20 @@ examples:
         print(f"[Provenance] source_portfolio_id={provenance.source_portfolio_id} "
               f"type={provenance.source_portfolio_type} "
               f"cohort={provenance.portfolio_cohort}")
+
+    # -- Approved mapping contract requirement (client-config driven) -------
+    # Resolved once, here, so the decision is visible in the run log and is the
+    # same for every gate that consults it. An explicit CLI flag overrides.
+    _client_cfg = _load_yaml(args.master_config)
+    if getattr(args, "require_approved_contract", None) is None:
+        args.approved_contract_required = approved_contract_required(
+            _client_cfg, getattr(args, "source_portfolio_id", "") or "")
+    else:
+        args.approved_contract_required = bool(args.require_approved_contract)
+    if args.approved_contract_required:
+        print("[Mapping] Approved contract REQUIRED for "
+              f"{getattr(args, 'source_portfolio_id', '') or '<portfolio unset>'} "
+              f"({len(getattr(args, 'approved_mappings', None) or [])} supplied)")
 
     flags = _derive_runtime_flags(args)
 

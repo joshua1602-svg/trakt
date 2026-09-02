@@ -18,7 +18,7 @@ import argparse
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 import pandas as pd
 from rapidfuzz import fuzz, process
@@ -42,6 +42,9 @@ FUZZ_NORM_THRESHOLD = 92
 
 # Mapping method precedence (higher wins) to resolve duplicate collisions deterministically
 METHOD_RANK = {
+    # An operator-approved decision outranks every automated method. It is the
+    # only entry here that is not a matching technique: it is a governance fact.
+    "operator_approved": 7,
     "exact": 6,
     "normalized": 5,
     "alias": 4,
@@ -201,6 +204,234 @@ def load_aliases_from_dir(aliases_dir: Path) -> Dict[str, str]:
     return alias_map
 
 
+# ------------------------------------------------------------------
+# APPROVED MAPPING CONTRACT (tier 0)
+# ------------------------------------------------------------------
+#
+# The mapping semantics of a client's source columns are decided ONCE, during
+# onboarding, by the mapping model and a human operator. The Operations Control
+# Centre records each approval as a versioned rule and materialises the decisions
+# as ``12_approved_mapping_overrides.yaml``. Until this layer existed the mapper
+# had no way to be told any of that: the only client-specific channel was the
+# alias overlay, which sits BELOW exact and normalised canonical-name matching,
+# so an approved decision was silently overridable by automated name matching.
+#
+# An approved decision is not a matching technique competing with the others. It
+# is the answer. It is therefore consulted first, and nothing below it can win.
+
+#: Contract document versions this loader understands.
+SUPPORTED_APPROVED_CONTRACT_VERSIONS = (1,)
+
+#: Groups inside the contract, MOST authoritative first. ``user_overrides`` are
+#: the operator's own corrections; ``approved_high_confidence_mappings`` are the
+#: machine proposals approved wholesale alongside them.
+_APPROVED_GROUPS = ("user_overrides", "approved_high_confidence_mappings")
+
+
+def approved_column_key(column: str) -> str:
+    """Match key for an approved decision: case and separators only.
+
+    Deliberately NOT :func:`normalise_name`, which is built for *fuzzy* matching:
+    it drops stopwords and sorts tokens, so "Loan Type", "Type" and "Account
+    Type" all collapse to the same key. That tolerance is right when guessing
+    what a header means and wrong when applying a decision an operator made
+    about one specific column — a decision must land on the column it was made
+    about and no other. This is the same rule the client mapping memory uses
+    (``mapping_memory.normalize_column``), so a decision recorded in one place
+    matches the same header in the other.
+    """
+    return re.sub(r"[\s_]+", " ", str(column or "").strip().lower()).strip()
+
+
+class ApprovedMappingError(ValueError):
+    """The approved mapping contract is missing, malformed, mis-scoped or of an
+    unsupported version. Always fatal: a run that was told to use an approved
+    contract must never quietly fall back to alias and fuzzy matching."""
+
+
+class ApprovedMapping(NamedTuple):
+    """One approved source-column -> canonical-field decision."""
+
+    source_column: str
+    canonical_field: str
+    source_file: str
+    group: str
+    rule_id: str
+    rule_version: str
+    confidence: float
+    contract_path: str
+
+
+class ApprovedContract:
+    """The approved decisions in force for one run, indexed for lookup."""
+
+    def __init__(self, mappings: List[ApprovedMapping],
+                 sources: Optional[List[str]] = None,
+                 scopes: Optional[List[Dict[str, str]]] = None):
+        self.mappings = list(mappings)
+        self.sources = list(sources or [])
+        self.scopes = list(scopes or [])
+        self._by_column: Dict[str, ApprovedMapping] = {}
+        # Most authoritative group first, and within a group first-declared wins,
+        # so the index is built by walking groups in order and never overwriting.
+        for group in _APPROVED_GROUPS:
+            for m in self.mappings:
+                if m.group != group:
+                    continue
+                self._by_column.setdefault(approved_column_key(m.source_column), m)
+
+    def __len__(self) -> int:
+        return len(self.mappings)
+
+    def __bool__(self) -> bool:
+        return bool(self.mappings)
+
+    def lookup(self, raw_header: str) -> Optional[ApprovedMapping]:
+        return self._by_column.get(approved_column_key(raw_header))
+
+    def as_report(self) -> Dict[str, Any]:
+        return {
+            "contract_files": list(self.sources),
+            "contract_scopes": list(self.scopes),
+            "approved_mapping_count": len(self.mappings),
+            "approved_mappings": [
+                {"source_column": m.source_column,
+                 "canonical_field": m.canonical_field,
+                 "source_file": m.source_file,
+                 "group": m.group,
+                 "rule_id": m.rule_id,
+                 "rule_version": m.rule_version,
+                 "contract_file": m.contract_path}
+                for m in self.mappings
+            ],
+        }
+
+
+def _scope_mismatch(scope: Dict[str, str], expected: Dict[str, str]) -> List[str]:
+    """Names of the scope dimensions on which a contract does not match the run.
+
+    A dimension the run does not state is not checked; a dimension the run DOES
+    state must be present and equal in the contract. A contract that cannot prove
+    its scope is treated as mismatched on every stated dimension — an unscoped
+    document is exactly what a mis-filed one looks like.
+    """
+    bad: List[str] = []
+    for key, want in (expected or {}).items():
+        want = str(want or "").strip()
+        if not want:
+            continue
+        got = str((scope or {}).get(key, "") or "").strip()
+        if got.lower() != want.lower():
+            bad.append(f"{key}: contract={got or '<absent>'!s} run={want}")
+    return bad
+
+
+def load_approved_mappings(
+    paths: List[str | Path],
+    canonical_fields: Optional[List[str]] = None,
+    expected_scope: Optional[Dict[str, str]] = None,
+) -> ApprovedContract:
+    """Load and validate approved mapping contracts. Fails closed on any doubt.
+
+    ``expected_scope`` names the run's client / portfolio / dataset. When given,
+    every contract must carry a matching ``contract_scope`` block; a contract that
+    is silent about its scope, or that names a different one, is refused rather
+    than applied to the wrong book.
+    """
+    mappings: List[ApprovedMapping] = []
+    sources: List[str] = []
+    scopes: List[Dict[str, str]] = []
+    allowed = set(canonical_fields or [])
+
+    for raw_path in paths or []:
+        path = Path(raw_path)
+        if not path.exists():
+            raise ApprovedMappingError(
+                f"approved mapping contract not found: {path}. Refusing to run "
+                f"with automated matching in place of an approved decision.")
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except Exception as exc:  # noqa: BLE001 — reported, never swallowed
+            raise ApprovedMappingError(
+                f"approved mapping contract {path} is not readable YAML: {exc}")
+        if not isinstance(doc, dict):
+            raise ApprovedMappingError(
+                f"approved mapping contract {path} is malformed: expected a "
+                f"mapping at the top level, got {type(doc).__name__}.")
+
+        version = doc.get("version", None)
+        try:
+            version_i = int(version)
+        except (TypeError, ValueError):
+            raise ApprovedMappingError(
+                f"approved mapping contract {path} declares no usable version "
+                f"({version!r}); supported: {list(SUPPORTED_APPROVED_CONTRACT_VERSIONS)}.")
+        if version_i not in SUPPORTED_APPROVED_CONTRACT_VERSIONS:
+            raise ApprovedMappingError(
+                f"approved mapping contract {path} is version {version_i}; this "
+                f"build understands {list(SUPPORTED_APPROVED_CONTRACT_VERSIONS)}. "
+                f"Refusing to interpret a contract written to another schema.")
+
+        scope = doc.get("contract_scope") or {}
+        if not isinstance(scope, dict):
+            raise ApprovedMappingError(
+                f"approved mapping contract {path} has a malformed contract_scope.")
+        bad = _scope_mismatch(scope, expected_scope or {})
+        if bad:
+            raise ApprovedMappingError(
+                f"approved mapping contract {path} is scoped to a different "
+                f"source ({'; '.join(bad)}). Refusing to apply one book's "
+                f"approved decisions to another.")
+        scopes.append({k: str(v) for k, v in scope.items()})
+        sources.append(str(path))
+
+        found_group = False
+        for group in _APPROVED_GROUPS:
+            if group not in doc:
+                continue
+            entries = doc.get(group)
+            if entries is None:
+                entries = []
+            if not isinstance(entries, list):
+                raise ApprovedMappingError(
+                    f"approved mapping contract {path}: '{group}' must be a list, "
+                    f"got {type(entries).__name__}.")
+            found_group = True
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    raise ApprovedMappingError(
+                        f"approved mapping contract {path}: '{group}' contains a "
+                        f"non-mapping entry ({entry!r}).")
+                column = str(entry.get("source_column", "") or "").strip()
+                target = str(entry.get("canonical_field", "") or "").strip()
+                if not column or not target:
+                    raise ApprovedMappingError(
+                        f"approved mapping contract {path}: every '{group}' entry "
+                        f"needs a source_column and a canonical_field; got "
+                        f"{entry!r}.")
+                if allowed and target not in allowed:
+                    raise ApprovedMappingError(
+                        f"approved mapping contract {path}: approved target "
+                        f"'{target}' (for column '{column}') is not a canonical "
+                        f"field of this run's registry scope.")
+                mappings.append(ApprovedMapping(
+                    source_column=column,
+                    canonical_field=target,
+                    source_file=str(entry.get("source_file", "") or "").strip(),
+                    group=group,
+                    rule_id=str(entry.get("rule_id", "") or ""),
+                    rule_version=str(entry.get("rule_version", "") or ""),
+                    confidence=float(entry.get("confidence", 1.0) or 1.0),
+                    contract_path=str(path),
+                ))
+        if not found_group:
+            raise ApprovedMappingError(
+                f"approved mapping contract {path} declares none of "
+                f"{list(_APPROVED_GROUPS)} — there is no approved decision in it.")
+
+    return ApprovedContract(mappings, sources, scopes)
+
+
 def apply_alias_overlay(
     alias_map: Dict[str, str], overlay_dir: Path
 ) -> Tuple[Dict[str, str], List[Dict[str, str]]]:
@@ -243,12 +474,23 @@ def apply_alias_overlay(
 
 
 class HeaderMapper:
-    def __init__(self, canonical_fields: List[str], alias_map: Dict[str, str]):
+    def __init__(self, canonical_fields: List[str], alias_map: Dict[str, str],
+                 approved: Optional[ApprovedContract] = None):
         self.canonical = canonical_fields
         self.alias_map = alias_map
+        #: The operator-approved decisions in force for this run, consulted
+        #: before any automated matching. ``None`` on a run with no contract,
+        #: which leaves every tier below exactly as it was.
+        self.approved = approved
 
         self.norm_map = {normalise_name(c): c for c in canonical_fields}
         self.token_sets = {c: set(tokenize(c)) for c in canonical_fields}
+
+    def approved_for(self, raw_header: str) -> Optional[ApprovedMapping]:
+        """The approved decision governing this header, if there is one."""
+        if self.approved is None or pd.isna(raw_header):
+            return None
+        return self.approved.lookup(str(raw_header).strip())
 
     def map_one(self, raw_header: str) -> Tuple[Optional[str], str, float]:
         if pd.isna(raw_header):
@@ -257,6 +499,13 @@ class HeaderMapper:
         h = str(raw_header).strip()
         if not h:
             return None, "empty", 0.0
+
+        # Tier 0: the operator-approved decision. Checked before every automated
+        # method, including exact and normalised canonical-name matching, because
+        # it is not a guess about what the column means — it is the answer.
+        decision = self.approved_for(h)
+        if decision is not None:
+            return decision.canonical_field, "operator_approved", 1.0
 
         lowered = h.lower()
         norm = normalise_name(h)
@@ -391,6 +640,31 @@ def main() -> None:
              "global alias files.",
     )
     parser.add_argument(
+        "--approved-mappings",
+        action="append",
+        default=[],
+        help="Path to an APPROVED mapping contract "
+             "(12_approved_mapping_overrides.yaml) produced by the Operations "
+             "Control Centre. Repeatable. Approved decisions are tier 0: they "
+             "beat exact, normalised, alias and fuzzy matching. This is NOT an "
+             "alias overlay and must not be supplied through --extra-aliases-dir.",
+    )
+    parser.add_argument(
+        "--require-approved-mappings",
+        action="store_true",
+        default=False,
+        help="Fail the run when no usable approved mapping contract is supplied. "
+             "For a client/portfolio governed by an approved onboarding contract, "
+             "reverting to alias and fuzzy matching is a governed failure, not a "
+             "fallback.",
+    )
+    parser.add_argument("--approved-scope-client", default="",
+                        help="Client the approved contract must be scoped to.")
+    parser.add_argument("--approved-scope-portfolio", default="",
+                        help="source_portfolio_id the contract must be scoped to.")
+    parser.add_argument("--approved-scope-dataset", default="",
+                        help="Dataset (funded|pipeline) the contract must be scoped to.")
+    parser.add_argument(
         "--regimes",
         nargs="*",
         default=[],
@@ -462,19 +736,51 @@ def main() -> None:
             )
         alias_map, applied = apply_alias_overlay(alias_map, extra_dir)
         alias_overlay_applied.extend(applied)
-    mapper = HeaderMapper(canonical_fields, alias_map)
+
+    # Operator-approved decisions, loaded and validated BEFORE any header is
+    # looked at. A required-but-unusable contract stops the run here, so no
+    # canonical is ever produced from automated matching in its place.
+    expected_scope = {
+        "client_id": args.approved_scope_client,
+        "portfolio_id": args.approved_scope_portfolio,
+        "dataset": args.approved_scope_dataset,
+    }
+    approved = load_approved_mappings(
+        [Path(a) for a in (args.approved_mappings or [])],
+        canonical_fields=canonical_fields,
+        expected_scope=expected_scope,
+    )
+    if args.require_approved_mappings and not approved:
+        raise ApprovedMappingError(
+            "This client/portfolio requires an approved mapping contract and "
+            "none was supplied (--approved-mappings). Refusing to map headers "
+            "by alias or fuzzy matching: the approved decision is the mapping "
+            "authority, and running without it is what silently remapped "
+            "columns before.")
+    if approved:
+        logging.info("Loaded %d approved mapping decision(s) from %s",
+                     len(approved), ", ".join(approved.sources))
+
+    mapper = HeaderMapper(canonical_fields, alias_map, approved=approved or None)
 
     header_map: Dict[str, Optional[str]] = {}
     report_rows = []
     for col in df_raw.columns:
         canon, method, conf = mapper.map_one(col)
         header_map[col] = canon
+        decision = mapper.approved_for(col)
         report_rows.append(
             {
                 "raw_header": col,
                 "canonical_field": canon or "",
+                # The method that ACTUALLY decided this column, so a reader can
+                # never mistake "a contract was loaded" for "the contract won".
                 "mapping_method": method,
                 "confidence": conf,
+                "approved_rule_id": decision.rule_id if decision else "",
+                "approved_rule_version": decision.rule_version if decision else "",
+                "approved_contract_file": decision.contract_path if decision else "",
+                "approved_source_file": decision.source_file if decision else "",
             }
         )
 
@@ -607,6 +913,14 @@ def main() -> None:
         "extra_aliases_dirs": [str(d) for d in (args.extra_aliases_dir or [])],
         "alias_overlay_applied": alias_overlay_applied,
         "alias_overlay_entry_count": len(alias_overlay_applied),
+        # The approved mapping contract in force, what it said, and how many
+        # columns it actually decided.
+        "approved_mapping_contract": approved.as_report(),
+        "approved_mapping_required": bool(args.require_approved_mappings),
+        "approved_mapping_scope_expected": {k: v for k, v in expected_scope.items() if v},
+        "columns_decided_by_operator_approval": sorted(
+            r["raw_header"] for r in report_rows
+            if r["mapping_method"] == "operator_approved"),
         "thresholds": {
             "JACCARD_THRESHOLD": JACCARD_THRESHOLD,
             "FUZZ_TOKEN_SET_THRESHOLD": FUZZ_TOKEN_SET_THRESHOLD,

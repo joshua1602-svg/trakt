@@ -70,7 +70,20 @@ def normalize_types(
     return ct.apply_types(df, fields_meta, currency_synonyms, dayfirst=dayfirst)
 
 
-def normalize_enums(df: pd.DataFrame, config: Optional[dict] = None) -> Dict[str, Any]:
+def apply_portfolio_defaults(df: pd.DataFrame, client_config: Optional[dict],
+                            source_portfolio_id: str) -> Dict[str, Any]:
+    """Reuse Gate 2's portfolio-scoped fill-if-missing defaults.
+
+    A fact about ONE source portfolio (the acquired book's origination channel is
+    the portfolio itself) is configured per portfolio and never hard-coded, so the
+    next acquired book is a configuration line.
+    """
+    return ct.apply_portfolio_defaults(df, client_config or {},
+                                       source_portfolio_id or "")
+
+
+def normalize_enums(df: pd.DataFrame, config: Optional[dict] = None,
+                    client_config: Optional[dict] = None) -> Dict[str, Any]:
     """Apply Gate 2 canonical enum normalisation (internal standardisation).
 
     This is NOT ESMA/regime code projection — it standardises known enum
@@ -78,6 +91,14 @@ def normalize_enums(df: pd.DataFrame, config: Optional[dict] = None) -> Dict[str
     untouched (never guessed) and reported in the returned per-field summary.
     """
     norm_map = ct.resolve_canonical_enum_normalization(config or {})
+    # A CLIENT's own source vocabulary layered on top of the asset-class map.
+    # "Inforce" means a live policy in one lender's administration system; that
+    # is a statement about that lender, so it must not be able to speak for the
+    # asset class. Client entries win on the same key.
+    if client_config:
+        for field, mapping in ct.resolve_canonical_enum_normalization(
+                client_config).items():
+            norm_map.setdefault(field, {}).update(mapping)
     report = ct.apply_canonical_enum_normalization(df, norm_map)
     report["_normalization_map_fields"] = sorted(norm_map.keys())
     return report

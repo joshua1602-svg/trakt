@@ -359,6 +359,7 @@ def build_transformation_package(
     handoff_manifest_path: str | Path,
     *,
     asset_config_path: str = "",
+    client_config_path: str = "",
     regime_config_path: str = "",
     registry_path: str = "",
     enum_mapping_path: str = "",
@@ -399,6 +400,14 @@ def build_transformation_package(
         registry_path = str(repo_root / registry_path)
     enum_mapping_path = enum_mapping_path or str(
         repo_root / "config" / "system" / "enum_mapping.yaml")
+
+    # The CLIENT layer of the effective configuration (the OCC snapshot's
+    # effective_client_config.yaml, or the repository client file). Optional:
+    # with no client config nothing below changes, which is every run that has
+    # not been given one.
+    client_config_path = client_config_path or handoff.get("client_config_path", "") or ""
+    client_cfg = (_read_yaml(Path(client_config_path))
+                  if client_config_path and Path(client_config_path).exists() else {}) or {}
 
     asset_cfg = _read_yaml(Path(asset_config_path)) or {}
     asset_defaults = asset_cfg.get("defaults", {}) or {}
@@ -447,6 +456,13 @@ def build_transformation_package(
     # 7. Apply Gate 2 config-driven asset defaults (reuse) as a backstop fill.
     g2.apply_defaults(df, asset_defaults)
 
+    # 7a. Portfolio-scoped defaults (fill-if-missing). More specific than the
+    #     client and asset layers, so applied after them. A mapped source value
+    #     always wins; provenance records value_origin: portfolio_default so a
+    #     configured channel never reads as one the lender reported.
+    portfolio_defaults_report = g2.apply_portfolio_defaults(
+        df, client_cfg, _source_portfolio_id(handoff, df))
+
     # 7b. Equivalent-field fill (``transformations.copy_if_missing``). Declared in
     #     the estate's client configs since inception but never executed, so the
     #     relationship it states was silently not applied. For equity release the
@@ -458,7 +474,7 @@ def build_transformation_package(
     copy_results = _apply_copy_if_missing(df, asset_cfg, issues)
 
     # 8. Canonical enum normalisation (internal standardisation; not projection).
-    enum_report = g2.normalize_enums(df, asset_cfg)
+    enum_report = g2.normalize_enums(df, asset_cfg, client_config=client_cfg)
 
     # 8b. Deterministic canonical derivations (config-driven). Runs AFTER typing
     #     so each rule reads the PARSED canonical value — e.g. the protected-equity
@@ -514,8 +530,10 @@ def build_transformation_package(
         enum_report=enum_report,
         derivation_results=derivation_results,
         normalisation_results=normalisation_results,
+        portfolio_defaults=portfolio_defaults_report,
         config_paths={
             "asset_config_path": asset_config_path,
+            "client_config_path": client_config_path,
             "regime_config_path": regime_config_path,
             "registry_path": registry_path,
         },
@@ -959,6 +977,23 @@ def _apply_source_value_rules(
 # Deterministic canonical derivations (config-driven)
 # --------------------------------------------------------------------------- #
 
+def _source_portfolio_id(handoff: Dict[str, Any], df: pd.DataFrame) -> str:
+    """The run's source portfolio, from the handoff or from the tape's own
+    provenance column. Row-level provenance is authoritative — the tape says
+    which cohort it belongs to — and the handoff is the fallback for a tape that
+    has not been stamped yet."""
+    if "source_portfolio_id" in df.columns and len(df):
+        values = {str(v).strip() for v in df["source_portfolio_id"].dropna().tolist()
+                  if str(v).strip() not in ("", "nan", "None")}
+        if len(values) == 1:
+            return values.pop()
+    for key in ("source_portfolio_id", "portfolio_id"):
+        value = str((handoff or {}).get(key, "") or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _apply_canonical_derivations(
     df: pd.DataFrame, issues: _IssueLog, *, config_path: str = "",
 ) -> Dict[str, Dict[str, Any]]:
@@ -970,6 +1005,24 @@ def _apply_canonical_derivations(
     """
     results = cd.apply_derivations(df, config_path=config_path)
     for target, res in results.items():
+        # Rows the rule could not answer because the inputs were not there. That
+        # is a question about the data, not a failure of the transformation, so
+        # it is reported to the OPERATOR and never blocks the portfolio: two
+        # loans with no usable date of birth must not hold up the other 883.
+        unresolved = int(res.get("unresolved_count", 0) or 0)
+        if res.get("applied") and unresolved:
+            res["unresolved_issue_id"] = issues.add(
+                severity="warning", field=target, canonical_field=target,
+                esma_code="", issue_type=IT_OPERATOR_PENDING,
+                source_value_sample="",
+                description=(res.get("unresolved_reason")
+                             or (f"{unresolved} row(s) have no usable "
+                                 f"{res.get('derived_from', 'source')} value, so "
+                                 f"{target} could not be derived")),
+                blocking_for_validation=False, blocking_for_projection=False,
+                recommended_action=("operator review: supply the missing source "
+                                    "values or confirm the field stays null"),
+                downstream_owner=OWN_OPERATOR)
         if not res.get("applied") or not res.get("failure_count"):
             continue
         res["issue_id"] = issues.add(
@@ -1432,6 +1485,7 @@ def _write_artefacts(
     config_paths: Dict[str, str],
     derivation_results: Optional[Dict[str, Dict[str, Any]]] = None,
     normalisation_results: Optional[Dict[str, Dict[str, Any]]] = None,
+    portfolio_defaults: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
 
     # 31 — transformed canonical tape (csv + json)
@@ -1566,6 +1620,11 @@ def _write_artefacts(
             int(r.get("normalised_row_count", 0) or 0)
             for r in (normalisation_results or {}).values()),
         "source_value_normalised_field_count": len(normalisation_results or {}),
+        # Portfolio-scoped fill-if-missing defaults: which field, which value,
+        # how many rows took it and how many kept a real source value. Recorded
+        # so a configured value is never indistinguishable from a reported one.
+        "portfolio_defaults_applied": (portfolio_defaults or {}).get(
+            "portfolio_defaults", {}),
         "next_agent": NEXT_AGENT,
         **readiness,
     }

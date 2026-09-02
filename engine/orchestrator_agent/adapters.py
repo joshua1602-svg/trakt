@@ -171,6 +171,7 @@ class RealAgentAdapters(AgentAdapters):
                  client_name: Optional[str] = None,
                  onboarding_mode: str = "mi_only",
                  aliases_dir: str = "config/system",
+                 client_config: Optional[str] = None,
                  processing_mode: str = "source_onboarding",
                  dataset: str = "",
                  mapping_config_path: Optional[str] = None,
@@ -185,6 +186,12 @@ class RealAgentAdapters(AgentAdapters):
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
         self.aliases_dir = aliases_dir
+        # The CLIENT layer of the immutable effective configuration. Carries the
+        # client's own source-value normalisations and its portfolio-scoped
+        # defaults, which are statements about THIS client's books and must not
+        # be read from the asset-class layer. None on a run with no snapshot,
+        # which leaves transformation exactly as it was.
+        self.client_config = client_config
         # processing_mode is the discovery lever the blob trigger sets:
         #   "source_onboarding" — run source discovery/mapping (new/changed source);
         #   "deterministic"     — skip discovery, apply the saved approved mapping.
@@ -373,7 +380,8 @@ class RealAgentAdapters(AgentAdapters):
     def transform(self, spec: PortfolioSpec, handoff_manifest: str, work_dir: Path) -> StepResult:
         from engine.transformation_agent.transformation_agent import build_transformation_package
         res = build_transformation_package(handoff_manifest,
-                                           registry_path=self.registry)
+                                           registry_path=self.registry,
+                                           client_config_path=self.client_config or "")
         m = res["manifest"]
         ready = bool(m.get("ready_for_validation"))
         return StepResult(

@@ -72,3 +72,28 @@ derivations:
     description: >-
       Original advance as a percentage of the valuation at origination.
       Calculated only where the lender does not supply the ratio itself.
+
+  # Youngest borrower age. An acquired back book is delivered with dates of
+  # birth and no age column: the seller's system stored the DOB and computed the
+  # age on demand. The canonical field is what MI and every age-band question
+  # read, so it is calculated from the governed canonical dates rather than left
+  # absent for two thirds of the platform.
+  #
+  # Full calendar age (completed years) at the GOVERNED cut-off date, never at
+  # today: an answer about the June book must not change because it was asked in
+  # September. Both borrowers are considered and the YOUNGER one's age is taken;
+  # one borrower is enough. A lender-supplied age always wins (`fill_blank_only`).
+  # Where no date of birth is usable the result is null and the row is counted
+  # for operator review — it is a question about the data, not a failure of the
+  # rule, so it never blocks the portfolio.
+  youngest_borrower_age:
+    from: [borrower_1_DOB, borrower_2_DOB]
+    at: data_cut_off_date
+    rule: youngest_full_age_at
+    fill_blank_only: true
+    unresolved_reason: >-
+      No usable borrower date of birth at the governed cut-off date; the
+      youngest-borrower age cannot be calculated for these loans.
+    description: >-
+      Completed years lived by the younger borrower at the governed data cut-off
+      date, calculated only where the lender does not supply an age.
