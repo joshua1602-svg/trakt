@@ -1064,6 +1064,15 @@ def main() -> int:
             "aggregation": spec.get("aggregation"),
             "dimensions": _keys(spec.get("dimensions") or spec.get("dimension")),
             "filter_fields": _keys(spec.get("filters")),
+            # WHY the language-understanding step failed, in the arm's own
+            # words. `_enforce_model_availability` deliberately publishes a
+            # reader-facing sentence with no model name and no arm in it; the
+            # cause it withholds is an API exception, not client data, and
+            # without it a whole run of refusals names no fault to fix.
+            "concept_merge": ({
+                "status": (meta.get("conceptMerge") or {}).get("status"),
+                "detail": _redact((meta.get("conceptMerge") or {}).get("detail")),
+            } if isinstance(meta.get("conceptMerge"), dict) else None),
             "scope_applied": _scope_applied(env, meta),
             "coverage": coverage,
             "artefacts": [{"type": a.get("type"), "rows": len(a.get("rows") or [])}
