@@ -467,3 +467,80 @@ class TestArtefactEconomy(unittest.TestCase):
             "budget. Every megabyte is uploaded on each deploy and unpacked on "
             "each cold start. Either it is runtime code that has genuinely grown, "
             "or it is evidence that belongs in package_excludes.txt."))
+
+
+def _startup_preamble() -> str:
+    """Everything ``startup.sh`` runs BEFORE it execs gunicorn.
+
+    Sourcing that half in a subshell is how the import-path handling can be
+    exercised without a web server: the exec line is the only statement after
+    it, and dropping it is what makes the script terminate normally.
+    """
+    lines = (_REPO / "startup.sh").read_text(encoding="utf-8").splitlines()
+    for i, line in enumerate(lines):
+        if line.startswith("exec gunicorn"):
+            return "\n".join(lines[:i])
+    raise AssertionError("startup.sh no longer execs gunicorn")
+
+
+def _pythonpath_after_startup(before: str) -> str:
+    """PYTHONPATH as the gunicorn process would inherit it."""
+    result = subprocess.run(
+        ["bash", "-c", _startup_preamble() + '\nprintf "%s" "${PYTHONPATH:-}"'],
+        env={**os.environ, "PYTHONPATH": before},
+        capture_output=True, text=True, check=True)
+    return result.stdout
+
+
+class TestStartupImportPath(unittest.TestCase):
+    """The venv's libraries must win over the platform's vendored copies.
+
+    App Service prepends its auto-instrumentation directory to PYTHONPATH. That
+    directory carries its own ``typing_extensions``, and because it sits ahead
+    of the venv it shadowed the installed one — so ``anyio``, imported by
+    ``fastapi.routing``, failed on ``from typing_extensions import sentinel``
+    and both gunicorn workers refused to boot. The site 5xx'd until a later
+    boot happened to omit the entry, which makes the failure intermittent and
+    unattributable to any deploy: exactly the kind of thing a guard is for.
+    """
+
+    _AGENT = "/agents/python"
+    _VENV = "/tmp/8df09486979dd64/antenv/lib/python3.11/site-packages"
+
+    def test_the_platform_agent_directory_is_removed(self):
+        after = _pythonpath_after_startup(
+            f"{self._AGENT}:/opt/startup/app_logs:{self._VENV}")
+        self.assertNotIn(self._AGENT, after.split(":"), (
+            "the App Service auto-instrumentation directory is still on "
+            "PYTHONPATH ahead of the venv. Its vendored typing_extensions "
+            "shadows the installed one and gunicorn's workers fail to boot."))
+
+    def test_nested_agent_entries_are_removed_too(self):
+        after = _pythonpath_after_startup(f"{self._AGENT}/common:{self._VENV}")
+        self.assertEqual(after, self._VENV)
+
+    def test_every_other_entry_survives_in_order(self):
+        """Only the agent's own entries go. Removing anything else would change
+        what the app can import, which is a far larger blast than the bug."""
+        after = _pythonpath_after_startup(
+            f"{self._AGENT}:/opt/startup/app_logs:{self._VENV}")
+        self.assertEqual(after, f"/opt/startup/app_logs:{self._VENV}")
+
+    def test_an_unset_pythonpath_stays_harmless(self):
+        """Locally and in the container image PYTHONPATH is often unset. The
+        guard must not turn that into an empty-string entry, which Python reads
+        as the current working directory."""
+        result = subprocess.run(
+            ["bash", "-c", _startup_preamble()
+             + '\nprintf "%s" "${PYTHONPATH-<unset>}"'],
+            env={k: v for k, v in os.environ.items() if k != "PYTHONPATH"},
+            capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout, "<unset>")
+
+    def test_a_path_that_merely_mentions_agents_is_kept(self):
+        """``/agents/python`` is the platform's directory. A repo path that
+        happens to contain the word is not, and dropping it would break the
+        app it belongs to."""
+        keep = "/home/site/wwwroot/agents/python_helpers"
+        after = _pythonpath_after_startup(f"{keep}:{self._VENV}")
+        self.assertEqual(after, f"{keep}:{self._VENV}")
