@@ -1,4 +1,17 @@
-"""mi_agent_api.query_telemetry — the governed record of one MI question.
+"""operations_control.mi_query_telemetry — the governed record of one MI question.
+
+This lives in ``operations_control`` because the RECORD is an OCC document. OCC
+owns the store it lands in, the layout it lands under, the review vocabulary an
+operator classifies it with, and the routes that read it back. The MI API is
+merely the writer, and calls in here to write.
+
+Putting it the other way round — the projection living beside the MI service —
+coupled two independently deployed App Services in both directions: the OCC API
+imported ``mi_agent_api`` at module scope for the review vocabulary, which its
+deployment package does not ship (and should not: the MI service is a separate
+deployment with its own image and requirements), and the OCC API then failed to
+import at all. The dependency that remains runs one way only, MI API → OCC, and
+is declared in ``deploy/trakt-mi-api/package_contents.txt``.
 
 Every MI Query execution already ends at a :class:`~trakt_core.envelope.
 GovernedResult` carrying who asked, of which snapshot, what happened and how
@@ -34,7 +47,7 @@ from typing import Any, Dict, List, Optional
 from trakt_core.envelope import GovernedResult
 from trakt_core.errors import ErrorCategory, ErrorCode, category_for
 
-logger = logging.getLogger("mi_agent_api.query_telemetry")
+logger = logging.getLogger("operations_control.mi_query_telemetry")
 
 SCHEMA_VERSION = "1.0.0"
 

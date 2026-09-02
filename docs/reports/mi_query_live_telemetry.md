@@ -66,11 +66,11 @@ helper:
 def _finish(result, request):
     emit_audit_event(result)                 # unchanged — Application Insights
     try:
-        from . import query_telemetry
+        from operations_control import mi_query_telemetry
         from operations_control.stores import OpsStore
-        query_telemetry.record(OpsStore.from_env(), result,
-                               question=request.question,
-                               requested_portfolio=request.effective_portfolio_id())
+        mi_query_telemetry.record(OpsStore.from_env(), result,
+                                  question=request.question,
+                                  requested_portfolio=request.effective_portfolio_id())
     except Exception:
         logger.warning("mi query telemetry unavailable for request_id=%s", ...)
     return result
@@ -88,6 +88,55 @@ Three properties are deliberate:
   the explicit structured `spec` the parser emitted. No prompts, no
   chain-of-thought, no hidden reasoning, no tokens — none of which are available
   at this seam in any case.
+
+### Which service owns which half — and a deployment defect this sprint caused
+
+OCC and the MI API are **separately deployed App Services** with separate
+packages. The first cut of this sprint ignored that and coupled them in both
+directions. It broke the `trakt-ops-api` deployment:
+
+```
+ARTEFACT CHECK FAILED: could not import operations_control.api.app
+(ModuleNotFoundError: No module named 'mi_agent_api')
+```
+
+Two distinct defects, both introduced here:
+
+1. **Hard, and caught by CI.** The OCC review routes imported the review
+   vocabulary from `mi_agent_api.query_telemetry` at module scope. The ops-api
+   package ships a deliberately traced import closure that does not include
+   `mi_agent_api` — correctly, since that is a different service — so the OCC
+   API failed to import at all. Not just the new screen: **no OCC, no OCC Agent,
+   no routes.**
+2. **Silent, and worse.** The reverse import — MI API → `operations_control` —
+   was real and intended, but `operations_control` was not listed in
+   `deploy/trakt-mi-api/package_contents.txt`. Because the write is deliberately
+   non-raising, the deployed MI API would have answered every query normally,
+   logged a warning nobody reads, and **recorded nothing at all** — leaving the
+   OCC review screen permanently empty with no error to explain why. The entire
+   sprint would have been inert in production while appearing to work.
+
+The fix is a correction of ownership, not a workaround. **The record is an OCC
+document** — OCC owns the store it lands in, the layout, the review vocabulary
+and the routes that read it back — so the projection module now lives at
+`operations_control/mi_query_telemetry.py`. That deletes defect 1 outright: the
+OCC API no longer references `mi_agent_api` at all. What remains is one
+dependency in one direction, MI API → OCC, which is now declared in the MI API's
+package manifest, so defect 2 fails loudly at packaging time rather than silently
+in production.
+
+Verified by rebuilding the actual artefact the way the workflow does and running
+the same `verify_package.py` against it, in a directory where `mi_agent_api` does
+not exist: *artefact OK — 82 served paths, 8 governed config files, 2 delivery
+scripts.*
+
+**Why it was not caught before pushing.** The regression run selected MI Query
+acceptance suites by name and did not include the packaging tests, which are the
+tests that encode exactly this. `tests/test_mi_api_appservice_packaging.py::
+TestArtefactCompleteness::test_every_reachable_repo_package_is_staged` fails on
+defect 2 and passes at the merge base — it would have caught this before the
+deploy did. The corrected regression procedure (§11) runs the whole `tests/`
+tree against a baseline checkout rather than a hand-picked subset.
 
 ## 3. Storage split: OCC vs Azure
 
@@ -130,7 +179,7 @@ Insights exists.
 
 ## 4. Exact telemetry schema
 
-`mi_agent_api/query_telemetry.py`, `SCHEMA_VERSION = "1.0.0"`. One JSON document
+`operations_control/mi_query_telemetry.py`, `SCHEMA_VERSION = "1.0.0"`. One JSON document
 per question. Fields, grouped by the stage they come from — the architectural
 separation is visible in the record itself:
 
@@ -374,6 +423,19 @@ answered, whether it answered / refused / errored, how long it took, which data
 version, and — after review — whether it was any good.
 
 ## 11. Tests and regression
+
+### How the baseline is established
+
+Failures are only meaningful against a baseline, so every count below comes from
+running the **same** command twice: once on this branch, and once in a separate
+`git worktree` checked out at the starting SHA `d355065`. A failure is called
+pre-existing only when it appears in both runs with the same test id.
+
+The first regression pass for this sprint ran a **hand-picked selection** of MI
+Query suites by name. That selection omitted the deployment-packaging tests,
+which is precisely where the defect described in §2 lives — so the sprint pushed
+green and broke the `trakt-ops-api` deployment. The procedure now runs the whole
+`tests/` tree on both sides rather than a chosen subset.
 
 ### New tests
 

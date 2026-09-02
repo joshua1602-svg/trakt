@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel
 
-from mi_agent_api.query_telemetry import (
+from ..mi_query_telemetry import (
     ANSWERED,
     ERROR,
     PROBLEMATIC,

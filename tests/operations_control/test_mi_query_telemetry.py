@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from mi_agent_api import query_telemetry as qt
+from operations_control import mi_query_telemetry as qt
 from operations_control.api import app as app_module
 from trakt_core.envelope import AuditMetadata, GovernedResult, SnapshotRef
 from trakt_core.errors import ErrorCode, TraktError
