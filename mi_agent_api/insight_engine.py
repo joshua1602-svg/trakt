@@ -327,8 +327,8 @@ _MIX_COLUMNS: Dict[str, Tuple[str, ...]] = {
 }
 
 
-def _mix_shifts(current, prior, *, source_dates: Dict[str, Any]
-                ) -> List[Dict[str, Any]]:
+def _mix_shifts(current, prior, *, source_dates: Dict[str, Any],
+                population: str = "combined") -> List[Dict[str, Any]]:
     """Share-of-balance movement per governed dimension, largest band each.
 
     Grouping is ``evolution._group_balance`` — the same function the funded
@@ -381,6 +381,7 @@ def _mix_shifts(current, prior, *, source_dates: Dict[str, Any]
                     "current_share_pct": round(cur_bal / cur_total * 100.0, 2),
                     "prior_share_pct": round(pri_bal / pri_total * 100.0, 2),
                     "share_change_pp": round(change_pp, 2),
+                    "population": population,
                     "source_dates": dict(source_dates),
                 }
         if best is not None:
@@ -448,6 +449,7 @@ def resolve_funded_inputs(output_root, client_id: str, *,
     # the existing one, over the continuing portfolio ids.
     out["underlying"] = None
     underlying_filters = comp.underlying_lens_filters(out["decomposition"] or {})
+    out["underlying_filters"] = underlying_filters
     if underlying_filters:
         underlying = _safe("underlying book", lambda: comp.decompose(
             evolution_mod._scope_frame_lens(cur["df"], underlying_filters),
@@ -459,9 +461,70 @@ def resolve_funded_inputs(output_root, client_id: str, *,
             })
         out["underlying"] = underlying
 
+    # CHARACTERISTIC movement is read on the UNDERLYING book whenever a
+    # portfolio was added, and labelled as such.
+    #
+    # Mix and weighted LTV describe what the book IS, and an arriving book
+    # rewrites both by construction. Measured on the combined population, an
+    # incumbent book whose LTV rose 30% to 38% alongside a low-LTV acquisition
+    # published "LTV moved from 30.0% to 29.0%" — an improvement, on a book that
+    # deteriorated by eight points. That is the masking this review exists to
+    # prevent, and it is worse than an omission because it is confidently wrong.
+    #
+    # The combined position is not lost: the balance decomposition above states
+    # the addition, and concentration is evaluated on the whole book by its own
+    # governed tests. What changes here is only which population the
+    # characteristic MOVEMENT describes — the one that was there for both
+    # periods, which is the only population a movement can honestly be measured
+    # over.
+    mix_current, mix_prior = cur["df"], pri["df"]
+    out["characteristic_population"] = "combined"
+    if underlying_filters:
+        mix_current = evolution_mod._scope_frame_lens(cur["df"], underlying_filters)
+        mix_prior = evolution_mod._scope_frame_lens(pri["df"], underlying_filters)
+        out["characteristic_population"] = "underlying"
+
     out["mix_shifts"] = _safe("funded mix", lambda: _mix_shifts(
-        cur["df"], pri["df"], source_dates=source_dates), default=[])
+        mix_current, mix_prior, source_dates=source_dates,
+        population=out["characteristic_population"]), default=[])
+    out["underlying_ltv"] = _safe("underlying ltv", lambda: _weighted_ltv_points(
+        mix_current, mix_prior)) if underlying_filters else None
     return out
+
+
+_LTV_COLUMN = "current_loan_to_value"
+
+
+def _weighted_ltv_points(current, prior) -> Optional[Dict[str, Any]]:
+    """Balance-weighted LTV, in points, for one population across two periods.
+
+    Same weighting and the same scale rule the funded series uses — a stored
+    ratio is converted, a stored percentage is not — so an underlying LTV and a
+    combined one are the same measure over different populations rather than two
+    definitions.
+    """
+    from analytics_lib.numeric import coerce_numeric
+
+    def _points(df):
+        if df is None or not len(df) or _LTV_COLUMN not in df.columns:
+            return None
+        value = coerce_numeric(df[_LTV_COLUMN])
+        weight = coerce_numeric(df[_BALANCE_COLUMN])
+        usable = value.notna() & weight.notna()
+        if not usable.any() or float(weight[usable].sum()) <= 0:
+            return None
+        wavg = float((value[usable] * weight[usable]).sum()
+                     / weight[usable].sum())
+        return round(wavg * 100.0 if abs(wavg) <= 1.5 else wavg, 2)
+
+    cur_pts, pri_pts = _points(current), _points(prior)
+    if cur_pts is None or pri_pts is None:
+        return None
+    return {"current": cur_pts, "prior": pri_pts,
+            "change_pp": round(cur_pts - pri_pts, 2)}
+
+
+_BALANCE_COLUMN = "current_outstanding_balance"
 
 
 @_perf.stage_fn("funded_brief_build")
@@ -511,7 +574,8 @@ def build_funded(output_root, client_id: str, *, tenant_id: str,
          lambda: fgen.underlying_book(ctx, data.get("decomposition"),
                                       data.get("underlying"))),
         ("FUNDED_MIX_SHIFT", lambda: fgen.mix_shift(ctx, data.get("mix_shifts"))),
-        ("FUNDED_LTV_MOVEMENT", lambda: fgen.ltv_movement(ctx, movement)),
+        ("FUNDED_LTV_MOVEMENT",
+         lambda: fgen.ltv_movement(ctx, movement, data.get("underlying_ltv"))),
         ("RISK_LIMIT_TRANSITION",
          lambda: fgen.risk_limit_transitions(ctx, data.get("concentration"))),
     ]

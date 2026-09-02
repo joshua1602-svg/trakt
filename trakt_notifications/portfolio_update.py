@@ -431,9 +431,10 @@ def _funded_items(inputs: GovernedInputs, insight_ids: List[str]
     # these are still the best attribution available and dropping them would be
     # a capability loss rather than a materiality gate.
     #
-    # The test is whether an OBSERVATION survived, not whether the insight list
-    # is empty: a month can produce a headline-movement insight and nothing
-    # else, and the headline is already the lead sentence.
+    # Whether the gated set gave the CARD anything to print, which is what
+    # decides the fallback. It is not the same question as whether the month was
+    # material — a headline-movement insight prints nothing here because the
+    # lead sentence already states it.
     gated_observations = bool(items[1:] if loans is not None else items)
     if not gated_observations:
         items.extend(_ungated_attribution(movement))
@@ -443,9 +444,16 @@ def _funded_items(inputs: GovernedInputs, insight_ids: List[str]
             text=("The monthly portfolio review was unavailable for this "
                   f"update: {inputs.unavailable[CAP_MONTHLY_BRIEF]}."),
             metric="monthly_brief", unavailable=True))
-    elif inputs.funded_brief and not gated_observations:
+    elif inputs.funded_brief and not inputs.funded_insights():
         # A month where everything was below threshold is a real answer, and a
         # card that simply omitted the section would look like one that failed.
+        #
+        # Gated on the INSIGHT SET, not on what the card printed. Those are
+        # different questions and conflating them put a flat contradiction on
+        # the card: a month whose only material finding was the headline
+        # movement printed no bullet for it — because the lead sentence already
+        # said it — and the card then declared nothing material had happened
+        # directly underneath a lead sentence reporting -45%.
         disclosures.append(MessageItem(
             text="No material developments were identified in the funded book "
                  "this period.",

@@ -330,16 +330,42 @@ def dominant_addition(decomposition: Dict[str, Any], *,
     Deterministic, and deliberately a share of the MOVEMENT rather than of the
     book: the question a monthly review has to settle is whether the period is
     explained by an addition, not whether the addition is large.
+
+    ``exceeds_movement`` is the case a share cannot describe. An acquisition
+    alongside heavy redemptions — a £50m book arriving while £40m redeems, for a
+    £5m net movement — gives a share of 1000%, and "£50m of the £5m movement"
+    is not a sentence about the world. It is also the most ordinary shape an
+    acquisition month takes, so it is flagged rather than suppressed: the
+    addition still dominates the period and the reader still needs to know, but
+    the narrative has to state it against the book rather than as a proportion
+    of a net figure smaller than itself.
+
+    ``share_of_movement`` is left unset in that case, so a caller cannot format
+    a percentage that does not mean anything.
     """
     additions = decomposition.get("portfolio_additions") or []
     movement = decomposition.get("movement")
     if not additions or not movement:
         return None
     lead = max(additions, key=lambda p: p["balance"])
-    share = lead["balance"] / movement if movement else None
-    if share is None or share < share_floor:
+
+    # A movement in the opposite direction to the addition, or smaller than it,
+    # cannot carry a share. Both are real months: a book arriving into a
+    # shrinking portfolio is the second one.
+    if movement <= 0 or lead["balance"] > movement:
+        closing = decomposition.get("closing_balance") or 0.0
+        return {**lead, "share_of_movement": None, "exceeds_movement": True,
+                "share_of_closing_balance": (round(lead["balance"] / closing, 4)
+                                             if closing else None)}
+
+    share = lead["balance"] / movement
+    if share < share_floor:
         return None
-    return {**lead, "share_of_movement": round(share, 4)}
+    return {**lead, "share_of_movement": round(share, 4),
+            "exceeds_movement": False,
+            "share_of_closing_balance": (
+                round(lead["balance"] / decomposition["closing_balance"], 4)
+                if decomposition.get("closing_balance") else None)}
 
 
 # --------------------------------------------------------------------------- #

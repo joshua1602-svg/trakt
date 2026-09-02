@@ -63,6 +63,23 @@ def _pp(value: Optional[float]) -> str:
     return "—" if value is None else f"{value:+.1f}pp"
 
 
+def _addition_headline(lead: Dict[str, Any]) -> str:
+    """The headline for a period an addition dominates.
+
+    A share of the movement is only quotable when the movement is larger than
+    the addition and points the same way. Otherwise the addition is stated
+    against the book, which is a figure that always means something.
+    """
+    if lead.get("exceeds_movement"):
+        share = lead.get("share_of_closing_balance")
+        if share is not None:
+            return (f"{lead['label']} added {money(lead['balance'])}, "
+                    f"{pct(share * 100)} of the closing book")
+        return f"{lead['label']} added {money(lead['balance'])}"
+    return (f"{lead['label']} accounts for "
+            f"{pct((lead['share_of_movement'] or 0) * 100)} of the movement")
+
+
 # --------------------------------------------------------------------------- #
 # 1. Headline funded movement
 # --------------------------------------------------------------------------- #
@@ -183,16 +200,33 @@ def funded_composition(ctx: Dict[str, Any],
         severity = SEVERITY_ATTENTION
         kind = ("the acquisition of" if lead["portfolio_type"] == comp.TYPE_ACQUIRED
                 else "the addition of the source portfolio")
-        summary = (f"{money(lead['balance'])} of the "
-                   f"{money(abs(movement or 0))} movement reflects {kind} "
-                   f"{lead['label']}. " + summary)
+        if lead.get("exceeds_movement"):
+            # The addition is larger than the net movement, so it cannot be
+            # stated as a share of it: "£50.0m of the £5.0m movement" is not a
+            # sentence about the world. Stated against the book instead, with
+            # the offsetting components named so the small net is explained
+            # rather than left looking like a small event.
+            offsets = [r for r in named
+                       if r["component"] in ("exits", "portfolio_disposals")]
+            summary = (f"{kind.capitalize()} {lead['label']} added "
+                       f"{money(lead['balance'])}, against a net movement of "
+                       f"{signed_money(movement)}. " + summary)
+            if offsets:
+                summary += (" The net is smaller than the addition because "
+                            + ", ".join(
+                                f"{money(abs(r['amount']))} of "
+                                f"{COMPONENT_LABEL.get(r['component'], r['component'])}"
+                                for r in offsets) + " offset it.")
+        else:
+            summary = (f"{money(lead['balance'])} of the "
+                       f"{money(abs(movement or 0))} movement reflects {kind} "
+                       f"{lead['label']}. " + summary)
 
     unavailable = decomposition.get("unavailable") or {}
     return [Insight(
         insight_type=FUNDED_COMPOSITION,
-        headline=(f"{lead['label']} accounts for "
-                  f"{pct((lead['share_of_movement'] or 0) * 100)} of the movement"
-                  if lead else "What moved the funded book"),
+        headline=(_addition_headline(lead) if lead
+                  else "What moved the funded book"),
         summary=summary,
         severity=severity,
         discriminator=(lead["source_portfolio_id"] if lead else ""),
@@ -254,10 +288,17 @@ def underlying_book(ctx: Dict[str, Any],
                   if movement is not None and opening else None)
 
     components = underlying.get("components") or {}
-    summary = (f"Excluding the {len(decomposition['portfolio_additions'])} "
-               f"portfolio(s) added this period, the existing book "
-               f"{direction(movement)} by {money(abs(movement or 0))} "
-               f"({signed_pct(change_pct)}) to {money(underlying.get('closing_balance'))}.")
+    added = len(decomposition["portfolio_additions"])
+    scope = (f"Excluding the portfolio added this period" if added == 1
+             else f"Excluding the {added} portfolios added this period")
+    if movement:
+        summary = (f"{scope}, the existing book {direction(movement)} by "
+                   f"{money(abs(movement))} ({signed_pct(change_pct)}) to "
+                   f"{money(underlying.get('closing_balance'))}.")
+    else:
+        # "was unchanged by £0" is not a sentence. A flat book is stated flatly.
+        summary = (f"{scope}, the existing book was unchanged at "
+                   f"{money(underlying.get('closing_balance'))}.")
     if components.get("exits"):
         summary += (f" That is net of {money(abs(components['exits']))} of "
                     f"redemptions and exits.")
@@ -319,9 +360,12 @@ def mix_shift(ctx: Dict[str, Any], shifts: Optional[List[Dict[str, Any]]]) -> Re
         kept.append(Insight(
             insight_type=FUNDED_MIX_SHIFT,
             headline=f"{label}: {band} {direction(change_pp)} {_pp(change_pp)}",
-            summary=(f"{band} moved from {pct(shift.get('prior_share_pct'))} to "
-                     f"{pct(shift.get('current_share_pct'))} of the funded book "
-                     f"({_pp(change_pp)})."),
+            summary=(
+                f"{band} moved from {pct(shift.get('prior_share_pct'))} to "
+                f"{pct(shift.get('current_share_pct'))} of the "
+                + ("funded book" if shift.get("population") != "underlying"
+                   else "existing book, excluding portfolios added this period")
+                + f" ({_pp(change_pp)})."),
             severity=SEVERITY_INFO,
             discriminator=f"{shift.get('dimension')}:{band}",
             metrics={
@@ -332,6 +376,7 @@ def mix_shift(ctx: Dict[str, Any], shifts: Optional[List[Dict[str, Any]]]) -> Re
                 "share_change_pp": change_pp,
                 "current_balance": shift.get("current_balance"),
                 "prior_balance": shift.get("prior_balance"),
+                "population": shift.get("population", "combined"),
             },
             methodology={"basis": "share of funded balance by governed dimension",
                          "grouping": "the same grouping the funded bridge uses"},
@@ -354,14 +399,28 @@ def mix_shift(ctx: Dict[str, Any], shifts: Optional[List[Dict[str, Any]]]) -> Re
 # 5. Weighted-average LTV
 # --------------------------------------------------------------------------- #
 def ltv_movement(ctx: Dict[str, Any],
-                 movement: Optional[Dict[str, Any]]) -> Result:
-    """Balance-weighted LTV movement on the funded book."""
+                 movement: Optional[Dict[str, Any]],
+                 underlying: Optional[Dict[str, Any]] = None) -> Result:
+    """Balance-weighted LTV movement on the funded book.
+
+    ``underlying`` is the same measure over the portfolios present in BOTH
+    periods, supplied only when something was added. Where it exists it LEADS,
+    and the combined figure is stated beside it.
+
+    That ordering is the whole point. An arriving book rewrites a weighted
+    average by construction: an incumbent book whose LTV rose 30% to 38%
+    alongside a low-LTV acquisition produces a combined move of −1.0pp, and a
+    reader told only that would conclude credit quality improved in a month it
+    deteriorated by eight points. Both numbers are true; only one of them is a
+    statement about the book that was already there.
+    """
     if not movement or not movement.get("available"):
         return [], [Omission(FUNDED_LTV_MOVEMENT,
                              "No comparable prior reporting period is available.",
                              OMITTED_UNAVAILABLE)]
 
     t = cfg.thresholds("funded_ltv")
+    floor = float(t.get("min_change_pp", 0.5))
     delta = (movement.get("delta") or {}).get("wa_ltv_points")
     current = (movement.get("current") or {}).get("wa_ltv_points")
     prior = (movement.get("prior") or {}).get("wa_ltv_points")
@@ -371,22 +430,61 @@ def ltv_movement(ctx: Dict[str, Any],
                              "Weighted-average LTV is unavailable for one of the "
                              "two reporting periods.",
                              OMITTED_UNAVAILABLE)]
-    if abs(delta) < float(t.get("min_change_pp", 0.5)):
+
+    u_delta = (underlying or {}).get("change_pp")
+    # Material if EITHER population moved materially. Gating on the combined
+    # figure alone is how the masking survives: the arriving book can hold the
+    # combined move under the threshold while the incumbent book moves a long
+    # way, and the month would then be reported as having no LTV movement.
+    if abs(delta) < floor and (u_delta is None or abs(u_delta) < floor):
         return [], [Omission(
             FUNDED_LTV_MOVEMENT,
             f"Weighted-average LTV moved {_pp(delta)}, below the "
             f"{t.get('min_change_pp')}pp materiality threshold.",
             OMITTED_IMMATERIAL)]
 
+    metrics: Dict[str, Any] = {
+        "current_wa_ltv_pct": current, "prior_wa_ltv_pct": prior,
+        "change_pp": delta, "population": "combined",
+    }
+    if u_delta is not None:
+        metrics.update({
+            "underlying_current_wa_ltv_pct": underlying["current"],
+            "underlying_prior_wa_ltv_pct": underlying["prior"],
+            "underlying_change_pp": u_delta,
+        })
+        headline = (f"Underlying weighted-average LTV {direction(u_delta)} "
+                    f"{_pp(u_delta)}")
+        summary = (f"Excluding portfolios added this period, balance-weighted "
+                   f"current LTV moved from {pct(underlying['prior'])} to "
+                   f"{pct(underlying['current'])} ({_pp(u_delta)}). Including "
+                   f"them the combined book moved from {pct(prior)} to "
+                   f"{pct(current)} ({_pp(delta)}).")
+        # Opposite directions is the case a reader is most likely to misread,
+        # so it is said outright rather than left to be inferred from two
+        # numbers with different signs.
+        if u_delta * delta < 0:
+            summary += (" The combined movement is in the opposite direction to "
+                        "the underlying book's.")
+        severity = SEVERITY_ATTENTION if abs(u_delta) >= floor else SEVERITY_INFO
+    else:
+        headline = f"Weighted-average LTV {direction(delta)} {_pp(delta)}"
+        summary = (f"Balance-weighted current LTV moved from {pct(prior)} to "
+                   f"{pct(current)} ({_pp(delta)}).")
+        severity = SEVERITY_INFO
+
     return [Insight(
         insight_type=FUNDED_LTV_MOVEMENT,
-        headline=f"Weighted-average LTV {direction(delta)} {_pp(delta)}",
-        summary=(f"Balance-weighted current LTV moved from {pct(prior)} to "
-                 f"{pct(current)} ({_pp(delta)})."),
-        severity=SEVERITY_INFO,
-        metrics={"current_wa_ltv_pct": current, "prior_wa_ltv_pct": prior,
-                 "change_pp": delta},
-        methodology={"basis": "balance-weighted current LTV, governed funded series"},
+        headline=headline,
+        summary=summary,
+        severity=severity,
+        metrics=metrics,
+        methodology={
+            "basis": "balance-weighted current LTV, governed funded series",
+            "population": ("underlying (portfolios present in both periods), "
+                           "with the combined book stated beside it"
+                           if u_delta is not None else "combined"),
+        },
         source_dates={"funded_as_of": movement.get("currentReportingDate"),
                       "funded_comparison": movement.get("priorReportingDate")},
         deep_link="/mi/funded",

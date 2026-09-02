@@ -35,8 +35,9 @@ from mi_agent.concentration_tests.forward import (
     RISK_LIMITATION, RISK_LOW_EXPECTED_HEADROOM, RISK_STRESS_ONLY,
 )
 from mi_agent_api.insight_contract import (
-    CONVERSION_CONTEXT, DATA_QUALITY, LTV_MIX_SHIFT, RISK_LIMIT_TRANSITION,
-    SEVERITY_ATTENTION, SEVERITY_CONCERN, TICKET_MIX_SHIFT, WEIGHTED_LTV,
+    CONVERSION_CONTEXT, DATA_QUALITY, FUNDED_LTV_MOVEMENT, LTV_MIX_SHIFT,
+    RISK_LIMIT_TRANSITION, SEVERITY_ATTENTION, SEVERITY_CONCERN,
+    TICKET_MIX_SHIFT, WEIGHTED_LTV,
 )
 
 from . import deep_links, formatting as fmt, recommendation
@@ -80,6 +81,11 @@ _INSIGHT_RISKS: Dict[str, Tuple[int, str]] = {
     # approved concentration configuration rather than by this package.
     RISK_LIMIT_TRANSITION: (1, "current_breach"),
     DATA_QUALITY: (2, "data_quality"),
+    # Only ever graded above informational when the UNDERLYING book moved
+    # materially — which is the case a headline cannot show and a reader is
+    # least likely to find on their own. A combined-book LTV move stays an
+    # observation and does not reach here.
+    FUNDED_LTV_MOVEMENT: (5, "ltv_mix"),
     CONVERSION_CONTEXT: (7, "conversion"),
     WEIGHTED_LTV: (8, "ltv_mix"),
     LTV_MIX_SHIFT: (9, "ltv_mix"),

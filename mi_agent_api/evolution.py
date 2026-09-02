@@ -311,11 +311,30 @@ _MISSING_TOKENS = {"", "nan", "none", "nat", "<na>"}
 
 
 def _group_balance(df, col: str) -> Dict[str, float]:
-    """Funded balance summed by a dimension column; blank/NaN → 'Unknown / Missing'."""
+    """Funded balance summed by a dimension column; blank/NaN → 'Unknown / Missing'.
+
+    The NaN half of that contract did not hold. ``astype(str)`` leaves a real
+    NaN as NaN rather than as the string ``"nan"``, so ``.str.casefold()``
+    propagated NaN, the mask never fired, and ``groupby`` DROPPED those rows
+    entirely — silently, and out of the denominator as well as the numerator.
+
+    A column read from a CSV with blank cells is exactly that shape, so on a
+    £140m book with £90m of unset product this returned Lump Sum = £50m of a
+    £50m total and published a 35.7% share as 100%. It also broke the funded
+    bridge's stated property that per-category deltas sum exactly to the net
+    change, because the dropped balance was in the net change and in no
+    category.
+
+    ``isna()`` is tested before the string conversion, so a genuine null and a
+    blank string reach the same bucket — which is what every caller already
+    believed happened.
+    """
     if df is None or col not in df.columns:
         return {}
-    s = df[col].astype(str).str.strip()
-    s = s.mask(s.str.casefold().isin(_MISSING_TOKENS), "Unknown / Missing")
+    raw = df[col]
+    s = raw.astype(str).str.strip()
+    missing = raw.isna() | s.str.casefold().isin(_MISSING_TOKENS)
+    s = s.mask(missing, "Unknown / Missing")
     bal = coerce_numeric(df[_BALANCE])
     grp = bal.groupby(s).sum()
     return {str(k): float(v) for k, v in grp.items()}
