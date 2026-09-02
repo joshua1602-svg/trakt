@@ -108,17 +108,33 @@ def main() -> int:
     # type answers fine as a GROUP-BY and never as a FILTER, so the failure is
     # in value matching, not in the column. These print booleans about how the
     # book spells its values, never the spellings themselves.
+    def _norm(v):
+        return str(v).strip().lower().replace("_", " ").replace("-", " ")
+
     def _match(col, wanted):
+        """Whole tape AND direct book, because those are different questions.
+
+        The LTV result taught this: "> 50 exists on the tape" and "> 50 exists
+        in the DIRECT book" had opposite answers, and only the second one is
+        what the questions ran against. A value carried solely by the acquired
+        book is a correct refusal at scope=direct, not a matching bug.
+        """
         if col not in cols:
             print("  %-24s column absent" % wanted)
             return
         vals = [str(v) for v in df[col].dropna().unique()]
         exact = any(v == wanted for v in vals)
-        loose = any(v.strip().lower().replace("_", " ").replace("-", " ")
-                    == wanted for v in vals)
-        print("  %-24s exact %-4s normalised %-4s distinct values %d"
-              % (wanted, "yes" if exact else "NO",
-                 "yes" if loose else "NO", len(vals)))
+        loose = any(_norm(v) == wanted for v in vals)
+        if len(direct):
+            dvals = [str(v) for v in direct[col].dropna().unique()]
+            in_direct = "yes" if any(_norm(v) == wanted for v in dvals) else "NO"
+            n_direct = len(dvals)
+        else:
+            in_direct, n_direct = "?", 0
+        print("  %-12s tape: exact %-4s normalised %-4s (%d values)   "
+              "DIRECT book: present %-4s (%d values)"
+              % (wanted, "yes" if exact else "NO", "yes" if loose else "NO",
+                 len(vals), in_direct, n_direct))
 
     print("VALUE MATCHING — does the book carry the value the question names?")
     print("  (exact = character-for-character; normalised = ignoring case,")
@@ -136,6 +152,13 @@ def main() -> int:
         print("  direct & age > 55        ", _yes(d_age.any()))
         print("  direct & ltv > 50        ", _yes(d_ltv.any()))
         print("  direct & both            ", _yes((d_age & d_ltv).any()))
+        print()
+        # WHERE the high-LTV loans actually are. "> 50 on the tape but not in
+        # direct" makes 18 refusals correct answers rather than defects, so it
+        # is worth stating rather than inferring.
+        print("  ltv > 50 anywhere        ", _yes((df[LTV] > 50).any()))
+        print("  ltv > 40 in direct       ", _yes((direct[LTV] > 40).any()))
+        print("  ltv > 30 in direct       ", _yes((direct[LTV] > 30).any()))
     return 0
 
 
