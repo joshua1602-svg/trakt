@@ -108,7 +108,25 @@ _WEAK_CONNECTORS = ("to",)
 _ARRIVAL_WORDS = ("new arrival", "new arrivals", "newly entered", "newly arrived",
                   "entered", "enter", "enters", "entering", "arrived", "arrive",
                   "arrives", "arriving", "new case", "new cases",
-                  "new pipeline case", "new pipeline cases")
+                  "new pipeline case", "new pipeline cases",
+                  # The bare nouns. "new arrivals" was here and "arrivals" was
+                  # not, so "Show arrivals into Completion" read as nothing.
+                  "arrival", "arrivals")
+
+#: Movement verbs that, with a single stage and an INTO-shaped connector, mean
+#: arrivals AT that stage. Asked live: "how many loans moved into Offer in the
+#: last reporting period" named one governed stage, carried a direction, and was
+#: read as no stage movement at all — so it fell to the generic engine, which
+#: correctly declines a movement question and then explains it needs two
+#: governed snapshots to compare. Twenty weekly extracts existed. The message
+#: was wrong because the ROUTING was wrong, and a reader has no way to tell
+#: those apart.
+#:
+#: Only ONE stage may be named. Two stages with a direction are already a
+#: TRANSITION and are matched earlier; this cannot reach them.
+_MOVED_VERBS = ("moved", "move", "moves", "moving", "flowed", "flow",
+                "flows", "flowing", "progressed", "advanced", "transitioned")
+_INTO_CONNECTORS = ("into", "in to", "through to", "to the")
 
 _STAYER_WORDS = ("stayed", "stay", "stays", "staying", "stayer", "stayers",
                  "remained", "remain", "remains", "remaining", "persisted",
@@ -298,7 +316,11 @@ def read(question: Optional[str]) -> Optional[StageMovement]:
     if _has(text, _STAYER_WORDS):
         return StageMovement(subtype=STAYER,
                              measure=_measure_for(text, STAYER), stage=stage)
-    if _has(text, _ARRIVAL_WORDS):
+    if _has(text, _ARRIVAL_WORDS) or (_has(text, _MOVED_VERBS)
+                                      and _has(text, _INTO_CONNECTORS)):
+        # "moved into Offer" can only mean arrivals at Offer: the sentence names
+        # a direction and one end of it. Where it named both ends, the
+        # directional pair above has already claimed it as a transition.
         return StageMovement(subtype=NEW_ARRIVAL,
                              measure=_measure_for(text, NEW_ARRIVAL),
                              destination=stage)
