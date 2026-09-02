@@ -29,9 +29,14 @@ import os
 from dataclasses import dataclass, field
 from typing import List, Mapping, Optional
 
-# Cheap default model — matches the repo's existing cheap tier
-# (agents/onboarding_agent.py). Overridable via MI_AGENT_LLM_MODEL.
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+# The default model for MI language work. Overridable via MI_AGENT_LLM_MODEL,
+# which is how the App Service pins its own choice.
+#
+# THE ID IS BARE ON PURPOSE. `claude-haiku-4-5-20251001` carried a date suffix;
+# current model identifiers are complete without one, and a suffix that drifts
+# out of service fails at the API rather than at import, in whichever deployment
+# had not set the env var.
+DEFAULT_MODEL = "claude-opus-5"
 DEFAULT_PROVIDER = "anthropic"
 # Cost-conscious default: one repair attempt (override with MI_AGENT_MAX_REPAIR_ATTEMPTS).
 DEFAULT_MAX_REPAIR_ATTEMPTS = 1
