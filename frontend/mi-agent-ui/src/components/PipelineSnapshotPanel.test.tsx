@@ -16,13 +16,17 @@ describe("PipelineSnapshotPanel", () => {
     expect(screen.getByText("Weighted expected funded")).toBeInTheDocument();
   });
 
-  it("renders the pipeline stage breakdown (amount and count)", () => {
+  it("renders the pipeline stage breakdown, in either measure", () => {
+    // CHANGED DELIBERATELY: the amount and count stage panels used to sit side
+    // by side. The section now carries ONE measure switch, matching the Funded
+    // tab, so the stage breakdown follows it rather than being shown twice.
     render(<PipelineSnapshotPanel snapshot={NOV} />);
     expect(screen.getByText("Pipeline amount by stage")).toBeInTheDocument();
-    expect(screen.getByText("Pipeline count by stage")).toBeInTheDocument();
-    // Stage labels appear in the breakdown bars.
     expect(screen.getAllByText("OFFER").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("COMPLETED").length).toBeGreaterThanOrEqual(1);
+    fireEvent.click(screen.getByTestId("pipeline-measure-count"));
+    expect(screen.getByText("Pipeline count by stage")).toBeInTheDocument();
+    expect(screen.getAllByText("OFFER").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders the expected completion breakdown when months exist", () => {

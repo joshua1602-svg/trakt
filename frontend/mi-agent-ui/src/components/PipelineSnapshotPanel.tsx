@@ -2,7 +2,8 @@ import { useState } from "react";
 import { AlertTriangle, ChevronDown, GitBranch } from "lucide-react";
 import type { PipelineSnapshot } from "@/domain";
 import { Badge } from "@/components/ui";
-import { BarList, StatTile, type BarDatum, type DeltaIntent } from "@/components/pipeline/bits";
+import { BarList, MeasureToggle, StatTile, BAR_MEASURE_FORMAT,
+  type BarDatum, type BarMeasure, type DeltaIntent } from "@/components/pipeline/bits";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
 import { cn, formatGBP } from "@/lib/utils";
@@ -37,6 +38,13 @@ function dataQualityStatus(snap: PipelineSnapshot): { label: string; tone: "mint
  * from the funded book; loads from the forecast/pipeline snapshot endpoint and
  * answers "what is in the pipeline / how much is expected to fund / when".
  */
+/** Swap a bar list onto its count, which the same payload already carried. A
+ *  row with no count keeps its amount rather than inventing a zero. */
+function asMeasure(bars: BarDatum[], measure: BarMeasure): BarDatum[] {
+  if (measure !== "count") return bars;
+  return bars.map((b) => (b.count == null ? b : { ...b, value: b.count }));
+}
+
 export function PipelineSnapshotPanel({
   snapshot,
   loading,
@@ -99,6 +107,7 @@ export function PipelineSnapshotPanel({
   const overdueCount = summary?.overdueExpectedCompletionCount ?? 0;
   const overdueWeighted = summary?.overdueExpectedCompletionWeightedAmount ?? 0;
   const dq = dataQualityStatus(snapshot);
+  const [measure, setMeasure] = useState<BarMeasure>("balance");
 
   const stageByAmount: BarDatum[] = snapshot.stageBreakdown.map((s) => ({
     label: s.stage,
@@ -182,26 +191,43 @@ export function PipelineSnapshotPanel({
         )}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Pipeline amount by stage">
-          <BarList data={stageByAmount} format="gbp" />
-        </Panel>
-        <Panel title="Pipeline count by stage">
-          <BarList data={stageByCount} format="count" />
+      {/* One switch for every breakdown that carries both measures. Each
+          breakdown already returned amount AND case count in the same payload,
+          so switching only chooses which of them to draw. */}
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
+          Breakdowns · {measure === "count" ? "case count" : "amount"}
+        </span>
+        <MeasureToggle
+          measures={["balance", "count"]}
+          active={measure}
+          onChange={setMeasure}
+          label="Pipeline breakdown measure"
+          testIdPrefix="pipeline-measure"
+        />
+      </div>
+
+      <div className="mt-2 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by stage`}>
+          <BarList data={measure === "count" ? stageByCount : stageByAmount}
+            format={BAR_MEASURE_FORMAT[measure]} />
         </Panel>
         {completionByMonth.length > 0 && (
-          <Panel title="Weighted expected funded by completion month">
-            <BarList data={completionByMonth} format="gbp" />
+          <Panel title={measure === "count"
+            ? "Expected completions by month · cases"
+            : "Weighted expected funded by completion month"}>
+            <BarList data={asMeasure(completionByMonth, measure)}
+              format={BAR_MEASURE_FORMAT[measure]} />
           </Panel>
         )}
         {byBroker.length > 0 && (
-          <Panel title="Pipeline amount by broker / channel">
-            <BarList data={byBroker} format="gbp" />
+          <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by broker / channel`}>
+            <BarList data={asMeasure(byBroker, measure)} format={BAR_MEASURE_FORMAT[measure]} />
           </Panel>
         )}
         {byRegion.length > 0 && (
-          <Panel title="Pipeline amount by region">
-            <BarList data={byRegion} format="gbp" />
+          <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by region`}>
+            <BarList data={asMeasure(byRegion, measure)} format={BAR_MEASURE_FORMAT[measure]} />
           </Panel>
         )}
       </div>

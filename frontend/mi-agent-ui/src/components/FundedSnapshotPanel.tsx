@@ -9,7 +9,8 @@ import {
   Minus,
 } from "lucide-react";
 import type { FundedSnapshot, SnapshotKPI } from "@/domain";
-import { BarList, type BarDatum } from "@/components/pipeline/bits";
+import { BarList, MeasureToggle, BAR_MEASURE_LABEL, BAR_MEASURE_FORMAT,
+  type BarDatum, type BarMeasure } from "@/components/pipeline/bits";
 import { cleanBucketLabel, sortStratBars } from "@/lib/stratOrder";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -53,15 +54,6 @@ function KpiTile({ kpi }: { kpi: SnapshotKPI }) {
  * The deterministic funded-portfolio snapshot shown on the landing page BEFORE
  * any AI query. Clearly labelled as funded-book MI (not the origination pipeline).
  */
-/** Which already-computed measure the stratification bars display. */
-export type StratMeasure = "balance" | "share" | "count";
-
-const MEASURE_LABEL: Record<StratMeasure, string> = {
-  balance: "Balance",
-  share: "% of book",
-  count: "Loans",
-};
-
 export function FundedSnapshotPanel({
   snapshot,
   loading,
@@ -73,7 +65,7 @@ export function FundedSnapshotPanel({
    *  never derives a population itself. */
   onDrill?: (dimension: string, band: string) => void;
 }) {
-  const [measure, setMeasure] = useState<StratMeasure>("balance");
+  const [measure, setMeasure] = useState<BarMeasure>("balance");
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   if (loading && !snapshot) {
@@ -164,29 +156,18 @@ export function FundedSnapshotPanel({
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-ink-400">
-              Stratifications · {MEASURE_LABEL[measure].toLowerCase()} by dimension
+              Stratifications · {BAR_MEASURE_LABEL[measure].toLowerCase()} by dimension
             </div>
-            {/* Presentation-only view switch. Balance, share and count are all
-                already in the stratification payload the deterministic engine
-                returned — nothing is recomputed in the browser. */}
-            <div role="group" aria-label="Stratification measure"
-                 className="inline-flex overflow-hidden rounded-md border border-navy-600/70">
-              {(Object.keys(MEASURE_LABEL) as StratMeasure[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={measure === m}
-                  data-testid={`strat-measure-${m}`}
-                  onClick={() => setMeasure(m)}
-                  className={cn(
-                    "px-2.5 py-1 text-[10px] font-medium transition-colors",
-                    measure === m ? "bg-peri-400/20 text-peri-200" : "text-ink-400 hover:text-ink-200",
-                  )}
-                >
-                  {MEASURE_LABEL[m]}
-                </button>
-              ))}
-            </div>
+            {/* Presentation-only view switch on the shared bar-list seam.
+                Balance, share and count are all already in the stratification
+                payload — nothing is recomputed in the browser. */}
+            <MeasureToggle
+              measures={["balance", "share", "count"]}
+              active={measure}
+              onChange={setMeasure}
+              label="Stratification measure"
+              testIdPrefix="strat-measure"
+            />
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {snapshot.stratifications!.map((s) => {
@@ -222,7 +203,7 @@ export function FundedSnapshotPanel({
                   {drawable ? (
                     <BarList
                       data={data}
-                      format={measure === "balance" ? "gbp" : measure === "share" ? "pct" : "count"}
+                      format={BAR_MEASURE_FORMAT[measure]}
                       onSelect={onDrill && ((label) => onDrill(s.label, label))}
                       selectTitle={(label) => `Ask the MI engine about ${label}`}
                     />

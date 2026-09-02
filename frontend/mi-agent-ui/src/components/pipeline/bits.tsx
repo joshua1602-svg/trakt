@@ -71,6 +71,65 @@ export interface BarDatum {
  * across the whole list and every bar track is identical — bars stay
  * apples-to-apples regardless of how long each row's value text is.
  */
+/** Which already-computed measure a bar list displays. Presentation only: every
+ *  measure named here is a field the deterministic engine already returned in
+ *  the same payload — switching never re-aggregates anything in the browser. */
+export type BarMeasure = "balance" | "share" | "count";
+
+export const BAR_MEASURE_LABEL: Record<BarMeasure, string> = {
+  balance: "Balance",
+  share: "% of book",
+  count: "Count",
+};
+
+/** The render format each measure needs. */
+export const BAR_MEASURE_FORMAT: Record<BarMeasure, "gbp" | "pct" | "count"> = {
+  balance: "gbp",
+  share: "pct",
+  count: "count",
+};
+
+/**
+ * A measure switch for bar lists. ``measures`` names only what the payload
+ * actually carries, so a breakdown without a count simply never offers one.
+ */
+export function MeasureToggle({
+  measures,
+  active,
+  onChange,
+  label = "Measure",
+  testIdPrefix,
+}: {
+  measures: readonly BarMeasure[];
+  active: BarMeasure;
+  onChange: (m: BarMeasure) => void;
+  label?: string;
+  testIdPrefix: string;
+}) {
+  if (measures.length < 2) return null;
+  return (
+    <div role="group" aria-label={label}
+      className="inline-flex overflow-hidden rounded-md border border-navy-600/70">
+      {measures.map((m) => (
+        <button
+          key={m}
+          type="button"
+          aria-pressed={active === m}
+          data-testid={`${testIdPrefix}-${m}`}
+          onClick={() => onChange(m)}
+          className={cn(
+            "px-2.5 py-1 text-[10px] font-medium transition-colors",
+            active === m ? "bg-peri-400/20 text-peri-200" : "text-ink-400 hover:text-ink-200",
+          )}
+        >
+          {BAR_MEASURE_LABEL[m]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
 export function BarList({
   data,
   format = "gbp",
