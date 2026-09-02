@@ -12,6 +12,7 @@ emit them. Each returned metric is present only when its source column exists, a
 
 from __future__ import annotations
 
+import calendar
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -494,6 +495,31 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
     }
 
 
+def _formation_end(vintage: str, grain: str) -> Optional[str]:
+    """The ISO date on which a vintage stops taking new loans.
+
+    A static pool is only a pool once its vintage is complete. Anchoring it to
+    the first reporting period the vintage is SEEN in — while loans originated
+    later in the same year or quarter have yet to arrive — lets the pool grow,
+    which is the one thing a static pool may never do, and makes balance
+    retention exceed 100% for a reason that has nothing to do with roll-up.
+    """
+    label = str(vintage or "").strip()
+    g = (grain or "M").upper()
+    try:
+        if g == "Y":
+            return f"{int(label[:4]):04d}-12-31"
+        if g == "Q":  # "2025-Q3" / "2025Q3"
+            year = int(label[:4])
+            quarter = int(label.rstrip()[-1])
+            month = quarter * 3
+            return f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
+        year, month = int(label[:4]), int(label[5:7])
+        return f"{year:04d}-{month:02d}-{calendar.monthrange(year, month)[1]:02d}"
+    except (ValueError, IndexError):
+        return None
+
+
 def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                        grain: str = "M", client_id: str = "",
                        portfolio_id: str = "") -> Dict[str, Any]:
@@ -526,6 +552,12 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         return {**base, "available": False, "periods": [],
                 "reason": f"no loans were originated in {vintage}"}
 
+    # The pool is anchored once the vintage has STOPPED FORMING. Reporting
+    # periods before that are shown, so the reader sees the vintage building,
+    # but they are marked `forming` and carry no retention — retention against
+    # a pool that is still admitting loans is not a survival rate.
+    formation_end = _formation_end(vintage, grain)
+
     periods: List[Dict[str, Any]] = []
     original_count: Optional[int] = None
     original_balance: Optional[float] = None
@@ -539,25 +571,34 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         present = ids.isin(members)
         if not present.any() and original_count is None:
             continue  # the vintage has not formed yet
+        reporting_date = str(fr.get("reporting_date") or "")
+        forming = bool(formation_end and reporting_date
+                       and reporting_date[:10] < formation_end)
         sub = df[present.values]
         here = set(ids[present].dropna().tolist())
         balance = (float(coerce_numeric(sub[_BALANCE]).sum())
                    if _BALANCE in sub.columns and len(sub) else 0.0)
-        if original_count is None:
+        if original_count is None and not forming:
             original_count, original_balance = len(here), balance
-        exits = sorted(prior_ids - here) if prior_ids is not None else []
+        # Exits only mean something once the pool is fixed. While the vintage is
+        # still forming, a loan absent last period may simply not have completed
+        # yet, so it is not an exit.
+        exits = (sorted(prior_ids - here)
+                 if prior_ids is not None and not forming else [])
         row: Dict[str, Any] = {
             "period": (fr.get("reporting_date") or fr.get("run_id") or "")[:7],
             "reportingDate": fr.get("reporting_date"),
             "monthsSinceEntry": _months_between(vintage, fr.get("reporting_date")),
             "survivingLoanCount": len(here),
             "currentBalance": round(balance, 2),
+            "forming": forming,
             "loanRetention": (round(len(here) / original_count, 4)
-                              if original_count else None),
+                              if original_count and not forming else None),
             "balanceRetention": (round(balance / original_balance, 4)
-                                 if original_balance else None),
+                                 if original_balance and not forming else None),
             "exitsInPeriod": len(exits),
-            "cumulativeExits": original_count - len(here) if original_count else 0,
+            "cumulativeExits": (original_count - len(here)
+                                if original_count and not forming else 0),
         }
         if len(sub) and _BALANCE in sub.columns:
             w = sub[_BALANCE]
@@ -572,6 +613,9 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         **base,
         "available": bool(periods),
         "reason": None if periods else f"no reporting period contains {vintage}",
+        "formationEnd": formation_end,
+        "poolAnchored": original_count is not None,
+        "formingPeriods": sum(1 for r in periods if r.get("forming")),
         "originalLoanCount": original_count,
         "originalBalance": (round(original_balance, 2)
                             if original_balance is not None else None),
@@ -580,8 +624,11 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         "lineage": {
             "source": "governed funded reporting periods (fixed static pool)",
             "metric": "surviving loans, balance, retention and exits for one vintage",
-            "note": "The pool is fixed at formation. A falling count is "
-                    "redemption or exit; the count can never rise.",
+            "note": "The pool is fixed once the vintage stops forming. From that "
+                    "point a falling count is redemption or exit and the count "
+                    "can never rise. Periods before formation completes are "
+                    "marked `forming` and carry no retention — the vintage was "
+                    "still admitting loans, so there is no survival rate to give.",
         },
     }
 
