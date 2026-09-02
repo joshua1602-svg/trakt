@@ -345,6 +345,23 @@ a fix**. It asserts an absolute path against the checked-in registry, so it fail
 from any worktree and passes only when run from `/home/user/trakt`. Verified by
 running it standalone on both: it fails on HEAD too.
 
+**Synthetic portfolio artefacts.** The first pass of this work tested the new
+funded code only against frames stated inline in the tests. That was the weaker
+evidence, and it has since been closed:
+`tests/notifications/test_funded_composition_on_real_canonical.py` runs the
+decomposition over `synthetic_demo/output/multibook/` — two consecutive platform
+canonicals the pipeline actually produced, 116 and 118 loans across
+`alp_acquired` / `alp_origination` / `spv1_sponsored`. None of those ids carries
+the `direct_` / `acquired_` prefix, so classification runs through the
+`source_portfolio_type` column on data never shaped to exercise that path. The
+partition reconciles at full precision (residual `0.0`).
+
+The `tests/test_simulation_*.py` suites — the asset-class hardening framework,
+which drives generated portfolios through the real gates — were **not** in the
+targeted set above and were run separately: **19 failed / 136 passed / 3 errors
+on both `origin/main` and HEAD**, failure lists diffed and identical. They are
+pre-existing and environment-related in this container.
+
 **Not completed:** the entire repository suite. It is simulation-heavy and did
 not finish in the time available; two full runs reached ~10% after fifteen
 minutes each. This is stated rather than glossed: the targeted set covers every
