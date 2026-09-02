@@ -123,7 +123,16 @@ contribution rather than money on the book. Never state one as the other.
 the client's own configured risk limits, and name the source. If no approved \
 configuration exists, say that — an absence of configured limits is not a pass.
 7. Report what you could NOT assess as carefully as what you could. A check \
-that did not run is never evidence that nothing was wrong.
+that did not run is never evidence that nothing was wrong. Qualify your \
+conclusion to the evidence you actually reviewed: "no material emerging risks \
+or developments were identified from the portfolio MI reviewed" is a claim you \
+can support; "all risk limits remain within tolerance" is one you may make ONLY \
+where the approved risk-limit check actually ran and passed.
+8. A quiet period is a real finding, not a failed review. Where the metrics \
+moved only modestly and nothing material emerged from the MI you reviewed, say \
+so plainly and stop. Do not manufacture a concern to justify the review, and do \
+not downgrade the period to INCOMPLETE_REVIEW because a capability this \
+deployment has never had is absent.
 
 INVESTIGATING
 
@@ -161,12 +170,23 @@ SUBMIT_REVIEW: Dict[str, Any] = {
                 "type": "string",
                 "enum": ["MATERIAL_DEVELOPMENTS", "ROUTINE_PERIOD",
                          "ATTENTION_REQUIRED", "INCOMPLETE_REVIEW"],
-                "description": ("ATTENTION_REQUIRED where an APPROVED client "
-                                "limit was crossed or approached, or the book "
-                                "deteriorated materially. ROUTINE_PERIOD is a "
-                                "real verdict, not a fallback, and a quiet "
-                                "month should get it. INCOMPLETE_REVIEW where "
-                                "checks you needed did not run."),
+                "description": (
+                    "ATTENTION_REQUIRED where an APPROVED client limit was "
+                    "crossed or approached, or the book deteriorated "
+                    "materially. MATERIAL_DEVELOPMENTS where something "
+                    "significant changed that is not a risk warning. "
+                    "ROUTINE_PERIOD where the metrics moved only modestly and "
+                    "the governed MI you reviewed showed no material emerging "
+                    "development — this is a real and useful answer, and a "
+                    "quiet month must get it. "
+                    "INCOMPLETE_REVIEW ONLY where a governed check you needed "
+                    "for THIS review failed or returned nothing, so you could "
+                    "not reach a conclusion. A capability this deployment has "
+                    "never had — no approved risk limits configured, a single "
+                    "governed snapshot so no historical rates — is NOT an "
+                    "incomplete review. Note it under `could_not_assess`, "
+                    "qualify your conclusion to the evidence you did review, "
+                    "and still give the period its real verdict."),
             },
             "headline": {
                 "type": "string",

@@ -30,11 +30,11 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from apps.blob_trigger_app.storage import Storage, open_storage
 
-from . import generate, sources, telemetry
+from . import enrichment, generate, sources, telemetry
 from .config import load as load_config
 from .contract import NotificationBatch, validate
 from .layout import NotificationLayout
@@ -100,6 +100,7 @@ def on_publication_approved(*, tenant_id: str, portfolio_id: str,
                             storage: Optional[Storage] = None,
                             layout: Optional[NotificationLayout] = None,
                             expected_microsoft_tenant: Optional[str] = None,
+                            reviewer: Optional[Callable[[], Any]] = None,
                             ) -> TriggerOutcome:
     """Generate and enqueue the two messages for one approved update.
 
@@ -113,7 +114,8 @@ def on_publication_approved(*, tenant_id: str, portfolio_id: str,
                     datasets=datasets, approved_run_ids=approved_run_ids or [],
                     portfolio_context=portfolio_context, run_status=run_status,
                     funded_run_id=funded_run_id, storage=storage, layout=layout,
-                    expected_microsoft_tenant=expected_microsoft_tenant)
+                    expected_microsoft_tenant=expected_microsoft_tenant,
+                    reviewer=reviewer)
     except Exception as exc:  # noqa: BLE001 - a publication must never fail here
         logger.exception("notifications: trigger failed for %s/%s",
                          tenant_id, portfolio_id)
@@ -129,7 +131,8 @@ def _run(outcome: TriggerOutcome, *, tenant_id: str, portfolio_id: str,
          portfolio_context: str, run_status: Optional[str],
          funded_run_id: Optional[str], storage: Optional[Storage],
          layout: Optional[NotificationLayout],
-         expected_microsoft_tenant: Optional[str]) -> TriggerOutcome:
+         expected_microsoft_tenant: Optional[str],
+         reviewer: Optional[Callable[[], Any]] = None) -> TriggerOutcome:
     conf = load_config()
 
     telemetry.emit(telemetry.EVT_UPDATE_RECEIVED, tenant_id=tenant_id,
@@ -173,6 +176,14 @@ def _run(outcome: TriggerOutcome, *, tenant_id: str, portfolio_id: str,
                            approved_run_ids=approved_run_ids,
                            eligibility={"datasets": sorted(normalised),
                                         "run_status": run_status})
+
+    # -- autonomous enrichment, strictly additive --------------------------- #
+    # Deliberately AFTER the guaranteed briefing exists and BEFORE validation,
+    # so an enriched batch is held to exactly the same contract as a plain one.
+    # `enrich` cannot raise and cannot remove a deterministic item; if the
+    # autonomous layer is blocked, errors or is not configured, `batch` comes
+    # back as `generate.build` made it.
+    batch = enrichment.enrich(batch, reviewer=reviewer)
     outcome.notification_batch_id = batch.notification_batch_id
     outcome.reporting_key = batch.reporting_key
 

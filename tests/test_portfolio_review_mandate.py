@@ -358,9 +358,9 @@ def test_the_card_keeps_at_most_five_findings():
 
 def test_the_card_drops_from_the_bottom_of_the_ranking_until_it_fits():
     """Selection, not truncation: whole findings go, sentences never do."""
-    card = brief.render(_review(findings=[_finding(i, 60) for i in range(5)]))
+    card = brief.render(_review(findings=[_finding(i, 90) for i in range(5)]))
 
-    assert card.word_count <= brief.MAX_CARD_WORDS
+    assert card.word_count <= brief.SOFT_CARD_WORDS
     assert card.findings[0]["title"] == "Finding 0"
     assert all(f["observation"].strip() for f in card.findings)
 
@@ -376,26 +376,105 @@ def test_a_thousand_word_review_becomes_a_card():
 
     card = brief.render(long_review)
 
-    assert card.word_count <= brief.MAX_CARD_WORDS
-    assert not brief.over_budget(card)
+    assert card.word_count <= brief.SOFT_CARD_WORDS
     assert len(card.gaps) <= brief.MAX_GAPS
     assert all(isinstance(g, str) for g in card.gaps)
 
 
-def test_a_summary_that_alone_blows_the_budget_says_so():
-    """Selection cannot fix prose it does not control, and must not pretend to.
+def test_going_over_the_guide_is_a_note_not_a_failure():
+    """Length alone must never withhold a useful briefing.
 
-    A budget that silently failed would be worse than none: the card would look
-    compliant to anything checking `notes`. So the one case selection cannot
-    reach is named explicitly, and one finding always survives rather than the
-    card being stripped to a bare headline.
+    A summary longer than selection can trim leaves the card over the guide.
+    That is reported, and the card is still produced with its findings intact —
+    the commercial requirement is a readable briefing, not a word count.
     """
     card = brief.render(_review(summary="word " * 400,
                                 findings=[_finding(0, 20)]))
 
-    assert brief.over_budget(card)
-    assert any(n.startswith("OVER BUDGET") for n in card.notes)
+    assert card.word_count > brief.SOFT_CARD_WORDS
+    assert any("a note, not a defect" in n for n in card.notes)
     assert len(card.findings) == 1
+    assert not brief.quality_flags(card)
+
+
+# --------------------------------------------------------------------------- #
+# Quality — what actually makes a briefing bad
+# --------------------------------------------------------------------------- #
+def _card(**over):
+    return brief.render(_review(**over))
+
+
+def test_a_clean_briefing_raises_no_quality_flag():
+    card = _card(findings=[
+        {"title": "Movement", "observation": "The book grew £554k.",
+         "why_it_matters": "Ordinary origination.", "severity": "low"},
+        {"title": "Mix", "observation": "London rose to 22.6% of balance.",
+         "why_it_matters": "Worth watching against the regional limit.",
+         "severity": "medium"}])
+
+    assert brief.quality_flags(card) == []
+
+
+def test_two_findings_that_repeat_each_other_are_flagged():
+    same = ("The funded book increased by five hundred and fifty four thousand "
+            "pounds through new lending across three loans this period")
+    card = _card(findings=[
+        {"title": "Growth", "observation": same,
+         "why_it_matters": "a", "severity": "low"},
+        {"title": "New lending", "observation": same + " overall",
+         "why_it_matters": "b", "severity": "low"}])
+
+    assert any("repeat each other" in f for f in brief.quality_flags(card))
+
+
+def test_duplicate_titles_are_flagged():
+    card = _card(findings=[
+        {"title": "Concentration", "observation": "London is 22.6%.",
+         "why_it_matters": "a", "severity": "low"},
+        {"title": "Concentration", "observation": "The top ten are 20.1%.",
+         "why_it_matters": "b", "severity": "low"}])
+
+    assert "duplicate finding titles" in brief.quality_flags(card)
+
+
+def test_methodology_exposition_is_flagged():
+    card = _card(findings=[{
+        "title": "LTV", "observation": "Weighted LTV is 45.9%.",
+        "why_it_matters": "It is calculated as the balance-weighted mean.",
+        "severity": "low"}])
+
+    assert any("explains method" in f for f in brief.quality_flags(card))
+
+
+def test_raw_tool_output_is_flagged():
+    card = _card(findings=[{
+        "title": "Composition", "observation": "components: {'exits': None}",
+        "why_it_matters": "a", "severity": "low"}])
+
+    assert "carries raw tool output" in brief.quality_flags(card)
+
+
+def test_claims_hedged_away_are_flagged():
+    card = _card(findings=[{
+        "title": "Concentration",
+        "observation": "London may be rising and could potentially matter.",
+        "why_it_matters": ("This might suggest a trend, though it appears to "
+                           "be unclear and arguably cannot be determined."),
+        "severity": "low"}])
+
+    assert any("hedging" in f for f in brief.quality_flags(card))
+
+
+def test_word_count_alone_is_never_a_quality_flag():
+    """The explicit commercial instruction: length is not a defect."""
+    card = _card(findings=[{
+        "title": "A long but useful finding",
+        "observation": " ".join(f"governed figure {i}" for i in range(90)),
+        "why_it_matters": " ".join(f"reason {i}" for i in range(90)),
+        "severity": "high"}])
+
+    assert card.word_count > brief.SOFT_CARD_WORDS
+    assert brief.quality_flags(card) == []
 
 
 def test_the_gaps_are_named_not_argued():

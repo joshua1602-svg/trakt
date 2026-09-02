@@ -1,27 +1,40 @@
-"""What actually reaches Teams: a ranked selection, inside a word budget.
+"""What actually reaches Teams: a ranked selection, judged on quality not length.
 
 THE PROBLEM THIS SOLVES
 -----------------------
 The autonomous reviews the red-team collected ran 744–1,011 words. The
 deterministic card runs about 40. Nobody reads a thousand words in a Teams
-notification, and a briefing nobody reads is worth less than a short one that is
-merely adequate — the excess is not thoroughness, it is a failure to rank.
+notification, and the excess was not thoroughness — it was a failure to rank.
+
+LENGTH IS A SYMPTOM, NOT THE DEFECT
+-----------------------------------
+An earlier revision made 260 words a hard pass/fail line. That was the wrong
+test and it is gone. The commercial requirement is that the message reads like a
+concise management briefing rather than an essay or a tool dump, and a word
+count answers neither question: a padded 200-word card fails it and a dense
+300-word one passes. Worse, optimising for the count costs exactly the context
+that makes a briefing worth sending.
+
+So this module now does two separable things. ``render`` **selects** — a card is
+a ranking, and the eleventh finding is not worth a manager's time whatever its
+length. ``quality_flags`` **judges**, on the failures that actually make a
+briefing bad: repetition, methodology exposition, raw tool output, duplicate
+findings, hedging stacked until the claim disappears. Going over the soft guide
+is a note on the card, never a failure.
 
 SELECTION, NOT TRUNCATION
 -------------------------
 Nothing here cuts a sentence short. It drops whole findings from the bottom of
-the model's own ranking until the card fits, and says how many it dropped. A
-half-sentence is worse than a missing paragraph: the reader cannot tell what was
-lost, and a severed clause can invert a claim.
+the model's own ranking, and says how many it dropped. A half-sentence is worse
+than a missing paragraph: the reader cannot tell what was lost, and a severed
+clause can invert a claim.
 
-WHY THE BUDGET IS ENFORCED HERE AND NOT ASKED FOR IN THE PROMPT
+WHY SELECTION IS ENFORCED HERE AND NOT ASKED FOR IN THE PROMPT
 ---------------------------------------------------------------
 The prompt does ask. It also asked for no arithmetic, and that held until it
 didn't. Anything that must be true of what a lender receives belongs somewhere
 deterministic, and "somewhere deterministic" is this module and
-:mod:`portfolio_review.numeric_gate`. The prompt's job is to make the model
-*want* to be brief so that selection rarely has to bite; the budget's job is to
-make brevity true when it doesn't.
+:mod:`portfolio_review.numeric_gate`.
 
 THE GAPS ARE NAMED, NOT ARGUED
 ------------------------------
@@ -34,6 +47,7 @@ notification needs to know only that something did not run.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -43,11 +57,20 @@ MAX_GAPS = 4
 MAX_HEADLINE_WORDS = 40
 MAX_SUMMARY_WORDS = 90
 
-#: Total words across everything a reader sees. Chosen against the measured
-#: extremes — ~40 for the deterministic card, 744–1,011 for the ungated agent —
-#: to sit far enough above the former to carry the agent's added value and far
-#: enough below the latter to be read on a phone.
-MAX_CARD_WORDS = 260
+#: A soft ceiling, deliberately not a pass/fail threshold.
+#:
+#: An earlier revision treated 260 words as a hard limit and a card over it as a
+#: defect. That is the wrong test: the commercial requirement is that the
+#: message reads like a management briefing rather than an essay or a tool dump,
+#: and a genuinely useful 300-word briefing is better than a thin 200-word one.
+#: Optimising for the count would cost exactly the context that makes the
+#: message worth sending.
+#:
+#: So selection still trims — a card is a ranking, and the eleventh finding is
+#: not worth a manager's time whatever its length — but going over is reported
+#: as a note, never as a failure. :func:`quality_flags` carries the tests that
+#: DO indicate a bad briefing.
+SOFT_CARD_WORDS = 320
 
 
 def _words(text: Optional[str]) -> int:
@@ -129,28 +152,81 @@ def render(review: Dict[str, Any]) -> Card:
         findings = findings[:MAX_FINDINGS]
     card.findings = findings
 
-    # Drop from the bottom of the model's own ranking until it fits. One
-    # finding always survives: a card with a headline and nothing under it is
-    # not a briefing, and dropping the last finding to satisfy a budget the
-    # SUMMARY blew would punish the wrong part of the review.
+    # Drop from the bottom of the model's own ranking until it fits the soft
+    # ceiling. One finding always survives: a card with a headline and nothing
+    # under it is not a briefing, and dropping the last finding to satisfy a
+    # length the SUMMARY blew would punish the wrong part of the review.
     trimmed = False
-    while card.word_count > MAX_CARD_WORDS and len(card.findings) > 1:
+    while card.word_count > SOFT_CARD_WORDS and len(card.findings) > 1:
         card.withheld.append(card.findings.pop())
         trimmed = True
     if trimmed:
         card.notes.append(f"trimmed to {card.word_count} words against a "
-                          f"{MAX_CARD_WORDS}-word budget")
-
-    # Selection cannot fix prose it does not control. Say so rather than let
-    # the budget look like a guarantee it is not.
-    if card.word_count > MAX_CARD_WORDS:
+                          f"{SOFT_CARD_WORDS}-word guide")
+    elif card.word_count > SOFT_CARD_WORDS:
         card.notes.append(
-            f"OVER BUDGET at {card.word_count} words: the headline and summary "
-            f"alone are {_words(card.headline) + _words(card.summary)} words, "
-            f"which selection cannot reduce")
+            f"{card.word_count} words, above the {SOFT_CARD_WORDS}-word guide — "
+            f"a note, not a defect")
     return card
 
 
-def over_budget(card: Card) -> bool:
-    """Did the card fail its own budget? Only possible via headline/summary."""
-    return card.word_count > MAX_CARD_WORDS
+#: Phrasing that belongs in a methodology appendix, not a management briefing.
+_METHODOLOGY = re.compile(
+    r"\b(methodolog\w+|is calculated as|is computed|we (?:then )?(?:ran|called)|"
+    r"the tool returned|per the formula|by construction|as defined in|"
+    r"weighted by balance across)\b", re.I)
+
+#: Raw machine output leaking into prose a person reads.
+_RAW_OUTPUT = re.compile(r"[\{\[]\s*['\"]|=>|\bNone\b|\bnull\b|_id\b|\bdict\(")
+
+#: Hedging stacked until the claim disappears.
+_QUALIFIERS = re.compile(
+    r"\b(may|might|could|possibly|potentially|appears? to|seems? to|"
+    r"suggests?|arguably|it is unclear|cannot be (?:fully )?determined)\b", re.I)
+
+
+def quality_flags(card: Card) -> List[str]:
+    """What actually makes a briefing bad. Length is not on this list.
+
+    The commercial test is whether the message reads like a concise management
+    briefing rather than an essay or a tool dump, and a word count answers
+    neither question — a padded 200-word card fails and a dense 300-word one
+    passes. These are the failures worth naming, each observable in the text.
+    """
+    flags: List[str] = []
+    body = [card.headline, card.summary] + [
+        f"{f.get('title','')} {f.get('observation','')} {f.get('why_it_matters','')}"
+        for f in card.findings]
+    joined = " ".join(t for t in body if t)
+
+    if len(card.findings) > MAX_FINDINGS:
+        flags.append(f"{len(card.findings)} findings, above the "
+                     f"{MAX_FINDINGS} a card should carry")
+
+    titles = [str(f.get("title") or "").strip().lower() for f in card.findings]
+    if len(titles) != len(set(titles)):
+        flags.append("duplicate finding titles")
+
+    # Two findings whose observations share most of their vocabulary are one
+    # finding written twice — the commonest way a card gets long without
+    # getting more useful.
+    observations = [set(str(f.get("observation") or "").lower().split())
+                    for f in card.findings]
+    for i, a in enumerate(observations):
+        for b in observations[i + 1:]:
+            if a and b and len(a & b) / max(len(a), len(b)) > 0.6:
+                flags.append("two findings substantially repeat each other")
+                break
+        else:
+            continue
+        break
+
+    if _METHODOLOGY.search(joined):
+        flags.append("explains method rather than reporting a result")
+    if _RAW_OUTPUT.search(joined):
+        flags.append("carries raw tool output")
+
+    hedges = len(_QUALIFIERS.findall(joined))
+    if hedges > 2 + len(card.findings):
+        flags.append(f"{hedges} hedging phrases — the claims are qualified away")
+    return flags
