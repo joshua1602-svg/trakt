@@ -1,0 +1,22 @@
+# =========================================================================
+# Governed client identity — what Trakt calls this client on screen.
+# =========================================================================
+#
+# Read by mi_agent_api/client_identity.py, which is keyed by the directory name
+# above: this file can only ever name client_001, so it cannot attribute one
+# client's name to another client's book.
+#
+# This is the same fact OCC records as `client.client_name` in its adoption
+# answers, sourced from the client configuration's `client.display_name`
+# (config/client/config_client_ERM_UK.yaml) — restated here against the tenant
+# id the MI service actually serves, because that configuration declares
+# `client_id: ere_funding_uk` and a name is only trustworthy when the source is
+# addressed to the client being rendered.
+#
+# When onboarding generates a per-client configuration for this tenant, or a
+# tenancy registry (config/tenancy.yaml) declares its display_name, either takes
+# over and this file can go.
+
+client:
+  client_id: client_001
+  display_name: "ERE Funding - Equity Release Mortgages"

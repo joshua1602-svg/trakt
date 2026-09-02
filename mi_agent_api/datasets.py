@@ -219,10 +219,12 @@ def _platform_snapshot_index() -> Optional[Dict[str, Any]]:
 
     default_run = os.environ.get("MI_AGENT_RUN_ID") or "latest"
     runs = _platform_runs(df, default_run)
+    from . import client_identity
     return {
         "portfolios": [{
             "client_id": client_id,
-            "label": str(client_id).upper(),
+            "label": client_identity.portfolio_label(client_id),
+            "client_name": client_identity.governed_client_name(client_id),
             "runs": runs,
         }],
         "source": data_source_label(),
