@@ -93,6 +93,42 @@ def main() -> int:
         print("  any value > 50           ", _yes((ltv > 50).any()))
         print()
 
+    PRODUCT = "erm_product_type"
+    GEO = "collateral_geography"
+    RATE = "current_interest_rate"
+
+    if RATE in cols:
+        rate = df[RATE].dropna()
+        print("INTEREST RATE — the numeric CONTROL")
+        print("  any value > 7            ", _yes((rate > 7).any()),
+              " <- a rate filter DID answer, so numeric thresholds work")
+        print()
+
+    # A value the question names must match a value the BOOK carries. Product
+    # type answers fine as a GROUP-BY and never as a FILTER, so the failure is
+    # in value matching, not in the column. These print booleans about how the
+    # book spells its values, never the spellings themselves.
+    def _match(col, wanted):
+        if col not in cols:
+            print("  %-24s column absent" % wanted)
+            return
+        vals = [str(v) for v in df[col].dropna().unique()]
+        exact = any(v == wanted for v in vals)
+        loose = any(v.strip().lower().replace("_", " ").replace("-", " ")
+                    == wanted for v in vals)
+        print("  %-24s exact %-4s normalised %-4s distinct values %d"
+              % (wanted, "yes" if exact else "NO",
+                 "yes" if loose else "NO", len(vals)))
+
+    print("VALUE MATCHING — does the book carry the value the question names?")
+    print("  (exact = character-for-character; normalised = ignoring case,")
+    print("   underscores and hyphens. 'NO / yes' means a normalisation bug;")
+    print("   'NO / NO' means the book spells it differently altogether.)")
+    for col, wanted in ((PRODUCT, "drawdown"), (PRODUCT, "lump sum"),
+                        (GEO, "london")):
+        _match(col, wanted)
+    print()
+
     if len(direct) and AGE in cols and LTV in cols:
         print("THE FAILING PREDICATE, ONE TERM AT A TIME (direct book)")
         d_age = direct[AGE] > 55
