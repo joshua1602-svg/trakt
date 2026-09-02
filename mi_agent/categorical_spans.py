@@ -69,6 +69,48 @@ def _normalise(text: Any) -> str:
     return re.sub(r"[\s_]+", " ", str(text or "").strip().lower())
 
 
+#: Closed-class English function words. A span made of exactly ONE of these is
+#: not a reference to a category value, whatever the tape happens to carry.
+#:
+#: WHY THIS EXISTS. Matching is against the values the BOOK carries, which is
+#: the right instinct and the reason nothing here holds a vocabulary of its own.
+#: But a real tape carries short codes, and a one-character grade collides with
+#: ordinary English. Measured on a live book whose `internal_risk_grade` is
+#: A/B/C: the "a" in "Give me A concise overview of the funded portfolio" was
+#: claimed as a governed value on that field, the execution never applied it —
+#: it is an article, not a filter — and the coverage ledger correctly refused an
+#: answer for a concept it could not confirm. 12 of the 166 accepted questions
+#: broke that way, every one of them a natural phrasing ("Give me a…",
+#: "Show a table of…"). The synthetic book has no single-letter value and showed
+#: none of it.
+#:
+#: The guard is deliberately narrow: ONE token, and only the closed classes —
+#: articles, pronouns, copulas/auxiliaries, conjunctions, prepositions,
+#: wh-words. A multi-word span is untouched, so a tape value that genuinely is a
+#: function word still matches when the reader writes it inside a longer phrase.
+#: No content word is listed: "direct", "total", "offer" and their kind are real
+#: business values and must keep matching.
+_FUNCTION_WORDS = frozenset({
+    # articles and determiners
+    "a", "an", "the", "this", "that", "these", "those", "any", "some",
+    # pronouns
+    "i", "me", "my", "we", "us", "our", "you", "your", "it", "its",
+    "he", "she", "him", "her", "they", "them", "their",
+    # copulas and auxiliaries
+    "is", "are", "was", "were", "be", "been", "being", "am",
+    "do", "does", "did", "have", "has", "had",
+    "will", "would", "can", "could", "shall", "should", "may", "might", "must",
+    # conjunctions and negation
+    "and", "or", "but", "nor", "not", "no", "if", "than", "as", "so",
+    # prepositions
+    "of", "in", "on", "at", "to", "for", "by", "with", "from", "into",
+    "onto", "off", "out", "up", "down", "about",
+    # wh-words and pro-forms
+    "what", "which", "who", "whom", "whose", "when", "where", "why", "how",
+    "there", "here", "then",
+})
+
+
 def value_field(value: str, available_values: Any) -> Optional[Tuple[str, str]]:
     """The governed field whose values include ``value`` — ``(field, value)``.
 
@@ -91,6 +133,12 @@ def value_field(value: str, available_values: Any) -> Optional[Tuple[str, str]]:
         return None
     probe = _normalise(value)
     if not probe:
+        return None
+    if probe in _FUNCTION_WORDS:
+        # ONE owner, so every consumer gets this: the coverage ledger stops
+        # inventing a concept nothing can carry, AND `mask_value_spans` stops
+        # blanking the word out of the sentence before the scope owner reads it.
+        # Fixing it at either call site alone would leave the other corrupting.
         return None
     hits = []
     for field, values in available_values.items():
