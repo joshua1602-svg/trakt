@@ -1,0 +1,49 @@
+# Files that live inside a staged package but are NOT runtime code or data.
+# One repo-relative glob per line; inline # comments and blank lines ignored.
+#
+# WHY THIS FILE EXISTS
+# --------------------
+# `package_contents.txt` names DIRECTORIES. Everything tracked inside one ships,
+# and the staging step strips only `__pycache__`, `tests/` and `.pytest_cache` —
+# it has no way to tell a file the app opens from a file a harness wrote.
+#
+# The measurement programme deliberately commits its evidence beside the code it
+# measures: frozen answer baselines, lexical baselines, question corpora. That is
+# the right place for them in the REPOSITORY — they are the audit trail that lets
+# a change be proved against a fixed prior. It is the wrong place for them on a
+# web server. Measured 2026-09-02: 14.5 MB of `answer_baseline_*.json` in a
+# 28.0 MB artefact — roughly half the deployment package was evidence no
+# runtime code opens.
+#
+# THE BAR FOR ADDING A LINE HERE
+# ------------------------------
+# A pattern belongs here only when NOTHING in the staged packages reads the file:
+# not by name, not by glob, not by directory walk. Excluding a file the runtime
+# needs recreates exactly the failure `package_contents.txt` exists to prevent —
+# an App Service that starts and then 500s on the first request.
+# `tests/test_mi_api_appservice_packaging.py` checks both directions, so a
+# mistake here fails in CI rather than in production.
+#
+# Every pattern below was verified: 18 of these files are referenced by no code
+# anywhere in the repository, and the three corpora are read only by
+# `migration_phase0/` measurement scripts, which are not staged.
+
+# Frozen answer baselines — one per measured gate, re-recorded per commit.
+question_interpretation/answer_baseline_*.json
+
+# Lexical-surface baselines from the same programme.
+question_interpretation/lexical_baseline_*.json
+
+# One-off measurement artefacts: a robustness run, an expectation check, and the
+# before/after pair from the B5 subject-side split.
+question_interpretation/robustness_deterministic_baseline.json
+question_interpretation/answer_type_expectation_check.json
+question_interpretation/b5_before_split.json
+question_interpretation/b5_after_split.json
+
+# Question corpora — inputs to the harnesses in migration_phase0/, which is not
+# a staged package. The serving path builds its vocabulary from the semantics
+# registry in config/, never from these.
+question_interpretation/stage1_corpus.json
+question_interpretation/stage2_corpus.json
+question_interpretation/compound_canary_bank.yaml

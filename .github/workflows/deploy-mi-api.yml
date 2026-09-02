@@ -93,6 +93,25 @@ jobs:
           find "${STAGE_DIR}" -type d -name 'tests' -prune -exec rm -rf {} +
           find "${STAGE_DIR}" -type d -name '.pytest_cache' -prune -exec rm -rf {} +
 
+          # Measurement evidence that lives beside the code it measures. The
+          # package list names DIRECTORIES, so these ship unless named here;
+          # 14.5 MB of a 28.0 MB artefact was frozen answer baselines no runtime
+          # code opens. See deploy/trakt-mi-api/package_excludes.txt for the bar
+          # a pattern has to clear, and test_mi_api_appservice_packaging.py for
+          # the check that a needed file was not excluded by mistake.
+          pruned=0
+          while IFS= read -r raw; do
+            pattern="${raw%%#*}"
+            pattern="$(echo "${pattern}" | xargs || true)"
+            [ -z "${pattern}" ] && continue
+            for f in ${STAGE_DIR}/${pattern}; do
+              [ -e "${f}" ] || continue
+              rm -f "${f}"
+              pruned=$((pruned + 1))
+            done
+          done < deploy/trakt-mi-api/package_excludes.txt
+          echo "Pruned ${pruned} non-runtime file(s) declared in package_excludes.txt"
+
           test -f "${STAGE_DIR}/startup.sh" \
             || { echo "::error::startup.sh is missing from the artefact root"; exit 1; }
           test -f "${STAGE_DIR}/requirements.txt" \

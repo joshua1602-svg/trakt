@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import re
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -33,6 +34,7 @@ from mi_agent.mi_query_validator import load_mi_semantics
 
 from .adapters import adapt_workflow_result
 from .catalogue import build_catalogue
+from . import data_source
 from .data_source import (
     KIND_PLATFORM_CANONICAL,
     data_source_info,
@@ -287,9 +289,36 @@ def _warm_caches() -> None:
         logger.info("startup shared-preparation warm skipped: %s", exc)
 
 
+def _start_warm() -> None:
+    """Warm the caches WITHOUT holding up startup.
+
+    THE WARM IS AN OPTIMISATION. It exists so the first question of the day is
+    not cold; it may never decide whether the app serves at all. Run inline it
+    did exactly that, because the platform gives a container a fixed window to
+    come up and this work is a governed-tape download plus a prepare — unbounded
+    by anything the app controls.
+
+    Measured on trakt-mi-api, 2026-09-02: three consecutive boots reached
+    "Waiting for application startup" and none reached "complete". Azure killed
+    each container on the 230s startup probe, and the next boot began the same
+    download from the beginning — the scratch copy does not survive the restart,
+    so the loop could not converge. The API served nothing for fourteen minutes
+    and every request to it was a 500.
+
+    The old `try/except` guarded the warm against FAILING. Nothing guarded it
+    against being SLOW, and slow is the mode that took the site down. A daemon
+    thread cannot: startup completes at once, the port answers, and the first
+    request either finds the frame ready or waits for the same load it would
+    have triggered itself — `data_source._ACTIVE_LOCK` makes that one load
+    rather than two.
+    """
+    threading.Thread(target=_warm_caches, name="mi-cache-warm",
+                     daemon=True).start()
+
+
 @asynccontextmanager
 async def _lifespan(_app: "FastAPI"):
-    _warm_caches()
+    _start_warm()
     yield
 
 
@@ -402,10 +431,24 @@ class QueryRequest(BaseModel):
 
 @app.get("/")
 def root() -> Dict[str, Any]:
-    """Friendly index so the bare URL isn't a confusing 404."""
+    """Friendly index, and THE LIVENESS PROBE — point the platform health check here.
+
+    The distinction matters and is not cosmetic. This route touches no data: it
+    answers as soon as the process is up. `/health` is a READINESS and diagnostic
+    route — it reports the resolved data source, which means it RESOLVES the data
+    source, which on a cold process is a governed-tape download. Pointing a
+    liveness check at `/health` therefore makes the probe wait for the very work
+    that a restart just discarded, and an instance can be recycled for being slow
+    to answer a question about whether it is slow.
+
+    `warm` says whether the active dataset is already cached, WITHOUT loading it,
+    so an operator can watch a cold start progress without becoming the thing
+    that triggers the load.
+    """
     return {
         "service": "mi_agent_api",
         "version": app.version,
+        "warm": data_source.is_loaded(),
         "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot",
                       "/mi/pipeline/snapshots", "/mi/pipeline/snapshot",
                       "/mi/forecast/snapshot", "/mi/workspace/view", "/mi/query"],
