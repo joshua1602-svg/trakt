@@ -1355,6 +1355,15 @@ def main() -> int:
             "concept_merge": ({
                 "status": (meta.get("conceptMerge") or {}).get("status"),
                 "detail": _redact((meta.get("conceptMerge") or {}).get("detail")),
+                # THE ARM'S OWN MODEL, USAGE AND PRICED COST. The first cut of
+                # this read `metadata.llm`, which is the deterministic PARSER's
+                # record — it reports `calls: 0` when the parser is off, so a
+                # whole run came back with no cost at all while the arm was
+                # calling a model on every question. The arm publishes its own
+                # `usage` and `cost` here, priced by the estate's own table.
+                "model": (meta.get("conceptMerge") or {}).get("model"),
+                "usage": (meta.get("conceptMerge") or {}).get("usage") or {},
+                "cost": (meta.get("conceptMerge") or {}).get("cost") or {},
             } if isinstance(meta.get("conceptMerge"), dict) else None),
             "scope_applied": _scope_applied(env, meta),
             "coverage": coverage,
@@ -1422,20 +1431,29 @@ def main() -> int:
               % ", ".join(out["overreach"]))
     # THE BILL, from the run's own usage rather than from a prompt built
     # against another book. Reported whenever the envelope carried it.
-    billed = [r["llm"] for r in rows if isinstance(r.get("llm"), dict)
-              and r["llm"].get("input_tokens")]
+    # THE ARM is what calls a model per question; `metadata.llm` is the
+    # deterministic parser and reports zero when that parser is switched off.
+    billed = [(r.get("concept_merge") or {}).get("usage") or {}
+              for r in rows
+              if ((r.get("concept_merge") or {}).get("usage") or {}).get("input_tokens")]
+    priced = [(r.get("concept_merge") or {}).get("cost") or {} for r in rows
+              if (r.get("concept_merge") or {}).get("cost")]
+    models = sorted({(r.get("concept_merge") or {}).get("model")
+                     for r in rows if (r.get("concept_merge") or {}).get("model")})
     if billed:
         tin = sum(b.get("input_tokens") or 0 for b in billed)
         tout = sum(b.get("output_tokens") or 0 for b in billed)
         tread = sum(b.get("cache_read_tokens") or 0 for b in billed)
-        cost = sum(b.get("estimated_total_cost") or 0.0 for b in billed)
-        out["llm_totals"] = {"questions_with_usage": len(billed),
+        cost = sum(c.get("estimated_total_cost") or 0.0 for c in priced)
+        out["llm_totals"] = {"models": models,
+                             "questions_with_usage": len(billed),
                              "input_tokens": tin, "output_tokens": tout,
                              "cache_read_tokens": tread,
                              "estimated_total_cost": round(cost, 4)}
-        print("\nLLM: %d questions | in %d (cache reads %d) | out %d | "
+        print("\nLLM %s: %d questions | in %d (cache reads %d) | out %d | "
               "est $%.4f  = $%.4f/question"
-              % (len(billed), tin, tread, tout, cost, cost / len(billed)))
+              % (",".join(models) or "?", len(billed), tin, tread, tout,
+                 cost, cost / len(billed)))
         if not tread:
             print("     no cache reads — every call paid full price for the "
                   "vocabulary; check the TTL reached this build")
