@@ -126,8 +126,32 @@ def _blank_type(frame: pd.DataFrame, portfolio_id: str) -> pd.DataFrame:
     return out
 
 
+#: The column the funded engines actually sum. Both balance columns are present
+#: in this canonical and carry identical values, so a fixture that mutates the
+#: wrong one changes nothing and silently produces a scenario that is not the
+#: one it claims to be. Named once, here, so that cannot happen twice.
+BALANCE_COLUMNS = ("current_outstanding_balance", "current_principal_balance")
+
+#: What ``snapshots.infer_reporting_date`` reads. The reporting date is a
+#: property of the TAPE, not of the folder it sits in, so a fixture that wants
+#: a period ordering has to say so in the data — writing the frames to
+#: differently named run directories does not reorder them, and should not.
+CUT_OFF_COLUMN = "data_cut_off_date"
+
+
 def _balance(frame: pd.DataFrame) -> float:
-    return float(frame["current_principal_balance"].sum())
+    return float(frame[BALANCE_COLUMNS[0]].sum())
+
+
+def _scale_balance(frame: pd.DataFrame, factor: float,
+                   where: Optional[pd.Series] = None) -> pd.DataFrame:
+    """Scale balances on every column the engines read."""
+    out = frame.copy()
+    mask = pd.Series(True, index=out.index) if where is None else where
+    for column in BALANCE_COLUMNS:
+        if column in out.columns:
+            out.loc[mask, column] = out.loc[mask, column] * factor
+    return out
 
 
 # --------------------------------------------------------------------------- #
@@ -229,3 +253,126 @@ def build(tmp_root: Path, client_id: str) -> List[Scenario]:
 def clear(tmp_root: Path) -> None:
     if tmp_root.exists():
         shutil.rmtree(tmp_root)
+
+
+# --------------------------------------------------------------------------- #
+# The deterministic period set
+# --------------------------------------------------------------------------- #
+#: Periods the DETERMINISTIC brief is re-run over. Wider than the three
+#: adversarial ones above, because the deterministic layer is cheap to run and
+#: the question here is coverage rather than temptation: does the generator set
+#: still say the right thing about a quiet month, a shrinking book, a
+#: deteriorating one, and a second client, after the mandate and gate landed.
+#:
+#: Every frame is derived from the same real canonical pair by deletion, by
+#: scaling one existing column, or by relabelling a source portfolio id. No row
+#: is authored, so the distributions stay the ones the pipeline produced.
+def build_periods(tmp_root: Path, client_id: str) -> List[Scenario]:
+    """The ten §12 periods, materialised under ``tmp_root``."""
+    prior, current = _read(PRIOR_CSV), _read(CURRENT_CSV)
+    reduced = _drop_book(prior, ARRIVING_BOOK)
+    out: List[Scenario] = []
+
+    def add(key: str, title: str, pri: pd.DataFrame, cur: pd.DataFrame,
+            derivation: str, traps: Dict[str, Any],
+            cid: str = client_id) -> None:
+        root = tmp_root / key
+        _write_run(root, cid, PRIOR_RUN, pri)
+        _write_run(root, cid, CURRENT_RUN, cur)
+        out.append(Scenario(
+            key=key, period="monthly_funded", root=root, title=title,
+            trap="", evidence_class=("A — real pipeline canonical, unmodified"
+                                     if derivation == "none"
+                                     else "C — purpose-built from real canonical"),
+            derivation=derivation, traps={**traps, "client_id": cid}))
+
+    # 1 — a quiet period: the same frame twice.
+    add("quiet", "Nothing moved", current, current,
+        "the same real canonical as both periods",
+        {"movement": 0.0, "expect_material": False})
+
+    # 2 — organic growth, the real month.
+    add("organic_growth", "The real month", prior, current, "none",
+        {"movement": round(_balance(current) - _balance(prior), 2),
+         "expect_material": False, "expect_addition": False})
+
+    # 3 — an acquisition month.
+    add("acquisition", "A book arrives", reduced, current,
+        f"prior frame has every {ARRIVING_BOOK!r} row deleted",
+        {"expect_addition": True, "expect_acquisition_language": True})
+
+    # 4 — an acquisition masking a deteriorating underlying book.
+    #     The arrival is real; the incumbent book's balances are scaled down so
+    #     the headline rises while the business underneath it shrinks.
+    shrunk = _scale_balance(
+        current, 0.90, current["source_portfolio_id"] != ARRIVING_BOOK)
+    add("acquisition_masking_decline", "Headline up, underlying down",
+        reduced, shrunk,
+        f"as `acquisition`, and the incumbent books' balances scaled to 90% so "
+        f"the underlying book falls while the headline rises",
+        {"expect_addition": True, "expect_underlying_decline": True})
+
+    # 5 — concentration warning: one loan grown until it dominates.
+    top = current[BALANCE_COLUMNS[0]].idxmax()
+    concentrated = _scale_balance(current, 6.0, current.index == top)
+    add("concentration_warning", "One exposure dominates", prior, concentrated,
+        "the largest existing loan's balance multiplied by six, so one "
+        "exposure moves from 2.6% to roughly 14% of the book",
+        {"expect_concentration_move": True})
+
+    # 6 — missing concentration evidence. The funded brief carries no
+    #     concentration claim unless a governed snapshot was resolved, and the
+    #     guard that stops an unevaluated domain reading as a clean result
+    #     lives one layer up in `trakt_notifications.sources`. What this period
+    #     establishes is the half that belongs here: silence, not reassurance.
+    add("no_concentration_config", "No approved limits exist", prior, current,
+        "none; the deployment has no approved concentration configuration",
+        {"expect_concentration_available": False,
+         "expect_no_concentration_claim": True})
+
+    # 7 — a shrinking book. Built by REMOVING loans from the later frame rather
+    #     than by swapping the two periods over: the engine resolves period
+    #     order from each tape's own cut-off date, so a swap is correctly undone
+    #     and would have tested nothing.
+    redeemed = current.iloc[::4]
+    shrinking = current.drop(redeemed.index)
+    add("book_shrinks", "The book contracts", current, shrinking,
+        "every fourth loan removed from the later frame, as redemptions",
+        {"movement": round(_balance(shrinking) - _balance(current), 2),
+         "expect_negative_movement": True})
+
+    # 8 — a disposal: a whole source portfolio leaves.
+    add("disposal", "A book leaves", current, _drop_book(current, ARRIVING_BOOK),
+        f"the current frame has every {ARRIVING_BOOK!r} row deleted, so that "
+        f"book is disposed of",
+        {"expect_disposal": True})
+
+    # 9 — multi-portfolio scaling: a fourth and fifth source portfolio arrive
+    #     at once, to show nothing is pinned to three books or to their names.
+    scaled = current.copy()
+    extra = current[current["source_portfolio_id"] == "spv1_sponsored"].copy()
+    for i, (name, label) in enumerate((
+            ("spv2_sponsored", "SPV2 Sponsored Securitisation"),
+            ("jv_partner_book", "JV Partner Book")), start=1):
+        clone = extra.copy()
+        # Every column carrying the ORIGINAL book's identity is re-keyed, not
+        # just the id. `source_portfolio_label` is governed and is what the
+        # narrative names a book by, so a clone that kept it would have made
+        # the engine look as though it had hard-coded a portfolio name when in
+        # fact the fixture had.
+        clone["source_portfolio_id"] = name
+        clone["source_portfolio_label"] = label
+        clone["portfolio_cohort"] = name
+        clone["loan_identifier"] = clone["loan_identifier"].astype(str) + f"-X{i}"
+        scaled = pd.concat([scaled, clone], ignore_index=True)
+    add("multi_portfolio", "Two more books arrive at once", current, scaled,
+        "two copies of an existing source portfolio re-keyed to new ids, so "
+        "five source portfolios exist and two of them are new",
+        {"expect_addition": True, "expect_addition_count": 2})
+
+    # 10 — a second client, isolated. Same data, different client id: nothing
+    #      about the first client may leak into it.
+    add("second_client", "A different lender entirely", prior, current, "none",
+        {"expect_isolation": True}, cid="client9")
+
+    return out
