@@ -509,3 +509,60 @@ def test_a_shadow_period_is_not_re_notified_when_a_recipient_appears(
     assert second.sent_to_outbox is False
     assert second.suppressed_reason == trigger.SUPPRESS_DUPLICATE
     assert client.sent == []
+
+
+# =========================================================================== #
+# §5 — the verdict enum is internal, and stays internal
+# =========================================================================== #
+def test_the_period_verdict_never_reaches_the_teams_card(
+        storage, layout, recipient, enabled_config, funded):
+    """The uninformative enum cannot hold up deployment, because it is not sent.
+
+    The agent kept returning INCOMPLETE_REVIEW on quiet periods — first because
+    it read absent deployment capabilities as failed checks, and after the
+    prompt was sharpened, because it judged that being unable to test high-LTV
+    exposure against approved thresholds is itself material. The second
+    reading is defensible, so it was not argued away.
+
+    It does not need to be. `enrichment.attach` takes the card's FINDINGS and
+    nothing else: the verdict is a monitoring signal for operators, never a
+    line a manager reads. That is asserted here rather than left as a property
+    of the current implementation, so a future change that starts rendering it
+    fails loudly.
+    """
+    verdicts = ("INCOMPLETE_REVIEW", "ROUTINE_PERIOD", "ATTENTION_REQUIRED",
+                "MATERIAL_DEVELOPMENTS")
+    for verdict in verdicts:
+        card = {**PUBLISHABLE_CARD, "period_verdict": verdict}
+        outcome = _approve(
+            storage, layout, run_ids=[f"orun-{verdict.lower()}"],
+            reviewer=lambda c=card: _Outcome(card=c, gate_status="PUBLISHABLE"))
+        _report, client = _deliver(storage, layout)
+        rendered = " ".join(_json(s["card"]) for s in client.sent)
+        assert verdict not in rendered, f"{verdict} leaked into the card"
+
+
+def test_a_quiet_period_still_states_the_factual_baseline(
+        storage, layout, recipient, enabled_config, funded, monkeypatch):
+    """§3: a still month is a useful management outcome, not a failed review.
+
+    Whatever the agent's internal verdict, the deterministic core carries the
+    period's facts and says plainly that nothing material was found — and it
+    says it about the MI that was reviewed, not about risk in general.
+    """
+    from trakt_notifications import generate
+
+    quiet = funded_inputs()
+    quiet.funded_brief = {"status": "success", "insights": [], "omitted": []}
+    monkeypatch.setattr(sources, "resolve", lambda **_k: quiet)
+
+    batch = generate.build(quiet, update_type="FUNDED")
+    message = batch.message(MESSAGE_PORTFOLIO_UPDATE)
+    text = " ".join(i.text for i in message.items)
+
+    assert "Funded balance is" in message.summary or "Funded balance is" in text
+    assert "No material developments were identified" in text
+    # §4: the qualification must survive. This is a claim about the MI
+    # reviewed, never a clearance of limits that were never tested.
+    assert "all risk limits" not in text.lower()
+    assert "within tolerance" not in text.lower()
