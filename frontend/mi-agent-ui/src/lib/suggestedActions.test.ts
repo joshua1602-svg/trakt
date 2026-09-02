@@ -30,7 +30,7 @@ describe("buildSuggestedActions", () => {
   it("returns grounded, capped follow-ups for a region balance chart", () => {
     const actions = buildSuggestedActions(spec, regionChart());
     expect(actions.length).toBeGreaterThanOrEqual(3);
-    expect(actions.length).toBeLessThanOrEqual(5);
+    expect(actions.length).toBeLessThanOrEqual(4);
     const labels = actions.map((a) => a.label);
     expect(labels).toContain("Split by Broker");
     // The current dimension is never suggested as a split.
@@ -38,7 +38,13 @@ describe("buildSuggestedActions", () => {
     // A measure change and a drill into the largest value are offered.
     expect(actions.some((a) => a.kind === "change_measure")).toBe(true);
     expect(actions.find((a) => a.kind === "drill")?.question).toBe("only London");
-    expect(actions.some((a) => a.kind === "refine" && /as a table/i.test(a.question))).toBe(true);
+    // CHANGED DELIBERATELY. A "Show as Table" refinement used to be offered,
+    // sending "<measure> by <dimension> as a table" back through the parser —
+    // a backend round trip, and a parse that can fail, for a view the artifact
+    // card already holds and switches to locally. No suggestion should cost a
+    // network request to do what a local toggle does.
+    expect(actions.some((a) => a.kind === "refine")).toBe(false);
+    expect(actions.some((a) => /as a table/i.test(a.question))).toBe(false);
   });
 
   it("split questions reference real catalogue dimensions only", () => {

@@ -35,11 +35,34 @@ describe("AgentChatPanel context indicator", () => {
     expect(screen.queryByText(/Context:/)).not.toBeInTheDocument();
   });
 
-  it("shows the active context summary and clears on demand", () => {
+  // CHANGED DELIBERATELY. The context bar used to be permanently visible, which
+  // made it a third printing of the measure and dimensions the answer's
+  // execution receipt and the artifact's own title already carry. It answers
+  // exactly one question — "what will a follow-up attach to?" — so it now
+  // appears when that question is live.
+  it("shows the active context summary once the composer has focus", () => {
     const onClearContext = vi.fn();
     render(<AgentChatPanel {...baseProps} context={context} onClearContext={onClearContext} />);
+    expect(screen.queryByTestId("chat-context-bar")).toBeNull();
+    fireEvent.focus(screen.getByRole("textbox"));
     expect(screen.getByText(/Balance · Region · South East/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /clear context/i }));
     expect(onClearContext).toHaveBeenCalledOnce();
+  });
+
+  it("shows it unprompted once what is typed reads as a follow-up", () => {
+    render(<AgentChatPanel {...baseProps} context={context} onClearContext={vi.fn()} />);
+    const box = screen.getByRole("textbox");
+    fireEvent.change(box, { target: { value: "split by broker" } });
+    fireEvent.blur(box);
+    expect(screen.getByTestId("chat-context-bar")).toBeInTheDocument();
+  });
+
+  it("stays out of the way for a standalone question", () => {
+    render(<AgentChatPanel {...baseProps} context={context} onClearContext={vi.fn()} />);
+    const box = screen.getByRole("textbox");
+    fireEvent.change(box, { target: { value: "What is the funded balance by region?" } });
+    fireEvent.blur(box);
+    expect(screen.queryByTestId("chat-context-bar")).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ChartArtifact, ChatMessage as ChatMessageType, TableArtifact } from "@/domain";
 import { ChatMessage } from "./ChatMessage";
 
@@ -85,22 +85,47 @@ describe("ChatMessage embedded result", () => {
     ],
   };
 
-  it("shows a compact result in chat (no duplicated chart) that opens in the workspace", () => {
-    const onOpenArtifact = vi.fn();
+  const inWorkspace = new Set(["c1", "t1"]);
+
+  it("says nothing about a result that is already on screen", () => {
+    // CHANGED DELIBERATELY. This asserted that the chat offered "Open chart in
+    // workspace" / "Open table in workspace" buttons. The workspace expands
+    // itself, scrolls to the new card and flash-highlights it on arrival, so
+    // those buttons navigated to something already open, already scrolled to
+    // and already glowing. The chat states; the workspace shows.
     const { container } = render(
-      <ChatMessage message={msg} onTogglePin={vi.fn()} onOpenArtifact={onOpenArtifact} />,
+      <ChatMessage message={msg} onTogglePin={vi.fn()} onOpenArtifact={vi.fn()}
+        workspaceArtifactIds={inWorkspace} />,
     );
-    // Conversational, in a teal-tinted assistant bubble.
     expect(screen.getByTestId("assistant-bubble").textContent).toMatch(/London has the largest balance/i);
     expect(screen.queryByText(/Parser|Validation: Passed|Aggregation/)).not.toBeInTheDocument();
-    // The full chart is NOT duplicated in the chat by default — it lives in the workspace.
+    // The chart is not duplicated in the chat — that part is unchanged.
     expect(container.querySelector(".recharts-responsive-container")).toBeNull();
-    // Instead the chat offers links to open the chart/table in the workspace.
-    fireEvent.click(screen.getByRole("button", { name: /Open chart in workspace/i }));
-    expect(onOpenArtifact).toHaveBeenCalledWith("c1");
-    expect(screen.getByRole("button", { name: /Open table in workspace/i })).toBeInTheDocument();
-    // The bare "CHART →" navigation links are NOT the only output.
-    expect(screen.queryByText(/CHART →/)).not.toBeInTheDocument();
+    // And no navigation to a panel the reader is already looking at.
+    expect(screen.queryByRole("button", { name: /Open chart in workspace/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Open table in workspace/i })).toBeNull();
+    expect(screen.queryByTestId("chat-result-cleared")).toBeNull();
+  });
+
+  it("says so, once, when the result has been cleared from the workspace", () => {
+    render(
+      <ChatMessage message={msg} onTogglePin={vi.fn()} onOpenArtifact={vi.fn()}
+        workspaceArtifactIds={new Set<string>()} />,
+    );
+    expect(screen.getByTestId("chat-result-cleared").textContent)
+      .toMatch(/no longer in the workspace/i);
+    // A sentence, not a control.
+    expect(screen.queryByRole("button", { name: /workspace/i })).toBeNull();
+  });
+
+  it("repeats none of the result's own figures", () => {
+    // The chips read "Groups: 2" and "Coverage: 100%" — both already in the
+    // answer's execution receipt and the artifact's reconciliation footer.
+    render(
+      <ChatMessage message={msg} onTogglePin={vi.fn()} workspaceArtifactIds={inWorkspace} />,
+    );
+    expect(screen.queryByText(/^Groups: /)).toBeNull();
+    expect(screen.queryByText(/^Coverage: /)).toBeNull();
   });
 
   it("never renders the full chart inline — outputs live in the workspace", () => {
@@ -112,8 +137,13 @@ describe("ChatMessage embedded result", () => {
 });
 
 describe("ChatMessage suggestions", () => {
-  it("renders suggestion chips and dispatches the question on click", () => {
-    const onAsk = vi.fn();
+  it("renders no suggestion chips — they belong beside the result", () => {
+    // CHANGED DELIBERATELY. This asserted the chat rendered the chips and
+    // dispatched on click. Two engines were building follow-ups independently
+    // — buildSuggestedActions here and buildInvestigations on the artifact card
+    // — so one chart put six offers on screen in two visual languages. Both now
+    // feed the card's single "Investigate next" row; see
+    // InsightPanel.suggestions.test.tsx for the surface that renders them.
     const msg: ChatMessageType = {
       id: "m3",
       role: "assistant",
@@ -124,9 +154,11 @@ describe("ChatMessage suggestions", () => {
         { label: "Drill into London", question: "only London", kind: "drill" },
       ],
     };
-    render(<ChatMessage message={msg} onAsk={onAsk} />);
-    fireEvent.click(screen.getByRole("button", { name: "Split by Broker" }));
-    expect(onAsk).toHaveBeenCalledWith("Balance by Broker");
+    render(<ChatMessage message={msg} />);
+    expect(screen.queryByRole("button", { name: "Split by Broker" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Drill into London" })).toBeNull();
+    // The message still carries them for anything reading the transcript.
+    expect(msg.suggestions).toHaveLength(2);
   });
 });
 

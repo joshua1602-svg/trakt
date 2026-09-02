@@ -666,7 +666,13 @@ export function useWorkspace(client: AgentClient): Workspace {
                 ? {
                     ...m,
                     pending: false,
-                    error: !res.ok && res.artifacts.length === 0,
+                    // A refusal is a refusal whatever came back with it. This
+                    // read `!res.ok && res.artifacts.length === 0`, so a
+                    // declined answer that shipped any artifact rendered in the
+                    // ordinary answer bubble — success styling, no Retry — for
+                    // a question that was not answered. The artifact count is
+                    // not evidence that a question was answered.
+                    error: !res.ok,
                     content,
                     artifacts: stampedArtifacts,
                     interpreted: res.interpreted,

@@ -36,15 +36,12 @@ export function ChatMessage({
   message,
   onOpenArtifact,
   onRetry,
-  onAsk,
   onTogglePin,
   workspaceArtifactIds,
 }: {
   message: ChatMessageType;
   onOpenArtifact?: (id: string) => void;
   onRetry?: () => void;
-  /** Dispatch a suggested follow-up question (routes through context). */
-  onAsk?: (question: string) => void;
   onTogglePin?: (id: string) => void;
   /** Ids still present in the artifact workspace. When provided, links to
    *  artifacts that were since cleared render stale instead of no-opping. */
@@ -125,27 +122,39 @@ export function ChatMessage({
           </div>
         )}
 
-        {/* Governed portfolio coverage. Every word here — including the list of
-            portfolios and the "not fully consolidated" statement — is authored by
-            the backend. The chat renders it; it never works out consolidation
-            status for itself, which is what stops a partial answer being read as
-            a Total. */}
+        {/* Governed portfolio coverage. Every word — including the list of
+            portfolios and the "not fully consolidated" statement — is authored
+            by the backend. The chat renders it; it never works out
+            consolidation status for itself, which is what stops a partial
+            answer being read as a Total.
+ 
+            The WEIGHT it is given is the browser's to decide, and the two cases
+            do not deserve the same. Full consolidation is the unremarkable
+            case: it gets one quiet line, not a titled bordered box competing
+            with the answer above it. Partial consolidation changes what every
+            number in the answer means, so it keeps the amber panel and its
+            heading. The sentence itself is verbatim in both. */}
         {message.portfolioCoverage?.disclosure && (
-          <div
-            data-testid="chat-portfolio-coverage"
-            data-fully-consolidated={message.portfolioCoverage.is_fully_consolidated ? "true" : "false"}
-            className={[
-              "mt-2 rounded-lg border px-3 py-2 text-[11px] leading-relaxed",
-              message.portfolioCoverage.is_fully_consolidated
-                ? "border-[var(--color-line-soft)] bg-navy-900/50 text-ink-400"
-                : "border-amber-400/25 bg-amber-400/5 text-amber-200/90",
-            ].join(" ")}
-          >
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-ink-500">
-              Portfolio coverage
+          message.portfolioCoverage.is_fully_consolidated ? (
+            <div
+              data-testid="chat-portfolio-coverage"
+              data-fully-consolidated="true"
+              className="mt-1.5 text-[11px] leading-relaxed text-ink-500"
+            >
+              {message.portfolioCoverage.disclosure}
             </div>
-            <div className="mt-1">{message.portfolioCoverage.disclosure}</div>
-          </div>
+          ) : (
+            <div
+              data-testid="chat-portfolio-coverage"
+              data-fully-consolidated="false"
+              className="mt-2 rounded-lg border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-[11px] leading-relaxed text-amber-200/90"
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-300/80">
+                Portfolio coverage
+              </div>
+              <div className="mt-1">{message.portfolioCoverage.disclosure}</div>
+            </div>
+          )
         )}
 
         {message.assumptions && message.assumptions.length > 0 && (
@@ -160,8 +169,9 @@ export function ChatMessage({
           </div>
         )}
 
-        {/* A compact result summary + links; the full chart/table/artifact lives
-            in the Artifact Workspace (never duplicated inline in the chat). */}
+        {/* Says nothing at all unless the result has been cleared from the
+            workspace. The chart, its figures and its controls live on the
+            artifact — see ChatResult. */}
         {hasInlineResult && onTogglePin && (
           <ChatResult
             artifacts={message.artifacts!}
@@ -203,21 +213,14 @@ export function ChatMessage({
           </div>
         )}
 
-        {!isUser && !message.pending && !message.error && message.suggestions && message.suggestions.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {message.suggestions.map((s) => (
-              <button
-                key={`${s.kind}:${s.question}`}
-                type="button"
-                onClick={() => onAsk?.(s.question)}
-                title={s.question}
-                className="inline-flex items-center rounded-full border border-teal-700/30 bg-teal-900/20 px-2.5 py-1 text-[11px] text-teal-100 transition-colors hover:border-teal-400/50 hover:bg-teal-800/30"
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* Follow-up suggestions are NOT rendered here. They used to be, which
+            put two independently-built suggestion sets on screen at once — this
+            row from `buildSuggestedActions`, and "Suggested investigations" on
+            the artifact card from `buildInvestigations` — in two visual
+            languages, for one chart. They now share the card's surface, beside
+            the result they refer to rather than in a rail that has scrolled.
+            `message.suggestions` is still carried on the message for callers
+            that read the transcript. */}
       </div>
     </div>
   );

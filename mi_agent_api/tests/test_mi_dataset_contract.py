@@ -133,9 +133,13 @@ class TestGracefulFailureNoValues(unittest.TestCase):
         self.assertNotEqual(wf["interpreted"].get("Validation"), "Passed")
         reasons = {e["reason"] for e in resp["validation"]["data_validation_errors"]}
         self.assertIn("loan_level_no_usable_rows", reasons)
-        # A controlled validation artifact is emitted (not a silent empty chart).
-        self.assertTrue(any(a["type"] == "validation" for a in resp["artifacts"]))
-        self.assertFalse(any(a["type"] == "chart" for a in resp["artifacts"]))
+        # CHANGED DELIBERATELY. This asserted a validation ARTIFACT was emitted.
+        # The concern it guards — no silent empty chart — is unaffected and is
+        # still asserted: the failure and its reason are in the envelope above,
+        # and no chart ships. What changed is that a refusal no longer opens a
+        # workspace card restating the reply, which also made the refusal read
+        # as answered in the chat (see test_refusal_ships_no_artifact.py).
+        self.assertEqual(resp["artifacts"], [])
 
     def test_missing_ltv_bucket_dimension_fails(self):
         warnings.simplefilter("ignore")

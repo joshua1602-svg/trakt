@@ -129,8 +129,16 @@ def test_invalid_spec_returns_structured_validation_failure():
     assert body["ok"] is False
     assert body["validation"]["ok"] is False
     assert body["validation"]["errors"]
-    # The failure is surfaced as a validation artifact for the UI.
-    assert any(a["type"] == "validation" for a in body["artifacts"])
+    # CHANGED DELIBERATELY. This asserted the failure was ALSO surfaced as a
+    # validation artifact. That artifact opened a second card in the workspace
+    # restating the refusal the reply had just made, and — because the browser
+    # flagged an error with `!ok && artifacts.length === 0` — one artifact was
+    # enough to render the declined answer in the ordinary answer styling.
+    #
+    # Nothing is lost: the structured failure this test is named for still
+    # travels in the envelope, machine-readable, asserted above. A refusal
+    # states itself once and ships nothing to render.
+    assert body["artifacts"] == []
 
 
 def test_empty_question_rejected():

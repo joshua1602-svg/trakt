@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { Activity, Eye, Info, Lightbulb, Sparkles } from "lucide-react";
 import type { Artifact } from "@/domain";
+import type { SuggestedAction } from "@/domain";
 import { computeInsights, hasInsights, type Observation, type Severity } from "@/lib/insights";
+import { buildSuggestedActions } from "@/lib/suggestedActions";
 
 const SEVERITY_META: Record<Severity, { icon: typeof Info; tone: string; label: string }> = {
   info: { icon: Info, tone: "text-ink-500", label: "Info" },
@@ -13,7 +15,34 @@ const SEVERITY_META: Record<Severity, { icon: typeof Info; tone: string; label: 
  * Key Observations — the additive Insight Engine surface under a chart/table.
  * Everything is computed locally from the artifact rows; if computation throws
  * or yields nothing, the panel renders null and the result is unaffected.
+ *
+ * THE ONE SUGGESTION SURFACE. Follow-ups used to be built by two engines and
+ * shown in two places: `buildInvestigations` here, and `buildSuggestedActions`
+ * as a chip row in the chat rail. Neither knew the other existed, so one chart
+ * could put six offers on screen in two visual languages. Both engines now feed
+ * this panel, beside the result they refer to rather than in a rail that has
+ * already scrolled: the insight-derived investigations lead, because they are
+ * grounded in what this result actually shows, and the spec-derived actions
+ * follow. Deduplicated by question, capped, and each one still routed through
+ * the normal MI Agent flow.
  */
+const MAX_SUGGESTIONS = 5;
+
+function mergeSuggestions(
+  investigations: SuggestedAction[],
+  actions: SuggestedAction[],
+): SuggestedAction[] {
+  const out: SuggestedAction[] = [];
+  const seen = new Set<string>();
+  for (const s of [...investigations, ...actions]) {
+    const key = s.question.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+    if (out.length === MAX_SUGGESTIONS) break;
+  }
+  return out;
+}
 export function InsightPanel({
   artifact,
   onAsk,
@@ -28,6 +57,18 @@ export function InsightPanel({
       return null; // never let insight analysis break the result
     }
   }, [artifact]);
+
+  // The spec-derived actions ("Split by broker", "Show current LTV", "Drill
+  // into 40-50%") that the chat rail used to carry.
+  const suggestions = useMemo(() => {
+    if (!summary) return [];
+    try {
+      return mergeSuggestions(summary.suggestions,
+                              buildSuggestedActions(artifact.source.spec, artifact));
+    } catch {
+      return summary.suggestions; // a suggestion must never break a result
+    }
+  }, [summary, artifact]);
 
   if (!hasInsights(summary)) return null;
 
@@ -44,16 +85,16 @@ export function InsightPanel({
         ))}
       </ul>
 
-      {summary.suggestions.length > 0 && (
+      {suggestions.length > 0 && (
         <div className="mt-3 border-t border-[var(--color-line-soft)] pt-2.5">
           <div className="mb-1.5 flex items-center gap-1.5">
             <Lightbulb size={12} className="text-ink-500" />
             <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
-              Suggested investigations
+              Investigate next
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {summary.suggestions.map((s) => (
+            {suggestions.map((s) => (
               <button
                 key={`${s.kind}:${s.question}`}
                 type="button"
