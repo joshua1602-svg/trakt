@@ -978,6 +978,10 @@ def main() -> int:
                     help="portfolio context: direct | acquired | total")
     ap.add_argument("--out", required=True)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--only", default="",
+                    help="comma-separated question ids, e.g. CFO50,Q21A. Lets a "
+                         "hypothesis be tested on the questions it is about "
+                         "instead of re-running the whole bank.")
     ap.add_argument("--as-of", default=None)
     args = ap.parse_args()
 
@@ -997,11 +1001,19 @@ def main() -> int:
         "data_source_label": data_source.data_source_label(),
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    print("probing %d questions | scope=%s | source=%s"
-          % (len(QUESTIONS), args.scope, context["data_source_kind"]), flush=True)
-
     rows = []
-    asked = QUESTIONS[: args.limit] if args.limit else QUESTIONS
+    asked = QUESTIONS
+    if args.only:
+        wanted = {t.strip().upper() for t in args.only.split(",") if t.strip()}
+        asked = [q for q in asked if q["id"].upper() in wanted]
+        missing = wanted - {q["id"].upper() for q in asked}
+        if missing:
+            raise SystemExit("unknown question id(s): %s" % ", ".join(sorted(missing)))
+    if args.limit:
+        asked = asked[: args.limit]
+    print("probing %d questions | scope=%s | source=%s"
+          % (len(asked), args.scope, context["data_source_kind"]), flush=True)
+
     for i, item in enumerate(asked):
         payload = {"question": item["q"], "sourcePortfolioLens": args.scope}
         if args.as_of:
