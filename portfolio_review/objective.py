@@ -1,25 +1,47 @@
 """What the review is asked to do, and the shape it answers in.
 
 Two objectives — a weekly pipeline review and a monthly funded one — and one
-system prompt. Both are deliberately sparse about METHOD and specific about
-DISCIPLINE: they say what question the period poses and which mistakes are
-disqualifying, and they name no metric, no ordering and no first call.
+system prompt, all derived from :data:`portfolio_review.mandate.MANDATE` so
+there is one statement of what this agent is for and the prompt is a rendering
+of it rather than a second, drifting copy.
 
-That restraint is the point. A prompt listing "check balance, then LTV, then
-concentration" produces workflow automation wearing an agent's clothes: it would
-run the same twenty calls on a quiet month as on an acquisition month, and it
-could never find the thing nobody thought to list. The materiality layer
-(``insight_generators_funded``) is where a fixed set of checks belongs, and it
-already exists; this layer is for the questions that set cannot anticipate.
+SPARSE ON METHOD, SPECIFIC ON DISCIPLINE
+----------------------------------------
+The prompt says what question the period poses and which mistakes are
+disqualifying. It names no metric, no ordering and no first call. That restraint
+is the point: a prompt listing "check balance, then LTV, then concentration"
+produces workflow automation wearing an agent's clothes — it would run the same
+twenty calls on a quiet month as on an acquisition month, and could never find
+the thing nobody thought to list. The fixed set of checks belongs in
+``insight_generators_funded``, where it already is; this layer is for what that
+set cannot anticipate.
 
-The weekly objective is shorter than the monthly one because the week is. A
-pipeline moves, converts and occasionally threatens a limit; a month does that
-and also changes what the book IS.
+WHAT CHANGED AFTER THE FIRST REAL-MODEL RED-TEAM
+------------------------------------------------
+Two rules here previously carried the whole weight of two boundaries, and both
+gave way under a real model:
+
+* **arithmetic.** Rule 1 forbade it in the strongest terms available and the
+  model published "Combined they are £1.88m" anyway. The control is now
+  :mod:`portfolio_review.numeric_gate`, which refuses the finding. The rule
+  stays in the prompt because a model that obeys it produces a publishable card
+  first time — but the prompt is now the optimisation and the gate is the
+  control, not the other way round.
+* **scope.** The agent was asked what changed this month and reported ESMA
+  Annex 2 blockers and a breach of a rulebook labelled SYNTHETIC. The control is
+  now the allow-list in :mod:`portfolio_review.mandate`: those tools are not
+  offered and a call naming one is refused. The prompt states the boundary so
+  the model does not waste turns discovering it.
+
+Neither rule was removed. Both were demoted from control to hint, which is the
+only honest place for a sentence in a prompt.
 """
 
 from __future__ import annotations
 
 from typing import Any, Dict
+
+from .mandate import MANDATE, NOT_ROLES, ROLE
 
 #: The two periods a review runs for.
 WEEKLY_PIPELINE = "weekly_pipeline"
@@ -29,22 +51,31 @@ MONTHLY_FUNDED = "monthly_funded"
 WEEKLY_PIPELINE_OBJECTIVE = (
     "Review what materially changed in this portfolio's PIPELINE since the "
     "previous governed weekly extract. Establish the movement, find what drove "
-    "it, decide whether anything in it threatens a portfolio limit once it "
-    "funds, and say what deserves the reader's attention this week. Support "
-    "every conclusion with governed Trakt evidence."
+    "it, decide whether anything in it threatens an APPROVED client portfolio "
+    "limit once it funds, and say what deserves management's attention this "
+    "week. Support every conclusion with governed Trakt evidence."
 )
 
 MONTHLY_FUNDED_OBJECTIVE = (
     "Review what materially changed in this portfolio's FUNDED book since the "
     "previous governed reporting period. Establish the movement, establish WHY "
     "it moved, investigate what looks material in how the book is composed and "
-    "what it risks, and say what deserves the reader's attention this month. "
-    "Support every conclusion with governed Trakt evidence."
+    "what it risks against APPROVED client limits, and say what deserves "
+    "management's attention this month. Support every conclusion with governed "
+    "Trakt evidence."
 )
 
 
-SYSTEM_PROMPT = """You are a portfolio analyst reviewing a reporting period for \
-a lender. You work through Trakt, a governed portfolio-intelligence system.
+SYSTEM_PROMPT = f"""You are a portfolio analyst producing MANAGEMENT \
+INFORMATION for a lender. You work through Trakt, a governed portfolio-\
+intelligence system.
+
+YOUR MANDATE
+
+{MANDATE}
+
+You are a {ROLE} analyst. You are NOT a {', not a '.join(NOT_ROLES)} analyst. \
+Those are other agents' work and Trakt will refuse the tools that do them.
 
 HOW TRAKT WORKS
 
@@ -57,28 +88,41 @@ refuses a calculation, that refusal IS a finding — report it and say what woul
 be needed. Never substitute a different number for one Trakt declined to \
 produce, and never estimate one yourself.
 
+A refusal marked OUT_OF_MANDATE is different and is NOT a finding. It means the \
+question belongs to another agent. Do not report it, do not estimate what the \
+answer would have been, and do not list it under `could_not_assess` — a thing \
+you were never asked to assess is not a gap in your review.
+
 ABSOLUTE RULES
 
 1. You perform NO arithmetic. Every number you state must have been returned by \
-a Trakt tool call in this session. Do not add, average, scale, annualise or \
-convert anything. If you need a number, ask for it.
-2. Do not infer a cause from a number. In particular: a balance that jumped is \
+a Trakt tool call in this session, as that exact value. Do not add, subtract, \
+divide, multiply, average, annualise, extrapolate or convert anything. If you \
+need a number — a share, a difference, a headroom — ask for it; if no tool \
+returns it, say so in words and state no figure. A finding containing a number \
+Trakt did not return is discarded before anyone reads it, so an unsupported \
+figure does not make your review stronger, it deletes it.
+2. Stay inside MI. Report on the pipeline, the funded book, their movement and \
+composition, and their position against APPROVED client risk limits. Do not \
+report on regulatory submission, field coverage, ESMA Annex 2 or 12, \
+securitisation or warehouse readiness, rating-agency criteria, transaction \
+eligibility, or any illustrative or proposed rulebook.
+3. Do not infer a cause from a number. In particular: a balance that jumped is \
 NOT evidence that a portfolio was acquired. `funded_composition` resolves \
 additions from governed portfolio identity, and if it reports no addition then \
 no book arrived, however large the movement. An addition whose portfolio_type \
 is `unclassified` is a new source portfolio and you must NOT describe it as an \
 acquisition.
-3. Contributor dimensions overlap completely. Brokers, regions and products are \
+4. Contributor dimensions overlap completely. Brokers, regions and products are \
 three decompositions of the SAME movement and each sums to all of it, so never \
 add one dimension's contribution to another's. Name one lead per dimension.
-4. Pipeline is not funded. Cases reaching COMPLETED stage are pipeline progress, \
+5. Pipeline is not funded. Cases reaching COMPLETED stage are pipeline progress, \
 not funded balance growth, and weighted expected funding is a forecast \
 contribution rather than money on the book. Never state one as the other.
-5. Distinguish what Trakt MEASURED from what a RULE says about it, and name the \
-rule's source. An operator-approved concentration limit and an extracted \
-indicative one are different authorities. `full_pipeline` concentration is a \
-deliberately unrealistic stress maximum and is never a forecast.
-6. Report what you could NOT assess as carefully as what you could. A check \
+6. A limit is only a limit if the client approved it. Cite thresholds only from \
+the client's own configured risk limits, and name the source. If no approved \
+configuration exists, say that — an absence of configured limits is not a pass.
+7. Report what you could NOT assess as carefully as what you could. A check \
 that did not run is never evidence that nothing was wrong.
 
 INVESTIGATING
@@ -97,9 +141,11 @@ available. A review that lists everything has ranked nothing.
 FINISHING
 
 When you have enough evidence, call `submit_review` exactly once. Rank your \
-findings: the first is what the reader should see first. If nothing material \
-changed, say so — that is a real answer and a useful one, and it is different \
-from having been unable to look."""
+findings: the first is what the reader should see first. Give AT MOST FIVE, and \
+fewer when fewer matter — this is a Teams card a manager reads on a phone, not a \
+report. Be concise: a finding is two or three sentences, not a paragraph. If \
+nothing material changed, say so — that is a real answer and a useful one, and \
+it is different from having been unable to look."""
 
 
 #: How the review declares it has finished. Structured so a renderer, an
@@ -115,23 +161,28 @@ SUBMIT_REVIEW: Dict[str, Any] = {
                 "type": "string",
                 "enum": ["MATERIAL_DEVELOPMENTS", "ROUTINE_PERIOD",
                          "ATTENTION_REQUIRED", "INCOMPLETE_REVIEW"],
-                "description": ("ATTENTION_REQUIRED where a limit was crossed "
-                                "or approached, or the book deteriorated "
-                                "materially. ROUTINE_PERIOD is a real verdict, "
-                                "not a fallback. INCOMPLETE_REVIEW where checks "
-                                "you needed did not run."),
+                "description": ("ATTENTION_REQUIRED where an APPROVED client "
+                                "limit was crossed or approached, or the book "
+                                "deteriorated materially. ROUTINE_PERIOD is a "
+                                "real verdict, not a fallback, and a quiet "
+                                "month should get it. INCOMPLETE_REVIEW where "
+                                "checks you needed did not run."),
             },
             "headline": {
                 "type": "string",
-                "description": ("One sentence: what a reader must know about "
-                                "this period."),
+                "description": ("One sentence, at most 40 words: what a manager "
+                                "must know about this period."),
             },
-            "summary": {"type": "string",
-                        "description": "Two or three sentences."},
+            "summary": {
+                "type": "string",
+                "description": "Two or three sentences, at most 90 words.",
+            },
             "findings": {
                 "type": "array",
-                "description": ("Ranked, most material first. Only what you "
-                                "would defend as worth the reader's time."),
+                "maxItems": 5,
+                "description": ("Ranked, most material first. At most five, and "
+                                "only what you would defend as worth a "
+                                "manager's time."),
                 "items": {
                     "type": "object",
                     "properties": {
@@ -139,11 +190,13 @@ SUBMIT_REVIEW: Dict[str, Any] = {
                         "observation": {
                             "type": "string",
                             "description": ("What Trakt measured, with the "
-                                            "number and the metric name."),
+                                            "number and the metric name. One "
+                                            "or two sentences."),
                         },
                         "why_it_matters": {
                             "type": "string",
-                            "description": "Your judgement, stated as yours.",
+                            "description": ("Your judgement, stated as yours. "
+                                            "One or two sentences."),
                         },
                         "severity": {"type": "string",
                                      "enum": ["high", "medium", "low"]},
@@ -167,7 +220,10 @@ SUBMIT_REVIEW: Dict[str, Any] = {
             },
             "could_not_assess": {
                 "type": "array",
-                "description": "Checks that did not run, and why it matters.",
+                "maxItems": 4,
+                "description": ("MI checks that did not run, and why it "
+                                "matters. Do NOT list anything refused as "
+                                "OUT_OF_MANDATE."),
                 "items": {
                     "type": "object",
                     "properties": {

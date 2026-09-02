@@ -151,9 +151,29 @@ def test_the_review_uses_its_own_prompt_and_submission_tool():
     run_review(_session(), period=review.PERIOD_MONTHLY_FUNDED,
                period_context=MONTHLY_CONTEXT, client=model)
 
-    assert "portfolio analyst reviewing a reporting period" in model.systems[0]
+    assert "MANAGEMENT INFORMATION" in model.systems[0]
     assert "submit_review" in model.tool_names[0]
     assert "submit_assessment" not in model.tool_names[0]
+
+
+def test_the_review_is_offered_MI_tools_and_no_readiness_tools():
+    """The mandate reaches the model as a narrower tool surface, not advice.
+
+    Asserted on what the model was actually handed rather than on the prompt,
+    because the prompt is the hint and the surface is the control.
+    """
+    from portfolio_review import mandate
+
+    model = _ScriptedModel([_submit_turn()])
+    run_review(_session(), period=review.PERIOD_MONTHLY_FUNDED,
+               period_context=MONTHLY_CONTEXT, client=model)
+
+    offered = set(model.tool_names[0]) - {"submit_review"}
+    assert offered == set(mandate.ALLOWED)
+    assert not (offered & mandate.EXCLUDED_NAMES)
+    for readiness_tool in ("regulatory_readiness", "evaluate_rule_packs",
+                           "readiness_metrics"):
+        assert readiness_tool not in offered
 
 
 def test_the_readiness_agent_still_uses_its_own(monkeypatch):
@@ -392,3 +412,115 @@ def test_the_submission_schema_keeps_measurement_and_judgement_apart():
     assert "could_not_assess" in properties
     # A routine period is a real verdict, not a fallback for having found nothing.
     assert "ROUTINE_PERIOD" in properties["period_verdict"]["enum"]
+
+
+# =========================================================================== #
+# The publication gate, end to end
+# =========================================================================== #
+def _turn(name, **args):
+    return [_Block("tool_use", name=name, id=f"tu-{name}", input=args)]
+
+
+def _review_turn(**over):
+    payload = {**REVIEW_PAYLOAD, **over}
+    return [_Block("tool_use", name="submit_review", id="tu-submit",
+                   input=payload)]
+
+
+def _run(model):
+    return run_review(_session(), period=review.PERIOD_MONTHLY_FUNDED,
+                      period_context=MONTHLY_CONTEXT, client=model)
+
+
+def test_a_finding_stating_an_ungoverned_figure_never_reaches_the_card():
+    """The gate runs on the production path, not only in the harness.
+
+    `REVIEW_PAYLOAD` claims £68m of portfolio additions. The planted portfolio
+    contains no such number, and no tool was called at all in this run, so the
+    figure has no possible governed source.
+    """
+    outcome = _run(_ScriptedModel([_submit_turn()]))
+
+    assert outcome.gate_status == "DEGRADED"
+    assert outcome.card["findings"] == []
+    assert outcome.unsupported_claims
+    assert outcome.dropped_findings
+    # The model's own words are preserved for the audit record even though
+    # nothing was published from them.
+    assert outcome.review["findings"][0]["title"].startswith("Portfolio addition")
+
+
+def test_an_ungoverned_headline_withholds_the_whole_review():
+    outcome = _run(_ScriptedModel([_review_turn(
+        headline="Funded assets rose £999.9m this period.")]))
+
+    assert outcome.gate_status == "BLOCKED"
+    assert outcome.card is None
+    assert outcome.available is False
+    assert outcome.submitted is True
+    assert "no governed result contains" in outcome.unavailable
+
+
+def test_a_review_with_no_figures_is_published_intact():
+    outcome = _run(_ScriptedModel([_review_turn(
+        headline="Nothing material changed this period.",
+        summary="The book was quiet.",
+        findings=[{"title": "A routine month",
+                   "observation": "No governed measure moved materially.",
+                   "why_it_matters": "Nothing needs management attention.",
+                   "severity": "low"}],
+        period_explained_by=None)]))
+
+    assert outcome.gate_status == "PUBLISHABLE"
+    assert outcome.available is True
+    assert len(outcome.card["findings"]) == 1
+    assert outcome.unsupported_claims == []
+
+
+def test_a_governed_figure_survives_and_lands_in_the_claim_ledger():
+    """A number the session actually obtained is published and traceable."""
+    model = _ScriptedModel([
+        _turn("portfolio_summary"),
+        _review_turn(headline="The book is steady.",
+                     summary="One governed measure is quoted below.",
+                     findings=[{"title": "Scale",
+                                "observation": "The book totals £3.2m.",
+                                "why_it_matters": "Unchanged scale.",
+                                "severity": "low"}],
+                     period_explained_by=None)])
+    outcome = _run(model)
+
+    assert outcome.gate_status == "PUBLISHABLE"
+    row = next(r for r in outcome.claim_ledger if r["output_number"] == "3.2m")
+    assert row["governed_source_tool"] == "portfolio_summary"
+    assert row["source_field"] == "population.total_balance"
+    assert row["exact_match"] == "yes"
+
+
+def test_an_out_of_mandate_call_is_refused_and_audited():
+    """The model may name a readiness tool; it may not reach one."""
+    model = _ScriptedModel([
+        _turn("regulatory_readiness"),
+        _review_turn(headline="Nothing material changed.",
+                     summary="Quiet.", findings=[], period_explained_by=None)])
+    outcome = _run(model)
+
+    refused = outcome.out_of_mandate_calls
+    assert [c["tool"] for c in refused] == ["regulatory_readiness"]
+    assert refused[0]["executed"] is False
+    assert outcome.tool_call_audit[0]["in_allow_list"] is False
+    # It never entered the governed transcript, because it never ran.
+    assert all(c["tool"] != "regulatory_readiness" for c in outcome.transcript)
+
+
+def test_the_card_caps_findings_at_five():
+    many = [{"title": f"Finding {i}", "observation": "No figure here.",
+             "why_it_matters": "Judgement.", "severity": "low"}
+            for i in range(9)]
+    outcome = _run(_ScriptedModel([_review_turn(
+        headline="Several things moved.", summary="Nine findings submitted.",
+        findings=many, period_explained_by=None)]))
+
+    assert len(outcome.card["findings"]) == 5
+    assert len(outcome.card["withheld_findings"]) == 4
+    assert outcome.card["word_count"] <= 260

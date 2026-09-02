@@ -224,6 +224,7 @@ def run_assessment(session: GovernedSession, *,
                    on_step: Optional[Callable[[int, str], None]] = None,
                    system_prompt: str = SYSTEM_PROMPT,
                    submit_tool: Optional[Dict[str, Any]] = None,
+                   tool_schemas: Optional[List[Dict[str, Any]]] = None,
                    ) -> AgentRun:
     """Run one autonomous assessment.
 
@@ -232,13 +233,23 @@ def run_assessment(session: GovernedSession, *,
     steers it toward a metric — the only control is the step ceiling, which
     exists so a confused run costs a bounded amount rather than an unbounded one.
 
-    ``system_prompt`` and ``submit_tool`` are parameters so a second autonomous
-    review — a period review rather than a readiness assessment — reuses THIS
-    loop rather than growing a second one beside it. They default to the
-    readiness values, so that agent is untouched. What must not become a
-    parameter is anything that would let a caller steer the investigation: there
-    is deliberately no metric list, no ordering and no first call here, because
-    a loop that accepts one is executing a checklist.
+    ``system_prompt``, ``submit_tool`` and ``tool_schemas`` are parameters so a
+    second autonomous review — a period review rather than a readiness
+    assessment — reuses THIS loop rather than growing a second one beside it.
+    They default to the readiness values, so that agent is untouched.
+
+    ``tool_schemas`` narrows WHICH governed tools exist for a caller, which is a
+    different thing from steering an investigation: the Portfolio Review Agent
+    is an MI analyst and the readiness surface is another agent's job, so it is
+    not offered them. What must not become a parameter is anything that orders
+    or prioritises the tools a caller DOES have — there is deliberately no
+    metric list, no ordering and no first call here, because a loop that accepts
+    one is executing a checklist. Withholding a tool is a mandate; ranking the
+    remaining ones would be a script.
+
+    Narrowing here is a convenience, not the control. The caller's session is
+    what must refuse an out-of-scope call, because a model can name a tool it
+    was never offered.
     """
     if client is None:
         # Imported only when one has to be BUILT. ``client`` is the injection
@@ -250,7 +261,8 @@ def run_assessment(session: GovernedSession, *,
         client = anthropic.Anthropic()
     submit = submit_tool or SUBMIT_TOOL
     submit_name = submit["name"]
-    tools = governed_tool_schemas() + [submit]
+    surface = governed_tool_schemas() if tool_schemas is None else tool_schemas
+    tools = list(surface) + [submit]
 
     opening = (
         f"{objective}\n\n"

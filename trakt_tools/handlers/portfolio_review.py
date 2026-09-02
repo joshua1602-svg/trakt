@@ -462,6 +462,27 @@ COMPOSITION_OUTPUT = object_schema(
                             "and must not be described as an acquisition."),
         },
         "portfolio_disposals": {"type": "array", "items": {"type": "object"}},
+        "dominant_addition": {
+            "type": ["object", "null"],
+            "description": ("The largest addition, with its governed shares. "
+                            "Null when nothing was added."),
+        },
+        "addition_share_of_movement": {
+            "type": ["number", "null"],
+            "description": ("The dominant addition's share of the movement, as "
+                            "a fraction. Governed: do NOT divide the addition "
+                            "by the movement yourself. Null where the movement "
+                            "is zero or negative, or the addition exceeds it — "
+                            "in which case use "
+                            "'addition_share_of_closing_balance' instead, "
+                            "because a share of a smaller movement would read "
+                            "as over 100%."),
+        },
+        "addition_share_of_closing_balance": {
+            "type": ["number", "null"],
+            "description": ("The dominant addition's share of the closing "
+                            "balance, as a fraction. Governed."),
+        },
         "continuing_portfolio_ids": {"type": "array", "items": {"type": "string"}},
         "counts": {"type": "object"},
         "reconciliation": {
@@ -510,6 +531,14 @@ def funded_composition(args: Dict[str, Any],
                             or "the funded movement could not be decomposed")
 
     reconciliation = payload.get("reconciliation") or {}
+    #: The shares ``dominant_addition`` already computes. Returned because the
+    #: first real-model red-team showed an agent needing exactly these two
+    #: figures, finding no governed way to obtain them, and dividing the numbers
+    #: itself — publishing "93% of the period's balance growth" from a division
+    #: Trakt never performed. Withholding a number the deterministic layer has
+    #: already calculated correctly does not stop it being stated; it only
+    #: decides who calculates it.
+    lead = comp.dominant_addition(payload) or {}
     warnings: List[str] = []
     if not reconciliation.get("reconciles", True):
         warnings.append(
@@ -531,6 +560,10 @@ def funded_composition(args: Dict[str, Any],
         "components": payload.get("components") or {},
         "portfolio_additions": payload.get("portfolio_additions") or [],
         "portfolio_disposals": payload.get("portfolio_disposals") or [],
+        "dominant_addition": lead or None,
+        "addition_share_of_movement": lead.get("share_of_movement"),
+        "addition_share_of_closing_balance": lead.get(
+            "share_of_closing_balance"),
         "continuing_portfolio_ids": payload.get("continuing_portfolio_ids") or [],
         "counts": payload.get("counts") or {},
         "reconciliation": reconciliation,

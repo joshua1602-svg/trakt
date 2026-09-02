@@ -37,9 +37,11 @@ from typing import Any, Callable, Dict, List, Optional
 from readiness_agent.agent import DEFAULT_MAX_STEPS, DEFAULT_MODEL
 from readiness_agent.session import GovernedSession
 
+from . import brief, mandate, numeric_gate
 from .objective import (
     MONTHLY_FUNDED, SUBMIT_REVIEW, SYSTEM_PROMPT, WEEKLY_PIPELINE, objective_for,
 )
+from .session import MIScopedSession
 
 logger = logging.getLogger("portfolio_review.controller")
 
@@ -54,7 +56,15 @@ DEFAULT_REVIEW_STEPS = 24
 
 @dataclass
 class ReviewOutcome:
-    """One completed review, and everything observable about how it got there."""
+    """One completed review, and everything observable about how it got there.
+
+    ``review`` is what the model submitted. ``card`` is what a reader may
+    actually be shown — the review after the numeric gate has refused anything
+    unsupported and the word budget has selected what fits. They are separate
+    fields on purpose: a reviewer investigating a bad card needs to see what the
+    model said *and* what the gate did to it, and collapsing them would hide
+    exactly the step that matters.
+    """
 
     period: str
     resource: str
@@ -68,19 +78,44 @@ class ReviewOutcome:
     usage: Dict[str, int] = field(default_factory=dict)
     period_context: Dict[str, Any] = field(default_factory=dict)
     unavailable: Optional[str] = None
+    #: What the publication gate decided. PUBLISHABLE, DEGRADED or BLOCKED.
+    gate_status: str = ""
+    gate_reasons: List[str] = field(default_factory=list)
+    #: §16: every published figure and the governed field behind it.
+    claim_ledger: List[Dict[str, Any]] = field(default_factory=list)
+    unsupported_claims: List[Dict[str, Any]] = field(default_factory=list)
+    dropped_findings: List[Dict[str, Any]] = field(default_factory=list)
+    #: §15: every tool the model reached for, and whether the mandate allowed it.
+    tool_call_audit: List[Dict[str, Any]] = field(default_factory=list)
+    out_of_mandate_calls: List[Dict[str, Any]] = field(default_factory=list)
+    #: The Teams-facing selection.
+    card: Optional[Dict[str, Any]] = None
 
     @property
     def available(self) -> bool:
+        return self.card is not None
+
+    @property
+    def submitted(self) -> bool:
+        """Did the model finish, regardless of what the gate then did?"""
         return self.review is not None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "period": self.period, "resource": self.resource,
             "available": self.available, "unavailable": self.unavailable,
-            "review": self.review, "stopped_reason": self.stopped_reason,
+            "review": self.review, "card": self.card,
+            "stopped_reason": self.stopped_reason,
             "steps": self.steps, "period_context": dict(self.period_context),
             "transcript": list(self.transcript),
             "efficiency": dict(self.efficiency), "usage": dict(self.usage),
+            "gate_status": self.gate_status,
+            "gate_reasons": list(self.gate_reasons),
+            "claim_ledger": list(self.claim_ledger),
+            "unsupported_claims": list(self.unsupported_claims),
+            "dropped_findings": list(self.dropped_findings),
+            "tool_call_audit": list(self.tool_call_audit),
+            "out_of_mandate_calls": list(self.out_of_mandate_calls),
         }
 
     def evidence_for(self, finding: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -200,26 +235,50 @@ def run_review(session: GovernedSession, *,
     from readiness_agent.agent import run_assessment
 
     objective = objective_for(period)
+    scoped = (session if isinstance(session, MIScopedSession)
+              else MIScopedSession(session))
     resolved = period_context or resolve_period(
-        period, client_id=client_id or session.resource.split("/")[0],
+        period, client_id=client_id or scoped.resource.split("/")[0],
         output_root=output_root, pipeline_root=pipeline_root,
         to_run_id=to_run_id)
 
     if not resolved.get("available"):
         return ReviewOutcome(
-            period=period, resource=session.resource,
+            period=period, resource=scoped.resource,
             unavailable=resolved.get("reason") or "the period could not be resolved",
             stopped_reason="period unavailable", period_context=dict(resolved))
 
     run = run_assessment(
-        session, objective=objective, context_note=_context_note(resolved),
+        scoped, objective=objective, context_note=_context_note(resolved),
         model=model, max_steps=max_steps, client=client, on_step=on_step,
-        system_prompt=SYSTEM_PROMPT, submit_tool=SUBMIT_REVIEW)
+        system_prompt=SYSTEM_PROMPT, submit_tool=SUBMIT_REVIEW,
+        tool_schemas=mandate.tool_schemas())
+
+    # The gate runs on every completed review, including one that looks clean.
+    # A control that only engages when something already looks wrong is not a
+    # control; it is a second opinion.
+    gated = numeric_gate.apply(run.assessment, scoped.index)
+    card = brief.render(gated.review) if gated.publishable else None
+
+    unavailable = None
+    if not run.assessment:
+        unavailable = f"the review did not complete: {run.stopped_reason}"
+    elif card is None:
+        unavailable = ("the review stated figures no governed result contains, "
+                       "so it was withheld: " + "; ".join(gated.reasons))
 
     return ReviewOutcome(
-        period=period, resource=session.resource,
+        period=period, resource=scoped.resource,
         review=run.assessment, stopped_reason=run.stopped_reason,
         steps=run.steps, transcript=run.transcript, efficiency=run.efficiency,
         usage=run.usage, period_context=dict(resolved),
-        unavailable=(None if run.assessment else
-                     f"the review did not complete: {run.stopped_reason}"))
+        gate_status=gated.status, gate_reasons=list(gated.reasons),
+        claim_ledger=gated.ledger(),
+        unsupported_claims=[{"stated": c.stated + (c.unit or ""),
+                             "in": c.field_path, "excerpt": c.excerpt}
+                            for c in gated.unsupported],
+        dropped_findings=list(gated.dropped_findings),
+        tool_call_audit=scoped.tool_call_audit(),
+        out_of_mandate_calls=scoped.out_of_mandate_calls(),
+        card=card.to_dict() if card else None,
+        unavailable=unavailable)
