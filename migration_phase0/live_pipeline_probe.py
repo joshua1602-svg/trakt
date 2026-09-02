@@ -1343,6 +1343,15 @@ def main() -> int:
             # reader-facing sentence with no model name and no arm in it; the
             # cause it withholds is an API exception, not client data, and
             # without it a whole run of refusals names no fault to fix.
+            # WHAT THE CALL ACTUALLY COST, when the envelope reports it.
+            # Estimating cost from a prompt built against a DIFFERENT book is
+            # how a $2 estimate is presented against a $20 bill: the vocabulary
+            # is the whole prompt, and it is the part that varies by book.
+            "llm": ({k: (meta.get("llm") or {}).get(k)
+                     for k in ("calls", "input_tokens", "output_tokens",
+                               "cache_read_tokens", "cache_write_tokens",
+                               "estimated_total_cost", "cost_estimate_status")}
+                    if isinstance(meta.get("llm"), dict) else None),
             "concept_merge": ({
                 "status": (meta.get("conceptMerge") or {}).get("status"),
                 "detail": _redact((meta.get("conceptMerge") or {}).get("detail")),
@@ -1411,6 +1420,25 @@ def main() -> int:
     if out["overreach"]:
         print("OVERREACH (answered where the bank expects a refusal): %s"
               % ", ".join(out["overreach"]))
+    # THE BILL, from the run's own usage rather than from a prompt built
+    # against another book. Reported whenever the envelope carried it.
+    billed = [r["llm"] for r in rows if isinstance(r.get("llm"), dict)
+              and r["llm"].get("input_tokens")]
+    if billed:
+        tin = sum(b.get("input_tokens") or 0 for b in billed)
+        tout = sum(b.get("output_tokens") or 0 for b in billed)
+        tread = sum(b.get("cache_read_tokens") or 0 for b in billed)
+        cost = sum(b.get("estimated_total_cost") or 0.0 for b in billed)
+        out["llm_totals"] = {"questions_with_usage": len(billed),
+                             "input_tokens": tin, "output_tokens": tout,
+                             "cache_read_tokens": tread,
+                             "estimated_total_cost": round(cost, 4)}
+        print("\nLLM: %d questions | in %d (cache reads %d) | out %d | "
+              "est $%.4f  = $%.4f/question"
+              % (len(billed), tin, tread, tout, cost, cost / len(billed)))
+        if not tread:
+            print("     no cache reads — every call paid full price for the "
+                  "vocabulary; check the TTL reached this build")
     print("wrote", args.out)
     return 0
 

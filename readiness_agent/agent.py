@@ -251,7 +251,21 @@ def run_assessment(session: GovernedSession, *,
         run.steps = step
         response = client.messages.create(
             model=model, max_tokens=DEFAULT_MAX_TOKENS,
-            system=SYSTEM_PROMPT, tools=tools, messages=messages)
+            # CACHE THE PREFIX THIS LOOP RE-SENDS. A request renders as
+            # tools -> system -> messages, so a breakpoint on the system block
+            # covers the governed tool schemas as well: together roughly 1.4k
+            # tokens that are byte-identical on every step, re-bought on each
+            # one. The TTL is an hour because a readiness run is a session, not
+            # a burst, and the five-minute default expires between steps that
+            # wait on a tool.
+            #
+            # The QUESTION-shaped half — `messages`, which grows a turn at a
+            # time — is deliberately left outside the breakpoint: it changes on
+            # every step, and a breakpoint there would write a new cache entry
+            # per turn rather than read one.
+            system=[{"type": "text", "text": SYSTEM_PROMPT,
+                     "cache_control": {"type": "ephemeral", "ttl": "1h"}}],
+            tools=tools, messages=messages)
         usage["input_tokens"] += response.usage.input_tokens
         usage["output_tokens"] += response.usage.output_tokens
 
