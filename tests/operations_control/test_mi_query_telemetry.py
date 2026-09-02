@@ -449,6 +449,25 @@ class TestBehaviourUnchanged:
         qt.record(r, _answered(), question="q")
         assert r.saved == []
 
+    def test_someone_elses_blob_root_is_not_permission_to_record(
+            self, monkeypatch, tmp_path):
+        """A reachable store is not consent to write client content into it.
+
+        ``TRAKT_LOCAL_BLOB_ROOT`` is set by dozens of test modules, demos and dev
+        runs for their own purposes. Treating it as an instruction to record made
+        questions and answers land in whichever workspace happened to be pointed
+        at — one full test run put 2116 records into the repository's demo
+        workspace, where a governance test then read them as configuration. The
+        filesystem backend records on an explicit opt-in and nothing else.
+        """
+        monkeypatch.setenv("TRAKT_STORAGE_BACKEND", "filesystem")
+        monkeypatch.setenv("TRAKT_LOCAL_BLOB_ROOT", str(tmp_path))
+        monkeypatch.delenv("TRAKT_MI_QUERY_TELEMETRY", raising=False)
+        assert qt.enabled() is False
+
+        monkeypatch.setenv("TRAKT_MI_QUERY_TELEMETRY", "on")
+        assert qt.enabled() is True
+
     def test_a_query_without_a_tenant_is_not_recorded(self, monkeypatch, store):
         """The store is client-scoped; a record with no client could not be
         isolated, so it is not written at all."""

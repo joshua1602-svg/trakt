@@ -85,16 +85,28 @@ PROBLEMATIC = frozenset({
 
 
 def enabled() -> bool:
-    """Is a governed store actually configured to record into?
+    """Is there a governed store this process is MEANT to record into?
 
-    Telemetry WRITES, where the audit line only logs, so it records only where a
-    storage backend has been deliberately chosen — Azure in a deployment, or an
-    explicit local root. Without one, the filesystem backend would resolve to a
-    path relative to the working directory and quietly create a store nobody
-    asked for, which is not a place governed client records may land.
+    Telemetry WRITES where the audit line only logs, and what it writes is the
+    sensitive half — the user's question and the answer they were given. So the
+    bar is not "a store is reachable" but "this process was asked to record".
+
+    * **Azure blob**: yes. Reaching that backend means real credentials for the
+      governed container, which is the deliberate deployment.
+    * **Filesystem**: only on an explicit ``TRAKT_MI_QUERY_TELEMETRY`` opt-in.
+
+    That second rule is the important one, and it is narrower than it first
+    looks. An earlier version enabled the filesystem backend whenever
+    ``TRAKT_LOCAL_BLOB_ROOT`` was set — inferring consent from a storage path
+    someone else had configured for their own purposes. Dozens of test modules,
+    demos and dev runs set that variable, so questions and answers landed in
+    whatever workspace happened to be pointed at: one full test run deposited
+    2116 records into the repository's demo workspace, and a governance test that
+    scans that store for committed configuration then read them as configuration.
+    Storage being available is not permission to write client content into it.
     """
-    if os.environ.get("TRAKT_MI_QUERY_TELEMETRY", "").strip().lower() in ("0", "off",
-                                                                          "false"):
+    flag = os.environ.get("TRAKT_MI_QUERY_TELEMETRY", "").strip().lower()
+    if flag in ("0", "off", "false", "no"):
         return False
     try:
         from apps.blob_trigger_app.storage import decide_backend
@@ -103,8 +115,7 @@ def enabled() -> bool:
         return False
     if decision["backend"] == "azure_blob":
         return True
-    # Filesystem is only a governed store when someone named its root.
-    return bool(os.environ.get("TRAKT_LOCAL_BLOB_ROOT"))
+    return flag in ("1", "on", "true", "yes")
 
 
 def outcome_for(result: GovernedResult) -> str:
