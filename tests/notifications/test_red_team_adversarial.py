@@ -164,16 +164,23 @@ def test_a_masked_deterioration_reaches_the_risk_review(period):
     assert risk_review.CLEAR_STATEMENT not in [i.text for i in risk.items]
 
 
-def test_a_combined_only_ltv_move_stays_an_observation(period):
-    """No addition, so no underlying/combined distinction and no risk finding."""
-    prior = frame([{L: "A1", B: 100_000_000.0, P: "alp_origination", LTV: 0.30}])
-    current = frame([{L: "A1", B: 100_000_000.0, P: "alp_origination", LTV: 0.32}])
-    inputs, _u, risk = period(current, prior)
+def test_no_addition_means_no_underlying_versus_combined_split(period):
+    """With nothing added there is one population, so one figure.
+
+    A card that offered an "underlying" reading where none exists would imply a
+    distinction the month does not contain. The LTV here FALLS, so the severity
+    rule tested in ``test_an_improving_ltv_stays_an_observation`` is not what is
+    being exercised — only the absence of the split is.
+    """
+    prior = frame([{L: "A1", B: 100_000_000.0, P: "alp_origination", LTV: 0.32}])
+    current = frame([{L: "A1", B: 100_000_000.0, P: "alp_origination", LTV: 0.30}])
+    inputs, update, risk = period(current, prior)
 
     ltv = next(i for i in inputs.funded_insights()
                if i["insight_type"] == "FUNDED_LTV_MOVEMENT")
-    assert ltv["severity"] == "info"
     assert "underlying_change_pp" not in ltv["metrics"]
+    assert ltv["metrics"]["population"] == "combined"
+    assert "Excluding portfolios added" not in texts(update)
     assert risk.severity == "clear"
 
 
@@ -382,3 +389,57 @@ def test_a_busy_month_is_ranked_and_capped(period):
     # And nothing immaterial reached it: every bullet after the loan count is a
     # governed insight, not a statistic included because it was available.
     assert not any("was unchanged" in t for t in body)
+
+
+# =========================================================================== #
+# Scenario 19 — an outlier that moves the book's weighted average
+# =========================================================================== #
+def test_a_material_ltv_rise_is_a_risk_finding_not_only_an_observation(period):
+    """The Risk Review said "no material portfolio risks were identified".
+
+    On the same card, the update reported the book's weighted LTV rising 21.7
+    points in one month. Rising LTV is credit deterioration on any secured book,
+    so the clear statement was not one the evidence supported.
+    """
+    prior = frame([{L: f"A{i}", B: 10_000_000.0, P: "alp", LTV: 0.30}
+                   for i in range(10)])
+    current = frame([{L: f"A{i}", B: 10_000_000.0, P: "alp", LTV: 0.30}
+                     for i in range(10)]
+                    + [{L: "OUT", B: 50_000_000.0, P: "alp", LTV: 0.95}])
+
+    _i, update, risk = period(current, prior)
+
+    assert "from 30.0% to 51.7% (+21.7pp)" in texts(update)
+    assert risk.severity == "attention"
+    assert risk_review.CLEAR_STATEMENT not in [i.text for i in risk.items]
+
+
+def test_an_improving_ltv_stays_an_observation(period):
+    """A FALLING weighted LTV is not a risk finding.
+
+    Direction is the whole judgement — no second threshold is introduced, and
+    the estate does not acquire a competing risk framework.
+    """
+    prior = frame([{L: "A1", B: 100_000_000.0, P: "alp", LTV: 0.40}])
+    current = frame([{L: "A1", B: 100_000_000.0, P: "alp", LTV: 0.30}])
+
+    _i, update, risk = period(current, prior)
+
+    assert "from 40.0% to 30.0% (-10.0pp)" in texts(update)
+    assert risk.severity == "clear"
+
+
+def test_a_limit_breach_still_outranks_an_ltv_move(period):
+    """LTV is ranked below anything contractual, so it never displaces a breach."""
+    breach = {
+        **CLEAR_CONCENTRATION,
+        "emergingRisks": [{"category": "current_breach", "rank": 1,
+                           "testId": "ldn", "displayName": "London exposure",
+                           "statement": "London exposure is in breach."}],
+        "tests": []}
+    prior = frame([{L: "A1", B: 100_000_000.0, P: "alp", LTV: 0.30}])
+    current = frame([{L: "A1", B: 100_000_000.0, P: "alp", LTV: 0.45}])
+
+    _i, _u, risk = period(current, prior, concentration=breach)
+    assert risk.severity == "concern"
+    assert "London exposure" in risk.headline

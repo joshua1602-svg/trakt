@@ -63,6 +63,26 @@ def _pp(value: Optional[float]) -> str:
     return "—" if value is None else f"{value:+.1f}pp"
 
 
+def _ltv_severity(delta: Optional[float], floor: float) -> str:
+    """A material RISE in weighted LTV is a risk finding; a fall is an observation.
+
+    Direction is the only judgement here, and it is not a threshold: rising LTV
+    is credit deterioration and falling LTV is not, which is true of every
+    secured book and needs no portfolio-specific number to say. The size gate is
+    the configured materiality floor already applied above — nothing new is
+    introduced, and the estate does not acquire a second risk framework.
+
+    It matters because the Risk Review is otherwise entitled to say "no material
+    portfolio risks were identified" in a month when the book's weighted LTV
+    rose twenty points. That sentence sits beside the movement on the same card.
+    Ranked below breaches, limit transitions and data quality, so it surfaces
+    only when nothing more contractual is competing for the reader's attention.
+    """
+    if delta is None or abs(delta) < floor:
+        return SEVERITY_INFO
+    return SEVERITY_ATTENTION if delta > 0 else SEVERITY_INFO
+
+
 def _addition_headline(lead: Dict[str, Any]) -> str:
     """The headline for a period an addition dominates.
 
@@ -466,12 +486,12 @@ def ltv_movement(ctx: Dict[str, Any],
         if u_delta * delta < 0:
             summary += (" The combined movement is in the opposite direction to "
                         "the underlying book's.")
-        severity = SEVERITY_ATTENTION if abs(u_delta) >= floor else SEVERITY_INFO
+        severity = _ltv_severity(u_delta, floor)
     else:
         headline = f"Weighted-average LTV {direction(delta)} {_pp(delta)}"
         summary = (f"Balance-weighted current LTV moved from {pct(prior)} to "
                    f"{pct(current)} ({_pp(delta)}).")
-        severity = SEVERITY_INFO
+        severity = _ltv_severity(delta, floor)
 
     return [Insight(
         insight_type=FUNDED_LTV_MOVEMENT,
