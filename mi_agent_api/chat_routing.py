@@ -3383,7 +3383,8 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     if meta.get("lensApplied") is None:
         meta["lensApplied"] = route in _lens_aware_routes()
     if meta["lensApplied"]:
-        return envelope
+        return _disclose_wording_widened_the_scope(envelope, question,
+                                                   source_lens, meta)
     try:
         lens = _resolve_lens(question, source_lens)
     except Exception:  # noqa: BLE001 - disclosure must never break an answer
@@ -3401,6 +3402,51 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     if isinstance(warnings, list) and disclosure not in warnings:
         warnings.append(disclosure)
     meta["lensRequested"] = lens.label
+    return envelope
+
+
+def _disclose_wording_widened_the_scope(envelope, question, source_lens, meta):
+    """A question whose own words widened the caller's lens must say so.
+
+    A lens-aware route APPLIES the lens it resolved, so `lensApplied` is true
+    and the disclosure below never runs. That is right when the resolved lens is
+    the requested one, and silent when it is not: the question's own words
+    override the caller's selection by design, and widening to Total is the one
+    override that hands back a bigger population than the reader chose.
+
+    Measured on the live book with 'Direct' selected, three of the accepted
+    questions answered over the whole platform with nothing to say so —
+    "Give me a concise overview of the funded portfolio" among them, while the
+    same question in two other phrasings answered Direct-only. Same reader,
+    same selection, two populations, no warning; the envelope stamped Total
+    honestly, and nobody reads the envelope.
+
+    Only WIDENING is disclosed here. A question naming another book
+    ("balance in the acquired book") re-points rather than widens, and already
+    says so through the scope owner's own warning — repeating it would be noise.
+    """
+    try:
+        from mi_agent import portfolio_lens as plens
+
+        if source_lens is None:
+            return envelope
+        requested = plens.lens_from_selection(source_lens)
+        if not requested.filters:      # Total was chosen; nothing to widen from.
+            return envelope
+        resolved = _resolve_lens(question, source_lens)
+        if resolved.filters:           # Still narrowed — to this book or another.
+            return envelope
+        disclosure = (
+            f"Scope widened by the question: '{requested.label}' was selected, "
+            f"but the wording of this question asks about the whole book, so "
+            f"these figures cover every portfolio — they are NOT "
+            f"{requested.label}-only. Name the book in the question to keep it.")
+        warnings = envelope.setdefault("warnings", [])
+        if isinstance(warnings, list) and disclosure not in warnings:
+            warnings.append(disclosure)
+        meta["lensRequested"] = requested.label
+    except Exception:  # noqa: BLE001 - disclosure must never break an answer
+        pass
     return envelope
 
 
