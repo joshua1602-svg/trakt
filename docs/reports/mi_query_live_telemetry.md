@@ -66,11 +66,11 @@ helper:
 def _finish(result, request):
     emit_audit_event(result)                 # unchanged — Application Insights
     try:
-        from . import query_telemetry
+        from operations_control import mi_query_telemetry
         from operations_control.stores import OpsStore
-        query_telemetry.record(OpsStore.from_env(), result,
-                               question=request.question,
-                               requested_portfolio=request.effective_portfolio_id())
+        mi_query_telemetry.record(OpsStore.from_env(), result,
+                                  question=request.question,
+                                  requested_portfolio=request.effective_portfolio_id())
     except Exception:
         logger.warning("mi query telemetry unavailable for request_id=%s", ...)
     return result
@@ -88,6 +88,93 @@ Three properties are deliberate:
   the explicit structured `spec` the parser emitted. No prompts, no
   chain-of-thought, no hidden reasoning, no tokens — none of which are available
   at this seam in any case.
+
+### Which service owns which half — and a deployment defect this sprint caused
+
+OCC and the MI API are **separately deployed App Services** with separate
+packages. The first cut of this sprint ignored that and coupled them in both
+directions. It broke the `trakt-ops-api` deployment:
+
+```
+ARTEFACT CHECK FAILED: could not import operations_control.api.app
+(ModuleNotFoundError: No module named 'mi_agent_api')
+```
+
+Two distinct defects, both introduced here:
+
+1. **Hard, and caught by CI.** The OCC review routes imported the review
+   vocabulary from `mi_agent_api.query_telemetry` at module scope. The ops-api
+   package ships a deliberately traced import closure that does not include
+   `mi_agent_api` — correctly, since that is a different service — so the OCC
+   API failed to import at all. Not just the new screen: **no OCC, no OCC Agent,
+   no routes.**
+2. **Silent, and worse.** The reverse import — MI API → `operations_control` —
+   was real and intended, but `operations_control` was not listed in
+   `deploy/trakt-mi-api/package_contents.txt`. Because the write is deliberately
+   non-raising, the deployed MI API would have answered every query normally,
+   logged a warning nobody reads, and **recorded nothing at all** — leaving the
+   OCC review screen permanently empty with no error to explain why. The entire
+   sprint would have been inert in production while appearing to work.
+
+The fix is a correction of ownership, not a workaround. **The record is an OCC
+document** — OCC owns the store it lands in, the layout, the review vocabulary
+and the routes that read it back — so the projection module now lives at
+`operations_control/mi_query_telemetry.py`. That deletes defect 1 outright: the
+OCC API no longer references `mi_agent_api` at all. What remains is one
+dependency in one direction, MI API → OCC, which is now declared in the MI API's
+package manifest, so defect 2 fails loudly at packaging time rather than silently
+in production.
+
+Verified by rebuilding the actual artefact the way the workflow does and running
+the same `verify_package.py` against it, in a directory where `mi_agent_api` does
+not exist: *artefact OK — 82 served paths, 8 governed config files, 2 delivery
+scripts.*
+
+**Why it was not caught before pushing.** The regression run selected MI Query
+acceptance suites by name and did not include the packaging tests, which are the
+tests that encode exactly this. `tests/test_mi_api_appservice_packaging.py::
+TestArtefactCompleteness::test_every_reachable_repo_package_is_staged` fails on
+defect 2 and passes at the merge base — it would have caught this before the
+deploy did. The corrected regression procedure (§11) runs the whole `tests/`
+tree against a baseline checkout rather than a hand-picked subset.
+
+### A third defect, found by that wider run: telemetry wrote where it was not invited
+
+Running the whole tree against the baseline surfaced one further regression, and
+it is the most instructive of the three because nothing about it was loud.
+
+`enabled()` originally treated the filesystem backend as recordable whenever
+`TRAKT_LOCAL_BLOB_ROOT` was set. That reads as a reasonable "only record where a
+store was deliberately configured" — but it infers **consent from a storage path
+someone else configured for their own purposes**. Dozens of test modules, demo
+scripts and dev runs set that variable. So every MI query executed anywhere in
+the repository began writing the user's question and the answer into whatever
+workspace happened to be pointed at. One full `tests/` run deposited **2116
+telemetry records into the repository's own demo workspace**
+(`demo_platform/workspace/store/`), and
+`tests/test_concentration_dimension_fallback.py::TestNoCommittedConfigurationIs
+Affected` — a governance test that scans that store for committed configuration —
+read them as configuration and failed.
+
+The failing test was the symptom. The defect is that the sensitive half of this
+feature (question and answer, the very content §8 is careful about) was landing
+in directories nobody had designated for it.
+
+**Fixed by requiring an explicit opt-in rather than inferring one.** Azure blob
+still enables telemetry on its own — reaching that backend means real credentials
+for the governed container, which *is* the deliberate deployment, so production
+behaviour is unchanged. The filesystem backend now records only when
+`TRAKT_MI_QUERY_TELEMETRY` is explicitly set on. Demonstrated both ways: with the
+opt-in, one query writes one record; with a blob root configured but no opt-in,
+the same query answers successfully and writes nothing.
+
+A test now holds the line —
+`TestBehaviourUnchanged::test_someone_elses_blob_root_is_not_permission_to_record`
+— and the 2116 stray records were deleted (they were git-ignored, so none had
+been committed).
+
+The general lesson, worth carrying into the retention decision in §12: **storage
+being reachable is not permission to write client content into it.**
 
 ## 3. Storage split: OCC vs Azure
 
@@ -130,7 +217,7 @@ Insights exists.
 
 ## 4. Exact telemetry schema
 
-`mi_agent_api/query_telemetry.py`, `SCHEMA_VERSION = "1.0.0"`. One JSON document
+`operations_control/mi_query_telemetry.py`, `SCHEMA_VERSION = "1.0.0"`. One JSON document
 per question. Fields, grouped by the stage they come from — the architectural
 separation is visible in the record itself:
 
@@ -375,9 +462,22 @@ version, and — after review — whether it was any good.
 
 ## 11. Tests and regression
 
+### How the baseline is established
+
+Failures are only meaningful against a baseline, so every count below comes from
+running the **same** command twice: once on this branch, and once in a separate
+`git worktree` checked out at the starting SHA `d355065`. A failure is called
+pre-existing only when it appears in both runs with the same test id.
+
+The first regression pass for this sprint ran a **hand-picked selection** of MI
+Query suites by name. That selection omitted the deployment-packaging tests,
+which is precisely where the defect described in §2 lives — so the sprint pushed
+green and broke the `trakt-ops-api` deployment. The procedure now runs the whole
+`tests/` tree on both sides rather than a chosen subset.
+
 ### New tests
 
-`tests/operations_control/test_mi_query_telemetry.py` — **32 tests**, mapped to
+`tests/operations_control/test_mi_query_telemetry.py` — **33 tests**, mapped to
 the brief's acceptance list:
 
 | | Requirement | Evidence |
@@ -418,18 +518,35 @@ instrumentation was demonstrably active while making no difference.
 
 ### Regression counts
 
-| Suite | Result |
-|---|---|
-| `tests/operations_control/` (OCC backend, incl. the 32 new tests) | **1133 passed, 0 failed** |
-| `mi_agent_api/tests/` | 1417 passed, 1 skipped, **5 failed — all pre-existing** |
-| MI Query acceptance suites in `tests/` (phase7 spec v2, phase8a interpreter harness, capability registry, recognition diagnosis, portfolio lens wiring, governed MI integration defects, MI render) | 217 passed, **5 failed — all pre-existing** |
-| `frontend/operations-control-ui` (Vitest) | 23 files, **208 passed** |
-| `tsc --noEmit` | clean (apart from a pre-existing `tsconfig` `baseUrl` deprecation warning) |
+Whole-tree, branch vs a baseline worktree at `d355065`, same command both sides:
 
-**Pre-existing failure baseline, verified not assumed.** The 10 failures were
-reproduced at the clean merge base `d355065` in a separate `git worktree`, with
-the same test ids and the same assertions, before any file in this sprint
-existed:
+| Suite | Branch | Baseline `d355065` |
+|---|---|---|
+| **`tests/` (entire tree)** | 147 failed, 7377 passed, 434 skipped, 3 errors | 146 failed, 7346 passed, 434 skipped, 3 errors |
+| `mi_agent_api/tests/` | 1417 passed, 1 skipped, 5 failed | same 5 failed |
+| `frontend/operations-control-ui` (Vitest) | 23 files, 208 passed | — |
+| `tsc --noEmit` | clean (bar a pre-existing `baseUrl` deprecation warning) | — |
+
+The 146 baseline failures in `tests/` are pre-existing and untouched by this
+sprint. Diffing the two failure sets by test id gave **exactly one name present
+on the branch and absent at baseline**:
+
+```
+FAILED tests/test_concentration_dimension_fallback.py::
+       TestNoCommittedConfigurationIsAffected::
+       test_no_configuration_feeds_a_newly_resolvable_dimension_to_a_metric
+```
+
+That was not a pre-existing failure and not one of the new tests — it was the
+third defect, diagnosed and fixed as described in §2. All 33 new tests pass, and
+the previously-failing file is back to `9 passed`.
+
+Two suites were also re-run after the §2 fixes with unchanged results:
+`tests/operations_control/` and `mi_agent_api/tests/` — the latter still
+`1417 passed, 1 skipped, 5 failed`, the identical five pre-existing ids.
+
+**The pre-existing failures relied on in this report**, each reproduced at
+`d355065` in a `git worktree` with the same test id and assertion:
 
 *`mi_agent_api/tests/`* — `test_chat_routing_e2e.py::test_cumulative_cohort_conversion_routes`,
 `test_currency_authority.py::test_client_1_gbp_comes_from_the_governed_client_configuration`,
@@ -437,16 +554,27 @@ existed:
 `test_pipeline_stage_transition.py::TestClassification::test_a_prior_only_identifier_is_a_departure`,
 `test_single_parse_and_substitution.py::test_an_unavailable_dimension_is_refused_not_substituted`
 
-*`tests/test_phase8a_mi_interpreter_harness.py`* —
-`test_golden_example[compare funded balance to last month]`,
+*`tests/test_phase8a_mi_interpreter_harness.py`* — `test_golden_example[compare funded balance to last month]`,
 `test_golden_example[show changes]`,
 `test_supported_valid_questions_validate[compare funded balance to last month]`,
 `test_ambiguous_questions_clarify[show changes]`,
 `test_interpreter_always_validates_supported_specs`
 
-The baseline run was `5 failed, 217 passed` and this branch's run is
-`5 failed, 217 passed` — the same five. **This sprint introduced no new test
-failures.**
+*`tests/test_mi_api_appservice_packaging.py`* —
+`TestRequirementsSufficiency::test_every_reachable_distribution_is_declared`
+(`analytics`, `lxml` undeclared). Its sibling
+`TestArtefactCompleteness::test_every_reachable_repo_package_is_staged` was
+**passing** at baseline and failing on the branch, which is how defect 2 in §2
+was identified; it passes again now.
+
+*`tests/test_governance_dependency_direction.py`* —
+`test_capability_layer_has_no_source_level_dependency_on_the_http_module`
+(`trakt_core/regime_exception_reconciliation.py` imports `engine.…`).
+
+**After the fixes in §2, this sprint introduces no new test failures.** The
+earlier version of this report claimed that on the strength of a hand-picked
+suite selection, which is how three defects reached the remote; the claim now
+rests on the whole-tree diff above.
 
 ## 12. Intentionally deferred
 
@@ -553,12 +681,19 @@ telemetry-off runs — are normalised. 12 telemetry records were written during
 the ON run, so instrumentation was demonstrably active while changing nothing.
 
 **14. Regression counts.**
-OCC backend `tests/operations_control/`: **1133 passed, 0 failed**.
-`mi_agent_api/tests/`: 1417 passed, 1 skipped, 5 failed — all five reproduced at
-the clean merge base `d355065`.
-MI Query acceptance suites in `tests/`: 217 passed, 5 failed — the baseline run
-at `d355065` was the same `5 failed, 217 passed`, same test ids.
-Frontend Vitest: 23 files, 208 passed. **No new failures introduced.**
+Whole `tests/` tree, branch vs a baseline worktree at `d355065`:
+branch **147 failed / 7377 passed / 434 skipped / 3 errors**, baseline
+**146 failed / 7346 passed / 434 skipped / 3 errors**. Diffing the failure sets
+by test id gave exactly one name on the branch and not at baseline —
+`test_concentration_dimension_fallback.py::TestNoCommittedConfigurationIsAffected
+::test_no_configuration_feeds_a_newly_resolvable_dimension_to_a_metric` — which
+was the third defect in §2, now fixed (that file is back to `9 passed`).
+`mi_agent_api/tests/`: 1417 passed, 1 skipped, 5 failed — the same five
+pre-existing ids, re-run after the fixes.
+Frontend Vitest: 23 files, 208 passed; `tsc --noEmit` clean.
+**After the §2 fixes, no new test failures.** The first version of this answer
+claimed that from a hand-picked suite selection, which is how three defects
+reached the remote; it now rests on the whole-tree diff.
 
 **15. Commit SHA and pushed branch.**
 Pushed to branch `claude/mi-query-live-telemetry`, as the single commit on top

@@ -348,12 +348,19 @@ def _finish(result: GovernedResult[Dict[str, Any]],
     governed telemetry document an operator reviews in OCC. Both are
     non-raising by construction: neither may turn an answered query into a
     failed one, and neither changes the result that is returned.
+
+    The OCC imports are deliberately local to this function. The record is an
+    OCC document written into the OCC store, so this module is the writer and
+    ``operations_control`` is the owner — a one-way dependency, declared in
+    deploy/trakt-mi-api/package_contents.txt so the App Service actually ships
+    it. Kept function-local so importing the MI service does not pull the
+    control plane in at module scope.
     """
     emit_audit_event(result)
     try:
-        from . import query_telemetry
+        from operations_control import mi_query_telemetry
         from operations_control.stores import OpsStore
-        query_telemetry.record(
+        mi_query_telemetry.record(
             OpsStore.from_env(), result, question=request.question,
             requested_portfolio=request.effective_portfolio_id())
     except Exception:  # noqa: BLE001 — telemetry must never fail a query

@@ -29,6 +29,14 @@ analytics_lib         # buckets, cohorts, the analytic primitives
 engine                # orchestrator/transformation/validation agents
 apps                  # apps.blob_trigger_app: storage, pptx_stage, layout
 snapshot              # snapshot.model — the dataset contract
+operations_control    # the OCC store the MI query telemetry record is written
+                      # into, reached from mi_service._finish after every query.
+                      # A ONE-WAY dependency: the MI API writes, OCC owns and
+                      # reads. Absent, every query still answers normally — the
+                      # write is non-raising — but nothing is ever recorded and
+                      # the OCC review screen stays empty with no error to say
+                      # why, which is why it is staged rather than left to the
+                      # lazy import to discover in production.
 trakt_core            # context, tenancy, organisation, principal, entitlement
 trakt_tools           # governed tool registry (agent API surface)
 trakt_notifications   # recipients + layout, reached from teams_bot
