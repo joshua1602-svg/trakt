@@ -4,16 +4,18 @@ mi_agent_config.py
 
 Environment-driven configuration for the MI Agent's optional LLM path.
 
-Cost control: the default model is a cheap/fast Claude model already used
-elsewhere in this repo (the onboarding agent uses ``claude-haiku-4-5-20251001``
-as its cheap tier). Everything is overridable via environment variables so no
-code change is needed to switch models or providers.
+Model choice: the default is the most capable Claude model, because reading a
+governed question against a governed vocabulary decides WHICH POPULATION a
+figure covers — a cheaper reading is not a cheaper answer, it is a different
+one. Everything is overridable via environment variables, so a deployment that
+wants a cheaper tier pins it without a code change and can measure what the
+change costs on the acceptance bank.
 
 Environment variables
 ---------------------
 ENABLE_LLM_MI_AGENT        "true"/"false"  (default false -> deterministic only)
 MI_AGENT_LLM_PROVIDER      anthropic | mock | none   (default anthropic)
-MI_AGENT_LLM_MODEL         model id        (default claude-haiku-4-5-20251001)
+MI_AGENT_LLM_MODEL         model id        (default claude-opus-5)
 MI_AGENT_MAX_REPAIR_ATTEMPTS  int          (default 2)
 ANTHROPIC_API_KEY          required for provider=anthropic
 
@@ -29,9 +31,14 @@ import os
 from dataclasses import dataclass, field
 from typing import List, Mapping, Optional
 
-# Cheap default model — matches the repo's existing cheap tier
-# (agents/onboarding_agent.py). Overridable via MI_AGENT_LLM_MODEL.
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+# The default model for MI language work. Overridable via MI_AGENT_LLM_MODEL,
+# which is how the App Service pins its own choice.
+#
+# THE ID IS BARE ON PURPOSE. `claude-haiku-4-5-20251001` carried a date suffix;
+# current model identifiers are complete without one, and a suffix that drifts
+# out of service fails at the API rather than at import, in whichever deployment
+# had not set the env var.
+DEFAULT_MODEL = "claude-opus-5"
 DEFAULT_PROVIDER = "anthropic"
 # Cost-conscious default: one repair attempt (override with MI_AGENT_MAX_REPAIR_ATTEMPTS).
 DEFAULT_MAX_REPAIR_ATTEMPTS = 1

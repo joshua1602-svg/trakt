@@ -35,8 +35,15 @@ from . import population as _population_mod
 
 logger = logging.getLogger(__name__)
 
-# Cheap default model for NL->spec parsing.  Overridable via the `model` arg.
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+# The default model for NL->spec parsing. Overridable via the `model` arg, and
+# in a deployment via MI_AGENT_LLM_MODEL / MI_AGENT_CONCEPT_MERGE_MODEL.
+#
+# Reading a governed question against a governed vocabulary decides which
+# population a figure covers, so the default is the most capable model rather
+# than the cheapest; a deployment that wants a cheaper tier says so explicitly
+# and can measure the difference on the acceptance bank. Bare id, no date
+# suffix — see `mi_agent_config.DEFAULT_MODEL`.
+DEFAULT_MODEL = "claude-opus-5"
 
 
 # --------------------------------------------------------------------------- #
@@ -4342,6 +4349,13 @@ def parse_llm_response_to_spec(response_json: Any) -> MIQuerySpec:
 # input and cache writes at 1.25x input (applied in ``estimate_cost``).
 _PRICING = {
     "haiku": (1.00, 5.00),
+    # Sonnet is NOT one price. Sonnet 5 is $2/$10; Sonnet 4.6 is $3/$15, and the
+    # generic "sonnet" key below still serves it and anything older. The longest
+    # key wins (see `_PRICING_KEYS`), so the specific entry is reached first.
+    # This matters here and not in theory: the App Service runs
+    # `claude-sonnet-5`, and every cost estimate it produced was overstated by
+    # half until this entry existed.
+    "sonnet-5": (2.00, 10.00),
     "sonnet": (3.00, 15.00),
     "opus": (5.00, 25.00),
     "fable": (10.00, 50.00),
@@ -4472,6 +4486,25 @@ def _message_text(message) -> str:
 #: Models the API has told us reject sampling parameters, learned at runtime.
 _SAMPLING_REJECTED: set = set()
 
+#: Models observed to accept a cached system block. Mirrors `_SAMPLING_REJECTED`
+#: above, in the other direction: once a model has cached successfully, a later
+#: failure of the SAME call is not evidence that caching is unsupported, so the
+#: uncached retry below is skipped and the real error propagates. Without this,
+#: an exhausted credit balance costs TWO calls per question and is logged as
+#: "SDK without cache support", which is how a billing fault comes to look like
+#: a capability one. Measured 2026-09-02: 139 questions, each billed twice for
+#: nothing, against a 400 that said "credit balance is too low".
+_CACHE_SUPPORTED: set = set()
+
+
+#: The vocabulary in a proposal prompt is stable for as long as the BOOK is —
+#: it is the governed field and value catalogue, and it is 99% of the request
+#: (measured: 2,170 tokens of system against 13 of question). The default
+#: ephemeral TTL is five minutes, which an MI dashboard used a few times an hour
+#: misses on almost every call, paying full price for an identical prefix. An
+#: hour spans a working session.
+_CACHE_TTL = "1h"
+
 #: Phrases an SDK or the API uses when the sampling kwarg is the problem. Not a
 #: model list: a list of ways one specific rejection is worded.
 _SAMPLING_REJECTION_MARKS = ("temperature", "top_p", "top_k")
@@ -4570,11 +4603,18 @@ def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
             message = _create(
                 model=model, max_tokens=1024,
                 system=[{"type": "text", "text": prompt["system"],
-                         "cache_control": {"type": "ephemeral"}}],
+                         "cache_control": {"type": "ephemeral",
+                                           "ttl": _CACHE_TTL}}],
                 messages=[{"role": "user", "content": prompt["user"]}],
             )
             cache_supported = True
+            _CACHE_SUPPORTED.add(model or "")
         except Exception:  # pragma: no cover - SDK without cache support
+            if (model or "") in _CACHE_SUPPORTED:
+                # This model HAS cached before, so whatever just failed is not
+                # about caching — an auth error, an exhausted balance, a rate
+                # limit. Retrying uncached would fail identically and bill twice.
+                raise
             message = None
     if message is None:
         message = _create(

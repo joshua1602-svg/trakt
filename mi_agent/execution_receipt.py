@@ -1604,6 +1604,35 @@ def _join(items: Sequence[str]) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
+def _speech_list(facets) -> str:
+    """The concepts as the READER stated them, each said once.
+
+    Two facets can describe one phrase from different angles — "which region
+    added the most" registers a RANKING ("ranking by region") and the dimension
+    it ranks ("region") — and both legitimately block for different reasons.
+    Naming both in the opening clause produced, on the live book:
+
+        "I understood that you asked for ranking by region and region, ..."
+
+    which reads like a defect in the sentence rather than a fact about the
+    answer, and was measured on ten of the accepted questions. Where one
+    facet's speech CONTAINS another's, the containing phrase is the one the
+    reader recognises, so the shorter is dropped from this list only. Every
+    facet keeps its own entry in the detail that follows: the redundancy is in
+    how the request is echoed, never in what could not be applied.
+    """
+    said = []
+    for text in (f.speech for f in facets):
+        if not text:
+            continue
+        if any(text != other and text in other for other in said):
+            continue
+        said = [k for k in said if not (k != text and k in text)]
+        if text not in said:
+            said.append(text)
+    return _join(said)
+
+
 def _business_name(key: Optional[str], semantics: dict) -> Optional[str]:
     if not key:
         return None
@@ -2779,7 +2808,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     if blocking:
         detail = "; ".join(f.disclosure(semantics) for f in blocking)
         return VERDICT_REFUSE, (
-            f"I understood that you asked for {_join([f.speech for f in blocking])}, "
+            f"I understood that you asked for {_speech_list(blocking)}, "
             f"but that could not be applied to the calculation ({detail}). "
             "I have not substituted a broader figure.")
 

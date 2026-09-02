@@ -293,7 +293,11 @@ def test_pricing_matches_published_list_prices():
     assert _price_for_model("claude-opus-4-8") == (5.00, 25.00)
     assert _price_for_model("claude-opus-4-7") == (5.00, 25.00)
     assert _price_for_model("claude-haiku-4-5-20251001") == (1.00, 5.00)
-    assert _price_for_model("claude-sonnet-5") == (3.00, 15.00)
+    # Sonnet is two prices, and the specific key must win over the family one.
+    assert _price_for_model("claude-sonnet-5") == (2.00, 10.00)
+    assert _price_for_model("claude-sonnet-4-6") == (3.00, 15.00)
+    # The default the MI estate ships with, so a drift here mis-bills everything.
+    assert _price_for_model("claude-opus-5") == (5.00, 25.00)
     assert _price_for_model("claude-fable-5") == (10.00, 50.00)
     # An unrecognised model has no price (status becomes 'unknown', not $0).
     assert _price_for_model("some-future-model") is None
