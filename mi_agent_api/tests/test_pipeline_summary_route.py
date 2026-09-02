@@ -114,5 +114,50 @@ class TestTheRouteComputesNothing(unittest.TestCase):
         self.assertIn("Scope not narrowed", body)
 
 
+class TestWhereItRegisters(unittest.TestCase):
+    """The placement test `test_existing_route_order_is_preserved` requires.
+
+    That test pins the twelve MIGRATED routes in order and excludes anything
+    added since, on the condition that each addition proves its own placement
+    here. This is that proof.
+    """
+
+    def _names(self):
+        import mi_agent_api.chat_routing  # noqa: F401 - registers the routes
+        from mi_agent_api.recogniser_registry import REGISTRY
+
+        return list(REGISTRY.names())
+
+    def test_it_registers_immediately_after_the_funded_summary(self):
+        names = self._names()
+        self.assertIn("pipeline_summary", names)
+        self.assertEqual(names[names.index("portfolio_summary") + 1],
+                         "pipeline_summary",
+                         "the two summaries must sit together: they are one "
+                         "capability split by dataset, and reading the chain "
+                         "should say so")
+
+    def test_it_sits_before_period_change_analysis(self):
+        names = self._names()
+        self.assertLess(names.index("pipeline_summary"),
+                        names.index("period_change_analysis"))
+
+    def test_the_migrated_chain_is_untouched(self):
+        """Order among the pre-existing routes is exactly as it was."""
+        names = self._names()
+        chain = [n for n in names
+                 if n in ("scenario", "cohort_conversion",
+                          "forecast_extrapolation", "funded_bridge",
+                          "cohort_progression", "geo_exposure",
+                          "period_movement", "portfolio_summary",
+                          "period_change_analysis", "temporal_compare",
+                          "risk_limits", "evolution")]
+        self.assertEqual(chain, [
+            "scenario", "cohort_conversion", "forecast_extrapolation",
+            "funded_bridge", "cohort_progression", "geo_exposure",
+            "period_movement", "portfolio_summary", "period_change_analysis",
+            "temporal_compare", "risk_limits", "evolution"])
+
+
 if __name__ == "__main__":
     unittest.main()
