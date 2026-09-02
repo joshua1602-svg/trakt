@@ -139,12 +139,31 @@ def main() -> int:
     from mi_agent_api import pipeline_contract as pipeline_mod
     from mi_agent_api.movement_detail import select_pair
 
-    root = os.environ.get("MI_AGENT_ONBOARDING_OUTPUT_ROOT")
+    # THE SAME ROOT THE ROUTE USES. Reading MI_AGENT_ONBOARDING_OUTPUT_ROOT
+    # directly finds nothing: the weekly extracts live under a pipeline root
+    # derived from MI_AGENT_PIPELINE_URI and MATERIALISED to local scratch, and
+    # the onboarding root holds funded cuts instead. A reconciliation pointed at
+    # a different root cannot disagree with the answer meaningfully — it can
+    # only fail to find anything, which is what it did.
+    from mi_agent_api import datasets as ds_mod
+
+    root = ds_mod._materialise_pipeline_root(ds_mod._pipeline_root())
     client_id = os.environ.get("MI_AGENT_CLIENT_ID") or "client_001"
+    print("pipeline root resolved:", "yes" if root else "NO")
+    print("client id             :", client_id)
     inv = pipeline_mod.weekly_extract_inventory(root, client_id)
-    cur_e, pri_e = select_pair(inv.get("extracts", []), None)
+    extracts = inv.get("extracts", []) or []
+    print("weekly extracts found :", len(extracts))
+    cur_e, pri_e = select_pair(extracts, None)
     if cur_e is None or pri_e is None:
-        raise SystemExit("no governed weekly extract pair to reconcile against")
+        raise SystemExit(
+            "no governed weekly extract PAIR to reconcile against (%d extract(s) "
+            "found). The agent answers transitions from a pair, so if it is "
+            "answering and this cannot find one, the roots differ — check "
+            "MI_AGENT_PIPELINE_ROOT / MI_AGENT_PIPELINE_URI." % len(extracts))
+    print("comparing             :", pri_e.get("pipeline_extract_date"),
+          "->", cur_e.get("pipeline_extract_date"))
+    print()
     cur, _ = pipeline_mod.load_prepared_pipeline(cur_e)
     pri, _ = pipeline_mod.load_prepared_pipeline(pri_e)
 
