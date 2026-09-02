@@ -112,12 +112,53 @@ def _normalise_numeric_columns(out: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _to_ratio(s: pd.Series) -> pd.Series:
-    """Normalise an LTV series to a 0..1 ratio (percent inputs ÷100, col-level)."""
+#: The band an LTV ratio can plausibly occupy. Used only to tell a scale
+#: MIXTURE apart from one convention's own tail: dividing a points cluster by
+#: 100 lands inside this band, dividing a genuinely rolled-up ratio (1.7 == 170%)
+#: does not.
+_LTV_RATIO_MIN = 0.02
+_LTV_RATIO_MAX = 1.5
+
+
+def _to_ratio(s: pd.Series) -> Tuple[pd.Series, Optional[str]]:
+    """Normalise an LTV series to a 0..1 ratio, returning ``(values, note)``.
+
+    A column normally carries ONE convention and the median decides it. But a
+    frame assembled from more than one book need not: an acquired portfolio
+    stored in points (25.0) alongside originations already stored as ratios
+    (0.418) makes the column median follow whichever book is larger, and the
+    single column-level division then makes the OTHER book a hundred times too
+    small. That is how a vintage reading 41.8% alone came to read 0.4% once a
+    seasoned book joined the same reporting period.
+
+    So the column decision is kept wherever the column is coherent — which is
+    every single-source tape, unchanged — and a genuine mixture is normalised
+    row-wise and reported. A mixture is only claimed when the high group,
+    divided by 100, lands in the plausible LTV band; one convention's own
+    rolled-up tail (1.7 == 170% LTV) does not, and is left alone.
+    """
     valid = s.dropna()
-    if not valid.empty and float(valid.median()) > _PERCENT_MEDIAN:
-        return s / 100.0
-    return s
+    if valid.empty:
+        return s, None
+
+    high = valid[valid > _PERCENT_MEDIAN]
+    low = valid[valid <= _PERCENT_MEDIAN]
+    if len(high) and len(low):
+        looks_like_points = (_LTV_RATIO_MIN
+                             <= float(high.median()) / 100.0
+                             <= _LTV_RATIO_MAX)
+        looks_like_ratios = float(low.median()) >= _LTV_RATIO_MIN
+        if looks_like_points and looks_like_ratios:
+            out = s.where(~(s > _PERCENT_MEDIAN), s / 100.0)
+            return out, (
+                f"mixed LTV storage scales in one frame: {len(high)} row(s) in "
+                f"percentage points and {len(low)} already a ratio. Normalised "
+                "per row rather than per column, which would have divided the "
+                "ratios by 100 as well.")
+
+    if float(valid.median()) > _PERCENT_MEDIAN:
+        return s / 100.0, None
+    return s, None
 
 
 def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
@@ -133,10 +174,12 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
     if target in cols:
         s = _to_num(out[target])
         if (s.notna() & (s > 0)).any():
-            out[target] = _to_ratio(s)
+            out[target], note = _to_ratio(s)
             basis.update(method="source_field", source_fields=[target],
                          numerator=None, denominator=None, confidence=1.0,
                          valid_rows=int((s.notna() & (s > 0)).sum()))
+            if note:
+                basis["scaleNote"] = note
             return basis
 
     # 2. derive numerator / denominator (divide-by-zero / non-numeric safe).
@@ -145,10 +188,12 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
         den = _to_num(out[den_field])
         ratio = num / den.where(den > 0)
         if ratio.notna().any():
-            out[target] = _to_ratio(ratio)
+            out[target], note = _to_ratio(ratio)
             basis.update(method="derived_ratio", source_fields=[num_field, den_field],
                          numerator=num_field, denominator=den_field, confidence=0.9,
                          valid_rows=int(ratio.notna().sum()))
+            if note:
+                basis["scaleNote"] = note
             return basis
 
     # 3. inputs missing -> do NOT fabricate an LTV.

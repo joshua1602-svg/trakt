@@ -337,8 +337,10 @@ function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWe
 }
 
 /** One origination-funnel stage: weekly-FLOW bars (default) with an optional
- * stock line, a 5-week trailing average of the WEEKLY FLOW, the Δ vs prior week
- * (flow − prior flow), and a collapsed conversion-vs-KFI disclosure. Renders
+ * stock line, a 5-week trailing average of the WEEKLY FLOW, the flow's own
+ * acceleration (this week's flow minus last week's — NOT the flow itself,
+ * which is already a week-on-week change), and a collapsed conversion-vs-KFI
+ * disclosure. Renders
  * compact in the 2×2 grid and larger inside the focus modal (``large``). */
 export function FunnelStageCard({
   stage, label, points, flowPoints, summary, conversion, cohortPct, showCumulative, large, onExpand,
@@ -479,8 +481,11 @@ export function FunnelStageCard({
             </div>
           </div>
           <div>
-            <div className="text-ink-500" title="Latest weekly flow minus prior weekly flow">
-              Δ vs prior wk
+            <div
+              className="text-ink-500"
+              title="Change in the weekly flow itself: this week's flow minus last week's. The flow is already the week-on-week movement, so this is whether that movement is speeding up or slowing down."
+            >
+              Flow acceleration
             </div>
             <div className="text-ink-200">
               {summary.deltaFlowValue != null ? gbpCompact(summary.deltaFlowValue) : "—"}
