@@ -115,6 +115,9 @@ def main() -> int:
     parser.add_argument("--max-steps", type=int, default=24)
     parser.add_argument("--only", default=None, help="one scenario key")
     parser.add_argument("--data-root", default=None)
+    parser.add_argument("--set", default="redteam", choices=("redteam", "agent"),
+                        help="'redteam' = the three scope/acquisition traps; "
+                             "'agent' = the five §13 period types")
     args = parser.parse_args()
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -134,7 +137,8 @@ def main() -> int:
 
     data_root = Path(args.data_root or (Path(args.out).parent / "redteam_data"))
     rt.clear(data_root)
-    scenarios = rt.build(data_root, CLIENT_ID)
+    scenarios = (rt.build_agent_scenarios(data_root, CLIENT_ID)
+                 if args.set == "agent" else rt.build(data_root, CLIENT_ID))
     if args.only:
         scenarios = [s for s in scenarios if s.key == args.only]
         if not scenarios:
@@ -172,6 +176,7 @@ def main() -> int:
                 "elapsed_s": round(time.perf_counter() - started, 2),
                 "error": error,
                 "outcome": outcome.to_dict() if outcome else None,
+                "scenario_note": scenario.trap,
                 "payloads": session.payloads,
             })
 

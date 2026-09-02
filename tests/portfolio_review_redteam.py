@@ -267,6 +267,51 @@ def clear(tmp_root: Path) -> None:
 #: Every frame is derived from the same real canonical pair by deletion, by
 #: scaling one existing column, or by relabelling a source portfolio id. No row
 #: is authored, so the distributions stay the ones the pipeline produced.
+#: The five periods the AGENT is run against (§13). A subset of the ten
+#: deterministic ones, chosen so each poses a different question to a reviewer:
+#: an arrival that dominates, an ordinary month, a risk characteristic moving, a
+#: month where the honest answer is "nothing", and one where several things move
+#: at once and the work is ranking them.
+AGENT_SCENARIOS = {
+    "A_acquisition": "acquisition",
+    "B_organic": "organic_growth",
+    "C_risk_warning": "concentration_warning",
+    "D_quiet": "quiet",
+    "E_mixed": "acquisition_masking_decline",
+}
+
+#: What each of the five is FOR, in the reviewer's terms. Prose, for the report.
+AGENT_SCENARIO_NOTES = {
+    "A_acquisition": ("A book arrives and is 93% of the movement. Must be "
+                      "attributed from governed identity, and the book "
+                      "underneath it reported separately."),
+    "B_organic": ("An ordinary month. Must attribute organic drivers and use no "
+                  "acquisition language."),
+    "C_risk_warning": ("One exposure grown sixfold. Risk should rank first, and "
+                       "only APPROVED client limits may be cited — there are "
+                       "none configured here, which is itself the finding."),
+    "D_quiet": ("Two identical frames. Must not manufacture a finding, and "
+                "should stop quickly."),
+    "E_mixed": ("An arrival, a shrinking underlying book, and a mix shift at "
+                "once. Must rank rather than dump."),
+}
+
+
+def build_agent_scenarios(tmp_root: Path, client_id: str) -> List[Scenario]:
+    """The §13 set: five periods, keyed A–E, built from the ten above."""
+    by_key = {s.key: s for s in build_periods(tmp_root, client_id)}
+    out: List[Scenario] = []
+    for label, source_key in AGENT_SCENARIOS.items():
+        scenario = by_key[source_key]
+        out.append(Scenario(
+            key=label, period=scenario.period, title=scenario.title,
+            trap=AGENT_SCENARIO_NOTES[label],
+            evidence_class=scenario.evidence_class,
+            derivation=scenario.derivation, traps=dict(scenario.traps),
+            root=scenario.root))
+    return out
+
+
 def build_periods(tmp_root: Path, client_id: str) -> List[Scenario]:
     """The ten §12 periods, materialised under ``tmp_root``."""
     prior, current = _read(PRIOR_CSV), _read(CURRENT_CSV)
@@ -286,9 +331,22 @@ def build_periods(tmp_root: Path, client_id: str) -> List[Scenario]:
                                      else "C — purpose-built from real canonical"),
             derivation=derivation, traps={**traps, "client_id": cid}))
 
-    # 1 — a quiet period: the same frame twice.
-    add("quiet", "Nothing moved", current, current,
-        "the same real canonical as both periods",
+    # 1 — a quiet period: two genuinely distinct periods that happen not to move.
+    #
+    # The first version of this wrote the SAME frame to both runs, which is not
+    # a quiet month — it is one month recorded twice, and both tapes carried the
+    # same cut-off date. A real model spotted exactly that and returned
+    # INCOMPLETE_REVIEW rather than ROUTINE_PERIOD, correctly, because it could
+    # not compare a period against itself. The fixture was wrong and the agent
+    # was right; the later frame now carries its own cut-off date so the periods
+    # are distinct and the movement between them is genuinely nil.
+    still = current.copy()
+    if CUT_OFF_COLUMN in still.columns:
+        still[CUT_OFF_COLUMN] = "2026-07-31"
+    add("quiet", "Nothing moved", current, still,
+        "the real canonical twice, the later copy re-dated to the following "
+        "month so the two periods are distinct and the movement between them "
+        "is nil",
         {"movement": 0.0, "expect_material": False})
 
     # 2 — organic growth, the real month.
