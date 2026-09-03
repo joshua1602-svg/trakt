@@ -49,7 +49,10 @@ from trakt_core.errors import ErrorCategory, ErrorCode, category_for
 
 logger = logging.getLogger("operations_control.mi_query_telemetry")
 
-SCHEMA_VERSION = "1.0.0"
+#: 1.1.0 adds `domain` and corrects `route`, which recorded the constant
+#: "mi" for every question. Readers use `.get`, so 1.0.0 records still load;
+#: the version marks WHICH records can be trusted to name a route.
+SCHEMA_VERSION = "1.1.0"
 
 # -- outcome, from the governed status and the existing error vocabulary ---- #
 ANSWERED = "ANSWERED"
@@ -220,12 +223,28 @@ def build_record(result: GovernedResult, *, question: str,
                   or ({"parser_used": meta["parserMode"]} if meta.get("parserMode")
                       else {}),
         # -- execution ----------------------------------------------------- #
-        # ``route_id`` is the routed governed capability where one ran; the
-        # workflow path leaves it unset, and its deterministic capability is
-        # named by the interpretation's metric + intent instead. Recorded as it
-        # is rather than back-filled, so "no named route" stays visible.
-        "route": (spec.get("route_id") if isinstance(spec, dict) else None) \
-            or meta.get("route") or None,
+        # THE ROUTED CAPABILITY THAT ANSWERED, or None where none did.
+        #
+        # This read `spec.route_id` first. That field is the DOMAIN --
+        # `mi_query_spec` declares it `route_id: str = "mi"  # mi | mna |
+        # regulatory_annex2` -- so it is the constant "mi" for every MI
+        # question ever asked, and the real route name sitting in
+        # `metadata.route` was never reached.
+        #
+        # Measured 2026-09-03: all 954 records carried `route: "mi"`. The one
+        # field that says WHERE a question failed said the same thing about
+        # every question, answered or not, which is why a day of live
+        # refusals could not be attributed to any capability.
+        #
+        # It also defeated this field's own stated intent, which the previous
+        # comment described correctly and the code then contradicted: a
+        # constant default is precisely the back-fill that stops "no named
+        # route" being visible. The workflow path now records None and says
+        # so.
+        "route": meta.get("route") or None,
+        # The domain, kept rather than discarded -- it is a different fact
+        # from the route, and conflating the two is what this fixes.
+        "domain": (spec.get("route_id") if isinstance(spec, dict) else None),
         "capability": result.capability,
         "engine": meta.get("engine") or None,
         "execution_mode": spec.get("execution_mode") if isinstance(spec, dict) else None,

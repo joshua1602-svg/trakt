@@ -143,6 +143,9 @@ def _row(rec: Dict[str, Any]) -> Dict[str, Any]:
         "question": rec.get("question"),
         "outcome": rec.get("outcome"),
         "route": rec.get("route"),
+        # The domain beside the route, so a log row shows both what answered
+        # and what could not be attributed to any route at all.
+        "domain": rec.get("domain"),
         "refusal_reason": rec.get("refusal_reason"),
         "error_code": rec.get("error_code"),
         "duration_ms": rec.get("duration_ms"),
