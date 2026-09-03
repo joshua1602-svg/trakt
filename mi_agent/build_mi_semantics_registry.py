@@ -415,6 +415,52 @@ CURATION: Dict[str, dict] = {
         "synonyms": ["region", "geography", "area", "property region",
                      "location", "collateral geography"],
     },
+    # THE HARMONISED REGION, and the reason MI reads it in preference to the raw
+    # source column. `engine.region_taxonomy` resolves each book's own spelling
+    # to one governed vocabulary and persists these two columns; until they were
+    # registered there was no governed field for them, so a region question
+    # bound to the raw column instead. The acquired book carries both "LONDON"
+    # and "London" there, so one region came back as two rows in every
+    # breakdown — while the taxonomy had already resolved both, invisibly.
+    #
+    # NEITHER CLAIMS A GENERIC REGION TERM. "region", "geography" and their
+    # forms route through `_preferred_region`, which is data-aware and picks
+    # the first field whose column is actually present. Putting the generic
+    # vocabulary here as well would make the term ambiguous, and
+    # `_registry_dimension_terms` DROPS an ambiguous synonym — deleting the
+    # word and refusing every region question.
+    #
+    # Rows whose raw value has no governed mapping keep a NULL canonical value
+    # and are excluded and disclosed, never assigned to a nearby region. That
+    # is the intended behaviour and it is why the vocabulary gaps the audit
+    # names are worth closing before this becomes the reporting axis.
+    "canonical_region_reporting": {
+        "tier": "core", "derived": True,
+        "derived_from": "collateral_geography",
+        "business_name": "Region",
+        "value_domain": "uk_region",
+        "business_description": "Governed region, harmonised across books to "
+                                "the client's approved reporting taxonomy. "
+                                "Equal to the detail value unless a "
+                                "consolidation is declared.",
+        "synonyms": ["harmonised region", "harmonized region",
+                     "governed region", "reporting region",
+                     "canonical region"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "canonical_region_detail": {
+        "tier": "core", "derived": True,
+        "derived_from": "collateral_geography",
+        "business_name": "Region Detail",
+        "value_domain": "uk_region",
+        "business_description": "Governed region at the most granular value "
+                                "the source supports, retained beside the "
+                                "reporting value so any consolidation is "
+                                "reversible.",
+        "synonyms": ["region detail", "detailed region",
+                     "granular region", "unconsolidated region"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
     # Granular UK ITL3 codes (FCA/UK reporting + MI drilldown). Derived analytics
     # fields preserved in canonical output; never used as the readable MI Region
     # (that is collateral_geography) and never collapsed to the ESMA GBZZZ default.

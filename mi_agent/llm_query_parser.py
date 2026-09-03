@@ -418,9 +418,20 @@ def _preferred_borrower_dim(semantics: dict, available_columns=None) -> Optional
         if cols is None or entry.get("canonical_field", key) in cols:
             return key
     return known[0] if known else None
-# Preference for the MI "Region" dimension: readable display field first, then
-# NUTS3 code fields. geographic_region_classification (a YEAR) is never a region.
-_REGION_PREFERENCE = ("collateral_geography", "geographic_region_collateral",
+# Preference for the MI "Region" dimension: the HARMONISED columns first, then
+# the readable display field, then NUTS3 code fields.
+# geographic_region_classification (a YEAR) is never a region.
+#
+# The harmonised pair leads because it is the only vocabulary that is the same
+# across books. The raw display field holds whatever each source system wrote —
+# the acquired book carries "LONDON" and "London" in it — so grouping on it
+# splits one region into two rows, each carrying part of the answer.
+#
+# Nothing changes for a dataset that never harmonised: this function is
+# data-aware and takes the first field whose column is PRESENT, so a tape
+# without the canonical columns keeps `collateral_geography` exactly as before.
+_REGION_PREFERENCE = ("canonical_region_reporting", "canonical_region_detail",
+                      "collateral_geography", "geographic_region_collateral",
                       "geographic_region_obligor")
 
 

@@ -4,7 +4,7 @@
 # Do NOT edit by hand without also updating the build script (CURATION),
 # or your changes will be overwritten on the next regeneration.
 metadata:
-  generated_at: '2026-08-27T16:12:57.618523+00:00'
+  generated_at: '2026-09-03T21:30:09.075917+00:00'
   source_registry: /home/user/trakt/config/system/fields_registry.yaml
   selection_approach: curated MI-first allowlist (see CURATION in build script)
   selection_rules:
@@ -21,10 +21,10 @@ metadata:
   mi_tiers:
   - core
   - extended
-  field_count: 119
-  core_field_count: 83
+  field_count: 121
+  core_field_count: 85
   extended_field_count: 36
-  derived_field_count: 19
+  derived_field_count: 21
   virtual_field_count: 15
   missing_curated_fields: []
   version: 0.3.0
@@ -502,6 +502,75 @@ fields:
     weight_field: null
     bucket_field: null
     notes: ''
+  canonical_region_detail:
+    canonical_field: canonical_region_detail
+    mi_tier: core
+    business_name: Region Detail
+    display_name: Canonical Region Detail
+    business_description: Governed region at the most granular value the source supports, retained beside
+      the reporting value so any consolidation is reversible.
+    description: ''
+    synonyms:
+    - region detail
+    - detailed region
+    - granular region
+    - unconsolidated region
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    value_domain: uk_region
+    derived: true
+    derived_from: collateral_geography
+  canonical_region_reporting:
+    canonical_field: canonical_region_reporting
+    mi_tier: core
+    business_name: Region
+    display_name: Canonical Region Reporting
+    business_description: Governed region, harmonised across books to the client's approved reporting
+      taxonomy. Equal to the detail value unless a consolidation is declared.
+    description: ''
+    synonyms:
+    - harmonised region
+    - harmonized region
+    - governed region
+    - reporting region
+    - canonical region
+    source_criteria:
+    - derived_bucket
+    role: dimension
+    format: string
+    chartable: true
+    allowed_aggregations:
+    - count
+    - balance_sum
+    default_aggregation: count
+    allowed_chart_roles:
+    - x
+    - group
+    - filter
+    - color
+    default_chart_role: x
+    weight_field: null
+    bucket_field: null
+    notes: ''
+    value_domain: uk_region
+    derived: true
+    derived_from: collateral_geography
   charge_type:
     canonical_field: charge_type
     mi_tier: core
