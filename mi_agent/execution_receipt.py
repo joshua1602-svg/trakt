@@ -277,8 +277,20 @@ _THRESHOLD_PATTERNS: Tuple[Tuple[str, str], ...] = (
 
 #: "a 75% LTV cap", "eligible for a 75% LTV ..." — a percentage bound stated
 #: directly against a percent measure, without a comparator word.
+#: "a 75% LTV cap" — a bound written without a comparator. NOT a bucket name.
+#:
+#: Two marks in the question say the number is a bucket edge rather than a cap,
+#: and both are the reader's own words rather than an inference:
+#:   * a range dash immediately before it — the "70" of "60-70%" is the top of
+#:     a labelled band, and `buckets.yaml` declares those very labels;
+#:   * a bucket word immediately after it — bucket, band, bracket, range.
+#: Detecting a cap there raised a requirement nothing could satisfy: the engine
+#: narrows a band with an equality on `ltv_bucket`, never with a comparison, so
+#: a correct answer was refused for not applying a threshold nobody asked for.
 _PCT_BOUND_RE = re.compile(
-    r"(\d[\d\.]*)\s*%\s*(?:current\s+)?(ltv|loan[- ]to[- ]value)\b", re.I)
+    r"(?<![-\u2010-\u2015\d.])(\d[\d\.]*)\s*%\s*(?:current\s+)?"
+    r"(ltv|loan[- ]to[- ]value)\b"
+    r"(?!\s*(?:bucket|band|bracket|banding|range)s?\b)", re.I)
 
 #: Hypothetical / scenario markers. Require a directional verb so a forecast
 #: ("if origination continues") is not mistaken for a stress.
