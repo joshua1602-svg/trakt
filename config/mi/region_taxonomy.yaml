@@ -82,6 +82,21 @@ taxonomies:
       # part of it sits in the East Midlands, so that one needs a decision
       # about the client's own book rather than a rule.
       yorkshire and humberside: Yorkshire and The Humber
+      # APPROVED BY THE CLIENT 2026-09-03, from the region vocabulary audit.
+      # Both are former standard-region names the acquired book still carries,
+      # and NEITHER is a pure rename — which is why the audit proposed nothing
+      # for them and left the decision here.
+      #
+      # "North" was the standard region covering the North East plus Cumbria;
+      # under ITL1 Cumbria sits in the North West, so mapping the whole of it to
+      # North East assigns those loans to a neighbouring region. The client owns
+      # that call for this book and has made it. 30 rows.
+      north: North East
+      # "Outer Metropolitan" was the ring outside Greater London within the
+      # South East standard region. It is not an ITL1 area at all, so there is
+      # no rename available; South East is the client's approved home for it.
+      # 4 rows.
+      outer metropolitan: South East
       yorkshire and the humber: Yorkshire and The Humber
       yorks and humber: Yorkshire and The Humber
       east midlands region: East Midlands
