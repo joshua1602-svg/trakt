@@ -68,6 +68,17 @@ STILL_FAILING = "STILL_FAILING"  # did not answer before or after
 WAS_MIXED = "WAS_MIXED"         # prior runs disagreed; no single "before"
 UNMEASURED = "UNMEASURED"       # the request never reached the model
 
+#: A 401/403 is the TOKEN failing, never the model. It arrives in
+#: milliseconds, touches no analytic, and — before this — was recorded as an
+#: ERROR and scored against a prior that said ANSWERED. On 2026-09-03 a token
+#: expired 29 questions into a 115-question replay and the run reported
+#: "REGRESSIONS: 64 question(s) answered before and do not now": eighty-six
+#: authentication failures presented as a model that had fallen apart.
+#:
+#: `load_probe` has carried this guard since a cold-burst run returned 54/54
+#: 401s and printed a capacity verdict off it. The lesson did not travel here.
+_AUTH_STATUSES = (401, 403)
+
 #: The Azure auth sidecar gives up at ~46s and returns "Backend call failure"
 #: -- a body that is not an MI envelope. Recorded so a slow answer is visible
 #: as a capacity finding rather than silently absorbed into the model's score.
@@ -186,7 +197,10 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
     # auth sidecar, a proxy, or nothing at all -- so the model never gave a
     # verdict and this run has no measurement of it.
     envelope = isinstance(payload, dict) and "ok" in payload
-    if transport or status == 0:
+    if status in _AUTH_STATUSES:
+        # The token, not the model. Never a verdict about a question.
+        outcome = NOT_MEASURED
+    elif transport or status == 0:
         outcome = NOT_MEASURED
     elif status >= 500 and not envelope:
         outcome = NOT_MEASURED
@@ -225,6 +239,7 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
         # Corroborating, never the discriminator: the envelope is. A cut at 46s
         # and a cut at 3s are both unmeasured; only one is a capacity finding.
         "gateway_cut": elapsed >= GATEWAY_CUT_MS and outcome == NOT_MEASURED,
+        "auth_failed": status in _AUTH_STATUSES,
     }
 
 
@@ -421,6 +436,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             res = _ask(args.base, token, item["question"], args.lens,
                        item.get("portfolio") or args.portfolio, args.timeout)
             attempts += 1
+            if res.get("auth_failed"):
+                break          # a second attempt with the same token is the
+                               # same answer, more slowly
             if res["outcome"] != NOT_MEASURED or attempts > args.retries:
                 break
         res["attempts"] = attempts
@@ -428,6 +446,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         row = {**item, **res, "verdict": verdict}
         results.append(row)
         flag = "  <-- REGRESSED" if verdict == REGRESSED else ""
+        if res.get("auth_failed"):
+            print("\n*** NOT A MEASUREMENT — the token was rejected (HTTP %s) at "
+                  "question %d of %d.\n    Everything from here would be "
+                  "recorded as a model failure and scored against a prior that\n"
+                  "    says ANSWERED. Get a fresh token and re-run; a partial "
+                  "run is not a baseline.\n" % (res["http"], i, len(corpus)),
+                  file=sys.stderr)
+            return 3
         if res["outcome"] == NOT_MEASURED:
             flag = "  <-- not measured (%s)" % (
                 "gateway cut" if res["gateway_cut"]

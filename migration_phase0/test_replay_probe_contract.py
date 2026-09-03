@@ -399,6 +399,90 @@ class TestItRecordsWhatTheModelUnderstood(unittest.TestCase):
         self.assertEqual(written["by_error_code"], {"UNSUPPORTED_QUESTION": 1})
 
 
+class TestAnExpiredTokenIsNotSixtyFourRegressions(unittest.TestCase):
+    """WHAT HAPPENED ON 2026-09-03, in production, on a run that mattered.
+
+    A token expired 29 questions into a 115-question replay. The remaining 86
+    came back HTTP 401 in under 400ms each, were recorded as ERROR, and were
+    scored against priors that said ANSWERED. The run printed "REGRESSIONS: 64
+    question(s) answered before and do not now" and every one of them was an
+    authentication failure.
+
+    `load_probe` has had this guard since a cold-burst run returned 54/54 401s
+    and printed a capacity verdict off it — which, believed, buys a bigger App
+    Service plan to fix an expired token. The lesson did not travel to this
+    probe until it cost a second false alarm.
+    """
+
+    def _ask(self, status):
+        def _open(req, timeout=0):
+            raise RP.urllib.error.HTTPError("u", status, "e", {},
+                                            io.BytesIO(b""))
+        with mock.patch.object(RP.urllib.request, "urlopen", _open):
+            return RP._ask("http://h", "t", "q", None, None, 5.0)
+
+    def test_a_401_is_not_a_model_outcome(self):
+        res = self._ask(401)
+        self.assertEqual(res["outcome"], RP.NOT_MEASURED)
+        self.assertTrue(res["auth_failed"])
+
+    def test_a_403_reads_the_same_way(self):
+        self.assertEqual(self._ask(403)["outcome"], RP.NOT_MEASURED)
+
+    def test_an_ordinary_server_error_is_still_not_an_auth_failure(self):
+        res = self._ask(500)
+        self.assertFalse(res["auth_failed"])
+
+    def test_it_is_never_scored_as_a_regression(self):
+        self.assertEqual(RP._verdict("ANSWERED", RP.NOT_MEASURED),
+                         RP.UNMEASURED)
+
+    def test_the_run_stops_rather_than_filling_the_corpus_with_401s(self):
+        """A partial run is not a baseline. Continuing produces a file that
+        looks like a measurement and is not one."""
+        seen = []
+
+        def _fake(*a, **k):
+            seen.append(1)
+            ok = len(seen) <= 2
+            return {"outcome": RP.ANSWERED if ok else RP.NOT_MEASURED,
+                    "http": 200 if ok else 401, "route": None,
+                    "error_code": None, "category": None, "reason": "",
+                    "ms": 1, "transport_error": "", "gateway_cut": False,
+                    "auth_failed": not ok, "metric_defaulted": False,
+                    "spec": {}}
+
+        rows = [{"question": "q%d" % n, "outcome": "ANSWERED"}
+                for n in range(10)]
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            rc = RP.main(["--from-log", _log(rows),
+                          "--out", str(Path(d) / "o.json")])
+        self.assertEqual(rc, 3)
+        self.assertEqual(len(seen), 3, "it kept asking after the token died")
+
+    def test_a_dead_token_is_not_retried(self):
+        seen = []
+
+        def _fake(*a, **k):
+            seen.append(1)
+            return {"outcome": RP.NOT_MEASURED, "http": 401, "route": None,
+                    "error_code": None, "category": None, "reason": "",
+                    "ms": 1, "transport_error": "", "gateway_cut": False,
+                    "auth_failed": True, "metric_defaulted": False, "spec": {}}
+
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            RP.main(["--from-log", _log([{"question": "q",
+                                          "outcome": "ANSWERED"}]),
+                     "--retries", "3", "--out", str(Path(d) / "o.json")])
+        self.assertEqual(len(seen), 1)
+
+
 class TestAGatewayCutIsNotAModelFailure(unittest.TestCase):
     """The failure this class exists to stop.
 
