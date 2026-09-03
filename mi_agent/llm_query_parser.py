@@ -443,6 +443,26 @@ _REGION_PREFERENCE = ("canonical_region_reporting", "canonical_region_detail",
 _REGION_DEFAULT = "collateral_geography"
 
 
+#: WHICH FIELD A DECLARED ``value_domain``'S ALIASES RESOLVE TO.
+#:
+#: A registry field may declare the domain its values are drawn from. Several
+#: fields declaring ONE domain are aliases of one concept — the region fields
+#: all declare `uk_region` and a book can carry more than one of them — so a
+#: value they both claim is not ambiguous, it is the same claim twice.
+#: `categorical_spans.preferred_field` asks this which of them a reader's term
+#: binds to, and it answers with the order the GROUPING owner already walks, so
+#: a question that groups and filters on one concept binds one field for both.
+#:
+#: The order lives here, once, beside the axis owner that uses it. A domain
+#: absent from this map declares no preference and its aliases stay ambiguous.
+_DOMAIN_FIELD_PREFERENCE = {"uk_region": _REGION_PREFERENCE}
+
+
+def domain_field_preference(domain: Optional[str]) -> Tuple[str, ...]:
+    """The field order declared for ``domain``, most preferred first."""
+    return tuple(_DOMAIN_FIELD_PREFERENCE.get(str(domain or ""), ()))
+
+
 def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
     """Pick the MI 'Region' field: readable collateral_geography first, then a
     NUTS3 code field. When available_columns is given, prefer a field whose
@@ -2418,7 +2438,9 @@ def _contribution_request(q: str, semantics: dict, available_columns=None
     return metric, weight
 
 
-def _categorical_value_field(value: str, available_values) -> Optional[Tuple[str, str]]:
+def _categorical_value_field(value: str, available_values,
+                             semantics: Optional[dict] = None
+                             ) -> Optional[Tuple[str, str]]:
     """The governed field whose values include ``value`` — ``(field, value)``.
 
     THE RESOLVER LIVES IN ONE PLACE. `mi_agent.categorical_spans` owns both the
@@ -2431,7 +2453,13 @@ def _categorical_value_field(value: str, available_values) -> Optional[Tuple[str
     """
     from .categorical_spans import value_field
 
-    return value_field(value, available_values)
+    # SEMANTICS IS PASSED, NOT OMITTED. Without it the owner cannot tell an
+    # ambiguity from an alias: the region fields all declare
+    # `value_domain: uk_region`, and a book carrying two of them resolved every
+    # region filter to nothing. Each call site below hands over the registry it
+    # already holds, so one question cannot bind differently depending on which
+    # reading of it got there first.
+    return value_field(value, available_values, semantics)
 
 
 #: "... is drawdown", "... are second home". Bounded to four words so the
@@ -2441,7 +2469,8 @@ _COPULAR_CATEGORICAL_RE = re.compile(
     r"\s*[?.!,]*\s*$", re.I)
 
 
-def _copular_categorical(masked: str, available_values
+def _copular_categorical(masked: str, available_values,
+                         semantics: Optional[dict] = None
                          ) -> Optional[Tuple[str, str]]:
     """A category named as the COMPLEMENT of the verb, at the end of a clause."""
     if not available_values:
@@ -2452,7 +2481,8 @@ def _copular_categorical(masked: str, available_values
     words = m.group(1).split()
     # LONGEST FIRST, as everywhere else: only a value the book carries resolves.
     for start in range(len(words)):
-        owned = _categorical_value_field(" ".join(words[start:]), available_values)
+        owned = _categorical_value_field(" ".join(words[start:]),
+                                         available_values, semantics)
         if owned is not None:
             return owned
     return None
@@ -2483,7 +2513,7 @@ def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
         return True
     if token in _METRIC_SIDE_STOPWORDS or token in _ANALYTICAL_FRAMING_WORDS:
         return True
-    if _categorical_value_field(token, available_values):
+    if _categorical_value_field(token, available_values, semantics):
         return True
     if _explicit_dimensions(token, semantics, available_columns=available_columns)[0]:
         return True
@@ -2558,7 +2588,8 @@ def _unclaimed_attributive_slot(masked: str, semantics: dict, available_columns,
     return None
 
 
-def _attributive_categorical(masked: str, available_values
+def _attributive_categorical(masked: str, available_values,
+                             semantics: Optional[dict] = None
                              ) -> Optional[Tuple[str, str]]:
     """THE ATTRIBUTIVE FORM — "<value> loans" with no preposition in front.
 
@@ -2590,7 +2621,8 @@ def _attributive_categorical(masked: str, available_values
         from .categorical_spans import value_field, value_spans
 
         for start, end in value_spans(masked, available_values):
-            owned = value_field((masked or "")[start:end], available_values)
+            owned = value_field((masked or "")[start:end], available_values,
+                                semantics)
             if owned is not None:
                 return owned
     except Exception:  # noqa: BLE001 - the owner missing leaves the scan below
@@ -2610,7 +2642,8 @@ def _attributive_categorical(masked: str, available_values
         for start in range(len(words)):
             tail = " ".join(words[start:])
             for candidate in (f"{tail} {noun}", tail):
-                owned = _categorical_value_field(candidate, available_values)
+                owned = _categorical_value_field(candidate, available_values,
+                                                 semantics)
                 if owned is not None:
                     return owned
     return None
@@ -2685,10 +2718,11 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     # adjective, and a clause the pattern below can read is read there first.
     m = _CATEGORICAL_FILTER_RE.search(masked)
     if not m:
-        attributive = _attributive_categorical(masked, available_values)
+        attributive = _attributive_categorical(masked, available_values,
+                                               semantics)
         if attributive is not None:
             return attributive
-        copular = _copular_categorical(masked, available_values)
+        copular = _copular_categorical(masked, available_values, semantics)
         if copular is not None:
             return copular
         # RECORDED, NOT DROPPED — the attributive form of the rule the
@@ -2733,7 +2767,7 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     # The list keeps its job — it exists to stop an INVENTED geography, and it
     # still runs below for a value nothing claims. What it may no longer do is
     # overrule the book about the book's own values.
-    owned = _categorical_value_field(value, available_values)
+    owned = _categorical_value_field(value, available_values, semantics)
     if owned is not None:
         return owned[0], owned[1]
     if any(word in _NON_PLACE_TERMS for word in value.split()):
@@ -2746,7 +2780,7 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         # resolve. If that fails too, the narrowing is UNRESOLVED — binding it
         # to region anyway is how a product type became a geography — and the
         # fail-closed machinery discloses it rather than dropping it.
-        owned = _attributive_categorical(masked, available_values)
+        owned = _attributive_categorical(masked, available_values, semantics)
         if owned is not None:
             return owned
         # RECORDED, NOT DROPPED. "what is the average LTV in Atlantis" names a
@@ -3605,7 +3639,8 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
             for seg in _grouping_segments(q)[1]).lower()
         _kept_keys, _kept_terms = [], []
         for _key, _term in zip(dim_keys, dim_terms):
-            _is_value = _categorical_value_field(_term, available_values) is not None
+            _is_value = _categorical_value_field(
+                _term, available_values, semantics) is not None
             if _is_value and str(_term).lower() not in _after_by:
                 _dropped_dimension_terms.append(str(_term))
                 continue
