@@ -138,3 +138,91 @@ the failure a reader cannot reason about or work around.
   them.
 - `tests/test_business_semantics_registry.py::test_committed_registry_matches_regeneration`
   fails on `main` and predates this work.
+
+---
+
+# Second session, same day — what was done and what remains
+
+Three commits on `claude/mi-query-agent-defects-27s4ys`, one per defect above,
+each with its failing test written first and falsified against the unfixed code.
+
+## 1. The aliased value — FIXED
+
+`categorical_spans.preferred_field` is the rule: several fields that declare one
+`value_domain` are ALIASES of one concept and resolve to the field the GROUPING
+owner already prefers (`llm_query_parser.domain_field_preference`, which returns
+`_REGION_PREFERENCE` for `uk_region`). Hits spanning different domains, and any
+field declaring no domain, stay ambiguous and are disclosed — the "lump sum"
+protection is untouched and is pinned two ways.
+
+`value_field` grew a third parameter, `semantics`. All nine call sites were read
+and pass the registry they already hold; omitting it keeps the strict rule.
+`concept_proposal.vocabulary` was counting claimants itself — a second copy of
+the same rule — and now asks `preferred_field`, or it would have withheld as
+ambiguous the very terms the parser binds.
+
+## 2. The stolen stage question — FIXED
+
+`temporal_compare` yields a sentence carrying a governed stage-movement
+construction (`stage_movement_query.names_a_stage_movement`, the same reading
+its own recogniser uses). It was NOT taught to narrow, and that boundary is
+pinned: "Compare KFI balance this month vs last month" NAMES a stage without
+putting it in motion, still reaches `temporal_compare`, and is still refused.
+
+## 3. The non-determinism — DIAGNOSED, NOT FIXED
+
+See `docs/mi_query_non_determinism.md`. One outbound model call decides it: the
+concept-merge arm reports `proposal_unavailable` on any exception, and
+`_enforce_model_availability` converts an otherwise-successful envelope into the
+language-understanding refusal. The deterministic reading does not vary.
+
+Second finding, on the RECORD: that refusal is coded `CALCULATION_FAILED` /
+`capability` / `retryable: false`, which both the telemetry and `replay_probe`
+count as an ERROR — so a transient model outage is recorded as the system having
+broken, and the code contradicts the sentence ("Please try again"). Fixing it
+needs a governed decision: no existing error code means "an upstream model was
+unavailable; ask again", and code values are part of the external contract.
+
+## THE VERIFICATION THAT COULD NOT BE RUN, AND WHAT WAS RUN INSTEAD
+
+`replay_probe.py --from-log queries.json` **was not run**. Three separate
+blockers, none of them worked around:
+
+* `queries.json` is not in the tree — it is a saved `/ops/mi-queries` response.
+* No `MI_BEARER` was available.
+* This environment's network policy denies `app.traktinfra.io` outright
+  (the proxy answers 403 to CONNECT). The deployed build cannot be reached at
+  all from here.
+
+So the **83/115 baseline was neither reproduced nor beaten, and nothing here
+claims it was.** What was measured instead, all offline, all reproducible from
+this tree:
+
+| measurement | result |
+|---|---|
+| `scripts/run_mi_query_stage_movement_banks.py`, base vs HEAD, per question | **0 of 215 moved** (166-question bank, stage bank 36/36, near-neighbours 13/13) |
+| the same three banks on a LIVE-SHAPED book (second region column added) | **0 of 215 moved** |
+| `migration_phase0/live_shape_probe.py`, base vs HEAD | **6 FIXED, 0 REGRESSED**, 8 unchanged-ok, 6 still failing |
+| `mi_agent/tests` + `question_interpretation/tests` failure node sets | 28 → 21, no new failure |
+| `mi_agent_api/tests` + 17 routing files in `tests/` | 66 → 48, no new failure |
+
+`must_refuse_both_arms.py` **could not run**: it needs `/tmp/cfo_env`, an
+ephemeral fixture no committed script rebuilds. Its three questions are in
+`live_shape_probe` instead, and all three still refuse.
+
+The full 7,988-test suite does not complete in this environment's window and was
+not run. Every blast claim above is scoped to the files named.
+
+## Newly measured, still open
+
+* **A filter on the field being grouped is dropped.** "Show balance by region
+  for loans in Wales." groups on region and applies NO filter; the coverage gate
+  then refuses, naming Wales. It reproduces on a ONE-column book, so it is not
+  the aliasing defect and was not introduced with its fix. "Show balance by
+  broker for loans in Wales." binds the filter correctly, so the collision is
+  specifically axis-field == filter-field. Carried in `live_shape_probe` as
+  `region_filter_on_the_grouped_axis`.
+* **`mi_agent_api/tests` is order-dependent elsewhere too.** Several modules set
+  and pop `MI_AGENT_PIPELINE_ROOT` globally in setUp/tearDown.
+  `test_stage_movement_query` was fixed by re-asserting its environment per ask
+  (15 nodes recovered); the same pattern is still live in its neighbours.
