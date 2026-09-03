@@ -190,71 +190,186 @@ class TestAQuestionIsReplayedAgainstItsOwnPortfolio(unittest.TestCase):
         self.assertEqual(sent, ["P/1", "FALLBACK"])
 
 
-class TestItRecordsWhatTheModelUnderstood(unittest.TestCase):
-    """`route` is null for every question the general path answers, which is
-    most of them. The spec is what distinguishes one defect from another."""
+#: A response shaped like the one the live API actually returns, taken from a
+#: structure dump of two real answers on 2026-09-03. The previous version of
+#: these tests was written against the shape the SOURCE suggested, and passed
+#: while the probe read a `governance.errorCode` that does not exist.
+def _live_refusal():
+    return {
+        "ok": False,
+        "error": "'funded' is not a governed measure in this dataset.",
+        "governance": {"status": "error", "capability": "mi_query",
+                       "error": {"code": "UNSUPPORTED_QUESTION",
+                                 "category": "capability",
+                                 "message": "not a governed measure",
+                                 "retryable": False}},
+        "spec": {"metric": None, "dimension": None, "aggregation": "count",
+                 "execution_mode": None, "filters": {}, "measures": []},
+        "metadata": {"parserMode": "deterministic", "controlledRefusal": True,
+                     "controlledUnsupported": True, "unmappedQuestion": False,
+                     "semanticCoverage": {"unaccounted": ["funded"]}},
+    }
 
-    def test_the_spec_names_measure_dimension_and_period(self):
-        d = RP._spec_digest({"spec": {
-            "metric": "balance", "dimension": "region",
-            "temporal_mode": "compare", "as_of_date": "2026-06-30",
-            "execution_mode": "temporal"}})
-        self.assertEqual(d["metric"], "balance")
-        self.assertEqual(d["dimension"], "region")
-        self.assertEqual(d["temporal_mode"], "compare")
-        self.assertEqual(d["as_of_date"], "2026-06-30")
 
-    def test_filter_values_survive_because_they_are_the_finding(self):
-        """Scotland applied and Scotland dropped are different defects, and
-        the value came from the user's question, not the tape."""
-        d = RP._spec_digest({"spec": {"filters": {"region": "Scotland"}}})
-        self.assertIn("Scotland", d["filters"]["region"])
+def _live_answer():
+    return {
+        "ok": True,
+        "governance": {"status": "success", "error": None},
+        "spec": {"metric": "current_outstanding_balance",
+                 "dimension": "pipeline_stage", "aggregation": "count",
+                 "execution_mode": None, "filters": {}},
+        "metadata": {"parserMode": "llm", "rowCount": 7,
+                     "llm": {"model": "x", "calls": 2, "total_tokens": 900,
+                             "estimated_total_cost": 0.0121,
+                             "prompt_cache_used": True}},
+        "queryTrace": {"requested_dimensions": ["pipeline_stage"],
+                       "rejected_dimensions": [], "parserConfidence": 0.9,
+                       "normalisedQuery": "which stage has the most cases"},
+        "filterInvariant": {"ok": True, "dropped": [],
+                            "parsed_filters": {}, "applied_filters": {}},
+        "executionSummary": {"measure": "case count", "period": "2026-01-12",
+                             "comparisonPeriod": None, "populationTotal": 11035,
+                             "groupCount": 7, "populationLabel": "pipeline"},
+    }
 
-    def test_a_figure_inside_a_filter_is_still_redacted(self):
-        d = RP._spec_digest({"spec": {"filters": {"balance": "£562,900,000"}}})
-        self.assertNotIn("562", d["filters"]["balance"])
 
-    def test_no_answer_text_or_artefact_can_ride_out_on_the_spec(self):
-        d = RP._spec_digest({"spec": {
-            "metric": "balance", "title": "Funded balance is 562.9m",
-            "explanation": "The book stands at ...", "rows": [[1, 2]],
-            "snapshot_store_root": "/governed/tape"}})
-        for banned in ("title", "explanation", "rows", "snapshot_store_root"):
-            self.assertNotIn(banned, d)
+class TestTheProbeClassifiesLikeTheLog(unittest.TestCase):
+    """A probe that split ANSWERED/REFUSED/ERROR differently from the telemetry
+    would report a change in every question where the two merely disagree."""
 
-    def test_a_defaulted_measure_is_flagged(self):
-        """'Show me the trend' answered as a funded-balance trend is a
-        different defect from a trend the reader asked for."""
+    def _ask(self, body, status=200):
+        class _R:
+            def __init__(self):
+                self.status = status
+
+            def read(self):
+                return json.dumps(body).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
         def _open(req, timeout=0):
-            class _R:
-                status = 200
-
-                def read(self):
-                    return json.dumps({"ok": True, "spec": {
-                        "metric": "funded_balance",
-                        "metric_defaulted": True}}).encode()
-
-                def __enter__(self):
-                    return self
-
-                def __exit__(self, *a):
-                    return False
+            if status >= 400:
+                raise RP.urllib.error.HTTPError(
+                    "u", status, "e", {}, io.BytesIO(json.dumps(body).encode()))
             return _R()
 
         with mock.patch.object(RP.urllib.request, "urlopen", _open):
-            res = RP._ask("http://h", "t", "show me the trend", None, None, 5.0)
-        self.assertTrue(res["metric_defaulted"])
-        self.assertTrue(res["spec"]["metric_defaulted"])
+            return RP._ask("http://h", "t", "q", None, None, 5.0)
 
-    def test_an_unrouted_question_is_grouped_by_how_it_executed(self):
-        """'(no route)' for four questions in five says nothing about where the
-        model is weak."""
+    def test_the_error_code_is_read_from_governance_error_code(self):
+        """NOT `governance.errorCode`, which does not exist -- the field the
+        probe read until a live response was looked at."""
+        res = self._ask(_live_refusal())
+        self.assertEqual(res["error_code"], "UNSUPPORTED_QUESTION")
+        self.assertEqual(res["category"], "capability")
+
+    def test_a_capability_decline_is_a_refusal_not_an_error(self):
+        self.assertEqual(self._ask(_live_refusal())["outcome"], RP.REFUSED)
+
+    def test_an_infrastructure_failure_is_an_error(self):
+        body = _live_refusal()
+        body["governance"]["error"] = {"code": "STORAGE_UNAVAILABLE",
+                                       "category": "infrastructure"}
+        self.assertEqual(self._ask(body)["outcome"], RP.ERROR)
+
+    def test_calculation_failed_is_an_error_despite_being_a_capability_code(self):
+        body = _live_refusal()
+        body["governance"]["error"] = {"code": "CALCULATION_FAILED",
+                                       "category": "capability"}
+        self.assertEqual(self._ask(body)["outcome"], RP.ERROR)
+
+    def test_a_governed_status_beats_the_envelope_ok_flag(self):
+        """`ok` is true for a partial success; the telemetry counts only
+        `status == success` as answered."""
+        body = _live_answer()
+        body["governance"]["status"] = "partial_success"
+        body["governance"]["error"] = {"code": "PARTIAL", "category": "capability"}
+        self.assertEqual(self._ask(body)["outcome"], RP.REFUSED)
+
+    def test_a_success_is_answered(self):
+        self.assertEqual(self._ask(_live_answer())["outcome"], RP.ANSWERED)
+
+    def test_the_rule_still_matches_the_telemetry_that_owns_it(self):
+        """The probe carries a copy because it runs as a standalone file. This
+        is the seam that keeps the copy honest."""
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+            from operations_control import mi_query_telemetry as T
+        except Exception as exc:  # noqa: BLE001
+            self.skipTest("telemetry not importable: %s" % type(exc).__name__)
+        self.assertEqual(set(RP._ERROR_CODES), {str(c) for c in T._ERROR_CODES})
+        self.assertEqual(set(RP._ERROR_CATEGORIES),
+                         {str(c) for c in T._ERROR_CATEGORIES})
+
+
+class TestItRecordsWhatTheModelUnderstood(unittest.TestCase):
+    """`route` is null for every question the general path answers and
+    `execution_mode` is null even on a correct answer. These blocks are what
+    can actually locate a defect."""
+
+    def test_it_captures_which_scopes_were_parsed_and_then_dropped(self):
+        d = RP._digest({"filterInvariant": {
+            "ok": False, "parsed_filters": {"region": "Scotland"},
+            "applied_filters": {}, "dropped": ["region"]}})
+        self.assertEqual(d["filterInvariant"]["dropped"], ["region"])
+        self.assertIn("Scotland", str(d["filterInvariant"]["parsed_filters"]))
+
+    def test_it_captures_a_comparison_period_the_reader_did_not_ask_for(self):
+        d = RP._digest({"executionSummary": {
+            "period": "2026-06-30", "comparisonPeriod": "2026-05-31"}})
+        self.assertEqual(d["execution"]["comparisonPeriod"], "2026-05-31")
+
+    def test_it_captures_which_concepts_went_unaccounted(self):
+        d = RP._digest(_live_refusal())
+        self.assertEqual(d["meta"]["semanticCoverage"]["unaccounted"],
+                         ["funded"])
+
+    def test_no_figure_reaches_the_output_on_any_key(self):
+        """The standing rule, enforced rather than intended: a number is
+        dropped unless its key is named, so an allow-list entry cannot leak
+        one."""
+        d = RP._digest(_live_answer())
+        self.assertNotIn("populationTotal", d["execution"])
+        self.assertNotIn("groupCount", d["execution"])
+        self.assertNotIn("estimated_total_cost", d["llm"])
+        blob = json.dumps(d)
+        for figure in ("11035", "0.0121"):
+            self.assertNotIn(figure, blob)
+
+    def test_a_row_count_becomes_whether_there_were_rows(self):
+        self.assertTrue(RP._digest(_live_answer())["hasRows"])
+        body = _live_answer()
+        body["metadata"]["rowCount"] = 0
+        self.assertFalse(RP._digest(body)["hasRows"])
+
+    def test_our_own_token_usage_survives_because_it_is_not_client_data(self):
+        d = RP._digest(_live_answer())
+        self.assertEqual(d["llm"]["calls"], 2)
+        self.assertEqual(d["llm"]["total_tokens"], 900)
+
+    def test_a_figure_in_a_filter_value_is_still_redacted(self):
+        d = RP._digest({"spec": {"filters": {"balance": "£562,900,000"}}})
+        self.assertNotIn("562", json.dumps(d))
+
+    def test_no_answer_text_or_artefact_can_ride_out(self):
+        d = RP._digest({"answer": "The book stands at [x]", "artifacts": [{}],
+                        "spec": {"title": "t", "explanation": "e"},
+                        "reconciliation": {"total_balance": 1}})
+        for banned in ("answer", "artifacts", "reconciliation"):
+            self.assertNotIn(banned, d)
+        self.assertNotIn("title", d.get("spec", {}))
+
+    def test_an_unrouted_question_is_grouped_by_parser_mode(self):
         def _fake(*a, **k):
             return {"outcome": RP.ANSWERED, "http": 200, "route": None,
-                    "error_code": None, "reason": "", "ms": 1,
-                    "transport_error": "", "gateway_cut": False,
+                    "error_code": None, "category": None, "reason": "",
+                    "ms": 1, "transport_error": "", "gateway_cut": False,
                     "metric_defaulted": False,
-                    "spec": {"execution_mode": "temporal"}}
+                    "spec": {"meta": {"parserMode": "llm"}}}
 
         with tempfile.TemporaryDirectory() as d, \
              mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
@@ -264,14 +379,14 @@ class TestItRecordsWhatTheModelUnderstood(unittest.TestCase):
                                           "outcome": "ANSWERED"}]),
                      "--out", str(Path(d) / "o.json")])
             written = json.loads((Path(d) / "o.json").read_text())
-        self.assertEqual(list(written["by_route"]), ["pit:temporal"])
+        self.assertEqual(list(written["by_route"]), ["pit:llm"])
 
     def test_failures_are_counted_by_error_code(self):
         def _fake(*a, **k):
             return {"outcome": RP.REFUSED, "http": 200, "route": None,
-                    "error_code": "UNSUPPORTED_QUESTION", "reason": "",
-                    "ms": 1, "transport_error": "", "gateway_cut": False,
-                    "metric_defaulted": False, "spec": {}}
+                    "error_code": "UNSUPPORTED_QUESTION", "category": None,
+                    "reason": "", "ms": 1, "transport_error": "",
+                    "gateway_cut": False, "metric_defaulted": False, "spec": {}}
 
         with tempfile.TemporaryDirectory() as d, \
              mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \

@@ -173,8 +173,14 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
     elapsed = int((time.time() - t0) * 1000)
 
     meta = payload.get("metadata") or {}
-    ok = bool(payload.get("ok"))
-    code = payload.get("errorCode") or (payload.get("governance") or {}).get("errorCode")
+    gov = payload.get("governance") if isinstance(
+        payload.get("governance"), dict) else {}
+    gov_error = gov.get("error") if isinstance(gov.get("error"), dict) else {}
+    # `governance.error.code` -- NOT `governance.errorCode`, which does not
+    # exist and which this probe read until a live response was looked at.
+    code = payload.get("errorCode") or gov_error.get("code")
+    category = gov_error.get("category")
+    gov_status = gov.get("status")
     # The MI service ALWAYS answers with an envelope carrying `ok`. Its absence
     # means the response was written by something in front of the app -- the
     # auth sidecar, a proxy, or nothing at all -- so the model never gave a
@@ -184,14 +190,21 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
         outcome = NOT_MEASURED
     elif status >= 500 and not envelope:
         outcome = NOT_MEASURED
-    elif ok:
-        outcome = ANSWERED
+    elif gov_status:
+        # THE TELEMETRY'S OWN RULE, on the telemetry's own fields, so a verdict
+        # compares like with like. Reading `ok` instead would disagree with the
+        # log wherever the two diverge -- a partial success, most of all.
+        if gov_status == _STATUS_SUCCESS:
+            outcome = ANSWERED
+        elif not code:
+            outcome = ERROR if gov_status == _STATUS_ERROR else REFUSED
+        elif code in _ERROR_CODES or category in _ERROR_CATEGORIES:
+            outcome = ERROR
+        else:
+            outcome = REFUSED
     else:
-        # The same split the telemetry makes: a capability decline is a
-        # refusal, anything else is a failure.
-        outcome = REFUSED if str(code or "").upper() in (
-            "UNSUPPORTED_QUESTION", "AMBIGUOUS_QUESTION",
-            "NO_MATCHING_RECORDS") else ERROR
+        # No governance block at all -- an older or non-governed response.
+        outcome = ANSWERED if payload.get("ok") else ERROR
     return {
         "outcome": outcome,
         "http": status,
@@ -199,10 +212,11 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
         # on the telemetry fix being deployed.
         "route": meta.get("route") or None,
         "error_code": code or None,
-        "reason": _redact(payload.get("error")),
+        "reason": _redact(payload.get("error") or gov_error.get("message")),
         "ms": elapsed,
         "transport_error": transport,
-        "spec": _spec_digest(payload),
+        "spec": _digest(payload),
+        "category": category or None,
         # Did the model choose the measure, or did it choose one FOR the reader?
         # "Show me the trend" answered as a funded-balance trend is a different
         # defect from a trend the reader asked for.
@@ -214,65 +228,131 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
     }
 
 
-#: What the model UNDERSTOOD, and nothing it computed. Every one of these is a
-#: field name, a mode, a flag or a date -- never a value read off the tape. The
-#: OCC's own calibration export already treats the interpretation as safe to
-#: leave the governed environment for exactly this reason; the figures, the
-#: answer text and the artefacts are not carried and cannot be.
-_SPEC_KEYS = ("intent", "execution_mode", "temporal_mode", "state",
-              "metric", "metric_defaulted", "aggregation", "dimension",
-              "ranking_mode", "as_of_date", "start_date", "end_date",
-              "baseline_date", "current_date", "segment")
+#: THE SAME RULE THE TELEMETRY USES, copied from
+#: `operations_control.mi_query_telemetry.outcome_for`. A probe that
+#: classified outcomes differently from the log it compares against would
+#: report a change in every question where the two merely disagree. A test
+#: imports the owner's own constants and asserts these still match.
+_STATUS_SUCCESS = "success"
+_STATUS_ERROR = "error"
+_ERROR_CODES = frozenset({"CALCULATION_FAILED"})
+_ERROR_CATEGORIES = frozenset({"infrastructure"})
+
+#: The ONLY keys whose numeric value may leave this probe. Everything else
+#: numeric is dropped. This is the diagnostics-only rule made enforceable
+#: rather than aspirational: a field added to an allow-list below cannot leak
+#: a balance, a count or a rate, because `_safe` never lets a number through
+#: on a key that is not named here. None of these are portfolio figures --
+#: they are parser confidence, our own token usage and repair attempts.
+_NUMERIC_OK = frozenset({
+    "parserConfidence", "parser_confidence", "calls", "total_tokens",
+    "input_tokens", "output_tokens", "cache_read_tokens",
+    "cache_write_tokens", "repairAttempts",
+})
 
 
-def _flat(value: Any) -> str:
-    """A filter value as text, WITHOUT escaping it out of the redactor's reach."""
-    if isinstance(value, (list, tuple, set)):
-        return ", ".join(_flat(v) for v in list(value)[:8])
-    if isinstance(value, dict):
-        return ", ".join("%s=%s" % (k, _flat(v))
-                         for k, v in list(value.items())[:8])
-    return str(value)
+def _safe(value: Any, key: str = "") -> Any:
+    """Whatever survives the diagnostics-only rule, and nothing else.
 
-
-def _spec_digest(payload: Dict[str, Any]) -> Dict[str, Any]:
-    """What the query model made of the question.
-
-    `route` says which named capability ran, and is null for every question the
-    general point-in-time path answers -- which is most of them. That is honest
-    but it is not a diagnosis: it cannot distinguish "read the LTV bucket as a
-    threshold" from "ignored the Scotland scope". The spec can, because it is
-    the model's own statement of what it thought it was asked.
+    Strings are redacted, numbers are dropped unless their key is named in
+    `_NUMERIC_OK`, and containers are walked. Enforced here, once, so an
+    allow-list entry below cannot become a leak.
     """
-    spec = payload.get("spec")
-    if not isinstance(spec, dict) or not spec:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value if key in _NUMERIC_OK else None
+    if isinstance(value, str):
+        return _redact(value)[:160] or None
+    if isinstance(value, (list, tuple, set)):
+        out = [_safe(v, key) for v in list(value)[:12]]
+        out = [v for v in out if v not in (None, "", [], {})]
+        return out or None
+    if isinstance(value, dict):
+        out = {k: _safe(v, k) for k, v in list(value.items())[:30]}
+        out = {k: v for k, v in out.items() if v not in (None, "", [], {})}
+        return out or None
+    return None
+
+
+def _pick(block: Any, keys: Tuple[str, ...]) -> Dict[str, Any]:
+    """The named keys of a block, each through `_safe`."""
+    if not isinstance(block, dict):
         return {}
     out: Dict[str, Any] = {}
-    for key in _SPEC_KEYS:
-        val = spec.get(key)
-        if val not in (None, "", False, []):
-            out[key] = val
-    dims = spec.get("dimensions")
-    if isinstance(dims, list) and dims:
-        out["dimensions"] = [str(d) for d in dims][:6]
-    measures = spec.get("measures")
-    if isinstance(measures, list) and measures:
-        # Field and aggregation only. A weight field is a field name too, but
-        # the entry as a whole can carry executor state, so it is not copied.
-        out["measures"] = [
-            {"field": m.get("field"), "aggregation": m.get("aggregation")}
-            for m in measures if isinstance(m, dict)][:6]
-    filters = spec.get("filters")
-    if isinstance(filters, dict) and filters:
-        # Filter VALUES matter -- "Scotland applied as a filter" and "Scotland
-        # dropped" are the finding -- and they come from the user's own
-        # question, not from the tape. Redacted anyway, so a numeric bound
-        # cannot ride out inside one.
-        # NOT json.dumps: it escapes a currency symbol to \u00a3, whose
-        # trailing "3" then glues to the digits and defeats the word boundary
-        # the figure pattern needs. A scalar goes out as itself.
-        out["filters"] = {k: _redact(_flat(v))[:80]
-                          for k, v in list(filters.items())[:8]}
+    for k in keys:
+        v = _safe(block.get(k), k)
+        if v not in (None, "", [], {}):
+            out[k] = v
+    return out
+
+
+#: WHAT THE MODEL UNDERSTOOD -- read from the response the API actually
+#: returns, not from the one the source suggested it returns. `route` is null
+#: for every question the general path answers, and `spec.execution_mode` is
+#: null even when the answer is correct, so neither can locate a defect. These
+#: blocks can: `filterInvariant` says which scopes were parsed and then
+#: dropped, `queryTrace` says which dimensions and measures were requested and
+#: which were rejected, and `executionSummary` says which period was used and
+#: whether a comparison was introduced.
+_SPEC_KEYS = ("intent", "chart_type", "output_format", "metric",
+              "metric_defaulted", "aggregation", "dimension", "dimensions",
+              "temporal_mode", "execution_mode", "state", "as_of_date",
+              "start_date", "end_date", "baseline_date", "current_date",
+              "reporting_date", "segment", "ranking_mode", "sort_by",
+              "compare_periods", "trend_grain", "bucket_field",
+              "bucket_strategy", "filters", "measures", "unavailable_filters")
+_META_KEYS = ("parserMode", "parserModeDetail", "controlledRefusal",
+              "controlledUnsupported", "unmappedQuestion", "resultType",
+              "runRequired", "asOfDate", "repairAttempts",
+              "repairSkippedReason", "semanticCoverage", "parserProvenance")
+_TRACE_KEYS = ("intent", "metric", "aggregation", "parserMode",
+               "parserConfidence", "portfolioLens", "resultType",
+               "requested_dimensions", "applied_dimensions",
+               "rejected_dimensions", "rejectedDimensions",
+               "dimensionsParsed", "requested_filters", "applied_filters",
+               "rejected_filters", "rejectedFilters", "filtersParsed",
+               "requested_measures", "executed_measures", "normalisedQuery")
+_FILTER_INV_KEYS = ("ok", "dropped", "parsed_filters", "applied_filters",
+                    "filters_applied", "rejected_filters",
+                    "unavailable_filters")
+_DIM_INV_KEYS = ("ok", "applied", "dropped", "rejected")
+_GUARD_KEYS = ("verdict", "message", "substitution", "facets")
+#: NOT populationTotal, groupCount, population or receipt -- those are counts
+#: and balances off the client's own tape.
+_EXEC_KEYS = ("measure", "aggregation", "period", "comparisonPeriod",
+              "populationLabel", "filtersApplied", "dimensionsApplied",
+              "notApplied", "narrowed", "ranking", "scenario",
+              "parserConfidence")
+_LLM_KEYS = ("model", "calls", "total_tokens", "prompt_cache_used",
+             "prompt_cache_supported")
+
+
+def _digest(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """What the query model made of the question, and what it dropped."""
+    if not isinstance(payload, dict):
+        return {}
+    meta = payload.get("metadata") if isinstance(
+        payload.get("metadata"), dict) else {}
+    out: Dict[str, Any] = {}
+    for name, block, keys in (
+            ("spec", payload.get("spec"), _SPEC_KEYS),
+            ("meta", meta, _META_KEYS),
+            ("trace", payload.get("queryTrace"), _TRACE_KEYS),
+            ("filterInvariant", payload.get("filterInvariant"),
+             _FILTER_INV_KEYS),
+            ("dimensionInvariant", payload.get("dimensionInvariant"),
+             _DIM_INV_KEYS),
+            ("guard", payload.get("semanticGuard"), _GUARD_KEYS),
+            ("execution", payload.get("executionSummary"), _EXEC_KEYS),
+            ("llm", meta.get("llm"), _LLM_KEYS)):
+        picked = _pick(block, keys)
+        if picked:
+            out[name] = picked
+    # A count of the client's rows is a figure; whether ANY came back is a
+    # finding, and the difference between them is the whole standing rule.
+    if isinstance(meta.get("rowCount"), (int, float)):
+        out["hasRows"] = bool(meta["rowCount"])
     return out
 
 
@@ -356,6 +436,10 @@ def main(argv: Optional[List[str]] = None) -> int:
               % (i, len(corpus), item["prior"], res["outcome"],
                  (res["route"] or "-")[:22], res["ms"],
                  item["question"][:52], flag))
+        # The reason, on the failures only. A run that prints why it failed as
+        # it goes is diagnosable while it is still running.
+        if res["outcome"] in (REFUSED, ERROR) and res["reason"]:
+            print("            reason: %s" % res["reason"][:150])
         if args.pause:
             time.sleep(args.pause)
 
@@ -373,8 +457,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         # executed it. "(no route)" for four questions out of five says nothing
         # about where the model is weak; "flat" vs "temporal" vs nothing at all
         # does.
-        key = r["route"] or ("pit:" + str((r.get("spec") or {}).get(
-            "execution_mode") or "-"))
+        # `execution_mode` is null even on a correct answer, so it groups
+        # nothing. `parserMode` is present on every response and is the thing
+        # that actually differs between a question the model understood and one
+        # it did not.
+        key = r["route"] or ("pit:" + str(
+            ((r.get("spec") or {}).get("meta") or {}).get("parserMode") or "-"))
         by_route.setdefault(key, {})
         by_route[key][r["outcome"]] = by_route[key].get(r["outcome"], 0) + 1
     by_code: Dict[str, int] = {}
