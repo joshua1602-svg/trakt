@@ -16,6 +16,7 @@ import tempfile
 import unittest
 from collections import Counter
 from contextlib import redirect_stdout
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -195,6 +196,35 @@ class TestItFindsTheTreeWhereverItWasCopied(unittest.TestCase):
         self.assertEqual(out.returncode, 3)
         self.assertNotIn("TRAKT_ROOT=/home/site/wwwroot python3", out.stderr)
         self.assertIn("Oryx extraction directory", out.stderr)
+
+
+class TestFromAppCallsSomethingThatExists(unittest.TestCase):
+    """An earlier draft called `data_source.active_frame()`, which is not a
+    function this codebase has. It was found by running it against a live box,
+    which is the most expensive place to find a typo."""
+
+    def test_the_accessor_it_calls_is_on_the_real_module(self):
+        from mi_agent_api import data_source
+        self.assertTrue(callable(getattr(data_source, "get_dataframe", None)))
+
+    def test_it_reads_the_frame_through_that_accessor(self):
+        import types
+        fake = types.SimpleNamespace(
+            get_dataframe=lambda: "FRAME",
+            data_source_label=lambda: "a label")
+        with mock.patch.dict(sys.modules, {"mi_agent_api": types.SimpleNamespace(
+                data_source=fake), "mi_agent_api.data_source": fake}):
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(A._load_from_app(), "FRAME")
+
+    def test_a_module_without_it_says_what_to_do_instead(self):
+        import types
+        fake = types.SimpleNamespace()
+        with mock.patch.dict(sys.modules, {"mi_agent_api": types.SimpleNamespace(
+                data_source=fake), "mi_agent_api.data_source": fake}):
+            with self.assertRaises(SystemExit) as caught:
+                A._load_from_app()
+        self.assertIn("--csv", str(caught.exception))
 
 
 class TestItEmitsNoFigureFromTheBook(unittest.TestCase):

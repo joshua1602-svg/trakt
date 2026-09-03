@@ -239,11 +239,25 @@ def _load_csv(path: str):
 def _load_from_app():
     """The frame the running MI API has already resolved.
 
+    `get_dataframe()` is the accessor — the one the API's own routes call.
     Imported lazily and only on request: this is the convenient path inside the
     app container and is meaningless outside it.
+
+    The name is checked rather than assumed. An earlier draft called
+    `active_frame()`, which does not exist, and the operator found out by
+    running it against a live box.
     """
     from mi_agent_api import data_source
-    return data_source.active_frame()
+
+    accessor = getattr(data_source, "get_dataframe", None)
+    if accessor is None:  # pragma: no cover - the message IS the behaviour
+        raise SystemExit(
+            "NOT A MEASUREMENT — `mi_agent_api.data_source` on this box has no "
+            "`get_dataframe`. Use --csv and point at the canonical tape.")
+    frame = accessor()
+    label = getattr(data_source, "data_source_label", lambda: "?")()
+    print("dataset: %s" % label)
+    return frame
 
 
 def main(argv: Optional[List[str]] = None) -> int:
