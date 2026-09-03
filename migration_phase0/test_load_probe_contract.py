@@ -164,7 +164,8 @@ class TestItToleratesTheHeaderAsCopied(unittest.TestCase):
     def _token_used(self, env_value):
         seen = {}
 
-        def _fake(base, token, method, path, body, pid, timeout):
+        def _fake(base, token, method, path, body, pid, timeout,
+                  inflight=None):
             seen["token"] = token
             return {"endpoint": path, "method": method, "status": 200, "ms": 1,
                     "bytes": 0, "error": "", "over_gateway_timeout": False}
@@ -186,3 +187,59 @@ class TestItToleratesTheHeaderAsCopied(unittest.TestCase):
 
     def test_the_check_is_case_insensitive_and_survives_whitespace(self):
         self.assertEqual(self._token_used("  bearer   " + _TOKEN + "  "), _TOKEN)
+
+
+class TestBurstIsActuallyABurst(unittest.TestCase):
+    """A burst mode that quietly serialises would be worse than none.
+
+    The scenario this exists for — everyone opening the dashboard in the two
+    hours after a reporting cycle — is the one the sustained run cannot speak
+    to, because it issues nine calls per user one after another and never has
+    more than `users` requests open. If `--burst` reported the same shape, a
+    "6 users, all 200" result would be read as proof of something it never
+    tested.
+    """
+
+    def _round(self, users, burst):
+        import time as _t
+
+        def _slow(base, token, method, path, body, pid, timeout, inflight=None):
+            ctx = inflight if inflight is not None else LP._InFlight()
+            with ctx:
+                _t.sleep(0.05)          # long enough for overlap to be real
+            return {"endpoint": path, "method": method, "status": 200,
+                    "ms": 50, "bytes": 0, "error": "",
+                    "over_gateway_timeout": False}
+
+        with mock.patch.object(LP, "_call", side_effect=_slow):
+            return LP._run_round("https://x/api", _TOKEN, "p", users, 10.0,
+                                 burst=burst)
+
+    def test_burst_puts_the_whole_session_in_flight_per_user(self):
+        s = self._round(2, burst=True)
+        self.assertEqual(s["mode"], "burst")
+        self.assertGreater(s["peak_in_flight"], 2, (
+            "burst mode never exceeded one request per user — it is "
+            "serialising, and the result would describe sustained load"))
+        self.assertLessEqual(s["peak_in_flight"], 2 * len(LP.SESSION))
+
+    def test_sustained_keeps_one_request_per_user(self):
+        s = self._round(3, burst=False)
+        self.assertEqual(s["mode"], "sustained")
+        self.assertLessEqual(s["peak_in_flight"], 3)
+
+    def test_both_modes_still_run_every_call(self):
+        for burst in (True, False):
+            with self.subTest(burst=burst):
+                s = self._round(2, burst=burst)
+                self.assertEqual(s["requests"], 2 * len(LP.SESSION))
+
+    def test_the_peak_is_reported_so_a_throttled_run_is_visible(self):
+        """`users x 9` is what a burst SHOULD reach. Reporting the peak is
+        what makes a run that fell short of it detectable: if the client, the
+        network or the OS throttled before the server did, the round measured
+        the load generator and the number says so."""
+        s = self._round(2, burst=True)
+        self.assertIn("peak_in_flight", s)
+        self.assertIsInstance(s["peak_in_flight"], int)
+        self.assertGreaterEqual(s["peak_in_flight"], 1)

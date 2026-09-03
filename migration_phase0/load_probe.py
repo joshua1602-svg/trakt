@@ -48,6 +48,31 @@ import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
+
+class _InFlight:
+    """How many requests were genuinely open at once.
+
+    The number the burst mode exists to produce. Without it a run can report
+    "6 users" having issued six requests one after another, and the summary
+    would be indistinguishable from a real burst.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self.now = 0
+        self.peak = 0
+
+    def __enter__(self):
+        with self._lock:
+            self.now += 1
+            self.peak = max(self.peak, self.now)
+        return self
+
+    def __exit__(self, *a):
+        with self._lock:
+            self.now -= 1
+        return False
+
 #: The gateway's observed abandonment point. Measured 2026-09-03: four requests
 #: fired together all failed at 46.74s with "Backend call failure" — the auth
 #: container giving up, not the app erroring. A request slower than this is a
@@ -80,7 +105,8 @@ def _label(path: str) -> str:
 
 def _call(base: str, token: str, method: str, path: str,
           body: Optional[Dict[str, Any]], pid: str,
-          timeout: float) -> Dict[str, Any]:
+          timeout: float,
+          inflight: Optional["_InFlight"] = None) -> Dict[str, Any]:
     """One request. Returns timing and status; never the response content.
 
     A body is read and discarded so the server measures a full round trip
@@ -100,21 +126,22 @@ def _call(base: str, token: str, method: str, path: str,
     status: Any = None
     size = 0
     error = ""
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            status = resp.status
-            size = len(resp.read())
-    except urllib.error.HTTPError as exc:
-        status = exc.code
+    with (inflight if inflight is not None else _InFlight()):
         try:
-            size = len(exc.read())
-        except Exception:  # noqa: BLE001
-            size = 0
-    except Exception as exc:  # noqa: BLE001 - a dead call is a data point
-        # The CLASS only. An exception string can carry a URL with query
-        # parameters, and those name portfolios.
-        status = 0
-        error = type(exc).__name__
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                status = resp.status
+                size = len(resp.read())
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+            try:
+                size = len(exc.read())
+            except Exception:  # noqa: BLE001
+                size = 0
+        except Exception as exc:  # noqa: BLE001 - a dead call is a data point
+            # The CLASS only. An exception string can carry a URL with query
+            # parameters, and those name portfolios.
+            status = 0
+            error = type(exc).__name__
     elapsed = time.time() - t0
     return {"endpoint": _label(path), "method": method, "status": status,
             "ms": int(elapsed * 1000), "bytes": size, "error": error,
@@ -123,13 +150,41 @@ def _call(base: str, token: str, method: str, path: str,
 
 def _session(base: str, token: str, pid: str, user: int,
              timeout: float, sink: List[Dict[str, Any]],
-             lock: threading.Lock) -> None:
-    """One simulated user's page load, calls issued in the browser's order."""
-    for method, path, body in SESSION:
-        rec = _call(base, token, method, path, body, pid, timeout)
+             lock: threading.Lock, inflight: "_InFlight",
+             burst: bool) -> None:
+    """One simulated user's page load, in one of two shapes.
+
+    THE DIFFERENCE IS THE WHOLE POINT.
+
+    ``burst=False`` issues the nine calls one after another. That models
+    SUSTAINED load -- six people working through the dashboard over a morning
+    -- and it is what the 2026-09-03 run measured: 54 requests, all 200,
+    nothing near the gateway ceiling.
+
+    ``burst=True`` fires all nine at once, which is what a browser does on a
+    page load. Six people opening the dashboard in the same minute is then 54
+    requests genuinely in flight, not six. The sustained run understates that
+    roughly ninefold, so it cannot speak to the case that actually matters:
+    the first days, and the two hours after each reporting cycle, when
+    everyone opens the dashboard together.
+    """
+    def _one(method, path, body):
+        rec = _call(base, token, method, path, body, pid, timeout, inflight)
         rec["user"] = user
         with lock:
             sink.append(rec)
+
+    if not burst:
+        for method, path, body in SESSION:
+            _one(method, path, body)
+        return
+
+    threads = [threading.Thread(target=_one, args=(m, pth, b), daemon=True)
+               for m, pth, b in SESSION]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
 
 
 def _percentile(values: List[int], pct: float) -> int:
@@ -172,13 +227,15 @@ def _status_counts(records: List[Dict[str, Any]]) -> Dict[str, int]:
 
 
 def _run_round(base: str, token: str, pid: str, users: int,
-               timeout: float) -> Dict[str, Any]:
-    """N users, all starting together — the burst a shift change produces."""
+               timeout: float, burst: bool = False) -> Dict[str, Any]:
+    """N users, all starting together."""
     records: List[Dict[str, Any]] = []
     lock = threading.Lock()
+    inflight = _InFlight()
     threads = [threading.Thread(target=_session,
                                 args=(base, token, pid, i + 1, timeout,
-                                      records, lock), daemon=True)
+                                      records, lock, inflight, burst),
+                                daemon=True)
                for i in range(users)]
     t0 = time.time()
     for t in threads:
@@ -187,6 +244,12 @@ def _run_round(base: str, token: str, pid: str, users: int,
         t.join()
     summary = _summarise(records, users)
     summary["round_wall_s"] = round(time.time() - t0, 1)
+    summary["mode"] = "burst" if burst else "sustained"
+    # MEASURED, NEVER ASSUMED. `users x 9` is what a burst SHOULD reach; this
+    # is what it did. A peak well below it means the client, the network or
+    # the OS throttled before the server did, and the round measured the load
+    # generator rather than the app.
+    summary["peak_in_flight"] = inflight.peak
     summary["records"] = records
     return summary
 
@@ -194,10 +257,12 @@ def _run_round(base: str, token: str, pid: str, users: int,
 def _print_round(s: Dict[str, Any]) -> None:
     verdict = ("OK" if s["failed"] == 0 and s["over_gateway_timeout"] == 0
                else "DEGRADED")
-    print(f"\n=== {s['users']} concurrent user(s) — {verdict} ===")
+    print(f"\n=== {s['users']} concurrent user(s) [{s.get('mode', '?')}] "
+          f"— {verdict} ===")
     print(f"  requests {s['requests']}  ok {s['ok']}  failed {s['failed']}"
           f"  past-{int(GATEWAY_TIMEOUT_S)}s {s['over_gateway_timeout']}"
-          f"  round {s['round_wall_s']}s")
+          f"  round {s['round_wall_s']}s"
+          f"  peak-in-flight {s.get('peak_in_flight', '?')}")
     print(f"  statuses: {s['status_counts']}")
     for ep, v in s["by_endpoint"].items():
         flag = "  <-- past gateway timeout" if v["max_ms"] > GATEWAY_TIMEOUT_S * 1000 else ""
@@ -218,6 +283,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="client-side give-up, seconds (default 120)")
     ap.add_argument("--settle", type=float, default=20.0,
                     help="seconds to idle between ramp steps (default 20)")
+    ap.add_argument("--burst", action="store_true",
+                    help="fire each user's 9 calls AT ONCE, as a browser does "
+                         "on a page load. Models everyone opening the "
+                         "dashboard together -- the first days, and the two "
+                         "hours after a reporting cycle. Without it the calls "
+                         "go in sequence, which models sustained use and "
+                         "understates a burst roughly ninefold.")
     ap.add_argument("--out", default="load.json")
     args = ap.parse_args(argv)
 
@@ -238,7 +310,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     steps = ([args.users] if args.users
              else [int(x) for x in args.ramp.split(",") if x.strip()])
     print(f"target {args.base}  portfolio {args.portfolio}")
-    print(f"session = {len(SESSION)} calls per user; "
+    mode = ("BURST (all 9 at once, browser-style)" if args.burst
+            else "sustained (9 calls in sequence)")
+    print(f"session = {len(SESSION)} calls per user, {mode}; "
           f"gateway abandons at ~{int(GATEWAY_TIMEOUT_S)}s")
 
     rounds = []
@@ -248,11 +322,13 @@ def main(argv: Optional[List[str]] = None) -> int:
             # round's queue and every step after the first reads worse than
             # it is.
             time.sleep(args.settle)
-        s = _run_round(args.base, token, args.portfolio, users, args.timeout)
+        s = _run_round(args.base, token, args.portfolio, users, args.timeout,
+                       burst=args.burst)
         _print_round(s)
         rounds.append(s)
 
     payload = {"target": args.base, "portfolio": args.portfolio,
+               "mode": "burst" if args.burst else "sustained",
                "gateway_timeout_s": GATEWAY_TIMEOUT_S,
                "session_calls": [f"{m} {_label(p)}" for m, p, _ in SESSION],
                "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
