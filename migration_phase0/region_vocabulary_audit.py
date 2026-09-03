@@ -53,11 +53,55 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-_REPO = Path(__file__).resolve().parent.parent
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
+#: A marker only the tree this script needs would carry. Searched for rather
+#: than assumed, because this file is COPIED to a box and run from wherever it
+#: landed: `__file__/../..` is the repo root in the repository and "/" in
+#: /home, where the first live run of it died.
+_MARKER = Path("engine") / "region_taxonomy.py"
 
-from engine import region_taxonomy as RT  # noqa: E402
+#: Where a deployed copy of the tree actually lives on App Service, checked
+#: after the obvious candidates so a repository checkout always wins.
+_DEPLOY_ROOTS = ("/home/site/wwwroot", "/app", "/opt/app")
+
+
+def _find_tree() -> Optional[Path]:
+    """The directory holding `engine/region_taxonomy.py`, or None.
+
+    Order: an explicit TRAKT_ROOT, this file's own ancestors, the working
+    directory and its ancestors, then the known deployment roots.
+    """
+    candidates: List[Path] = []
+    explicit = os.environ.get("TRAKT_ROOT")
+    if explicit:
+        candidates.append(Path(explicit))
+    here = Path(__file__).resolve()
+    candidates.extend(here.parents)
+    candidates.append(Path.cwd().resolve())
+    candidates.extend(Path.cwd().resolve().parents)
+    candidates.extend(Path(p) for p in _DEPLOY_ROOTS)
+    for candidate in candidates:
+        try:
+            if (candidate / _MARKER).is_file():
+                return candidate
+        except OSError:          # an unreadable path is not a candidate
+            continue
+    return None
+
+
+_TREE = _find_tree()
+if _TREE is not None and str(_TREE) not in sys.path:
+    sys.path.insert(0, str(_TREE))
+
+try:
+    from engine import region_taxonomy as RT  # noqa: E402
+except ModuleNotFoundError:  # pragma: no cover - the message IS the behaviour
+    sys.stderr.write(
+        "NOT A MEASUREMENT — could not find `engine/region_taxonomy.py`.\n"
+        "This audit must resolve through the SAME code the runtime uses, so it\n"
+        "will not fall back to a copy of the rule. Point it at the tree:\n"
+        "    TRAKT_ROOT=/home/site/wwwroot python3 %s ...\n"
+        "or run it from inside that directory.\n" % Path(__file__).name)
+    raise SystemExit(3)
 
 
 def _distinct_values(frame, column: str) -> Counter:

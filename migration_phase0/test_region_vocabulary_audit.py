@@ -123,6 +123,51 @@ class TestItRefusesToPretendItMeasuredSomething(unittest.TestCase):
         self.assertEqual(rc, 0)
 
 
+class TestItFindsTheTreeWhereverItWasCopied(unittest.TestCase):
+    """THE FIRST LIVE RUN DIED HERE. The script computed its root as
+    `__file__/../..`, which is the repository root in the repository and "/"
+    when the file has been copied to /home — so the import blew up with a
+    ModuleNotFoundError and no indication of what to do about it."""
+
+    def _run(self, cwd, trakt_root=None):
+        import shutil
+        import subprocess
+        with tempfile.TemporaryDirectory() as d:
+            shutil.copy(str(Path(A.__file__)), d)
+            csv = Path(d) / "t.csv"
+            csv.write_text("region\nLondon\n")
+            env = dict(os.environ)
+            env.pop("TRAKT_ROOT", None)
+            if trakt_root:
+                env["TRAKT_ROOT"] = trakt_root
+            return subprocess.run(
+                [sys.executable, str(Path(d) / Path(A.__file__).name),
+                 "--csv", str(csv), "--out", str(Path(d) / "o.json")],
+                capture_output=True, text=True, cwd=cwd, env=env)
+
+    def test_a_copy_with_no_tree_above_it_says_what_to_do(self):
+        out = self._run(cwd="/")
+        self.assertEqual(out.returncode, 3)
+        self.assertIn("NOT A MEASUREMENT", out.stderr)
+        self.assertIn("TRAKT_ROOT", out.stderr)
+
+    def test_it_never_falls_back_to_its_own_copy_of_the_rule(self):
+        """The one thing it must not do when it cannot find the runtime's
+        code: resolve anyway and report a book it measured with a different
+        rule."""
+        out = self._run(cwd="/")
+        self.assertNotIn("resolve", out.stdout)
+        self.assertEqual(out.stdout.strip(), "")
+
+    def test_trakt_root_makes_a_copy_anywhere_work(self):
+        out = self._run(cwd="/", trakt_root=str(Path(A.__file__).parents[1]))
+        self.assertEqual(out.returncode, 0)
+        self.assertIn("100.0% resolve", out.stdout)
+
+    def test_the_marker_is_the_runtime_module_itself(self):
+        self.assertEqual(A._MARKER.as_posix(), "engine/region_taxonomy.py")
+
+
 class TestItEmitsNoFigureFromTheBook(unittest.TestCase):
 
     def test_counts_only_drops_the_region_names(self):
