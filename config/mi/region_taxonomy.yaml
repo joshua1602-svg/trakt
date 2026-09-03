@@ -73,6 +73,15 @@ taxonomies:
       north east england: North East
       yorkshire: Yorkshire and The Humber
       yorkshire and humber: Yorkshire and The Humber
+      # The former standard-region name for the same ITL1 area, carried by the
+      # acquired book. Approved 2026-09-03: "Yorkshire and Humberside" is the
+      # pre-2011 name of the region now published as "Yorkshire and The
+      # Humber", so this is a rename and not a consolidation — no area is
+      # folded into another and nothing is lost. "Humberside" ALONE is
+      # deliberately NOT mapped: the former county straddled the Humber and
+      # part of it sits in the East Midlands, so that one needs a decision
+      # about the client's own book rather than a rule.
+      yorkshire and humberside: Yorkshire and The Humber
       yorkshire and the humber: Yorkshire and The Humber
       yorks and humber: Yorkshire and The Humber
       east midlands region: East Midlands

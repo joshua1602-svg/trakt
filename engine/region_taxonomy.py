@@ -70,6 +70,7 @@ RULE_CONSOLIDATED = "consolidated"
 
 # Punctuation and separators collapse to single spaces so "South-West",
 # "SOUTH_WEST" and "south  west" all clean to "south west".
+_AMPERSAND_RE = re.compile(r"\s*&\s*")
 _PUNCT_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _SPACE_RE = re.compile(r"[\s_]+")
 
@@ -88,6 +89,16 @@ def clean(value: Any) -> str:
     text = str(value).strip()
     if not text or text.lower() in _NULL_TOKENS:
         return ""
+    # AN AMPERSAND IS THE WORD "and", and must be spelled out BEFORE the
+    # punctuation rule below turns it into a space. The acquired book carries
+    # both "Yorkshire & Humberside" and "YORKSHIRE AND HUMBERSIDE"; stripping
+    # the "&" gave "yorkshire humberside" and "yorkshire and humberside", two
+    # keys for one region, and the region appeared as two rows in every
+    # breakdown of that book. Case had always converged — the connector never
+    # did. No shipped key carries an ampersand, so no existing mapping moves;
+    # `test_every_shipped_key_is_its_own_fixed_point` states that so it can
+    # fail.
+    text = _AMPERSAND_RE.sub(" and ", text)
     text = _PUNCT_RE.sub(" ", text)
     text = _SPACE_RE.sub(" ", text)
     return text.strip().lower()
