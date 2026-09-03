@@ -440,7 +440,16 @@ def execute_governed_mi_query(
     # "the balance by seasoning segment excluding pipeline cases", served from
     # the pipeline on the pipeline tab. The tab still selects what the UI
     # DISPLAYS; it no longer decides what a question MEANS.
-    view = workspace_mod.resolve_dataset(request.question)
+    try:
+        view = workspace_mod.resolve_dataset(request.question)
+    except Exception:  # noqa: BLE001 - a reading of the sentence is not a 500
+        # This runs before governance and therefore outside every net below it.
+        # The default view is where a question with nothing to say about its
+        # dataset already lands, so falling back to it answers the question that
+        # was asked rather than failing the request over a classification.
+        logger.exception("dataset resolution failed for question=%r",
+                         request.question)
+        view = workspace_mod.DEFAULT_VIEW
     policy = PolicyState(runtime_mode=deps.runtime_mode)
     requested_portfolio = request.effective_portfolio_id()
 
@@ -465,6 +474,32 @@ def execute_governed_mi_query(
         result = _failure(context, err, started_at=started_at, t0=t0,
                           portfolio_id=requested_portfolio, view=view, req=request,
                           policy=policy)
+        return _finish(result, request)
+    except Exception as exc:  # noqa: BLE001 - governance failing is not a raw 500
+        # THE ASYMMETRY THIS CLOSES. The block below (source approval) already
+        # caught every exception; this one caught only the typed refusal, so a
+        # tenant registry that raised a KeyError left the request with no
+        # governed envelope, no audit event and no request id — it escaped as an
+        # unhandled 500. Measured: `authorise_portfolio_access` raising KeyError
+        # produced HTTP 500 where the same call raising TraktError produced 403.
+        #
+        # Entitlement that cannot be ESTABLISHED still refuses; it is never
+        # answered around. What changes is that the refusal is typed, audited
+        # and carries a request id the operator can trace.
+        logger.exception("governance failed for tenant=%s portfolio=%r",
+                         context.tenant_id, requested_portfolio)
+        err = TraktError(ErrorCode.INTERNAL_ERROR,
+                         "The MI Agent could not establish authorisation for "
+                         "this request.",
+                         request_id=context.request_id, cause=exc)
+        result = _failure(context, err, started_at=started_at, t0=t0,
+                          portfolio_id=requested_portfolio, view=view, req=request,
+                          policy=policy)
+        # THROUGH `_finish`, not around it. `main` made this the single exit for
+        # every governed query — the audit line AND the OCC telemetry document an
+        # operator reviews. A new refusal path that returned directly would be
+        # invisible in exactly the surface built to show what the agent did, and
+        # a governance fault is the last thing that should go unrecorded.
         return _finish(result, request)
 
     # ---- 2. governance: is this dataset allowed to answer? --------------- #
@@ -502,7 +537,34 @@ def execute_governed_mi_query(
         notes=(approval.reason,) if approval.fixture else ())
 
     # ---- 3. the analytical execution (unchanged) ------------------------- #
-    payload = _run_analysis(request, authorised, view, deps)
+    #
+    # NEVER RAISES INTO A REQUEST. This function's own docstring promises a
+    # controlled GovernedResult for an analytical fault, and that promise used to
+    # rest entirely on `_run_analysis` never raising. It does raise: the
+    # post-routing guards (`_stamp_routed_scope`, `_guard_routed_answer`,
+    # `_guard_temporal_honouring`, `_guard_unresolved_scope`,
+    # `_guard_unknown_category`, `_governed_context`) run OUTSIDE the routing
+    # try/except whose comment reads "routing must never break the chat", and a
+    # fault in any of the six was measured producing HTTP 500 rather than a
+    # refusal — a dead endpoint where the contract says `ok: false`.
+    #
+    # CALCULATION_FAILED is a CAPABILITY-category code and maps to HTTP 200, so
+    # the reader gets the governed "I could not answer this" envelope every
+    # channel already renders, and the cause is logged rather than published.
+    try:
+        payload = _run_analysis(request, authorised, view, deps)
+    except Exception as exc:  # noqa: BLE001 - surface a refusal, never a 500
+        logger.exception("MI analysis failed for question=%r portfolio=%r",
+                         request.question, authorised.portfolio_id)
+        err = TraktError(ErrorCode.CALCULATION_FAILED,
+                         "The MI Agent could not complete this query.",
+                         request_id=context.request_id, cause=exc)
+        result = _failure(context, err, started_at=started_at, t0=t0,
+                          portfolio_id=authorised.portfolio_id, view=view,
+                          req=request, policy=policy, snapshot=snapshot)
+        # Same single exit as every other outcome: an analytical fault is a
+        # governed event, and the operator's telemetry has to show it.
+        return _finish(result, request)
 
     ok = bool(payload.get("ok"))
     status = STATUS_SUCCESS if ok else STATUS_ERROR
@@ -706,6 +768,31 @@ def _parser_provenance(workflow: Dict[str, Any]) -> Dict[str, Any]:
             "specialist_intent_carried": parse_meta.get("specialist_intent_carried") or []}
 
 
+def _route_stated_reason(envelope: Dict[str, Any]) -> Optional[str]:
+    """The refusal a ROUTE authored for itself, if it authored one.
+
+    A route that declines writes its own sentence and marks the envelope
+    `controlledRefusal` / `controlledUnsupported`. That sentence names the
+    actual obstacle — a dimension the book does not govern, a scope with no
+    declared asset class, a comparison where no category moved — and the facet
+    guard downstream cannot know any of it.
+
+    Read from the envelope rather than re-derived: the marks and the message are
+    both set by the route, so this asks the route what it did rather than
+    guessing from the words it used.
+    """
+    if not isinstance(envelope, dict) or envelope.get("ok"):
+        return None
+    meta = envelope.get("metadata") or {}
+    marked = (envelope.get("controlledRefusal")
+              or (meta.get("controlledRefusal") if isinstance(meta, dict) else None)
+              or (meta.get("controlledUnsupported") if isinstance(meta, dict) else None))
+    if not marked:
+        return None
+    reason = envelope.get("error") or envelope.get("answer")
+    return str(reason).strip() or None if reason else None
+
+
 def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                          route: Optional[str], semantics: Dict[str, Any],
                          frame, parsed=None) -> Dict[str, Any]:
@@ -899,8 +986,26 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         if verdict in (receipt_mod.VERDICT_REFUSE,
                        receipt_mod.VERDICT_CLARIFY):
             routed["ok"] = False
-            routed["error"] = message
-            routed["answer"] = message
+            # A ROUTE THAT ALREADY REFUSED KEEPS ITS OWN REASON. This guard
+            # exists to stop a DELIVERED answer standing when a facet it was
+            # asked for never reached the calculation. Where the route has
+            # already declined and written why, replacing that sentence swaps a
+            # specific cause for a general one — measured on the live book,
+            #
+            #   route:   "I could not rank movement by region: no category
+            #             moved that way."
+            #   reader:  "I understood that you asked for ranking by region and
+            #             region, but that could not be applied..."
+            #
+            # and the useful half survived only as `ranking unavailable:
+            # no_category_moved_that_way` in the warnings, which is a code, in a
+            # field no channel renders. The facet message is kept as a warning
+            # so nothing is lost; only which sentence leads changes, and the
+            # verdict — already a refusal — does not change at all.
+            _own = _route_stated_reason(routed)
+            if not _own:
+                routed["error"] = message
+                routed["answer"] = message
             routed["artifacts"] = []
             routed["controlledRefusal"] = True
             routed["clarificationRequested"] = (

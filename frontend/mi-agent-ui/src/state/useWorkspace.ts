@@ -10,6 +10,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+/** Delay before a NOT-CURRENTLY-VISIBLE forecast prefetch is issued. */
+export const SPECULATIVE_FORECAST_DELAY_MS = 2500;
 import { setDisplayCurrency } from "@/lib/utils";
 import type {
   AgentRequest,
@@ -468,7 +471,15 @@ export function useWorkspace(client: AgentClient): Workspace {
   // PRIORITISED: unless a pipeline/forecast view needs it right now, the fetch
   // waits until the visible funded snapshot has settled — the slow backend
   // compute serves what's on screen first, then warms the rest.
+  //: How long a forecast prefetch waits when its tab is not open. Long enough
+  //: to clear a page-load burst, short enough that a user who reaches for the
+  //: Pipeline tab still finds it warm. Not a tuning knob anybody has measured
+  //: an optimum for -- it is the smallest delay that takes the request out of
+  //: the burst window that failed.
   const forecastKeyRef = useRef<string | null>(null);
+  //: A prefetch waiting out its delay. Held so that a user who opens the tab
+  //: mid-delay cancels it and is served immediately.
+  const deferredForecastRef = useRef<{ key: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const workspaceUnmounted = useRef(false);
   useEffect(() => () => { workspaceUnmounted.current = true; }, []);
   useEffect(() => {
@@ -477,8 +488,20 @@ export function useWorkspace(client: AgentClient): Workspace {
     const key = `${portfolioId}|${selectedContextId}|${dataVersion}`;
     if (forecastKeyRef.current === key) return; // already fetched for this selection
     if (!needNow && snapshotLoading) return;    // let the visible panel land first
-    forecastKeyRef.current = key;
+    // Loading is set SYNCHRONOUSLY even when the request is deferred below, so
+    // the panel shows the state it shows today rather than briefly reading as
+    // "no forecast" during the delay.
     setForecastLoading(true);
+
+    const fire = () => {
+      deferredForecastRef.current = null;
+      // Claimed HERE, not before the delay. Setting it up front made the
+      // "already fetched for this selection" guard above swallow the
+      // immediate fetch when a user opened the Pipeline tab mid-delay, so
+      // they waited out the remainder of a prefetch instead of being served
+      // at once -- a deferral turned into a stall for the one person it was
+      // supposed to be invisible to.
+      forecastKeyRef.current = key;
     // Resolution is guarded by the KEY (not an effect-cleanup flag): dep churn
     // like snapshotLoading flipping must not cancel the in-flight fetch, and a
     // late response for a superseded selection is simply ignored.
@@ -498,6 +521,46 @@ export function useWorkspace(client: AgentClient): Workspace {
           : "The pipeline / forecast snapshot could not be loaded.");
         setForecastLoading(false);
       });
+    };
+
+    // ON SCREEN NOW: fetch immediately, exactly as before — and cancel any
+    // prefetch already waiting, so the user's own request replaces the
+    // speculative one rather than queueing behind it.
+    if (needNow) {
+      if (deferredForecastRef.current) {
+        clearTimeout(deferredForecastRef.current.timer);
+        deferredForecastRef.current = null;
+      }
+      fire();
+      return;
+    }
+
+    if (deferredForecastRef.current?.key === key) return;  // already scheduled
+
+    // NOT ON SCREEN: this is SPECULATION — a prefetch so that opening the
+    // Pipeline or Forecast tab is instant. Worth doing, but not worth doing
+    // inside the page-load burst.
+    //
+    // MEASURED 2026-09-03, six users opening the dashboard together on a B2:
+    // 18 of 54 requests returned 500. The three that failed were the three
+    // heaviest, each pinned at ~45.4s against the auth layer's ~46s ceiling --
+    // and `forecast/snapshot` was one of them, fetched for a tab nobody had
+    // opened. The weekly brief then waits on the forecast and fires too, so
+    // one speculative request was pulling a second in behind it.
+    //
+    // Six users' speculation competing with six users' actual requests is the
+    // whole of that failure. Deferring it past the burst costs a tab switch
+    // within the delay window one wait it would otherwise have avoided; it
+    // costs a crowded morning nothing at all. The same reasoning already
+    // narrowed the other-client warm below from three clients to one.
+    const timer = setTimeout(fire, SPECULATIVE_FORECAST_DELAY_MS);
+    deferredForecastRef.current = { key, timer };
+    return () => {
+      clearTimeout(timer);
+      if (deferredForecastRef.current?.timer === timer) {
+        deferredForecastRef.current = null;
+      }
+    };
   }, [client, portfolioId, selectedContextId, dataVersion, activeView, snapshotLoading]);
 
   // Background-warm the OTHER clients' latest runs once the active snapshot has

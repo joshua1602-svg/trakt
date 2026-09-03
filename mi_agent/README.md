@@ -356,7 +356,7 @@ status. The app never hard-fails for a missing LLM key.
 |---|---|---|
 | `ENABLE_LLM_MI_AGENT` | `false` | turn the LLM path on |
 | `MI_AGENT_LLM_PROVIDER` | `anthropic` | `anthropic` \| `mock` \| `none` |
-| `MI_AGENT_LLM_MODEL` | `claude-haiku-4-5-20251001` | cheap/fast default; override freely |
+| `MI_AGENT_LLM_MODEL` | `claude-opus-5` | the default; override to pin a cheaper tier |
 | `MI_AGENT_MAX_REPAIR_ATTEMPTS` | `2` | LLM self-correction retries |
 | `ANTHROPIC_API_KEY` | — | required for `provider=anthropic` |
 

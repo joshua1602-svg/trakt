@@ -56,6 +56,51 @@ onboarding / regime logic is changed.
 | `MI_AGENT_API_PREFIX` | gateway prefix to accept, default `/api`. Leave unset unless a gateway mounts the API somewhere other than `/api` |
 | `MI_API_WORKERS` / `MI_API_TIMEOUT` | `2` / `120` (optional) |
 
+## Startup, and which route the health check probes
+
+**Point the platform Health check at `/`, never at `/health`.**
+
+`/` is the liveness route: it touches no data and answers as soon as the process
+is up. `/health` is a READINESS and diagnostic route — it reports the resolved
+data source, which means it RESOLVES the data source, which on a cold process is
+a governed-tape download. A liveness probe pointed at it waits for the very work
+a restart just discarded, and the instance can be recycled for being slow to
+answer a question about whether it is slow. `/` carries a `warm` flag so an
+operator can watch a cold start progress without triggering the load.
+
+`WEBSITES_CONTAINER_START_TIME_LIMIT` is worth setting (up to `1800`) on any book
+large enough that preparation is measured in minutes. The app no longer needs it
+to start — the cache warm runs on its own thread and startup completes at once —
+but Oryx extraction and the venv resolution still happen before the app is
+reached, and on a cold instance that alone has been observed at ~3.5 minutes of
+the default 230s budget.
+
+**What this replaced.** The lifespan used to warm the caches inline. On
+2026-09-02 three consecutive boots reached *"Waiting for application startup"*
+and none reached *"complete"*: Azure killed each container on the startup probe,
+and the next boot restarted the same download from nothing, because the scratch
+copy does not survive a restart. The API served nothing for fourteen minutes.
+The warm had a `try/except` — it was guarded against FAILING, and nothing guarded
+it against being SLOW. Pinned now by
+`mi_agent_api/tests/test_startup_does_not_block.py`.
+
+## What is deliberately NOT in the artefact
+
+`package_contents.txt` names DIRECTORIES, so everything tracked inside one ships.
+`package_excludes.txt` names the files that live in a staged package but are not
+runtime code or data — the measurement programme commits its frozen baselines and
+question corpora beside the code they measure, which is right for the repository
+and wrong for a web server.
+
+Measured 2026-09-02: **28.0 MB → 11.0 MB**, 21 files, 17.0 MB of evidence that no
+runtime code opens. Every megabyte is uploaded on each deploy and unpacked on
+each cold start.
+
+`tests/test_mi_api_appservice_packaging.py` holds both directions — the declared
+files must not ship, AND nothing declared may be something the staged code reads,
+so a mistaken exclusion fails in CI rather than as a 500 on the first request. A
+weight budget backs it up, to catch the next bulk addition whatever it is called.
+
 ## Which front door is this deployment behind?
 
 The API serves its routes **bare** (`/mi/query`) *and* under the gateway prefix

@@ -53,6 +53,17 @@ export function PipelineSnapshotPanel({
   loading?: boolean;
 }) {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  // HOISTED ABOVE THE EARLY RETURNS. This sat below `if (!snapshot) return
+  // null;`, so the hook ran on some renders and not others. React counts
+  // hooks per render and throws "Rendered more hooks than during the previous
+  // render" the moment a panel that rendered empty renders full -- which is
+  // exactly what happens when the snapshot arrives AFTER first paint.
+  //
+  // It was invisible while the data was always there before the panel mounted.
+  // Under the 2026-09-03 six-user burst the pipeline fetch took 45s, so a user
+  // opening the tab in that window would have crashed the panel rather than
+  // waiting for it. Load did not create this; it made it reachable.
+  const [measure, setMeasure] = useState<BarMeasure>("balance");
 
   if (loading && !snapshot) {
     return (
@@ -107,7 +118,6 @@ export function PipelineSnapshotPanel({
   const overdueCount = summary?.overdueExpectedCompletionCount ?? 0;
   const overdueWeighted = summary?.overdueExpectedCompletionWeightedAmount ?? 0;
   const dq = dataQualityStatus(snapshot);
-  const [measure, setMeasure] = useState<BarMeasure>("balance");
 
   const stageByAmount: BarDatum[] = snapshot.stageBreakdown.map((s) => ({
     label: s.stage,

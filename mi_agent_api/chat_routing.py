@@ -386,6 +386,201 @@ def _is_portfolio_summary(question: str, spec=None) -> bool:
     return not _names_something_else(question, spec)
 
 
+#: Pipeline-shaped ways of asking for the book's overall position, on top of
+#: `_SUMMARY_INTENT`. Held SEPARATELY and never merged into that list: every
+#: word here is gated behind "the question names the pipeline dataset", so
+#: nothing funded can be reached by adding to it. Merging them would make
+#: "what does the book look like" a summary on the funded side too, which is a
+#: change to a question that already answers.
+_PIPELINE_SUMMARY_INTENT = (
+    "look like", "looks like", "progression", "shape of", "state of",
+    "where is the pipeline", "how is the pipeline",
+)
+
+
+def _is_pipeline_summary(question: str, spec=None) -> bool:
+    """A summary request about the PIPELINE, which the funded summary declines.
+
+    `portfolio_summary` answers from `output_root` and has no pipeline frame, so
+    `_names_another_dataset` makes it decline every pipeline question — correctly,
+    and measured: "Summarise the current pipeline." was once answered *"the
+    portfolio holds 640 loans with a funded balance of [figure]"*, from the funded
+    book. What that guard has never had is a sibling to hand the question TO, so
+    a pipeline summary fell through to the generic executor and, for "What does
+    the current pipeline look like?", was declined as unmappable.
+
+    The set claimed here is exactly the set the funded summary refuses for naming
+    the pipeline. It takes nothing from the funded side by construction: the
+    dataset owner has to say PIPELINE before any word below is even consulted.
+    """
+    try:
+        from . import workspace as _ws
+
+        if _ws.resolve_dataset(question) != "pipeline":
+            return False
+    except Exception as exc:  # noqa: BLE001 - eligibility never breaks a query
+        _logger.info("dataset-intent read unavailable for %r: %s", question, exc)
+        return False
+    q = f" {question.lower().strip()} "
+    if not any(m in q for m in _SUMMARY_INTENT + _PIPELINE_SUMMARY_INTENT):
+        return False
+    # The same three exclusions the funded summary applies, for the same
+    # reasons: a stratification, a movement question and a prior-period
+    # comparison are each owned elsewhere and are not summaries.
+    if " by " in q or any(m in q for m in _MOVEMENT_MARKERS):
+        return False
+    if any(m in q for m in _PRIOR_PERIOD_MARKERS):
+        return False
+    return True
+
+
+def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
+                            source_lens=None) -> Optional[Dict[str, Any]]:
+    """The pipeline's governed headline position — the funded summary's sibling.
+
+    IT COMPUTES NOTHING. Every figure is a key on the payload
+    `pipeline_contract.compute_pipeline_snapshot` already produces for
+    `/mi/pipeline/snapshot`, which is what the dashboard's pipeline tiles render.
+    A second arithmetic here would be a second source for numbers the estate
+    already has one owner for, and the two would drift.
+
+    SCOPE IS DECLARED, NEVER ASSUMED. The governed weekly extract carries no
+    per-case source-portfolio column, so scope cannot be READ from the data.
+    Where it is a fact about the business instead, the lender declares it in
+    `config/mi/pipeline_field_contract.yaml` under `source_provenance`, and
+    `_pipeline_scope_disclosure` turns that into both the wording and
+    `lens_applied`. With nothing declared the route claims nothing and says the
+    same sentence every other pipeline-sourced route says.
+
+    Returns ``None`` where the snapshot is unavailable, which defers to the
+    existing path rather than inventing an answer or an error.
+    """
+    try:
+        from . import datasets as ds_mod
+        from . import pipeline_contract as pipeline_mod
+        from .datasets import load_mi_semantics, semantics_path
+    except Exception as exc:  # noqa: BLE001 - a route never breaks the chat
+        _logger.info("pipeline summary unavailable: %s", exc)
+        return None
+
+    try:
+        source = ds_mod._resolve_pipeline_source(client_id, run_id)
+        if source is None:
+            return None
+        history = ds_mod._pipeline_history(source.get("client_id", client_id))
+        df, report = pipeline_mod.load_prepared_pipeline(
+            source, historical_model=history)
+        snapshot = pipeline_mod.compute_pipeline_snapshot(
+            df, report, load_mi_semantics(semantics_path()),
+            client_id=source.get("client_id", client_id),
+            run_id=run_id or source.get("run_id", ""), source=source)
+    except Exception as exc:  # noqa: BLE001 - defer, never fail the request
+        _logger.info("pipeline summary could not be built: %s", exc)
+        return None
+
+    cases = snapshot.get("pipelineRowCount")
+    if not cases:
+        return None
+    as_of = _date_label(snapshot.get("pipelineAsOfDate"))
+    parts = [f"At the weekly extract of {as_of} the pipeline holds "
+             f"{_count(cases)} cases with a total pipeline amount of "
+             f"{_gbp(snapshot.get('pipelineAmount'))}."]
+
+    stages = [b for b in (snapshot.get("stageBreakdown") or []) if b]
+    if stages:
+        # `caseCount`, NOT `count`. `pipeline_contract._stage_breakdown` builds
+        # its rows through `_dimension_breakdown(..., key_name="stage")`, whose
+        # count key is `caseCount` (see `cap_breakdown`, which reads the same
+        # field). Reading `count` returned None for every stage and the live
+        # answer read "By stage: APPLICATION —, COMPLETED —, KFI —" — every
+        # figure an em-dash, in an answer that was otherwise correct.
+        named = ", ".join(
+            f"{b.get('stage')} {_count(b.get('caseCount'))}" for b in stages[:6])
+        parts.append(f"By stage: {named}.")
+    weighted = snapshot.get("weightedExpectedFundedAmount")
+    if weighted:
+        parts.append(f"Weighted expected funded amount is {_gbp(weighted)}.")
+
+    _lens_applied, _disclosure = _pipeline_scope_disclosure(question, source_lens)
+
+    artifacts = []
+    if stages:
+        artifacts.append({"type": "table", "title": "Pipeline by stage",
+                          "rows": [dict(b) for b in stages]})
+    return _envelope(
+        ok=True, question=question, spec=spec_dict, artifacts=artifacts,
+        answer=" ".join(parts), route="pipeline_summary",
+        lens_applied=_lens_applied,
+        # WHAT IT READ, DERIVED FROM THE ROOT IT READ IT FROM. Without this the
+        # envelope carried no reconciliation at all, so `completeness.
+        # _carried` saw an empty `reconciliation.dataset` against a stated
+        # `dataset: pipeline` concept, reported it UNACCOUNTED, and
+        # `_enforce_semantic_coverage` replaced a correct answer with "I could
+        # not confirm it was applied to this calculation". The answer HAD read
+        # the pipeline; it simply never said so, and the guard is right not to
+        # take a route's word for it. Declared through `datasets_read` rather
+        # than as the literal ["pipeline"] for the reason that function's own
+        # docstring gives: three routes once wrote the constant and were wrong
+        # about themselves in a way nothing could detect.
+        reconciliation=_workspace.reconciliation_for(
+            _workspace.datasets_read(pipeline_root=source),
+            reporting_date=snapshot.get("pipelineAsOfDate")),
+        warnings=[_disclosure])
+
+
+def _pipeline_scope_disclosure(question: str, source_lens) -> tuple:
+    """``(lens_applied, disclosure)`` for a pipeline-sourced answer.
+
+    THE WORDING FOLLOWS THE DECLARATION, never a string typed here. Before this
+    existed the route said, of every pipeline answer:
+
+        "...so this position is the whole platform pipeline and is NOT narrowed
+         to a selected book."
+
+    That sentence was true of the DATA — the weekly extract has no per-case
+    source-portfolio column — and false about the BUSINESS, once the lender
+    stated that the pipeline is direct origination only. A reader was being
+    told, in the confident voice the estate reserves for governance
+    disclosures, the opposite of the truth about the figure above it.
+
+    CONSERVATIVE IN EVERY OTHER DIRECTION. `lens_applied` becomes True only
+    where the declared book actually satisfies what was asked: Total (which
+    whole-pipeline already is) or a lens naming that same book. A lens naming
+    a DIFFERENT book keeps the previous behaviour untouched, because there the
+    old sentence is still true — the pipeline is not that book's, and claiming
+    the lens applied would be the misattribution this route exists to avoid.
+    Undeclared keeps the previous behaviour too, so deleting the config block
+    restores exactly what shipped.
+    """
+    from . import pipeline_prep as _pp
+
+    was = ("Scope not narrowed: the governed weekly pipeline extract carries "
+           "no source-portfolio provenance, so this position is the whole "
+           "platform pipeline and is NOT narrowed to a selected book.")
+    try:
+        declared = _pp.declared_source_provenance()
+    except Exception:  # noqa: BLE001 - a disclosure never breaks an answer
+        return False, was
+    if not declared:
+        return False, was
+
+    book = declared["book"]
+    try:
+        lens = _resolve_lens(question, source_lens)
+    except Exception:  # noqa: BLE001
+        return False, was
+
+    label = str(getattr(lens, "label", "") or "")
+    satisfied = (not lens.filters) or label.strip().lower() == book.strip().lower()
+    if not satisfied:
+        return False, was
+
+    shown = label if (lens.filters and label) else book.title()
+    rationale = declared.get("rationale") or ""
+    return True, (f"Scope: the whole pipeline IS the {shown} pipeline. "
+                  + (rationale or f"The pipeline is {book} origination only."))
+
+
 def _is_period_movement(question: str) -> bool:
     """A "what has changed versus the prior month" request.
 
@@ -3383,7 +3578,8 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     if meta.get("lensApplied") is None:
         meta["lensApplied"] = route in _lens_aware_routes()
     if meta["lensApplied"]:
-        return envelope
+        return _disclose_wording_widened_the_scope(envelope, question,
+                                                   source_lens, meta)
     try:
         lens = _resolve_lens(question, source_lens)
     except Exception:  # noqa: BLE001 - disclosure must never break an answer
@@ -3401,6 +3597,51 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     if isinstance(warnings, list) and disclosure not in warnings:
         warnings.append(disclosure)
     meta["lensRequested"] = lens.label
+    return envelope
+
+
+def _disclose_wording_widened_the_scope(envelope, question, source_lens, meta):
+    """A question whose own words widened the caller's lens must say so.
+
+    A lens-aware route APPLIES the lens it resolved, so `lensApplied` is true
+    and the disclosure below never runs. That is right when the resolved lens is
+    the requested one, and silent when it is not: the question's own words
+    override the caller's selection by design, and widening to Total is the one
+    override that hands back a bigger population than the reader chose.
+
+    Measured on the live book with 'Direct' selected, three of the accepted
+    questions answered over the whole platform with nothing to say so —
+    "Give me a concise overview of the funded portfolio" among them, while the
+    same question in two other phrasings answered Direct-only. Same reader,
+    same selection, two populations, no warning; the envelope stamped Total
+    honestly, and nobody reads the envelope.
+
+    Only WIDENING is disclosed here. A question naming another book
+    ("balance in the acquired book") re-points rather than widens, and already
+    says so through the scope owner's own warning — repeating it would be noise.
+    """
+    try:
+        from mi_agent import portfolio_lens as plens
+
+        if source_lens is None:
+            return envelope
+        requested = plens.lens_from_selection(source_lens)
+        if not requested.filters:      # Total was chosen; nothing to widen from.
+            return envelope
+        resolved = _resolve_lens(question, source_lens)
+        if resolved.filters:           # Still narrowed — to this book or another.
+            return envelope
+        disclosure = (
+            f"Scope widened by the question: '{requested.label}' was selected, "
+            f"but the wording of this question asks about the whole book, so "
+            f"these figures cover every portfolio — they are NOT "
+            f"{requested.label}-only. Name the book in the question to keep it.")
+        warnings = envelope.setdefault("warnings", [])
+        if isinstance(warnings, list) and disclosure not in warnings:
+            warnings.append(disclosure)
+        meta["lensRequested"] = requested.label
+    except Exception:  # noqa: BLE001 - disclosure must never break an answer
+        pass
     return envelope
 
 
@@ -3636,6 +3877,23 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 source_lens=r.source_lens,
                 interpretation=r.resolve_interpretation())),
+
+        # 8a-bis. THE PIPELINE'S headline position — the funded summary's
+        #     sibling. `portfolio_summary` above declines every pipeline
+        #     question because it reads `output_root` and has no pipeline
+        #     frame; until now nothing caught what it dropped, so a pipeline
+        #     summary fell through to the generic executor. This claims exactly
+        #     that set: the dataset owner must say PIPELINE before its
+        #     vocabulary is even consulted, so it can take nothing from the
+        #     funded side. Priority sits beside the funded summary, not above
+        #     it — the two recognise disjoint sets and cannot both fire.
+        Recogniser(
+            name="pipeline_summary", priority=81, lens_aware=False,
+            description="Current governed headline position of the pipeline.",
+            recognise=lambda r: _is_pipeline_summary(r.question, r.spec),
+            handle=lambda r: _route_pipeline_summary(
+                r.question, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, source_lens=r.source_lens)),
 
         # 8b. Governed Period Change Analysis — the first workflow layer built on
         #     the Business Semantics Registry. It sits AFTER the two composite

@@ -16,7 +16,7 @@ import type {
   PortfolioCapabilities,
   PortfolioContextIndex,
 } from "@/domain";
-import { useWorkspace } from "./useWorkspace";
+import { useWorkspace, SPECULATIVE_FORECAST_DELAY_MS } from "./useWorkspace";
 
 const INDEX = {
   portfolios: [{
@@ -196,7 +196,14 @@ describe("useWorkspace — governed portfolio context", () => {
     act(() => result.current.setSelectedContextId("acquired"));
     await waitFor(() =>
       expect(client.getSnapshot).toHaveBeenCalledWith(expect.any(String), "acquired"));
-    expect(client.getForecastSnapshot).toHaveBeenCalledWith(expect.any(String), "acquired");
+    // The forecast is PREFETCHED, not on screen — the funded view is active —
+    // so it now waits out SPECULATIVE_FORECAST_DELAY_MS before being issued,
+    // which is what keeps it out of a page-load burst. The claim under test is
+    // unchanged: whenever it goes, it goes with the same governed context.
+    await waitFor(
+      () => expect(client.getForecastSnapshot)
+        .toHaveBeenCalledWith(expect.any(String), "acquired"),
+      { timeout: SPECULATIVE_FORECAST_DELAY_MS + 2000 });
 
     act(() => result.current.ask("What is the weighted average LTV?"));
     await waitFor(() => expect(client.ask).toHaveBeenCalled());
@@ -317,5 +324,55 @@ describe("useWorkspace — governed portfolio context", () => {
     // contract keeps its existing navigation.
     expect(result.current.disabledViews).toEqual([]);
     expect(result.current.capabilityEnabled("pipeline")).toBe(true);
+  });
+});
+
+/**
+ * The forecast prefetch must stay OUT of the page-load burst.
+ *
+ * MEASURED 2026-09-03, six users opening the dashboard together on a B2: 18 of
+ * 54 requests returned 500, and the three that failed were the three heaviest,
+ * each pinned at ~45.4s against the auth layer's ~46s ceiling.
+ * `forecast/snapshot` was one of them — fetched for a tab nobody had opened —
+ * and the weekly brief waits on the forecast, so one speculative request was
+ * pulling a second in behind it.
+ *
+ * Both halves are pinned, because the deferral is only worth having if both
+ * hold: it must not fire inside the burst, and it must not make the user who
+ * actually opens the tab wait out a delay meant to be invisible to them.
+ *
+ * (Fixtures are this file's own `makeClient`, reused rather than copied.)
+ */
+describe("useWorkspace — the forecast prefetch is deferred, not cancelled", () => {
+  it("does not fetch the forecast in the page-load burst", async () => {
+    const client = makeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await waitFor(() => expect(client.getSnapshot).toHaveBeenCalled());
+    expect(client.getForecastSnapshot).not.toHaveBeenCalled();
+    expect(result.current.activeView).not.toBe("forecast");
+  });
+
+  it("still fetches it afterwards, so opening the tab stays warm", async () => {
+    const client = makeClient();
+    renderHook(() => useWorkspace(client));
+    await waitFor(() => expect(client.getForecastSnapshot).toHaveBeenCalled(),
+                  { timeout: SPECULATIVE_FORECAST_DELAY_MS + 2000 });
+  });
+
+  it("fetches IMMEDIATELY when the user opens a view that needs it", async () => {
+    // The regression this guards was live for one commit: claiming the fetch
+    // key before the delay made the "already fetched for this selection" guard
+    // swallow the immediate fetch, so a user opening Pipeline mid-delay waited
+    // out the remainder of a prefetch. A deferral that stalls the very person
+    // it was hiding from is worse than no deferral.
+    const client = makeClient();
+    const { result } = renderHook(() => useWorkspace(client));
+    await waitFor(() => expect(client.getSnapshot).toHaveBeenCalled());
+    expect(client.getForecastSnapshot).not.toHaveBeenCalled();
+
+    const startedAt = Date.now();
+    act(() => result.current.setActiveView("pipeline"));
+    await waitFor(() => expect(client.getForecastSnapshot).toHaveBeenCalled());
+    expect(Date.now() - startedAt).toBeLessThan(SPECULATIVE_FORECAST_DELAY_MS);
   });
 });
