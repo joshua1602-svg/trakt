@@ -106,12 +106,34 @@ class TestTheRouteComputesNothing(unittest.TestCase):
                              "key on the governed snapshot" % arithmetic)
 
     def test_scope_is_disclosed_not_claimed(self):
-        import pathlib
-        from mi_agent_api import chat_routing
-        src = pathlib.Path(chat_routing.__file__).read_text()
-        body = src.split("def _route_pipeline_summary", 1)[1].split("\ndef ", 1)[0]
-        self.assertIn("lens_applied=False", body)
-        self.assertIn("Scope not narrowed", body)
+        """The invariant, now asserted on BEHAVIOUR rather than on source text.
+
+        This read the route's body for the literal `lens_applied=False` and the
+        words "Scope not narrowed", which held while the disclosure was one
+        hard-coded sentence. It is now derived from the governed contract's
+        `source_provenance`, so the strings moved to `_pipeline_scope_
+        disclosure` and the source check began failing on a change it was never
+        meant to catch.
+
+        The INTENT is unchanged and is what is pinned here: a pipeline answer
+        may never claim a lens the estate cannot stand behind. With nothing
+        declared, it claims nothing — the exact behaviour the string check was
+        standing in for. The cases where a declaration DOES satisfy a lens, and
+        the case where it does not, are pinned in
+        `TestTheDeclaredBookIsWhatItSays`.
+        """
+        from unittest import mock
+        from mi_agent_api import chat_routing as CR
+
+        lens = mock.MagicMock()
+        lens.filters = ("f",)
+        lens.label = "Direct"
+        with mock.patch.object(CR, "_resolve_lens", return_value=lens), \
+             mock.patch("mi_agent_api.pipeline_prep.declared_source_provenance",
+                        return_value={}):
+            applied, text = CR._pipeline_scope_disclosure("the pipeline", None)
+        self.assertFalse(applied, "an undeclared pipeline answer claimed a lens")
+        self.assertIn("Scope not narrowed", text)
 
 
 class TestWhereItRegisters(unittest.TestCase):
@@ -329,3 +351,92 @@ class TestTheAnswerSurvivesTheCoverageGate(unittest.TestCase):
         self.assertFalse(gated.get("ok"),
                          "the coverage gate no longer catches an undeclared read")
         self.assertIn("could not confirm it was applied", str(gated.get("answer")))
+
+
+class TestTheDeclaredBookIsWhatItSays(unittest.TestCase):
+    """The disclosure must follow the DECLARATION, and stop where it stops.
+
+    "Scope not narrowed: ... NOT narrowed to a selected book" was true about
+    the extract's columns and false about the business: the lender states the
+    pipeline is direct origination only, acquired portfolios arriving already
+    funded. A reader was being told the opposite of the truth about the figure
+    above it, in the voice the estate reserves for governance.
+
+    Every assertion below pins a BOUNDARY as well as the happy path, because
+    the risk of a declared assumption is not that it fails to apply — it is
+    that it applies where it was never true.
+    """
+
+    def _disclose(self, question, lens_label=None, declared=("direct", "R.")):
+        from unittest import mock
+        from mi_agent_api import chat_routing as CR
+
+        lens = mock.MagicMock()
+        lens.filters = ("f",) if lens_label else ()
+        lens.label = lens_label or ""
+        prov = ({"book": declared[0], "rationale": declared[1]}
+                if declared else {})
+        with mock.patch.object(CR, "_resolve_lens", return_value=lens), \
+             mock.patch("mi_agent_api.pipeline_prep.declared_source_provenance",
+                        return_value=prov):
+            return CR._pipeline_scope_disclosure(question, None)
+
+    def test_a_total_request_is_satisfied_by_the_declared_book(self):
+        applied, text = self._disclose("Summarise the current pipeline.")
+        self.assertTrue(applied)
+        self.assertIn("IS the Direct pipeline", text)
+        self.assertNotIn("NOT narrowed", text)
+
+    def test_the_matching_lens_is_satisfied(self):
+        applied, text = self._disclose("Summarise the Direct pipeline.",
+                                       lens_label="Direct")
+        self.assertTrue(applied)
+        self.assertIn("Direct", text)
+
+    def test_a_different_book_keeps_the_old_disclosure(self):
+        """THE BOUNDARY THAT MATTERS. There is no acquired pipeline, so an
+        Acquired request must NOT come back claiming its lens was applied —
+        that would be the misattribution the declaration is supposed to end,
+        committed by the fix for it."""
+        applied, text = self._disclose("Summarise the Acquired pipeline.",
+                                       lens_label="Acquired")
+        self.assertFalse(applied)
+        self.assertIn("NOT narrowed to a selected book", text)
+
+    def test_no_declaration_restores_exactly_what_shipped(self):
+        """Deleting the config block must return the previous behaviour, or the
+        assumption is not revocable and the config is decoration."""
+        applied, text = self._disclose("Summarise the current pipeline.",
+                                       declared=None)
+        self.assertFalse(applied)
+        self.assertIn("carries no source-portfolio provenance", text)
+        self.assertIn("NOT narrowed to a selected book", text)
+
+    def test_the_config_as_shipped_declares_direct(self):
+        """The live contract, not a mock — so an edit to the YAML that breaks
+        the shape is caught here rather than in the dashboard."""
+        from mi_agent_api import pipeline_prep as P
+        P.load_pipeline_contract.cache_clear()
+        self.assertEqual(P.declared_source_provenance().get("book"), "direct")
+
+    def test_the_route_carries_the_declared_disclosure(self):
+        from unittest import mock
+        from mi_agent_api import chat_routing as CR
+        import mi_agent_api.datasets  # noqa: F401
+        import mi_agent_api.pipeline_contract  # noqa: F401
+
+        ds = mock.MagicMock()
+        ds._resolve_pipeline_source.return_value = {"client_id": "c"}
+        pc = mock.MagicMock()
+        pc.load_prepared_pipeline.return_value = (mock.MagicMock(), {})
+        pc.compute_pipeline_snapshot.return_value = {
+            "pipelineRowCount": 3, "pipelineAmount": 1.0,
+            "pipelineAsOfDate": "2026-01-12", "stageBreakdown": []}
+        with mock.patch("mi_agent_api.datasets", ds), \
+             mock.patch("mi_agent_api.pipeline_contract", pc):
+            env = CR._route_pipeline_summary("Summarise the current pipeline.",
+                                             {}, client_id="c", run_id="r")
+        self.assertIsNotNone(env)
+        joined = " ".join(env.get("warnings") or [])
+        self.assertNotIn("NOT narrowed to a selected book", joined)
+        self.assertTrue(env["metadata"]["lensApplied"])

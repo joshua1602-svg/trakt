@@ -82,6 +82,32 @@ def load_pipeline_contract() -> Dict[str, Any]:
     return yaml.safe_load(_CONTRACT_PATH.read_text(encoding="utf-8")) or {}
 
 
+def declared_source_provenance() -> Dict[str, Any]:
+    """The source-portfolio book the pipeline is DECLARED to be, or ``{}``.
+
+    THE ONE READER of `source_provenance` in the governed pipeline contract.
+    The weekly extract has no per-case source-portfolio column, so this is a
+    fact about the business rather than about the data — which is exactly why
+    it is declared in config and read here, instead of being written into a
+    route as a string nobody could find or revoke.
+
+    Returns ``{}`` unless the contract says `declared: true` AND names a book.
+    An absent, malformed or switched-off declaration is INDISTINGUISHABLE from
+    no declaration, so the estate falls back to claiming nothing — which is the
+    behaviour that shipped before this existed, and the behaviour the day the
+    lender's model changes and someone sets `declared: false`.
+    """
+    raw = (load_pipeline_contract().get("source_provenance") or {})
+    if not isinstance(raw, dict) or raw.get("declared") is not True:
+        return {}
+    book = str(raw.get("book") or "").strip()
+    if not book:
+        return {}
+    return {"book": book, "rationale": str(raw.get("rationale") or "").strip(),
+            "declared_by": str(raw.get("declared_by") or "").strip(),
+            "declared_on": str(raw.get("declared_on") or "").strip()}
+
+
 @lru_cache(maxsize=1)
 def _forecast_config() -> Dict[str, Any]:
     if not _FORECAST_CONFIG_PATH.exists():

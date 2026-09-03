@@ -444,11 +444,13 @@ def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
     A second arithmetic here would be a second source for numbers the estate
     already has one owner for, and the two would drift.
 
-    SCOPE IS NOT CLAIMED. The governed weekly extract carries no
-    source-portfolio provenance, so a pipeline answer is whole-platform whatever
-    lens is selected. That is disclosed rather than implied — the same sentence
-    every other pipeline-sourced route uses — and `lens_applied=False` makes the
-    envelope say so too.
+    SCOPE IS DECLARED, NEVER ASSUMED. The governed weekly extract carries no
+    per-case source-portfolio column, so scope cannot be READ from the data.
+    Where it is a fact about the business instead, the lender declares it in
+    `config/mi/pipeline_field_contract.yaml` under `source_provenance`, and
+    `_pipeline_scope_disclosure` turns that into both the wording and
+    `lens_applied`. With nothing declared the route claims nothing and says the
+    same sentence every other pipeline-sourced route says.
 
     Returns ``None`` where the snapshot is unavailable, which defers to the
     existing path rather than inventing an answer or an error.
@@ -493,6 +495,8 @@ def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
     if weighted:
         parts.append(f"Weighted expected funded amount is {_gbp(weighted)}.")
 
+    _lens_applied, _disclosure = _pipeline_scope_disclosure(question, source_lens)
+
     artifacts = []
     if stages:
         artifacts.append({"type": "table", "title": "Pipeline by stage",
@@ -500,7 +504,7 @@ def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
     return _envelope(
         ok=True, question=question, spec=spec_dict, artifacts=artifacts,
         answer=" ".join(parts), route="pipeline_summary",
-        lens_applied=False,
+        lens_applied=_lens_applied,
         # WHAT IT READ, DERIVED FROM THE ROOT IT READ IT FROM. Without this the
         # envelope carried no reconciliation at all, so `completeness.
         # _carried` saw an empty `reconciliation.dataset` against a stated
@@ -515,10 +519,60 @@ def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
         reconciliation=_workspace.reconciliation_for(
             _workspace.datasets_read(pipeline_root=source),
             reporting_date=snapshot.get("pipelineAsOfDate")),
-        warnings=["Scope not narrowed: the governed weekly pipeline extract "
-                  "carries no source-portfolio provenance, so this position is "
-                  "the whole platform pipeline and is NOT narrowed to a "
-                  "selected book."])
+        warnings=[_disclosure])
+
+
+def _pipeline_scope_disclosure(question: str, source_lens) -> tuple:
+    """``(lens_applied, disclosure)`` for a pipeline-sourced answer.
+
+    THE WORDING FOLLOWS THE DECLARATION, never a string typed here. Before this
+    existed the route said, of every pipeline answer:
+
+        "...so this position is the whole platform pipeline and is NOT narrowed
+         to a selected book."
+
+    That sentence was true of the DATA — the weekly extract has no per-case
+    source-portfolio column — and false about the BUSINESS, once the lender
+    stated that the pipeline is direct origination only. A reader was being
+    told, in the confident voice the estate reserves for governance
+    disclosures, the opposite of the truth about the figure above it.
+
+    CONSERVATIVE IN EVERY OTHER DIRECTION. `lens_applied` becomes True only
+    where the declared book actually satisfies what was asked: Total (which
+    whole-pipeline already is) or a lens naming that same book. A lens naming
+    a DIFFERENT book keeps the previous behaviour untouched, because there the
+    old sentence is still true — the pipeline is not that book's, and claiming
+    the lens applied would be the misattribution this route exists to avoid.
+    Undeclared keeps the previous behaviour too, so deleting the config block
+    restores exactly what shipped.
+    """
+    from . import pipeline_prep as _pp
+
+    was = ("Scope not narrowed: the governed weekly pipeline extract carries "
+           "no source-portfolio provenance, so this position is the whole "
+           "platform pipeline and is NOT narrowed to a selected book.")
+    try:
+        declared = _pp.declared_source_provenance()
+    except Exception:  # noqa: BLE001 - a disclosure never breaks an answer
+        return False, was
+    if not declared:
+        return False, was
+
+    book = declared["book"]
+    try:
+        lens = _resolve_lens(question, source_lens)
+    except Exception:  # noqa: BLE001
+        return False, was
+
+    label = str(getattr(lens, "label", "") or "")
+    satisfied = (not lens.filters) or label.strip().lower() == book.strip().lower()
+    if not satisfied:
+        return False, was
+
+    shown = label if (lens.filters and label) else book.title()
+    rationale = declared.get("rationale") or ""
+    return True, (f"Scope: the whole pipeline IS the {shown} pipeline. "
+                  + (rationale or f"The pipeline is {book} origination only."))
 
 
 def _is_period_movement(question: str) -> bool:
