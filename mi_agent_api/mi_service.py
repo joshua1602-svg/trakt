@@ -239,6 +239,25 @@ def _enforce_semantic_coverage(envelope: Dict[str, Any]) -> Dict[str, Any]:
     named = sorted({str(m.get("term") or m.get("value") or m.get("field"))
                     for m in missing})
     message = _COVERAGE_REFUSAL % _join_terms(named)
+    # THIS IS A DECLINE, NOT A BREAKAGE, AND THE RECORD HAS TO SAY SO.
+    #
+    # Without this marker `_classify_analytical_failure` finds nothing it
+    # recognises and falls through to CALCULATION_FAILED, which
+    # `mi_query_telemetry._ERROR_CODES` counts as an ERROR. So every time the
+    # coverage gate did its job — refused rather than answered over a concept
+    # it could not account for — the operator's record said the system had
+    # broken.
+    #
+    # Measured 2026-09-03 over 954 live questions: 289 ERRORs, 30.3%. That
+    # figure is a mixture of genuine unhandled exceptions and this gate working
+    # correctly, and nothing in the record separates them, so the one number an
+    # operator would act on cannot be read at all.
+    #
+    # UNSUPPORTED_QUESTION is the existing CAPABILITY code for "I will not
+    # answer that", and it carries the same HTTP 200 CALCULATION_FAILED already
+    # did — so what changes is the label on the record, not what any caller
+    # receives.
+    envelope.setdefault("metadata", {})["semanticCoverageRefused"] = True
     envelope["ok"] = False
     envelope["error"] = message
     envelope["answer"] = message
@@ -692,6 +711,12 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     previous free-text ``error`` string could not express.
     """
     meta = payload.get("metadata") or {}
+    # The coverage gate's own decline, marked by `_enforce_semantic_coverage`.
+    # Read FIRST and by its own marker rather than by reusing
+    # `controlledUnsupported`, whose meaning belongs to the estate's declared
+    # capability boundary and not to this gate.
+    if meta.get("semanticCoverageRefused"):
+        return ErrorCode.UNSUPPORTED_QUESTION
     if meta.get("controlledUnsupported"):
         return ErrorCode.UNSUPPORTED_QUESTION
     if meta.get("unmappedQuestion"):
