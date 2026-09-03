@@ -151,3 +151,38 @@ class TestItCountsTheGatewayCeiling(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestItToleratesTheHeaderAsCopied(unittest.TestCase):
+    """What devtools shows is `Bearer eyJ...`, and that is what gets copied.
+
+    `_call` adds the scheme, so an un-stripped paste sends it twice and every
+    request 401s. That would read as a total failure at every concurrency
+    level -- a capacity verdict produced by a formatting slip.
+    """
+
+    def _token_used(self, env_value):
+        seen = {}
+
+        def _fake(base, token, method, path, body, pid, timeout):
+            seen["token"] = token
+            return {"endpoint": path, "method": method, "status": 200, "ms": 1,
+                    "bytes": 0, "error": "", "over_gateway_timeout": False}
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": env_value}), \
+             mock.patch.object(LP, "_call", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            LP.main(["--users", "1", "--settle", "0",
+                     "--out", str(Path(d) / "o.json")])
+        return seen["token"]
+
+    def test_a_pasted_scheme_prefix_is_stripped(self):
+        self.assertEqual(self._token_used("Bearer " + _TOKEN), _TOKEN)
+
+    def test_a_bare_token_is_untouched(self):
+        self.assertEqual(self._token_used(_TOKEN), _TOKEN)
+
+    def test_the_check_is_case_insensitive_and_survives_whitespace(self):
+        self.assertEqual(self._token_used("  bearer   " + _TOKEN + "  "), _TOKEN)

@@ -222,6 +222,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = ap.parse_args(argv)
 
     token = os.environ.get("MI_BEARER", "").strip()
+    # The devtools header reads "Bearer eyJ...", and that whole string is what
+    # gets copied. `_call` adds the scheme itself, so a token pasted with its
+    # prefix would be sent as "Bearer Bearer eyJ..." and 401 every request --
+    # losing the run to a formatting slip rather than to capacity, which is the
+    # one thing a measurement must not do.
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
     if not token:
         print("MI_BEARER is not set. Copy the Authorization header value from "
               "your browser's devtools (without the leading 'Bearer ') and:\n"
