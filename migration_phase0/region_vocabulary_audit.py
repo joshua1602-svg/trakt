@@ -353,12 +353,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.suggest and not args.counts_only:
         print("\n=== paste into config/mi/region_taxonomy.yaml under `synonyms:` "
               "AFTER approving each line ===")
-        for label, columns in report["groups"].items():
-            for column, result in columns.items():
+        # ONE LINE PER KEY. A key appears once per book and once per region
+        # column, so the first run emitted ten lines for four keys — a YAML
+        # block with duplicate keys, where the last silently wins. Rows are
+        # summed across the appearances so the biggest gap is still first.
+        gaps: Dict[str, int] = {}
+        for columns in report["groups"].values():
+            for result in columns.values():
                 for entry in result.get("unresolved_keys", []):
-                    print("      %s: %s   # PROPOSAL — approve or replace"
-                          % (entry["key"],
-                             suggest(taxonomy, entry["key"]) or "TODO"))
+                    gaps[entry["key"]] = gaps.get(entry["key"], 0) + entry["rows"]
+        for key in sorted(gaps, key=lambda k: (-gaps[k], k)):
+            print("      %s: %s   # PROPOSAL — approve or replace"
+                  % (key, suggest(taxonomy, key) or "TODO"))
 
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, default=list)

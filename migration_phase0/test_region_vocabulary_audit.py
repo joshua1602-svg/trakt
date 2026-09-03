@@ -227,6 +227,24 @@ class TestFromAppCallsSomethingThatExists(unittest.TestCase):
         self.assertIn("--csv", str(caught.exception))
 
 
+class TestThePasteBlockIsValidToPaste(unittest.TestCase):
+    """The first live run emitted ten lines for four keys — one per key per
+    book per region column. Pasted into YAML that is a block with duplicate
+    keys, where the last one silently wins."""
+
+    def test_each_key_appears_once_however_many_books_carry_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            csv = Path(d) / "t.csv"
+            csv.write_text("book,geographic_region_obligor,collateral_geography\n"
+                           "a,Atlantis,Atlantis\n"
+                           "b,Atlantis,Atlantis\n")
+            with redirect_stdout(io.StringIO()) as printed:
+                A.main(["--csv", str(csv), "--by", "book", "--suggest",
+                        "--out", str(Path(d) / "o.json")])
+        block = printed.getvalue().split("paste into")[-1]
+        self.assertEqual(block.count("atlantis:"), 1, block)
+
+
 class TestItEmitsNoFigureFromTheBook(unittest.TestCase):
 
     def test_counts_only_drops_the_region_names(self):
