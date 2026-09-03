@@ -167,6 +167,20 @@ def _describe_unfoldable(pred: Any) -> str:
 MAX_MEASURES = 4
 
 
+def _governed_view_names() -> frozenset:
+    """The governed dataset names, from the registry that owns them.
+
+    Deferred and tolerant: this module is imported by the parser that
+    ``mi_agent_api`` itself imports, so a module-scope import is a cycle, and a
+    normalisation step may never fail an answer over a lookup.
+    """
+    try:
+        from mi_agent_api.workspace import VIEWS
+        return frozenset(str(v).strip().lower() for v in (VIEWS or ()) if v)
+    except Exception:  # noqa: BLE001 - normalisation never breaks a parse
+        return frozenset()
+
+
 def normalise_measures(raw: Any, *, metric: Optional[str] = None,
                        aggregation: Optional[str] = None,
                        weight_field: Optional[str] = None) -> tuple:
@@ -188,6 +202,32 @@ def normalise_measures(raw: Any, *, metric: Optional[str] = None,
     def _add(field_name: Any, agg: Any = None, weight: Any = None) -> None:
         name = str(field_name or "").strip()
         if not name:
+            return
+        # A GOVERNED VIEW NAME IS A DATASET, NOT A MEASURE.
+        #
+        # Measured live 2026-09-03: "Show me the funded loan book summary by
+        # region" was refused with *"'funded' is not a governed measure in this
+        # dataset"* and a list of measures to try instead. The deterministic
+        # parser emits no measure for that sentence, so the slot came from the
+        # language layer, which read the word naming the DATASET as the thing to
+        # calculate. The executor then reported it faithfully, and a reader saw
+        # the product decline an ordinary question.
+        #
+        # Rejected HERE rather than at the executor, because the executor is
+        # right: it reports what it was handed. This is the one place a measure
+        # list is normalised, and it already carries a notes channel for exactly
+        # this.
+        #
+        # The same collision, and the same rule, that
+        # `lexical.pipeline_stage_vocabulary` already applies to the STAGE
+        # vocabulary: it drops every stage spelling that collides with a
+        # governed view name, reading the registry so a newly registered view
+        # cannot silently reintroduce the clash. Read from the registry here for
+        # the same reason. Silent because it is not a loss: the view name has
+        # already done its work selecting the dataset, and saying "funded was
+        # not applied" about a question answered from the funded book would be
+        # a disclosure of something that did not happen.
+        if name.lower() in _governed_view_names():
             return
         key = (name, str(agg or "").strip().lower() or None)
         if key in seen or any(m["field"] == name and not agg for m in out):
