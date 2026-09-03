@@ -243,3 +243,79 @@ class TestBurstIsActuallyABurst(unittest.TestCase):
         self.assertIn("peak_in_flight", s)
         self.assertIsInstance(s["peak_in_flight"], int)
         self.assertGreaterEqual(s["peak_in_flight"], 1)
+
+
+class TestAnExpiredTokenIsNotACapacityVerdict(unittest.TestCase):
+    """MEASURED 2026-09-03. The cold-burst run returned 54/54 401s in 3.3
+    seconds and printed "FIRST DEGRADED AT: 6 concurrent user(s)".
+
+    Everything about that output reads like a capacity ceiling — a DEGRADED
+    verdict, 54 failures, a breaking point named. It measured an expired Entra
+    token. Believed, it buys a larger App Service plan to fix a credential
+    that lapsed while the previous ramp was running, which is exactly how long
+    an hour-long token lasts against a ramp plus a restart plus a warm-up.
+
+    A probe may fail to measure. It may not fail in a way that looks like a
+    finding.
+    """
+
+    def _round_of(self, status):
+        def _fake(base, token, method, path, body, pid, timeout, inflight=None):
+            return {"endpoint": path, "method": method, "status": status,
+                    "ms": 5, "bytes": 0, "error": "",
+                    "over_gateway_timeout": False}
+
+        with mock.patch.object(LP, "_call", side_effect=_fake):
+            return LP._run_round("https://x/api", _TOKEN, "p", 2, 10.0)
+
+    def test_an_all_401_round_is_flagged_as_not_a_measurement(self):
+        s = self._round_of(401)
+        self.assertTrue(s["auth_failed"])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            LP._print_round(s)
+        self.assertIn("NOT A MEASUREMENT", out.getvalue())
+        self.assertNotIn("DEGRADED", out.getvalue())
+
+    def test_403_counts_too(self):
+        self.assertTrue(self._round_of(403)["auth_failed"])
+
+    def test_a_real_failure_is_still_a_real_failure(self):
+        """The 500s at six burst users were the finding. This must not swallow
+        them."""
+        s = self._round_of(500)
+        self.assertFalse(s["auth_failed"])
+        out = io.StringIO()
+        with redirect_stdout(out):
+            LP._print_round(s)
+        self.assertIn("DEGRADED", out.getvalue())
+
+    def test_a_healthy_round_is_untouched(self):
+        s = self._round_of(200)
+        self.assertFalse(s["auth_failed"])
+
+    def test_a_mixed_round_is_not_written_off_as_auth(self):
+        """Some 401s among real traffic is a different problem — and a real
+        one. Only a round that is ENTIRELY auth failures measured nothing."""
+        recs = [{"endpoint": "/a", "method": "GET", "status": 401, "ms": 5,
+                 "bytes": 0, "error": "", "over_gateway_timeout": False},
+                {"endpoint": "/b", "method": "GET", "status": 500, "ms": 45000,
+                 "bytes": 0, "error": "", "over_gateway_timeout": False}]
+        self.assertFalse(LP._auth_failed(recs))
+
+    def test_the_run_stops_rather_than_ramping_on(self):
+        """Continuing produces a full ramp of clean-looking failures and a
+        confident verdict about a server never reached."""
+        def _fake(base, token, method, path, body, pid, timeout, inflight=None):
+            return {"endpoint": path, "method": method, "status": 401, "ms": 5,
+                    "bytes": 0, "error": "", "over_gateway_timeout": False}
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": _TOKEN}), \
+             mock.patch.object(LP, "_call", side_effect=_fake), \
+             redirect_stdout(io.StringIO()) as out:
+            rc = LP.main(["--ramp", "1,2,4,6", "--settle", "0",
+                          "--out", str(Path(d) / "o.json")])
+        self.assertEqual(rc, 3, "an all-auth-failure run must not exit 0")
+        self.assertNotIn("FIRST DEGRADED AT", out.getvalue())

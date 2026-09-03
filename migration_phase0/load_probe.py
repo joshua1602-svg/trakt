@@ -218,6 +218,27 @@ def _summarise(records: List[Dict[str, Any]], users: int) -> Dict[str, Any]:
     }
 
 
+#: Statuses that mean the CREDENTIAL failed, not the capacity. An Entra token
+#: lives about an hour, and a ramp plus a restart plus a warm-up easily outlives
+#: one — so this is not an edge case, it is the normal way a second run dies.
+_AUTH_STATUSES = (401, 403)
+
+
+def _auth_failed(records: List[Dict[str, Any]]) -> bool:
+    """True when the run measured the token rather than the server.
+
+    A 401 arrives in milliseconds and never touches an analytic, so a round
+    full of them shows fast timings, zero timeouts, and "DEGRADED" -- which
+    reads exactly like a capacity ceiling and is nothing of the kind. Measured
+    2026-09-03: a cold-burst run returned 54/54 401s in 3.3 seconds and
+    reported "FIRST DEGRADED AT: 6 concurrent user(s)". Believed, that buys a
+    bigger App Service plan to fix an expired token.
+    """
+    if not records:
+        return False
+    return all(r["status"] in _AUTH_STATUSES for r in records)
+
+
 def _status_counts(records: List[Dict[str, Any]]) -> Dict[str, int]:
     out: Dict[str, int] = {}
     for r in records:
@@ -250,13 +271,17 @@ def _run_round(base: str, token: str, pid: str, users: int,
     # the OS throttled before the server did, and the round measured the load
     # generator rather than the app.
     summary["peak_in_flight"] = inflight.peak
+    summary["auth_failed"] = _auth_failed(records)
     summary["records"] = records
     return summary
 
 
 def _print_round(s: Dict[str, Any]) -> None:
-    verdict = ("OK" if s["failed"] == 0 and s["over_gateway_timeout"] == 0
-               else "DEGRADED")
+    if s.get("auth_failed"):
+        verdict = "NOT A MEASUREMENT (auth failed)"
+    else:
+        verdict = ("OK" if s["failed"] == 0 and s["over_gateway_timeout"] == 0
+                   else "DEGRADED")
     print(f"\n=== {s['users']} concurrent user(s) [{s.get('mode', '?')}] "
           f"— {verdict} ===")
     print(f"  requests {s['requests']}  ok {s['ok']}  failed {s['failed']}"
@@ -326,6 +351,14 @@ def main(argv: Optional[List[str]] = None) -> int:
                        burst=args.burst)
         _print_round(s)
         rounds.append(s)
+        if s.get("auth_failed"):
+            # STOP, and do not pretend this was capacity. Continuing would
+            # produce a full ramp of fast, clean-looking failures and a
+            # confident verdict about a server that was never reached.
+            print("\nEvery request returned 401/403: the token is expired or "
+                  "wrong.\nThis run measured NOTHING about capacity. Get a "
+                  "fresh token and re-run.", file=sys.stderr)
+            return 3
 
     payload = {"target": args.base, "portfolio": args.portfolio,
                "mode": "burst" if args.burst else "sustained",
@@ -338,7 +371,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"\nwrote {args.out}")
 
     breaking = [r["users"] for r in rounds
-                if r["failed"] or r["over_gateway_timeout"]]
+                if not r.get("auth_failed")
+                and (r["failed"] or r["over_gateway_timeout"])]
     if breaking:
         print(f"FIRST DEGRADED AT: {min(breaking)} concurrent user(s)")
     else:
