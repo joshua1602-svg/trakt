@@ -155,5 +155,134 @@ class TestTheRunFailsOnARegression(unittest.TestCase):
         self.assertEqual(self._run("ERROR", "ANSWERED")[0], 0)
 
 
+class TestAGatewayCutIsNotAModelFailure(unittest.TestCase):
+    """The failure this class exists to stop.
+
+    The prior outcomes in the telemetry log were written by the APP, after it
+    had decided. If the client scores a gateway cut-off as ERROR, a question
+    the model still answers is reported REGRESSED, and the recalibration that
+    follows chases a defect that is not there.
+    """
+
+    def _ask(self, status, body, ms=0.0, boom=None):
+        calls = {"n": 0}
+
+        class _Resp:
+            status_code = status
+
+            def __init__(self):
+                self.status = status
+
+            def read(self):
+                return json.dumps(body).encode() if body is not None else b"x"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def _open(req, timeout=0):
+            calls["n"] += 1
+            if boom:
+                raise boom
+            if status >= 400:
+                raise RP.urllib.error.HTTPError(
+                    "u", status, "e", {}, io.BytesIO(_Resp().read()))
+            return _Resp()
+
+        times = iter([0.0, ms])
+        with mock.patch.object(RP.urllib.request, "urlopen", _open), \
+             mock.patch.object(RP.time, "time", lambda: next(times, ms)):
+            return RP._ask("http://h", "t", "q", None, None, 5.0), calls
+
+    def test_a_500_with_no_envelope_is_not_measured(self):
+        res, _ = self._ask(500, None, ms=46.0)
+        self.assertEqual(res["outcome"], RP.NOT_MEASURED)
+        self.assertTrue(res["gateway_cut"])
+
+    def test_a_500_carrying_an_envelope_is_a_real_error(self):
+        """The app's own failures still count. Only what never reached it does
+        not."""
+        res, _ = self._ask(500, {"ok": False, "errorCode": "INTERNAL"})
+        self.assertEqual(res["outcome"], RP.ERROR)
+        self.assertFalse(res["gateway_cut"])
+
+    def test_a_dead_connection_is_not_measured(self):
+        res, _ = self._ask(200, {}, boom=TimeoutError("read timeout"))
+        self.assertEqual(res["outcome"], RP.NOT_MEASURED)
+
+    def test_an_unmeasured_question_is_never_a_regression(self):
+        self.assertEqual(RP._verdict("ANSWERED", RP.NOT_MEASURED), RP.UNMEASURED)
+
+    def test_an_unmeasured_question_is_never_a_fix_either(self):
+        self.assertEqual(RP._verdict("ERROR", RP.NOT_MEASURED), RP.UNMEASURED)
+
+    def test_a_cut_is_retried_before_it_is_believed(self):
+        """One retry, because a warm second attempt usually answers -- and a
+        run that gives up on the first cut measures the box, not the model."""
+        seen = []
+
+        def _fake(*a, **k):
+            seen.append(1)
+            out = RP.NOT_MEASURED if len(seen) == 1 else RP.ANSWERED
+            return {"outcome": out, "http": 200, "route": "r",
+                    "error_code": None, "reason": "", "ms": 1,
+                    "transport_error": "", "gateway_cut": False}
+
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            rc = RP.main(["--from-log", _log([{"question": "q",
+                                               "outcome": "ANSWERED"}]),
+                          "--out", str(Path(d) / "o.json")])
+            written = json.loads((Path(d) / "o.json").read_text())
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(rc, 0)
+        self.assertEqual(written["results"][0]["verdict"], RP.UNCHANGED_OK)
+
+    def test_a_refusal_is_not_retried(self):
+        """Re-asking a refusal would average away the non-determinism this run
+        exists to find."""
+        seen = []
+
+        def _fake(*a, **k):
+            seen.append(1)
+            return {"outcome": RP.REFUSED, "http": 200, "route": "r",
+                    "error_code": "UNSUPPORTED_QUESTION", "reason": "",
+                    "ms": 1, "transport_error": "", "gateway_cut": False}
+
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            RP.main(["--from-log", _log([{"question": "q",
+                                          "outcome": "REFUSED"}]),
+                     "--out", str(Path(d) / "o.json")])
+        self.assertEqual(len(seen), 1)
+
+    def test_an_unmeasured_question_does_not_pollute_no_route(self):
+        """'(no route)' means the MODEL could not attribute the question. A
+        question the model never saw must not appear there."""
+        def _fake(*a, **k):
+            return {"outcome": RP.NOT_MEASURED, "http": 500, "route": None,
+                    "error_code": None, "reason": "", "ms": 46000,
+                    "transport_error": "", "gateway_cut": True}
+
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()) as out:
+            rc = RP.main(["--from-log", _log([{"question": "q",
+                                               "outcome": "ANSWERED"}]),
+                          "--retries", "0",
+                          "--out", str(Path(d) / "o.json")])
+            written = json.loads((Path(d) / "o.json").read_text())
+        self.assertEqual(rc, 0)
+        self.assertEqual(written["by_route"], {})
+        self.assertIn("never reached the model", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

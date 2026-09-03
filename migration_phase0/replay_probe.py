@@ -20,6 +20,14 @@ disagree is recorded as MIXED and never counted as a regression, because there
 is no single "before" for it to have regressed from. Those are the questions
 worth fixing first, and averaging them away would hide them.
 
+A CUT IS NOT A VERDICT. The prior outcome for each question was written by
+the APP, after it had decided. The gateway in front of it gives up at ~46s and
+returns a body that is not an MI envelope -- so a client that scores that as an
+error reports a REGRESSION in a question the model still answers, and the
+recalibration that follows chases a defect that is not there. Anything without
+an envelope is NOT_MEASURED: retried once, then scored neither way and counted
+separately as the capacity finding it is.
+
 DIAGNOSTICS ONLY, the standing rule. Outcome, route, error code, duration and
 a REDACTED reason. Never the answer text: money and long numbers are stripped
 with the same reader `live_bank_probe` uses, ISO dates kept, because "between
@@ -45,12 +53,25 @@ from typing import Any, Dict, List, Optional, Tuple
 ANSWERED, REFUSED, ERROR, MIXED, UNKNOWN = (
     "ANSWERED", "REFUSED", "ERROR", "MIXED", "UNKNOWN")
 
+#: The request never reached a verdict from the MI service -- the gateway cut
+#: it, or the connection died. NOT a model outcome, and deliberately not ERROR:
+#: the prior outcomes in the telemetry log were written by the app AFTER it had
+#: decided, so a client-side cut-off scored as ERROR would report a regression
+#: in a question the model still answers. See `_ask`.
+NOT_MEASURED = "NOT_MEASURED"
+
 #: Verdicts, and the only one that should stop a release.
 FIXED = "FIXED"                 # did not answer before; answers now
 REGRESSED = "REGRESSED"         # answered before; does not now
 UNCHANGED_OK = "UNCHANGED_OK"   # answered before and after
 STILL_FAILING = "STILL_FAILING"  # did not answer before or after
 WAS_MIXED = "WAS_MIXED"         # prior runs disagreed; no single "before"
+UNMEASURED = "UNMEASURED"       # the request never reached the model
+
+#: The Azure auth sidecar gives up at ~46s and returns "Backend call failure"
+#: -- a body that is not an MI envelope. Recorded so a slow answer is visible
+#: as a capacity finding rather than silently absorbed into the model's score.
+GATEWAY_CUT_MS = 44_000
 
 #: Copied from `live_bank_probe`, deliberately: ISO dates first so they survive,
 #: then money and long numbers out. One rule, two probes, same behaviour.
@@ -146,8 +167,15 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
     meta = payload.get("metadata") or {}
     ok = bool(payload.get("ok"))
     code = payload.get("errorCode") or (payload.get("governance") or {}).get("errorCode")
+    # The MI service ALWAYS answers with an envelope carrying `ok`. Its absence
+    # means the response was written by something in front of the app -- the
+    # auth sidecar, a proxy, or nothing at all -- so the model never gave a
+    # verdict and this run has no measurement of it.
+    envelope = isinstance(payload, dict) and "ok" in payload
     if transport or status == 0:
-        outcome = ERROR
+        outcome = NOT_MEASURED
+    elif status >= 500 and not envelope:
+        outcome = NOT_MEASURED
     elif ok:
         outcome = ANSWERED
     else:
@@ -166,10 +194,17 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
         "reason": _redact(payload.get("error")),
         "ms": elapsed,
         "transport_error": transport,
+        # Corroborating, never the discriminator: the envelope is. A cut at 46s
+        # and a cut at 3s are both unmeasured; only one is a capacity finding.
+        "gateway_cut": elapsed >= GATEWAY_CUT_MS and outcome == NOT_MEASURED,
     }
 
 
 def _verdict(prior: str, now: str) -> str:
+    # Checked BEFORE the prior, because a question we did not measure has no
+    # verdict to give whatever it used to do.
+    if now == NOT_MEASURED:
+        return UNMEASURED
     if prior == MIXED:
         return WAS_MIXED
     was_ok, is_ok = prior == ANSWERED, now == ANSWERED
@@ -194,6 +229,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--pause", type=float, default=0.0,
                     help="seconds between questions (default 0)")
     ap.add_argument("--limit", type=int, default=0, help="first N only (0 = all)")
+    ap.add_argument("--retries", type=int, default=1,
+                    help="re-ask a question the gateway cut, N times (default 1). "
+                         "Only NOT_MEASURED is retried -- a refusal and an error "
+                         "are answers, and re-asking them would hide "
+                         "non-determinism this run exists to find.")
     ap.add_argument("--out", default="replay.json")
     args = ap.parse_args(argv)
 
@@ -215,12 +255,22 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     results = []
     for i, item in enumerate(corpus, 1):
-        res = _ask(args.base, token, item["question"], args.lens,
-                   args.portfolio, args.timeout)
+        attempts = 0
+        while True:
+            res = _ask(args.base, token, item["question"], args.lens,
+                       args.portfolio, args.timeout)
+            attempts += 1
+            if res["outcome"] != NOT_MEASURED or attempts > args.retries:
+                break
+        res["attempts"] = attempts
         verdict = _verdict(item["prior"], res["outcome"])
         row = {**item, **res, "verdict": verdict}
         results.append(row)
         flag = "  <-- REGRESSED" if verdict == REGRESSED else ""
+        if res["outcome"] == NOT_MEASURED:
+            flag = "  <-- not measured (%s)" % (
+                "gateway cut" if res["gateway_cut"]
+                else res["transport_error"] or ("http %s" % res["http"]))
         print("[%3d/%3d] %-13s %-13s %-22s %5dms  %s%s"
               % (i, len(corpus), item["prior"], res["outcome"],
                  (res["route"] or "-")[:22], res["ms"],
@@ -233,14 +283,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         counts[r["verdict"]] = counts.get(r["verdict"], 0) + 1
     by_route: Dict[str, Dict[str, int]] = {}
     for r in results:
+        # An unmeasured question would otherwise pile into "(no route)", which
+        # is supposed to mean "the model could not attribute this" -- a finding
+        # about the model, not about the box it runs on.
+        if r["outcome"] == NOT_MEASURED:
+            continue
         key = r["route"] or "(no route)"
         by_route.setdefault(key, {})
         by_route[key][r["outcome"]] = by_route[key].get(r["outcome"], 0) + 1
 
     print("\n=== verdicts ===")
-    for k in (REGRESSED, FIXED, UNCHANGED_OK, STILL_FAILING, WAS_MIXED):
+    for k in (REGRESSED, FIXED, UNCHANGED_OK, STILL_FAILING, WAS_MIXED,
+              UNMEASURED):
         if counts.get(k):
             print("  %-14s %d" % (k, counts[k]))
+    if counts.get(UNMEASURED):
+        cut = sum(1 for r in results if r.get("gateway_cut"))
+        print("\n  %d question(s) never reached the model (%d cut by the "
+              "gateway at ~46s). Those are a capacity finding, not a model\n"
+              "  finding, and are scored neither way." % (counts[UNMEASURED], cut))
     print("\n=== outcome by route ===")
     for route, oc in sorted(by_route.items()):
         print("  %-24s %s" % (route, oc))
