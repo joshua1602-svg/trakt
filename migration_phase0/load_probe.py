@@ -98,6 +98,17 @@ SESSION: List[Tuple[str, str, Optional[Dict[str, Any]]]] = [
 ]
 
 
+#: The calls the dashboard STOPPED issuing in its page-load burst once the
+#: speculative forecast prefetch was deferred (useWorkspace.ts). They still
+#: happen -- a moment later, and only for a tab the user may open -- so they
+#: leave the burst without leaving the product.
+#:
+#: This probe talks to the API directly, so a dashboard change is invisible to
+#: it unless the session list is told. Measuring "after" against the "before"
+#: list would report no improvement and blame the wrong thing.
+DEFERRED_BY_LAZY_LOAD = ("/mi/forecast/snapshot", "/mi/insights/weekly-brief")
+
+
 def _label(path: str) -> str:
     """The endpoint without its query string — the unit results group by."""
     return path.split("?", 1)[0]
@@ -151,7 +162,7 @@ def _call(base: str, token: str, method: str, path: str,
 def _session(base: str, token: str, pid: str, user: int,
              timeout: float, sink: List[Dict[str, Any]],
              lock: threading.Lock, inflight: "_InFlight",
-             burst: bool) -> None:
+             burst: bool, session: List[Tuple[str, str, Optional[Dict[str, Any]]]]) -> None:
     """One simulated user's page load, in one of two shapes.
 
     THE DIFFERENCE IS THE WHOLE POINT.
@@ -175,12 +186,12 @@ def _session(base: str, token: str, pid: str, user: int,
             sink.append(rec)
 
     if not burst:
-        for method, path, body in SESSION:
+        for method, path, body in session:
             _one(method, path, body)
         return
 
     threads = [threading.Thread(target=_one, args=(m, pth, b), daemon=True)
-               for m, pth, b in SESSION]
+               for m, pth, b in session]
     for th in threads:
         th.start()
     for th in threads:
@@ -248,14 +259,17 @@ def _status_counts(records: List[Dict[str, Any]]) -> Dict[str, int]:
 
 
 def _run_round(base: str, token: str, pid: str, users: int,
-               timeout: float, burst: bool = False) -> Dict[str, Any]:
+               timeout: float, burst: bool = False,
+               session: Optional[List[Tuple[str, str, Optional[Dict[str, Any]]]]] = None
+               ) -> Dict[str, Any]:
     """N users, all starting together."""
     records: List[Dict[str, Any]] = []
     lock = threading.Lock()
     inflight = _InFlight()
+    calls = session if session is not None else SESSION
     threads = [threading.Thread(target=_session,
                                 args=(base, token, pid, i + 1, timeout,
-                                      records, lock, inflight, burst),
+                                      records, lock, inflight, burst, calls),
                                 daemon=True)
                for i in range(users)]
     t0 = time.time()
@@ -315,6 +329,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                          "hours after a reporting cycle. Without it the calls "
                          "go in sequence, which models sustained use and "
                          "understates a burst roughly ninefold.")
+    ap.add_argument("--page-load", choices=("before", "after"), default="before",
+                    help="'before' issues all 9 calls, as the dashboard did on "
+                         "2026-09-03. 'after' drops the two the deferred "
+                         "forecast prefetch removed from the burst "
+                         "(forecast/snapshot, weekly-brief), so the change can "
+                         "be measured -- this probe calls the API directly and "
+                         "cannot see a dashboard change otherwise.")
     ap.add_argument("--out", default="load.json")
     args = ap.parse_args(argv)
 
@@ -332,12 +353,18 @@ def main(argv: Optional[List[str]] = None) -> int:
               "    export MI_BEARER='<token>'", file=sys.stderr)
         return 2
 
+    session = list(SESSION)
+    if args.page_load == "after":
+        session = [(m, pth, b) for m, pth, b in SESSION
+                   if _label(pth) not in DEFERRED_BY_LAZY_LOAD]
+
     steps = ([args.users] if args.users
              else [int(x) for x in args.ramp.split(",") if x.strip()])
     print(f"target {args.base}  portfolio {args.portfolio}")
     mode = ("BURST (all 9 at once, browser-style)" if args.burst
             else "sustained (9 calls in sequence)")
-    print(f"session = {len(SESSION)} calls per user, {mode}; "
+    print(f"session = {len(session)} calls per user "
+          f"(page-load '{args.page_load}'), {mode}; "
           f"gateway abandons at ~{int(GATEWAY_TIMEOUT_S)}s")
 
     rounds = []
@@ -348,7 +375,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             # it is.
             time.sleep(args.settle)
         s = _run_round(args.base, token, args.portfolio, users, args.timeout,
-                       burst=args.burst)
+                       burst=args.burst, session=session)
         _print_round(s)
         rounds.append(s)
         if s.get("auth_failed"):
@@ -363,7 +390,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     payload = {"target": args.base, "portfolio": args.portfolio,
                "mode": "burst" if args.burst else "sustained",
                "gateway_timeout_s": GATEWAY_TIMEOUT_S,
-               "session_calls": [f"{m} {_label(p)}" for m, p, _ in SESSION],
+               "page_load": args.page_load,
+               "session_calls": [f"{m} {_label(p)}" for m, p, _ in session],
                "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                "rounds": rounds}
     with open(args.out, "w", encoding="utf-8") as fh:

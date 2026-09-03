@@ -319,3 +319,50 @@ class TestAnExpiredTokenIsNotACapacityVerdict(unittest.TestCase):
                           "--out", str(Path(d) / "o.json")])
         self.assertEqual(rc, 3, "an all-auth-failure run must not exit 0")
         self.assertNotIn("FIRST DEGRADED AT", out.getvalue())
+
+
+class TestTheSessionCanModelTheDeferredPageLoad(unittest.TestCase):
+    """This probe calls the API directly, so a DASHBOARD change is invisible
+    to it unless the session list is told about one.
+
+    Deferring the speculative forecast prefetch took `forecast/snapshot` and
+    `weekly-brief` out of the page-load burst. Re-running with the old
+    nine-call list would report no improvement whatever and send the search
+    somewhere else -- a measurement that is wrong in a way that looks like a
+    result.
+    """
+
+    def _labels(self, page_load):
+        seen = []
+
+        def _fake(base, token, method, path, body, pid, timeout, inflight=None):
+            seen.append(LP._label(path))
+            return {"endpoint": LP._label(path), "method": method, "status": 200,
+                    "ms": 1, "bytes": 0, "error": "",
+                    "over_gateway_timeout": False}
+
+        import tempfile
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": _TOKEN}), \
+             mock.patch.object(LP, "_call", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            LP.main(["--users", "1", "--settle", "0", "--page-load", page_load,
+                     "--out", str(Path(d) / "o.json")])
+        return seen
+
+    def test_before_issues_the_whole_traced_burst(self):
+        self.assertEqual(len(self._labels("before")), len(LP.SESSION))
+
+    def test_after_drops_exactly_the_deferred_calls(self):
+        after = self._labels("after")
+        for gone in LP.DEFERRED_BY_LAZY_LOAD:
+            self.assertNotIn(gone, after)
+        self.assertEqual(len(after), len(LP.SESSION) - len(LP.DEFERRED_BY_LAZY_LOAD))
+
+    def test_after_keeps_the_question(self):
+        """The query is the point of the product. Dropping it would make
+        'after' look better by measuring less."""
+        self.assertIn("/mi/query", self._labels("after"))
+
+    def test_before_is_the_default_so_a_rerun_compares_like_with_like(self):
+        self.assertEqual(len(self._labels("before")), 9)
