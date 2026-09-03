@@ -746,6 +746,31 @@ def _movement_title(reading: StageMovement) -> str:
     return "%s stage reconciliation" % _label(reading.stage)
 
 
+def names_a_stage_movement(question: Any) -> bool:
+    """Does this sentence carry a governed stage-movement construction?
+
+    PUBLISHED SO ANOTHER ROUTE CAN YIELD, and for nothing else. This module
+    defers structurally — it registers last, so any route that also matches
+    keeps the question — but deference only makes sense between routes that
+    CAN honour what the sentence asks.
+
+    Measured: "moved into Offer in the last reporting period" answered here,
+    while "moved into Offer stage in the last month" was claimed by
+    `temporal_compare` at priority 90, because a relative period sets
+    ``temporal_mode = "compare"`` and that route recognises on it alone.
+    `temporal_compare` compares a whole-population metric across two reporting
+    periods and cannot narrow to a stage, so it refused — correctly, and for a
+    question it should never have been given. One analytic, three phrasings,
+    two outcomes.
+
+    So a route that cannot narrow to a stage asks this before claiming a
+    sentence that names one in motion. It reads; it decides nothing about any
+    other route's own recognition, and it is the same reading :func:`recognise`
+    uses, so the two can never disagree about what a stage movement is.
+    """
+    return read(str(question or "")) is not None
+
+
 def recogniser():
     """This capability's registry entry.
 
