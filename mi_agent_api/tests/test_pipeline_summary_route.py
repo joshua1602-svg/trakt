@@ -265,7 +265,7 @@ class TestTheRouteItselfDeclaresIt(unittest.TestCase):
 
         snapshot = {"pipelineRowCount": 12, "pipelineAmount": 1_000_000.0,
                     "pipelineAsOfDate": "2026-01-12",
-                    "stageBreakdown": [{"stage": "Offer", "count": 4}],
+                    "stageBreakdown": [{"stage": "Offer", "caseCount": 4}],
                     "weightedExpectedFundedAmount": 500_000.0}
         ds = mock.MagicMock()
         ds._resolve_pipeline_source.return_value = {"client_id": "c", "run_id": "r"}
@@ -440,3 +440,67 @@ class TestTheDeclaredBookIsWhatItSays(unittest.TestCase):
         joined = " ".join(env.get("warnings") or [])
         self.assertNotIn("NOT narrowed to a selected book", joined)
         self.assertTrue(env["metadata"]["lensApplied"])
+
+
+class TestTheStageCountsAreNumbers(unittest.TestCase):
+    """The stage figures must come from the contract's OWN key.
+
+    MEASURED LIVE, 2026-09-03 13:15. The answer was otherwise right — 2,780
+    cases, the correct extract date, the correct scope sentence — and then said
+    "By stage: APPLICATION —, COMPLETED —, KFI —, OFFER —". Every figure an
+    em-dash, because the route read `count` while
+    `pipeline_contract._stage_breakdown` publishes `caseCount`.
+
+    THE SUITE THAT SHIPPED THIS PASSED. Its fixture said
+    `{"stage": "Offer", "count": 4}` — a key this route's author invented and
+    then asserted against, so the test proved only that the code agreed with
+    itself. The fixture below is built from `_dimension_breakdown`'s real
+    output instead, which is why it can fail.
+    """
+
+    def _rendered(self, stage_rows):
+        from unittest import mock
+        from mi_agent_api import chat_routing as CR
+        import mi_agent_api.datasets  # noqa: F401
+        import mi_agent_api.pipeline_contract  # noqa: F401
+
+        ds = mock.MagicMock()
+        ds._resolve_pipeline_source.return_value = {"client_id": "c"}
+        pc = mock.MagicMock()
+        pc.load_prepared_pipeline.return_value = (mock.MagicMock(), {})
+        pc.compute_pipeline_snapshot.return_value = {
+            "pipelineRowCount": 2780, "pipelineAmount": 562_900_000.0,
+            "pipelineAsOfDate": "2026-01-12", "stageBreakdown": stage_rows}
+        with mock.patch("mi_agent_api.datasets", ds), \
+             mock.patch("mi_agent_api.pipeline_contract", pc):
+            env = CR._route_pipeline_summary("Summarise the current pipeline.",
+                                             {}, client_id="c", run_id="r")
+        return (env or {}).get("answer", "")
+
+    def _real_shape(self):
+        """The keys `pipeline_contract._dimension_breakdown` actually emits."""
+        from mi_agent_api import pipeline_contract as PC
+        import pandas as pd
+        df = pd.DataFrame({"pipeline_stage": ["OFFER", "OFFER", "KFI"],
+                           "current_outstanding_balance": [1.0, 2.0, 3.0]})
+        return PC._stage_breakdown(df)
+
+    def test_the_contract_key_is_case_count_not_count(self):
+        """Pin the assumption to the producer, so a rename fails HERE."""
+        rows = self._real_shape()
+        self.assertTrue(rows, "the breakdown produced no rows")
+        self.assertIn("caseCount", rows[0])
+        self.assertNotIn("count", rows[0])
+
+    def test_stage_counts_render_as_numbers(self):
+        answer = self._rendered(self._real_shape())
+        self.assertIn("By stage:", answer)
+        stage_clause = answer.split("By stage:", 1)[1]
+        self.assertNotIn("—", stage_clause,
+                         "a stage figure rendered as an em-dash: %r" % stage_clause)
+
+    def test_a_genuinely_absent_count_still_degrades_gracefully(self):
+        """The em-dash is right when there IS no figure — the defect was
+        reaching for it on data that had one."""
+        answer = self._rendered([{"stage": "OFFER"}])
+        self.assertIn("OFFER —", answer)

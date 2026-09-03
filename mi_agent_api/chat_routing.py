@@ -488,8 +488,14 @@ def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
 
     stages = [b for b in (snapshot.get("stageBreakdown") or []) if b]
     if stages:
+        # `caseCount`, NOT `count`. `pipeline_contract._stage_breakdown` builds
+        # its rows through `_dimension_breakdown(..., key_name="stage")`, whose
+        # count key is `caseCount` (see `cap_breakdown`, which reads the same
+        # field). Reading `count` returned None for every stage and the live
+        # answer read "By stage: APPLICATION —, COMPLETED —, KFI —" — every
+        # figure an em-dash, in an answer that was otherwise correct.
         named = ", ".join(
-            f"{b.get('stage')} {_count(b.get('count'))}" for b in stages[:6])
+            f"{b.get('stage')} {_count(b.get('caseCount'))}" for b in stages[:6])
         parts.append(f"By stage: {named}.")
     weighted = snapshot.get("weightedExpectedFundedAmount")
     if weighted:
