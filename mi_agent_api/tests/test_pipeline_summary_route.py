@@ -266,3 +266,66 @@ class TestTheRouteItselfDeclaresIt(unittest.TestCase):
         env = self._run_the_route()
         self.assertEqual((env.get("reconciliation") or {}).get("reporting_date"),
                          "2026-01-12")
+
+
+class TestTheAnswerSurvivesTheCoverageGate(unittest.TestCase):
+    """END TO END, THROUGH THE GATE THAT ACTUALLY REFUSED IT.
+
+    The suites above prove the route DECLARES the pipeline and that
+    `completeness._carried` reaches RESOLVED from that declaration. Neither
+    drives `_enforce_semantic_coverage`, which is what replaced the live answer
+    with "I could not confirm it was applied to this calculation" — so neither
+    can honestly claim the question is answered again. This one runs the real
+    ledger over the real envelope and asserts the gate lets it through, and
+    asserts the same gate still refuses the undeclared envelope so the test
+    cannot pass by the gate having gone soft.
+    """
+
+    QUESTION = "Summarise the current pipeline."
+
+    def _semantics(self):
+        from mi_agent_api.datasets import load_mi_semantics, semantics_path
+        return load_mi_semantics(semantics_path())
+
+    def _gated(self, envelope):
+        """The envelope after the service's own stamp-then-enforce sequence."""
+        from mi_agent_api import mi_service as MS
+        envelope.setdefault("metadata", {})
+        MS._stamp_semantic_coverage(envelope, question=self.QUESTION,
+                                    semantics=self._semantics(), frame=None)
+        return MS._enforce_semantic_coverage(envelope)
+
+    def _envelope(self, *, declared: bool):
+        from mi_agent_api import chat_routing as CR
+        from mi_agent_api import workspace as W
+        recon = (W.reconciliation_for(W.datasets_read(pipeline_root={"c": 1}),
+                                      reporting_date="2026-01-12")
+                 if declared else None)
+        return CR._envelope(
+            ok=True, question=self.QUESTION,
+            answer="At the weekly extract of 12 Jan 2026 the pipeline holds ...",
+            spec={}, artifacts=[], route="pipeline_summary",
+            lens_applied=False, reconciliation=recon)
+
+    def test_the_declared_answer_is_not_refused(self):
+        gated = self._gated(self._envelope(declared=True))
+        self.assertTrue(gated.get("ok"), (
+            "the coverage gate still refuses the pipeline summary: "
+            + str(gated.get("error"))))
+        self.assertNotIn("could not confirm it was applied",
+                         str(gated.get("answer")))
+
+    def test_the_pipeline_concept_is_not_left_unaccounted(self):
+        gated = self._gated(self._envelope(declared=True))
+        ledger = (gated.get("metadata") or {}).get("semanticCoverage") or {}
+        unaccounted = {str(e.get("value")) for e in (ledger.get("unaccounted") or ())}
+        self.assertNotIn("pipeline", unaccounted)
+
+    def test_the_undeclared_answer_is_still_refused(self):
+        """THE FALSIFICATION, and the guard's own protection. If this ever
+        passes, the gate has stopped catching a route that reads one dataset
+        and is asked about another — which is the defect it exists for."""
+        gated = self._gated(self._envelope(declared=False))
+        self.assertFalse(gated.get("ok"),
+                         "the coverage gate no longer catches an undeclared read")
+        self.assertIn("could not confirm it was applied", str(gated.get("answer")))
