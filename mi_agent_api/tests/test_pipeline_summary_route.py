@@ -161,3 +161,108 @@ class TestWhereItRegisters(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestItSaysWhichDatasetItRead(unittest.TestCase):
+    """The route must DECLARE the pipeline, not merely read it.
+
+    MEASURED LIVE, 2026-09-03. "Summarise the current pipeline" routed here,
+    computed the right snapshot, disclosed its scope — and was then replaced by
+    "I understood that you asked about pipeline, but I could not confirm it was
+    applied to this calculation." The envelope carried no `reconciliation` at
+    all, so `completeness._carried` compared a stated `dataset: pipeline`
+    concept against an empty record of what was read, reported it UNACCOUNTED,
+    and `_enforce_semantic_coverage` refused a correct answer.
+
+    The guard was right. A route that cannot say what it read cannot be checked
+    against what it was asked for, and `workspace.datasets_read` exists because
+    three routes once wrote the dataset as a literal and were wrong about
+    themselves undetectably. So the fix is the route supplying the evidence,
+    never the ledger being told to trust it — which is why the assertions below
+    are about the ENVELOPE's own record and about `_carried` reaching RESOLVED
+    from it, not about the refusal being suppressed.
+    """
+
+    def _envelope_from_the_route(self):
+        from mi_agent_api import chat_routing as CR
+        from mi_agent_api import workspace as W
+        return CR._envelope(
+            ok=True, question="Summarise the current pipeline.",
+            answer="...", spec={}, artifacts=[], route="pipeline_summary",
+            reconciliation=W.reconciliation_for(
+                W.datasets_read(pipeline_root={"client_id": "c"}),
+                reporting_date="2026-01-12"))
+
+    def test_the_envelope_names_the_pipeline_as_what_it_read(self):
+        env = self._envelope_from_the_route()
+        self.assertEqual((env.get("reconciliation") or {}).get("dataset"),
+                         "pipeline")
+
+    def test_the_stated_pipeline_concept_is_carried(self):
+        """The ledger's own reader, on the ledger's own terms."""
+        from question_interpretation import completeness as C
+        concept = C.StatedConcept("dataset", "view", "pipeline", "",
+                                  "workspace.resolve_dataset")
+        contract = C.from_envelope(self._envelope_from_the_route())
+        self.assertTrue(C._carried(concept, contract))
+
+    def test_an_envelope_without_the_declaration_is_still_refused(self):
+        """The falsification. Remove the declaration and the concept goes back
+        to uncarried — so this suite fails against the code that shipped, and
+        the guard is proven still able to catch a route that stays silent."""
+        from mi_agent_api import chat_routing as CR
+        from question_interpretation import completeness as C
+        silent = CR._envelope(ok=True, question="Summarise the current pipeline.",
+                              answer="...", spec={}, artifacts=[],
+                              route="pipeline_summary")
+        concept = C.StatedConcept("dataset", "view", "pipeline", "",
+                                  "workspace.resolve_dataset")
+        self.assertFalse(C._carried(concept, C.from_envelope(silent)))
+
+    def test_it_does_not_claim_the_funded_book(self):
+        """Declaring MORE than it read would be the same defect pointed the
+        other way: `funded+pipeline` would let a funded concept pass unchecked."""
+        env = self._envelope_from_the_route()
+        self.assertNotIn("funded", (env.get("reconciliation") or {}).get("dataset", ""))
+
+
+class TestTheRouteItselfDeclaresIt(unittest.TestCase):
+    """The assertions above exercise `_envelope` and `workspace`. This one
+    exercises THE CALL SITE, which is where the declaration was missing — a
+    suite that builds the envelope by hand would pass against the code that
+    shipped the bug."""
+
+    def _run_the_route(self):
+        from unittest import mock
+        from mi_agent_api import chat_routing as CR
+        # Import them so they are attributes of the package: the route resolves
+        # `from . import datasets` at call time, and patch() cannot replace an
+        # attribute that import has not yet created.
+        import mi_agent_api.datasets  # noqa: F401
+        import mi_agent_api.pipeline_contract  # noqa: F401
+
+        snapshot = {"pipelineRowCount": 12, "pipelineAmount": 1_000_000.0,
+                    "pipelineAsOfDate": "2026-01-12",
+                    "stageBreakdown": [{"stage": "Offer", "count": 4}],
+                    "weightedExpectedFundedAmount": 500_000.0}
+        ds = mock.MagicMock()
+        ds._resolve_pipeline_source.return_value = {"client_id": "c", "run_id": "r"}
+        pc = mock.MagicMock()
+        pc.load_prepared_pipeline.return_value = (mock.MagicMock(), {})
+        pc.compute_pipeline_snapshot.return_value = snapshot
+        with mock.patch("mi_agent_api.datasets", ds), \
+             mock.patch("mi_agent_api.pipeline_contract", pc):
+            return CR._route_pipeline_summary(
+                "Summarise the current pipeline.", {},
+                client_id="c", run_id="r")
+
+    def test_the_route_publishes_the_pipeline_reconciliation(self):
+        env = self._run_the_route()
+        self.assertIsNotNone(env, "the route declined its own question")
+        self.assertEqual((env.get("reconciliation") or {}).get("dataset"),
+                         "pipeline")
+
+    def test_the_route_reports_the_extract_date_it_read(self):
+        env = self._run_the_route()
+        self.assertEqual((env.get("reconciliation") or {}).get("reporting_date"),
+                         "2026-01-12")

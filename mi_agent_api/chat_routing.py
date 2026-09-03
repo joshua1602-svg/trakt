@@ -501,6 +501,20 @@ def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
         ok=True, question=question, spec=spec_dict, artifacts=artifacts,
         answer=" ".join(parts), route="pipeline_summary",
         lens_applied=False,
+        # WHAT IT READ, DERIVED FROM THE ROOT IT READ IT FROM. Without this the
+        # envelope carried no reconciliation at all, so `completeness.
+        # _carried` saw an empty `reconciliation.dataset` against a stated
+        # `dataset: pipeline` concept, reported it UNACCOUNTED, and
+        # `_enforce_semantic_coverage` replaced a correct answer with "I could
+        # not confirm it was applied to this calculation". The answer HAD read
+        # the pipeline; it simply never said so, and the guard is right not to
+        # take a route's word for it. Declared through `datasets_read` rather
+        # than as the literal ["pipeline"] for the reason that function's own
+        # docstring gives: three routes once wrote the constant and were wrong
+        # about themselves in a way nothing could detect.
+        reconciliation=_workspace.reconciliation_for(
+            _workspace.datasets_read(pipeline_root=source),
+            reporting_date=snapshot.get("pipelineAsOfDate")),
         warnings=["Scope not narrowed: the governed weekly pipeline extract "
                   "carries no source-portfolio provenance, so this position is "
                   "the whole platform pipeline and is NOT narrowed to a "
