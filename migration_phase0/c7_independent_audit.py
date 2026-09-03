@@ -109,13 +109,45 @@ def audit() -> Dict[str, Any]:
                 "question": q, "portfolioId": f"client_001/{runs[-1][0]}",
                 "asOfDate": runs[-1][1]}).json()
 
+        # AMENDED 2026-09-03. These two name a subject (the ranked dimension)
+        # and no window. The ruling used to refuse them; it now answers over
+        # the governed default pair and DISCLOSES it, which is the estate's
+        # own rule for a missing element an analysis cannot exist without —
+        # the measure half has worked that way since `metric_defaulted`.
+        #
+        # WHAT THIS CRITERION CHECKS IS UNCHANGED: a window the reader did not
+        # choose must never arrive undisclosed. The check moved from "did it
+        # refuse" to "did it declare", because the second is the property the
+        # first was protecting. Both ends must be named — a method name is not
+        # a window a reader can check.
+        #
+        # The BARE case ("What changed?") still refuses, and
+        # `must_refuse_both_arms.py` still fails the estate if it stops.
         amb = {q: ask(q) for q in ("Which region grew the most?",
                                    "Which region added the most balance?")}
-        findings["D_no_implicit_period_or_measure"] = {
-            "pass": all(not r.get("ok") for r in amb.values()),
+
+        def _discloses(r):
+            declared = ((r.get("metadata") or {}).get("periodDefaulted")
+                        if r.get("ok") else None)
+            if not r.get("ok"):
+                return True             # a refusal discloses nothing to hide
+            if not (declared or {}).get("start") or not declared.get("end"):
+                return False
+            answer = str(r.get("answer") or "")
+            return (declared["start"] in answer and declared["end"] in answer)
+
+        bare = ask("What changed?")
+        findings["D_no_undisclosed_period_or_measure"] = {
+            "pass": all(_discloses(r) for r in amb.values())
+                    and not bare.get("ok"),
             "detail": {q: {"ok": r.get("ok"),
+                           "periodDefaulted":
+                               (r.get("metadata") or {}).get("periodDefaulted"),
                            "answer": str(r.get("answer"))[:90]}
-                       for q, r in amb.items()}}
+                       for q, r in amb.items()}
+                      | {"What changed? (bare, must refuse)":
+                         {"ok": bare.get("ok"),
+                          "answer": str(bare.get("answer"))[:90]}}}
 
         # Ranked movement reconciles numerically, and D1's alternate binds.
         rm = ask("Which region grew the most since last month?")
