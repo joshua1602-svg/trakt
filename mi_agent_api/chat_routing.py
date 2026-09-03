@@ -2302,7 +2302,23 @@ _BRIDGE_DEFAULT_DIMS = ("geographic_region_obligor", "collateral_geography",
 
 # The region family — any of these columns may carry the geography depending on
 # the tape; the bridge resolves whichever is actually present.
-_REGION_FAMILY = ("collateral_geography", "geographic_region_collateral",
+#
+# THE HARMONISED PAIR LEADS, and belongs here for the reason the family exists.
+# `_preferred_region` is data-aware, so once the canonical columns were
+# registered it began naming `canonical_region_reporting` wherever
+# harmonisation had run — correctly. But a concept OUTSIDE this family resolves
+# to a single column, and the bridge reads its own governed snapshot frames,
+# which need not carry it. "Show movement by region." answered before that
+# registration and refused after it: "the requested attribution dimension is
+# not available in the funded data".
+#
+# The defect was never that MI preferred the harmonised column. It was that
+# this route kept a second idea of what "region" spells as, and a new governed
+# region field left it behind. Inside the family the concept resolves to every
+# candidate and the bridge uses whichever its frames actually hold — which is
+# what the docstring below already promised.
+_REGION_FAMILY = ("canonical_region_reporting", "canonical_region_detail",
+                  "collateral_geography", "geographic_region_collateral",
                   "geographic_region_obligor")
 
 
