@@ -59,17 +59,41 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 #: /home, where the first live run of it died.
 _MARKER = Path("engine") / "region_taxonomy.py"
 
-#: Where a deployed copy of the tree actually lives on App Service, checked
-#: after the obvious candidates so a repository checkout always wins.
+#: Where a deployed copy of the tree actually lives, checked after the obvious
+#: candidates so a repository checkout always wins.
+#:
+#: `/home/site/wwwroot` is the App Service SHARE and holds `startup.sh`; it is
+#: NOT where the application runs from. Oryx extracts the artefact to a
+#: per-deployment directory under /tmp and starts it there — the first live run
+#: of this audit failed against wwwroot for exactly that reason, while the
+#: operator's own shell prompt was sitting in `/tmp/8df09fb1c38da69`.
 _DEPLOY_ROOTS = ("/home/site/wwwroot", "/app", "/opt/app")
+
+#: The Oryx extraction pattern. Directories matching it are OFFERED in the
+#: failure message and never selected automatically: a box carries older
+#: extractions beside the live one, and a developer box carries checkouts and
+#: worktrees, so picking one would be the audit quietly choosing whose copy of
+#: `clean` to believe. That is the single thing this script must not do.
+_DEPLOY_GLOBS = ("/tmp/*",)
 
 
 def _find_tree() -> Optional[Path]:
     """The directory holding `engine/region_taxonomy.py`, or None.
 
-    Order: an explicit TRAKT_ROOT, this file's own ancestors, the working
-    directory and its ancestors, then the known deployment roots.
+    Order: whatever the interpreter can ALREADY import (an environment that has
+    the tree on its path is the most authoritative answer available), then an
+    explicit TRAKT_ROOT, this file's own ancestors, the working directory and
+    its ancestors, the known deployment roots, and finally the Oryx extraction
+    directories, newest first.
     """
+    try:                          # already importable — nothing to search for
+        import engine as _engine
+        found = Path(_engine.__file__).resolve().parents[1]
+        if (found / _MARKER).is_file():
+            return found
+    except Exception:             # noqa: BLE001 - absence is the normal case
+        pass
+
     candidates: List[Path] = []
     explicit = os.environ.get("TRAKT_ROOT")
     if explicit:
@@ -85,7 +109,24 @@ def _find_tree() -> Optional[Path]:
                 return candidate
         except OSError:          # an unreadable path is not a candidate
             continue
+
     return None
+
+
+def _offer_candidates() -> List[Path]:
+    """Trees the operator might have meant, for the failure message only.
+
+    Never returned to the caller as a choice. On a redeployed App Service box
+    /tmp holds older extractions beside the live one; on a developer box it
+    holds checkouts and worktrees. Selecting one would be this script deciding
+    whose `clean` to audit with, which is the failure it exists to refuse.
+    """
+    import glob
+    found: List[Path] = []
+    for pattern in _DEPLOY_GLOBS:
+        for match in glob.glob(str(Path(pattern) / _MARKER)):
+            found.append(Path(match).resolve().parents[1])
+    return sorted(set(found))
 
 
 _TREE = _find_tree()
@@ -99,8 +140,16 @@ except ModuleNotFoundError:  # pragma: no cover - the message IS the behaviour
         "NOT A MEASUREMENT — could not find `engine/region_taxonomy.py`.\n"
         "This audit must resolve through the SAME code the runtime uses, so it\n"
         "will not fall back to a copy of the rule. Point it at the tree:\n"
-        "    TRAKT_ROOT=/home/site/wwwroot python3 %s ...\n"
-        "or run it from inside that directory.\n" % Path(__file__).name)
+        "    TRAKT_ROOT=<app directory> python3 %s ...\n"
+        "(on App Service the app runs from the Oryx extraction directory under\n"
+        "/tmp, NOT from /home/site/wwwroot, which holds only startup.sh.)\n"
+        % Path(__file__).name)
+    _offered = _offer_candidates()
+    if _offered:
+        sys.stderr.write(
+            "\nTrees found, NOT chosen for you — pick the one the app is "
+            "running from:\n"
+            + "".join("    TRAKT_ROOT=%s\n" % p for p in _offered))
     raise SystemExit(3)
 
 

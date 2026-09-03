@@ -167,6 +167,35 @@ class TestItFindsTheTreeWhereverItWasCopied(unittest.TestCase):
     def test_the_marker_is_the_runtime_module_itself(self):
         self.assertEqual(A._MARKER.as_posix(), "engine/region_taxonomy.py")
 
+    def test_an_extracted_deployment_is_offered_and_never_chosen(self):
+        """WHERE THE APP ACTUALLY RUNS, and why it is still not picked
+        automatically. `/home/site/wwwroot` is the App Service share and holds
+        startup.sh; Oryx extracts the artefact to a per-deployment directory
+        under /tmp and starts it there. But /tmp on a redeployed box holds
+        older extractions beside the live one, and on a developer box it holds
+        worktrees — an earlier draft globbed one and would have audited the
+        book with a checkout's copy of `clean`."""
+        import shutil
+        with tempfile.TemporaryDirectory(dir="/tmp") as fake_deploy:
+            marker = Path(fake_deploy) / A._MARKER
+            marker.parent.mkdir(parents=True)
+            shutil.copy(str(Path(RT.__file__)), str(marker))
+            out = self._run(cwd="/")
+            self.assertEqual(out.returncode, 3, out.stdout)
+            self.assertIn("NOT chosen for you", out.stderr)
+            self.assertIn(fake_deploy, out.stderr)
+
+    def test_an_importable_engine_wins_over_any_search(self):
+        """The most authoritative answer available: if the interpreter can
+        already import it, that IS the code the runtime uses."""
+        self.assertEqual(A._find_tree(), Path(RT.__file__).resolve().parents[1])
+
+    def test_the_message_says_where_to_look_not_a_path_that_is_wrong(self):
+        out = self._run(cwd="/")
+        self.assertEqual(out.returncode, 3)
+        self.assertNotIn("TRAKT_ROOT=/home/site/wwwroot python3", out.stderr)
+        self.assertIn("Oryx extraction directory", out.stderr)
+
 
 class TestItEmitsNoFigureFromTheBook(unittest.TestCase):
 
