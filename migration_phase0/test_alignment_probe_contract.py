@@ -140,16 +140,75 @@ class TestItReadsWhatTheAnswerDeclares(unittest.TestCase):
         self.assertEqual(labels, [["LONDON", "London"]])
 
 
+class TestItAsksWhenTheDataWasCutNotWhatItIsLabelled(unittest.TestCase):
+    """THE THIRD FIRST-RUN DEFECT, and the worst of them.
+
+    C compared `reporting_date` across the lenses and found them equal — which
+    they are BY CONSTRUCTION. `_platform_reporting_date` picks the first column
+    present from ("reporting_date", "data_cut_off_date", "cut_off_date"), so a
+    tape carrying both never has the second read. The probe was measuring the
+    chain's first preference and reporting it as the two books agreeing, while
+    the lender's own tape has them cut six months apart.
+    """
+
+    def _run(self, answer_payload, surfaces):
+        def _fake_ask(base, token, question, *, lens, portfolio, timeout,
+                      keep_payload=False):
+            return {"ok": True, "http": 200, "transport_error": "",
+                    "error_code": None, "reason": "", "ms": 1,
+                    "parsed_filters": [], "applied_filters": [],
+                    "reporting_dates": ["2026-06-30"], "_labels": [],
+                    "_payload": dict(answer_payload)}
+
+        with mock.patch.object(AP, "_ask", side_effect=_fake_ask):
+            return AP.probe_cut_off_alignment(
+                "b", "t", "p", 1.0, fetch=lambda *a: dict(surfaces))
+
+    def test_a_cut_off_hidden_behind_a_uniform_reporting_date_is_found(self):
+        out = self._run({"governance": {"snapshot": {
+            "reporting_date": "2026-06-30",
+            "data_cut_off_date": "2025-11-30"}}}, {})
+        self.assertIn("NOT CUT WHEN THE ANSWER SAYS", out["verdict"])
+        self.assertIn("2025-11-30", out["verdict"])
+
+    def test_no_cut_off_anywhere_is_the_finding_not_a_pass(self):
+        """A uniform reporting date is not evidence the books are aligned."""
+        out = self._run({"governance": {"snapshot": {
+            "reporting_date": "2026-06-30"}}}, {})
+        self.assertIn("NO DATA CUT-OFF IS SURFACED", out["verdict"])
+
+    def test_it_looks_at_the_platform_surfaces_too(self):
+        out = self._run({}, {"dataCutOffDate": "2026-05-20"})
+        self.assertIn("2026-05-20", out["cut_off_dates_surfaced"])
+
+    def test_it_finds_the_key_however_it_is_spelled_and_however_deep(self):
+        found = AP._find_cut_off(
+            {"a": {"b": [{"cutOffDate": "2025-11-30T00:00:00"}]}})
+        self.assertEqual(found, [("cutOffDate", "2025-11-30")])
+
+    def test_a_reporting_date_is_not_mistaken_for_a_cut_off(self):
+        self.assertEqual(AP._find_cut_off({"reporting_date": "2026-06-30"}), [])
+
+    def test_a_timestamped_date_is_not_invisible(self):
+        """`\\b` does not exist between the "0" of a date and the "T" of a
+        timestamp, so every timestamped date in the platform metadata was
+        being read as absent."""
+        self.assertEqual(AP._ISO_DATE.findall("2025-11-30T00:00:00Z"),
+                         ["2025-11-30"])
+
+
 class TestTheVerdictsSayWhatWasFound(unittest.TestCase):
 
     def _run(self, responses):
         calls = iter(responses)
 
-        def _fake(base, token, question, *, lens, portfolio, timeout):
-            return next(calls)
+        def _fake(base, token, question, *, lens, portfolio, timeout,
+                  keep_payload=False):
+            return {**next(calls), "_payload": {}}
 
         with mock.patch.object(AP, "_ask", side_effect=_fake):
-            return AP.probe_cut_off_alignment("b", "t", "p", 1.0)
+            return AP.probe_cut_off_alignment("b", "t", "p", 1.0,
+                                              fetch=lambda *a: {})
 
     def _res(self, dates):
         return {"ok": True, "http": 200, "transport_error": "",
@@ -157,21 +216,13 @@ class TestTheVerdictsSayWhatWasFound(unittest.TestCase):
                 "parsed_filters": [], "applied_filters": [],
                 "reporting_dates": dates, "_labels": []}
 
-    def test_two_different_cut_offs_are_named_in_the_verdict(self):
-        out = self._run([self._res(["2026-06-30"]),      # total
-                         self._res(["2026-06-30"]),      # direct
-                         self._res(["2026-01-12"])])     # acquired
-        self.assertIn("DIFFERENT AS-OF DATES", out["verdict"])
-        self.assertIn("2026-01-12", out["verdict"])
-
-    def test_matching_cut_offs_say_so(self):
+    def test_agreeing_reporting_dates_are_no_longer_read_as_alignment(self):
+        """What C used to assert, kept as the thing that must NOT come back:
+        three lenses agreeing on a reporting date proves only that the date
+        chain has one first preference."""
         out = self._run([self._res(["2026-06-30"])] * 3)
-        self.assertIn("same as-of date", out["verdict"])
-
-    def test_a_lens_that_declares_nothing_is_not_read_as_agreement(self):
-        """The failure that would matter most: silence reported as a pass."""
-        out = self._run([self._res([]), self._res([]), self._res([])])
-        self.assertIn("not established", out["verdict"])
+        self.assertNotIn("same as-of date", out["verdict"])
+        self.assertIn("NO DATA CUT-OFF IS SURFACED", out["verdict"])
 
 
 if __name__ == "__main__":

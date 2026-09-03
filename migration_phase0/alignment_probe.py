@@ -58,7 +58,11 @@ REGIONS = ("Scotland", "London", "South West")
 #: The lenses whose alignment question C exists to ask.
 LENSES = (None, "direct", "acquired")
 
-_ISO_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+#: NOT `\b...\b`. A trailing word boundary does not exist between the "0" of
+#: a date and the "T" of a timestamp, so "2025-11-30T00:00:00" matched nothing
+#: and every timestamped date in the platform's own metadata was invisible to
+#: this probe. Digit lookarounds instead, which is what was meant.
+_ISO_DATE = re.compile(r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)")
 _FIGURE = re.compile(
     r"[£$€]\s?[\d,.]+\s*(?:[kKmMbB]{1,2}|MM)?|\b\d[\d,]{3,}(?:\.\d+)?\b"
     r"|\b\d+\.\d+\b")
@@ -186,7 +190,8 @@ def _reporting_dates(payload: Dict[str, Any]) -> List[str]:
 
 
 def _ask(base: str, token: str, question: str, *, lens: Optional[str],
-         portfolio: Optional[str], timeout: float) -> Dict[str, Any]:
+         portfolio: Optional[str], timeout: float,
+         keep_payload: bool = False) -> Dict[str, Any]:
     body: Dict[str, Any] = {"question": question}
     if lens:
         body["sourcePortfolioLens"] = lens
@@ -233,7 +238,19 @@ def _ask(base: str, token: str, question: str, *, lens: Optional[str],
         "applied_filters": sorted(str(f) for f in (fi.get("applied_filters") or [])),
         "reporting_dates": _reporting_dates(payload),
         "_labels": _category_labels(payload),      # local only; never emitted
+        **({"_payload": payload} if keep_payload else {}),
     }
+
+
+def _get(base: str, token: str, path: str, timeout: float) -> Any:
+    """A platform metadata surface, or {} if it cannot be read."""
+    req = urllib.request.Request(base.rstrip("/") + path, method="GET")
+    req.add_header("Authorization", "Bearer " + token)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8") or "{}")
+    except Exception:  # noqa: BLE001 - an unreadable surface is not a finding
+        return {}
 
 
 def _strip_local(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -307,29 +324,103 @@ def probe_case_on_the_way_out(base, token, portfolio, timeout) -> Dict[str, Any]
     return out
 
 
-def probe_cut_off_alignment(base, token, portfolio, timeout) -> Dict[str, Any]:
-    """C. Do the two books declare the same as-of date?"""
+#: Anything the platform might call the date the DATA was last updated, as
+#: opposed to the period the figures are labelled as. Both concepts are
+#: legitimate and they are not the same: a 30 June report can be produced from
+#: data cut on 20 May, and the reader has to be told which they are looking at.
+_CUT_OFF_KEYS = ("data_cut_off_date", "dataCutOffDate", "cut_off_date",
+                 "cutOffDate", "dataCutOff")
+
+
+def _find_cut_off(obj: Any, depth: int = 0) -> List[Tuple[str, str]]:
+    """Every (key, ISO date) the platform exposes as a data cut-off.
+
+    Searched rather than read from one place because the question is whether
+    the value is surfaced ANYWHERE a reader or a channel could see it — not
+    whether it sits in the field this probe expected.
+    """
+    found: List[Tuple[str, str]] = []
+    if depth > 6:
+        return found
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key in _CUT_OFF_KEYS and value:
+                match = _ISO_DATE.search(str(value))
+                if match:
+                    found.append((str(key), match.group(0)))
+            found.extend(_find_cut_off(value, depth + 1))
+    elif isinstance(obj, list):
+        for item in obj[:40]:
+            found.extend(_find_cut_off(item, depth + 1))
+    return found
+
+
+def probe_cut_off_alignment(base, token, portfolio, timeout,
+                            fetch=None) -> Dict[str, Any]:
+    """C. Does an answer say when its data was last updated?
+
+    NOT what the first draft asked. That compared `reporting_date` across the
+    lenses and found them equal — which they are BY CONSTRUCTION, because
+    `_platform_reporting_date` picks the first column present from
+    ("reporting_date", "data_cut_off_date", "cut_off_date"). A tape carrying
+    both never has the second read at all, so the probe was measuring the
+    chain's first preference and reporting it as agreement between the books.
+
+    The real question is whether the DATA CUT-OFF is surfaced anywhere. If it
+    is not, every answer's "as at" is a reporting label and not a statement of
+    freshness, and two books cut months apart are presented under one date with
+    nothing to distinguish them.
+    """
     out: Dict[str, Any] = {}
+    surfaced: List[Tuple[str, str]] = []
     for lens in LENSES:
         res = _ask(base, token, "Summarise the funded portfolio.", lens=lens,
-                   portfolio=portfolio, timeout=timeout)
-        out[lens or "total"] = _strip_local(res)
-    dates = {name: tuple(v.get("reporting_dates") or ())
-             for name, v in out.items() if isinstance(v, dict)}
-    direct = set(dates.get("direct", ()))
-    acquired = set(dates.get("acquired", ()))
-    out["dates_by_lens"] = {k: list(v) for k, v in dates.items()}
-    if direct and acquired and direct != acquired:
-        out["verdict"] = ("THE BOOKS DECLARE DIFFERENT AS-OF DATES — direct "
-                          + ", ".join(sorted(direct)) + " vs acquired "
-                          + ", ".join(sorted(acquired))
-                          + ". A combined figure has no single point in time, "
-                            "and a period comparison over it compares two.")
-    elif not direct or not acquired:
-        out["verdict"] = ("not established — a lens declared no reporting "
-                          "date, so the two could not be compared")
+                   portfolio=portfolio, timeout=timeout, keep_payload=True)
+        payload = res.pop("_payload", {})
+        hits = _find_cut_off(payload)
+        surfaced.extend(hits)
+        out[lens or "total"] = {**_strip_local(res),
+                                "cut_off_keys_found": sorted({k for k, _ in hits}),
+                                "cut_off_dates_found": sorted({d for _, d in hits})}
+    # The platform's own metadata surfaces, checked the same way.
+    for path in ("/health", "/mi/snapshots", "/mi/catalogue"):
+        body = (fetch or _get)(base, token, path, timeout)
+        hits = _find_cut_off(body)
+        surfaced.extend(hits)
+        out["GET " + path] = {"cut_off_keys_found": sorted({k for k, _ in hits}),
+                              "cut_off_dates_found": sorted({d for _, d in hits}),
+                              "reporting_dates": sorted(set(
+                                  _ISO_DATE.findall(json.dumps(body))))[:6]}
+
+    dates = sorted({d for _, d in surfaced})
+    labelled = sorted({d for name, v in out.items()
+                       if isinstance(v, dict)
+                       for d in (v.get("reporting_dates") or ())})
+    out["cut_off_dates_surfaced"] = dates
+    out["reporting_dates_declared"] = labelled
+    stale = [d for d in dates if labelled and d not in labelled]
+    if surfaced and (len(dates) > 1 or stale):
+        # The two findings that matter, in one branch because they are the same
+        # fact: the date the figures are LABELLED with is not the date the data
+        # was cut. Either the books disagree with each other, or they agree and
+        # both disagree with the label.
+        out["verdict"] = (
+            "THE DATA WAS NOT CUT WHEN THE ANSWER SAYS — cut-off "
+            + ", ".join(dates) + " against a reported "
+            + (", ".join(labelled) or "(none declared)")
+            + ". A reader told 'as at " + (labelled[0] if labelled else "?")
+            + "' is reading figures whose data was last updated earlier, and a "
+              "combined figure blends books cut at different times.")
+    elif not surfaced:
+        out["verdict"] = (
+            "NO DATA CUT-OFF IS SURFACED ANYWHERE — not on an answer, not on "
+            "/health, not on the snapshot index. Every 'as at' a reader sees "
+            "is the reporting LABEL, not a statement of when the data was last "
+            "updated, so two books cut months apart are presented under one "
+            "date with nothing to tell them apart.")
     else:
-        out["verdict"] = "both books declare the same as-of date"
+        out["verdict"] = ("one data cut-off is surfaced (" + dates[0]
+                          + ") and it matches the reported date")
     return out
 
 
@@ -366,7 +457,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         report[key] = section
         print("  %s" % section.get("verdict"))
         for name, value in section.items():
-            if name in ("verdict", "dates_by_lens") or not isinstance(value, dict):
+            if name in ("verdict", "cut_off_dates_surfaced") \
+                    or not isinstance(value, dict):
                 continue
             if "grouping" in value:
                 g = value["grouping"]
@@ -374,6 +466,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                       % (name, g["labels_returned"],
                          g["distinct_case_insensitive"], g["colliding_groups"],
                          g["widest_collision"]))
+            elif "cut_off_keys_found" in value:
+                print("    %-16s cutOffKeys=%s cutOffDates=%s"
+                      % (name, value.get("cut_off_keys_found") or "-",
+                         ", ".join(value.get("cut_off_dates_found") or ["none"])))
             elif "reporting_dates" in value and "runs" not in value:
                 print("    %-10s ok=%s dates=%s"
                       % (name, value.get("ok"),
