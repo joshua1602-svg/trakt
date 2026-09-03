@@ -1179,9 +1179,15 @@ def _route_compare(question, spec_dict, *, client_id, run_id, output_root,
     notes = [{"field": "source_periods",
               "note": f"Period A: {out.get('sourcePeriods', [None, None])[0]}; "
                       f"Period B: {out.get('sourcePeriods', [None, None])[1]}"}]
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
-                     route="temporal_compare")
+    out_env = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                        artifacts=[chart, table], reconciliation=recon,
+                        source_notes=notes, route="temporal_compare")
+    # DECLARE THE GRAIN. This route compares month-end funded snapshots AND
+    # weekly pipeline extracts, so the receipt's static `temporal_compare:
+    # month` fallback is wrong half the time — and it refused "how many cases
+    # moved into Offer in the last week?" as monthly when the comparison it ran
+    # was weekly.
+    return _declare_grain(out_env, out.get("seriesGrain") or "month")
 
 
 # --------------------------------------------------------------------------- #
@@ -1572,7 +1578,9 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     # data disagreed, and the label was right. Read from what the producer returns
     # rather than from the dataset name, so a series is keyed by the grain it
     # actually carries.
-    period_field = "week" if any("week" in p for p in periods) else "period"
+    # The grain rule now lives in `temporal_compare.series_grain`, so this
+    # route and the period comparison cannot disagree about the same series.
+    period_field = "week" if compare_mod.series_grain(periods) == "week" else "period"
     rows = [{"period": p.get(period_field), "value": (p.get("metrics") or {}).get(metric_key)}
             for p in periods]
     filter_txt = _filter_summary(predicates) if filtered else ""
@@ -1617,7 +1625,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                     artifacts=[chart, table], reconciliation=last_recon,
                     source_notes=notes, warnings=warnings, route="evolution")
-    _declare_grain(out, "week" if period_field == "week" else "month")
+    _declare_grain(out, compare_mod.series_grain(periods))
     # The lens this route narrowed each period by, declared through the same
     # primitive the movement routes use. Metadata only.
     _declare_lens_scope(out, interpretation,

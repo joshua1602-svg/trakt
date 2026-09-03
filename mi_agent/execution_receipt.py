@@ -137,6 +137,21 @@ KIND_GRANULARITY = "granularity"
 #: nothing for one across twenty-four time-series probes.
 KIND_SERIES_AXIS = "series_axis"
 
+#: The TIME grain an answer is reported at, as distinct from the SPATIAL grain
+#: `KIND_GRANULARITY` carries. The two look alike and are adjudicated by the
+#: same comparison, but they do not deserve the same verdict:
+#:
+#:   * a spatial mismatch is a SUBSTITUTION — "by postcode" answered at ITL3
+#:     area level is a different number for a different question, and blocks;
+#:   * a temporal mismatch is a LIMIT OF THE SERIES — the pipeline is published
+#:     weekly and there is no monthly one to have answered from instead. The
+#:     figure is the real weekly movement, correctly computed, and the reader
+#:     is owed the grain rather than a refusal.
+#:
+#: Decided 2026-09-03 after "Has pipeline progression improved month on month?"
+#: was refused outright while the weekly answer sat computed behind the guard.
+KIND_TIME_GRAIN = "time_grain"
+
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
 #: The dataset does not carry the field the facet needs. Disclosable.
@@ -1700,6 +1715,10 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # settled that for periods and this programme settled it for populations;
     # disclosure is not honouring. A coverage LIMIT is a different thing and is
     # not this kind — see `assess`.
+    # SPATIAL grain only. `KIND_TIME_GRAIN` is deliberately absent: a level of
+    # PLACE the answer could not express is a substitution, while a series
+    # published weekly has no monthly twin that was passed over — see
+    # `SHAPE_FACETS`, which delivers it with the grain disclosed.
     KIND_GRANULARITY,
     # Dropping the population changes WHICH ROWS were counted, so it changes
     # every number in the answer. It can never be a partial disclosure.
@@ -1721,7 +1740,12 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
 })
 #: Facets that change the SHAPE of a still-valid answer. A partial answer is
 #: acceptable provided the unhonoured facet is named.
-SHAPE_FACETS = frozenset({KIND_GROUPING})
+#: Disclosed, not refused: the answer stands and the facet is named as not
+#: applied. `KIND_TIME_GRAIN` belongs here because the alternative was refusing
+#: a correct weekly movement for want of a monthly series that does not exist —
+#: the reader got nothing where they could have had the real figure and the
+#: sentence saying what period it covers.
+SHAPE_FACETS = frozenset({KIND_GROUPING, KIND_TIME_GRAIN})
 
 #: Verdicts from :func:`assess`.
 VERDICT_OK = "ok"
@@ -2572,7 +2596,7 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                 facet.reason = ("a single aggregate was calculated, which cannot "
                                 "express one measure relative to another")
 
-        elif facet.kind == KIND_GRANULARITY:
+        elif facet.kind in (KIND_GRANULARITY, KIND_TIME_GRAIN):
             # Stamped from what the route REPORTS, not from what was asked.
             # `concepts` carries (asked, reported); a grain the answer expresses
             # is APPLIED, and one it cannot is UNSUPPORTED with the level it did
@@ -3492,7 +3516,7 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.reason = ("this answer does not state what proportion of "
                                 "the book the figure represents")
 
-        elif facet.kind == KIND_GRANULARITY:
+        elif facet.kind in (KIND_GRANULARITY, KIND_TIME_GRAIN):
             # Stamped from what the route REPORTS, not from what was asked.
             # `concepts` carries (asked, reported); a grain the answer expresses
             # is APPLIED, and one it cannot is UNSUPPORTED with the level it did
@@ -3934,7 +3958,7 @@ def time_axis_disclosure(unit: Optional[str], route: Optional[str],
     grain = declared_series_grain(envelope) or route_time_grain(route)
     if not grain:
         return None
-    return RequestedFacet(kind=KIND_GRANULARITY, label=unit,
+    return RequestedFacet(kind=KIND_TIME_GRAIN, label=unit,
                           concepts=(unit, grain))
 
 

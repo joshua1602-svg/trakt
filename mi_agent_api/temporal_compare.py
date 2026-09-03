@@ -35,6 +35,18 @@ _RELATIVE_PRIOR = ("prior", "previous", "prior pipeline", "prior week", "last we
                    "previous week", "previous month")
 
 
+def series_grain(periods: Any) -> str:
+    """The grain a governed evolution series is keyed at.
+
+    THE ONE OWNER of a rule the evolution route carried inline. Read from the
+    period dicts themselves — a period carrying a `week` is a weekly series —
+    because that is execution reporting what it produced, and the alternative
+    (a static route -> grain assertion) was wrong for every route that serves
+    both the monthly funded snapshots and the weekly pipeline extracts.
+    """
+    return "week" if any("week" in p for p in (periods or [])) else "month"
+
+
 def resolve_metric_key(dataset: str, metric: Optional[str], aggregation: str
                        ) -> Tuple[str, str, str]:
     """``(evolution_metric_key, label, format)`` for a compare spec.
@@ -170,6 +182,14 @@ def run_temporal_compare(output_root, pipeline_root, client_id: str,
                                              scope=scope)
     out = compare_periods(evo.get("periods", []), metric_key=metric_key,
                           period_a=period_a, period_b=period_b, label=label, fmt=fmt)
+    # THE GRAIN THIS COMPARISON ACTUALLY RAN AT, from the series it read.
+    # Without it the receipt falls back to a static route -> grain map that
+    # says `temporal_compare: month`, and a pipeline comparison — which is
+    # keyed on the WEEKLY extract date — was refused as monthly whenever the
+    # reader said "last week". The map cannot be right for this route: the
+    # same route compares month-end funded snapshots and weekly pipeline
+    # extracts, so only the series can say.
+    out["seriesGrain"] = series_grain(evo.get("periods", []))
     out["dataset"] = dataset
     out["portfolioId"] = client_id
     out["toRunId"] = to_run_id
