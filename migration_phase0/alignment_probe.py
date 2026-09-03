@@ -364,6 +364,26 @@ def hypothesis_region_vocabulary(base, token, portfolio, timeout,
     single_books_clean = not (dirty & {"direct", "acquired"})
     combined_dirty = "total" in dirty
 
+    # FILTERING AND GROUPING ARE TWO CLAIMS, and the 2026-09-03 run showed
+    # them coming apart: every book refused "the balance in Scotland" with the
+    # SAME message — including `direct`, whose ten region values collide not at
+    # all. A book with a clean vocabulary that still cannot be filtered proves
+    # the filter failure is not a case failure, and a verdict that reports one
+    # number for both hides exactly that.
+    clean_books_that_cannot_filter = sorted(
+        n for n, v in measured.items()
+        if v["grouping"]["clean"] and per_book.get(n, {}).get("ok") is False)
+    out["clean_books_that_cannot_filter"] = clean_books_that_cannot_filter
+    if clean_books_that_cannot_filter:
+        out["filter_finding"] = (
+            "SEPARATE DEFECT — " + ", ".join(clean_books_that_cannot_filter)
+            + " has a clean region vocabulary and still cannot be filtered to a "
+              "region, so the filter failure is NOT caused by case. Grouping and "
+              "filtering are binding to different things; compare the field the "
+              "breakdown grouped on against the one the filter looked for.")
+    else:
+        out["filter_finding"] = "none — no clean book failed to filter"
+
     # The verdict, from the comparisons rather than from the expectation.
     if not measured and not any(outcomes.values()):
         out["verdict"] = _verdict(
@@ -458,6 +478,18 @@ def hypothesis_data_cut_off(base, token, portfolio, timeout,
     out["period_outcome_per_book"] = ok
     combined_only_fails = (ok.get("total") is False
                            and ok.get("direct") and ok.get("acquired"))
+    # THE REVERSE, which the first draft never tested and then printed silence
+    # over: a book that fails ALONE while the total containing it succeeds.
+    # Benign when the book has one period and the refusal says so; serious if
+    # the total is answering by leaving that book out. The reason distinguishes
+    # them, so it is carried into the finding rather than reduced to a flag.
+    single_fails_under_passing_total = sorted(
+        n for n in ("direct", "acquired")
+        if ok.get(n) is False and ok.get("total") is True)
+    out["single_book_fails_under_passing_total"] = {
+        n: {"error_code": period[n].get("error_code"),
+            "reason": period[n].get("reason")}
+        for n in single_fails_under_passing_total}
 
     dates = sorted({d for _, d in surfaced})
     labelled = sorted({d for v in out.values() if isinstance(v, dict)
@@ -465,6 +497,15 @@ def hypothesis_data_cut_off(base, token, portfolio, timeout,
     out["cut_off_dates_surfaced"] = dates
     out["reporting_dates_declared"] = labelled
 
+    if single_fails_under_passing_total and not combined_only_fails:
+        out["book_asymmetry"] = (
+            "CHECK — " + ", ".join(single_fails_under_passing_total)
+            + " cannot answer a period question alone while the total that "
+              "contains it can. Read the reason: a book that exists at only one "
+              "reporting date is a correct refusal, and the total then compares "
+              "two dates across which that book did not exist throughout.")
+    else:
+        out["book_asymmetry"] = "none"
     if combined_only_fails:
         out["verdict"] = _verdict(
             True, False,
@@ -541,13 +582,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         section = fn(args.base, token, args.portfolio, args.timeout)
         report[key] = section
         print("  %s" % _wrap(section.get("verdict")))
-        for extra in ("harmonised_fields_exposed", "region_bound_to",
+        for extra in ("filter_finding", "book_asymmetry",
+                      "clean_books_that_cannot_filter",
+                      "single_book_fails_under_passing_total",
+                      "harmonised_fields_exposed", "region_bound_to",
                       "outcome_per_book", "period_outcome_per_book",
                       "cut_off_dates_surfaced", "reporting_dates_declared"):
             if extra in section:
                 print("    %-26s %s" % (extra, json.dumps(section[extra])))
         for name, value in section.items():
-            if name in ("verdict", "cut_off_dates_surfaced",
+            if name in ("verdict", "cut_off_dates_surfaced", "filter_finding",
+                        "book_asymmetry", "clean_books_that_cannot_filter",
+                        "single_book_fails_under_passing_total",
                         "reporting_dates_declared", "region_bound_to",
                         "outcome_per_book", "period_outcome_per_book",
                         "harmonised_fields_exposed",

@@ -218,5 +218,83 @@ class TestRegionIsJudgedByComparison(unittest.TestCase):
         self.assertIn("EXONERATED", out["verdict"])
 
 
+class TestFilteringAndGroupingAreTwoClaims(unittest.TestCase):
+    """THE 2026-09-03 RUN'S REAL FINDING, which the verdict hid.
+
+    Every book refused "the balance in Scotland" with the same message —
+    including `direct`, whose ten region values collide not at all. A book with
+    a CLEAN vocabulary that still cannot be filtered proves the filter failure
+    is not a case failure. Reading one verdict for both meant the split only
+    surfaced by reading the JSON afterwards.
+    """
+
+    def _region(self, splits, ok_by_book):
+        def _fake_ask(base, token, question, *, lens, portfolio, timeout,
+                      keep_payload=False):
+            name = lens or "total"
+            is_breakdown = "by region" in question
+            return {"ok": True if is_breakdown else ok_by_book.get(name, True),
+                    "http": 200, "transport_error": "",
+                    "error_code": None, "reason": "", "ms": 1,
+                    "parsed_filters": [], "applied_filters": [],
+                    "reporting_dates": [],
+                    "_labels": [list(splits.get(name, ["London", "Scotland"]))]}
+
+        with mock.patch.object(AP, "_ask", side_effect=_fake_ask):
+            return AP.hypothesis_region_vocabulary("b", "t", "p", 1.0,
+                                                   fetch=lambda *a: {})
+
+    def test_a_clean_book_that_cannot_filter_is_named_as_a_separate_defect(self):
+        out = self._region(
+            {"direct": ["London", "Scotland"],
+             "acquired": ["LONDON", "London"], "total": ["LONDON", "London"]},
+            {"direct": False, "acquired": False, "total": False})
+        self.assertEqual(out["clean_books_that_cannot_filter"], ["direct"])
+        self.assertIn("NOT caused by case", out["filter_finding"])
+
+    def test_a_dirty_book_that_cannot_filter_is_not_that_defect(self):
+        out = self._region(
+            {"direct": ["LONDON", "London"], "acquired": ["LONDON", "London"],
+             "total": ["LONDON", "London"]},
+            {"direct": False, "acquired": False, "total": False})
+        self.assertEqual(out["clean_books_that_cannot_filter"], [])
+        self.assertIn("none", out["filter_finding"])
+
+
+class TestASingleBookFailingIsNotSilence(unittest.TestCase):
+    """The reverse comparison the first draft never made: a book that fails
+    ALONE while the total containing it passes. It printed nothing over a
+    signal sitting in its own output."""
+
+    def _cut_off(self, ok_by_book, reason=""):
+        def _fake_ask(base, token, question, *, lens, portfolio, timeout,
+                      keep_payload=False):
+            name = lens or "total"
+            ok = ok_by_book.get(name, True) if "moved since" in question else True
+            return {"ok": ok, "http": 200, "transport_error": "",
+                    "error_code": None if ok else "UNSUPPORTED_QUESTION",
+                    "reason": "" if ok else reason, "ms": 1,
+                    "parsed_filters": [], "applied_filters": [],
+                    "reporting_dates": ["2026-06-30"], "_labels": [],
+                    "_payload": {}}
+
+        with mock.patch.object(AP, "_ask", side_effect=_fake_ask):
+            return AP.hypothesis_data_cut_off("b", "t", "p", 1.0,
+                                              fetch=lambda *a: {})
+
+    def test_the_asymmetry_is_reported_with_the_reason_that_explains_it(self):
+        out = self._cut_off(
+            {"acquired": False},
+            reason="The requested portfolio does not exist at both reporting "
+                   "dates, so the two periods cannot be compared.")
+        self.assertIn("CHECK", out["book_asymmetry"])
+        self.assertIn("acquired", out["book_asymmetry"])
+        carried = out["single_book_fails_under_passing_total"]["acquired"]
+        self.assertIn("does not exist at both reporting dates", carried["reason"])
+
+    def test_all_books_passing_reports_no_asymmetry(self):
+        self.assertEqual(self._cut_off({})["book_asymmetry"], "none")
+
+
 if __name__ == "__main__":
     unittest.main()
