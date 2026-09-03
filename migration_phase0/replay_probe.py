@@ -202,10 +202,78 @@ def _ask(base: str, token: str, question: str, lens: Optional[str],
         "reason": _redact(payload.get("error")),
         "ms": elapsed,
         "transport_error": transport,
+        "spec": _spec_digest(payload),
+        # Did the model choose the measure, or did it choose one FOR the reader?
+        # "Show me the trend" answered as a funded-balance trend is a different
+        # defect from a trend the reader asked for.
+        "metric_defaulted": bool((payload.get("spec") or {}).get(
+            "metric_defaulted")) if isinstance(payload.get("spec"), dict) else False,
         # Corroborating, never the discriminator: the envelope is. A cut at 46s
         # and a cut at 3s are both unmeasured; only one is a capacity finding.
         "gateway_cut": elapsed >= GATEWAY_CUT_MS and outcome == NOT_MEASURED,
     }
+
+
+#: What the model UNDERSTOOD, and nothing it computed. Every one of these is a
+#: field name, a mode, a flag or a date -- never a value read off the tape. The
+#: OCC's own calibration export already treats the interpretation as safe to
+#: leave the governed environment for exactly this reason; the figures, the
+#: answer text and the artefacts are not carried and cannot be.
+_SPEC_KEYS = ("intent", "execution_mode", "temporal_mode", "state",
+              "metric", "metric_defaulted", "aggregation", "dimension",
+              "ranking_mode", "as_of_date", "start_date", "end_date",
+              "baseline_date", "current_date", "segment")
+
+
+def _flat(value: Any) -> str:
+    """A filter value as text, WITHOUT escaping it out of the redactor's reach."""
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(_flat(v) for v in list(value)[:8])
+    if isinstance(value, dict):
+        return ", ".join("%s=%s" % (k, _flat(v))
+                         for k, v in list(value.items())[:8])
+    return str(value)
+
+
+def _spec_digest(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """What the query model made of the question.
+
+    `route` says which named capability ran, and is null for every question the
+    general point-in-time path answers -- which is most of them. That is honest
+    but it is not a diagnosis: it cannot distinguish "read the LTV bucket as a
+    threshold" from "ignored the Scotland scope". The spec can, because it is
+    the model's own statement of what it thought it was asked.
+    """
+    spec = payload.get("spec")
+    if not isinstance(spec, dict) or not spec:
+        return {}
+    out: Dict[str, Any] = {}
+    for key in _SPEC_KEYS:
+        val = spec.get(key)
+        if val not in (None, "", False, []):
+            out[key] = val
+    dims = spec.get("dimensions")
+    if isinstance(dims, list) and dims:
+        out["dimensions"] = [str(d) for d in dims][:6]
+    measures = spec.get("measures")
+    if isinstance(measures, list) and measures:
+        # Field and aggregation only. A weight field is a field name too, but
+        # the entry as a whole can carry executor state, so it is not copied.
+        out["measures"] = [
+            {"field": m.get("field"), "aggregation": m.get("aggregation")}
+            for m in measures if isinstance(m, dict)][:6]
+    filters = spec.get("filters")
+    if isinstance(filters, dict) and filters:
+        # Filter VALUES matter -- "Scotland applied as a filter" and "Scotland
+        # dropped" are the finding -- and they come from the user's own
+        # question, not from the tape. Redacted anyway, so a numeric bound
+        # cannot ride out inside one.
+        # NOT json.dumps: it escapes a currency symbol to \u00a3, whose
+        # trailing "3" then glues to the digits and defeats the word boundary
+        # the figure pattern needs. A scalar goes out as itself.
+        out["filters"] = {k: _redact(_flat(v))[:80]
+                          for k, v in list(filters.items())[:8]}
+    return out
 
 
 def _verdict(prior: str, now: str) -> str:
@@ -301,9 +369,20 @@ def main(argv: Optional[List[str]] = None) -> int:
         # about the model, not about the box it runs on.
         if r["outcome"] == NOT_MEASURED:
             continue
-        key = r["route"] or "(no route)"
+        # A named route when there is one, otherwise how the general path
+        # executed it. "(no route)" for four questions out of five says nothing
+        # about where the model is weak; "flat" vs "temporal" vs nothing at all
+        # does.
+        key = r["route"] or ("pit:" + str((r.get("spec") or {}).get(
+            "execution_mode") or "-"))
         by_route.setdefault(key, {})
         by_route[key][r["outcome"]] = by_route[key].get(r["outcome"], 0) + 1
+    by_code: Dict[str, int] = {}
+    for r in results:
+        if r["outcome"] in (ANSWERED, NOT_MEASURED):
+            continue
+        by_code[str(r.get("error_code") or "(none)")] = by_code.get(
+            str(r.get("error_code") or "(none)"), 0) + 1
 
     print("\n=== verdicts ===")
     for k in (REGRESSED, FIXED, UNCHANGED_OK, STILL_FAILING, WAS_MIXED,
@@ -315,16 +394,25 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("\n  %d question(s) never reached the model (%d cut by the "
               "gateway at ~46s). Those are a capacity finding, not a model\n"
               "  finding, and are scored neither way." % (counts[UNMEASURED], cut))
-    print("\n=== outcome by route ===")
+    print("\n=== outcome by route (pit: = no named route, general path) ===")
     for route, oc in sorted(by_route.items()):
         print("  %-24s %s" % (route, oc))
+    if by_code:
+        print("\n=== why the rest did not answer ===")
+        for code, n in sorted(by_code.items(), key=lambda kv: -kv[1]):
+            print("  %-34s %d" % (code, n))
+    defaulted = [r for r in results if r.get("metric_defaulted")]
+    if defaulted:
+        print("\n  %d question(s) were answered on a measure the reader did "
+              "not name." % len(defaulted))
 
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump({"generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                                  time.gmtime()),
                    "base": args.base, "portfolio": args.portfolio,
                    "lens": args.lens, "counts": counts,
-                   "by_route": by_route, "results": results}, fh, indent=2)
+                   "by_route": by_route, "by_error_code": by_code,
+                   "results": results}, fh, indent=2)
     print("\nwrote %s" % args.out)
 
     if counts.get(REGRESSED):

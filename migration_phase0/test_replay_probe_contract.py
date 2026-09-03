@@ -190,6 +190,100 @@ class TestAQuestionIsReplayedAgainstItsOwnPortfolio(unittest.TestCase):
         self.assertEqual(sent, ["P/1", "FALLBACK"])
 
 
+class TestItRecordsWhatTheModelUnderstood(unittest.TestCase):
+    """`route` is null for every question the general path answers, which is
+    most of them. The spec is what distinguishes one defect from another."""
+
+    def test_the_spec_names_measure_dimension_and_period(self):
+        d = RP._spec_digest({"spec": {
+            "metric": "balance", "dimension": "region",
+            "temporal_mode": "compare", "as_of_date": "2026-06-30",
+            "execution_mode": "temporal"}})
+        self.assertEqual(d["metric"], "balance")
+        self.assertEqual(d["dimension"], "region")
+        self.assertEqual(d["temporal_mode"], "compare")
+        self.assertEqual(d["as_of_date"], "2026-06-30")
+
+    def test_filter_values_survive_because_they_are_the_finding(self):
+        """Scotland applied and Scotland dropped are different defects, and
+        the value came from the user's question, not the tape."""
+        d = RP._spec_digest({"spec": {"filters": {"region": "Scotland"}}})
+        self.assertIn("Scotland", d["filters"]["region"])
+
+    def test_a_figure_inside_a_filter_is_still_redacted(self):
+        d = RP._spec_digest({"spec": {"filters": {"balance": "£562,900,000"}}})
+        self.assertNotIn("562", d["filters"]["balance"])
+
+    def test_no_answer_text_or_artefact_can_ride_out_on_the_spec(self):
+        d = RP._spec_digest({"spec": {
+            "metric": "balance", "title": "Funded balance is 562.9m",
+            "explanation": "The book stands at ...", "rows": [[1, 2]],
+            "snapshot_store_root": "/governed/tape"}})
+        for banned in ("title", "explanation", "rows", "snapshot_store_root"):
+            self.assertNotIn(banned, d)
+
+    def test_a_defaulted_measure_is_flagged(self):
+        """'Show me the trend' answered as a funded-balance trend is a
+        different defect from a trend the reader asked for."""
+        def _open(req, timeout=0):
+            class _R:
+                status = 200
+
+                def read(self):
+                    return json.dumps({"ok": True, "spec": {
+                        "metric": "funded_balance",
+                        "metric_defaulted": True}}).encode()
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *a):
+                    return False
+            return _R()
+
+        with mock.patch.object(RP.urllib.request, "urlopen", _open):
+            res = RP._ask("http://h", "t", "show me the trend", None, None, 5.0)
+        self.assertTrue(res["metric_defaulted"])
+        self.assertTrue(res["spec"]["metric_defaulted"])
+
+    def test_an_unrouted_question_is_grouped_by_how_it_executed(self):
+        """'(no route)' for four questions in five says nothing about where the
+        model is weak."""
+        def _fake(*a, **k):
+            return {"outcome": RP.ANSWERED, "http": 200, "route": None,
+                    "error_code": None, "reason": "", "ms": 1,
+                    "transport_error": "", "gateway_cut": False,
+                    "metric_defaulted": False,
+                    "spec": {"execution_mode": "temporal"}}
+
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            RP.main(["--from-log", _log([{"question": "q",
+                                          "outcome": "ANSWERED"}]),
+                     "--out", str(Path(d) / "o.json")])
+            written = json.loads((Path(d) / "o.json").read_text())
+        self.assertEqual(list(written["by_route"]), ["pit:temporal"])
+
+    def test_failures_are_counted_by_error_code(self):
+        def _fake(*a, **k):
+            return {"outcome": RP.REFUSED, "http": 200, "route": None,
+                    "error_code": "UNSUPPORTED_QUESTION", "reason": "",
+                    "ms": 1, "transport_error": "", "gateway_cut": False,
+                    "metric_defaulted": False, "spec": {}}
+
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            RP.main(["--from-log", _log([{"question": "q",
+                                          "outcome": "REFUSED"}]),
+                     "--out", str(Path(d) / "o.json")])
+            written = json.loads((Path(d) / "o.json").read_text())
+        self.assertEqual(written["by_error_code"], {"UNSUPPORTED_QUESTION": 1})
+
+
 class TestAGatewayCutIsNotAModelFailure(unittest.TestCase):
     """The failure this class exists to stop.
 
