@@ -155,6 +155,41 @@ class TestTheRunFailsOnARegression(unittest.TestCase):
         self.assertEqual(self._run("ERROR", "ANSWERED")[0], 0)
 
 
+class TestAQuestionIsReplayedAgainstItsOwnPortfolio(unittest.TestCase):
+    """The prior outcome was recorded against a named portfolio. Replaying the
+    question against a different one compares two different questions, and the
+    disagreement would be read as the model having changed."""
+
+    def test_the_logged_portfolio_travels_with_the_question(self):
+        corpus = RP.load_corpus(_log([
+            {"question": "a", "outcome": "ANSWERED", "portfolio_id": "P/1"},
+            {"question": "b", "outcome": "ERROR", "portfolio_id": "P/2"}]))
+        self.assertEqual([c["portfolio"] for c in corpus], ["P/1", "P/2"])
+
+    def test_a_log_without_a_portfolio_falls_back_to_the_flag(self):
+        corpus = RP.load_corpus(_log([{"question": "a", "outcome": "ANSWERED"}]))
+        self.assertIsNone(corpus[0]["portfolio"])
+
+    def test_the_flag_does_not_override_the_log(self):
+        sent = []
+
+        def _fake(base, token, q, lens, portfolio, timeout):
+            sent.append(portfolio)
+            return {"outcome": RP.ANSWERED, "http": 200, "route": "r",
+                    "error_code": None, "reason": "", "ms": 1,
+                    "transport_error": "", "gateway_cut": False}
+
+        rows = [{"question": "a", "outcome": "ANSWERED", "portfolio_id": "P/1"},
+                {"question": "b", "outcome": "ANSWERED"}]
+        with tempfile.TemporaryDirectory() as d, \
+             mock.patch.dict(os.environ, {"MI_BEARER": "t"}), \
+             mock.patch.object(RP, "_ask", side_effect=_fake), \
+             redirect_stdout(io.StringIO()):
+            RP.main(["--from-log", _log(rows), "--portfolio", "FALLBACK",
+                     "--out", str(Path(d) / "o.json")])
+        self.assertEqual(sent, ["P/1", "FALLBACK"])
+
+
 class TestAGatewayCutIsNotAModelFailure(unittest.TestCase):
     """The failure this class exists to stop.
 

@@ -110,6 +110,7 @@ def load_corpus(path: str) -> List[Dict[str, Any]]:
         raise SystemExit("no queries found in %s" % path)
 
     seen: Dict[str, Dict[str, int]] = {}
+    portfolios: Dict[str, str] = {}
     order: List[str] = []
     for row in rows:
         q = str((row or {}).get("question") or "").strip()
@@ -120,6 +121,12 @@ def load_corpus(path: str) -> List[Dict[str, Any]]:
             order.append(q)
         outcome = str(row.get("outcome") or UNKNOWN).upper()
         seen[q][outcome] = seen[q].get(outcome, 0) + 1
+        # The prior outcome was recorded against THIS portfolio. Replaying the
+        # question against a different one compares two different questions,
+        # and any disagreement would be read as the model having changed.
+        pid = row.get("portfolio_id")
+        if pid and q not in portfolios:
+            portfolios[q] = str(pid)
 
     corpus = []
     for q in order:
@@ -128,7 +135,8 @@ def load_corpus(path: str) -> List[Dict[str, Any]]:
         # was not deterministic BEFORE this run, so it has no "before" to have
         # regressed from — recorded, never averaged.
         prior = next(iter(counts)) if len(counts) == 1 else MIXED
-        corpus.append({"question": q, "prior": prior, "prior_counts": counts})
+        corpus.append({"question": q, "prior": prior, "prior_counts": counts,
+                       "portfolio": portfolios.get(q)})
     return corpus
 
 
@@ -222,7 +230,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--from-log", required=True,
                     help="the /ops/mi-queries response, saved as JSON")
     ap.add_argument("--base", default="https://app.traktinfra.io/api")
-    ap.add_argument("--portfolio", default="ERE/2026-06-30")
+    ap.add_argument("--portfolio", default="ERE/2026-06-30",
+                    help="fallback only -- a question logged with its own "
+                         "portfolio is replayed against that one")
     ap.add_argument("--lens", default=None,
                     help="sourcePortfolioLens, e.g. direct. Omit for none.")
     ap.add_argument("--timeout", type=float, default=180.0)
@@ -250,15 +260,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         corpus = corpus[:args.limit]
     total_rows = sum(sum(c["prior_counts"].values()) for c in corpus)
     print("%d distinct questions (from %d logged runs)" % (len(corpus), total_rows))
+    logged = sorted({c["portfolio"] for c in corpus if c.get("portfolio")})
     print("target %s  portfolio %s  lens %s"
-          % (args.base, args.portfolio, args.lens or "-"))
+          % (args.base,
+             ", ".join(logged) if logged else args.portfolio + " (fallback)",
+             args.lens or "-"))
 
     results = []
     for i, item in enumerate(corpus, 1):
         attempts = 0
         while True:
             res = _ask(args.base, token, item["question"], args.lens,
-                       args.portfolio, args.timeout)
+                       item.get("portfolio") or args.portfolio, args.timeout)
             attempts += 1
             if res["outcome"] != NOT_MEASURED or attempts > args.retries:
                 break
