@@ -434,6 +434,14 @@ _REGION_PREFERENCE = ("canonical_region_reporting", "canonical_region_detail",
                       "collateral_geography", "geographic_region_collateral",
                       "geographic_region_obligor")
 
+#: THE DEFAULT WHEN NOTHING IS KNOWN ABOUT THE DATA, which is not the head of
+#: the preference order and must not become it. The harmonised columns exist
+#: only where harmonisation ran; naming one at parse time on a tape that has no
+#: such column makes the executor refuse an ordinary "balance by region" for a
+#: field the reader never mentioned and the book never carried. Preference is
+#: for choosing among columns KNOWN to be present; this is for the rest.
+_REGION_DEFAULT = "collateral_geography"
+
 
 def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
     """Pick the MI 'Region' field: readable collateral_geography first, then a
@@ -448,7 +456,12 @@ def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
             entry = fields.get(key) or {}
             if entry.get("canonical_field", key) in cols:
                 return key
-        # None present. Return the FIRST KNOWN choice, not None.
+        # None present. Return the readable default, not the head of the
+        # preference order: the harmonised columns lead that order and exist
+        # only where harmonisation ran.
+        if _REGION_DEFAULT in known:
+            return _REGION_DEFAULT
+        # Otherwise the FIRST KNOWN choice, not None.
         #
         # The intent recorded here was always "fail clearly rather than
         # substitute an absent field" — but returning None achieved the
@@ -458,7 +471,11 @@ def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
         # executor then refuses NAMING the field the user asked for, exactly as
         # it does for any ordinary absent dimension.
         return known[0] if known else None
-    # No column context: fall back to registry presence (parse-time default).
+    # No column context — a parse with no dataset in hand. The readable field
+    # is the one every tape carries, so it stays the parse-time default and the
+    # harmonised columns are chosen only where they are known to be present.
+    if _REGION_DEFAULT in known:
+        return _REGION_DEFAULT
     return known[0] if known else None
 
 # Metric NL terms -> resolver. Order matters (longer/more-specific first).

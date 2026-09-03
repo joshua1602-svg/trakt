@@ -115,8 +115,12 @@ def test_registry_field_count_and_tiers(semantics):
     # + protected_equity_flag, which is derived from protected_equity_percentage
     # rather than read from source, + the 2 governed seasoning dimensions
     # (seasoning_segment, seasoning_bucket) added by P1J-1, both derived from
-    # months_on_book.
-    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 5 + 1 + 2
+    # months_on_book, + the 2 harmonised region dimensions
+    # (canonical_region_reporting, canonical_region_detail) that
+    # `engine.region_taxonomy` persists — registered so a region question reads
+    # ONE governed vocabulary instead of whichever spelling each book's source
+    # system happened to write.
+    assert m["derived_field_count"] == len(DERIVED_BUCKETS) + 2 + 5 + 1 + 2 + 2
     assert m["field_count"] == m["core_field_count"] + m["extended_field_count"]
     # v0.2.x set == 72; Phase 0B adds 27 MI/M&A risk + segmentation/snapshot
     # semantic fields == 99; the funded-book vs pipeline date-semantics work adds
@@ -138,10 +142,19 @@ def test_registry_field_count_and_tiers(semantics):
     # bucket engine, and already grouped by on the chart path; only the
     # DECLARATION was missing, and its absence made the query path refuse with
     # a claim about the client's data that was false on all 640 rows.
-    assert m["field_count"] == 119
+    # The two harmonised region dimensions (canonical_region_reporting,
+    # canonical_region_detail) == 121. `engine.region_taxonomy` already
+    # persisted both columns and already resolved 82.6% of the acquired book's
+    # region values into them; only the DECLARATION was missing, so MI had no
+    # governed field to read and bound every region question to the raw source
+    # column instead — where the same book carries "LONDON" and "London" and
+    # one region came back as two rows.
+    assert m["field_count"] == 121
     # +2 core: both governed seasoning dimensions are core-tier (P1J-1);
-    # +1 core: interest_rate_bucket, core like every other derived bucket.
-    assert m["core_field_count"] == 83
+    # +1 core: interest_rate_bucket, core like every other derived bucket;
+    # +2 core: the harmonised region pair, core like the region field they
+    # are preferred over.
+    assert m["core_field_count"] == 85
     # The generated metadata counts must match the actual entries (drift guard).
     assert m["field_count"] == len(semantics["fields"])
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])

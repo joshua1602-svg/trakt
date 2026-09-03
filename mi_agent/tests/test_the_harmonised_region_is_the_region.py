@@ -102,6 +102,27 @@ class TestTheHarmonisedColumnWinsWhenItIsThere(unittest.TestCase):
         chosen = P._preferred_region(self.semantics, available_columns={RAW})
         self.assertEqual(chosen, RAW)
 
+    def test_a_parse_with_no_dataset_in_hand_names_a_column_every_tape_has(self):
+        """THE REGRESSION THE BLAST RUN CAUGHT, and the inverse of the rule
+        this whole change follows.
+
+        `_deterministic_parse` resolves a dimension with NO column context. The
+        first draft returned the head of the preference order there — a
+        harmonised column that exists only where harmonisation ran — so an
+        ordinary "balance by region" on an unharmonised tape would have been
+        refused for a field the reader never named and the book never carried.
+        Preference is for choosing among columns KNOWN to be present. It is not
+        a default."""
+        self.assertEqual(P._preferred_region(self.semantics), RAW)
+
+    def test_a_dataset_carrying_none_of_them_falls_back_the_same_way(self):
+        self.assertEqual(
+            P._preferred_region(self.semantics, available_columns={"loan_id"}),
+            RAW)
+
+    def test_the_default_is_not_simply_the_head_of_the_preference_order(self):
+        self.assertNotEqual(P._REGION_DEFAULT, P._REGION_PREFERENCE[0])
+
     def test_the_raw_column_still_wins_over_the_nuts_code_fields(self):
         chosen = P._preferred_region(
             self.semantics,
