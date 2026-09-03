@@ -72,19 +72,38 @@ def _write_funded_tape(root: Path) -> None:
 
 
 _CLIENT = None
+_ROOT = None
+
+
+def _ensure_env() -> None:
+    """The roots this module's client needs, RE-ASSERTED before every ask.
+
+    The app reads these per request, and several sibling modules in this
+    directory set and then POP the same variables in their own setUp/tearDown.
+    Whichever of them runs first leaves `MI_AGENT_PIPELINE_ROOT` unset, and
+    every question here then came back "No governed pipeline data is available
+    for the pipeline view" — twenty-odd failures that depend on nothing but
+    collection order, and that do not appear when this file is run alone.
+
+    Setting them once at client construction was the assumption; the process
+    environment is shared, so it does not hold.
+    """
+    global _ROOT
+    if _ROOT is None:
+        import tempfile
+
+        _ROOT = Path(tempfile.mkdtemp()) / "onboarding_output"
+        _write_funded_tape(_ROOT)
+    os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"] = str(_ROOT)
+    os.environ["MI_AGENT_PIPELINE_ROOT"] = str(FIXTURE)
+    os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
+    os.environ.setdefault("MI_AGENT_LLM_PARSER", "off")
 
 
 def _client():
     global _CLIENT
     if _CLIENT is None:
-        import tempfile
-
-        root = Path(tempfile.mkdtemp()) / "onboarding_output"
-        _write_funded_tape(root)
-        os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"] = str(root)
-        os.environ["MI_AGENT_PIPELINE_ROOT"] = str(FIXTURE)
-        os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
-        os.environ.setdefault("MI_AGENT_LLM_PARSER", "off")
+        _ensure_env()
         from fastapi.testclient import TestClient
         from mi_agent_api.app import app
 
@@ -93,7 +112,9 @@ def _client():
 
 
 def ask(question: str) -> Dict[str, Any]:
-    return _client().post("/mi/query", json={
+    client = _client()
+    _ensure_env()
+    return client.post("/mi/query", json={
         "question": question, "portfolioId": PORTFOLIO, "asOfDate": AS_OF}).json()
 
 
