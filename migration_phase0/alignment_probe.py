@@ -257,73 +257,6 @@ def _strip_local(result: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in result.items() if not k.startswith("_")}
 
 
-def probe_case_on_the_way_in(base, token, portfolio, timeout) -> Dict[str, Any]:
-    """A. Does the case a reader types change what is matched?"""
-    out: Dict[str, Any] = {}
-    for region in REGIONS:
-        forms = {"as_written": region, "upper": region.upper(),
-                 "lower": region.lower()}
-        runs = {name: _strip_local(_ask(
-            base, token, f"What is the balance in {value}?",
-            lens=None, portfolio=portfolio, timeout=timeout))
-            for name, value in forms.items()}
-        outcomes = {r["ok"] for r in runs.values()}
-        applied = {tuple(r["applied_filters"]) for r in runs.values()}
-        out[region] = {
-            "runs": runs,
-            "all_forms_agree": len(outcomes) == 1 and len(applied) == 1,
-            "any_answered": any(r["ok"] for r in runs.values()),
-        }
-    rows = [v for k, v in out.items() if k != "verdict"]
-    agree = all(v["all_forms_agree"] for v in rows)
-    answered = any(v["any_answered"] for v in rows)
-    if not answered:
-        # NOT A MEASUREMENT. Three forms that all REFUSE agree perfectly and
-        # prove nothing about case: the question failed for some other reason
-        # and took the experiment with it. The first run of this probe reported
-        # "case-insensitive" off exactly that, which is a verdict dressed up
-        # from an absence of evidence.
-        out["verdict"] = ("not established — no case form answered, so the "
-                          "forms agreeing says nothing about case. The region "
-                          "question is failing for another reason; see the "
-                          "error codes below.")
-    elif agree:
-        out["verdict"] = "case-insensitive"
-    else:
-        out["verdict"] = ("CASE-SENSITIVE — the case a reader types changes "
-                          "what is matched")
-    return out
-
-
-def probe_case_on_the_way_out(base, token, portfolio, timeout) -> Dict[str, Any]:
-    """B. Does one region come back as two groups?"""
-    out: Dict[str, Any] = {}
-    for lens in LENSES:
-        res = _ask(base, token, "Show balance by region.", lens=lens,
-                   portfolio=portfolio, timeout=timeout)
-        name = lens or "total"
-        out[name] = {**_strip_local(res),
-                     "grouping": worst_collision(res["_labels"])}
-    measured = {n: v for n, v in out.items()
-                if isinstance(v, dict) and v.get("grouping", {}).get("measured")}
-    split = [n for n, v in measured.items() if not v["grouping"]["clean"]]
-    if not measured:
-        # NOT A MEASUREMENT. No lens returned a grouped artefact, so nothing
-        # was compared. Reporting that as "clean" is how a probe launders a
-        # failed run into a pass.
-        out["verdict"] = ("not established — no lens returned a grouped "
-                          "answer, so no grouping was examined")
-    elif split:
-        out["verdict"] = ("ONE REGION REPORTED TWICE within a single artefact "
-                          "under: " + ", ".join(split)
-                          + " — every share, rank and 'largest region' over "
-                            "that grouping is computed on split rows")
-    else:
-        out["verdict"] = ("no region is reported twice within any single "
-                          "artefact (%d lens(es) examined)" % len(measured))
-    return out
-
-
 #: Anything the platform might call the date the DATA was last updated, as
 #: opposed to the period the figures are labelled as. Both concepts are
 #: legitimate and they are not the same: a 30 June report can be produced from
@@ -355,24 +288,144 @@ def _find_cut_off(obj: Any, depth: int = 0) -> List[Tuple[str, str]]:
     return found
 
 
-def probe_cut_off_alignment(base, token, portfolio, timeout,
-                            fetch=None) -> Dict[str, Any]:
-    """C. Does an answer say when its data was last updated?
+#: The columns `engine.region_taxonomy` stamps when harmonisation RUNS. Their
+#: absence from what MI binds to is the difference between "the books disagree
+#: about case" and "nothing harmonised them".
+HARMONISED_REGION_FIELDS = ("canonical_region_detail",
+                            "canonical_region_reporting")
 
-    NOT what the first draft asked. That compared `reporting_date` across the
-    lenses and found them equal — which they are BY CONSTRUCTION, because
-    `_platform_reporting_date` picks the first column present from
-    ("reporting_date", "data_cut_off_date", "cut_off_date"). A tape carrying
-    both never has the second read at all, so the probe was measuring the
-    chain's first preference and reporting it as agreement between the books.
 
-    The real question is whether the DATA CUT-OFF is surfaced anywhere. If it
-    is not, every answer's "as at" is a reporting label and not a statement of
-    freshness, and two books cut months apart are presented under one date with
-    nothing to distinguish them.
+def _verdict(confirmed: bool, exonerated: bool, why: str) -> str:
+    """CONFIRMED / EXONERATED / NOT ESTABLISHED, and never a fourth thing.
+
+    A test that can only confirm is not evidence. Every comparison below is
+    built so that the hypothesis can FAIL — and "not established" is a real
+    outcome, not a polite way of saying yes.
+    """
+    if confirmed and not exonerated:
+        return "CONFIRMED — " + why
+    if exonerated and not confirmed:
+        return "EXONERATED — " + why
+    return "NOT ESTABLISHED — " + why
+
+
+def hypothesis_region_vocabulary(base, token, portfolio, timeout,
+                                 fetch=None) -> Dict[str, Any]:
+    """H1. Are un-harmonised region names actually blocking the agent?
+
+    FOUR STEPS, and the last two are the ones that can exonerate:
+
+      1. does the platform expose a HARMONISED region field at all?
+      2. which field does a region filter actually bind to?
+      3. does the same region question behave DIFFERENTLY per book? If a
+         question fails identically on direct, on acquired and on the two
+         combined, then whatever is wrong is not a disagreement between them;
+      4. does a region breakdown split WITHIN one artefact, and does it split
+         on a single book or only on the two combined? A split that appears
+         only when the books are combined is harmonisation; a split inside one
+         book is that book's own data.
     """
     out: Dict[str, Any] = {}
+    getter = fetch or _get
+
+    # 1. What the platform says it carries.
+    catalogue = getter(base, token, "/mi/catalogue", timeout)
+    blob = json.dumps(catalogue)
+    harmonised_present = [f for f in HARMONISED_REGION_FIELDS if f in blob]
+    out["harmonised_fields_exposed"] = harmonised_present
+
+    # 2 and 3. The same question, per book.
+    per_book: Dict[str, Any] = {}
+    for lens in LENSES:
+        res = _ask(base, token, "What is the balance in Scotland?", lens=lens,
+                   portfolio=portfolio, timeout=timeout)
+        per_book[lens or "total"] = _strip_local(res)
+    out["one_region_per_book"] = per_book
+    bound = sorted({f for v in per_book.values()
+                    for f in (v.get("applied_filters") or [])})
+    out["region_bound_to"] = bound
+    out["bound_to_harmonised_field"] = any(
+        f in HARMONISED_REGION_FIELDS for f in bound)
+    outcomes = {name: v.get("ok") for name, v in per_book.items()}
+    out["outcome_per_book"] = outcomes
+    differs_by_book = len(set(outcomes.values())) > 1
+
+    # 4. The breakdown, per book and combined.
+    splits: Dict[str, Any] = {}
+    for lens in LENSES:
+        res = _ask(base, token, "Show balance by region.", lens=lens,
+                   portfolio=portfolio, timeout=timeout)
+        splits[lens or "total"] = {**_strip_local(res),
+                                   "grouping": worst_collision(res["_labels"])}
+    out["breakdown_per_book"] = splits
+    measured = {n: v for n, v in splits.items()
+                if v["grouping"].get("measured")}
+    dirty = {n for n, v in measured.items() if not v["grouping"]["clean"]}
+    single_books_clean = not (dirty & {"direct", "acquired"})
+    combined_dirty = "total" in dirty
+
+    # The verdict, from the comparisons rather than from the expectation.
+    if not measured and not any(outcomes.values()):
+        out["verdict"] = _verdict(
+            False, False,
+            "no region question answered anywhere and no breakdown came back, "
+            "so nothing could be compared between the books. The region path "
+            "is failing for a reason this test has not reached.")
+    elif combined_dirty and single_books_clean:
+        out["verdict"] = _verdict(
+            True, False,
+            "a region splits into two rows only when the books are COMBINED "
+            "and neither book splits alone. That is unharmonised vocabulary, "
+            "and it is upstream: nothing in the query path should be casefolding "
+            "a group key.")
+    elif dirty:
+        out["verdict"] = _verdict(
+            True, False,
+            "a region splits within a single book (" + ", ".join(sorted(dirty))
+            + "), so that book's own region values are inconsistent before any "
+              "combination happens.")
+    elif differs_by_book:
+        out["verdict"] = _verdict(
+            True, False,
+            "the same region question succeeds on one book and fails on "
+            "another (" + json.dumps(outcomes) + "), which is a difference "
+            "BETWEEN the books rather than a defect in the question.")
+    elif not harmonised_present and not out["bound_to_harmonised_field"]:
+        out["verdict"] = _verdict(
+            False, False,
+            "no region is reported twice and every book behaves the same, so "
+            "case is NOT blocking anything measurable here — but MI binds "
+            "region to " + (", ".join(bound) or "no field this test could see")
+            + " and no harmonised column is exposed, so nothing guarantees it "
+              "stays that way when a book changes.")
+    else:
+        out["verdict"] = _verdict(
+            False, True,
+            "no region splits, every book behaves the same, and MI binds to a "
+            "harmonised column. Region vocabulary is not the problem.")
+    return out
+
+
+def hypothesis_data_cut_off(base, token, portfolio, timeout,
+                            fetch=None) -> Dict[str, Any]:
+    """H2. Are two data cut-off dates actually blocking the agent?
+
+    THE HYPOTHESIS CAN FAIL HERE, and on the code as read it probably should.
+    `_platform_reporting_date` picks the first column present from
+    ("reporting_date", "data_cut_off_date", "cut_off_date"), so a tape carrying
+    a `reporting_date` never has `data_cut_off_date` read at all — and a value
+    nothing reads cannot block anything. That would make it a DISCLOSURE
+    failure (every "as at" overstating freshness) rather than a blocking one,
+    and the two need different remedies.
+
+    So this asks both questions separately:
+      * is a cut-off surfaced anywhere a reader could see it?   (disclosure)
+      * does a period question behave differently per book?     (blocking)
+    """
+    out: Dict[str, Any] = {}
+    getter = fetch or _get
     surfaced: List[Tuple[str, str]] = []
+
     for lens in LENSES:
         res = _ask(base, token, "Summarise the funded portfolio.", lens=lens,
                    portfolio=portfolio, timeout=timeout, keep_payload=True)
@@ -382,46 +435,78 @@ def probe_cut_off_alignment(base, token, portfolio, timeout,
         out[lens or "total"] = {**_strip_local(res),
                                 "cut_off_keys_found": sorted({k for k, _ in hits}),
                                 "cut_off_dates_found": sorted({d for _, d in hits})}
-    # The platform's own metadata surfaces, checked the same way.
-    for path in ("/health", "/mi/snapshots", "/mi/catalogue"):
-        body = (fetch or _get)(base, token, path, timeout)
+    for path in ("/health", "/mi/snapshots"):
+        body = getter(base, token, path, timeout)
         hits = _find_cut_off(body)
         surfaced.extend(hits)
-        out["GET " + path] = {"cut_off_keys_found": sorted({k for k, _ in hits}),
-                              "cut_off_dates_found": sorted({d for _, d in hits}),
-                              "reporting_dates": sorted(set(
-                                  _ISO_DATE.findall(json.dumps(body))))[:6]}
+        out["GET " + path] = {
+            "cut_off_keys_found": sorted({k for k, _ in hits}),
+            "cut_off_dates_found": sorted({d for _, d in hits}),
+            "reporting_dates": sorted(set(_ISO_DATE.findall(json.dumps(body))))[:8]}
+
+    # THE BLOCKING TEST. A period comparison over each book alone, and over the
+    # two combined. If the combined one fails where both singles succeed, the
+    # misalignment is blocking. If all three behave the same, it is not.
+    period: Dict[str, Any] = {}
+    for lens in LENSES:
+        res = _ask(base, token, "How has the funded balance moved since last "
+                                "month?", lens=lens, portfolio=portfolio,
+                   timeout=timeout)
+        period[lens or "total"] = _strip_local(res)
+    out["period_question_per_book"] = period
+    ok = {name: v.get("ok") for name, v in period.items()}
+    out["period_outcome_per_book"] = ok
+    combined_only_fails = (ok.get("total") is False
+                           and ok.get("direct") and ok.get("acquired"))
 
     dates = sorted({d for _, d in surfaced})
-    labelled = sorted({d for name, v in out.items()
-                       if isinstance(v, dict)
+    labelled = sorted({d for v in out.values() if isinstance(v, dict)
                        for d in (v.get("reporting_dates") or ())})
     out["cut_off_dates_surfaced"] = dates
     out["reporting_dates_declared"] = labelled
-    stale = [d for d in dates if labelled and d not in labelled]
-    if surfaced and (len(dates) > 1 or stale):
-        # The two findings that matter, in one branch because they are the same
-        # fact: the date the figures are LABELLED with is not the date the data
-        # was cut. Either the books disagree with each other, or they agree and
-        # both disagree with the label.
-        out["verdict"] = (
-            "THE DATA WAS NOT CUT WHEN THE ANSWER SAYS — cut-off "
-            + ", ".join(dates) + " against a reported "
-            + (", ".join(labelled) or "(none declared)")
-            + ". A reader told 'as at " + (labelled[0] if labelled else "?")
-            + "' is reading figures whose data was last updated earlier, and a "
-              "combined figure blends books cut at different times.")
-    elif not surfaced:
-        out["verdict"] = (
-            "NO DATA CUT-OFF IS SURFACED ANYWHERE — not on an answer, not on "
-            "/health, not on the snapshot index. Every 'as at' a reader sees "
-            "is the reporting LABEL, not a statement of when the data was last "
-            "updated, so two books cut months apart are presented under one "
+
+    if combined_only_fails:
+        out["verdict"] = _verdict(
+            True, False,
+            "a period question answers on each book alone and fails on the two "
+            "combined, which is the misalignment blocking the answer.")
+    elif not dates:
+        out["verdict"] = _verdict(
+            False, False,
+            "NOT BLOCKING, but not safe either: no data cut-off is surfaced "
+            "anywhere — not on an answer, not on /health, not on the snapshot "
+            "index — and a value nothing reads cannot block anything. It is a "
+            "DISCLOSURE failure: every 'as at' a reader sees is the reporting "
+            "label, so books cut at different times are presented under one "
             "date with nothing to tell them apart.")
+    elif len(dates) > 1 or (labelled and any(d not in labelled for d in dates)):
+        out["verdict"] = _verdict(
+            False, False,
+            "a cut-off IS surfaced (" + ", ".join(dates) + ") and differs from "
+            "the reported date (" + (", ".join(labelled) or "none")
+            + "), but every book answers the same, so it is degrading "
+              "disclosure rather than blocking answers.")
     else:
-        out["verdict"] = ("one data cut-off is surfaced (" + dates[0]
-                          + ") and it matches the reported date")
+        out["verdict"] = _verdict(
+            False, True,
+            "one cut-off, matching the reported date, and every book answers "
+            "the same. Cut-off alignment is not the problem.")
     return out
+
+
+def _wrap(text: Any, width: int = 76) -> str:
+    """A verdict is a sentence, and a sentence has to be readable in a
+    terminal to be acted on."""
+    words, line, out = str(text or "").split(), "", []
+    for word in words:
+        if len(line) + len(word) + 1 > width:
+            out.append(line)
+            line = "    " + word
+        else:
+            line = (line + " " + word) if line else word
+    if line:
+        out.append(line)
+    return "\n  ".join(out)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -446,18 +531,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         "base": args.base, "portfolio": args.portfolio}
 
     for key, label, fn in (
-            ("A_case_on_the_way_in", "A. case a reader types",
-             probe_case_on_the_way_in),
-            ("B_case_on_the_way_out", "B. one region, two groups?",
-             probe_case_on_the_way_out),
-            ("C_cut_off_alignment", "C. do the books share an as-of date?",
-             probe_cut_off_alignment)):
+            ("H1_region_vocabulary",
+             "H1. are un-harmonised region names blocking the agent?",
+             hypothesis_region_vocabulary),
+            ("H2_data_cut_off",
+             "H2. are two data cut-off dates blocking the agent?",
+             hypothesis_data_cut_off)):
         print("\n=== %s ===" % label)
         section = fn(args.base, token, args.portfolio, args.timeout)
         report[key] = section
-        print("  %s" % section.get("verdict"))
+        print("  %s" % _wrap(section.get("verdict")))
+        for extra in ("harmonised_fields_exposed", "region_bound_to",
+                      "outcome_per_book", "period_outcome_per_book",
+                      "cut_off_dates_surfaced", "reporting_dates_declared"):
+            if extra in section:
+                print("    %-26s %s" % (extra, json.dumps(section[extra])))
         for name, value in section.items():
-            if name in ("verdict", "cut_off_dates_surfaced") \
+            if name in ("verdict", "cut_off_dates_surfaced",
+                        "reporting_dates_declared", "region_bound_to",
+                        "outcome_per_book", "period_outcome_per_book",
+                        "harmonised_fields_exposed",
+                        "bound_to_harmonised_field") \
                     or not isinstance(value, dict):
                 continue
             if "grouping" in value:

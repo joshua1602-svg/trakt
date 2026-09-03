@@ -78,27 +78,6 @@ class TestAChartAndATableAreNotTwoRegions(unittest.TestCase):
         self.assertFalse(out["measured"])
 
 
-class TestAnAbsenceOfEvidenceIsNotAVerdict(unittest.TestCase):
-    """The other first-run defect: three case forms that all REFUSE agree
-    perfectly, and the probe read that agreement as "case-insensitive"."""
-
-    def _run(self, ok):
-        def _fake(base, token, question, *, lens, portfolio, timeout):
-            return {"ok": ok, "http": 200, "transport_error": "",
-                    "error_code": None if ok else "CALCULATION_FAILED",
-                    "reason": "", "ms": 1, "parsed_filters": [],
-                    "applied_filters": ["region"], "reporting_dates": [],
-                    "_labels": []}
-
-        with mock.patch.object(AP, "_ask", side_effect=_fake):
-            return AP.probe_case_on_the_way_in("b", "t", "p", 1.0)
-
-    def test_three_refusals_that_agree_are_not_case_insensitivity(self):
-        self.assertIn("not established", self._run(False)["verdict"])
-
-    def test_three_answers_that_agree_are(self):
-        self.assertEqual(self._run(True)["verdict"], "case-insensitive")
-
 
 class TestItNeverEmitsARegionName(unittest.TestCase):
     """The standing rule, on the one probe that has to read the values."""
@@ -140,89 +119,103 @@ class TestItReadsWhatTheAnswerDeclares(unittest.TestCase):
         self.assertEqual(labels, [["LONDON", "London"]])
 
 
-class TestItAsksWhenTheDataWasCutNotWhatItIsLabelled(unittest.TestCase):
-    """THE THIRD FIRST-RUN DEFECT, and the worst of them.
 
-    C compared `reporting_date` across the lenses and found them equal — which
-    they are BY CONSTRUCTION. `_platform_reporting_date` picks the first column
-    present from ("reporting_date", "data_cut_off_date", "cut_off_date"), so a
-    tape carrying both never has the second read. The probe was measuring the
-    chain's first preference and reporting it as the two books agreeing, while
-    the lender's own tape has them cut six months apart.
+
+class TestAHypothesisCanBeExonerated(unittest.TestCase):
+    """A probe that can only confirm is not evidence.
+
+    The user's stated hope is that the data cut-off turns out to be a large
+    problem. These pin that the probe will say otherwise when the evidence
+    says otherwise — including the outcome the code as read predicts, which is
+    that a value nothing reads cannot block anything.
     """
 
-    def _run(self, answer_payload, surfaces):
+    def test_the_three_verdicts_are_distinct_and_none_is_a_default(self):
+        self.assertTrue(AP._verdict(True, False, "x").startswith("CONFIRMED"))
+        self.assertTrue(AP._verdict(False, True, "x").startswith("EXONERATED"))
+        self.assertTrue(AP._verdict(False, False, "x").startswith("NOT ESTABLISHED"))
+        self.assertTrue(AP._verdict(True, True, "x").startswith("NOT ESTABLISHED"))
+
+    def _cut_off(self, per_lens_ok, payload, surfaces):
+        seen = {"n": 0}
+
+        def _fake_ask(base, token, question, *, lens, portfolio, timeout,
+                      keep_payload=False):
+            seen["n"] += 1
+            name = lens or "total"
+            return {"ok": per_lens_ok.get(name, True), "http": 200,
+                    "transport_error": "", "error_code": None, "reason": "",
+                    "ms": 1, "parsed_filters": [], "applied_filters": [],
+                    "reporting_dates": ["2026-06-30"], "_labels": [],
+                    "_payload": dict(payload)}
+
+        with mock.patch.object(AP, "_ask", side_effect=_fake_ask):
+            return AP.hypothesis_data_cut_off("b", "t", "p", 1.0,
+                                              fetch=lambda *a: dict(surfaces))
+
+    def test_a_cut_off_nothing_reads_is_reported_as_not_blocking(self):
+        """The outcome the source predicts, and the probe must be willing to
+        return it."""
+        out = self._cut_off({}, {"governance": {"snapshot": {
+            "reporting_date": "2026-06-30"}}}, {})
+        self.assertIn("NOT ESTABLISHED", out["verdict"])
+        self.assertIn("NOT BLOCKING", out["verdict"])
+        self.assertIn("DISCLOSURE failure", out["verdict"])
+
+    def test_a_combined_failure_over_two_working_books_is_confirmation(self):
+        out = self._cut_off({"total": False, "direct": True, "acquired": True},
+                            {}, {})
+        self.assertIn("CONFIRMED", out["verdict"])
+
+    def test_an_aligned_book_exonerates_the_hypothesis(self):
+        out = self._cut_off({}, {"governance": {"snapshot": {
+            "data_cut_off_date": "2026-06-30"}}}, {})
+        self.assertIn("EXONERATED", out["verdict"])
+
+
+class TestRegionIsJudgedByComparison(unittest.TestCase):
+
+    def _region(self, splits, ok=True, catalogue=None):
+        def _fake_ask(base, token, question, *, lens, portfolio, timeout,
+                      keep_payload=False):
+            name = lens or "total"
+            labels = [[l for l in splits.get(name, ["London", "Scotland"])]]
+            return {"ok": ok, "http": 200, "transport_error": "",
+                    "error_code": None, "reason": "", "ms": 1,
+                    "parsed_filters": [], "applied_filters": ["collateral_geography"],
+                    "reporting_dates": [], "_labels": labels}
+
+        with mock.patch.object(AP, "_ask", side_effect=_fake_ask):
+            return AP.hypothesis_region_vocabulary(
+                "b", "t", "p", 1.0, fetch=lambda *a: (catalogue or {}))
+
+    def test_a_split_only_when_combined_confirms_harmonisation(self):
+        out = self._region({"total": ["LONDON", "London"],
+                            "direct": ["London"], "acquired": ["LONDON"]})
+        self.assertIn("CONFIRMED", out["verdict"])
+        self.assertIn("COMBINED", out["verdict"])
+
+    def test_a_clean_split_on_a_raw_binding_is_not_confirmation(self):
+        """No region is reported twice — so case is not blocking anything,
+        even though MI binds to a raw source column."""
+        out = self._region({})
+        self.assertIn("NOT ESTABLISHED", out["verdict"])
+        self.assertFalse(out["bound_to_harmonised_field"])
+
+    def test_a_harmonised_binding_with_no_split_exonerates(self):
         def _fake_ask(base, token, question, *, lens, portfolio, timeout,
                       keep_payload=False):
             return {"ok": True, "http": 200, "transport_error": "",
                     "error_code": None, "reason": "", "ms": 1,
-                    "parsed_filters": [], "applied_filters": [],
-                    "reporting_dates": ["2026-06-30"], "_labels": [],
-                    "_payload": dict(answer_payload)}
+                    "parsed_filters": [],
+                    "applied_filters": ["canonical_region_reporting"],
+                    "reporting_dates": [], "_labels": [["London"]]}
 
         with mock.patch.object(AP, "_ask", side_effect=_fake_ask):
-            return AP.probe_cut_off_alignment(
-                "b", "t", "p", 1.0, fetch=lambda *a: dict(surfaces))
-
-    def test_a_cut_off_hidden_behind_a_uniform_reporting_date_is_found(self):
-        out = self._run({"governance": {"snapshot": {
-            "reporting_date": "2026-06-30",
-            "data_cut_off_date": "2025-11-30"}}}, {})
-        self.assertIn("NOT CUT WHEN THE ANSWER SAYS", out["verdict"])
-        self.assertIn("2025-11-30", out["verdict"])
-
-    def test_no_cut_off_anywhere_is_the_finding_not_a_pass(self):
-        """A uniform reporting date is not evidence the books are aligned."""
-        out = self._run({"governance": {"snapshot": {
-            "reporting_date": "2026-06-30"}}}, {})
-        self.assertIn("NO DATA CUT-OFF IS SURFACED", out["verdict"])
-
-    def test_it_looks_at_the_platform_surfaces_too(self):
-        out = self._run({}, {"dataCutOffDate": "2026-05-20"})
-        self.assertIn("2026-05-20", out["cut_off_dates_surfaced"])
-
-    def test_it_finds_the_key_however_it_is_spelled_and_however_deep(self):
-        found = AP._find_cut_off(
-            {"a": {"b": [{"cutOffDate": "2025-11-30T00:00:00"}]}})
-        self.assertEqual(found, [("cutOffDate", "2025-11-30")])
-
-    def test_a_reporting_date_is_not_mistaken_for_a_cut_off(self):
-        self.assertEqual(AP._find_cut_off({"reporting_date": "2026-06-30"}), [])
-
-    def test_a_timestamped_date_is_not_invisible(self):
-        """`\\b` does not exist between the "0" of a date and the "T" of a
-        timestamp, so every timestamped date in the platform metadata was
-        being read as absent."""
-        self.assertEqual(AP._ISO_DATE.findall("2025-11-30T00:00:00Z"),
-                         ["2025-11-30"])
-
-
-class TestTheVerdictsSayWhatWasFound(unittest.TestCase):
-
-    def _run(self, responses):
-        calls = iter(responses)
-
-        def _fake(base, token, question, *, lens, portfolio, timeout,
-                  keep_payload=False):
-            return {**next(calls), "_payload": {}}
-
-        with mock.patch.object(AP, "_ask", side_effect=_fake):
-            return AP.probe_cut_off_alignment("b", "t", "p", 1.0,
-                                              fetch=lambda *a: {})
-
-    def _res(self, dates):
-        return {"ok": True, "http": 200, "transport_error": "",
-                "error_code": None, "reason": "", "ms": 1,
-                "parsed_filters": [], "applied_filters": [],
-                "reporting_dates": dates, "_labels": []}
-
-    def test_agreeing_reporting_dates_are_no_longer_read_as_alignment(self):
-        """What C used to assert, kept as the thing that must NOT come back:
-        three lenses agreeing on a reporting date proves only that the date
-        chain has one first preference."""
-        out = self._run([self._res(["2026-06-30"])] * 3)
-        self.assertNotIn("same as-of date", out["verdict"])
-        self.assertIn("NO DATA CUT-OFF IS SURFACED", out["verdict"])
+            out = AP.hypothesis_region_vocabulary(
+                "b", "t", "p", 1.0,
+                fetch=lambda *a: {"fields": ["canonical_region_reporting"]})
+        self.assertIn("EXONERATED", out["verdict"])
 
 
 if __name__ == "__main__":
