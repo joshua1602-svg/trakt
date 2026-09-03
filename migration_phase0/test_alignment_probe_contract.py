@@ -45,6 +45,61 @@ class TestItFindsARegionReportedTwice(unittest.TestCase):
         self.assertEqual(out["distinct_case_insensitive"], 1)
 
 
+class TestAChartAndATableAreNotTwoRegions(unittest.TestCase):
+    """THE FALSE POSITIVE THIS PROBE PRODUCED ON ITS FIRST LIVE RUN.
+
+    A grouped answer returns a chart AND a table over the same rows. Pooling
+    their labels made every region appear twice and reported a clean book as
+    "one region reported twice" — 20 labels, 10 distinct, widest exactly 2. A
+    duplicate only means anything WITHIN one artefact.
+    """
+
+    def test_the_same_regions_in_a_chart_and_a_table_are_clean(self):
+        payload = {"artifacts": [
+            {"xKey": "region", "rows": [{"region": "London"},
+                                        {"region": "Scotland"}]},
+            {"xKey": "region", "rows": [{"region": "London"},
+                                        {"region": "Scotland"}]}]}
+        out = AP.worst_collision(AP._category_labels(payload))
+        self.assertTrue(out["clean"])
+        self.assertEqual(out["artifacts_read"], 2)
+
+    def test_a_split_inside_one_table_is_still_caught(self):
+        payload = {"artifacts": [
+            {"xKey": "region", "rows": [{"region": "LONDON"},
+                                        {"region": "London"}]},
+            {"xKey": "region", "rows": [{"region": "Scotland"}]}]}
+        out = AP.worst_collision(AP._category_labels(payload))
+        self.assertFalse(out["clean"])
+        self.assertEqual(out["colliding_groups"], 1)
+
+    def test_an_answer_with_no_grouped_artefact_is_not_measured(self):
+        out = AP.worst_collision(AP._category_labels({"artifacts": []}))
+        self.assertFalse(out["measured"])
+
+
+class TestAnAbsenceOfEvidenceIsNotAVerdict(unittest.TestCase):
+    """The other first-run defect: three case forms that all REFUSE agree
+    perfectly, and the probe read that agreement as "case-insensitive"."""
+
+    def _run(self, ok):
+        def _fake(base, token, question, *, lens, portfolio, timeout):
+            return {"ok": ok, "http": 200, "transport_error": "",
+                    "error_code": None if ok else "CALCULATION_FAILED",
+                    "reason": "", "ms": 1, "parsed_filters": [],
+                    "applied_filters": ["region"], "reporting_dates": [],
+                    "_labels": []}
+
+        with mock.patch.object(AP, "_ask", side_effect=_fake):
+            return AP.probe_case_on_the_way_in("b", "t", "p", 1.0)
+
+    def test_three_refusals_that_agree_are_not_case_insensitivity(self):
+        self.assertIn("not established", self._run(False)["verdict"])
+
+    def test_three_answers_that_agree_are(self):
+        self.assertEqual(self._run(True)["verdict"], "case-insensitive")
+
+
 class TestItNeverEmitsARegionName(unittest.TestCase):
     """The standing rule, on the one probe that has to read the values."""
 
@@ -82,7 +137,7 @@ class TestItReadsWhatTheAnswerDeclares(unittest.TestCase):
         labels = AP._category_labels({"artifacts": [
             {"xKey": "region", "rows": [{"region": "LONDON", "value": 1},
                                         {"region": "London", "value": 2}]}]})
-        self.assertEqual(labels, ["LONDON", "London"])
+        self.assertEqual(labels, [["LONDON", "London"]])
 
 
 class TestTheVerdictsSayWhatWasFound(unittest.TestCase):

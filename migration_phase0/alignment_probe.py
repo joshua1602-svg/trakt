@@ -111,13 +111,19 @@ def case_collisions(labels: List[Any]) -> Dict[str, Any]:
     }
 
 
-def _category_labels(payload: Dict[str, Any]) -> List[Any]:
-    """Every category key across the answer's chart and table artefacts.
+def _category_labels(payload: Dict[str, Any]) -> List[List[Any]]:
+    """The category keys of each artefact, KEPT APART.
 
-    Read from `xKey`/the first text column, because that is where a grouped
-    answer puts the axis it grouped on.
+    ONE LIST PER ARTEFACT, and the reason is a false positive this probe
+    produced on its first run. A grouped answer returns a chart AND a table
+    over the same rows, so pooling their labels made every region appear twice
+    and reported the whole book as "one region reported twice" — 20 labels, 10
+    distinct, widest exactly 2, in a book with no case problem at all.
+
+    A duplicate only means anything WITHIN one artefact: two rows of the same
+    table that differ only in case are one region the grouping split.
     """
-    out: List[Any] = []
+    out: List[List[Any]] = []
     for art in (payload.get("artifacts") or []):
         if not isinstance(art, dict):
             continue
@@ -125,17 +131,32 @@ def _category_labels(payload: Dict[str, Any]) -> List[Any]:
         if not isinstance(rows, list):
             continue
         key = art.get("xKey")
+        labels: List[Any] = []
         for row in rows:
             if not isinstance(row, dict):
                 continue
             if key and key in row:
-                out.append(row[key])
+                labels.append(row[key])
                 continue
             for k, v in row.items():
                 if isinstance(v, str) and k not in ("id", "type"):
-                    out.append(v)
+                    labels.append(v)
                     break
+        if labels:
+            out.append(labels)
     return out
+
+
+def worst_collision(per_artifact: List[List[Any]]) -> Dict[str, Any]:
+    """The worst split found in ANY single artefact, plus how many were read."""
+    reports = [case_collisions(labels) for labels in (per_artifact or [])]
+    if not reports:
+        return {"artifacts_read": 0, "labels_returned": 0,
+                "distinct_case_insensitive": 0, "colliding_groups": 0,
+                "widest_collision": 0, "clean": True, "measured": False}
+    worst = max(reports, key=lambda r: (r["colliding_groups"],
+                                        r["widest_collision"]))
+    return {**worst, "artifacts_read": len(reports), "measured": True}
 
 
 def _reporting_dates(payload: Dict[str, Any]) -> List[str]:
@@ -236,11 +257,24 @@ def probe_case_on_the_way_in(base, token, portfolio, timeout) -> Dict[str, Any]:
             "all_forms_agree": len(outcomes) == 1 and len(applied) == 1,
             "any_answered": any(r["ok"] for r in runs.values()),
         }
-    out["verdict"] = ("case-insensitive"
-                      if all(v["all_forms_agree"] for k, v in out.items()
-                             if k != "verdict")
-                      else "CASE-SENSITIVE — the case a reader types changes "
-                           "what is matched")
+    rows = [v for k, v in out.items() if k != "verdict"]
+    agree = all(v["all_forms_agree"] for v in rows)
+    answered = any(v["any_answered"] for v in rows)
+    if not answered:
+        # NOT A MEASUREMENT. Three forms that all REFUSE agree perfectly and
+        # prove nothing about case: the question failed for some other reason
+        # and took the experiment with it. The first run of this probe reported
+        # "case-insensitive" off exactly that, which is a verdict dressed up
+        # from an absence of evidence.
+        out["verdict"] = ("not established — no case form answered, so the "
+                          "forms agreeing says nothing about case. The region "
+                          "question is failing for another reason; see the "
+                          "error codes below.")
+    elif agree:
+        out["verdict"] = "case-insensitive"
+    else:
+        out["verdict"] = ("CASE-SENSITIVE — the case a reader types changes "
+                          "what is matched")
     return out
 
 
@@ -252,13 +286,24 @@ def probe_case_on_the_way_out(base, token, portfolio, timeout) -> Dict[str, Any]
                    portfolio=portfolio, timeout=timeout)
         name = lens or "total"
         out[name] = {**_strip_local(res),
-                     "grouping": case_collisions(res["_labels"])}
-    split = [n for n, v in out.items() if not v["grouping"]["clean"]]
-    out["verdict"] = ("no region is reported twice"
-                      if not split else
-                      "ONE REGION REPORTED TWICE under: " + ", ".join(split)
-                      + " — every share, rank and 'largest region' over this "
-                        "grouping is computed on split rows")
+                     "grouping": worst_collision(res["_labels"])}
+    measured = {n: v for n, v in out.items()
+                if isinstance(v, dict) and v.get("grouping", {}).get("measured")}
+    split = [n for n, v in measured.items() if not v["grouping"]["clean"]]
+    if not measured:
+        # NOT A MEASUREMENT. No lens returned a grouped artefact, so nothing
+        # was compared. Reporting that as "clean" is how a probe launders a
+        # failed run into a pass.
+        out["verdict"] = ("not established — no lens returned a grouped "
+                          "answer, so no grouping was examined")
+    elif split:
+        out["verdict"] = ("ONE REGION REPORTED TWICE within a single artefact "
+                          "under: " + ", ".join(split)
+                          + " — every share, rank and 'largest region' over "
+                            "that grouping is computed on split rows")
+    else:
+        out["verdict"] = ("no region is reported twice within any single "
+                          "artefact (%d lens(es) examined)" % len(measured))
     return out
 
 
