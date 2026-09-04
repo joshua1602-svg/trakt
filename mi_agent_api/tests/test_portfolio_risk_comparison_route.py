@@ -87,6 +87,12 @@ class TestRegistration:
         added_since_the_migration = {prc.WORKFLOW_ID, "concentration_analysis",
                                      "analytical_composition",
                                      "pipeline_stage_movement",
+                                     # The all-stages movement summary, added
+                                     # 2026-09-04 at 79. It sits above the
+                                     # chain's summaries deliberately and has
+                                     # its own placement test in
+                                     # `test_the_pipeline_movement_summary_route`.
+                                     "pipeline_movement_summary",
                                      # The funded summary's sibling, added for
                                      # the pipeline questions that route
                                      # declines for naming another dataset. It
