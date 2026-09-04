@@ -168,3 +168,47 @@ class TestTheInvariant(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class TestAValueBindsOnlyToAColumnTheFrameHas(unittest.TestCase):
+    """THE SECOND HALF OF THE SAME DEFECT.
+
+    `_bind` asserts `available_columns` for a MEASURE and for a DIMENSION —
+    both say so in their own comments — and does not for a VALUE. The arm's
+    catalogue is built from a SEPARATELY resolved frame
+    (`chat_routing._values_for_recognition` → `base_frame_resolver`), not the
+    frame the parse and the executor use, so the two need not agree about which
+    region columns exist. A value bound against the other frame's catalogue
+    reached the spec as a filter on a column this frame does not carry, and the
+    executor refused at `_require_column`.
+
+    Availability is the SAME question for all three kinds, so it gets the same
+    answer.
+    """
+
+    def _vocab(self, columns):
+        from question_interpretation import concept_proposal as CP
+
+        return CP.vocabulary(
+            _semantics(),
+            available_values={ALIAS: {"london": "London"}},
+            available_columns=columns)
+
+    def _bind_london(self, columns):
+        from question_interpretation import concept_proposal as CP
+
+        proposal = ProposedConcept(kind="category_value", term="london")
+        return CP.bind([proposal], self._vocab(columns))
+
+    def test_a_value_naming_an_absent_column_is_rejected_not_bound(self):
+        bound, rejected = self._bind_london({READER, "current_outstanding_balance"})
+        self.assertEqual(list(bound), [], "bound a value to a column the frame lacks")
+        self.assertTrue(rejected)
+
+    def test_a_value_whose_column_is_present_still_binds(self):
+        bound, _ = self._bind_london({ALIAS, "current_outstanding_balance"})
+        self.assertEqual([b.field for b in bound], [ALIAS])
+
+    def test_with_no_column_context_the_rule_stands_down(self):
+        bound, _ = self._bind_london(None)
+        self.assertEqual([b.field for b in bound], [ALIAS])

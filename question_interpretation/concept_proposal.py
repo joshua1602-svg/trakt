@@ -370,6 +370,15 @@ def _bind_one(proposal: ProposedConcept, vocab: ConceptVocabulary):
         hit = CS.value_field(term, vocab.available_values, vocab.semantics)
         if hit is None:
             return RejectedConcept(proposal, REJECT_AMBIGUOUS, term)
+        # THE SAME AVAILABILITY FILTER THE OTHER TWO KINDS ASSERT, and for the
+        # same reason. This catalogue is built from a SEPARATELY resolved frame
+        # (`chat_routing._values_for_recognition`), not the one the parse and
+        # the executor use, so the two need not agree about which columns
+        # exist. Without this a value bound against the other frame reached the
+        # spec as a filter on a column this frame does not carry, and the
+        # executor refused: "'Region' is not available in this dataset".
+        if vocab.available_columns and hit[0] not in vocab.available_columns:
+            return RejectedConcept(proposal, REJECT_UNAVAILABLE, hit[0])
         return BoundConcept(proposal, hit[0], hit[1],
                             "categorical_spans.value_field")
     if kind == KIND_MEASURE:
