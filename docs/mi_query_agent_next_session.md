@@ -274,30 +274,32 @@ principle it already applies to the book's own values: a word a governed owner
 claims is not a measure this dataset lacks. This reaches the case book values
 cannot — a stage the loaded frame carries no column for.
 
-## The region double-bind — BLOCKED, do not guess
+## The region double-bind — CLOSED on the live build, cause not attributed
 
-The three failing region questions carry TWO filters for one region:
+At `3acd6d0` (the build the 115-replay measured) three region questions carried
+TWO filters for one region and refused "'Region' is not available in this
+dataset". On `df0a1c5`, asked live, all three answer with exactly one filter:
 
-    filters={'collateral_geography': 'London', 'canonical_region_reporting': 'London'}
+    What is the funded balance in the London region      ok, filters ['London']
+    What is the funded balance in South West             ok, filters ['South West']
+    ...in the Scotland region for the Acquired portfolio ok, filters ['Scotland',
+                                                         'Source Portfolio in acquired_001']
 
-That is the raw **Region** column and its own **derived harmonisation of
-itself** — one concept bound twice. (Not the ITL/NUTS3 fields, which are a
-different, finer geography and were not involved.) The executor then needs both
-columns; the live frame has one, so it refuses "'Region' is not available in
-this dataset" — while `Show balance by region.` answers on the same book.
+notApplied is empty on all three and the lens applied correctly on the third.
 
-**It does not reproduce offline.** Frames carrying both columns, the raw only,
-the canonical only, and canonical+detail all bind exactly ONE filter. Every
-writer of `spec.filters` outside the parser was read (`portfolio_lens.apply_lens`,
-the pipeline-stage adder, drill-through merge, the concept-merge arm) and none
-adds a second region key. It needs the live request to diagnose:
+**The cause is NOT established, and should not be recorded as one.** Two of the
+three contain the word `funded`, which #400 stopped reading as a measure this
+dataset does not carry — but the third contains neither `funded` nor anything
+else #399 or #400 touched, so that story is incomplete. The other candidate is
+that the FRAME CHANGED: asked today, portfolio `ERE` answers "as at 31 May 2026"
+over a population of 958, while this document and the deploy notes describe a
+640-loan book at 30 June 2026. A frame whose region columns differ would explain
+both the original refusal and why the double-bind never reproduced offline
+across four frame shapes.
 
-    curl -s -X POST $BASE/mi/query -H "Authorization: Bearer $MI_BEARER" \
-      -H 'Content-Type: application/json' \
-      -d '{"question":"What is the funded balance in the London region","portfolioId":"ERE"}' \
-      | python3 -m json.tool | head -60
-
-Guessing here is how four diagnoses were wrong on 2026-09-03.
+Worth settling before any conclusion is drawn from the next replay: if the
+active dataset moved between runs, some verdict changes will be DATA rather than
+code, and the 115 corpus was recorded against `ERE` and `ERE/2026-06-30`.
 
 ## Newly measured, still open
 
