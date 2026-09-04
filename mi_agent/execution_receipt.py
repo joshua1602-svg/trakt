@@ -1731,11 +1731,26 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # settled that for periods and this programme settled it for populations;
     # disclosure is not honouring. A coverage LIMIT is a different thing and is
     # not this kind — see `assess`.
-    # SPATIAL grain only. `KIND_TIME_GRAIN` is deliberately absent: a level of
-    # PLACE the answer could not express is a substitution, while a series
-    # published weekly has no monthly twin that was passed over — see
-    # `SHAPE_FACETS`, which delivers it with the grain disclosed.
     KIND_GRANULARITY,
+    # TIME GRAIN, material since 2026-09-04 and disclosable before it.
+    #
+    # The rule this now follows: an answer may stay PARTIAL only where the
+    # omitted element cannot change the population, the measure, the comparison
+    # basis, the period or the economic interpretation. A grain changes two of
+    # them. "Month on month" and "week on week" compare different spans across
+    # different boundaries, and a monthly improvement is not a weekly one.
+    #
+    # What it replaces, recorded because it was a real trade and not an
+    # oversight: this kind sat in `SHAPE_FACETS` on the reasoning that refusing
+    # would deny "a correct weekly movement for want of a monthly series that
+    # does not exist" — the reader gets nothing where they could have had the
+    # real figure and a sentence saying what period it covers. Measured against
+    # that, the live bank answered "Has pipeline progression improved month on
+    # month?" from a weekly series, verdict `partial`, with the correction
+    # printed UNDERNEATH the figure. The disclosure was real; the number still
+    # answered a question nobody asked. A weekly question asking for weekly is
+    # unaffected — its facet is APPLIED and never reaches `_blocks`.
+    KIND_TIME_GRAIN,
     # Dropping the population changes WHICH ROWS were counted, so it changes
     # every number in the answer. It can never be a partial disclosure.
     KIND_POPULATION,
@@ -1754,14 +1769,16 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # 11,035 loans.
     KIND_LOST_NARROWING,
 })
-#: Facets that change the SHAPE of a still-valid answer. A partial answer is
-#: acceptable provided the unhonoured facet is named.
-#: Disclosed, not refused: the answer stands and the facet is named as not
-#: applied. `KIND_TIME_GRAIN` belongs here because the alternative was refusing
-#: a correct weekly movement for want of a monthly series that does not exist —
-#: the reader got nothing where they could have had the real figure and the
-#: sentence saying what period it covers.
-SHAPE_FACETS = frozenset({KIND_GROUPING, KIND_TIME_GRAIN})
+#: Facets that change the SHAPE of a still-valid answer, and nothing a reader
+#: would call the answer. A partial answer is acceptable provided the unhonoured
+#: facet is named.
+#:
+#: THE ADMISSION TEST, settled 2026-09-04: a facet may live here only if its
+#: absence cannot change the population, the measure, the comparison basis, the
+#: period or the economic interpretation. `KIND_TIME_GRAIN` was admitted before
+#: that test existed and fails it — see `NUMBER_OR_SUBJECT_FACETS`, which now
+#: holds it.
+SHAPE_FACETS = frozenset({KIND_GROUPING})
 
 #: Verdicts from :func:`assess`.
 VERDICT_OK = "ok"
