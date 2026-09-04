@@ -1,6 +1,41 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import { AppShell } from "./AppShell";
+import { MockAgentClient } from "@/api/MockAgentClient";
+import type { PortfolioCapability, PortfolioContextIndex } from "@/domain";
+
+/** A client whose portfolio-context genuinely has something to disclose (a
+ *  pipeline-attribution note), for every capability the shell reads — so a
+ *  test that asserts the scope banner is ABSENT is actually proving the
+ *  suppression, not just that the mock never had anything to show. */
+/** AppShell builds its own client internally (createAgentClient()), which
+ *  resolves to MockAgentClient with no injected VITE_AGENT_API_URL — so a
+ *  prototype spy, not a prop, is how a test gives it a governed context with
+ *  something to disclose. Restored in afterEach below. */
+function stubScopeDisclosure(): void {
+  const capability = (id: string, detail: string): PortfolioCapability => ({
+    capability: id as PortfolioCapability["capability"],
+    enabled: true, reason_code: null, detail,
+    contributing_portfolios: ["direct_001"], excluded_portfolios: ["acquired_001"],
+    partial: true,
+  });
+  const detail = "Pipeline is originating-only for this scope; acquired books do not contribute.";
+  const index: PortfolioContextIndex = {
+    available: true, client_id: "client_001", default_context_id: "total",
+    contexts: [{
+      context_id: "total", context_kind: "total", label: "Total", parent_id: null,
+      depth: 0, portfolio_ids: ["direct_001", "acquired_001"], portfolio_types: [],
+      capabilities: {
+        funded: capability("funded", detail),
+        pipeline: capability("pipeline", detail),
+        consolidated_forecast: capability("consolidated_forecast", detail),
+        risk: capability("risk", detail),
+      } as unknown as PortfolioContextIndex["contexts"][number]["capabilities"],
+    }],
+    portfolios: [], portfolio_types: [], pipeline_portfolios: null,
+  };
+  vi.spyOn(MockAgentClient.prototype, "getPortfolioContext").mockResolvedValue(index);
+}
 
 // AppShell (no VITE_AGENT_API_URL) uses the MockAgentClient, whose forecast
 // snapshot mirrors the real funded spine + pipeline fixture pack. The workspace
@@ -129,6 +164,45 @@ describe("AppShell — Pipeline → Stage Movement sub-tab", () => {
     expect(screen.queryAllByTestId("pipeline-movement-pane")).toHaveLength(1);
     expect(within(screen.getByTestId("pipeline-evo-pane"))
       .queryByTestId("stage-transitions-unavailable")).toBeNull();
+  });
+});
+
+describe("AppShell — the portfolio scope banner is not shown on Pipeline or Forecast", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("shows the governed scope disclosure on Funded", async () => {
+    stubScopeDisclosure();
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByText("Funded Book Snapshot")).toBeInTheDocument());
+    expect(screen.getByTestId("portfolio-scope-banner")).toBeInTheDocument();
+  });
+
+  it("does not show it on Pipeline", async () => {
+    stubScopeDisclosure();
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByText("Funded Book Snapshot")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Pipeline/ }));
+    await waitFor(() => expect(screen.getByText("Pipeline Snapshot")).toBeInTheDocument());
+    expect(screen.queryByTestId("portfolio-scope-banner")).toBeNull();
+  });
+
+  it("does not show it on Forecast", async () => {
+    stubScopeDisclosure();
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByText("Funded Book Snapshot")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Forecast/ }));
+    await waitFor(() => expect(screen.getByText("Funded + Pipeline Forecast")).toBeInTheDocument());
+    expect(screen.queryByTestId("portfolio-scope-banner")).toBeNull();
+  });
+
+  it("shows it again on switching back to Funded", async () => {
+    stubScopeDisclosure();
+    render(<AppShell />);
+    await waitFor(() => expect(screen.getByText("Funded Book Snapshot")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Pipeline/ }));
+    await waitFor(() => expect(screen.getByText("Pipeline Snapshot")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("tab", { name: /Funded/ }));
+    await waitFor(() => expect(screen.getByTestId("portfolio-scope-banner")).toBeInTheDocument());
   });
 });
 
