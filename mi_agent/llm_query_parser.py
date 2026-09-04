@@ -5144,7 +5144,15 @@ def _repair_prompt(base_prompt: Dict[str, str], previous_json: str,
 
 
 def _empty_llm_meta(provider: str, model: Optional[str]) -> dict:
+    """This parser's own LLM usage for one question.
+
+    `scope` names what the counters cover, because `calls: 0` here does NOT mean
+    no model touched the answer: the concept-merge arm runs outside this module
+    and reports its usage under `metadata.conceptMerge`. Read as "no model ran",
+    this block refuted a correct diagnosis of the region double-bind.
+    """
     return {
+        "scope": "parser",
         "provider": provider, "model": model, "calls": 0,
         "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
         "cache_read_tokens": 0, "cache_write_tokens": 0,

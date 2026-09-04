@@ -61,7 +61,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-__all__ = ["value_field", "preferred_field", "value_spans",
+__all__ = ["value_field", "preferred_field", "alias_fields", "value_spans",
            "mask_value_spans"]
 
 
@@ -134,6 +134,35 @@ def _domain_preference(domain: str) -> Tuple[str, ...]:
         return tuple(domain_field_preference(domain) or ())
     except Exception:  # noqa: BLE001 - the same
         return ()
+
+
+def alias_fields(field: Optional[str], semantics: Any = None) -> Tuple[str, ...]:
+    """Every OTHER governed field that is a spelling of ``field``'s concept.
+
+    Two fields that declare one ``value_domain`` are aliases of one concept, not
+    two concepts — the rule :func:`preferred_field` already binds by. This
+    publishes the same fact as a family, so a consumer holding one spelling can
+    ask whether a concept is already claimed under another.
+
+    Empty for a field the registry does not carry, for a field that declares no
+    domain, and for a domain whose owner declares no preference order — the
+    three cases where nothing governs which spellings mean the same thing, and
+    guessing is exactly what this module refuses to do.
+    """
+    entry = _entry(field, semantics)
+    domain = (entry or {}).get("value_domain")
+    if not domain:
+        return ()
+    known = {k for k, e in ((semantics or {}).get("fields") or {}).items()
+             if (e or {}).get("value_domain") == domain}
+    return tuple(f for f in _domain_preference(domain)
+                 if f in known and f != field)
+
+
+def _entry(field: Optional[str], semantics: Any) -> Optional[dict]:
+    if not field:
+        return None
+    return ((semantics or {}).get("fields") or {}).get(str(field))
 
 
 def preferred_field(fields: Iterable[str],

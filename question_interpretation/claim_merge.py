@@ -447,15 +447,54 @@ def _same_claim(current: "SlotValue", value: Any, operator: Optional[str]) -> bo
     return str(current.operator or "").lower() == str(operator or "").lower()
 
 
+def _concept_address(slot: str, field: Optional[str],
+                     slots: Mapping[Tuple[str, Optional[str]], SlotValue],
+                     semantics: Any) -> Optional[Tuple[str, Optional[str]]]:
+    """The address an ALIAS of ``field`` already occupies in ``slot``, if any.
+
+    A SLOT IS ADDRESSED BY CONCEPT, NOT BY COLUMN. Two fields that declare one
+    ``value_domain`` are spellings of one concept, so a claim already recorded
+    under one of them occupies the slot for all of them. Addressing by column
+    is what let "balance in London" carry BOTH `collateral_geography` and
+    `canonical_region_reporting` as filters — one concept, written twice, the
+    second naming a column the execution frame did not have.
+
+    Returns ``None`` when nothing governs the question: no semantics, no
+    declared domain, or no alias currently in the slot. The caller then keeps
+    the column address it already had, which is the behaviour that predates
+    this function.
+    """
+    if not field or slot not in KEYED_SLOTS or not semantics:
+        return None
+    try:
+        from mi_agent.categorical_spans import alias_fields
+
+        family = alias_fields(field, semantics)
+    except Exception:  # noqa: BLE001 - no owner reachable, no alias rule
+        return None
+    for alias in family:
+        address = (slot, str(alias))
+        if address in slots:
+            return address
+    return None
+
+
 def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
           rejected: Sequence[Any] = (),
-          profile: Optional[OperationProfile] = None) -> MergeResult:
+          profile: Optional[OperationProfile] = None,
+          semantics: Any = None) -> MergeResult:
     """Apply the three rules. Returns the merged slots AND every finding.
 
     ``bound`` and ``rejected`` are what `concept_proposal.bind` returned. The
     rejected proposals are carried through rather than dropped: a proposal the
     registry refused and a proposal that was never made must not arrive here as
     the same absence.
+
+    ``semantics`` lets a keyed slot be addressed by CONCEPT rather than by
+    column, so a concept the deterministic side already claimed under one of its
+    governed spellings is not an empty slot under another. Without it the rules
+    are exactly what they were: a caller that cannot say which fields are
+    aliases gets column addressing, and nothing here guesses.
     """
     slots: Dict[Tuple[str, Optional[str]], SlotValue] = {
         s.address: s for s in existing}
@@ -477,6 +516,14 @@ def merge(existing: Sequence[SlotValue], bound: Sequence[Any] = (),
             value = field
         address = _address(slot, field)
         current = slots.get(address)
+        if current is None:
+            # THE SAME CONCEPT UNDER ANOTHER OF ITS GOVERNED SPELLINGS. Resolve
+            # to the address it already occupies so rules 1-3 adjudicate the
+            # claim — agree, or decline and report — instead of a free column
+            # address inviting a second physical filter for one concept.
+            aliased = _concept_address(address[0], field, slots, semantics)
+            if aliased is not None:
+                address, current = aliased, slots[aliased]
 
         # THE FOURTH RULE, before the other three. Rules 1-3 ask whether the
         # slot is free; this asks whether the operation has that role to give.

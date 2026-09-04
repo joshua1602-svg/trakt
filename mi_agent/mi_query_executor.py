@@ -607,22 +607,40 @@ def governed_predicate_mask(work: pd.DataFrame, field_key: str, op: Any, value: 
     #    spec used to say so.
     if resolved_op in ("eq", "ne") and isinstance(value, str):
         target = value.strip().casefold()
-        same = col.astype(str).str.strip().str.casefold() == target
-        if not same.any():
-            # VALUE RESOLUTION. The exact match reached nothing, which is not
-            # the same as there being nothing to reach: "London" matches no row
-            # on a book whose region column holds TLI43. The executor does not
-            # know what a region is; it asks the semantics what domain the
-            # field's values are drawn from, and the domain resolves the term.
-            resolved = _resolve_domain_value(entry.get("value_domain"), value, col)
-            if resolved:
-                wanted = {str(v).strip().casefold() for v in resolved}
-                same = col.astype(str).str.strip().str.casefold().isin(wanted)
-                if warnings is not None:
-                    warnings.append(
-                        f"filter {field_key}: "
-                        + _describe_domain_value(entry.get("value_domain"),
-                                                 value, resolved))
+        folded = col.astype(str).str.strip().str.casefold()
+        same = folded == target
+        # VALUE RESOLUTION, ASKED ON EVERY CATEGORICAL FILTER — not only when
+        # the exact match reached nothing. Two cases need it and only one of
+        # them is empty:
+        #
+        #   nothing matched   "London" reaches no row on a book whose region
+        #                     column holds TLI43.
+        #   SOMETHING matched but not everything. A tape carrying the direct
+        #                     and acquired books' own spellings holds
+        #                     "YORKSHIRE AND HUMBERSIDE", "Yorkshire and
+        #                     humberside" and "Yorkshire & Humberside" as three
+        #                     categories. Asking only on empty returned FIVE of
+        #                     sixty-five loans and called it the answer.
+        #
+        # The executor still does not know what a region is: it asks the
+        # semantics which domain the field's values are drawn from, and the
+        # domain says which present values the term denotes. The result is
+        # UNIONED, so a resolution can only ever add rows the term genuinely
+        # names — never drop one the exact match found.
+        resolved = _resolve_domain_value(entry.get("value_domain"), value, col)
+        if resolved:
+            wanted = {str(v).strip().casefold() for v in resolved}
+            widened = folded.isin(wanted)
+            added = bool((widened & ~same).any())
+            same = same | widened
+            # Disclosed only where it CHANGED the population: a resolution the
+            # reader cannot see is a substitution, and one that added nothing is
+            # noise on every regional answer in the book.
+            if added and warnings is not None:
+                warnings.append(
+                    f"filter {field_key}: "
+                    + _describe_domain_value(entry.get("value_domain"),
+                                             value, resolved))
         mask = ~same if resolved_op == "ne" else same
         return PredicateExecution(mask.fillna(False), value, applied_keys,
                                   PREDICATE_CATEGORICAL, resolved_op)
