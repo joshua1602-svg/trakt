@@ -29,17 +29,65 @@ All seven declare `value_domain: uk_region`.
 | 4 | **Risk Limits (Schedule 8)** | **`geographic_region_obligor`** — the NUTS3 field, hard-coded in the category rules | `mi_agent/risk_monitor/schedule8_extractor.py:46` |
 | 5 | Exposure map | `_ITL3_FIELDS` — the ITL3 pair, plus `uk_itl_master_lookup_v2.csv` postcode → ITL3 | `mi_agent_api/geo.py:31` |
 
+## What the product owner has ruled (2026-09-04)
+
+These are the governing intents. Where the code disagrees, the code is the
+defect.
+
+1. **`collateral_geography` is the core pipeline source**, and the reporting
+   family is what the general MI stratifications mean by Region. Consistent
+   with ingestion: `region_taxonomy` derives the canonical pair FROM it.
+2. **Risk Limits should use NUTS3 where it is universally available, and fall
+   back to `collateral_geography` where it is not** — e.g. an SPV whose Direct
+   book carries NUTS3 and whose Acquired book does not. This is a DATA-AWARE
+   rule; the code has no fallback at all (F1).
+3. **The exposure map is a dashboard feature and must not permeate the MI Query
+   Agent.** Partly violated today (F6).
+
+## What the funded bridge is, and why it holds a region family
+
+The `funded_bridge` route is a balance ATTRIBUTION WATERFALL between two
+reporting periods: opening balance (a named start period, else the earliest) →
+per-category change across a chosen dimension → the latest balance, with the
+deltas reconciling exactly to the net change. It answers "why did funded balance
+increase?", "show movement by region", "what drove the change".
+
+It is NOT a Direct/Acquired consolidation mechanism — that is the LENS
+(`lens_aware=True`, `source_lens`), which scopes the bridge to Total, direct,
+acquired or a cohort id. The region family is there for a different reason,
+recorded in the code: the bridge reads **its own governed snapshot frames**,
+which need not carry the same columns as the MI query frame. A concept outside
+the family resolves to ONE column; inside it, the concept resolves to every
+candidate and the bridge uses whichever its frames actually hold.
+
+So the instinct behind the guess is right — the family exists because different
+frames spell geography differently — but the axis of variation is SNAPSHOT
+vintage, not book. Books are handled by the lens.
+
+**New finding while reading it:** `_BRIDGE_DEFAULT_DIMS` begins
+`geographic_region_obligor` — so when a bridge question names no dimension, the
+default attribution axis is the NUTS3 field, not the reporting family. A sixth
+place where NUTS3 leads and MI's own preference does not.
+
 ## Findings, ranked
 
-### F1 — Risk Limits and MI answer "region" on different fields (material)
+### F1 — Risk Limits reads one field, with no fallback (material, now specified)
 
-The limit monitor evaluates geographic concentration on **NUTS3**; MI answers on
-the **reporting** family. Same word on two dashboard surfaces, two different
-groupings of the same book. A breach reported against one and an MI answer given
-on the other can disagree, and a reader has no way to see why — the MI receipt
-names its field in `executionSummary.facets`, the limit test names a test label.
+The limit monitor evaluates geographic concentration on **`geographic_region_obligor`**
+— NUTS3, hard-coded in `_CATEGORY_RULES`, with no alternative. MI answers on the
+reporting family. Same word on two dashboard surfaces, two groupings of one book,
+nothing reconciling them.
 
-Nothing reconciles them. This is the end-to-end gap the audit was asked for.
+The owner's rule (above) makes this a specified defect rather than a divergence:
+NUTS3 **where universally available**, falling back to `collateral_geography`
+where it is not. The mechanism already exists one module over —
+`_preferred_region` is data-aware and takes the first field whose column is
+actually present — and the limits path has nothing equivalent.
+
+Remediating it is a governed change: it alters what every geographic limit
+measures on any book where NUTS3 is partial, which is exactly the SPV case the
+rule was written for. It needs the approved-configuration owner, and a
+re-evaluation of the affected limits, not just a code edit.
 
 ### F2 — `value_domain` now carries two meanings (latent)
 
@@ -79,6 +127,22 @@ because it is a live path into "'Region' is not available in this dataset".
 The map aggregates ITL3 areas derived from postcodes; MI queries answer on ITL1
 reporting regions. Already in the handover; restated because F1 makes it three
 systems, not two.
+
+### F6 — ITL3 is addressable from MI queries (contradicts ruling 3)
+
+The exposure map's fields are registered MI dimensions, so a reader can group by
+them directly. Measured:
+
+    balance by collateral itl3  -> geographic_region_collateral_itl3
+    balance by obligor itl3     -> geographic_region_obligor_itl3
+    balance by itl3             -> geographic_region_collateral_itl3
+
+The map FEATURE does not reach MI, and `_REGION_PREFERENCE` correctly never
+offers ITL3 as "region" — but the fields themselves are answerable. If the
+ruling is that ITL3 stays a dashboard concern until the development item lands,
+the options are to de-register the two fields as MI dimensions, or to accept
+that an explicit "by ITL3" question answers while "by region" never resolves to
+one. This is a decision, not a defect, and is recorded rather than taken.
 
 ## What is now guarded
 
