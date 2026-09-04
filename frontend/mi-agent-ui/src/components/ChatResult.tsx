@@ -1,89 +1,49 @@
-import type { ReactNode } from "react";
-import { BarChart3, Sheet } from "lucide-react";
-import type { Artifact, KPIArtifact, Reconciliation } from "@/domain";
-import { isChartArtifact, isTableArtifact, isKPIArtifact } from "@/domain";
+import type { Artifact } from "@/domain";
+import { isChartArtifact, isTableArtifact } from "@/domain";
 
 /**
- * The result shown INSIDE the conversation. It is deliberately COMPACT — a
- * concise set of key numbers plus links that open the full chart / table in the
- * Artifact Workspace. The chat stays conversational; charts, tables and other
- * artifacts render in the workspace only (never duplicated inline here).
+ * What the conversation says about a result that is ALREADY ON SCREEN.
+ *
+ * The chat rail and the Artifact Workspace render side by side, and a new
+ * artifact expands the workspace, scrolls to itself and flash-highlights (see
+ * AppShell's auto-reveal). So this used to carry two things that had no work
+ * left to do:
+ *
+ *   * key-number chips — "Groups: 52", "Coverage: 100%". Both are already in
+ *     the answer's execution receipt and the artifact's reconciliation footer,
+ *     so the reader met the same figure two or three times in three formats
+ *     with nothing to say which was authoritative.
+ *   * "Open chart / Open table in workspace" buttons — navigation to something
+ *     already open, already scrolled to, already glowing.
+ *
+ * The one case that DOES need saying is the opposite: the workspace was
+ * cleared, so the result the answer refers to is no longer there. That is a
+ * sentence, not a control.
+ *
+ * The rule this holds: the chat states, the workspace shows.
  */
-function keyNumbers(artifacts: Artifact[]): { label: string; value: string }[] {
-  const kpi = artifacts.find(isKPIArtifact) as KPIArtifact | undefined;
-  if (kpi) return kpi.kpis.map((k) => ({ label: k.label, value: k.value }));
-  const grouped = artifacts.find(isTableArtifact) ?? artifacts.find(isChartArtifact);
-  const out: { label: string; value: string }[] = [];
-  const recon = (grouped as { reconciliation?: Reconciliation } | undefined)?.reconciliation;
-  const rows = (grouped as { rows?: Array<Record<string, unknown>> } | undefined)?.rows ?? [];
-  if (rows.length) out.push({ label: "Groups", value: String(rows.length) });
-  if (recon?.coverage_by_balance_pct != null)
-    out.push({ label: "Coverage", value: `${recon.coverage_by_balance_pct}%` });
-  return out;
-}
-
 export function ChatResult({
   artifacts,
-  onOpenArtifact,
   workspaceArtifactIds,
 }: {
   artifacts: Artifact[];
   /** Retained for signature compatibility; pinning happens in the workspace. */
   onTogglePin?: (id: string) => void;
+  /** Retained for signature compatibility; the workspace reveals itself. */
   onOpenArtifact?: (id: string) => void;
-  /** Ids still present in the workspace; links to cleared artifacts go stale. */
+  /** Ids still present in the workspace. Absent means "don't know" — say nothing. */
   workspaceArtifactIds?: Set<string>;
 }) {
-  if (artifacts.length === 0) return null;
+  if (artifacts.length === 0 || !workspaceArtifactIds) return null;
 
-  const chart = artifacts.find(isChartArtifact);
-  const table = artifacts.find(isTableArtifact);
-  const numbers = keyNumbers(artifacts);
-  const isStale = (id: string) =>
-    workspaceArtifactIds ? !workspaceArtifactIds.has(id) : false;
-
-  const openButton = (id: string, icon: ReactNode, label: string) => {
-    const stale = isStale(id);
-    return (
-      <button
-        type="button"
-        disabled={stale}
-        title={stale
-          ? "No longer in the workspace — ask the question again to regenerate it"
-          : undefined}
-        onClick={() => !stale && onOpenArtifact?.(id)}
-        className={
-          stale
-            ? "inline-flex cursor-not-allowed items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 font-medium text-ink-300 opacity-50"
-            : "inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 font-medium text-ink-300 hover:border-teal-400/40 hover:text-ink-100"
-        }
-      >
-        {icon} {stale ? `${label} (cleared)` : label}
-      </button>
-    );
-  };
+  // Only the renderable results are worth mentioning; a validation artifact
+  // being cleared is not something the reader needs to act on.
+  const shown = artifacts.filter((a) => isChartArtifact(a) || isTableArtifact(a));
+  if (shown.length === 0 || shown.some((a) => workspaceArtifactIds.has(a.id))) return null;
 
   return (
-    <div className="mt-2 space-y-2" data-testid="chat-result-compact">
-      {numbers.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {numbers.slice(0, 4).map((n) => (
-            <div
-              key={n.label}
-              className="rounded-lg border border-[var(--color-line)] bg-navy-900/50 px-2.5 py-1.5 text-[11px]"
-            >
-              <span className="text-ink-500">{n.label}: </span>
-              <span className="font-semibold text-ink-100">{n.value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {(chart || table) && onOpenArtifact && (
-        <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          {chart && openButton(chart.id, <BarChart3 size={12} />, "Open chart in workspace")}
-          {table && openButton(table.id, <Sheet size={12} />, "Open table in workspace")}
-        </div>
-      )}
+    <div className="mt-2 text-[11px] text-ink-500" data-testid="chat-result-cleared">
+      This result is no longer in the workspace — ask again to regenerate it.
     </div>
   );
 }

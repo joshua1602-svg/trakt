@@ -287,6 +287,22 @@ class TestConversionGenerator(unittest.TestCase):
 
 
 class TestConcentrationGenerator(unittest.TestCase):
+    """`util` / `expected_util` / `fullPipeline.utilization` are all ALREADY
+    percentage-of-limit POINTS — exactly what
+    concentration_tests.evaluation._utilization returns (value/threshold*100)
+    and exactly what the Risk Limits table displays. 93 means 93%, not 0.93.
+    `headroom` is in the metric's OWN unit (percentage points here, since this
+    fixture's test is unit="percent") — also points, never a fraction.
+
+    CHANGED DELIBERATELY, together with insight_generators.concentration. The
+    fixture used to encode fractions (0.93 for "93%"), which is what the
+    defect this pins actually was: the generator multiplied an
+    already-percentage value by 100 a second time, printing "93%" as "9300%"
+    on the live book at 4340% and 4039%. See
+    test_weekly_brief_utilisation_matches_risk_limits.py for the reproduction
+    against the real evaluator.
+    """
+
     def _snap(self, util, expected_util=None, expected_breach=False,
               states=True):
         return {
@@ -296,11 +312,11 @@ class TestConcentrationGenerator(unittest.TestCase):
             "states": {"available": states},
             "tests": [{
                 "testId": "t1", "displayName": "Largest region share",
-                "currentValue": 0.31, "threshold": 0.35, "utilization": util,
-                "headroom": 0.04, "status": "warning",
-                "expected": {"value": 0.36, "utilization": expected_util,
-                             "headroom": -0.01, "status": "breach"},
-                "fullPipeline": {"value": 0.41, "utilization": 1.17,
+                "currentValue": 31.0, "threshold": 35.0, "utilization": util,
+                "unit": "percent", "headroom": 4.0, "status": "warning",
+                "expected": {"value": 36.0, "utilization": expected_util,
+                             "headroom": -1.0, "status": "breach"},
+                "fullPipeline": {"value": 41.0, "utilization": 117.0,
                                  "status": "breach"},
                 "expectedBreach": expected_breach,
                 "expectedBreachHorizon": {"available": True, "period": "2026-10"},
@@ -308,41 +324,65 @@ class TestConcentrationGenerator(unittest.TestCase):
         }
 
     def test_a_comfortable_test_is_suppressed(self):
-        ins, omit = gen.concentration(CTX, self._snap(0.50))
+        ins, omit = gen.concentration(CTX, self._snap(50.0))
         self.assertEqual(ins, [])
         self.assertEqual(omit[0].category, "immaterial")
 
     def test_a_test_near_its_limit_is_reported(self):
-        ins, _ = gen.concentration(CTX, self._snap(0.93))
+        ins, _ = gen.concentration(CTX, self._snap(93.0))
         self.assertEqual(len(ins), 1)
         self.assertIn("93%", ins[0].headline)
         self.assertEqual(ins[0].severity, SEVERITY_ATTENTION)
 
     def test_an_expected_breach_is_a_concern(self):
-        ins, _ = gen.concentration(CTX, self._snap(0.93, 1.03, expected_breach=True))
+        ins, _ = gen.concentration(CTX, self._snap(93.0, 103.0, expected_breach=True))
         self.assertEqual(ins[0].severity, SEVERITY_CONCERN)
         self.assertIn("2026-10", ins[0].summary)
 
     def test_the_forecast_reaching_the_threshold_alone_qualifies(self):
         """A comfortable funded position with a breaching forecast still matters."""
-        ins, _ = gen.concentration(CTX, self._snap(0.40, 1.10, expected_breach=True))
+        ins, _ = gen.concentration(CTX, self._snap(40.0, 110.0, expected_breach=True))
         self.assertEqual(len(ins), 1)
 
     def test_the_stress_scenario_is_labelled_hypothetical(self):
-        ins, _ = gen.concentration(CTX, self._snap(0.93, 1.03))
+        ins, _ = gen.concentration(CTX, self._snap(93.0, 103.0))
         self.assertIn("hypothetical", ins[0].summary.lower())
         self.assertIn("not a forecast",
                       ins[0].methodology["all_pipeline_basis"].lower())
 
     def test_the_funded_date_is_separate_from_the_pipeline_date(self):
-        ins, _ = gen.concentration(CTX, self._snap(0.93))
+        ins, _ = gen.concentration(CTX, self._snap(93.0))
         self.assertEqual(ins[0].source_dates["funded_as_of"], "2026-07-31")
         self.assertEqual(ins[0].source_dates["pipeline_as_of"], "2026-08-07")
 
     def test_it_does_not_recompute_the_test(self):
-        ins, _ = gen.concentration(CTX, self._snap(0.93))
+        ins, _ = gen.concentration(CTX, self._snap(93.0))
         self.assertIn("not recomputed", ins[0].methodology["source"])
-        self.assertEqual(ins[0].metrics["current_value"], 0.31)
+        self.assertEqual(ins[0].metrics["current_value"], 31.0)
+
+    def test_the_headroom_is_points_not_a_rescaled_fraction(self):
+        """THE OTHER HALF OF THE DEFECT. headroom=4.0 (4.00pp) was printed as
+        pct(4.0 * 100, 2) + a literal "pp" — "400.00%pp" — a percent sign AND a
+        points suffix on the same number."""
+        ins, _ = gen.concentration(CTX, self._snap(93.0))
+        self.assertIn("headroom 4.00pp", ins[0].summary)
+        self.assertNotIn("%pp", ins[0].summary)
+
+    def test_a_currency_unit_headroom_is_money_not_a_percent(self):
+        """The reported defect's second example: Average principal balance is
+        a currency-unit test, so its headroom is a balance, not a percentage —
+        £178,831 must never be run through pct()."""
+        snap = self._snap(40.0)
+        snap["tests"][0]["unit"] = "currency"
+        snap["tests"][0]["headroom"] = 178_831.0
+        snap["tests"][0]["displayName"] = "Average principal balance"
+        ins, _ = gen.concentration(CTX, snap)
+        self.assertEqual(ins, [])  # 40% utilisation is comfortable, correctly
+        # Force it into range to see the headroom text.
+        snap["tests"][0]["utilization"] = 93.0
+        ins, _ = gen.concentration(CTX, snap)
+        self.assertIn("£179k", ins[0].summary)
+        self.assertNotIn("%", ins[0].summary.split("headroom")[1].split(",")[0])
 
 
 class TestDataQualityGenerator(unittest.TestCase):

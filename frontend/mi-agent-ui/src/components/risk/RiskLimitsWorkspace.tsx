@@ -23,7 +23,6 @@ import type {
 } from "@/domain";
 import { Badge, Card } from "@/components/ui";
 import { ConcentrationDetailPanel } from "./ConcentrationDetailPanel";
-import { MethodologyBlock } from "./MethodologyBlock";
 import {
   RISK_CHIP,
   STATUS_GLYPH,
@@ -85,27 +84,10 @@ function SummaryTile({
 }
 
 function SourceBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
-  if (snapshot.source === "approved_configuration") {
-    return (
-      <p
-        role="note"
-        data-testid="concentration-source-banner"
-        className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[11px] text-ink-400"
-      >
-        Approved configuration v{snapshot.configurationVersion}
-        {snapshot.activatedBy && <> · activated by {snapshot.activatedBy}</>}
-        {snapshot.activatedAt && <> on {formatDate(snapshot.activatedAt)}</>} · evaluated
-        against the governed funded snapshot
-        {snapshot.reportingDate && <> at {formatDate(snapshot.reportingDate)}</>}.
-        {snapshot.openProposals ? (
-          <span className="ml-1 text-amber-300/90">
-            {snapshot.openProposals} proposal(s) from onboarding still await review or
-            approval.
-          </span>
-        ) : null}
-      </p>
-    );
-  }
+  // Configuration-version / activation provenance is not rendered here — an
+  // operator does not need to be told which config version evaluated their
+  // own book on every visit to this tab. It stays in the audit trail; it is
+  // not withheld, only no longer a standing banner.
   if (snapshot.source === "legacy_extracted") {
     return (
       <p
@@ -123,7 +105,6 @@ function SourceBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
 }
 
 function ForecastBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
-  const [open, setOpen] = useState(false);
   const forecast = snapshot.forecast;
   const statesAvailable = Boolean(snapshot.states?.available);
   if (snapshot.source !== "approved_configuration") return null;
@@ -140,38 +121,22 @@ function ForecastBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) 
       </p>
     );
   }
+  // The methodology description ("completion-trend model · window ...") and
+  // its "View methodology" detail are not rendered here — this tab reads the
+  // Expected Forecast's numbers, and the model behind them belongs on the
+  // Forecast tab, where it is described once rather than a second time here.
+  // A stage genuinely falling back to a configured assumption still says so —
+  // that changes what the forecast column means, not merely how it is sourced.
+  if ((forecast?.stagesUsingConfigFallback?.length ?? 0) === 0) return null;
   return (
-    <div
+    <p
+      role="note"
       data-testid="forecast-provenance-banner"
-      className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[11px] text-ink-400"
+      className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
     >
-      <p role="note">
-        Expected Forecast: completion-trend model · window{" "}
-        {formatDate(forecast?.observationWindowStart)} →{" "}
-        {formatDate(forecast?.observationWindowEnd)} ({forecast?.weeklyExtractsUsed}{" "}
-        weekly extracts, {forecast?.trackedCaseCount} cases,{" "}
-        {forecast?.observedCompletionCount} completions) ·{" "}
-        <button
-          type="button"
-          className="text-peri-200 underline-offset-2 hover:underline"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? "Hide methodology" : "View methodology"}
-        </button>
-      </p>
-      {(forecast?.stagesUsingConfigFallback?.length ?? 0) > 0 && (
-        <p className="mt-1 text-amber-300/90">
-          Stage(s) {forecast?.stagesUsingConfigFallback?.join(", ")} fall back to
-          configured assumptions — the observed sample is below the sufficiency floor.
-        </p>
-      )}
-      {open && forecast && (
-        <div className="mt-2">
-          <MethodologyBlock forecast={forecast} />
-        </div>
-      )}
-    </div>
+      Stage(s) {forecast?.stagesUsingConfigFallback?.join(", ")} fall back to configured
+      assumptions — the observed sample is below the sufficiency floor.
+    </p>
   );
 }
 
@@ -447,8 +412,6 @@ export function RiskLimitsWorkspace({
         </p>
       )}
 
-      <EmergingRisks snapshot={snapshot} onOpen={setSelectedId} />
-
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         <label className="relative">
@@ -676,6 +639,8 @@ export function RiskLimitsWorkspace({
           );
         })}
       </Card>
+
+      <EmergingRisks snapshot={snapshot} onOpen={setSelectedId} />
 
       {selected && (
         <ConcentrationDetailPanel

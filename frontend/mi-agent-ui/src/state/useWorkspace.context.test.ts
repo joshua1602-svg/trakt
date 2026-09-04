@@ -185,3 +185,60 @@ describe("useWorkspace — analysis context", () => {
     expect(result.current.context).toBeNull();
   });
 });
+
+/**
+ * A refusal must look like a refusal.
+ *
+ * This flag drives the chat's error styling and its Retry control, and it read
+ * `!res.ok && res.artifacts.length === 0`. The backend shipped a validation
+ * artifact alongside a declined answer, so the count was not zero, the flag was
+ * false, and a question that was NOT answered rendered in the ordinary answer
+ * bubble. The artifact count is not evidence that a question was answered.
+ */
+describe("useWorkspace — a declined answer is flagged as one", () => {
+  function refusalWithArtifact(question: string): AgentResponse {
+    return {
+      ...regionResult(question),
+      ok: false,
+      error: "That dimension is not governed for this book.",
+    };
+  }
+
+  it("flags the refusal even when something came back with it", async () => {
+    const { result } = renderHook(() =>
+      useWorkspace(makeClient(async (req) => refusalWithArtifact(req.question))));
+    await waitFor(() => expect(result.current.portfolios.length).toBe(1));
+    act(() => result.current.ask("balance by tenure"));
+    await waitFor(() => {
+      const last = result.current.messages[result.current.messages.length - 1];
+      expect(last.pending).toBeFalsy();
+    });
+    const last = result.current.messages[result.current.messages.length - 1];
+    expect(last.error).toBe(true);
+    expect(last.content).toMatch(/not governed for this book/i);
+  });
+
+  it("still flags a refusal that came back empty", async () => {
+    const { result } = renderHook(() =>
+      useWorkspace(makeClient(async (req) => failureResult(req.question))));
+    await waitFor(() => expect(result.current.portfolios.length).toBe(1));
+    act(() => result.current.ask("something unanswerable"));
+    await waitFor(() => {
+      const last = result.current.messages[result.current.messages.length - 1];
+      expect(last.pending).toBeFalsy();
+    });
+    expect(result.current.messages[result.current.messages.length - 1].error).toBe(true);
+  });
+
+  it("does not flag a successful answer", async () => {
+    const { result } = renderHook(() =>
+      useWorkspace(makeClient(async (req) => regionResult(req.question))));
+    await waitFor(() => expect(result.current.portfolios.length).toBe(1));
+    act(() => result.current.ask("balance by region"));
+    await waitFor(() => {
+      const last = result.current.messages[result.current.messages.length - 1];
+      expect(last.pending).toBeFalsy();
+    });
+    expect(result.current.messages[result.current.messages.length - 1].error).toBeFalsy();
+  });
+});

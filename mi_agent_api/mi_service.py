@@ -262,7 +262,10 @@ def _enforce_semantic_coverage(envelope: Dict[str, Any]) -> Dict[str, Any]:
     envelope["error"] = message
     envelope["answer"] = message
     envelope["artifacts"] = []
-    envelope.setdefault("warnings", []).append(message)
+    # NOT also appended to warnings. `answer`/`error` already carry it — that
+    # is what the chat renders as the refusal itself — and appending the same
+    # sentence to `warnings` printed it a second time, under the refusal it was
+    # restating, in the same conversation turn.
     return envelope
 
 

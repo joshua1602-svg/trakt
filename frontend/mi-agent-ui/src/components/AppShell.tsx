@@ -399,11 +399,16 @@ export function AppShell() {
                   />
                 )}
                 {/* Governed disclosure for the active view: which portfolios
-                    contribute, which are excluded and why. Backend prose only. */}
-                <PortfolioScopeBanner
-                  context={ws.activeContext}
-                  capability={ws.capabilities[VIEW_CAPABILITY[ws.activeView]]}
-                />
+                    contribute, which are excluded and why. Backend prose only.
+                    NOT shown on Pipeline or Forecast — the operator does not
+                    need the "Total workspace" scope note repeated on every tab;
+                    it stays where a scope actually narrows the answer. */}
+                {ws.activeView !== "pipeline" && ws.activeView !== "forecast" && (
+                  <PortfolioScopeBanner
+                    context={ws.activeContext}
+                    capability={ws.capabilities[VIEW_CAPABILITY[ws.activeView]]}
+                  />
+                )}
                 {/* FUNDED — stratifications · geography · evolution · cohorts.
                     Risk Limits lives ONCE, as the top-level tab (no duplicate
                     sub-tab entry pointing at the same workspace). */}

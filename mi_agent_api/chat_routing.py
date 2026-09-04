@@ -3611,15 +3611,24 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     if not lens.filters:          # Total was requested; whole-book IS the scope.
         meta["lensApplied"] = True
         return envelope
-    noun = _ROUTE_NOUN.get(route, "routed")
-    disclosure = (
-        f"Scope not narrowed: this {noun} answer is computed across the whole "
-        f"platform book. It is sourced from a governed run artefact that carries "
-        f"no source-portfolio provenance, so it could not be scoped to "
-        f"'{lens.label}' — these figures are NOT {lens.label}-only.")
     warnings = envelope.setdefault("warnings", [])
-    if isinstance(warnings, list) and disclosure not in warnings:
-        warnings.append(disclosure)
+    # A route that already disclosed its own scope gap — pipeline_summary's
+    # DECLARED-provenance wording, for instance — said the same fact more
+    # accurately than this generic fallback can. Appending a second "Scope not
+    # narrowed" sentence beside it repeated one gap in two different sentences,
+    # in the same warnings box. This generic disclosure exists for routes that
+    # have NOT already said so; it stands down once one already has.
+    already_disclosed = isinstance(warnings, list) and any(
+        isinstance(w, str) and w.startswith("Scope not narrowed:") for w in warnings)
+    if not already_disclosed:
+        noun = _ROUTE_NOUN.get(route, "routed")
+        disclosure = (
+            f"Scope not narrowed: this {noun} answer is computed across the whole "
+            f"platform book. It is sourced from a governed run artefact that carries "
+            f"no source-portfolio provenance, so it could not be scoped to "
+            f"'{lens.label}' — these figures are NOT {lens.label}-only.")
+        if isinstance(warnings, list) and disclosure not in warnings:
+            warnings.append(disclosure)
     meta["lensRequested"] = lens.label
     return envelope
 

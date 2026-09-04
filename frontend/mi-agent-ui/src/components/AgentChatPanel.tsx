@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import type { AnalysisContext } from "@/lib/analysisContext";
-import { contextSummary } from "@/lib/analysisContext";
+import { contextSummary, looksLikeFollowUp } from "@/lib/analysisContext";
 import type { ChatMessage as ChatMessageType } from "@/domain";
 import { ChatMessage } from "@/components/ChatMessage";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
@@ -63,6 +63,12 @@ export function AgentChatPanel({
   }, [collapsed]);
   // Re-open the suggested questions after the conversation has started.
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // The context bar answers one question — "what will a follow-up attach to?"
+  // — so it appears when that question is live: the composer has focus, or what
+  // has been typed already reads as a follow-up. Permanently on, it was a third
+  // printing of the measure and dimensions the answer's execution receipt and
+  // the artifact's own title already carry.
+  const [composerFocused, setComposerFocused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Follow the conversation only while the reader is at (or near) the bottom;
   // never yank the viewport away from someone re-reading history.
@@ -172,7 +178,6 @@ export function AgentChatPanel({
             message={m}
             onOpenArtifact={onOpenArtifact}
             onRetry={onRetry}
-            onAsk={onSubmit}
             onTogglePin={onTogglePin}
             workspaceArtifactIds={workspaceArtifactIds}
           />
@@ -185,8 +190,11 @@ export function AgentChatPanel({
         )}
       </div>
 
-      {contextSummary(context) && (
-        <div className="flex items-center gap-1.5 border-t border-teal-800/30 bg-teal-950/30 px-3 py-1.5">
+      {contextSummary(context) && (composerFocused || looksLikeFollowUp(input, context)) && (
+        <div
+          data-testid="chat-context-bar"
+          className="flex items-center gap-1.5 border-t border-teal-800/30 bg-teal-950/30 px-3 py-1.5"
+        >
           <History size={12} className="shrink-0 text-teal-300" />
           <span className="truncate text-[11px] text-teal-100/80">
             <span className="text-teal-300/70">Context:</span> {contextSummary(context)}
@@ -222,6 +230,16 @@ export function AgentChatPanel({
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onFocus={() => setComposerFocused(true)}
+            // Keep the bar up while the Clear-context button is being clicked;
+            // it sits inside the panel, so a bare blur would remove the control
+            // from under the pointer.
+            onBlur={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (!next || !e.currentTarget.closest("aside")?.contains(next)) {
+                setComposerFocused(false);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();

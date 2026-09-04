@@ -78,11 +78,17 @@ describe("RiskLimitsWorkspace", () => {
     expect(screen.getByText(/prior 2025-10-31/)).toBeInTheDocument();
   });
 
-  it("discloses the approved configuration source (version + operator)", async () => {
+  // CHANGED DELIBERATELY. This asserted a standing "Approved configuration
+  // v2 · activated by Demo Operator" banner. That provenance line is not
+  // rendered for an approved-configuration source any more — an operator does
+  // not need it repeated on every visit to this tab; it stays in the audit
+  // trail instead. The legacy-extracted governance warning (the numbers are
+  // NOT operator-approved) is a different, load-bearing disclosure and is
+  // still asserted below, unchanged.
+  it("renders no standing configuration-provenance banner for an approved source", async () => {
     render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
-    const banner = await screen.findByTestId("concentration-source-banner");
-    expect(banner).toHaveTextContent("Approved configuration v2");
-    expect(banner).toHaveTextContent("Demo Operator");
+    await screen.findByTestId("concentration-summary");
+    expect(screen.queryByTestId("concentration-source-banner")).toBeNull();
   });
 
   it("conveys status by label and glyph, not colour alone", async () => {
@@ -112,6 +118,18 @@ describe("RiskLimitsWorkspace", () => {
     expect(row).toHaveTextContent("52.10%"); // Full Pipeline (stress)
     expect(row).toHaveTextContent("+1.30pp"); // Move F→E
     expect(row).toHaveTextContent("LOW HEADROOM"); // service risk classification
+  });
+
+  it("orders the tab tiles, then the table, then emerging risks", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const tiles = await screen.findByTestId("concentration-summary");
+    const table = await screen.findByTestId("concentration-table");
+    const risks = await screen.findByTestId("emerging-risks");
+    // DOCUMENT_POSITION_FOLLOWING (4): the first node precedes the second.
+    expect(tiles.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(table.compareDocumentPosition(risks) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
   });
 
   it("renders the service-ranked emerging risks verbatim", async () => {
@@ -144,16 +162,19 @@ describe("RiskLimitsWorkspace", () => {
     for (const row of rows) expect(row).not.toHaveTextContent("Net WAC");
   });
 
-  it("discloses the forecast methodology from the governed payload", async () => {
+  // CHANGED DELIBERATELY. This asserted a standing "Expected Forecast:
+  // completion-trend model · window ..." banner with a "View methodology"
+  // toggle. That description now lives only on the Forecast tab, which
+  // already covers it — showing it twice was the duplication the operator
+  // asked to remove. The sufficiency-floor caveat is a genuine warning (a
+  // stage's forecast falls back to a configured assumption) rather than
+  // decorative methodology, and is still asserted.
+  it("still warns when a stage falls back to a configured assumption", async () => {
     render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
     const banner = await screen.findByTestId("forecast-provenance-banner");
-    expect(banner).toHaveTextContent("2025-10-27 → 2025-11-24");
     expect(banner).toHaveTextContent("sufficiency floor"); // KFI fallback caveat
-    fireEvent.click(within(banner).getByRole("button", { name: "View methodology" }));
-    const block = await screen.findByTestId("methodology-block");
-    expect(block).toHaveTextContent("No machine learning");
-    expect(block).toHaveTextContent("maximum-exposure stress, not a prediction");
-    expect(block).toHaveTextContent("≥ 12 observed cases");
+    expect(banner).not.toHaveTextContent("completion-trend model");
+    expect(screen.queryByRole("button", { name: "View methodology" })).toBeNull();
   });
 
   it("drills through to pipeline drivers that reconcile", async () => {

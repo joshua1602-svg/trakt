@@ -841,9 +841,21 @@ def adapt_workflow_result(
         if source_notes and art.get("type") in ("chart", "table", "kpi"):
             art["sourceNotes"] = source_notes
 
-    val_artifact = _validation_artifact(validation, spec, ctx)
-    if val_artifact:
-        artifacts.append(val_artifact)
+    # A REFUSAL SHIPS NO ARTIFACT. The chart, table and KPI are already gated on
+    # ``refused`` above; the validation artifact was not, so a declined answer
+    # that also tripped validation opened a workspace card titled "Query
+    # Validation" restating the refusal as a blocker — the same sentence the
+    # chat had just shown, in a second place.
+    #
+    # Worse, it made the refusal LOOK ANSWERED: the browser flags an error
+    # message with ``!ok && artifacts.length === 0``, so one artifact was enough
+    # to render a declined answer in the ordinary answer styling. A declined
+    # answer states itself once, in the reply, and puts nothing in the
+    # workspace. Validation issues on a SUCCESSFUL answer are unchanged.
+    if not refused:
+        val_artifact = _validation_artifact(validation, spec, ctx)
+        if val_artifact:
+            artifacts.append(val_artifact)
 
     raw_warnings = list(workflow.get("warnings", []))
     # Only warn about degraded fidelity when we could not emit a chart at all

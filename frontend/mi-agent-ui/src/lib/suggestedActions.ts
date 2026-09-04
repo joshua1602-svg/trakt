@@ -105,10 +105,12 @@ export function buildSuggestedActions(
   const top = largestValue(artifact);
   if (top) push({ label: `Drill into ${top}`, question: `only ${top}`, kind: "drill" });
 
-  // refine — offer the other output mode.
-  if (isChartArtifact(artifact)) {
-    push({ label: "Show as Table", question: `${measureQ} by ${dimQ} as a table`, kind: "refine" });
-  }
+  // NO "Show as Table" HERE. It used to be offered, and it sent
+  // `"<measure> by <dimension> as a table"` back through the parser — a full
+  // backend round trip, and a parse that can fail, for a view the artifact card
+  // already holds: the chart and its table arrive together and the card
+  // switches between them locally and instantly. An offer that costs a network
+  // request to do what a local toggle does is not a suggestion worth making.
 
-  return out.slice(0, 5);
+  return out.slice(0, 4);
 }
