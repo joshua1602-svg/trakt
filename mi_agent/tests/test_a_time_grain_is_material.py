@@ -104,3 +104,34 @@ def test_partial_remains_available_for_a_genuinely_cosmetic_facet():
     """PARTIAL is not abolished — it is reserved. A grouping the answer could
     not draw leaves the population, the measure and the period untouched."""
     assert rc.SHAPE_FACETS, "no facet may remain disclosable at all"
+
+
+# --------------------------------- what happens when two reasons both refuse #
+def test_a_second_true_reason_does_not_stack_onto_the_first():
+    """FOUND BY THE BLAST DIFF of this very ruling, and resolved as a
+    NON-DEFECT after reading the estate's own rule.
+
+    "Compare KFI balance this month vs last month" cannot be answered for two
+    reasons: `temporal_compare` cannot narrow to KFI, and the series has no
+    monthly grain. Before the ruling the facet guard said `partial`, the
+    envelope stayed `ok`, and `_enforce_semantic_coverage` then refused it
+    naming KFI. After the ruling the facet guard refuses first, and the coverage
+    guard stands down — deliberately, by its own documented rule: "a refusal is
+    already a refusal, and re-refusing it would replace a specific governed
+    reason with a general one."
+
+    So the reason a reader is given changed from one true, specific reason to
+    another. The verdict did not: fail-closed, no figure, same route. An earlier
+    attempt to state BOTH was reverted — it contradicted that rule and did not
+    work anyway, because the KFI reason is authored after this point, not
+    before.
+    """
+    import sys
+    sys.argv = ["pytest"]
+    from mi_agent_api.tests.test_stage_movement_query import ask
+
+    envelope = ask("Compare KFI balance this month vs last month")
+    assert envelope.get("ok") is False
+    said = str(envelope.get("error") or envelope.get("answer") or "")
+    assert "month" in said, said
+    assert "not substituted a broader figure" in said, said
