@@ -245,12 +245,35 @@ not run. Every blast claim above is scoped to the files named.
   answers. It is not defensible to refuse it while answering the two-value
   one, and a reader who wants the figure alone can ask for it directly.
 
-  One question in the 882-question corpus moved and was put back: with no value
-  catalogue available, "What is the largest geographic concentration versus
-  limit?" binds `collateral_geography = 'Concentration Versus Limit'` from the
-  place-resolver fallback, and the old blanket drop was hiding it. Requiring
-  the book's own values keeps it hidden. That fallback is still wrong and is
-  still open.
+* **The place-resolver fallback — FIXED.** With no value catalogue,
+  `_parse_categorical_filter` bound ANY captured phrase to a region field in
+  title case. The 882-question corpus carried five: `collateral_geography` =
+  'Concentration Versus Limit', 'Equity Release Supermarket Limited' (twice — a
+  BROKER), 'October' (a MONTH) and 'Weighting'. It was invisible until the
+  grouped-filter rule above was narrowed to the case it was written for.
+
+  `region_resolution.looks_like_region_term` — the governed ITL ladder the
+  canonical transformation itself uses, written for exactly this question and
+  called from nowhere — now decides. A term it knows still binds with no
+  catalogue, so every real place keeps working; a term it does not know is
+  recorded as an unresolved narrowing instead, using the SAME note the
+  catalogued ending writes, because a warning would not refuse and removing the
+  invented binding would otherwise have answered over the whole book for the
+  first time.
+
+  No served answer moves: serving always has a frame, so the catalogued ending
+  owns these questions, and all five were checked through the app on base and
+  HEAD — identical. `filter_ownership_trace` goes 119 → 115 of 882, and its
+  assertion in `tests/test_assurance_measurement_failure.py` was updated with
+  the four losses named.
+
+* **`limit` is claimed by no owner, so a risk question refuses.** "What is the
+  largest geographic concentration versus limit?" reaches `risk_limits` and is
+  then refused with `unknown category: 'concentration versus limit'`, because
+  `_claimed_by_an_owner` recognises "concentration" and "versus" and not
+  "limit" — the risk-limit vocabulary is not one of the owners it consults.
+  Measured on base and unchanged by any of this work; it is the next cheap win
+  in that area.
 
 * **Two grouping axes are fine, and are pinned so this is not re-opened.**
   "Balance by region by broker" answers as a 5x3 heatmap — either order, and

@@ -2877,6 +2877,51 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
                             for w in str(value).split())):
             unresolved.append(f"{UNKNOWN_CATEGORY_PREFIX}'{value}'")
         return None
+    # NO CATALOGUE IS NOT A LICENCE TO INVENT A PLACE.
+    #
+    # This ending binds when the book's own values were not supplied, and it
+    # used to bind ANYTHING the prepositional pattern captured: measured on the
+    # 882-question corpus, "What is the largest geographic concentration versus
+    # limit?" produced `collateral_geography = 'Concentration Versus Limit'`.
+    # It stayed invisible only because a later rule dropped every filter whose
+    # field was the grouping dimension, and it surfaced the moment that rule was
+    # narrowed to the case it was written for.
+    #
+    # THE GOVERNED MAPPING ALREADY KNOWS WHAT A PLACE IS.
+    # `region_resolution` holds the ITL ladder the canonical transformation
+    # itself uses — name, alias, code, postcode — and `looks_like_region_term`
+    # was written to answer exactly this and used nowhere. Asking it keeps every
+    # real place working with no catalogue and stops the invention. No place
+    # vocabulary is added here, and where the book's values ARE available they
+    # still decide, first, above.
+    #
+    # A term it does not know is RECORDED, not dropped: a narrowing dropped in
+    # silence is a whole-book figure answering a narrower question, and that is
+    # the outcome this ending used to prevent by accident — binding an invented
+    # place that then matched no rows and refused.
+    #
+    # IT IS THE SAME NOTE THE CATALOGUED ENDING WRITES, and deliberately so. A
+    # warning would not refuse, so the fail-closed posture would weaken exactly
+    # where the invented binding was removed; and `unknown_category_refusal`
+    # exists so "a reader who asks the same question two ways cannot be told two
+    # different things about the same obstacle". Whether the caller happened to
+    # pass the book's values is not a difference a reader should be able to
+    # hear. The same owner test guards it, so the two endings also agree about
+    # what counts as an unrecognised category.
+    try:
+        from .region_resolution import looks_like_region_term
+        governed_place = looks_like_region_term(value)
+    except Exception:  # noqa: BLE001 - the mapping missing binds nothing
+        governed_place = False
+    if not governed_place:
+        if (unresolved is not None and not _names_a_book(clause)
+                and not all(_claimed_by_an_owner(w, semantics, available_columns,
+                                                 available_values)
+                            for w in str(value).split())):
+            note = f"{UNKNOWN_CATEGORY_PREFIX}'{value}'"
+            if note not in unresolved:
+                unresolved.append(note)
+        return None
     field = _preferred_region(semantics, available_columns) or "geographic_region_obligor"
     if field not in _fields(semantics):
         return None

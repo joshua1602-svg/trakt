@@ -173,7 +173,14 @@ def test_site3_reports_the_denominator_it_examined():
         fot.main()
     text = buf.getvalue()
     assert "corpus questions examined             : 882" in text
-    assert "corpus questions carrying spec.filters: 119" in text
+    # 119 until the place-resolver fallback stopped inventing a geography for
+    # any phrase it was handed with no value catalogue. The four it loses are
+    # `collateral_geography` = 'Equity Release Supermarket Limited' (twice, a
+    # BROKER), 'October' (a MONTH) and 'Weighting' (an analytic noun). None of
+    # the four is a place, none reached a reader — this trace parses without a
+    # frame, and serving always has one — and each is now recorded as an
+    # unresolved narrowing instead of a filter on a field nobody named.
+    assert "corpus questions carrying spec.filters: 115" in text
 
 
 # --------------------------------------------------------------------------- #
