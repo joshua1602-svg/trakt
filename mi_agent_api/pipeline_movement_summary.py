@@ -216,3 +216,280 @@ def build(payload: Any) -> Dict[str, Any]:
         "sources": payload.get("sources"),
         "source_dates": payload.get("source_dates"),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Reading the sentence
+# --------------------------------------------------------------------------- #
+import re                                                       # noqa: E402
+from dataclasses import dataclass                               # noqa: E402
+
+ROUTE_NAME = "pipeline_movement_summary"
+RECOGNITION_KEY = "pipeline_movement_summary"
+
+#: The SUBJECT: the pipeline's movement as a whole. Both words are required —
+#: "movement" alone is a funded-bridge word ("Show movement by region") and
+#: claiming it here would take a question this route cannot answer.
+_MOVEMENT = r"(?:stage movement|pipeline movement|movement (?:through|across) "\
+            r"the (?:pipeline|funnel)|funnel movement)"
+#: The SHAPE: a summary of it, or a comparison of it.
+_SUMMARY = r"(?:summar(?:y|ise|ize)|overview|breakdown|reconcil)"
+_COMPARATIVE = r"(?:compare|versus|vs\b|changed?|prior period|last period|"\
+               r"previous period|since last|month on month|period on period)"
+
+_MOVEMENT_RE = re.compile(_MOVEMENT, re.I)
+_SUMMARY_RE = re.compile(_SUMMARY, re.I)
+_COMPARATIVE_RE = re.compile(_COMPARATIVE, re.I)
+
+
+@dataclass(frozen=True)
+class MovementSummaryRequest:
+    """What the sentence asked for. Carries no data and decides no figure."""
+
+    comparative: bool
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"subtype": "comparison" if self.comparative else "summary"}
+
+
+def read(question: Any) -> Optional[MovementSummaryRequest]:
+    """The reading, or ``None`` where this route may not claim the sentence.
+
+    TWO GATES, and the second is what keeps this route from stealing work.
+    The sentence must name the pipeline's movement as a subject, AND ask for it
+    summarised or compared. "Show movement by region" names neither and stays
+    with the funded bridge; "How many cases moved from KFI to Application?"
+    names a transition and stays with `pipeline_stage_movement`, which reads it
+    first because it registers first.
+    """
+    text = str(question or "")
+    if not _MOVEMENT_RE.search(text):
+        return None
+    if not (_SUMMARY_RE.search(text) or _COMPARATIVE_RE.search(text)):
+        return None
+    # A SENTENCE THAT NAMES ONE STAGE IN MOTION IS NOT THIS. Asked of the
+    # existing owner rather than re-read, so the two can never disagree about
+    # what a single stage movement is — and so this route never has to invent
+    # a stage to honour a question.
+    from . import stage_movement_query as _stage
+
+    if _stage.names_a_stage_movement(text):
+        return None
+    return MovementSummaryRequest(comparative=bool(_COMPARATIVE_RE.search(text)))
+
+
+def compare(current: Dict[str, Any], prior: Dict[str, Any]) -> Dict[str, Any]:
+    """Two governed movement summaries, and the difference between them.
+
+    BOTH SIDES ARE MOVEMENTS. A comparison that put a point-in-time stock on
+    one side would answer a different question from the one asked — which is
+    exactly what happened when `temporal_compare` claimed "Compare stage
+    movement with the prior period".
+    """
+    if not (current or {}).get("available"):
+        return {"available": False, "version": SUMMARY_VERSION,
+                "reason": (current or {}).get("reason")
+                          or "No governed movement summary for this period."}
+    if not (prior or {}).get("available"):
+        return {"available": False, "version": SUMMARY_VERSION,
+                "reason": (prior or {}).get("reason")
+                          or "There is no prior governed movement interval to "
+                             "compare this one against."}
+    def _delta(block: str, key: str) -> float:
+        return (_num(current[block][key]) - _num(prior[block][key]))
+
+    return {
+        "available": True,
+        "version": SUMMARY_VERSION,
+        "current": current,
+        "prior": prior,
+        "delta": {
+            "net_cases": _delta("net", "cases"),
+            "net_balance": _delta("net", "balance"),
+            "entrant_cases": _delta("entrants", "cases"),
+            "entrant_balance": _delta("entrants", "balance"),
+            "departure_cases": _delta("departures", "cases"),
+            "departure_balance": _delta("departures", "balance"),
+        },
+    }
+
+
+# --------------------------------------------------------------------------- #
+# The route
+# --------------------------------------------------------------------------- #
+def resolve(root: str, client_id: str, *, history=None,
+            as_of: Optional[str] = None) -> Dict[str, Any]:
+    """The summary for one governed interval, from the governed resolver.
+
+    A thin composition seam, published so the Teams briefing can ask for the
+    same structure without going through the chat route.
+    """
+    from . import movement_detail as detail
+
+    return build(detail.resolve_stage_transition_detail(
+        root, client_id, as_of=as_of, historical_model=history))
+
+
+def resolve_comparison(root: str, client_id: str, *, history=None
+                       ) -> Dict[str, Any]:
+    """The latest governed interval against the one before it.
+
+    The prior interval is the SAME resolver asked for an earlier point — the
+    neighbour rule already owns which extracts pair, so there is no second
+    pairing engine and no second idea of what a period is.
+    """
+    current = resolve(root, client_id, history=history)
+    if not current.get("available"):
+        return compare(current, {})
+    opening = (current.get("window") or {}).get("opening_date")
+    prior = resolve(root, client_id, history=history, as_of=opening)
+    return compare(current, prior)
+
+
+def recognise(request: Any) -> Any:
+    from .recogniser_registry import Recognition
+
+    reading = read(getattr(request, "question", ""))
+    if reading is None:
+        return Recognition.no("no governed pipeline movement summary request")
+    request.remember_recognition(RECOGNITION_KEY, reading)
+    return Recognition.yes(reason=reading.to_dict()["subtype"])
+
+
+def handle(request: Any) -> Optional[Dict[str, Any]]:
+    """Compose the governed summary and publish it. Renders; computes nothing."""
+    from . import currency as currency_mod
+    from .chat_routing import _envelope, _source, _table_artifact, _undeliverable
+
+    reading = request.recalled_recognition(RECOGNITION_KEY) or read(request.question)
+    if reading is None:
+        return None
+    root = request.pipeline_root
+    if not root:
+        return None
+
+    spec_dict = dict(request.spec_dict or {})
+    history = request.resolve_history_model()
+    money = lambda v: currency_mod.format_money(v, suffixes=("bn", "m", "k"))
+
+    if reading.comparative:
+        result = resolve_comparison(root, request.client_id, history=history)
+        if not result.get("available"):
+            return _undeliverable(
+                question=request.question, spec=spec_dict, artifacts=[],
+                answer=result.get("reason"), error=result.get("reason"),
+                route=ROUTE_NAME, warnings=[result.get("reason")])
+        summary = result["current"]
+        delta = result["delta"]
+        answer = (
+            "Pipeline movement %s to %s, against the interval ending %s: "
+            "net %+d cases (%s), %+d entrants, %+d departures."
+            % (summary["window"]["opening_date"], summary["window"]["closing_date"],
+               result["prior"]["window"]["closing_date"],
+               summary["net"]["cases"], money(summary["net"]["balance"]),
+               delta["entrant_cases"], delta["departure_cases"]))
+        meta_key, meta_value = "pipelineMovementComparison", result
+    else:
+        summary = resolve(root, request.client_id, history=history)
+        if not summary.get("available"):
+            return _undeliverable(
+                question=request.question, spec=spec_dict, artifacts=[],
+                answer=summary.get("reason"), error=summary.get("reason"),
+                route=ROUTE_NAME, warnings=[summary.get("reason")])
+        answer = (
+            "Pipeline movement %s to %s: opened %d cases (%s), closed %d (%s), "
+            "net %+d (%s). %d new entrants, %d progressions, %d departures."
+            % (summary["window"]["opening_date"], summary["window"]["closing_date"],
+               summary["opening"]["cases"], money(summary["opening"]["balance"]),
+               summary["closing"]["cases"], money(summary["closing"]["balance"]),
+               summary["net"]["cases"], money(summary["net"]["balance"]),
+               summary["entrants"]["cases"],
+               sum(p["cases"] for p in summary["progressions"]),
+               summary["departures"]["cases"]))
+        meta_key, meta_value = "pipelineMovementSummary", summary
+
+    if summary.get("omitted"):
+        answer += " Not evidenced: " + "; ".join(
+            "%s (%s)" % (o["element"], o["reason"]) for o in summary["omitted"]) + "."
+
+    rows = [{"stage": r["stage"], "opening_cases": r["opening_cases"],
+             "arrivals": r["arrivals"], "departures": r["departures"],
+             "closing_cases": r["closing_cases"],
+             "opening_balance": r["opening_balance"],
+             "closing_balance": r["closing_balance"]}
+            for r in summary["by_stage"]]
+    window = summary["window"]
+    columns = [{"key": k, "label": k.replace("_", " ").title()}
+               for k in ("stage", "opening_cases", "arrivals", "departures",
+                         "closing_cases", "opening_balance", "closing_balance")]
+    artifact = _table_artifact(
+        "Pipeline movement by stage", columns=columns, rows=rows,
+        spec=spec_dict, portfolio_id=request.client_id,
+        as_of=window["closing_date"],
+        description="Opening, arrivals, departures and closing per governed stage.")
+    # WHAT THIS ANSWER READ, in the estate's own record. The coverage ledger
+    # accounts for a `dataset` concept against `reconciliation.dataset` and
+    # nothing else — the DECISION (`datasetContext`) is not evidence that the
+    # tape was read. This summary reads the governed weekly pipeline extracts,
+    # so it says so, and the case counts are the ones it reported.
+    reconciliation = {
+        "dataset": "pipeline",
+        "total_records": summary["closing"]["cases"],
+        "records_included": summary["closing"]["cases"],
+        "opening_records": summary["opening"]["cases"],
+        "reporting_date": window["closing_date"],
+        "comparison_date": window["opening_date"],
+    }
+    envelope = _envelope(
+        ok=True, question=request.question, spec=spec_dict, answer=answer,
+        reconciliation=reconciliation,
+        artifacts=[artifact] if artifact else [], route=ROUTE_NAME,
+        source_notes=[_source("Governed pipeline movement summary", spec_dict,
+                              request.client_id, window["closing_date"],
+                              engine="mi_agent_api.pipeline_movement_summary")])
+    meta = envelope.setdefault("metadata", {})
+    meta[meta_key] = meta_value
+    # THE AXIS THIS ANSWER IS CUT BY, declared rather than inferred. The summary
+    # reports every governed stage, so a question naming "stage" is answered on
+    # that axis and the receipt can see it — the same `groupedBy` declaration
+    # other routes make about themselves.
+    from question_interpretation.lexical import PIPELINE_STAGE_FIELD
+
+    meta["groupedBy"] = [PIPELINE_STAGE_FIELD]
+    meta["movementWindow"] = dict(summary["window"])
+    return envelope
+
+
+def recogniser():
+    """This capability's registry entry.
+
+    Priority 79, ahead of `pipeline_summary` at 81 — which claimed "Give me the
+    stage movement summary" on the word "summary" alone and then refused,
+    because a point-in-time pipeline summary can honour neither a comparison
+    period nor a stage. That is the substitution this route removes.
+
+    79 rather than 80 because `portfolio_summary` (80) and `pipeline_summary`
+    (81) are ONE capability split by dataset and a test asserts they stay
+    adjacent. Reading before both is safe: `read` requires the pipeline's
+    movement as a subject, so "Summarise the funded portfolio" is not a
+    sentence this route can claim.
+
+    It cannot take work from `pipeline_stage_movement` (120) despite reading
+    first: `read` asks `names_a_stage_movement` directly and returns None for
+    any sentence that owner claims, so deference here is EXPLICIT rather than
+    an artefact of registration order — and the two can never disagree about
+    what a single stage movement is, because only one of them defines it.
+    """
+    from .recogniser_registry import Recogniser
+
+    return Recogniser(
+        name=ROUTE_NAME, priority=79, lens_aware=False,
+        description=("Whole-pipeline movement across every governed stage for "
+                     "one reporting interval, and against the prior one."),
+        metadata={
+            "governed_capability":
+                "mi_agent_api.movement_detail.resolve_stage_transition_detail",
+            "computes_nothing": True,
+            "structured_result": "pipelineMovementSummary",
+        },
+        recognise=recognise, handle=handle)

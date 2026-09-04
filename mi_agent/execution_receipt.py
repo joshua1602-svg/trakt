@@ -363,6 +363,11 @@ TEMPORAL_ROUTES = frozenset({
     # capability, which disables working governed analytics rather than
     # preventing a substitution.
     "period_movement",
+    # ``pipeline_movement_summary`` composes the SAME two-snapshot payload the
+    # stage route reads, for every governed stage at once. It compares two
+    # governed extracts by construction — an interval is what it reports — so a
+    # comparison-period facet it did not honour would be a contradiction.
+    "pipeline_movement_summary",
     # ``pipeline_stage_movement`` classifies every governed pipeline case across
     # the two latest weekly extracts and reports the movement between them. It
     # is a two-snapshot capability by construction — without a prior snapshot it
