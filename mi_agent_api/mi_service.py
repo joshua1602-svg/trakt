@@ -676,6 +676,58 @@ def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
         logger.info("routed scope stamping skipped: %s", exc)
 
 
+#: An arm status that means the model was ASKED. `proposal_unavailable` means it
+#: was not — the call failed, or never left. A replayed proposal is a recorded
+#: one, so it costs nothing and is not a fresh call.
+_ARM_RAN = ("applied", "no_change")
+
+
+def _model_usage(parser_llm, concept_merge) -> Dict[str, Any]:
+    """Every model that touched this answer, in ONE place.
+
+    `metadata.llm` counts the free-form parser's own repair loop and nothing
+    else, and the concept-merge arm reports separately. A reader had to know
+    both existed and add them: the live London response said `llm.calls = 0`
+    while claude-opus-5 was writing a filter onto the spec that made the answer
+    refuse. Neither block is renamed or removed; this states the whole picture
+    so the question "did a model change this answer" has one place to look.
+    """
+    parser = dict(parser_llm or {})
+    arm = dict(concept_merge or {})
+    parser_calls = int(parser.get("calls") or 0)
+
+    arm_ran = (str(arm.get("status") or "") in _ARM_RAN
+               and str(arm.get("source") or "") != "replayed")
+    arm_calls = 1 if arm_ran else 0
+
+    usage = dict(arm.get("usage") or {}) if arm_ran else {}
+    cost = dict(arm.get("cost") or {}) if arm_ran else {}
+
+    models = []
+    for name in (parser.get("model") if parser_calls else None,
+                 arm.get("model") if arm_ran else None):
+        if name and name not in models:
+            models.append(str(name))
+
+    return {
+        "free_form_parser_calls": parser_calls,
+        "concept_merge_calls": arm_calls,
+        "total_model_calls": parser_calls + arm_calls,
+        "models": models,
+        "input_tokens": int(parser.get("input_tokens") or 0)
+                        + int(usage.get("input_tokens") or 0),
+        "output_tokens": int(parser.get("output_tokens") or 0)
+                         + int(usage.get("output_tokens") or 0),
+        "cache_read_tokens": int(parser.get("cache_read_tokens") or 0)
+                             + int(usage.get("cache_read_input_tokens") or 0),
+        "cache_write_tokens": int(parser.get("cache_write_tokens") or 0)
+                              + int(usage.get("cache_creation_input_tokens") or 0),
+        "estimated_total_cost": round(
+            float(parser.get("estimated_total_cost") or 0.0)
+            + float(cost.get("estimated_total_cost") or 0.0), 6),
+    }
+
+
 def _book_values(frame, semantics):
     """The book's governed category values, or ``None`` if they cannot be read.
 
@@ -1590,6 +1642,10 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         meta.setdefault("parserProvenance", _parser_provenance(workflow))
         if _concept_merge is not None:
             meta["conceptMerge"] = _concept_merge
+        # BOTH ARMS, TOTALLED. Neither block above is changed; this is the one
+        # place that answers "did a model touch this answer, and what did it
+        # cost" without the reader having to know there are two.
+        meta["modelUsage"] = _model_usage(meta.get("llm"), _concept_merge)
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
     # Governed portfolio scope + coverage. The BACKEND states which portfolios

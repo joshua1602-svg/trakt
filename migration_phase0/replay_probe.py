@@ -320,7 +320,12 @@ _SPEC_KEYS = ("intent", "chart_type", "output_format", "metric",
 _META_KEYS = ("parserMode", "parserModeDetail", "controlledRefusal",
               "controlledUnsupported", "unmappedQuestion", "resultType",
               "runRequired", "asOfDate", "repairAttempts",
-              "repairSkippedReason", "semanticCoverage", "parserProvenance")
+              "repairSkippedReason", "semanticCoverage", "parserProvenance",
+              # WHICH MODELS TOUCHED THE ANSWER, both arms totalled. Without it
+              # the bank evidence showed `llm.calls = 0` for a request the
+              # concept-merge arm had changed, and a replay could not tell a
+              # deterministic answer from a model-assisted one.
+              "modelUsage")
 _TRACE_KEYS = ("intent", "metric", "aggregation", "parserMode",
                "parserConfidence", "portfolioLens", "resultType",
                "requested_dimensions", "applied_dimensions",
