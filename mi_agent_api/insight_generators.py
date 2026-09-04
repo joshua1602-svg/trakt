@@ -443,6 +443,23 @@ def conversion(ctx: Dict[str, Any], conv: Optional[Dict[str, Any]],
     )], []
 
 
+def _headroom_text(headroom: Optional[float], unit: Optional[str]) -> str:
+    """Headroom (concentration_tests.evaluation._headroom) is ``value -
+    threshold`` in the METRIC'S OWN UNIT — percentage points for a percent
+    test, currency for a balance test — never a fraction to rescale, and never
+    itself a percentage regardless of the test's own unit. Formatting it with
+    ``pct()`` appended a "%" on top of the literal "pp" this call site already
+    wrote after it, producing e.g. "17883100.00%pp" for a real headroom of
+    £178,831 on a currency-unit test."""
+    if headroom is None:
+        return "—"
+    if unit == "currency":
+        return money(headroom)
+    if unit == "count":
+        return f"{headroom:,.0f}"
+    return f"{headroom:.2f}pp"
+
+
 # --------------------------------------------------------------------------- #
 # 7. Concentration — reuses the governed test output, never recomputes it
 # --------------------------------------------------------------------------- #
@@ -453,8 +470,16 @@ def concentration(ctx: Dict[str, Any], snapshot: Optional[Dict[str, Any]]) -> Re
                              or "No approved concentration tests are available.",
                              OMITTED_UNAVAILABLE)]
     t = cfg.thresholds("concentration")
-    amber = t.get("amber_utilisation_pct", 90.0) / 100.0
-    red = t.get("red_utilisation_pct", 100.0) / 100.0
+    # `utilization` is ALREADY value/threshold*100 — a percentage-of-limit, in
+    # points (concentration_tests.evaluation._utilization), the same figure the
+    # Risk Limits table shows. `amber_utilisation_pct` / `red_utilisation_pct`
+    # are configured in that same points scale (90.0 meaning 90%, not 0.9) —
+    # dividing them by 100 here compared a points value against a fraction, so
+    # a test at 43% utilisation (comfortably under its limit) tripped both the
+    # "worth reporting" gate and the "breached" check, which fire at >= 0.9 and
+    # >= 1.0 points respectively — almost any nonzero utilisation.
+    amber = t.get("amber_utilisation_pct", 90.0)
+    red = t.get("red_utilisation_pct", 100.0)
     states_available = bool((snapshot.get("states") or {}).get("available"))
     funded_date = snapshot.get("reportingDate")
     forecast = snapshot.get("forecast") or {}
@@ -475,14 +500,17 @@ def concentration(ctx: Dict[str, Any], snapshot: Optional[Dict[str, Any]]) -> Re
                     else SEVERITY_ATTENTION)
 
         name = test.get("displayName") or test.get("testId") or "Concentration test"
-        headline = (f"{name} is at {pct((util or 0) * 100, 0)} of its limit"
+        # `util` is already the percentage-of-limit; pct() only formats — it
+        # does not scale. Multiplying here was the second half of the display
+        # defect: a genuine 43.4% utilisation printed as "4340%".
+        headline = (f"{name} is at {pct(util, 0)} of its limit"
                     if util is not None else f"{name} utilisation is unavailable")
-        summary = (f"Current funded utilisation {pct((util or 0) * 100)} "
+        summary = (f"Current funded utilisation {pct(util)} "
                    f"(as of {funded_date or 'unknown date'}), headroom "
-                   f"{pct((test.get('headroom') or 0) * 100, 2)}pp, status "
+                   f"{_headroom_text(test.get('headroom'), test.get('unit'))}, status "
                    f"{test.get('status')}.")
         if states_available and exp_util is not None:
-            summary += (f" Expected forecast utilisation {pct(exp_util * 100)}"
+            summary += (f" Expected forecast utilisation {pct(exp_util)}"
                         f"{', forecast to breach' if exp_breach else ''}")
             if horizon.get("available") and horizon.get("period"):
                 summary += f" around {horizon['period']}"
@@ -491,7 +519,7 @@ def concentration(ctx: Dict[str, Any], snapshot: Optional[Dict[str, Any]]) -> Re
         if states_available and full.get("utilization") is not None:
             summary += (f" If all active pipeline converted — a hypothetical "
                         f"stress, not a forecast — utilisation would be "
-                        f"{pct(full['utilization'] * 100)}.")
+                        f"{pct(full['utilization'])}.")
 
         candidates.append((worst, Insight(
             insight_type=CONCENTRATION_PROXIMITY,
