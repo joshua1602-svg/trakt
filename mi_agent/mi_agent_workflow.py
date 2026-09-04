@@ -1148,7 +1148,11 @@ def run_mi_agent_query(
             spec=spec, query_result=qres, semantics=semantics, facets=_facets,
             parser_confidence=(parse_meta or {}).get("parser_confidence"),
             dataset=dataset,
-            period=_reporting_date_label(df))
+            period=_reporting_date_label(df),
+            # The prepared frame, so the receipt can state which region the
+            # figure was measured on and how much of the book resolved there.
+            # Read only — nothing about the figure is recomputed from it.
+            frame=df)
         verdict, message = _receipt_mod.assess(
             receipt, substitution=_substitution, semantics=semantics)
         result["execution_receipt"] = receipt.to_dict()

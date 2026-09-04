@@ -387,3 +387,67 @@ groupings of one book, nothing reconciling them.
   and pop `MI_AGENT_PIPELINE_ROOT` globally in setUp/tearDown.
   `test_stage_movement_query` was fixed by re-asserting its environment per ask
   (15 nodes recovered); the same pattern is still live in its neighbours.
+## Region lineage and go-live defensibility — 2026-09-04
+
+Two surfaces answer "region". Until today neither said which region it meant,
+and one of them was measuring the wrong one.
+
+### 1. The limit was tested on the raw column, and read a breach as compliant
+
+`engine.region_taxonomy` harmonises every book onto `canonical_region_reporting`
+and records, per row, how each raw value was mapped (`region_mapping_method` =
+exact / synonym / unresolved / absent). The MI Query Agent has preferred that
+column for every region question since the aliasing work. The RISK-LIMIT
+evaluator never learned about it: `risk_limits._REGION_COLUMNS` began at the raw
+`collateral_geography`.
+
+Reproduced in `mi_agent_api/tests/test_a_limit_is_tested_on_the_governed_region.py`
+against the unfixed code — a tape spelling one region three ways:
+
+    "South West" · "south-west" · "SOUTH WEST"        3 x 25% of the book
+
+    limit  "South West must not exceed 40%"
+    before actual 25.00  status GREEN     <- 75% of the book, reported compliant
+    after  actual 75.00  status RED
+
+and the MI Agent, asked the same thing in words, already answered 75%. Two
+dashboard surfaces, one word, contradictory numbers, with the limit erring in
+the unsafe direction.
+
+`_REGION_COLUMNS` now leads with the harmonised reporting family and keeps the
+old order behind it, so a deployment with no taxonomy configured has no
+harmonised column and behaves exactly as before (pinned by
+`test_a_tape_with_no_harmonised_column_still_falls_back`).
+
+### 2. Nothing read the provenance the taxonomy was written to record
+
+`region_mapping_method` had zero consumers. An answer grouped by region was
+computed from the rows that carried a governed value and said nothing about the
+rest, and said nothing about WHICH of the three families produced it —
+reporting, NUTS3, or ITL3, which cover different populations.
+
+`mi_agent/region_basis.py` is the one reader. It decides nothing, resolves no
+value and changes no figure; it answers two questions about an executed query:
+
+    which region field did it measure, and at which level?
+    what share of the frame carries a governed value at that level?
+
+It now backs both surfaces:
+
+* `ExecutionReceipt.region_basis` — published as `regionBasis` on every
+  `execution_receipt`, and, when coverage is PARTIAL, said out loud on the
+  receipt line the reader is shown. Full coverage stays silent: a caveat
+  printed on every answer is a caveat nobody reads. Unknown coverage (no frame)
+  is stated as unknown, never as complete.
+* `risk_limits.region_basis_block(df)` — published as `regionBasis` on the
+  limits envelope, with the same partial-coverage sentence carried on each
+  geographic test, and each test's `dimensionKey` now recording the column its
+  actual was ACTUALLY measured on rather than the Schedule 8 keyword hint.
+
+### A correction to the 2026-09-03 audit
+
+That audit recorded "Risk Limits hardcoded to NUTS3, no fallback", read from
+`schedule8_extractor._CATEGORY_RULES`. That tuple is an extraction-time
+DIMENSION HINT. The evaluator already fell back across three columns — it just
+led with the raw one rather than the governed one, which is the defect above.
+`tests/test_region_topology.py` records the corrected coupling.

@@ -1515,6 +1515,13 @@ class ExecutionReceipt:
     #: "entire funded portfolio" default, which would misdescribe (say) a
     #: two-book comparison as a whole-book aggregate.
     routed: bool = False
+    #: WHICH REGION the figure was measured on — the governed field, which of
+    #: the three granularities it belongs to, and how much of the frame carried
+    #: a governed value there. Three field families wear the word "Region" and
+    #: they cover different populations, so an answer that names only "Region"
+    #: cannot be reconciled with a limit evaluated on another of them. None when
+    #: the query never touched geography. See `mi_agent/region_basis.py`.
+    region_basis: Optional[Any] = None
     #: WHICH GOVERNED DATASET the figure came from. The unfiltered-population
     #: phrase used to be the literal "entire funded portfolio" whatever had been
     #: computed, so "what is the pipeline balance?" returned the right number —
@@ -1577,6 +1584,13 @@ class ExecutionReceipt:
         if not parts:
             return ""
         line = "Calculated: " + " · ".join(parts) + "."
+        # A partially covered geography is disclosed on the line that presents
+        # the figure. Full coverage says nothing — a caveat printed on every
+        # answer is a caveat nobody reads.
+        _region = getattr(self.region_basis, "disclosure", None)
+        _said = _region() if callable(_region) else None
+        if _said:
+            line += " " + _said + "."
         # Surface low parser confidence only when the question actually carried a
         # material facet — i.e. when there was something scope-related to get
         # wrong. The confidence heuristic scores plain KPI questions ("what is
@@ -1617,6 +1631,8 @@ class ExecutionReceipt:
             "ranking": self.ranking,
             "parserConfidence": self.parser_confidence,
             "facets": [f.to_dict() for f in self.facets],
+            "regionBasis": (self.region_basis.to_dict()
+                            if self.region_basis is not None else None),
             "notApplied": [f.disclosure() for f in self.not_applied()],
             "receipt": self.render(),
         }
@@ -2759,7 +2775,8 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
                   period: Optional[str] = None,
                   comparison_period: Optional[str] = None,
                   dataset: Optional[str] = None,
-                  scenario: Optional[str] = None) -> ExecutionReceipt:
+                  scenario: Optional[str] = None,
+                  frame=None) -> ExecutionReceipt:
     """The receipt for one executed point-in-time query."""
     meta = getattr(query_result, "metadata", None) or {}
     recon = meta.get("reconciliation") or {}
@@ -2777,6 +2794,19 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         group_count = getattr(query_result, "row_count", None)
 
     executed = meta.get("measures_executed") or []
+    # The region the figure was measured on, read from the fields execution
+    # actually used — grouping axis first, then the filters. Never raises: a
+    # disclosure must not cost an answer that would otherwise stand.
+    try:
+        from . import region_basis as _region_basis
+
+        region = _region_basis.basis_for(
+            list(meta.get("group_field_keys") or [])
+            + [getattr(spec, "dimension", None), getattr(spec, "x", None)]
+            + list(getattr(spec, "filters", None) or ()),
+            frame=frame)
+    except Exception:                                        # noqa: BLE001
+        region = None
     return ExecutionReceipt(
         measure=(_measure_set_phrase(executed)
                  or _business_name(getattr(spec, "metric", None), semantics)),
@@ -2796,6 +2826,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         scenario=scenario,
         parser_confidence=parser_confidence,
         facets=list(facets),
+        region_basis=region,
     )
 
 

@@ -36,10 +36,13 @@ _REGISTRY = _REPO_ROOT / "mi_agent" / "mi_semantics_field_registry.yaml"
 #: `value_domain: uk_region` that is in none of these fails the first test —
 #: which is the point: a new region field must be classified before it can join
 #: the alias pool that `categorical_spans.preferred_field` binds from.
-REPORTING = ("canonical_region_reporting", "canonical_region_detail",
-             "collateral_geography")
-NUTS3 = ("geographic_region_obligor", "geographic_region_collateral")
-ITL3 = ("geographic_region_obligor_itl3", "geographic_region_collateral_itl3")
+#:
+#: Read from `mi_agent.region_basis` rather than restated here, because that
+#: module is what the receipt uses to say WHICH region a figure was measured on.
+#: A file that recorded its own copy of the topology could agree with itself
+#: while disagreeing with the answer a reader is shown.
+from mi_agent.region_basis import (                    # noqa: E402
+    ITL3_FIELDS as ITL3, NUTS3_FIELDS as NUTS3, REPORTING_FIELDS as REPORTING)
 
 
 def _registry_fields():
@@ -99,16 +102,28 @@ class TestWhatEachSurfaceReads(unittest.TestCase):
             semantics = yaml.safe_load(fh)
         self.assertIsNone(preferred_field(list(ITL3), semantics))
 
-    def test_risk_limits_evaluates_geography_on_the_nuts3_field(self):
-        """AND MI ANSWERS ON THE REPORTING FAMILY. This is the disagreement the
-        audit records: two dashboard surfaces, one word, different populations.
-        If either side is repointed, this test is where it surfaces."""
+    def test_risk_limits_evaluates_geography_on_the_reporting_family(self):
+        """FIXED 2026-09-04, and this is the line that used to record the
+        disagreement. The evaluator's preference order now LEADS with the
+        harmonised reporting family, so a concentration limit and an MI answer
+        about the same region are measured on the same column. Before this, a
+        tape spelling one region three ways had a 75% concentration tested as
+        three 25% bars and a 40% limit reported compliant.
+
+        The Schedule 8 keyword rule still carries the NUTS3 field as its
+        extraction-time DIMENSION HINT, which is a different thing from the
+        basis: each test now records the column its actual was measured on."""
+        from mi_agent_api.risk_limits import _REGION_COLUMNS
+
+        self.assertEqual(_REGION_COLUMNS[:len(REPORTING)], tuple(REPORTING))
+        self.assertIn("geographic_region_obligor", _REGION_COLUMNS)
+
+    def test_the_schedule_8_hint_is_a_hint_and_not_the_basis(self):
         from mi_agent.risk_monitor.schedule8_extractor import _CATEGORY_RULES
 
         geographic = [r for r in _CATEGORY_RULES
                       if r[1] == "geographic_concentration"]
         self.assertTrue(geographic)
-        self.assertEqual(geographic[0][2], "geographic_region_obligor")
         self.assertIn(geographic[0][2], NUTS3)
 
     def test_the_exposure_map_reads_only_itl3(self):
@@ -124,6 +139,31 @@ class TestWhatEachSurfaceReads(unittest.TestCase):
 
         self.assertIn("canonical_region_reporting", _REGION_FAMILY)
         self.assertTrue(set(_REGION_FAMILY) & set(REPORTING))
+
+
+class TestTheReceiptCanNameTheLevel(unittest.TestCase):
+    """Lineage: the answer a reader is shown must be able to say which of the
+    three families produced it, and how much of the book resolved there."""
+
+    def test_every_classified_field_has_a_level(self):
+        from mi_agent.region_basis import level_of
+
+        for key in REPORTING + NUTS3 + ITL3:
+            with self.subTest(field=key):
+                self.assertIsNotNone(level_of(key))
+
+    def test_a_field_that_is_not_a_region_has_no_level(self):
+        from mi_agent.region_basis import level_of
+
+        self.assertIsNone(level_of("product_type"))
+        self.assertIsNone(level_of(None))
+
+    def test_each_level_has_a_word_a_reader_understands(self):
+        from mi_agent.region_basis import LEVEL_LABELS, level_of
+
+        for key in REPORTING + NUTS3 + ITL3:
+            with self.subTest(field=key):
+                self.assertIn(level_of(key), LEVEL_LABELS)
 
 
 if __name__ == "__main__":  # pragma: no cover
