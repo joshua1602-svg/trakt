@@ -11,8 +11,8 @@
  * dates, which is what makes the same object reusable by another channel later.
  */
 
-import { useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, Info, TriangleAlert } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Check, ChevronDown, Info, TriangleAlert } from "lucide-react";
 import type { AgentClient } from "@/api";
 import type { Insight, InsightSeverity, WeeklyBrief } from "@/domain";
 import { useWeeklyBrief } from "@/hooks/useWeeklyBrief";
@@ -111,6 +111,35 @@ function Omissions({ brief }: { brief: WeeklyBrief }) {
   );
 }
 
+const DISMISSED_KEY_PREFIX = "mi.weeklyBrief.dismissedFor.";
+
+/** What makes this week's brief THIS week's brief. A new data upload changes
+ *  at least one of these dates, so it is never mistaken for an already-read
+ *  one — the reader sees every new brief exactly once. */
+function briefIdentity(brief: WeeklyBrief): string {
+  return [brief.as_of_date, brief.comparison_date, brief.source_dates?.funded_as_of]
+    .filter(Boolean).join("|");
+}
+
+function readDismissed(portfolioId: string): string | null {
+  try {
+    return typeof localStorage === "undefined"
+      ? null : localStorage.getItem(DISMISSED_KEY_PREFIX + portfolioId);
+  } catch {
+    return null; // private browsing / storage blocked — never break the panel
+  }
+}
+
+function writeDismissed(portfolioId: string, identity: string): void {
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(DISMISSED_KEY_PREFIX + portfolioId, identity);
+    }
+  } catch {
+    /* per-viewer convenience only — losing it just re-shows the brief */
+  }
+}
+
 export function WeeklyBriefPanel({
   client, portfolioId, portfolioContext, asOf, onNavigate, enabled, ready = true,
 }: {
@@ -135,10 +164,21 @@ export function WeeklyBriefPanel({
     client, portfolioId, portfolioContext, asOf, enabled: on, ready,
   });
 
+  // Read once this brief's identity is known, and again whenever a NEW brief
+  // (a new data upload) arrives with a different one — so a stale "dismissed"
+  // flag from last week's brief never hides this week's.
+  const identity = brief ? briefIdentity(brief) : null;
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (identity) setDismissedId(readDismissed(portfolioId));
+  }, [portfolioId, identity]);
+  const dismissed = Boolean(identity) && identity === dismissedId;
+
   // Nothing to say and nothing to explain -> render nothing, so a disabled or
   // unsupported environment is visually identical to today.
   if (!on) return null;
   if (unavailable && !loading) return null;
+  if (dismissed) return null;
 
   const insights = brief?.insights ?? [];
   if (!loading && !insights.length && !(brief?.omitted ?? []).length) return null;
@@ -148,14 +188,31 @@ export function WeeklyBriefPanel({
       className="mx-6 mt-5 rounded-2xl border border-[var(--color-line)] bg-navy-900/30 p-4">
       <header className="mb-2 flex items-baseline justify-between gap-3">
         <h3 className="text-[13px] font-semibold text-ink-100">Weekly Portfolio Brief</h3>
-        {brief?.as_of_date && (
-          <span className="text-[10px] text-ink-500">
-            Pipeline {brief.as_of_date}
-            {brief.comparison_date && ` vs ${brief.comparison_date}`}
-            {brief.source_dates?.funded_as_of
-              && ` · funded actuals ${brief.source_dates.funded_as_of}`}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {brief?.as_of_date && (
+            <span className="text-[10px] text-ink-500">
+              Pipeline {brief.as_of_date}
+              {brief.comparison_date && ` vs ${brief.comparison_date}`}
+              {brief.source_dates?.funded_as_of
+                && ` · funded actuals ${brief.source_dates.funded_as_of}`}
+            </span>
+          )}
+          {!loading && identity && (
+            <button
+              type="button"
+              data-testid="weekly-brief-mark-read"
+              aria-label="Mark this week's brief as read"
+              title="Mark as read — reappears when a new upload has new insights"
+              onClick={() => {
+                writeDismissed(portfolioId, identity);
+                setDismissedId(identity);
+              }}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[var(--color-line)] px-1.5 py-0.5 text-[10px] text-ink-400 hover:border-mint-400/40 hover:text-mint-300"
+            >
+              <Check size={11} /> Read
+            </button>
+          )}
+        </div>
       </header>
 
       {loading && (
