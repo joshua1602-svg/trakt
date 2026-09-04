@@ -101,11 +101,19 @@ QUESTIONS: Tuple[Tuple[str, str], ...] = (
     # "geographic", and the answer must now be SCOPED to the category it names
     # rather than covering every limit test.
     ("risk_limit_category", "What is the largest geographic concentration versus limit?"),
+    # WORDS THE READER OWNS, refused as measures this dataset does not carry.
+    # `funded` names the portfolio, `withdrawals` the WITHDRAWN stage, and
+    # `amount` defaults to the balance with the choice disclosed.
+    ("reader_vocabulary", "Show me the funded loan book summary by region"),
+    ("reader_vocabulary", "What stage had the most withdrawals?"),
+    ("reader_vocabulary", "What is the current pipeline amount?"),
     # Refuses today, and must keep refusing. The last three are the estate's
     # must-refuse three; "Atlantis" is a place the book has no exposure to, and
     # the stage NAMED without being put in motion is the boundary of the
     # routing fix.
     ("must_refuse", "What is the average LTV in Atlantis?"),
+    # The residue guard's own job: an invented measure still refuses, naming it.
+    ("must_refuse", "Show me the unicorn ratio by region"),
     ("must_refuse", "Compare KFI balance this month vs last month"),
     ("must_refuse", "Show me the trend."),
     ("must_refuse", "What changed?"),

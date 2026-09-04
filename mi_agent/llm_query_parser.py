@@ -815,6 +815,16 @@ _ANALYTICAL_FRAMING_WORDS = frozenset({
     # "show the BOOK by region" answered with the governed default. One word's
     # absence, two behaviours for one sentence shape.
     "pipeline", "pipelines",
+    # `funded` IS THE OTHER ONE, and its absence was the same defect one view
+    # over. The estate has already decided this word names the governed
+    # DATASET: `pipeline_stage_vocabulary` DROPS the tape spelling "funded"
+    # precisely because in a sentence it names a view rather than a stage. It
+    # was still missing here, so "Show me the funded loan book summary by
+    # region" surfaced `funded` as a measure this dataset does not carry and
+    # refused — while "Show me the PIPELINE by stage", the identical shape,
+    # answered. Measure PHRASES are untouched: "funded balance" resolves in the
+    # metric grammar before any residue is computed.
+    "funded",
 })
 
 #: Minimum token length for a residue word to count as a named measure. Filters
@@ -824,9 +834,19 @@ _METRIC_RESIDUE_MIN_LEN = 3
 
 #: Generic measure words that name more than one governed measure on a book
 #: carrying both. The CANDIDATES come from the registry, never from a list here.
+#: Generic measure words that name more than one governed measure on a book
+#: carrying both, and are therefore ASKED ABOUT rather than guessed.
+#:
+#: `amount` was here and is not any more. The product owner's rule, 2026-09-04:
+#: it defaults to the current outstanding balance, with count as the fallback
+#: where the question asks how many, unless the reader says which. So "What is
+#: the current pipeline amount?" is answered on the balance and the choice is
+#: DISCLOSED through `metric_defaulted` — the existing shape for "the model
+#: chose the measure" — rather than refused. `value` keeps asking: no rule was
+#: given for it, and a silent default is the one outcome this list exists to
+#: prevent.
 _AMBIGUOUS_MEASURE_WORDS = {
     "value": ("balance", "valuation"),
-    "amount": ("balance", "valuation"),
 }
 
 
@@ -904,6 +924,18 @@ def _metric_side_residue(metric_part: str, semantics: dict,
                 terms.add(v)
                 if not v.endswith("s"):
                     terms.add(v + "s")     # the plural the reader writes
+    # A GOVERNED STAGE SPELLING IS NOT A MISSING MEASURE, on the same principle
+    # as the book's own values just above — and for the case those cannot
+    # reach: a stage the loaded frame does not carry as a column still has a
+    # governed name. "What stage had the most withdrawals?" refused with
+    # `withdrawals` as an unmapped measure. Read from
+    # `pipeline_stage_vocabulary`, the estate's ONE question-side stage
+    # vocabulary, so nothing here holds a stage list of its own.
+    try:
+        from question_interpretation.lexical import pipeline_stage_vocabulary
+        terms |= {str(k).strip().lower() for k in pipeline_stage_vocabulary()}
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        pass
     for term in sorted(terms, key=len, reverse=True):
         if len(term) < 2:
             continue
@@ -4367,6 +4399,33 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
                              "substituted."),
                 output_format="text"),
                 _det_meta("low", explicit, dim_terms, note="unresolved_metric"))
+        # AN AMOUNT IS THE BALANCE UNLESS THE READER SAYS OTHERWISE.
+        #
+        # The product owner's rule, 2026-09-04: `amount` defaults to the current
+        # outstanding balance, with count as the fallback where the question
+        # asks how many, unless the reader names a measure. Until now it was in
+        # `_AMBIGUOUS_MEASURE_WORDS` and refused instead — "What is the current
+        # pipeline amount?" came back "'amount' could mean more than one
+        # governed measure (Balance or Valuation)". A reader who names a measure
+        # is unaffected: this is reached only after `_detect_metric` resolved
+        # nothing, so "total valuation amount" still binds the valuation.
+        #
+        # DISCLOSED, NOT SILENT. `metric_defaulted` is the estate's existing
+        # shape for "the model chose the measure", and it is what keeps a
+        # governed default from being indistinguishable from a measure the
+        # reader named — the distinction the trend default already publishes.
+        if re.search(r"\bamounts?\b", q):
+            _amount_metric = _balance_metric(semantics, available_columns)
+            if _amount_metric:
+                return (MIQuerySpec(
+                    intent="summary", chart_type="none", metric=_amount_metric,
+                    aggregation="count" if _wants_count(q) else "sum",
+                    metric_defaulted=True, title=title,
+                    explanation="'amount' resolved to the governed balance "
+                                "measure; no other measure was named.",
+                    output_format="text"),
+                    _det_meta("medium", explicit, dim_terms,
+                              note="amount_defaulted"))
         return (MIQuerySpec(
             intent="summary", chart_type="none", aggregation="count", title=title,
             explanation="Could not map question to a governed analytic.",

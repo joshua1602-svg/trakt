@@ -57,6 +57,17 @@ _STAGE_CANON = {
     "funds released": "COMPLETED", "funded": "COMPLETED", "drawn": "COMPLETED",
     "drawdown": "COMPLETED", "live": "COMPLETED",
     "withdrawn": "WITHDRAWN", "declined": "WITHDRAWN", "rejected": "WITHDRAWN",
+    # THE NOUN, beside the participle. A tape cell reading "withdrawals"
+    # normalises to WITHDRAWN for the same reason "declined" does, and the
+    # question-side vocabulary is DERIVED from this map — asserted by
+    # `test_the_vocabulary_is_derived_from_the_one_governed_map` — so the reader
+    # who asks "what stage had the most withdrawals?" gets it here or not at
+    # all. Measured: that question refused with `withdrawals` reported as a
+    # measure this dataset does not carry.
+    # (The singular is a PREFIX of the plural for the same stage, so the
+    # question vocabulary's fragment rule drops it — the same rule that stops
+    # `complete` becoming a COMPLETED stage. It still normalises a tape cell.)
+    "withdrawal": "WITHDRAWN", "withdrawals": "WITHDRAWN",
     "cancelled": "WITHDRAWN", "lapsed": "WITHDRAWN", "abandoned": "WITHDRAWN",
 }
 # Coarse funnel grouping for pipeline_stage_bucket.
