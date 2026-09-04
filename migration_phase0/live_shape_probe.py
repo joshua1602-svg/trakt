@@ -95,6 +95,12 @@ QUESTIONS: Tuple[Tuple[str, str], ...] = (
     # heatmap, in either order and with "and" as well as a second "by".
     ("control", "Balance by region by broker"),
     ("control", "Show me balance by broker and region"),
+    # A LIMITS QUESTION THE RECOGNISER NEVER CLAIMED. `_RISK_LIMIT_RE` does not
+    # match this sentence; the analytical intent boundary claims it. It was
+    # refused for a category the parser invented out of the words after
+    # "geographic", and the answer must now be SCOPED to the category it names
+    # rather than covering every limit test.
+    ("risk_limit_category", "What is the largest geographic concentration versus limit?"),
     # Refuses today, and must keep refusing. The last three are the estate's
     # must-refuse three; "Atlantis" is a place the book has no exposure to, and
     # the stage NAMED without being put in motion is the boundary of the

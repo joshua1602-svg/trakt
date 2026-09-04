@@ -1702,6 +1702,38 @@ _RISK_LIMIT_RE = re.compile(
     # concentration methodology.
     r"(?:concentration|limit)\s+tests?\b|tests?\s+(?:are|is)\s+(?:most )?at risk")
 
+#: THE NOUNS THIS VOCABULARY IS BUILT ON, named so a WORD-LEVEL reader can ask
+#: this owner what it claims. `_RISK_LIMIT_RE` recognises PHRASES, which is right
+#: for deciding whether a question is a limit question and useless for deciding
+#: whether a word is a category.
+#:
+#: Measured: "What is the largest geographic concentration versus limit?" was
+#: refused with "No loans in this book match that filter ('concentration versus
+#: limit')". The question names no category — `_CATEGORICAL_FILTER_RE` reads
+#: "geographic X" as "the place X" — and `_claimed_by_an_owner`, the guard that
+#: stops an unclaimed candidate being recorded as a category the book lacks,
+#: claimed "concentration" (analytical framing) and "versus" (a grouping marker)
+#: and not "limit", the noun an exposure is measured AGAINST.
+#:
+#: NOT added to `_ANALYTICAL_FRAMING_WORDS`, where it would read as kin to
+#: "concentration" and "exposure": a word in that set is not metric residue, so
+#: "Show the limit by region" would stop refusing with "'limit' is not a
+#: governed measure in this dataset" and answer with a balance breakdown. One
+#: reader needs this vocabulary; the other must not have it.
+#:
+#: Every noun here appears in `_RISK_LIMIT_RE`, asserted by
+#: `test_the_limit_owner_claims_its_own_nouns`, so the two cannot drift into two
+#: vocabularies.
+#: Inflections are deliberately absent. The set is NOUNS a reader writes inside
+#: a candidate category phrase, and every entry is a literal of the owner's
+#: pattern — "breached"/"breaches" live there only inside an alternation, so
+#: listing them would put words here the owner does not literally carry and
+#: weaken the one assertion that keeps the two together.
+_RISK_LIMIT_NOUNS = frozenset({
+    "limit", "limits", "headroom", "breach", "schedule",
+})
+
+
 # Natural-language risk-limit category -> the category key used by the risk
 # monitor (``risk_limits.testsByCategory``). Order matters (most specific first).
 _RISK_LIMIT_CATEGORY_TERMS: List[Tuple[str, str]] = [
@@ -1722,6 +1754,20 @@ def _risk_limit_category(q: str) -> Optional[str]:
         if re.search(pattern, q):
             return cat
     return None
+
+
+def risk_limit_category(question: Any) -> Optional[str]:
+    """The risk-limit category a question scopes to — for callers outside here.
+
+    ONE READER. `_risk_limit_recognizer` settles the category from
+    `_risk_limit_category` when it claims a question; the analytical intent
+    boundary claims the ones whose phrasing `_RISK_LIMIT_RE` never matches, and
+    without this it settled the FLAG and left the category open — so the route
+    answered every limit category for a question that named one. A second
+    opinion about what category a question names is how two phrasings of one
+    question reach two different answers.
+    """
+    return _risk_limit_category(str(question or "").strip().lower())
 
 
 # A funded-balance ATTRIBUTION bridge (waterfall): opening balance → per-category
@@ -2542,6 +2588,12 @@ def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
     if token in _GROUPING_MARKERS:
         return True
     if token in _METRIC_SIDE_STOPWORDS or token in _ANALYTICAL_FRAMING_WORDS:
+        return True
+    # THE RISK-LIMIT OWNER, on its own nouns. See `_RISK_LIMIT_NOUNS`: the
+    # recogniser reads phrases, so it cannot answer a question about one word,
+    # and its nouns were the gap through which an analytic phrase was recorded
+    # as a category the book does not carry.
+    if token in _RISK_LIMIT_NOUNS:
         return True
     if _categorical_value_field(token, available_values, semantics):
         return True

@@ -202,7 +202,7 @@ this tree:
 |---|---|
 | `scripts/run_mi_query_stage_movement_banks.py`, base vs HEAD, per question | **0 of 215 moved** (166-question bank, stage bank 36/36, near-neighbours 13/13) |
 | the same three banks on a LIVE-SHAPED book (second region column added) | **0 of 215 moved** |
-| `migration_phase0/live_shape_probe.py`, base vs HEAD (24 questions) | **9 FIXED, 0 REGRESSED**, 10 unchanged-ok, 5 still failing — all five the must-refuse set |
+| `migration_phase0/live_shape_probe.py`, base vs HEAD (25 questions) | **10 FIXED, 0 REGRESSED**, 10 unchanged-ok, 5 still failing — all five the must-refuse set |
 | `mi_agent/tests` + `question_interpretation/tests` failure node sets | 28 → 21, no new failure |
 | `mi_agent_api/tests` + 17 routing files in `tests/` | 66 → 48, no new failure |
 
@@ -267,13 +267,33 @@ not run. Every blast claim above is scoped to the files named.
   assertion in `tests/test_assurance_measurement_failure.py` was updated with
   the four losses named.
 
-* **`limit` is claimed by no owner, so a risk question refuses.** "What is the
-  largest geographic concentration versus limit?" reaches `risk_limits` and is
-  then refused with `unknown category: 'concentration versus limit'`, because
-  `_claimed_by_an_owner` recognises "concentration" and "versus" and not
-  "limit" — the risk-limit vocabulary is not one of the owners it consults.
-  Measured on base and unchanged by any of this work; it is the next cheap win
-  in that area.
+* **The `limit` noun, and the category that went with it — FIXED.** "What is
+  the largest geographic concentration versus limit?" was refused with
+  `unknown category: 'concentration versus limit'`. The question names no
+  category at all: `_CATEGORICAL_FILTER_RE` reads "geographic X" as "the place
+  X", and `_claimed_by_an_owner` — the guard that stops an unclaimed candidate
+  being RECORDED as a category the book lacks — claimed "concentration"
+  (analytical framing) and "versus" (a grouping marker) and not "limit".
+
+  `_RISK_LIMIT_NOUNS` is the risk-limit vocabulary's own nouns, read only by
+  that guard, with every entry asserted to appear in `_RISK_LIMIT_RE` so the two
+  cannot drift. Deliberately NOT added to `_ANALYTICAL_FRAMING_WORDS`, where
+  "limit" reads like kin to "concentration" and "exposure": a word in that set
+  is not metric residue, so "Show the limit by region" would stop refusing with
+  *"'limit' is not a governed measure in this dataset"* and answer with a
+  balance breakdown. That refusal is pinned.
+
+  Removing the refusal exposed a second defect underneath it, fixed with it
+  because the first makes it reachable: `_RISK_LIMIT_RE` never matches this
+  sentence, so the ANALYTICAL INTENT BOUNDARY claims it — and the boundary set
+  `risk_limit_query` while leaving `risk_limit_category` open. The route
+  answered every limit category: *"5 passed … Nearest to limit: Top 3 brokers"*
+  for a question about geography. The boundary now settles the category from the
+  parser's own reader (`llm_query_parser.risk_limit_category`), never
+  overriding a settled parse, and the answer is scoped: *"geographic
+  concentration: 2 passed, 0 warning(s), 2 breach(es) … Nearest to limit:
+  Scotland"*. `_route_risk` already narrowed to the category and already
+  refuses honestly when one has no configured tests; nothing there changed.
 
 * **Two grouping axes are fine, and are pinned so this is not re-opened.**
   "Balance by region by broker" answers as a 5x3 heatmap — either order, and
