@@ -34,6 +34,7 @@ import {
   formatValue,
   operatorGlyph,
   riskCategoryByTest,
+  riskStatementByTest,
   riskSortKey,
   statePhrase,
 } from "./concentrationShared";
@@ -241,6 +242,10 @@ export function RiskLimitsWorkspace({
   const statesAvailable = Boolean(snapshot?.states?.available);
   const categoryByTest = useMemo(
     () => riskCategoryByTest(snapshot?.emergingRisks),
+    [snapshot],
+  );
+  const statementByTest = useMemo(
+    () => riskStatementByTest(snapshot?.emergingRisks),
     [snapshot],
   );
   const categories = useMemo(
@@ -632,7 +637,16 @@ export function RiskLimitsWorkspace({
               >
                 {formatChange(move, t.unit)}
               </span>
-              <span>
+              <span
+                title={t.testId ? statementByTest.get(t.testId) : undefined}
+              >
+                {/* The badge and "Move F->E" sit in the same row, but a
+                    DETERIORATION badge is measured since the prior REPORTING
+                    period — a different, usually longer span than the F->E
+                    column beside it. Without this, a comfortably small F->E
+                    move next to DETERIORATION reads as contradictory; the
+                    title attribute states the real basis in the service's own
+                    words. */}
                 <Badge tone={chip.tone}>{chip.label}</Badge>
               </span>
             </button>

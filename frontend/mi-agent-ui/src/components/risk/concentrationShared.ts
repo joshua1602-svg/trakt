@@ -124,6 +124,29 @@ export function riskCategoryByTest(
   return map;
 }
 
+/**
+ * testId → the service's own explanation of the risk badge.
+ *
+ * The badge sits in the row next to "Move F→E" (this run's funded vs its own
+ * forecast), but `material_deterioration` is measured on a DIFFERENT axis —
+ * the change since the prior REPORTING period (e.g. 2025-11-30), which is
+ * usually a larger number over a longer span. Read as "the row next to it",
+ * a comfortably small F→E move beside a DETERIORATION badge looks
+ * contradictory. It isn't; the two just don't share a time axis, and nothing
+ * on the row said so. The statement the service already computed —
+ * "Scotland deteriorated 2.87pp since 2025-11-30 (1.5% → 4.3%)" — states the
+ * real basis, so surfacing it as a tooltip is exact and costs no new logic.
+ */
+export function riskStatementByTest(
+  risks: EmergingRisk[] | undefined,
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const r of risks ?? []) {
+    if (r.testId && r.statement && !map.has(r.testId)) map.set(r.testId, r.statement);
+  }
+  return map;
+}
+
 /** Sort weight for "expected risk" ordering: service rank, then ascending
  *  expected headroom, then name. Rows without a risk sort last. */
 export function riskSortKey(

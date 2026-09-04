@@ -27,6 +27,17 @@ describe("AgentChatPanel surface", () => {
     // Distinct teal palette, not the navy analytics card colour.
     expect(surface!.className).toMatch(/teal/);
   });
+
+  it("carries a Beta tag beside the MI Agent title", () => {
+    render(<AgentChatPanel {...baseProps} context={null} />);
+    expect(screen.getByText("MI Agent")).toBeInTheDocument();
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+  });
+
+  it("invites a portfolio question, not a list of capability keywords", () => {
+    render(<AgentChatPanel {...baseProps} context={null} />);
+    expect(screen.getByPlaceholderText("Ask me about your portfolio…")).toBeInTheDocument();
+  });
 });
 
 describe("AgentChatPanel context indicator", () => {

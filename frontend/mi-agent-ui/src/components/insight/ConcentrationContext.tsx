@@ -19,13 +19,22 @@
 import type { ConcentrationTest, ForecastMethodology } from "@/domain";
 import { cn } from "@/lib/utils";
 
+// FIXED: `currentValue` / `threshold` / `utilization` / `headroom` are
+// ALREADY percent numbers on the wire (7.63 means 7.63%), the same
+// convention `concentrationShared.formatValue`/`formatChange` and the
+// server's own `_fmt` (mi_agent_api/concentration_query.py) use for every
+// other rendering of these same fields — confirmed by both agreeing on
+// "%.2f%%" with no scaling. This block used to multiply by 100 on top of
+// that, so a test the table row showed as "7.63%" and "15.00%" opened here
+// as "763.0%" and "1500.0%" — the reported defect. `warningFraction` is the
+// one genuinely fractional field in this payload (used elsewhere as
+// `warningFraction * 100`); it is not touched by either helper below.
 function pct(v: number | null | undefined, dp = 1): string {
-  return v == null ? "—" : `${(v * 100).toFixed(dp)}%`;
+  return v == null ? "—" : `${v.toFixed(dp)}%`;
 }
 
-/** Limits and actuals are ratios in the governed payload; headroom is too. */
 function pp(v: number | null | undefined, dp = 1): string {
-  return v == null ? "—" : `${(v * 100).toFixed(dp)}pp`;
+  return v == null ? "—" : `${v.toFixed(dp)}pp`;
 }
 
 const TONE: Record<string, string> = {
