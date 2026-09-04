@@ -1152,8 +1152,13 @@ CURATION: Dict[str, dict] = {
         # no governed dimension at all, and the question was refused as
         # unmapped on a tape that carries the column and five values. No other
         # governed field claims the bare word.
+        # "funnel" ALONE, for the same reason "stage" alone was added: a reader
+        # asking "how did cases move through the funnel" names this dimension
+        # and no other. The funded book has no funnel, and no governed field
+        # claims the bare word.
         "synonyms": ["stage", "stages", "pipeline stage", "pipeline stages",
-                     "funnel stage", "application stage", "pipeline status"],
+                     "funnel", "funnel stage", "application stage",
+                     "pipeline status"],
         "overrides": {"role": "dimension", "format": "string"},
     },
     "pipeline_snapshot_date": {

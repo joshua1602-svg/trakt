@@ -9,6 +9,8 @@ the deterministic bridge) used only for view breakdowns / queries.
 
 from __future__ import annotations
 
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
@@ -108,6 +110,49 @@ def reconciliation_for(datasets: Iterable[str], **extra: Any) -> Dict[str, Any]:
 #: A question that means the pipeline case still says so — "how many PIPELINE
 #: cases are there?" resolves through the view name, unaffected.
 PIPELINE_ARTEFACTS = ("kfi", "application", "offer")
+
+#: The registry's own field, so the terms below have ONE owner.
+_STAGE_FIELD = "pipeline_stage"
+
+
+@lru_cache(maxsize=1)
+def pipeline_dataset_terms() -> Tuple[str, ...]:
+    """Every term whose presence makes a question a PIPELINE question.
+
+    The artefact names above, plus the governed synonyms of the pipeline-stage
+    DIMENSION — read from the registry rather than restated here.
+
+    WHY THE DIMENSION AND NOT ONLY ITS VALUES. The artefact triple names three
+    points on the funnel. Six questions in the live bank named the axis instead
+    — "the largest stage transition", "which stage had the most movement", "how
+    did cases move through the funnel" — and were sent to the FUNDED book, which
+    carries no `pipeline_stage` column. Field binding and execution then refused
+    a column that genuinely is not there, three layers downstream of the wrong
+    decision, while `pipeline_stage_movement` answered forty-nine of its
+    siblings.
+
+    Nothing is invented: a term here is a term the registry already binds to
+    `pipeline_stage`, so widening the rule is a governed registry change rather
+    than a word added to a list in code. Measured on the 882-question corpus,
+    three questions move and all three are about pipeline stages; every funded
+    question that answers today stays funded.
+
+    Falls back to the artefact names alone if the registry cannot be read: a
+    dataset rule that raises would take down every question, and the behaviour
+    it falls back to is exactly the one that predates this.
+    """
+    try:
+        from mi_agent.mi_query_validator import load_mi_semantics
+
+        registry = load_mi_semantics(
+            Path(__file__).resolve().parents[1] / "mi_agent"
+            / "mi_semantics_field_registry.yaml")
+        entry = ((registry or {}).get("fields") or {}).get(_STAGE_FIELD) or {}
+        synonyms = tuple(str(t).strip().lower()
+                         for t in (entry.get("synonyms") or ()) if str(t).strip())
+    except Exception:  # noqa: BLE001 - no registry, no widening
+        synonyms = ()
+    return tuple(dict.fromkeys(PIPELINE_ARTEFACTS + synonyms))
 
 # Unqualified "amount"/"balance" resolves to this column per view. The pipeline
 # prepared dataset and the forecast frame both carry the view's primary metric
@@ -225,7 +270,8 @@ def resolve_dataset(question: Optional[str]) -> str:
     if named is not None:
         return named
     low = (question or "").lower()
-    if any(lens_mod.undisclaimed_mention(low, w) for w in PIPELINE_ARTEFACTS):
+    if any(lens_mod.undisclaimed_mention(low, w)
+           for w in pipeline_dataset_terms()):
         return "pipeline"
     return DEFAULT_VIEW
 

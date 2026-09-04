@@ -44,6 +44,7 @@ from . import period_change_route as _period_change
 from . import analytical_plan as _plan
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
+from . import pipeline_movement_summary as _pipeline_movement_summary
 from . import stage_movement_query as _stage_movement
 from . import workspace as _workspace
 from .recogniser_registry import (
@@ -4053,6 +4054,12 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
         #     Stock standing in for a transition is the substitution this entry
         #     removes; it computes none of the analysis itself.
         _stage_movement.recogniser(),
+        # At 79, ahead of `pipeline_summary` (81), which claimed "Give me
+        # the stage movement summary" on the word "summary" and then refused
+        # for a comparison period and a stage it cannot honour. It still cannot
+        # take work from `pipeline_stage_movement` (120): its own `read` asks
+        # `names_a_stage_movement` and yields to it explicitly.
+        _pipeline_movement_summary.recogniser(),
     ])
     return registry
 

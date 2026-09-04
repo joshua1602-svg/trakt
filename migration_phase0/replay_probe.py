@@ -263,6 +263,13 @@ _NUMERIC_OK = frozenset({
     "parserConfidence", "parser_confidence", "calls", "total_tokens",
     "input_tokens", "output_tokens", "cache_read_tokens",
     "cache_write_tokens", "repairAttempts",
+    # `metadata.modelUsage`. Adding the block to `_META_KEYS` was half a fix:
+    # the token counts came through because the parser block already used those
+    # key names, and the three CALL COUNTS were dropped here — which are the
+    # whole point, being what says a model touched the answer at all. The cost
+    # is Trakt's own spend, not a client figure.
+    "free_form_parser_calls", "concept_merge_calls", "total_model_calls",
+    "estimated_total_cost",
 })
 
 
@@ -325,7 +332,11 @@ _META_KEYS = ("parserMode", "parserModeDetail", "controlledRefusal",
               # the bank evidence showed `llm.calls = 0` for a request the
               # concept-merge arm had changed, and a replay could not tell a
               # deterministic answer from a model-assisted one.
-              "modelUsage")
+              "modelUsage",
+              # WHETHER THE MODEL ANSWERED, which `modelUsage` cannot say: a
+              # call that failed has no usage to report, and that is exactly
+              # the row whose outcome it decided.
+              "modelAvailability")
 _TRACE_KEYS = ("intent", "metric", "aggregation", "parserMode",
                "parserConfidence", "portfolioLens", "resultType",
                "requested_dimensions", "applied_dimensions",

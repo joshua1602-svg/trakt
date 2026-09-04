@@ -86,6 +86,14 @@ class ErrorCode:
     #: details carry the failing paths so an agent can correct and retry.
     TOOL_INPUT_INVALID = "TOOL_INPUT_INVALID"
 
+    # -- upstream semantic dependency --------------------------------------- #
+    #: The semantic model an arm needed was not reachable — overloaded, timed
+    #: out, or answered unusably. NOT a capability decision and NOT a broken
+    #: calculation: nothing was computed wrongly, and waiting can help. Kept
+    #: distinct so an operator counting failed calculations is not counting
+    #: model outages, and so a caller can retry the one and not the other.
+    SEMANTIC_MODEL_UNAVAILABLE = "SEMANTIC_MODEL_UNAVAILABLE"
+
     # -- capability / question --------------------------------------------- #
     UNSUPPORTED_QUESTION = "UNSUPPORTED_QUESTION"
     AMBIGUOUS_QUESTION = "AMBIGUOUS_QUESTION"
@@ -155,6 +163,11 @@ _CODES: Dict[str, _CodeSpec] = {
     ErrorCode.TOOL_NOT_FOUND: _CodeSpec(ErrorCategory.INPUT, False, 404),
     ErrorCode.TOOL_INPUT_INVALID: _CodeSpec(ErrorCategory.INPUT, False, 400),
 
+    # Retryable, and HTTP 200 like every other MI question verdict: a governed
+    # MI answer carries its outcome INSIDE the envelope, so an outage must not
+    # become a transport failure a caller handles somewhere else entirely.
+    ErrorCode.SEMANTIC_MODEL_UNAVAILABLE: _CodeSpec(
+        ErrorCategory.INFRASTRUCTURE, True, 200),
     ErrorCode.UNSUPPORTED_QUESTION: _CodeSpec(ErrorCategory.CAPABILITY, False, 200),
     ErrorCode.AMBIGUOUS_QUESTION: _CodeSpec(ErrorCategory.CAPABILITY, False, 200),
     ErrorCode.NO_MATCHING_RECORDS: _CodeSpec(ErrorCategory.CAPABILITY, False, 200),

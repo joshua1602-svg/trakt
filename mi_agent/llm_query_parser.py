@@ -1393,6 +1393,26 @@ def _wants_count(q: str) -> bool:
     return bool(_COUNT_INTENT_RE.search(q)) or bool(re.search(r"\bcount\b", q))
 
 
+#: A measure word that DEFAULTS rather than resolves. "Amount" is the reader's
+#: own governed default for the balance, so a question carrying it has named a
+#: money measure even though `_detect_metric` returns nothing for it.
+_DEFAULTED_MEASURE_RE = re.compile(r"\bamounts?\b", re.I)
+
+
+def _counts_a_row_noun(q: str) -> bool:
+    """True when the request's object is a governed ROW NOUN and no measure is
+    named — "show pipeline cases over time", "weekly loans".
+
+    The row-noun vocabulary is `_SHARE_COUNT_RE`'s, not a third copy. A question
+    carrying a money word is never a count: "the amount change on cases that
+    stayed in Application" asks for money about cases, and `amount` is the
+    reader's own governed default for the balance.
+    """
+    if _DEFAULTED_MEASURE_RE.search(q):
+        return False
+    return bool(_SHARE_COUNT_RE.search(q))
+
+
 # Period tokens for cross-period comparison. Only FULL month names and a small
 # set of unambiguous abbreviations are matched (never bare "may"/"mar"/"jun"
 # which are common words), plus explicit relative-period phrases.
@@ -4236,6 +4256,16 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         # week" all resolve to a governed count time-series.
         _defaulted = False
         if _wants_count(q) or agg == "count":
+            metric, agg = None, "count"
+        elif metric is None and _counts_a_row_noun(q):
+            # A TREND OF THINGS IS A COUNT OF THEM. "Show weekly pipeline
+            # cases" named no measure and asked for cases, and this branch
+            # answered with summed BALANCE — money for a question about how
+            # many. The same sentence without the trend word already answers as
+            # a count on the summary path, so the two intents disagreed about
+            # what one object means. `_wants_count` reads the explicit phrases
+            # ("case count", "how many cases"); this reads the bare row noun
+            # standing as the subject, which is the same request said plainly.
             metric, agg = None, "count"
         elif metric is None:
             # THE DEFAULT IS KEPT AND RECORDED. A time series must plot some

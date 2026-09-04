@@ -109,7 +109,17 @@ class TestTheBoundaryOfTheYield(unittest.TestCase):
         envelope = ask(question)
         self.assertEqual(_route_of(envelope), COMPARE)
         self.assertFalse(envelope.get("ok"))
-        self.assertIn("KFI", (envelope.get("answer") or envelope.get("error") or ""))
+        # WHICH reason leads changed on 2026-09-04, when a requested time grain
+        # the series cannot express became a blocking facet. This question
+        # carries TWO true reasons — the route cannot narrow to KFI, and the
+        # pipeline has no monthly series — and the facet guard now refuses
+        # first, so `_enforce_semantic_coverage` stands down by its own rule
+        # ("a refusal is already a refusal"). The BOUNDARY this test exists for
+        # is untouched: the question still reaches `temporal_compare`, and that
+        # route is still not taught to narrow.
+        said = envelope.get("answer") or envelope.get("error") or ""
+        self.assertRegex(said, r"KFI|month")
+        self.assertIn("not substituted a broader figure", said)
 
     def test_a_comparison_with_no_stage_is_untouched(self):
         """The stage route reads nothing here, so nothing yields."""
