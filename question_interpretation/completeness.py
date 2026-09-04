@@ -339,7 +339,12 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
             if any(taken[i:i + size]):
                 continue
             phrase = " ".join(words[i:i + size])
-            hit = CS.value_field(phrase, available_values)
+            # SEMANTICS, so the ledger's reading of a value and the parser's
+            # are the same reading. Fields drawn from one `value_domain` are
+            # aliases; a ledger still counting claimants would report the
+            # concept LOST on a book carrying two region columns while the
+            # parser bound the filter perfectly well.
+            hit = CS.value_field(phrase, available_values, semantics)
             if not hit:
                 continue
             if all(w.lower() in axis_words for w in words[i:i + size]):

@@ -61,7 +61,8 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Iterable, Optional, Tuple
 
-__all__ = ["value_field", "value_spans", "mask_value_spans"]
+__all__ = ["value_field", "preferred_field", "value_spans",
+           "mask_value_spans"]
 
 
 def _normalise(text: Any) -> str:
@@ -111,7 +112,80 @@ _FUNCTION_WORDS = frozenset({
 })
 
 
-def value_field(value: str, available_values: Any) -> Optional[Tuple[str, str]]:
+def _domain_preference(domain: str) -> Tuple[str, ...]:
+    """A declared domain's field order, asked of the owner that already walks it.
+
+    NOTHING about any particular domain is written here: this module holds no
+    vocabulary of its own — a property `test_governed_span_ownership` asserts
+    structurally — and the day it held one would be the day it started
+    disagreeing with the owner it copied from.
+
+    A domain whose owner declares no order resolves nothing: its fields may well
+    be aliases, but nothing governs which of them a reader's term binds to, and
+    choosing anyway is the preference this module refuses to exercise.
+    """
+    if not domain:
+        return ()
+    try:
+        from .llm_query_parser import domain_field_preference
+    except Exception:  # noqa: BLE001 - no owner reachable, no preference
+        return ()
+    try:
+        return tuple(domain_field_preference(domain) or ())
+    except Exception:  # noqa: BLE001 - the same
+        return ()
+
+
+def preferred_field(fields: Iterable[str],
+                    semantics: Any = None) -> Optional[str]:
+    """The ONE governed field a claim belongs to, or ``None`` if it is ambiguous.
+
+    ONE claimant is that claimant. SEVERAL claimants are ambiguous — UNLESS
+    every one of them declares the same ``value_domain``, because fields drawn
+    from one domain are ALIASES of one concept rather than competing concepts.
+
+    Measured, and the reason this exists: `collateral_geography` and
+    `geographic_region_obligor` carry the same region spellings on the live
+    tape. Two claimants, so every region FILTER resolved to nothing and the
+    reader was told ``unknown category: 'london'`` about a region the book
+    plainly holds.
+
+    The protection the ambiguity rule was written for is untouched. "lump sum"
+    claimed by a product field and a geography field spans two domains — a
+    product type bound to geography is exactly the substitution that rule
+    stops — so it stays ambiguous and is disclosed. So does a claim by any
+    field that declares no domain at all: silence is not agreement.
+
+    Published rather than private because the ambiguity rule has TWO consumers.
+    `concept_proposal.vocabulary` decides which values a model may even propose,
+    and if it kept counting claimants itself it would withhold as ambiguous the
+    very term this function resolves.
+    """
+    names = list(dict.fromkeys(str(f) for f in (fields or ())))
+    if not names:
+        return None
+    if len(names) == 1:
+        return names[0]
+    entries = ((semantics or {}).get("fields") or {}) if hasattr(
+        semantics, "get") else {}
+    if not entries:
+        return None
+    domains = {str((entries.get(n) or {}).get("value_domain") or "").strip()
+               for n in names}
+    if len(domains) != 1:
+        return None
+    domain = next(iter(domains))
+    if not domain:
+        return None
+    claimed = set(names)
+    for key in _domain_preference(domain):
+        if key in claimed:
+            return key
+    return None
+
+
+def value_field(value: str, available_values: Any,
+                semantics: Any = None) -> Optional[Tuple[str, str]]:
     """The governed field whose values include ``value`` — ``(field, value)``.
 
     THE FIELD COMES FROM THE VALUE, not from a fixed choice. The categorical
@@ -127,7 +201,11 @@ def value_field(value: str, available_values: Any) -> Optional[Tuple[str, str]]:
     match.
 
     A value two governed fields both claim returns ``None``: an ambiguous
-    narrowing must be disclosed, never resolved by preference.
+    narrowing must be disclosed, never resolved by preference. ``semantics``
+    is what lets that rule tell an ambiguity from an ALIAS — see
+    :func:`preferred_field`. Without it the strict rule stands, so a caller
+    that cannot say which domain a field draws from gets exactly the behaviour
+    it had before this parameter existed.
     """
     if not available_values:
         return None
@@ -147,9 +225,17 @@ def value_field(value: str, available_values: Any) -> Optional[Tuple[str, str]]:
             if _normalise(known) == probe:
                 hits.append((field, spelled))
                 break
-    if len(hits) != 1:
+    if not hits:
         return None
-    return hits[0]
+    if len(hits) == 1:
+        return hits[0]
+    chosen = preferred_field([field for field, _ in hits], semantics)
+    if chosen is None:
+        return None
+    # The PREFERRED field's own spelling of the value. The aliases agree about
+    # the concept; they need not agree about the capitalisation, and the
+    # executor matches case-insensitively either way.
+    return next((hit for hit in hits if hit[0] == chosen), None)
 
 
 def _claimable(available_values: Any, exclude_fields=()) -> Dict[str, str]:

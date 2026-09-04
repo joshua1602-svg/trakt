@@ -3948,10 +3948,28 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 interpretation=r.resolve_interpretation())),
 
         # 9. Cross-period comparison.
+        #
+        #    IT YIELDS A STAGE IN MOTION. This route compares a WHOLE-POPULATION
+        #    metric across two reporting periods; it cannot narrow to a pipeline
+        #    stage, and its receipt says so — "stage — this answer covers the
+        #    whole population". A relative time expression ("in the last month",
+        #    "in the last week") sets `temporal_mode = "compare"`, which was
+        #    enough to claim the question at priority 90, ahead of the stage
+        #    route registered last at 120. Measured: "moved into Offer in the
+        #    last reporting period" ANSWERED, and "moved into Offer stage in the
+        #    last month" — the same analytic — was refused here.
+        #
+        #    The period word was outranking the stage recogniser, so the fix is
+        #    which route claims the question, not what this one can do: nothing
+        #    below learned to narrow, and a question that merely NAMES a stage
+        #    without putting it in motion still arrives here and is still
+        #    refused rather than answered narrowly.
         Recogniser(
             name="temporal_compare", priority=90,
             description="Governed comparison of two reporting periods.",
-            recognise=lambda r: getattr(r.spec, "temporal_mode", None) == "compare",
+            recognise=lambda r: (
+                getattr(r.spec, "temporal_mode", None) == "compare"
+                and not _stage_movement.names_a_stage_movement(r.question)),
             # NO `view=`. The dataset is the question's, and the route asks
             # `workspace.resolve_dataset` for it. Leaving the parameter here
             # would be a live wire back to the tab.

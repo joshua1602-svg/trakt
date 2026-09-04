@@ -232,8 +232,15 @@ def vocabulary(semantics: Dict[str, Any], *, available_values: Any = None,
     for field_key, values in (available_values or {}).items():
         for known in (values.keys() if hasattr(values, "keys") else values):
             claimed.setdefault(_norm(known), set()).add(str(field_key))
+    # WHICH CLAIMS ARE AMBIGUOUS IS THE VALUE OWNER'S QUESTION, not a count
+    # taken here. Counting claimants withheld every region value on a book
+    # carrying two region columns — fields that declare one `value_domain` are
+    # aliases of one concept, and `preferred_field` is the same rule
+    # `value_field` binds by, so a term this offers is a term that binds.
+    from mi_agent.categorical_spans import preferred_field
     for term, fields in claimed.items():
-        (terms if len(fields) == 1 else ambiguous)[KIND_VALUE].add(term)
+        resolved = preferred_field(sorted(fields), semantics)
+        (terms if resolved else ambiguous)[KIND_VALUE].add(term)
 
     # --- dimensions and measures: the registry's maps, then the columns ---- #
     dim_terms = dict(LQ._registry_dimension_terms(semantics))
@@ -360,7 +367,7 @@ def _bind_one(proposal: ProposedConcept, vocab: ConceptVocabulary):
         return RejectedConcept(proposal, REJECT_UNREGISTERED, term)
 
     if kind == KIND_VALUE:
-        hit = CS.value_field(term, vocab.available_values)
+        hit = CS.value_field(term, vocab.available_values, vocab.semantics)
         if hit is None:
             return RejectedConcept(proposal, REJECT_AMBIGUOUS, term)
         return BoundConcept(proposal, hit[0], hit[1],

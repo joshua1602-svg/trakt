@@ -138,3 +138,168 @@ the failure a reader cannot reason about or work around.
   them.
 - `tests/test_business_semantics_registry.py::test_committed_registry_matches_regeneration`
   fails on `main` and predates this work.
+
+---
+
+# Second session, same day — what was done and what remains
+
+Three commits on `claude/mi-query-agent-defects-27s4ys`, one per defect above,
+each with its failing test written first and falsified against the unfixed code.
+
+## 1. The aliased value — FIXED
+
+`categorical_spans.preferred_field` is the rule: several fields that declare one
+`value_domain` are ALIASES of one concept and resolve to the field the GROUPING
+owner already prefers (`llm_query_parser.domain_field_preference`, which returns
+`_REGION_PREFERENCE` for `uk_region`). Hits spanning different domains, and any
+field declaring no domain, stay ambiguous and are disclosed — the "lump sum"
+protection is untouched and is pinned two ways.
+
+`value_field` grew a third parameter, `semantics`. All nine call sites were read
+and pass the registry they already hold; omitting it keeps the strict rule.
+`concept_proposal.vocabulary` was counting claimants itself — a second copy of
+the same rule — and now asks `preferred_field`, or it would have withheld as
+ambiguous the very terms the parser binds.
+
+## 2. The stolen stage question — FIXED
+
+`temporal_compare` yields a sentence carrying a governed stage-movement
+construction (`stage_movement_query.names_a_stage_movement`, the same reading
+its own recogniser uses). It was NOT taught to narrow, and that boundary is
+pinned: "Compare KFI balance this month vs last month" NAMES a stage without
+putting it in motion, still reaches `temporal_compare`, and is still refused.
+
+## 3. The non-determinism — DIAGNOSED, NOT FIXED
+
+See `docs/mi_query_non_determinism.md`. One outbound model call decides it: the
+concept-merge arm reports `proposal_unavailable` on any exception, and
+`_enforce_model_availability` converts an otherwise-successful envelope into the
+language-understanding refusal. The deterministic reading does not vary.
+
+Second finding, on the RECORD: that refusal is coded `CALCULATION_FAILED` /
+`capability` / `retryable: false`, which both the telemetry and `replay_probe`
+count as an ERROR — so a transient model outage is recorded as the system having
+broken, and the code contradicts the sentence ("Please try again"). Fixing it
+needs a governed decision: no existing error code means "an upstream model was
+unavailable; ask again", and code values are part of the external contract.
+
+## THE VERIFICATION THAT COULD NOT BE RUN, AND WHAT WAS RUN INSTEAD
+
+`replay_probe.py --from-log queries.json` **was not run**. Three separate
+blockers, none of them worked around:
+
+* `queries.json` is not in the tree — it is a saved `/ops/mi-queries` response.
+* No `MI_BEARER` was available.
+* This environment's network policy denies `app.traktinfra.io` outright
+  (the proxy answers 403 to CONNECT). The deployed build cannot be reached at
+  all from here.
+
+So the **83/115 baseline was neither reproduced nor beaten, and nothing here
+claims it was.** What was measured instead, all offline, all reproducible from
+this tree:
+
+| measurement | result |
+|---|---|
+| `scripts/run_mi_query_stage_movement_banks.py`, base vs HEAD, per question | **0 of 215 moved** (166-question bank, stage bank 36/36, near-neighbours 13/13) |
+| the same three banks on a LIVE-SHAPED book (second region column added) | **0 of 215 moved** |
+| `migration_phase0/live_shape_probe.py`, base vs HEAD (25 questions) | **10 FIXED, 0 REGRESSED**, 10 unchanged-ok, 5 still failing — all five the must-refuse set |
+| `mi_agent/tests` + `question_interpretation/tests` failure node sets | 28 → 21, no new failure |
+| `mi_agent_api/tests` + 17 routing files in `tests/` | 66 → 48, no new failure |
+
+`must_refuse_both_arms.py` **could not run**: it needs `/tmp/cfo_env`, an
+ephemeral fixture no committed script rebuilds. Its three questions are in
+`live_shape_probe` instead, and all three still refuse.
+
+The full 7,988-test suite does not complete in this environment's window and was
+not run. Every blast claim above is scoped to the files named.
+
+## Newly measured, still open
+
+* **A restriction on the axis being grouped — FIXED.** "Show balance by region
+  for loans in Wales and Scotland." now answers with two rows, and so does the
+  single-region form with one. Three separate things were wrong and each was
+  fixed at its own owner:
+
+  - `_grouping_segments` split EVERY "and" as an axis separator, so the axes
+    read as ["region for loans in wales", "scotland"]. An "and" inside a
+    segment's own qualifier coordinates VALUES. `_AXIS_QUALIFIER_RE` is now the
+    one owner of that boundary, shared with the reader below.
+  - Only the first value bound. The clause splitter leaves a bare " scotland",
+    and a clause that is nothing but a governed value resolved to nothing.
+    `_whole_clause_value` reads it and `_with_value` widens the field's
+    condition to `{"op": "in", ...}` — the shape the executor and the
+    drill-through already use. This also fixed the same loss one axis over:
+    "by broker for loans in Wales and Scotland" bound Wales and dropped
+    Scotland (the gate caught it, so nothing wrong was published).
+  - `_grouped_value_filters` dropped any filter whose field was the grouping
+    dimension. It now keeps one that RESTRICTS the axis, and only when the
+    values are the book's own and are not the axis phrase's own words —
+    "show balance by lump sum" still drops, which is the case that rule exists
+    for.
+  - `execution_receipt._filter_values` could not read a condition dict, so the
+    geographic-scope facet could not see a narrowing the receipt itself had
+    already described as "Region in Wales, Scotland". `not_in`/`ne` are
+    deliberately excluded: their operands are what an answer leaves out.
+
+  The single-value case, recorded yesterday as defensible to refuse, now
+  answers. It is not defensible to refuse it while answering the two-value
+  one, and a reader who wants the figure alone can ask for it directly.
+
+* **The place-resolver fallback — FIXED.** With no value catalogue,
+  `_parse_categorical_filter` bound ANY captured phrase to a region field in
+  title case. The 882-question corpus carried five: `collateral_geography` =
+  'Concentration Versus Limit', 'Equity Release Supermarket Limited' (twice — a
+  BROKER), 'October' (a MONTH) and 'Weighting'. It was invisible until the
+  grouped-filter rule above was narrowed to the case it was written for.
+
+  `region_resolution.looks_like_region_term` — the governed ITL ladder the
+  canonical transformation itself uses, written for exactly this question and
+  called from nowhere — now decides. A term it knows still binds with no
+  catalogue, so every real place keeps working; a term it does not know is
+  recorded as an unresolved narrowing instead, using the SAME note the
+  catalogued ending writes, because a warning would not refuse and removing the
+  invented binding would otherwise have answered over the whole book for the
+  first time.
+
+  No served answer moves: serving always has a frame, so the catalogued ending
+  owns these questions, and all five were checked through the app on base and
+  HEAD — identical. `filter_ownership_trace` goes 119 → 115 of 882, and its
+  assertion in `tests/test_assurance_measurement_failure.py` was updated with
+  the four losses named.
+
+* **The `limit` noun, and the category that went with it — FIXED.** "What is
+  the largest geographic concentration versus limit?" was refused with
+  `unknown category: 'concentration versus limit'`. The question names no
+  category at all: `_CATEGORICAL_FILTER_RE` reads "geographic X" as "the place
+  X", and `_claimed_by_an_owner` — the guard that stops an unclaimed candidate
+  being RECORDED as a category the book lacks — claimed "concentration"
+  (analytical framing) and "versus" (a grouping marker) and not "limit".
+
+  `_RISK_LIMIT_NOUNS` is the risk-limit vocabulary's own nouns, read only by
+  that guard, with every entry asserted to appear in `_RISK_LIMIT_RE` so the two
+  cannot drift. Deliberately NOT added to `_ANALYTICAL_FRAMING_WORDS`, where
+  "limit" reads like kin to "concentration" and "exposure": a word in that set
+  is not metric residue, so "Show the limit by region" would stop refusing with
+  *"'limit' is not a governed measure in this dataset"* and answer with a
+  balance breakdown. That refusal is pinned.
+
+  Removing the refusal exposed a second defect underneath it, fixed with it
+  because the first makes it reachable: `_RISK_LIMIT_RE` never matches this
+  sentence, so the ANALYTICAL INTENT BOUNDARY claims it — and the boundary set
+  `risk_limit_query` while leaving `risk_limit_category` open. The route
+  answered every limit category: *"5 passed … Nearest to limit: Top 3 brokers"*
+  for a question about geography. The boundary now settles the category from the
+  parser's own reader (`llm_query_parser.risk_limit_category`), never
+  overriding a settled parse, and the answer is scoped: *"geographic
+  concentration: 2 passed, 0 warning(s), 2 breach(es) … Nearest to limit:
+  Scotland"*. `_route_risk` already narrowed to the category and already
+  refuses honestly when one has no configured tests; nothing there changed.
+
+* **Two grouping axes are fine, and are pinned so this is not re-opened.**
+  "Balance by region by broker" answers as a 5x3 heatmap — either order, and
+  with "and" as well as a second "by". Measured on the base commit too, so it
+  never depended on any of this work.
+* **`mi_agent_api/tests` is order-dependent elsewhere too.** Several modules set
+  and pop `MI_AGENT_PIPELINE_ROOT` globally in setUp/tearDown.
+  `test_stage_movement_query` was fixed by re-asserting its environment per ask
+  (15 nodes recovered); the same pattern is still live in its neighbours.

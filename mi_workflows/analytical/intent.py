@@ -882,10 +882,16 @@ def _spec_risk_limit(spec: Any) -> bool:
 #: Nothing analytical is decided by this — it is routing, and only ever toward a
 #: capability that already exists.
 FLAG_RISK_LIMIT = "risk_limit_query"
+#: The category that flag is SCOPED to, settled from the parser's own reader.
+#: `_route_risk` already narrows to it and already refuses honestly when a
+#: category has no configured tests; leaving it open made the route answer every
+#: category for a question that named one.
+FLAG_RISK_LIMIT_CATEGORY = "risk_limit_category"
 FLAG_FORECAST_MODE = "forecast_mode"
 
 
-def governed_flags(reading: AnalyticalIntent, spec: Any) -> Dict[str, Any]:
+def governed_flags(reading: AnalyticalIntent, spec: Any,
+                   question: Optional[str] = None) -> Dict[str, Any]:
     """Governed intent flags the boundary can settle that the parser did not.
 
     The measured failure this exists for: *"Which concentration limits have the
@@ -912,6 +918,25 @@ def governed_flags(reading: AnalyticalIntent, spec: Any) -> Dict[str, Any]:
     if (FAMILY_LIMITS_CONCENTRATION in reading.families
             and not getattr(spec, FLAG_RISK_LIMIT, False)):
         flags[FLAG_RISK_LIMIT] = True
+
+    # AND THE CATEGORY THE QUESTION NAMED, if it named one and the parse left it
+    # open. Measured: "What is the largest geographic concentration versus
+    # limit?" is claimed HERE — `_RISK_LIMIT_RE` never matches it — and reached
+    # `_route_risk` with no category, which answered "5 passed … Nearest to
+    # limit: Top 3 brokers" for a question about geography. Handing over the
+    # flag without its scope hands over a wider question than the reader asked.
+    #
+    # The reader is the parser's own, so nothing here decides what a category
+    # is; and it never overrides a category a parse already settled.
+    if (FAMILY_LIMITS_CONCENTRATION in reading.families and question
+            and getattr(spec, FLAG_RISK_LIMIT_CATEGORY, None) is None):
+        try:
+            from mi_agent.llm_query_parser import risk_limit_category
+            category = risk_limit_category(question)
+        except Exception:  # noqa: BLE001 - no reader, no scope; the flag stands
+            category = None
+        if category:
+            flags[FLAG_RISK_LIMIT_CATEGORY] = category
 
     # Deliberately narrow: only a PIPELINE run rate. `forecast_extrapolation`
     # computes the COMPLETION run rate — the flow of cases out of the pipeline
@@ -1014,7 +1039,7 @@ def settle(question: Optional[str], spec: Any) -> Tuple[AnalyticalIntent, Dict[s
     if not reading.recognised or spec is None:
         return reading, {}
     applied: Dict[str, Any] = {}
-    for name, value in governed_flags(reading, spec).items():
+    for name, value in governed_flags(reading, spec, question).items():
         try:
             setattr(spec, name, value)
         except Exception:  # noqa: BLE001 - a spec that will not take a flag is

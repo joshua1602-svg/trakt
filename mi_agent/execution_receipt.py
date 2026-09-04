@@ -2005,14 +2005,36 @@ def _applied_filter_phrases(spec, semantics: dict, narrowed: bool) -> List[str]:
     return [describe_filter(k, v, semantics) for k, v in filters.items()]
 
 
+#: Operators whose operand is a value the answer WAS narrowed TO. `not_in` and
+#: `ne` are deliberately absent: their operands are what the answer excludes,
+#: and reporting those as the scope applied would tell a reader the figure
+#: covers exactly the population it leaves out.
+_INCLUSIVE_OPS = frozenset({"", "eq", "equals", "equal_to", "is", "in", "one_of"})
+
+
 def _filter_values(spec) -> List[str]:
     """Lowercased scalar values of every applied filter, for scope matching."""
     out: List[str] = []
-    for value in (getattr(spec, "filters", None) or {}).values():
+
+    def _add(value: Any) -> None:
         if isinstance(value, str):
             out.append(value.strip().lower())
         elif isinstance(value, (list, tuple, set)):
             out.extend(str(v).strip().lower() for v in value)
+
+    for value in (getattr(spec, "filters", None) or {}).values():
+        # A CONDITION IS A SHAPE THIS HAS TO READ, not only a bare value.
+        # "in Wales and Scotland" binds `{"op": "in", "value": [...]}` — the
+        # same shape the drill-through has always used — and reading only the
+        # bare forms left the geographic-scope facet unable to see a narrowing
+        # the executor had performed and the receipt had already described as
+        # "Region in Wales, Scotland". The answer was refused for losing a
+        # scope it was applying.
+        if isinstance(value, dict):
+            if str(value.get("op", "")).strip().lower() in _INCLUSIVE_OPS:
+                _add(value.get("value"))
+            continue
+        _add(value)
     return out
 
 
