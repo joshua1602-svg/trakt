@@ -217,16 +217,27 @@ class MergeResult:
 #: is the field the target concerns wherever the contract names no other.
 _TARGET_MEASURE_DEFAULT = "current_outstanding_balance"
 
-#: Aggregations that report ONE POPULATION AS A SHARE OF ANOTHER and therefore
-#: have no grouping axis to give a concept. From the spec's own vocabulary:
-#: "share — a filtered population expressed as a share of the whole book.
-#: Distinct from the aggregations above because it needs TWO populations."
+#: Aggregations with NO GROUPING AXIS to give a concept.
 #:
-#: Measured before it was relied on: across 1,612 deterministically parsed
-#: questions, `aggregation="share"` occurs 11 times and carries a dimension in
-#: NONE of them. The deterministic parser never builds this shape; this stops
-#: the merge building it either.
-_AGGREGATIONS_WITHOUT_AN_AXIS: Tuple[str, ...] = ("share",)
+#: `share` reports ONE POPULATION AS A SHARE OF ANOTHER. From the spec's own
+#: vocabulary: "share — a filtered population expressed as a share of the whole
+#: book. Distinct from the aggregations above because it needs TWO populations."
+#:
+#: `loan_level` reports ROWS. A loan-level table has no group columns at all, so
+#: an axis on that contract is one the executor can neither apply nor reject.
+#: Added after the 115-question replay of the deployed build caught it: "Where
+#: was the greatest pipeline attrition?" parses as a loan-level ranking with no
+#: dimension, the arm proposed `pipeline stage`, `_apply_to_spec` filled the
+#: empty slot, and the answer a reader had was replaced by "parsed dimension(s)
+#: neither applied nor rejected: pipeline_stage". The invariant was right; the
+#: axis should never have reached the contract.
+#:
+#: Both are held to the same measured bar — the deterministic parser never
+#: builds either shape, so this stops the merge building what the parser will
+#: not. Across the 882-question corpus: `loan_level` is parsed 29 times and
+#: carries a dimension in NONE of them, `share` 5 times and NONE. (The `share`
+#: figure was 11 of 1,612 when it was first measured, on the wider corpus.)
+_AGGREGATIONS_WITHOUT_AN_AXIS: Tuple[str, ...] = ("share", "loan_level")
 
 
 @dataclass(frozen=True)

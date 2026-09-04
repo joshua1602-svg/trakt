@@ -213,6 +213,42 @@ ephemeral fixture no committed script rebuilds. Its three questions are in
 The full 7,988-test suite does not complete in this environment's window and was
 not run. Every blast claim above is scoped to the files named.
 
+## The replay, against the deployed build (2026-09-04)
+
+PR #398 merged and deployed (`deploy-mi-api.yml` is `workflow_dispatch` only —
+merging does NOT ship the MI API), then `replay_probe.py` re-run over SSH
+against the 115-question telemetry corpus:
+
+| | baseline | after |
+|---|---|---|
+| answered | 83 / 115 | **87 / 115** |
+| regressed | 2 | **1** |
+| still failing | 30 | 27 |
+
+FIXED 8, UNCHANGED_OK 77, WAS_MIXED 2. `pipeline_stage_movement` answered 49 of
+49. No model calls occurred on any question (`metadata.llm` shows `calls: 0`
+wherever it appears), and every parse was `deterministic`.
+
+**The one regression was not the diff, and is now fixed.** "Where was the
+greatest pipeline attrition?" came back *"parsed dimension(s) neither applied
+nor rejected: pipeline_stage"*. The parse did not move — the same question at
+both commits over 48 column/value combinations gives byte-identical specs, and
+neither builds that shape. The CONCEPT-MERGE ARM proposed `pipeline stage` as a
+dimension and `_apply_to_spec` filled the empty slot on a **loan-level** spec,
+which has no group columns for an axis to land in. Reproduced with the arm
+stubbed, offline.
+
+`OperationProfile.accepts_grouping_axis` was already the rule and
+`_AGGREGATIONS_WITHOUT_AN_AXIS` was one entry short: `loan_level` now sits
+beside `share`, held to the same measured bar — across the 882-question corpus
+the deterministic parser builds `loan_level` 29 times and carries a dimension in
+NONE of them.
+
+**So the arm IS live in production**, and this is its second measured instance of
+changing what an answer is rather than whether there is one — the first being
+the language-understanding refusal in `docs/mi_query_non_determinism.md`. Worth
+deciding deliberately whether it should be on at all.
+
 ## Newly measured, still open
 
 * **A restriction on the axis being grouped — FIXED.** "Show balance by region
