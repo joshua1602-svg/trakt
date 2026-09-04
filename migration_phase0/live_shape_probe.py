@@ -59,12 +59,21 @@ QUESTIONS: Tuple[Tuple[str, str], ...] = (
     ("region_filter", "What is the total balance in Wales?"),
     ("region_filter", "What is the average LTV in Scotland?"),
     ("region_filter", "How many loans are in the South East?"),
-    # KNOWN OPEN, and recorded so it is not mistaken for one of the above: when
-    # the grouping AXIS and the filter are the SAME field, the filter is
-    # dropped. Reproduces on a ONE-column book too, so it is not the aliasing
-    # defect and was not introduced with its fix.
-    ("region_filter_on_the_grouped_axis",
+    # A RESTRICTION ON THE AXIS BEING GROUPED. The filter is dropped and the
+    # coverage gate then refuses, naming what was not applied. Reproduces on a
+    # ONE-column book, so it is neither the aliasing defect nor introduced with
+    # its fix.
+    #
+    # The two are NOT the same finding and are kept apart on purpose. Grouping
+    # by region and restricting to ONE region is a degenerate request — the
+    # answer is a single row, the reader could have asked for the figure
+    # directly, and refusing with a disclosure is a defensible reading of it.
+    # Restricting to SEVERAL is an ordinary question with no other phrasing,
+    # and refusing it is a gap rather than a judgement.
+    ("axis_restricted_to_one_value_degenerate",
      "Show balance by region for loans in Wales."),
+    ("axis_restricted_to_several_values",
+     "Show balance by region for loans in Wales and Scotland."),
     # One analytic, several phrasings. The first answered before the routing
     # precedence was fixed; the rest were claimed by `temporal_compare`.
     ("stage_movement", "How many loans moved into Offer in the last reporting period?"),
@@ -79,6 +88,11 @@ QUESTIONS: Tuple[Tuple[str, str], ...] = (
     ("control", "Which region has the largest balance?"),
     ("control", "Balance by region for loans with LTV above 50%."),
     ("control", "How many lump sum loans do we have?"),
+    # TWO GROUPING AXES. Measured because the line above could be misread as
+    # "region and another dimension together do not work": they do, as a
+    # heatmap, in either order and with "and" as well as a second "by".
+    ("control", "Balance by region by broker"),
+    ("control", "Show me balance by broker and region"),
     # Refuses today, and must keep refusing. The last three are the estate's
     # must-refuse three; "Atlantis" is a place the book has no exposure to, and
     # the stage NAMED without being put in motion is the boundary of the

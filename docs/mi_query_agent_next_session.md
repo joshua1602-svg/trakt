@@ -215,13 +215,29 @@ not run. Every blast claim above is scoped to the files named.
 
 ## Newly measured, still open
 
-* **A filter on the field being grouped is dropped.** "Show balance by region
-  for loans in Wales." groups on region and applies NO filter; the coverage gate
-  then refuses, naming Wales. It reproduces on a ONE-column book, so it is not
-  the aliasing defect and was not introduced with its fix. "Show balance by
-  broker for loans in Wales." binds the filter correctly, so the collision is
-  specifically axis-field == filter-field. Carried in `live_shape_probe` as
-  `region_filter_on_the_grouped_axis`.
+* **A restriction on the axis being grouped is dropped** — and only ONE of its
+  two shapes is worth calling a defect. Grouping on region and filtering on
+  region binds no filter; the coverage gate then refuses, naming what was not
+  applied and stating it has not substituted a broader figure. It reproduces on
+  a ONE-column book, so it is neither the aliasing defect nor introduced with
+  its fix, and "Show balance by broker for loans in Wales." binds correctly —
+  the collision is specifically axis-field == filter-field.
+
+  - "Show balance by region for loans in Wales." is DEGENERATE: one row, and
+    the reader could have asked "what is the balance in Wales" — which now
+    answers. Refusing with a disclosure is a defensible reading, and this is
+    recorded rather than filed as a defect.
+  - "Show balance by region for loans in Wales and Scotland." is the one that
+    matters. A two-region breakdown is an ordinary question with no other
+    phrasing available, and it refuses. That is the gap; the single-value case
+    is not the argument for fixing it.
+
+  Both carried in `live_shape_probe`, under names that keep them apart.
+
+* **Two grouping axes are fine, and are pinned so this is not re-opened.**
+  "Balance by region by broker" answers as a 5x3 heatmap — either order, and
+  with "and" as well as a second "by". Measured on the base commit too, so it
+  never depended on any of this work.
 * **`mi_agent_api/tests` is order-dependent elsewhere too.** Several modules set
   and pop `MI_AGENT_PIPELINE_ROOT` globally in setUp/tearDown.
   `test_stage_movement_query` was fixed by re-asserting its environment per ask
