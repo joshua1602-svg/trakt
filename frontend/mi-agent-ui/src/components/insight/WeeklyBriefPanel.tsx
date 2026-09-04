@@ -185,7 +185,7 @@ export function WeeklyBriefPanel({
 
   return (
     <section data-testid="weekly-brief"
-      className="mx-6 mt-5 rounded-2xl border border-[var(--color-line)] bg-navy-900/30 p-4">
+      className="mx-6 mt-5 rounded-2xl border border-[var(--color-line)] bg-[var(--surface-brief)] p-4">
       <header className="mb-2 flex items-baseline justify-between gap-3">
         <h3 className="text-[13px] font-semibold text-ink-100">Weekly Portfolio Brief</h3>
         <div className="flex items-center gap-3">

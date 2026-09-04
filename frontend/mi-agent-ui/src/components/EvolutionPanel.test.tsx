@@ -60,13 +60,24 @@ function client(over: Partial<AgentClient> = {}): AgentClient {
 }
 
 describe("EvolutionPanel", () => {
-  it("renders the funded evolution charts with source/coverage footers", async () => {
+  it("renders the funded evolution charts", async () => {
     render(<EvolutionPanel client={client()} portfolioId="client_001/mi_2025_11" />);
     expect(await screen.findByText("Funded balance by month")).toBeInTheDocument();
     expect(screen.getByText("Funded loan count by month")).toBeInTheDocument();
     expect(screen.getByText("WA LTV by month")).toBeInTheDocument();
-    // Every chart carries a per-period reconciliation/coverage footer.
-    expect(screen.getAllByText(/Coverage: 100%/).length).toBeGreaterThan(0);
+  });
+
+  // CHANGED DELIBERATELY. Every chart used to carry its own
+  // "Source: ... · As of: ... · Coverage: 100% (per-period reconciliation)"
+  // footer — governance detail an operator does not need on every screen,
+  // for every chart, every time (the client pays to have the business run,
+  // not to read data lineage unless they ask for it). Removed as clutter.
+  it("no longer prints a source/coverage footer under every chart", async () => {
+    render(<EvolutionPanel client={client()} portfolioId="client_001/mi_2025_11" />);
+    await screen.findByText("Funded balance by month");
+    expect(screen.queryByText(/Coverage: 100%/)).toBeNull();
+    expect(screen.queryByText(/^Source:/)).toBeNull();
+    expect(screen.queryByText(/^As of:/)).toBeNull();
   });
 
   it("switches to the pipeline series (amount + by stage over time)", async () => {

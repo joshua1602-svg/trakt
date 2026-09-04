@@ -95,7 +95,7 @@ export function AgentChatPanel({
     return (
       <aside
         data-surface="ai-chat"
-        className="flex h-full w-12 shrink-0 flex-col items-center border-r border-teal-800/30 bg-gradient-to-b from-teal-950/40 to-navy-950/60 py-3"
+        className="flex h-full w-12 shrink-0 flex-col items-center border-r border-teal-800/30 bg-[var(--surface-chat)] py-3"
       >
         <button
           type="button"
@@ -123,13 +123,23 @@ export function AgentChatPanel({
   return (
     <aside
       data-surface="ai-chat"
-      className="flex h-full w-[380px] shrink-0 flex-col border-r border-teal-800/30 bg-gradient-to-b from-teal-950/40 to-navy-950/60 xl:w-[460px]"
+      className="flex h-full w-[380px] shrink-0 flex-col border-r border-teal-800/30 bg-[var(--surface-chat)] xl:w-[460px]"
     >
-      <header className="flex items-center gap-2.5 border-b border-teal-800/30 bg-teal-950/30 px-5 py-3.5">
+      {/* One flat fill for the whole window (the base colour requested),
+          matching how Core Dashboard and Artifact Workspace hold a single
+          surface colour with a border-only header — not a separate header
+          tint on top of a gradient. */}
+      <header className="flex items-center gap-2.5 border-b border-teal-800/30 px-5 py-3.5">
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40">
           <Sparkles size={18} />
         </div>
         <h1 className="text-base font-semibold text-teal-50">MI Agent</h1>
+        <span
+          className="inline-flex items-center rounded-full border border-teal-700/40 bg-teal-800/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-teal-200/80"
+          title="In active development — behaviour and answers may still change"
+        >
+          Beta
+        </span>
         <span
           className={cn(
             "ml-auto inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
@@ -247,7 +257,7 @@ export function AgentChatPanel({
               }
             }}
             rows={2}
-            placeholder="Ask about balances, concentration, pipeline, static pools or validation…"
+            placeholder="Ask me about your portfolio…"
             className="w-full resize-none bg-transparent px-3.5 py-2.5 text-[13px] text-ink-100 placeholder:text-ink-500 focus:outline-none"
           />
           <div className="flex items-center justify-between px-3 pb-2.5">

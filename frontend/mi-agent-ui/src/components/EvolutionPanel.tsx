@@ -106,20 +106,24 @@ export function pipelineXValue(
   return p.week ?? p.extract_date ?? p.period;
 }
 
-/** A single labelled line chart over periods, with a source/coverage footer.
+/** A single labelled line chart over periods.
  *
  * `memo`'d: Recharts re-measures and re-renders the whole SVG on every parent
  * render, and the evolution views render several of these at once. With stable
  * props (the series are `useMemo`'d by the caller) a parent re-render caused by
  * an unrelated toggle no longer redraws every chart. */
 export const EvoLineChart = memo(function EvoLineChart({
-  title, data, lines, valueFormat = "gbp", source, asOf,
+  title, data, lines, valueFormat = "gbp",
   tooltipContent, onActivePoint, onPointClick,
 }: {
   title: string;
   data: Array<Record<string, number | string | null>>;
   lines: { key: string; label: string }[];
   valueFormat?: "gbp" | "count" | "pct" | "pct_points";
+  /** Kept for callers built against the source/as-of/coverage footer this
+   * card used to render. It was removed as clutter — every chart's data
+   * governance is one click away in the workspace, not printed under every
+   * chart on every screen — so these are accepted and ignored. */
   source?: string | null;
   asOf?: string | null;
   /** OPTIONAL (Phase 2A): replaces the tooltip BODY only. Absent on every
@@ -179,11 +183,6 @@ export const EvoLineChart = memo(function EvoLineChart({
           </ResponsiveContainer>
         </div>
       )}
-      <div className="mt-2 flex flex-wrap gap-x-4 text-[10px] text-ink-500">
-        {source && <span>Source: {source}</span>}
-        {asOf && <span>As of: {asOf}</span>}
-        <span>Coverage: 100% (per-period reconciliation)</span>
-      </div>
     </div>
   );
 });
@@ -801,7 +800,7 @@ function CohortView({ client, portfolioId, portfolioContext }: {
 /**
  * Evolution view — funded / pipeline / forecast metrics over time. Reads the
  * governed monthly funded runs and weekly pipeline extracts via the evolution
- * endpoints; every chart carries source lineage + per-period reconciliation.
+ * endpoints.
  */
 const ALL_EVO_TABS: EvoView[] = ["funded", "pipeline", "origination", "cohorts", "forecast"];
 

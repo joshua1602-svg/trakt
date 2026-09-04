@@ -56,17 +56,29 @@
   --color-line: #262f52; /* default: panel + control edges */
   --color-line-strong: #38436f; /* structural: column headers, tier-1 rail */
 
-  /* Region surfaces (A — clear UI division). Core dashboard reads as a neutral
-     panel; the artifact workspace + agent chat carry a faint blue-grey tint so
-     the three working areas are visually distinct without over-saturated navy. */
-  --surface-dashboard: #0f1328; /* neutral, near-black panel */
+  /* Region surfaces (A — clear UI division), derived from one anchor —
+     Petroleum Blue — by tinting it toward white (a lighter region) or
+     shading it toward black (a darker one). Each step is a plain white/black
+     mix at a stated percentage, so the ladder is reproducible from the one
+     anchor value:
+       app ground        Petroleum Blue,     0%
+       MI Agent           -15% (shade 15% toward black)
+       Core Dashboard     +15% (tint 15% toward white)
+       Artifact Workspace +30%
+       Portfolio Brief    +45%
+     Borders, accent rails and tints below are UNCHANGED — only the fill each
+     region sits on moved. Text and chart colours are untouched everywhere;
+     see the accessibility note where each derived surface is consumed. */
+  --color-app-ground: #123b47; /* Petroleum Blue — the main page background */
+  --surface-dashboard: #365863; /* Petroleum Blue +15% white */
   --surface-dashboard-line: #283154;
-  --surface-artifact: #1f222c; /* restrained neutral grey (distinct from the navy dashboard + teal chat) */
+  --surface-artifact: #59767e; /* Petroleum Blue +30% white */
   --surface-artifact-tint: rgba(150, 155, 170, 0.05);
   --surface-artifact-line: #343845;
   --surface-artifact-accent: #656b7a; /* neutral grey accent rail */
-  --surface-chat: #101731; /* faint blue-grey, chat column */
+  --surface-chat: #0f323c; /* Petroleum Blue -15% white (shaded toward black) */
   --surface-chat-line: #243059;
+  --surface-brief: #7d939a; /* Petroleum Blue +45% white */
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
@@ -122,12 +134,16 @@ body,
 
 body {
   margin: 0;
+  /* The page ground is Petroleum Blue itself; the decorative glow above it
+     is unchanged. --color-navy-950 stays the page-ground colour everywhere
+     ELSE it is used (tooltips, overlays, chrome) — only the actual page
+     background moved, to the dedicated --color-app-ground token. */
   background: radial-gradient(
       1200px 600px at 80% -10%,
       rgba(145, 157, 209, 0.07),
       transparent 60%
     ),
-    var(--color-navy-950);
+    var(--color-app-ground);
   color: var(--color-ink-200);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
