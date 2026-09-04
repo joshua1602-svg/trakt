@@ -121,3 +121,42 @@ def test_the_probe_carries_it_into_the_bank_evidence():
     from migration_phase0.replay_probe import _META_KEYS
 
     assert "modelUsage" in _META_KEYS
+
+
+def test_the_probe_keeps_the_call_counts_and_the_cost():
+    """CARRYING THE BLOCK IS NOT CARRYING THE NUMBERS.
+
+    `replay_probe._safe` drops every number whose key is not allow-listed, so
+    adding `modelUsage` to `_META_KEYS` was half a fix: a live replay row came
+    back as
+
+        {'models': ['claude-opus-5'], 'input_tokens': 22, 'output_tokens': 138,
+         'cache_read_tokens': 2262, 'cache_write_tokens': 0}
+
+    — the token counts survived, because the parser block already used those
+    key names, and the three CALL COUNTS and the cost were silently removed.
+    Those counts are the whole point: they are what says a model touched the
+    answer.
+    """
+    from migration_phase0.replay_probe import _NUMERIC_OK, _safe
+
+    for key in ("free_form_parser_calls", "concept_merge_calls",
+                "total_model_calls", "estimated_total_cost"):
+        assert key in _NUMERIC_OK, key
+
+    block = _model_usage(LIVE_PARSER, LIVE_ARM)
+    kept = _safe(block, "modelUsage")
+    assert kept["concept_merge_calls"] == 1
+    assert kept["total_model_calls"] == 1
+    assert kept["models"] == ["claude-opus-5"]
+    assert round(kept["estimated_total_cost"], 6) == 0.006092
+
+
+def test_a_zero_call_count_survives_rather_than_vanishing():
+    """`free_form_parser_calls: 0` is the fact that misled the diagnosis. A
+    digest that drops it because it is falsy would reproduce the original
+    ambiguity in the bank evidence."""
+    from migration_phase0.replay_probe import _safe
+
+    kept = _safe(_model_usage(LIVE_PARSER, LIVE_ARM), "modelUsage")
+    assert kept["free_form_parser_calls"] == 0
