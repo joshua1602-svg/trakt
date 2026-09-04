@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import type { ScenarioArtifact } from "@/domain";
 import { THEME } from "@/lib/theme";
-import { formatGBP } from "@/lib/utils";
+import { formatAxisValue, formatGBP } from "@/lib/utils";
 
 const AXIS = "#6b7493";
 const GRID = "#1c2440";
@@ -38,8 +38,10 @@ export function ScenarioArtifactView({ artifact }: { artifact: ScenarioArtifact 
         <ComposedChart data={artifact.projection} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="year" tick={tick} axisLine={{ stroke: GRID }} tickLine={false} tickFormatter={(v) => `Y${v}`} />
-          <YAxis yAxisId="left" tick={tick} axisLine={false} tickLine={false} width={52} tickFormatter={(v) => `£${v}`} />
-          <YAxis yAxisId="right" orientation="right" tick={tick} axisLine={false} tickLine={false} width={40} tickFormatter={(v) => `${v}%`} />
+          <YAxis yAxisId="left" tick={tick} axisLine={false} tickLine={false} width={52}
+            tickFormatter={(v) => formatAxisValue(v, "gbp")} />
+          <YAxis yAxisId="right" orientation="right" tick={tick} axisLine={false} tickLine={false} width={40}
+            tickFormatter={(v) => formatAxisValue(v, "pct", { scale: "percent_points" })} />
           <Tooltip
             cursor={{ fill: "rgba(145,157,209,0.06)" }}
             content={({ active, payload, label }) => {

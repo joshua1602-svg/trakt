@@ -133,13 +133,21 @@ export function AgentChatPanel({
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40">
           <Sparkles size={18} />
         </div>
-        <h1 className="text-base font-semibold text-teal-50">MI Agent</h1>
-        <span
-          className="inline-flex items-center rounded-full border border-teal-700/40 bg-teal-800/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-teal-200/80"
-          title="In active development — behaviour and answers may still change"
-        >
-          Beta
-        </span>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-base font-semibold leading-none text-teal-50">MI Agent</h1>
+          {/* Dark-navy tile fill (the same surface the dashboard's own KPI
+              tiles sit on) so it reads as a distinct chip against the chat
+              header's translucent teal, rather than blending into it.
+              `leading-none` on both this and the title above removes the
+              line-height padding that put them off-centre against each
+              other in a plain `items-center` row. */}
+          <span
+            className="inline-flex items-center self-center rounded-full border border-[var(--color-line-strong)] bg-navy-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-wider text-peri-300"
+            title="In active development — behaviour and answers may still change"
+          >
+            Beta
+          </span>
+        </div>
         <span
           className={cn(
             "ml-auto inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
@@ -193,11 +201,6 @@ export function AgentChatPanel({
           />
         ))}
 
-        {messages.length <= 1 && (
-          <div className="pt-1">
-            <PromptSuggestions onPick={onSubmit} />
-          </div>
-        )}
       </div>
 
       {contextSummary(context) && (composerFocused || looksLikeFollowUp(input, context)) && (
