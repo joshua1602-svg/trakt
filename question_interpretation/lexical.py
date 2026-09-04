@@ -225,15 +225,71 @@ COMPARATORS: Tuple[str, ...] = (
 #: and 60" is a predicate, while "between" before it is not a bound on it.
 COMPARATORS_AFTER_ONLY: Tuple[str, ...] = ("between",)
 
+# --------------------------------------------------------------------------- #
+# POSTFIX COMPARATORS — the number comes FIRST
+# --------------------------------------------------------------------------- #
+# "70+", "85 or older", "7% or more", "£200k or above". Everything above is a
+# PREFIX comparator, where the operator precedes the number, and until now that
+# was the only form any predicate test knew. The parser carried its own private
+# postfix patterns; `is_filter_subject` carried a bare `\d+%` / `\d+\+`
+# approximation of them; and the two disagreed about the same sentence:
+#
+#     "the balance of loans with an interest rate above 7%"
+#         → "interest rate" is a filter subject → one measure, one filter ✓
+#     "the balance of loans with an interest rate of 7% or more"
+#         → "interest rate" is not → TWO measures, and the filter is dropped
+#           because the multi-measure path masks the measure spans first ✗
+#
+# which is F032/P030 in the atomic-perimeter bank: an explicit count request
+# answered with the weighted-average rate over the whole book. The direction
+# words live here, with the prefix comparators, so a predicate is a predicate on
+# both sides of its number and there is one place to add to.
+#:
+#: `or more` / `and over`. Read by the parser to build its `ge` pattern.
+POSTFIX_GE: Tuple[str, ...] = ("above", "over", "older", "more", "greater")
+#: `or less` / `and under`.
+POSTFIX_LE: Tuple[str, ...] = ("below", "under", "younger", "less", "fewer")
+#: The direction words `and` may introduce. "85 and over" is a bound; "rate and
+#: more" is not English, so the set is deliberately smaller than `or`'s.
+POSTFIX_AND_GE: Tuple[str, ...] = ("above", "over", "older")
+POSTFIX_AND_LE: Tuple[str, ...] = ("below", "under", "younger")
+
+
+def postfix_operator_alternation(direction: Optional[str] = None) -> str:
+    """The regex fragment for a postfix operator, WITHOUT its number.
+
+    ``direction`` is ``"ge"``, ``"le"``, or None for either — the subject test
+    only needs to know that a bound follows, not which way it points.
+    """
+    if direction == "ge":
+        alt_or, alt_and = POSTFIX_GE, POSTFIX_AND_GE
+    elif direction == "le":
+        alt_or, alt_and = POSTFIX_LE, POSTFIX_AND_LE
+    else:
+        alt_or = POSTFIX_GE + POSTFIX_LE
+        alt_and = POSTFIX_AND_GE + POSTFIX_AND_LE
+    return (r"(?:\+|\bor (?:" + "|".join(alt_or) + r")\b"
+            r"|\band (?:" + "|".join(alt_and) + r")\b)")
+
 #: Filler that can sit between a measure word and its comparator
 #: ("LTV of more than 40%", "balance is above £100k").
 _FILTER_FILLER = r"(?:of|is|are|that is|which is|at|with|having)?"
+
+#: A number as the predicate's own words, for the POSTFIX form. Deliberately
+#: looser than the parser's `_VALUE` — this test only asks whether a bound
+#: follows the measure word, and the parser is what extracts it.
+_POSTFIX_NUMBER = r"(?:£|\$|€)?\s*\d[\d,]*(?:\.\d+)?\s*(?:k|m|bn|b)?\s*%?"
 
 _FILTER_AFTER_RE = re.compile(
     r"^\s*" + _FILTER_FILLER + r"\s*(?:[<>]=?|=)|"
     r"^\s*" + _FILTER_FILLER + r"\s*\b(?:"
     + "|".join(COMPARATORS + COMPARATORS_AFTER_ONLY) + r")\b|"
-    r"^\s*\d[\d,.]*\s*(?:%|\+)", re.I)
+    r"^\s*\d[\d,.]*\s*(?:%|\+)|"
+    # THE POSTFIX FORM. "…rate of 7% or more" is the same predicate as
+    # "…rate above 7%", and reading only the second made the first a second
+    # requested MEASURE — see POSTFIX_GE above.
+    r"^\s*" + _FILTER_FILLER + r"\s*" + _POSTFIX_NUMBER
+    + r"\s*(?:years?|yrs?)?\s*" + postfix_operator_alternation(), re.I)
 
 _FILTER_BEFORE_RE = re.compile(
     r"\b(?:" + "|".join(COMPARATORS) + r"|[<>]=?)"

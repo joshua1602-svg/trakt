@@ -3082,11 +3082,43 @@ def _borrower_structure_filter(q: str, semantics: dict, available_columns=None
 
 
 # Postfix comparators where the NUMBER precedes the operator, e.g. "70+",
-# "aged 70 or above", "75 or older", "60 or below". (Prefix comparators in
-# _FILTER_COMPARATORS cover "above 70", "between 20 and 40", etc.)
+# "aged 70 or above", "75 or older", "60 or below", "7% or more", "£200k or
+# more". (Prefix comparators in _FILTER_COMPARATORS cover "above 70",
+# "between 20 and 40", etc.)
+#
+# THE NUMBER IS `_VALUE`, NOT A SECOND OPINION ABOUT NUMBERS. These patterns
+# carried their own grammar — bare digits, with `years?` hard-coded as the only
+# unit a number could wear — while the prefix comparators read the governed
+# `_VALUE`. So every postfix bound on a rate or on money was invisible:
+#
+#     "7 or more"     → ge 7          "7% or more"   → NOTHING
+#     "200000 or more" → ge 200000    "£200k or more" → NOTHING
+#
+# and invisible is not the same as refused. The facet guard declines a requested
+# facet that could not be applied; nothing here recorded a request, so the
+# parser fell through to the weighted-average rate and answered the whole book
+# — F032 and P030 in the atomic-perimeter bank, and the reason the age theme
+# (which this grammar WAS written for) scored 20/20 beside them.
+#
+# `_VALUE` captures (number, multiplier), so both groups are read through
+# `_amount()` — the one coercion that strips thousands commas and applies
+# k/m/bn. Percent scale is not converted here: the executor owns that, against
+# the column's own storage scale, and is the estate's single source of truth
+# for it.
+# THE DIRECTION WORDS COME FROM `question_interpretation.lexical`, which owns
+# the comparator vocabulary and is where `is_filter_subject` reads them too — so
+# a phrase this module extracts as a bound is a phrase the receipt layer agrees
+# is a bound, on the same words.
+def _postfix_pattern(direction: str) -> str:
+    from question_interpretation.lexical import postfix_operator_alternation
+
+    return (_VALUE + r"\s*(?:years?|yrs?)?\s*"
+            + postfix_operator_alternation(direction))
+
+
 _POSTFIX_COMPARATORS: List[Tuple[str, str]] = [
-    (r"(-?\d+(?:\.\d+)?)\s*(?:years?|yrs?)?\s*(?:\+|\bor (?:above|over|older|more|greater)\b|\band (?:above|over|older)\b)", "ge"),
-    (r"(-?\d+(?:\.\d+)?)\s*(?:years?|yrs?)?\s*(?:\bor (?:below|under|younger|less|fewer)\b|\band (?:below|under|younger)\b)", "le"),
+    (_postfix_pattern("ge"), "ge"),
+    (_postfix_pattern("le"), "le"),
 ]
 
 
@@ -3158,7 +3190,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
         for pattern, op in _POSTFIX_COMPARATORS:
             m = re.search(pattern, clause)
             if m and field:
-                filters[field] = {"op": op, "value": float(m.group(1))}
+                filters[field] = {"op": op,
+                                  "value": _amount(m.group(1), m.group(2))}
                 if spans is not None:
                     spans[field] = (clause_start, clause_end)
                 matched = True
