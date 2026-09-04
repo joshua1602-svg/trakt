@@ -249,6 +249,56 @@ changing what an answer is rather than whether there is one — the first being
 the language-understanding refusal in `docs/mi_query_non_determinism.md`. Worth
 deciding deliberately whether it should be on at all.
 
+## Three words the reader owns (2026-09-04, from the product owner)
+
+Definitions given, and where each was fixed — none by widening the metric-residue
+guard, which exists to stop "show me the unicorn ratio by region" answering as
+balance by region and still does:
+
+| word | means | fixed at |
+|---|---|---|
+| `funded` | the PORTFOLIO, i.e. not the pipeline | `_ANALYTICAL_FRAMING_WORDS`, beside its twin `pipeline` |
+| `withdrawals` | the pipeline stage WITHDRAWN | `pipeline_prep._STAGE_CANON`, the ONE map the question vocabulary is derived from |
+| `amount` | defaults to current outstanding balance, count as fallback | a governed default with `metric_defaulted` disclosure |
+
+A contract test caught the first attempt at `withdrawals`: the question-side
+vocabulary must be a SUBSET of `_STAGE_CANON`, so extending the derived
+vocabulary is forbidden and the authoritative map is where a spelling goes. The
+singular `withdrawal` is then dropped from the question vocabulary by the
+fragment rule (it is a prefix of the plural) — the same rule that stops
+`complete` becoming a COMPLETED stage — and that is pinned rather than worked
+around.
+
+`_metric_side_residue` now also asks `pipeline_stage_vocabulary`, on the
+principle it already applies to the book's own values: a word a governed owner
+claims is not a measure this dataset lacks. This reaches the case book values
+cannot — a stage the loaded frame carries no column for.
+
+## The region double-bind — BLOCKED, do not guess
+
+The three failing region questions carry TWO filters for one region:
+
+    filters={'collateral_geography': 'London', 'canonical_region_reporting': 'London'}
+
+That is the raw **Region** column and its own **derived harmonisation of
+itself** — one concept bound twice. (Not the ITL/NUTS3 fields, which are a
+different, finer geography and were not involved.) The executor then needs both
+columns; the live frame has one, so it refuses "'Region' is not available in
+this dataset" — while `Show balance by region.` answers on the same book.
+
+**It does not reproduce offline.** Frames carrying both columns, the raw only,
+the canonical only, and canonical+detail all bind exactly ONE filter. Every
+writer of `spec.filters` outside the parser was read (`portfolio_lens.apply_lens`,
+the pipeline-stage adder, drill-through merge, the concept-merge arm) and none
+adds a second region key. It needs the live request to diagnose:
+
+    curl -s -X POST $BASE/mi/query -H "Authorization: Bearer $MI_BEARER" \
+      -H 'Content-Type: application/json' \
+      -d '{"question":"What is the funded balance in the London region","portfolioId":"ERE"}' \
+      | python3 -m json.tool | head -60
+
+Guessing here is how four diagnoses were wrong on 2026-09-03.
+
 ## Newly measured, still open
 
 * **A restriction on the axis being grouped — FIXED.** "Show balance by region
