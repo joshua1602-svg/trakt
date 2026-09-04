@@ -23,6 +23,7 @@ so a sentence it claims is a sentence this one never sees. Pinned below.
 """
 from __future__ import annotations
 
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -143,6 +144,32 @@ class TestNothingTheStageRouteAnswersMoves(unittest.TestCase):
                 envelope = ask(question)
                 self.assertTrue(envelope.get("ok"), envelope.get("error"))
                 self.assertEqual(_route(envelope), "pipeline_stage_movement")
+
+
+#: THE ENVIRONMENT THIS MODULE PERTURBS, restored so it cannot cost a neighbour.
+#:
+#: `test_stage_movement_query.ask` calls `_ensure_env()`, which sets the pipeline
+#: and onboarding roots GLOBALLY and never puts them back — deliberately, because
+#: re-asserting them per ask is what recovered fifteen order-dependent nodes in
+#: that module. Importing `ask` inherits the leak, and
+#: `test_pipeline_runtime_materialisation` (which sorts after these files) then
+#: discovered a pipeline root it never set. Measured: three failures that appear
+#: only in a whole-directory run.
+_LEAKED = ("MI_AGENT_PIPELINE_ROOT", "MI_AGENT_ONBOARDING_OUTPUT_ROOT",
+           "MI_AGENT_AUTH_ENABLED", "MI_AGENT_LLM_PARSER")
+_SAVED_ENV = {}
+
+
+def setUpModule():                                          # noqa: N802
+    _SAVED_ENV.update({k: os.environ.get(k) for k in _LEAKED})
+
+
+def tearDownModule():                                       # noqa: N802
+    for key, value in _SAVED_ENV.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
 
 if __name__ == "__main__":  # pragma: no cover

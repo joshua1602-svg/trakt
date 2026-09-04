@@ -230,3 +230,24 @@ def test_it_never_raises_on_a_shape_it_does_not_recognise():
     for bad in (None, {}, {"available": True}, []):
         out = PMS.build(bad)
         assert out["available"] is False
+
+
+#: THE ENVIRONMENT THIS MODULE PERTURBS. The `payload` fixture reaches the
+#: governed resolver through `test_stage_movement_query._ensure_env`, which sets
+#: the pipeline and onboarding roots globally and never restores them — by
+#: design there, and a leak here. `test_pipeline_runtime_materialisation` sorts
+#: after this file and failed on a root it never set: three failures visible
+#: only in a whole-directory run.
+_LEAKED = ("MI_AGENT_PIPELINE_ROOT", "MI_AGENT_ONBOARDING_OUTPUT_ROOT",
+           "MI_AGENT_AUTH_ENABLED", "MI_AGENT_LLM_PARSER")
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_environment():
+    saved = {k: os.environ.get(k) for k in _LEAKED}
+    yield
+    for key, value in saved.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value

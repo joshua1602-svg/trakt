@@ -163,34 +163,69 @@ class TestOneOutboundCallDecidesTheOutcome(unittest.TestCase):
 class TestWhatTheRecordSays(unittest.TestCase):
     """The finding an operator has to live with, pinned as it stands."""
 
-    def test_the_record_calls_an_unavailable_model_a_failed_calculation(self):
-        """A FINDING, not a desideratum.
+    def test_the_record_now_calls_an_unavailable_model_what_it_is(self):
+        """THE GAP THIS TEST WAS LEFT TO HOLD, closed 2026-09-04.
 
-        ``CALCULATION_FAILED`` is what `mi_query_telemetry` and
+        It used to assert ``CALCULATION_FAILED`` as a FINDING rather than a
+        desideratum: that code is what `mi_query_telemetry` and
         `migration_phase0/replay_probe` both count as an ERROR, so every one of
-        these refusals is recorded as the system having broken — and
-        ``retryable: false`` contradicts the sentence the reader is shown, which
-        ends "Please try again". Closing this gap means changing this test with
-        the fix; it is here so the gap cannot be lost.
+        these refusals was recorded as the system having broken — and
+        ``retryable: false`` contradicted the sentence the reader is shown,
+        which ends "Please try again". Its docstring said closing the gap meant
+        changing it with the fix. This is that change.
+
+        `SEMANTIC_MODEL_UNAVAILABLE` is INFRASTRUCTURE and retryable, so an
+        operator counting broken calculations is no longer counting model
+        outages, and an autonomous caller can tell that waiting may help. The
+        REFUSAL is unchanged: availability still fails closed, because the
+        estate has no completeness proof independent of the deterministic parse.
         """
+        from trakt_core.errors import ErrorCode, is_retryable
+
         with _Arm(_unavailable):
             envelope = ask(QUESTION)
         error = ((envelope.get("governance") or {}).get("error")) or {}
-        self.assertEqual(error.get("code"), "CALCULATION_FAILED")
-        self.assertEqual(error.get("category"), "capability")
-        self.assertIs(error.get("retryable"), False)
+        self.assertEqual(error.get("code"), ErrorCode.SEMANTIC_MODEL_UNAVAILABLE)
+        self.assertTrue(is_retryable(error.get("code")))
+        self.assertNotEqual(error.get("code"), "CALCULATION_FAILED")
+        # And it is still a refusal, with no figure.
+        self.assertFalse(envelope.get("ok"))
+        self.assertFalse(envelope.get("artifacts"))
+        self.assertEqual(error.get("category"), "infrastructure")
+        self.assertIs(error.get("retryable"), True)
+        # The sentence and the contract now agree: it says try again, and the
+        # record says the caller may.
         self.assertIn("try again", str(error.get("message") or "").lower())
 
-    def test_nothing_in_the_classifier_recognises_the_availability_refusal(self):
-        """Where the gap IS, so a fix has one obvious place to go. The coverage
-        gate marks its own decline and is classified by that marker; this one
-        publishes no marker the classifier reads."""
-        payload = {"ok": False, "error": "…",
-                   "metadata": {"conceptMerge": {"status": ARM.PROPOSAL_UNAVAILABLE}},
-                   "controlledRefusal": True}
-        self.assertEqual(mi_service._classify_analytical_failure(payload),
-                         "CALCULATION_FAILED")
-        # The precedent, one branch above it in the same function.
+    def test_the_classifier_reads_the_gate_s_marker_and_not_the_evidence(self):
+        """Where the gap WAS. It named the fix's obvious home: the coverage gate
+        marks its own decline and is classified by that marker, and this one
+        published none. It does now — and the distinction that remains is worth
+        keeping.
+
+        A CLASSIFICATION FOLLOWS A DECISION, NOT AN OBSERVATION. The arm's
+        evidence block records what happened to the model; the GATE decides
+        whether that cost the answer. An envelope carrying `conceptMerge:
+        proposal_unavailable` where no gate refused is an answer that stood
+        despite an unavailable arm, and calling that a failed request would be
+        as wrong as the code this replaced.
+        """
+        from trakt_core.errors import ErrorCode
+
+        # The gate refused: its marker is present, and it classifies.
+        refused = {"ok": False, "error": "…", "controlledRefusal": True,
+                   "metadata": {"modelUnavailableRefused": True,
+                                "conceptMerge": {
+                                    "status": ARM.PROPOSAL_UNAVAILABLE}}}
+        self.assertEqual(mi_service._classify_analytical_failure(refused),
+                         ErrorCode.SEMANTIC_MODEL_UNAVAILABLE)
+        # The evidence ALONE is not a verdict about the request.
+        observed = {"ok": False, "error": "…", "controlledRefusal": True,
+                    "metadata": {"conceptMerge": {
+                        "status": ARM.PROPOSAL_UNAVAILABLE}}}
+        self.assertNotEqual(mi_service._classify_analytical_failure(observed),
+                            ErrorCode.SEMANTIC_MODEL_UNAVAILABLE)
+        # The precedent, one branch below it in the same function.
         self.assertEqual(
             mi_service._classify_analytical_failure(
                 {"metadata": {"semanticCoverageRefused": True}}),
