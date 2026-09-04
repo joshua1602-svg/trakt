@@ -2182,6 +2182,19 @@ def _metric_slot(text: str) -> str:
     return _owner(text)
 
 
+#: The prepositions that END a grouping axis and BEGIN its qualifier —
+#: "by region FOR loans IN Wales". One owner, because two readers depend on
+#: exactly the same boundary: `_grouping_segments`, which must not mistake a
+#: qualifier's "and" for an axis separator, and `_grouped_value_filters`, which
+#: decides whether a value belongs to the axis or restricts it.
+_AXIS_QUALIFIER_RE = re.compile(r"\s+(?:for|in|within|among|amongst)\s+")
+
+
+def _axis_phrase(segment: str) -> str:
+    """A grouping segment WITHOUT its qualifier — the axis itself."""
+    return _AXIS_QUALIFIER_RE.split(str(segment or ""), 1)[0].strip()
+
+
 def _grouping_segments(q: str) -> Tuple[str, List[str]]:
     """Split ``<metric part> by <dim> [by/and <dim> ...]`` into the metric part
     (before the first ``by``) and the ordered list of grouping segments after it.
@@ -2201,8 +2214,25 @@ def _grouping_segments(q: str) -> Tuple[str, List[str]]:
     metric_part = parts[0].strip()
     segments: List[str] = []
     for chunk in parts[1:]:
-        for seg in re.split(r"\band\b|,", chunk):
-            seg = seg.strip()
+        # AN "and" AFTER THE QUALIFIER COORDINATES VALUES, NOT AXES.
+        # "by region for loans in Wales and Scotland" was cut into the axes
+        # ["region for loans in wales", "scotland"], which is how a two-region
+        # breakdown lost Scotland: the axis reader claimed the word, and the
+        # filter reader then saw a clause it could not attach to anything.
+        # Only the text BEFORE the qualifier separates axes; the qualifier
+        # travels with the axis it qualifies, exactly as it did when there was
+        # only one of them.
+        marker = _AXIS_QUALIFIER_RE.search(chunk)
+        head = chunk[:marker.start()] if marker else chunk
+        tail = chunk[marker.start():] if marker else ""
+        pieces = [p.strip() for p in re.split(r"\band\b|,", head)]
+        pieces = [p for p in pieces if p]
+        if tail:
+            if pieces:
+                pieces[-1] = pieces[-1] + tail
+            else:
+                pieces = [tail.strip()]
+        for seg in pieces:
             # strip trailing presentation words ("as a heatmap" etc.)
             seg = re.sub(r"\b(as a|as an|chart|heatmap|treemap|bar|table)\b.*$", "", seg).strip()
             if seg:
@@ -2688,6 +2718,26 @@ def _names_a_book(text: str) -> bool:
         return False
 
 
+def _whole_clause_value(clause: str, available_values,
+                        semantics: Optional[dict] = None
+                        ) -> Optional[Tuple[str, str]]:
+    """``(field, value)`` when the ENTIRE clause is one governed value.
+
+    Punctuation and a leading article are stripped and nothing else: the point
+    is that the clause states a value and states nothing else. A single token
+    that is an ordinary English word is already refused by the value owner, and
+    a clause with a construction in it has been read by one of the readings
+    above before this is reached.
+    """
+    if not available_values:
+        return None
+    text = re.sub(r"^[\s,;.:-]+|[\s,;.:?!-]+$", "", str(clause or ""))
+    text = re.sub(r"^(?:the|a|an)\s+", "", text.strip(), flags=re.I).strip()
+    if not text or text.lower() in _CATEGORICAL_STOPWORDS:
+        return None
+    return _categorical_value_field(text, available_values, semantics)
+
+
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None,
                               available_values=None, unresolved=None
                               ) -> Optional[Tuple[str, str]]:
@@ -2731,6 +2781,23 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         # Mortgages book" is an unheld PORTFOLIO and `portfolio_lens` has a
         # better refusal for it, naming the book and saying it is not in the
         # governed registry.
+        # A CLAUSE THAT IS NOTHING BUT A GOVERNED VALUE.
+        #
+        # The clause splitter cuts "... for loans in Wales and Scotland" into
+        # "... in wales" and a bare " scotland", because "and" joins predicates
+        # far more often than it coordinates values. The bare half named a value
+        # the book plainly carries, in no construction at all, and resolved to
+        # nothing — so the second region was lost, and the coverage gate refused
+        # the whole question rather than publish a narrowing it could not see
+        # applied. Measured on "Show balance by broker for loans in Wales and
+        # Scotland.": `collateral_geography = Wales`, Scotland gone.
+        #
+        # Deliberately the WHOLE clause, not a value found inside one: a clause
+        # with any other content has a construction, and the readings above own
+        # it. This is the residue they leave.
+        whole = _whole_clause_value(clause, available_values, semantics)
+        if whole is not None:
+            return whole
         if available_values and unresolved is not None and not _names_a_book(clause):
             token = _unclaimed_attributive_slot(masked, semantics,
                                                 available_columns, available_values)
@@ -2985,10 +3052,42 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
         cat = _parse_categorical_filter(clause, semantics, available_columns,
                                         available_values, unresolved=unresolved)
         if cat:
-            filters[cat[0]] = cat[1]
+            filters[cat[0]] = _with_value(filters.get(cat[0]), cat[1])
             if spans is not None:
-                spans[cat[0]] = (clause_start, clause_end)
+                # THE WHOLE RESTRICTION'S WORDS. Two clauses naming one field
+                # are one narrowing, and a span covering only the second would
+                # point the facet layer at half of what the reader wrote.
+                start, end = clause_start, clause_end
+                if cat[0] in spans:
+                    start = min(start, spans[cat[0]][0])
+                    end = max(end, spans[cat[0]][1])
+                spans[cat[0]] = (start, end)
     return filters
+
+
+def _with_value(existing: Any, value: str) -> Any:
+    """``existing`` widened to also admit ``value`` — one field, several values.
+
+    "in Wales and Scotland" is ONE restriction on ONE field, and the second
+    clause used to overwrite the first: whichever region the reader named last
+    was the only one bound. `in` is the operator the executor and the drill-down
+    already use for exactly this, so nothing downstream learns a new shape.
+
+    A non-categorical condition (a threshold) is replaced rather than widened,
+    which is what happened before this existed: two bounds on one field are a
+    range, and a range has its own reading.
+    """
+    if existing is None:
+        return value
+    if isinstance(existing, str):
+        return (existing if existing == value
+                else {"op": "in", "value": [existing, value]})
+    if isinstance(existing, dict) and existing.get("op") == "in":
+        members = list(existing.get("value") or [])
+        if value not in members:
+            members.append(value)
+        return {"op": "in", "value": members}
+    return value
 
 
 def _grouped_value_filters(q: str, semantics: dict, available_columns,
@@ -3017,9 +3116,82 @@ def _grouped_value_filters(q: str, semantics: dict, available_columns,
             filters.update(bfilters)
         elif bnote and not (bfilters and set(bfilters) & exclude):
             unavailable.append(bnote)
+    # A FILTER ON THE GROUPED FIELD IS THE AXIS ONLY WHEN IT IS THE AXIS'S OWN
+    # WORDS.
+    #
+    # This used to drop every filter whose field was a grouping dimension. The
+    # case it protects is real: "show balance by lump sum" names the product
+    # axis with a value's own words, and filtering to that value would answer a
+    # one-row question in place of the breakdown the reader asked for. But the
+    # same rule fired on "show balance by region for loans in Wales and
+    # Scotland", where the values arrive through a QUALIFIER and restrict the
+    # axis rather than being it — so a two-region breakdown was parsed with no
+    # filter at all, the executor grouped all five, and the gate refused an
+    # answer that had lost the narrowing.
+    #
+    # The discriminator is where the value's words are. `_axis_phrase` is the
+    # segment without its qualifier, and the two readers of that boundary share
+    # one owner.
+    axis_text = " ".join(_axis_phrase(seg)
+                         for seg in _grouping_segments(str(q or "").lower())[1])
     for d in exclude:
-        filters.pop(d, None)
+        if d in filters and not _restricts_the_axis(d, filters[d], axis_text,
+                                                    available_values):
+            filters.pop(d, None)
     return filters, unavailable
+
+
+def _restricts_the_axis(field: str, condition: Any, axis_text: str,
+                        available_values) -> bool:
+    """Does this filter RESTRICT the grouped axis, rather than being it?
+
+    Two things must both hold, and the second is what keeps this narrow.
+
+    THE VALUES MUST BE THE BOOK'S OWN. Measured: with no value catalogue
+    available, "What is the largest geographic concentration versus limit?"
+    binds `collateral_geography = 'Concentration Versus Limit'` — the
+    place-resolver fallback reading a phrase that is not a place. Dropping every
+    filter on the grouped field used to hide that; keeping only values the book
+    actually carries keeps it hidden without hiding a real narrowing with it.
+    A book with no catalogue therefore behaves exactly as it did before.
+
+    THE WORDS MUST NOT BE THE AXIS'S OWN. "show balance by lump sum" names the
+    product axis with a value's own words, and filtering to it would answer a
+    one-row question instead of the breakdown asked for.
+
+    A non-categorical condition is left to the old rule: a threshold on the
+    field being grouped has its own reading, and widening this to admit one is
+    not what the measured defect asked for.
+    """
+    if isinstance(condition, dict):
+        if str(condition.get("op", "")).strip().lower() not in ("", "eq", "in",
+                                                                "one_of"):
+            return False
+        values = condition.get("value")
+    else:
+        values = condition
+    members = list(values) if isinstance(values, (list, tuple, set)) else [values]
+    if not members or not all(isinstance(v, str) and v.strip() for v in members):
+        return False
+    carried = {_normalise_value(v) for v in
+               _field_values(available_values, field)}
+    if not carried or not all(_normalise_value(v) in carried for v in members):
+        return False
+    return not all(v.strip().lower() in axis_text for v in members)
+
+
+def _normalise_value(value: Any) -> str:
+    return re.sub(r"[\s_]+", " ", str(value or "").strip().lower())
+
+
+def _field_values(available_values, field: str) -> List[str]:
+    """The values the book carries for ``field`` — its own catalogue, whatever
+    shape it arrives in (a mapping of value->spelling, or a bare sequence)."""
+    values = (available_values or {}).get(field) if hasattr(
+        available_values, "get") else None
+    if not values:
+        return []
+    return [str(v) for v in (values.keys() if hasattr(values, "keys") else values)]
 
 
 def _build_two_dim_spec(metric: Optional[str], dims: List[str], semantics: dict,

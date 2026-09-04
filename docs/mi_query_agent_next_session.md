@@ -202,7 +202,7 @@ this tree:
 |---|---|
 | `scripts/run_mi_query_stage_movement_banks.py`, base vs HEAD, per question | **0 of 215 moved** (166-question bank, stage bank 36/36, near-neighbours 13/13) |
 | the same three banks on a LIVE-SHAPED book (second region column added) | **0 of 215 moved** |
-| `migration_phase0/live_shape_probe.py`, base vs HEAD | **6 FIXED, 0 REGRESSED**, 8 unchanged-ok, 6 still failing |
+| `migration_phase0/live_shape_probe.py`, base vs HEAD (24 questions) | **9 FIXED, 0 REGRESSED**, 10 unchanged-ok, 5 still failing — all five the must-refuse set |
 | `mi_agent/tests` + `question_interpretation/tests` failure node sets | 28 → 21, no new failure |
 | `mi_agent_api/tests` + 17 routing files in `tests/` | 66 → 48, no new failure |
 
@@ -215,24 +215,42 @@ not run. Every blast claim above is scoped to the files named.
 
 ## Newly measured, still open
 
-* **A restriction on the axis being grouped is dropped** — and only ONE of its
-  two shapes is worth calling a defect. Grouping on region and filtering on
-  region binds no filter; the coverage gate then refuses, naming what was not
-  applied and stating it has not substituted a broader figure. It reproduces on
-  a ONE-column book, so it is neither the aliasing defect nor introduced with
-  its fix, and "Show balance by broker for loans in Wales." binds correctly —
-  the collision is specifically axis-field == filter-field.
+* **A restriction on the axis being grouped — FIXED.** "Show balance by region
+  for loans in Wales and Scotland." now answers with two rows, and so does the
+  single-region form with one. Three separate things were wrong and each was
+  fixed at its own owner:
 
-  - "Show balance by region for loans in Wales." is DEGENERATE: one row, and
-    the reader could have asked "what is the balance in Wales" — which now
-    answers. Refusing with a disclosure is a defensible reading, and this is
-    recorded rather than filed as a defect.
-  - "Show balance by region for loans in Wales and Scotland." is the one that
-    matters. A two-region breakdown is an ordinary question with no other
-    phrasing available, and it refuses. That is the gap; the single-value case
-    is not the argument for fixing it.
+  - `_grouping_segments` split EVERY "and" as an axis separator, so the axes
+    read as ["region for loans in wales", "scotland"]. An "and" inside a
+    segment's own qualifier coordinates VALUES. `_AXIS_QUALIFIER_RE` is now the
+    one owner of that boundary, shared with the reader below.
+  - Only the first value bound. The clause splitter leaves a bare " scotland",
+    and a clause that is nothing but a governed value resolved to nothing.
+    `_whole_clause_value` reads it and `_with_value` widens the field's
+    condition to `{"op": "in", ...}` — the shape the executor and the
+    drill-through already use. This also fixed the same loss one axis over:
+    "by broker for loans in Wales and Scotland" bound Wales and dropped
+    Scotland (the gate caught it, so nothing wrong was published).
+  - `_grouped_value_filters` dropped any filter whose field was the grouping
+    dimension. It now keeps one that RESTRICTS the axis, and only when the
+    values are the book's own and are not the axis phrase's own words —
+    "show balance by lump sum" still drops, which is the case that rule exists
+    for.
+  - `execution_receipt._filter_values` could not read a condition dict, so the
+    geographic-scope facet could not see a narrowing the receipt itself had
+    already described as "Region in Wales, Scotland". `not_in`/`ne` are
+    deliberately excluded: their operands are what an answer leaves out.
 
-  Both carried in `live_shape_probe`, under names that keep them apart.
+  The single-value case, recorded yesterday as defensible to refuse, now
+  answers. It is not defensible to refuse it while answering the two-value
+  one, and a reader who wants the figure alone can ask for it directly.
+
+  One question in the 882-question corpus moved and was put back: with no value
+  catalogue available, "What is the largest geographic concentration versus
+  limit?" binds `collateral_geography = 'Concentration Versus Limit'` from the
+  place-resolver fallback, and the old blanket drop was hiding it. Requiring
+  the book's own values keeps it hidden. That fallback is still wrong and is
+  still open.
 
 * **Two grouping axes are fine, and are pinned so this is not re-opened.**
   "Balance by region by broker" answers as a 5x3 heatmap — either order, and
