@@ -332,7 +332,11 @@ _META_KEYS = ("parserMode", "parserModeDetail", "controlledRefusal",
               # the bank evidence showed `llm.calls = 0` for a request the
               # concept-merge arm had changed, and a replay could not tell a
               # deterministic answer from a model-assisted one.
-              "modelUsage")
+              "modelUsage",
+              # WHETHER THE MODEL ANSWERED, which `modelUsage` cannot say: a
+              # call that failed has no usage to report, and that is exactly
+              # the row whose outcome it decided.
+              "modelAvailability")
 _TRACE_KEYS = ("intent", "metric", "aggregation", "parserMode",
                "parserConfidence", "portfolioLens", "resultType",
                "requested_dimensions", "applied_dimensions",

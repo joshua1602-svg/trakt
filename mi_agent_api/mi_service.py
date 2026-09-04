@@ -327,6 +327,9 @@ def _enforce_model_availability(envelope: Dict[str, Any]) -> Dict[str, Any]:
     envelope["answer"] = _AVAILABILITY_REFUSAL
     envelope["artifacts"] = []
     envelope["controlledRefusal"] = True
+    # The marker `_classify_analytical_failure` reads. Set here, by the gate
+    # that made the decision, exactly as the coverage gate marks its own.
+    envelope.setdefault("metadata", {})["modelUnavailableRefused"] = True
     envelope.setdefault("warnings", []).append(_AVAILABILITY_REFUSAL)
     return envelope
 
@@ -758,6 +761,56 @@ def _owned_question(question: Optional[str], available_values) -> str:
         return question
 
 
+#: How an unavailable proposal FAILED, from the arm's own recorded detail. The
+#: detail is a raw provider string — it is classified here and never forwarded,
+#: because a stack trace or an api key in an upstream message must not travel
+#: into telemetry a probe writes to disk.
+_FAILURE_CLASSES = (
+    ("authentication", ("authenticationerror", "permissionerror", "x-api-key",
+                        "invalid api key")),
+    ("overloaded", ("overloaded", "rate_limit", "ratelimit", "429",
+                    "too many requests")),
+    ("timeout", ("timeout", "timed out", "deadline")),
+    ("malformed", ("jsondecode", "expecting value", "malformed",
+                   "could not parse", "validationerror")),
+)
+
+
+def _failure_class(detail: Any) -> Optional[str]:
+    text = str(detail or "").lower()
+    if not text:
+        return None
+    for name, markers in _FAILURE_CLASSES:
+        if any(m in text for m in markers):
+            return name
+    return "unknown"
+
+
+def _model_availability(concept_merge: Any) -> Dict[str, Any]:
+    """WHETHER THE MODEL ANSWERED, carried separately from what it cost.
+
+    `modelUsage` reports a call that SUCCEEDED — tokens, models, price. The one
+    row whose outcome the model decided is the row where there is no usage to
+    report, so the event that caused the refusal was the event the evidence
+    could not show. This says what happened whatever happened.
+    """
+    from . import concept_merge_arm as _arm
+
+    evidence = concept_merge if isinstance(concept_merge, dict) else None
+    if evidence is None:
+        return {"concept_merge_attempted": False,
+                "concept_merge_status": None,
+                "failure_class": None, "retryable": False}
+    status = str(evidence.get("status") or "") or None
+    unavailable = status == _arm.PROPOSAL_UNAVAILABLE
+    return {
+        "concept_merge_attempted": True,
+        "concept_merge_status": status,
+        "failure_class": _failure_class(evidence.get("detail")) if unavailable else None,
+        "retryable": bool(unavailable),
+    }
+
+
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     """Map an engine-reported failure onto a stable code.
 
@@ -766,6 +819,18 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     previous free-text ``error`` string could not express.
     """
     meta = payload.get("metadata") or {}
+    # THE MODEL NEVER RAN, so nothing downstream of it can be the reason. Read
+    # before every capability code: an unavailable dependency is not a decision
+    # the estate took about the question, and marking it `CALCULATION_FAILED,
+    # retryable false` told an operator a calculation had broken while the
+    # sentence the reader saw said "please try again".
+    if meta.get("modelUnavailableRefused"):
+        return ErrorCode.SEMANTIC_MODEL_UNAVAILABLE
+    # The SEMANTIC GUARD's own refusal — a facet the answer could not honour.
+    # The same shape the coverage gate already had, and for the same reason: a
+    # governed "I will not answer that on this basis" is not a broken sum.
+    if meta.get("semanticGuardRefused"):
+        return ErrorCode.UNSUPPORTED_QUESTION
     # The coverage gate's own decline, marked by `_enforce_semantic_coverage`.
     # Read FIRST and by its own marker rather than by reusing
     # `controlledUnsupported`, whose meaning belongs to the estate's declared
@@ -1088,6 +1153,10 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
                 routed["answer"] = message
             routed["artifacts"] = []
             routed["controlledRefusal"] = True
+            # A GOVERNED SEMANTIC REFUSAL, not a broken calculation. The same
+            # marker shape `_enforce_semantic_coverage` already uses, so both
+            # gates classify alike.
+            routed.setdefault("metadata", {})["semanticGuardRefused"] = True
             routed["clarificationRequested"] = (
                 verdict == receipt_mod.VERDICT_CLARIFY)
             routed.setdefault("warnings", []).append(message)
@@ -1580,6 +1649,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                     {"metadata": {"parse_metadata": dict(getattr(parsed, "meta", {}) or {})}}))
                 if _concept_merge is not None:
                     rmeta["conceptMerge"] = _concept_merge
+                # BOTH BLOCKS ON BOTH PATHS. `modelUsage` was stamped only where
+                # the point-in-time envelope is assembled, so a ROUTED question
+                # carried no model telemetry at all — and the one row whose
+                # outcome the model decided was routed.
+                rmeta["modelUsage"] = _model_usage(rmeta.get("llm"),
+                                                   _concept_merge)
+                rmeta["modelAvailability"] = _model_availability(_concept_merge)
         _stamp_routed_scope(routed, req)
         routed = _guard_routed_answer(routed, question=req.question, route=route,
                                       semantics=semantics, frame=df,
@@ -1646,6 +1722,7 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # place that answers "did a model touch this answer, and what did it
         # cost" without the reader having to know there are two.
         meta["modelUsage"] = _model_usage(meta.get("llm"), _concept_merge)
+        meta["modelAvailability"] = _model_availability(_concept_merge)
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
     # Governed portfolio scope + coverage. The BACKEND states which portfolios
