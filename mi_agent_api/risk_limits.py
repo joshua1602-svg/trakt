@@ -28,6 +28,7 @@ import yaml
 
 from analytics_lib.concentration import group_shares, top_n_concentration
 from analytics_lib.numeric import coerce_numeric
+from mi_agent import region_basis as _region_basis
 from mi_agent.risk_monitor import schedule8_extractor as extractor
 from mi_agent.risk_monitor import risk_limits_contract as contract
 
@@ -219,8 +220,17 @@ def _normalise_ltv(series: pd.Series) -> pd.Series:
 #: South East"), so the readable analytics label must be preferred over the
 #: regulatory NUTS/ITL3 code field — testing a "South East" limit against a
 #: column of ITL3 codes silently reports 0% against a book that is 26% South East.
-_REGION_COLUMNS = ("collateral_geography", "geographic_region_collateral",
-                   "geographic_region_obligor")
+#:
+#: The GOVERNED HARMONISED column leads, because that is the vocabulary the MI
+#: Query Agent answers every region question in. Reading the raw column instead
+#: is how a tape spelling one region three ways ("South West", "south-west",
+#: "SOUTH WEST") had a 75% concentration tested as three 25% bars and a 40%
+#: limit reported COMPLIANT, while the MI Agent, asked in words, said 75%. A
+#: tape with no taxonomy configured has no harmonised column and falls through
+#: to exactly the order this list used to begin with.
+_REGION_COLUMNS = (_region_basis.REPORTING_FIELDS
+                   + ("geographic_region_collateral",
+                      "geographic_region_obligor"))
 
 
 def _region_column(df: pd.DataFrame) -> Optional[str]:
@@ -229,6 +239,37 @@ def _region_column(df: pd.DataFrame) -> Optional[str]:
         if col in getattr(df, "columns", []) and df[col].notna().any():
             return col
     return None
+
+
+def _region_coverage_note(df: pd.DataFrame) -> str:
+    """The sentence a geographic test carries when its basis covers only part
+    of the book. Full coverage is silent — a caveat on every test is a caveat
+    nobody reads."""
+    basis = _region_column(df)
+    if basis is None:
+        return ""
+    resolved = _region_basis.basis_for([basis], frame=df)
+    return (resolved.disclosure() or "") + "." if (
+        resolved is not None and resolved.disclosure()) else ""
+
+
+def _joined_note(*parts: str) -> str:
+    return " ".join(p.strip() for p in parts if p and p.strip())
+
+
+def region_basis_block(df: pd.DataFrame) -> Optional[Dict[str, Any]]:
+    """WHICH region column the actuals were measured on, and how much of the
+    book carried a value there. None when the tape has no region at all.
+
+    A concentration limit measured on part of a book is defensible only if the
+    part is stated: the share below is the denominator behind every geographic
+    test in this envelope.
+    """
+    col = _region_column(df)
+    if col is None:
+        return None
+    basis = _region_basis.basis_for([col], frame=df)
+    return basis.to_dict() if basis is not None else None
 
 
 def _region_shares(df: pd.DataFrame) -> Optional[pd.DataFrame]:
@@ -424,6 +465,16 @@ def _compute_tests(df: pd.DataFrame, limits: List[Dict[str, Any]],
     # Governed client configuration first, then the tape, then GBP.
     currency_mod.resolve_and_set(df, client_id=client_id)
     region_shares = _region_shares(df)
+    # WHICH region column produced the actuals, and over how much of the book.
+    # A geographic limit measured on a partially populated column is defensible
+    # only if the covered share is stated on the test itself, where the reader
+    # is looking at the number.
+    region_note = _region_coverage_note(df)
+    # The column the actuals were ACTUALLY measured on, recorded on every
+    # geographic test. `_CATEGORY_RULES` only carries a keyword-time HINT, and a
+    # test whose dimensionKey names a field the number did not come from is a
+    # lineage claim that is not true.
+    region_field = _region_column(df)
     prior_region_shares = _region_shares(prior_df) if prior_df is not None else None
     region_lookup = ({str(r[_REGION]).lower(): float(r["balance_share"]) * 100.0
                       for _, r in region_shares.iterrows()} if region_shares is not None else {})
@@ -454,10 +505,14 @@ def _compute_tests(df: pd.DataFrame, limits: List[Dict[str, Any]],
                     tests.append(_test(lim, actual=actual, actual_basis="funded exposure %",
                                        prior_actual=prior_region_lookup.get(top_region),
                                        label=f"Largest other region ({top_region.title()})",
-                                       notes="Largest region without a region-specific limit."))
+                                       dimension_key=region_field,
+                                       notes=_joined_note(
+                                           "Largest region without a region-specific limit.",
+                                           region_note)))
                 continue
             actual = round(region_lookup.get(region, 0.0), 2)
             tests.append(_test(lim, actual=actual, actual_basis="funded exposure %",
+                               notes=region_note, dimension_key=region_field,
                                prior_actual=prior_region_lookup.get(region),
                                label=(lim.get("region") or "Region")))
 
@@ -724,6 +779,9 @@ def _risk_limit_envelope(df, prior_df, reporting_date: Optional[str],
         "isPlaceholder": bool(extracted.get("is_placeholder", not limits)),
         "diagnostics": extracted.get("ingestion_diagnostics") or extracted.get("diagnostics"),
         "fundedDataAvailable": not df.empty,
+        # The region the geographic tests were measured on, and its coverage.
+        # None when the tape carries no region column at all.
+        "regionBasis": region_basis_block(df),
         "summary": summary,
         "testsByCategory": by_category,
         "tests": tests,
