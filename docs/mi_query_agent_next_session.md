@@ -274,32 +274,28 @@ principle it already applies to the book's own values: a word a governed owner
 claims is not a measure this dataset lacks. This reaches the case book values
 cannot — a stage the loaded frame carries no column for.
 
-## The region double-bind — CLOSED on the live build, cause not attributed
+## The region double-bind — CLOSED on the live build; the journey is audited
 
-At `3acd6d0` (the build the 115-replay measured) three region questions carried
-TWO filters for one region and refused "'Region' is not available in this
-dataset". On `df0a1c5`, asked live, all three answer with exactly one filter:
+At `3acd6d0` three region questions carried TWO filters for one region and
+refused "'Region' is not available in this dataset". On `df0a1c5`, asked live,
+all three answer with exactly one filter and nothing not-applied, the Acquired
+lens applying correctly alongside the region on the third.
 
-    What is the funded balance in the London region      ok, filters ['London']
-    What is the funded balance in South West             ok, filters ['South West']
-    ...in the Scotland region for the Acquired portfolio ok, filters ['Scotland',
-                                                         'Source Portfolio in acquired_001']
+**The frame did NOT move** — the portfolio owner confirms 958 loans (885
+acquired, 73 direct), unchanged. The 640-loan/30-June book this document
+previously cited as the comparison is from `MI_FINAL_LIVE_DATA_READINESS.json`
+and describes a different environment; reading it as this portfolio was an
+error. So the cause remains unattributed: two of the three questions contain
+`funded`, which #400 stopped reading as a missing measure, but the third
+contains nothing #399 or #400 touched.
 
-notApplied is empty on all three and the lens applied correctly on the third.
-
-**The cause is NOT established, and should not be recorded as one.** Two of the
-three contain the word `funded`, which #400 stopped reading as a measure this
-dataset does not carry — but the third contains neither `funded` nor anything
-else #399 or #400 touched, so that story is incomplete. The other candidate is
-that the FRAME CHANGED: asked today, portfolio `ERE` answers "as at 31 May 2026"
-over a population of 958, while this document and the deploy notes describe a
-640-loan book at 30 June 2026. A frame whose region columns differ would explain
-both the original refusal and why the double-bind never reproduced offline
-across four frame shapes.
-
-Worth settling before any conclusion is drawn from the next replay: if the
-active dataset moved between runs, some verdict changes will be DATA rather than
-code, and the 115 corpus was recorded against `ERE` and `ERE/2026-06-30`.
+Because the symptom is gone and the journey is not, see
+**`docs/mi_query_region_end_to_end_audit.md`** — five owners, three field
+families, one word — and `tests/test_region_topology.py`, which pins the
+topology so any of them moving is loud. The material finding: **Risk Limits
+evaluates geographic concentration on `geographic_region_obligor` (NUTS3) while
+MI answers on `canonical_region_reporting`.** Two dashboard surfaces, two
+groupings of one book, nothing reconciling them.
 
 ## Newly measured, still open
 
