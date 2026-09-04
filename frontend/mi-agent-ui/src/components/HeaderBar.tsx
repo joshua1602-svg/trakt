@@ -121,18 +121,14 @@ export function HeaderBar({
       )}
 
       <div className="ml-auto flex items-center gap-2.5">
-        {/* Environment badge: the mock/staging warning stays prominent (it means
-            the data is not real); Production is a quiet, low-key marker. */}
-        {mock ? (
+        {/* Mock/staging warning stays prominent (it means the data is not
+            real) — a client-facing production session shows nothing here.
+            The quiet "Prod" marker this used to render was an internal
+            environment indicator with no reason to sit on a client's own
+            dashboard, so it was removed rather than kept low-key. */}
+        {mock && (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-medium text-amber-400">
             <ShieldCheck size={13} /> Staging · Mock Data
-          </span>
-        ) : (
-          <span
-            title="Production environment"
-            className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-ink-500"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-mint-400" /> Prod
           </span>
         )}
 

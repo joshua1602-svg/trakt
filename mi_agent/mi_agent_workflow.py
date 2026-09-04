@@ -588,7 +588,8 @@ def run_mi_agent_query(
         result["missing_fields"] = unsupported["missing_fields"]
         result["error"] = unsupported["message"]
         result["answer"] = unsupported["message"]
-        result["warnings"] = [unsupported["message"]]
+        # NOT also appended to warnings — see the "unmapped_question" guard
+        # below for why a refusal states its own reason exactly once.
         return result
 
     # ---- parse (ONCE per request) -----------------------------------------
@@ -656,9 +657,11 @@ def run_mi_agent_query(
             "errors": [f"unresolved_metric: {spec.explanation}"],
             "warnings": [], "resolved_fields": {},
         }
-        result["warnings"] = [
-            "requested measure is not available in this dataset; no substitute "
-            "measure was used."]
+        # NOT also appended to `warnings` — `error`/`answer` already carry
+        # this refusal's reason (`msg`, above), which is what the chat's red
+        # bubble renders. A second, differently-worded copy in `warnings`
+        # restated the same one fact rather than adding a new one — the same
+        # class of duplication `_disclose_lens_scope` was fixed for.
         return result
 
     # AN UNRESOLVED CATEGORY IS NOT AN UNMAPPED QUESTION. Where the reader
@@ -703,8 +706,12 @@ def run_mi_agent_query(
                        "intent was recognised in the question"],
             "warnings": [], "resolved_fields": {},
         }
-        result["warnings"] = ["question not understood: no governed metric, "
-                              "dimension or intent was recognised."]
+        # NOT also appended to `warnings` — `error`/`answer` (`msg`, above)
+        # already say this refusal's reason; a second, differently-worded
+        # "question not understood" line in `warnings` restated it rather
+        # than adding a new fact. Reported as two stacked-looking messages in
+        # the chat: the red refusal bubble followed by an amber box saying
+        # the same thing again.
         return result
     # ---- source-portfolio lens (Total / Direct / Acquired / cohort) -------
     # Deterministic: a portfolio scope named in the question ("acquired book",

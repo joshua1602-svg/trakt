@@ -161,13 +161,14 @@ export function ChatMessage({
           <AssumptionsDisclosure assumptions={message.assumptions} />
         )}
 
-        {message.warnings && message.warnings.length > 0 && (
-          <div className="mt-2 rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90">
-            {message.warnings.map((w, i) => (
-              <div key={i}>⚠ {w}</div>
-            ))}
-          </div>
-        )}
+        {/* The amber warnings box is deliberately never rendered here. On a
+            refusal it restated the red bubble's own explanation in different
+            words (confusing, and duplicative — see the backend fix that
+            already stops the refusal text itself being appended twice); on a
+            successful answer it competed with the coverage/assumptions
+            disclosures above for the same "something to flag" attention.
+            `message.warnings` is still carried on the message for the query
+            audit panel and other non-chat consumers. */}
 
         {/* Says nothing at all unless the result has been cleared from the
             workspace. The chart, its figures and its controls live on the
