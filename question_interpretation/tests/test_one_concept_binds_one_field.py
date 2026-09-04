@@ -212,3 +212,84 @@ class TestAValueBindsOnlyToAColumnTheFrameHas(unittest.TestCase):
     def test_with_no_column_context_the_rule_stands_down(self):
         bound, _ = self._bind_london(None)
         self.assertEqual([b.field for b in bound], [ALIAS])
+
+
+class TestSuppressionIsSafeNotMerelyQuieter(unittest.TestCase):
+    """"The arm writes less" is not proof that no wrong answer can appear.
+
+    Suppressing a model fill is only safe when the deterministic contract
+    ALREADY REPRESENTS THE SAME SEMANTIC CONCEPT. These assert that, and assert
+    the cases where suppression must NOT happen — because a narrowing that
+    disappears without an equivalent in its place answers over a broader
+    population than the reader asked about, which is the failure mode the whole
+    facet ledger exists to prevent.
+    """
+
+    def _row_slots(self, result):
+        return {s.key: s for s in result.slots
+                if s.slot == CM.SLOT_ROW_PREDICATES}
+
+    def test_a_suppressed_fill_leaves_an_equivalent_narrowing_in_place(self):
+        """The reader's own claim survives, carrying the same value."""
+        result = CM.merge(_reader_claim(), _model_binds(), semantics=_semantics())
+        held = self._row_slots(result)
+        self.assertIn(READER, held)
+        self.assertEqual(held[READER].value, "London")
+        self.assertTrue(held[READER].chosen_by_a_person)
+
+    def test_nothing_is_suppressed_when_the_contract_holds_no_such_concept(self):
+        """No deterministic claim at all: the fill MUST land, or the narrowing
+        the reader asked for is silently gone."""
+        result = CM.merge((), _model_binds(), semantics=_semantics())
+        self.assertEqual(list(self._row_slots(result)), [ALIAS])
+        self.assertIn(CM.FILLED_BY_MODEL, [f.outcome for f in result.findings])
+
+    def test_a_second_concept_on_the_same_field_family_is_not_collapsed(self):
+        """DISTINCT predicates must not merge merely because they share a field.
+        A threshold and a category on one field are two claims, and the merge
+        reports the disagreement rather than dropping either."""
+        bound = (BoundConcept(ProposedConcept(kind="category_value", term="scotland"),
+                              ALIAS, "Scotland", "categorical_spans.value_field"),)
+        result = CM.merge(_reader_claim(), bound, semantics=_semantics())
+        held = self._row_slots(result)
+        self.assertEqual(held[READER].value, "London")
+        outcomes = [f.outcome for f in result.findings]
+        self.assertTrue(any(o.startswith("declined") for o in outcomes), outcomes)
+        # The disagreement is REPORTED, with both sides named, so nothing is
+        # lost silently.
+        finding = next(f for f in result.findings if f.outcome.startswith("declined"))
+        self.assertEqual(finding.proposed, "Scotland")
+        self.assertEqual(finding.deterministic, "London")
+
+    def test_two_unrelated_fields_both_survive(self):
+        """The rule is per CONCEPT. Two genuinely different concepts are two
+        predicates, and suppressing either would broaden the population."""
+        bound = (BoundConcept(ProposedConcept(kind="category_value", term="alpha"),
+                              UNRELATED, "Alpha", "categorical_spans.value_field"),)
+        result = CM.merge(_reader_claim(), bound, semantics=_semantics())
+        self.assertEqual(sorted(self._row_slots(result)),
+                         sorted([READER, UNRELATED]))
+
+    def test_no_deterministic_narrowing_is_ever_removed(self):
+        """Whatever the model proposes, every predicate the reader's own parse
+        recorded is still on the contract afterwards."""
+        reader = (CM.SlotValue(CM.SLOT_ROW_PREDICATES, READER, "London",
+                               CM.PROV_EXPLICIT_USER),
+                  CM.SlotValue(CM.SLOT_ROW_PREDICATES, UNRELATED, "Alpha",
+                               CM.PROV_EXPLICIT_USER))
+        for binding in (_model_binds(), _model_binds(value="Scotland"),
+                        _model_binds(field=UNRELATED, value="Beta")):
+            with self.subTest(binding=binding[0].field):
+                result = CM.merge(reader, binding, semantics=_semantics())
+                held = self._row_slots(result)
+                self.assertEqual(held[READER].value, "London")
+                self.assertEqual(held[UNRELATED].value, "Alpha")
+
+    def test_the_alias_rule_never_fires_across_different_domains(self):
+        """Two fields that do NOT share a value_domain are never one concept,
+        so a fill on one can never be suppressed by a claim on the other."""
+        from mi_agent.categorical_spans import alias_fields
+
+        sem = _semantics()
+        self.assertNotIn(UNRELATED, alias_fields(READER, sem))
+        self.assertNotIn(READER, alias_fields(UNRELATED, sem))
