@@ -56,7 +56,11 @@ __all__ = ["MODELLED_FIELDS", "plan_from_spec"]
 MODELLED_FIELDS = frozenset({
     # 1. The analytical semantics the plan represents.
     "metric", "aggregation", "weight_field", "measures", "filters",
-    "dimension", "x", "portfolio_lens", "reporting_date", "as_of_date",
+    # EVERY governed axis. `dimensions` was un-modelled, which made 128 of the
+    # corpus's 307 declines a grouped question the plan could in fact carry —
+    # the executor's own `_all_group_dims` reads exactly these two fields.
+    "dimension", "dimensions", "x", "y",
+    "portfolio_lens", "reporting_date", "as_of_date",
     # 2. Presentation and prose. These decide nothing — §20 of the target-state
     #    brief puts presentation downstream of the governed result — so a
     #    difference here is not a semantic difference and must not block a lift.
@@ -93,6 +97,12 @@ def _is_liftable(spec: MIQuerySpec) -> bool:
     # the plan carries one axis and restating a disagreement would invent one.
     if spec.dimension and spec.x and spec.dimension != spec.x:
         return False
+    # `y` is an AXIS on a grouped result and a MEASURE on a scatter/bubble. The
+    # plan models the first meaning only, so a `y` that is not the second
+    # grouping dimension is not liftable.
+    axes = _axes(spec)
+    if spec.y and (len(axes) < 2 or spec.y != axes[1]):
+        return False
     return True
 
 
@@ -112,6 +122,20 @@ def _predicates(filters: Optional[Dict[str, Any]]) -> tuple:
             out.append(Predicate(field, "in", tuple(value)))
         else:
             out.append(Predicate(field, "eq", value))
+    return tuple(out)
+
+
+def _axes(spec: MIQuerySpec) -> tuple:
+    """Every governed grouping dimension, in order, de-duplicated.
+
+    The same order and the same precedence as the executor's `_all_group_dims`
+    — `dimensions` first, then `dimension` — because a plan that disagreed with
+    the executor about which axes exist would be a second grouping model.
+    """
+    out: List[str] = []
+    for key in list(spec.dimensions or ()) + ([spec.dimension] if spec.dimension else []):
+        if key and key not in out:
+            out.append(key)
     return tuple(out)
 
 
@@ -159,7 +183,7 @@ def plan_from_spec(spec: MIQuerySpec, *,
             portfolio_lens=portfolio_lens or spec.portfolio_lens,
             period=period or spec.reporting_date or spec.as_of_date,
             filters=_predicates(spec.filters),
-            dimensions=tuple(d for d in (spec.dimension,) if d))
+            dimensions=_axes(spec))
         return QueryPlan(shared_scope=scope, outputs=outputs)
     except (ValueError, TypeError):
         # A spec the contracts reject — an operation outside the governed set,

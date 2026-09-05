@@ -101,6 +101,25 @@ class TestTheRoundTripIsAnIdentity(unittest.TestCase):
             intent="summary", metric=BALANCE, aggregation=SUM,
             filters={"collateral_geography": {"op": "in",
                                               "value": ["Scotland", "Wales"]}}),
+        # EVERY GOVERNED AXIS. These were un-liftable until the compiler stopped
+        # taking dimensions[0]: 128 of the corpus's 307 declines were a grouped
+        # question the plan could carry, and compiling only the first axis would
+        # have answered "balance by LTV by age" as "balance by LTV".
+        "two dimensions": MIQuerySpec(
+            intent="chart", chart_type="heatmap", metric=BALANCE, aggregation=SUM,
+            dimension="ltv_bucket", x="ltv_bucket", y="age_bucket",
+            dimensions=["ltv_bucket", "age_bucket"], filters={}),
+        "two dimensions and a filter": MIQuerySpec(
+            intent="chart", chart_type="heatmap", metric=BALANCE, aggregation=SUM,
+            dimension="ltv_bucket", x="ltv_bucket", y="age_bucket",
+            dimensions=["ltv_bucket", "age_bucket"],
+            filters={"borrower_type": "Joint"}),
+        "three dimensions": MIQuerySpec(
+            intent="table", chart_type="none", metric=BALANCE, aggregation=SUM,
+            dimension="collateral_geography", x="collateral_geography",
+            dimensions=["collateral_geography", "erm_product_type",
+                        "broker_channel"],
+            filters={}, output_format="table"),
         "multi-measure": MIQuerySpec(
             intent="summary", filters={"borrower_type": "Joint"},
             measures=[{"field": "loan_count", "aggregation": COUNT},
@@ -113,10 +132,24 @@ class TestTheRoundTripIsAnIdentity(unittest.TestCase):
             with self.subTest(shape=name):
                 self.assertEqual(round_trip(spec).filters, spec.filters)
 
-    def test_the_dimension_survives(self):
+    def test_every_dimension_survives(self):
+        """§7 — never silently drop dimension 2 or 3."""
         for name, spec in self.SPECS.items():
             with self.subTest(shape=name):
-                self.assertEqual(round_trip(spec).dimension, spec.dimension)
+                out = round_trip(spec)
+                self.assertEqual(out.dimension, spec.dimension)
+                expected = list(spec.dimensions or
+                                ([spec.dimension] if spec.dimension else []))
+                self.assertEqual(list(out.dimensions or []), expected)
+
+    def test_the_rendering_follows_the_dimensionality(self):
+        """§12 — presentation represents the analysis, never truncates it."""
+        self.assertEqual(round_trip(self.SPECS["grouped"]).chart_type, "bar")
+        self.assertEqual(round_trip(self.SPECS["two dimensions"]).chart_type,
+                         "heatmap")
+        three = round_trip(self.SPECS["three dimensions"])
+        self.assertEqual(three.output_format, "table")
+        self.assertEqual(len(three.dimensions), 3)
 
     def test_the_measure_and_aggregation_survive(self):
         for name, spec in self.SPECS.items():
@@ -158,9 +191,6 @@ class TestTheAdapterDeclinesWhatItCannotRepresent(unittest.TestCase):
                                 forecast_mode="expected"),
         "scatter": MIQuerySpec(chart_type="scatter", metric=BALANCE,
                                aggregation=SUM, y=LTV),
-        "second dimension": MIQuerySpec(metric=BALANCE, aggregation=SUM,
-                                        dimension="broker_channel",
-                                        dimensions=["broker_channel", "ltv_bucket"]),
         "unapplied filter disclosure": MIQuerySpec(
             metric=BALANCE, aggregation=SUM,
             unavailable_filters=["risk score is not in this dataset"]),

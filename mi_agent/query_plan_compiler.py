@@ -122,11 +122,35 @@ def _measure_entry(output: PlannedOutput) -> Dict[str, Any]:
     return entry
 
 
+#: How a governed result is rendered at each dimensionality.
+#:
+#: PRESENTATION FOLLOWS THE ANALYSIS, never the other way round. One axis is a
+#: bar; two are a matrix; three or more have no faithful chart in this estate,
+#: so the analysis is preserved whole and rendered as a table. Dropping a third
+#: dimension to fit a picture would change the calculation to suit the picture,
+#: which is the one thing presentation may never do.
+_RENDERING = {
+    0: ("summary", "none", "text"),
+    1: ("chart", "bar", "chart"),
+    2: ("chart", "heatmap", "chart_and_table"),
+}
+_MANY_DIMENSIONS = ("table", "none", "table")
+
+
 def _spec_for(scope: AnalyticalScope,
               outputs: List[PlannedOutput]) -> MIQuerySpec:
     """The execution contract for these outputs over this population."""
-    dimension = scope.dimensions[0] if scope.dimensions else None
-    grouped = bool(dimension)
+    # EVERY GOVERNED DIMENSION, not the first one. `_all_group_dims` in the
+    # executor is documented as "the authoritative set the executor MUST group
+    # by (or explicitly reject) so a parsed second dimension is never silently
+    # dropped" — it reads `spec.dimensions` then `spec.dimension`. Compiling
+    # only `dimensions[0]` would have answered "balance by LTV by age" as
+    # "balance by LTV", with a plan that looked complete.
+    axes = list(scope.dimensions)
+    dimension = axes[0] if axes else None
+    grouped = bool(axes)
+    intent, chart_type, output_format = _RENDERING.get(len(axes),
+                                                       _MANY_DIMENSIONS)
     filters = _filters_for(scope)
 
     if len(outputs) == 1:
@@ -135,25 +159,27 @@ def _spec_for(scope: AnalyticalScope,
         # and `normalise_measures` folds it the same way.
         only = outputs[0]
         return MIQuerySpec(
-            intent="chart" if grouped else "summary",
-            chart_type="bar" if grouped else "none",
+            intent=intent, chart_type=chart_type,
             metric=None if only.operation == COUNT else only.measure,
             aggregation=only.operation,
             weight_field=only.weight_field,
             dimension=dimension, x=dimension,
+            y=axes[1] if len(axes) > 1 else None,
+            dimensions=list(axes),
             filters=filters,
-            output_format="chart" if grouped else "text",
+            output_format=output_format,
             explanation="One governed output over one analytical population.")
 
     return MIQuerySpec(
-        intent="chart" if grouped else "summary",
-        chart_type="bar" if grouped else "none",
+        intent=intent, chart_type=chart_type,
         measures=[_measure_entry(o) for o in outputs],
         metric=(None if outputs[0].operation == COUNT else outputs[0].measure),
         aggregation=outputs[0].operation,
         dimension=dimension, x=dimension,
+        y=axes[1] if len(axes) > 1 else None,
+        dimensions=list(axes),
         filters=filters,
-        output_format="chart_and_table" if grouped else "table",
+        output_format="table" if len(axes) > 2 else output_format,
         explanation="Several governed outputs over one analytical population.")
 
 
