@@ -1523,7 +1523,7 @@ def _wants_count(q: str) -> bool:
 #: A measure word that DEFAULTS rather than resolves. "Amount" is the reader's
 #: own governed default for the balance, so a question carrying it has named a
 #: money measure even though `_detect_metric` returns nothing for it.
-_DEFAULTED_MEASURE_RE = re.compile(r"\bamounts?\b", re.I)
+_DEFAULTED_MEASURE_RE = _lexical.DEFAULTED_MEASURE_RE
 
 
 def _counts_a_row_noun(q: str) -> bool:

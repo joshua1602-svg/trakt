@@ -426,6 +426,27 @@ def bound_unit(text: str) -> Optional[str]:
     return None
 
 
+#: `amount` — the reader's own governed default for the balance measure.
+#:
+#: The product owner's rule ("amount defaults to the current outstanding
+#: balance") had three separate homes: a terminal branch of the parse, the
+#: parser's `_DEFAULTED_MEASURE_RE`, and nowhere at all in the receipt layer —
+#: whose measure vocabulary listed "balance" and "exposure" and not this. So the
+#: completeness guard could not see an amount as a requested output:
+#:
+#:     "How many pipeline cases are there and what is the total pipeline
+#:      amount?"     parser: 2 outputs     guard: 1
+#:
+#: and a request for two that returned one was invisible to the machinery built
+#: to catch exactly that. One word, one owner.
+DEFAULTED_MEASURE_RE = re.compile(r"\bamounts?\b", re.I)
+
+
+def names_defaulted_measure(text: str) -> bool:
+    """Does this text name a measure that DEFAULTS rather than resolves?"""
+    return bool(DEFAULTED_MEASURE_RE.search(text or ""))
+
+
 PREDICATE_WINDOW = 32
 
 

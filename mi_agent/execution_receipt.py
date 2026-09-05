@@ -1106,6 +1106,31 @@ def named_measure_concepts(question: str) -> List[str]:
                 seen.add(concept)
                 found.append((match.start(), concept))
             break
+    # A COUNT IS A REQUESTED MEASURE, and this was the one place that did not
+    # think so. `executed_measure_concepts` already emits "count" for
+    # `loan_count`, so the two halves of the completeness check were reading
+    # different vocabularies and the requested side systematically under-counted:
+    #
+    #     "Give me the loan count and balance."               spec 2  guard 1
+    #     "How many pipeline cases are there and what is
+    #      the total pipeline amount?"                        spec 2  guard 0
+    #
+    # The guard raises its multi-measure facet on `len(concepts) > 1`, so for
+    # the commonest composed shape in the estate it never fired at all — a
+    # request for two outputs that returned one could not be detected by the
+    # machinery built to detect exactly that.
+    #
+    # Read from the one count owner rather than a seventh phrase list.
+    # `amount`, from the same owner and for the same reason as the count above.
+    if "balance" not in seen and _lexical.names_defaulted_measure(q):
+        match = _lexical.DEFAULTED_MEASURE_RE.search(q)
+        if match and not _is_filter_subject(q, match.start(), match.end()):
+            seen.add("balance")
+            found.append((match.start(), "balance"))
+    if "count" not in seen:
+        spans = _lexical.count_request_spans(q)
+        if spans and not _is_filter_subject(q, spans[0][0], spans[0][1]):
+            found.append((spans[0][0], "count"))
     return [c for _, c in sorted(found)]
 
 
