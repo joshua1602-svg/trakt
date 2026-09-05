@@ -3542,6 +3542,29 @@ def _grouped_value_filters(q: str, semantics: dict, available_columns,
     unavailable: List[str] = []
     filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable,
                              available_values=available_values)
+    # EVERY stated population, here too. This is the SECOND owner of that
+    # question — `_resolve_population` is the other — and fixing only one left
+    # the grouped path dropping narrowings the ungrouped path kept:
+    #
+    #   "For joint borrowers in Scotland, balance"              Joint + Scotland
+    #   "For joint borrowers in Scotland, balance by product"   Joint only
+    #
+    # A grouping is not supposed to cost a filter. The field that IS the
+    # grouping is still excluded below — that is the breakdown, not a
+    # narrowing — so "balance by region for Scotland" groups by region and
+    # narrows to Scotland without the two competing.
+    #
+    # `exclude` is NOT applied to these. It exists to stop the GROUPING WORD
+    # becoming a filter — "balance by region" must not narrow to a region — and
+    # `_categorical_narrowings` never returns a bare dimension word: it returns
+    # only values resolved against the book's own catalogue. So "balance by
+    # product and region for Scotland" groups by both axes AND narrows to
+    # Scotland, which is what was asked; excluding it dropped the narrowing and
+    # answered over every region.
+    for field, value in _categorical_narrowings(
+            q, semantics, available_columns, available_values).items():
+        if field not in filters:
+            filters[field] = value
     # A borrower-structure value filter ("... for joint borrowers") resolves to a
     # categorical filter (or an unavailable note). Skip it when the grouping IS
     # the borrower dimension (that is the breakdown, not a filter).
@@ -4492,8 +4515,25 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
             explicit_plot = False
     numeric_bubble = False
     if len(seg_classes) >= 2 and not explicit_plot and "treemap" not in q:
-        n_categorical = sum(1 for c in seg_classes if c[0] == "categorical")
-        if n_categorical >= 1:
+        # A NUMERIC CONCEPT IN A GROUPING POSITION IS A BUCKET, NOT AN AXIS TO
+        # SCATTER. This required at least one CATEGORICAL segment before the
+        # grouped matrix was allowed, so two governed buckets asked for by their
+        # plain names fell through to the bubble reading:
+        #
+        #   "balance by LTV bucket by age bucket"  -> 2D grouped matrix
+        #   "balance by LTV by age"                -> bubble, then loan_level
+        #
+        # One analytical request, two words apart, and the second lost its
+        # measure and its aggregation on the way. The comment above already
+        # states the rule this restores — the axes decide, not the verb — and
+        # `_classify_segment` has always returned each numeric segment's
+        # governed bucket as its third element. Nothing here learns a new
+        # concept; the bucket that was already resolved is now used.
+        #
+        # The scatter reading keeps every sentence that actually asks for one:
+        # `explicit_plot`, the bubble/scatter/"sized by" words and a resolved
+        # pair of scatter axes all still disqualify this branch above.
+        if seg_classes:
             # The two visual dimensions (row/column), in question order.
             dims: List[str] = []
             for c in seg_classes[:2]:
