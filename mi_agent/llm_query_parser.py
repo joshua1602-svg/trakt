@@ -3090,6 +3090,50 @@ def _whole_clause_value(clause: str, available_values,
     return _categorical_value_field(text, available_values, semantics)
 
 
+def _value_with_its_field_name(phrase: str, semantics: dict,
+                               available_columns=None, available_values=None
+                               ) -> Optional[Tuple[str, str]]:
+    """"the Alpha broker" -> ``("broker_channel", "Alpha")``, or None.
+
+    A GOVERNED VALUE MAY BE WRITTEN NEXT TO ITS OWN FIELD'S NAME, and that names
+    the value, not a breakdown by the field. "The Alpha broker" is one broker.
+
+    This construction already worked for exactly one field, because the
+    prepositional pattern carries a fixed list of trailing nouns and `region` is
+    on it while `broker` and `products` are not:
+
+        "in the Scotland region"      collateral_geography = Scotland   applied
+        "for the Alpha broker"        breakdown by broker, value LOST
+        "for Lump Sum products"       breakdown by product, value LOST
+
+    One construction, and whether it worked depended on which field the reader
+    happened to be asking about — a noun list standing in for a rule.
+
+    The rule is checked against the registry and the book, never a list: the
+    TRAILING words must name exactly one governed field, and the LEADING words
+    must resolve to a value OF THAT SAME FIELD. Both halves are required, which
+    is what keeps it from inventing anything — "the London broker" declines,
+    because London is a place and no broker is called it, and declining is what
+    lets the fail-closed machinery say so.
+
+    Longest head first, so a value that itself ends in a field-naming word is
+    tried whole before it is split.
+    """
+    words = [w for w in str(phrase or "").split() if w]
+    if len(words) < 2 or not available_values:
+        return None
+    for cut in range(len(words) - 1, 0, -1):
+        head, tail = " ".join(words[:cut]), " ".join(words[cut:])
+        keys, _terms, _rem = _explicit_dimensions(
+            tail, semantics, available_columns=available_columns)
+        if len(keys) != 1:
+            continue
+        owned = _categorical_value_field(head, available_values, semantics)
+        if owned is not None and owned[0] == keys[0]:
+            return owned
+    return None
+
+
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None,
                               available_values=None, unresolved=None
                               ) -> Optional[Tuple[str, str]]:
@@ -3189,6 +3233,19 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     owned = _categorical_value_field(value, available_values, semantics)
     if owned is not None:
         return owned[0], owned[1]
+    # A VALUE WRITTEN NEXT TO ITS OWN FIELD'S NAME, before the word-level veto
+    # below gets to it. `_NON_PLACE_TERMS` exists to stop an INVENTED geography,
+    # and it contains exactly the words a reader uses to name these fields —
+    # "broker", "product", "products", "type" — so "the Alpha broker" and "Lump
+    # Sum products" were rejected here and never reached the attributive
+    # fallback that could read them. The comment above already states the
+    # governing rule ("the book's own values decide the field, and they decide
+    # it FIRST"); this is that rule applied to the construction the veto was
+    # hiding.
+    named = _value_with_its_field_name(value, semantics, available_columns,
+                                       available_values)
+    if named is not None:
+        return named
     if any(word in _NON_PLACE_TERMS for word in value.split()):
         return None
     if available_values:
