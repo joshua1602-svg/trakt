@@ -87,12 +87,29 @@ def _filters_for(scope: AnalyticalScope) -> Dict[str, Any]:
     for predicate in scope.filters:
         op = str(predicate.op or "").lower()
         if op in ("eq", "", "equals"):
-            out[predicate.field] = predicate.value
-        elif op == "in":
-            out[predicate.field] = {"op": "in", "value": list(predicate.value)}
+            out[predicate.field] = _executor_value(predicate.value)
         else:
-            out[predicate.field] = {"op": op, "value": predicate.value}
+            out[predicate.field] = {"op": op,
+                                    "value": _executor_value(predicate.value)}
     return out
+
+
+def _executor_value(value: Any) -> Any:
+    """A predicate's value in the shape the executor's filters carry.
+
+    `Predicate` normalises a multi-valued bound to a TUPLE so a scope stays
+    hashable and two orderings of one restriction compare equal. The executor's
+    `filters` have always held LISTS — `{"op": "between", "value": [40, 60]}` —
+    and the round trip is only an identity if the shape comes back too.
+
+    Found by running the whole 882-question corpus through
+    `plan_from_spec` → `compile_query_plan`: seven questions, all of them a
+    `between`, came back structurally right and shaped wrong. Semantically it
+    changes nothing — the executor accepts either — but the round-trip identity
+    is the entire argument for routing production through the plan, and an
+    invariant with seven exceptions is not an invariant.
+    """
+    return list(value) if isinstance(value, tuple) else value
 
 
 def _measure_entry(output: PlannedOutput) -> Dict[str, Any]:
