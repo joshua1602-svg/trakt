@@ -1914,6 +1914,43 @@ _RISK_LIMIT_NOUNS = frozenset({
 })
 
 
+#: THE SAME GAP, FOR THE OTHER PHRASE-READING RECOGNISERS. `_RISK_LIMIT_NOUNS`
+#: exists because a recogniser that reads PHRASES cannot answer a question about
+#: one WORD, so its nouns were the gap through which an analytic phrase was
+#: recorded as a category the book does not carry. Every word below has exactly
+#: that shape: it belongs to a governed capability whose recogniser reads a
+#: phrase, and the word-level ownership test could not reach it.
+#:
+#:   compare, versus              the period-comparison recogniser
+#:   forecast, project, reach     the forecast and milestone recognisers
+#:   drill                        the loan-level drill-through
+#:   complete, completeness       the data-quality capability ("how complete
+#:                                is LTV?")
+#:   current, latest              the point-in-time default — the registry's
+#:                                own fields are named `current_*`
+#:   unknown, missing             the executor's own missing-value bucket
+#:                                label, "Unknown / Missing"
+#:   sits, stands                 the copular verbs a threshold is written with
+#:                                ("how much balance SITS above 50% LTV")
+#:
+#: This is NOT an ignore list, and the distinction matters. A word here is
+#: claimed BY AN OWNER — it names something the estate computes — so it can
+#: never be the route by which a population qualifier vanishes. A word with no
+#: owner does not belong here, and "platinum", "risky" and "good" are
+#: deliberately absent: they name restrictions nothing can apply, and they must
+#: keep reaching the unresolved-category refusal.
+_ANALYTIC_CAPABILITY_WORDS = frozenset({
+    "compare", "compares", "compared", "comparison", "versus",
+    "forecast", "forecasts", "forecast", "project", "projected", "projection",
+    "reach", "reaches", "reached",
+    "drill", "drilling",
+    "complete", "completeness", "incomplete",
+    "current", "latest",
+    "unknown", "missing",
+    "sits", "sit", "stands", "stand",
+})
+
+
 # Natural-language risk-limit category -> the category key used by the risk
 # monitor (``risk_limits.testsByCategory``). Order matters (most specific first).
 _RISK_LIMIT_CATEGORY_TERMS: List[Tuple[str, str]] = [
@@ -2951,7 +2988,7 @@ def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
     # recogniser reads phrases, so it cannot answer a question about one word,
     # and its nouns were the gap through which an analytic phrase was recorded
     # as a category the book does not carry.
-    if token in _RISK_LIMIT_NOUNS:
+    if token in _RISK_LIMIT_NOUNS or token in _ANALYTIC_CAPABILITY_WORDS:
         return True
     if _categorical_value_field(token, available_values, semantics):
         return True
@@ -4244,6 +4281,58 @@ def _resolve_population(text: str, semantics: dict, available_columns=None,
             if dim in filters and not _restricts_the_axis(
                     dim, filters[dim], axis_text, available_values):
                 filters.pop(dim, None)
+    # SEMANTIC ACCOUNTING — the last thing this owner does, and the hole it
+    # closes is the one every other guard is blind to.
+    #
+    # The estate fails closed on a requested population it has first NOTICED.
+    # Every requested-versus-executed guard compares something the question
+    # STATED with something the execution DID, and a qualifier no owner
+    # recognised states nothing — so there is nothing to reconcile and the
+    # answer succeeds over a broader population, confidently and in silence.
+    # That is how "Give me the Scottish balance." returned the whole book.
+    #
+    # Resolving "Scottish" fixed those two questions. It did not fix the CLASS:
+    # an unresolvable term still finds both blind spots, so "What is the
+    # platinum balance?" answered over the book while "How many platinum
+    # loans?" refused, for no reason a reader could hear.
+    #
+    # The accounting layer decides nothing about meaning. It asks the owners
+    # that already ship which spans they claimed, and reports what is left
+    # standing in a restriction position. It never resolves a population of its
+    # own — the residue is recorded as an unresolved CATEGORY, in the estate's
+    # existing vocabulary, so the refusal has ONE owner rather than two.
+    # ... UNLESS THE SCOPE OWNER IS THE ONE WHO SHOULD BE SPEAKING. "the
+    # Highgate Mortgages Book" is an unheld PORTFOLIO, and `portfolio_lens` has
+    # a controlled refusal for exactly that, naming the book and saying it is
+    # not in the governed registry. Announcing "no loans match 'highgate'" over
+    # the top of it is the same fact explained worse, and it costs the caller
+    # the `controlledRefusal` contract. The sibling residue path already defers
+    # here for the same reason; this is that rule, applied to this owner.
+    if unresolved is not None and not _names_a_book(text):
+        try:
+            from question_interpretation.semantic_accounting import material_residue
+
+            for residue in material_residue(
+                    text, semantics, available_columns=available_columns,
+                    available_values=available_values):
+                # ONE OBSTACLE, ONE SENTENCE. Where another owner has already
+                # recorded why a concept could not be applied — "borrower_
+                # structure is not in this dataset" for "joint borrowers" — the
+                # reader must not also be told it is a category the book does
+                # not carry. The estate's rule is that a reader who asks the
+                # same question two ways cannot be told two different things
+                # about the same obstacle; two notes about ONE obstacle is the
+                # same fault.
+                if residue.text in str(filters):
+                    continue
+                if any(residue.text in str(note).lower()
+                       for note in (unavailable or ())):
+                    continue
+                mark = f"{UNKNOWN_CATEGORY_PREFIX}'{residue.text}'"
+                if mark not in unresolved:
+                    unresolved.append(mark)
+        except Exception:  # noqa: BLE001 - accounting may never cost an answer
+            pass
     return filters, unavailable, note
 
 

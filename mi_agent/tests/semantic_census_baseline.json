@@ -6,7 +6,9 @@
   "intent": "chart",
   "measures": [],
   "metric": "current_outstanding_balance",
-  "unavailable": []
+  "unavailable": [
+   "unknown category: 'scotland'"
+  ]
  },
  "Are South East and London balances developing differently over time?": {
   "aggregation": "sum",
@@ -15,7 +17,9 @@
   "intent": "chart",
   "measures": [],
   "metric": "current_outstanding_balance",
-  "unavailable": []
+  "unavailable": [
+   "unknown category: 'london'"
+  ]
  },
  "Are any of our concentration limits likely to breach over the next three months?": {
   "aggregation": "count",
@@ -396,6 +400,7 @@
   "measures": [],
   "metric": "current_outstanding_balance",
   "unavailable": [
+   "unknown category: 'scotland'",
    "unknown category: 'west'"
   ]
  },
@@ -407,7 +412,8 @@
   "measures": [],
   "metric": "current_outstanding_balance",
   "unavailable": [
-   "unknown category: 'east'"
+   "unknown category: 'east'",
+   "unknown category: 'london'"
   ]
  },
  "How has the balance of direct loans moved relative to acquired loans?": {
@@ -1792,7 +1798,9 @@
   "intent": "chart",
   "measures": [],
   "metric": "equity",
-  "unavailable": []
+  "unavailable": [
+   "unknown category: 'estimated'"
+  ]
  },
  "Show expected completions by month.": {
   "aggregation": "sum",
@@ -2403,7 +2411,10 @@
   "intent": "summary",
   "measures": [],
   "metric": "equity",
-  "unavailable": []
+  "unavailable": [
+   "unknown category: 'low'",
+   "unknown category: 'remaining'"
+  ]
  },
  "Show loss amount by vintage.": {
   "aggregation": "sum",
@@ -2776,7 +2787,9 @@
   "intent": "summary",
   "measures": [],
   "metric": "current_outstanding_balance",
-  "unavailable": []
+  "unavailable": [
+   "unknown category: 'roll-up'"
+  ]
  },
  "Show source notes for this answer.": {
   "aggregation": "count",
@@ -3388,9 +3401,7 @@
   "intent": "summary",
   "measures": [],
   "metric": null,
-  "unavailable": [
-   "unknown category: 'forecast'"
-  ]
+  "unavailable": []
  },
  "What is the funded balance?": {
   "aggregation": "sum",

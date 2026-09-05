@@ -245,35 +245,20 @@ class TestTheDisclosureCapabilitySurvives(unittest.TestCase):
         self.assertFalse(result.get("ok"),
                          "an unrecognised category was answered over the book")
 
-    #: THE CLASS IS NOT CLOSED, only its two known instances.
-    #:
-    #: Resolving "Scottish" fixed the two questions. It did not fix the two
-    #: BLIND SPOTS that let them fail silently, and an unresolvable term still
-    #: finds both:
-    #:
-    #:   "What is the platinum balance?"          measure head, no row noun,
-    #:                                            so nothing is offered to any
-    #:                                            resolver and nothing is
-    #:                                            reported
-    #:   "How many platinum lump sum loans?"      the RESIDUE scan still stops
-    #:                                            at its first success, so a
-    #:                                            resolvable category masks an
-    #:                                            unresolvable one
-    #:
-    #: Resolution and disclosure are separate machinery, and only resolution was
-    #: repaired here. Closing the class is the semantic-accounting invariant's
-    #: job; these two rows are its acceptance test, and they become unexpected
-    #: successes when it lands.
-    UNCLOSED = ("What is the platinum balance?",
-                "How many platinum lump sum loans are there?")
-
-    @unittest.expectedFailure
-    def test_an_unresolvable_restriction_in_other_positions_refuses(self):
-        for question in self.UNCLOSED:
-            result, _frame = _run(question)
-            self.assertFalse(
-                result.get("ok"),
-                f"{question!r} was answered over a broader population")
+    def test_an_unresolvable_restriction_refuses_in_every_position(self):
+        """THE CLASS IS CLOSED. Resolving "Scottish" fixed two questions; it did
+        not fix the two blind spots that let them fail silently. The semantic
+        accounting invariant did — an unresolvable term is now refused whether
+        it stands before a row noun, before a MEASURE noun, or beside a category
+        that resolves and used to mask it."""
+        for question in ("How many platinum loans do we have?",
+                         "What is the platinum balance?",
+                         "How many platinum lump sum loans are there?"):
+            with self.subTest(question=question):
+                result, _frame = _run(question)
+                self.assertFalse(
+                    result.get("ok"),
+                    f"{question!r} was answered over a broader population")
 
 
 if __name__ == "__main__":

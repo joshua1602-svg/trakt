@@ -1610,8 +1610,8 @@ def ordering_request(question: str) -> OrderingRequest:
 #: benign — it merely ends the slot — so this cannot be the route by which a
 #: meaningful term vanishes.
 RESTRICTION_SLOT_BOUNDARY = frozenset("""
-for in of on at to with within without across from by per and or but where
-whose having that which than the a an
+for in of on at to with within without across from by per and or but so then
+also whose having that which than the a an
 """.split())
 
 _SLOT_WORD = re.compile(r"[a-z0-9£][a-z0-9'%£-]*[a-z0-9%£]|[a-z0-9£]")
