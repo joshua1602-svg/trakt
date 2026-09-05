@@ -2524,8 +2524,23 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                     + " instead, and no substitute has been presented as the answer")
             continue
         if facet.kind == KIND_GEOGRAPHIC_SCOPE:
-            if narrowed and any(facet.label.lower() in v or v in facet.label.lower()
-                                for v in values):
+            # EVIDENCE, NOT A ROW COUNT. `narrowed` is `rows_after < rows_before`,
+            # and that inference is wrong whenever a population happens to be the
+            # whole book. On a book whose loans are all in Scotland, "what is the
+            # total balance in Scotland?" was refused for a filter the executor
+            # had recorded applying — and a single-region book is an ordinary
+            # thing: a regional subsidiary, a drilled view, a small portfolio.
+            #
+            # The threshold and narrowing branches were converted to read
+            # `applied_filter_fields` when this class was found before. This is
+            # the owner that still inferred. Whether a narrowing ran is a fact
+            # the executor reports; it is never deduced from how many rows
+            # survived it. The VALUE check below is unchanged, so a filter on the
+            # right field carrying the wrong value is still lost.
+            _geo_applied = bool(facet.field_key) and facet.field_key in _applied_fields
+            if (narrowed or _geo_applied) and any(
+                    facet.label.lower() in v or v in facet.label.lower()
+                    for v in values):
                 facet.status, facet.reason = APPLIED, ""
             elif facet.field_key and columns and \
                     (fields.get(facet.field_key, {}) or {}).get(
