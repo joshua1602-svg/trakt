@@ -3827,13 +3827,31 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
     remainder = _mask_spans(q, spans)
     dims, _terms, _rest = _explicit_dimensions(
         remainder, semantics, grouping=True, available_columns=available_columns)
+    # A COUNT'S SPAN IS NOT A MEASURE'S SPAN, and the population lives inside it.
+    #
+    # Masking exists so a measure's own words cannot also be read as an axis —
+    # "average borrower AGE" must not additionally group by age band. A count is
+    # different in kind: its span is the ROW NOUN AND ITS MODIFIERS ("how many
+    # JOINT borrowers"), and those modifiers are the population, not the
+    # measure. Masking them threw the population away:
+    #
+    #     "how many joint borrowers and balance"
+    #         → measures {loan_count, balance} ✓   filters {} ✗
+    #
+    # so a request that named its population in the same breath as the count
+    # answered over the whole book. Dimensions still read the fully masked text
+    # — a count's modifiers are not axes either — and only the POPULATION is
+    # resolved from text where the count's own words survive.
+    population_text = _mask_spans(q, tuple(
+        span for span, measure in zip(spans, measures)
+        if measure.get("field") != "loan_count"))
     # THE BOOK'S OWN VALUES, here too. This was the last governed branch that
     # resolved a category without them, so "which broker channel has the largest
     # balance for LUMP SUM loans?" bound a product type to the GEOGRAPHY field,
     # selected nothing, and refused naming a field the reader never mentioned —
     # the exact substitution the catalogue exists to prevent.
-    filters, unavailable, _note = _resolve_population(
-        remainder, semantics, available_columns, available_values)
+    filters, unavailable, population_note = _resolve_population(
+        population_text, semantics, available_columns, available_values)
 
     grouped = bool(dims)
     spec = MIQuerySpec(
@@ -3851,8 +3869,15 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
         explanation=("Governed multi-measure request: "
                      + ", ".join(m["field"] for m in measures)
                      + " over one population."))
+    # THE SUBSTITUTION IS DISCLOSED ON EVERY PATH. `_resolve_population` reports
+    # when it reached a population through a PROXY — "joint" resolved as
+    # `number_of_borrowers >= 2` because `borrower_structure` is absent from
+    # this book. The filtered branch has always published that note; routing the
+    # same sentence to the measure set must not quietly drop it, or a proxy
+    # becomes indistinguishable from the field the reader named.
     return spec, _det_meta("high", bool(dims), [m["field"] for m in measures],
-                           note="multi_measure")
+                           note=("multi_measure: " + population_note
+                                 if population_note else "multi_measure"))
 
 
 #: Bare qualitative magnitudes. The COMPARATIVE and SUPERLATIVE forms are
