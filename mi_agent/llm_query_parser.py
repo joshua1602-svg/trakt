@@ -3895,6 +3895,61 @@ _QUALIFIER_SPLIT_RE = re.compile(
     r"(?:^|[,;]|\s)\b(?:" + "|".join(_QUALIFIER_OPENERS) + r")\b\s", re.I)
 
 
+def _qualifier_spans(text: str) -> List[Tuple[int, int]]:
+    """The character spans of ``text`` that stand inside a POPULATION qualifier.
+
+    ONE OWNER FOR "WHERE THE QUALIFIER IS". Several readers need this boundary
+    and each had grown its own answer: the narrowing resolver cuts at qualifier
+    openers, the grouping splitter cuts at axis markers, `_axis_phrase` is a
+    segment without its qualifier. The readers that did NOT ask were the ones
+    that read an axis out of a population.
+
+    A qualifier opens at one of the governed openers ("for", "in", "within",
+    …) or after a comma, and closes at the next such opener or at a GROUPING
+    MARKER — because "balance for loans in Wales BY REGION" turns back into
+    axis text at the "by", and a span that ran to the end of the sentence would
+    swallow the axis it was written beside.
+    """
+    lowered = str(text or "").lower()
+    if not lowered:
+        return []
+    opens = sorted({m.start() + (1 if m.group(0)[:1] in " ,;" else 0)
+                    for m in _QUALIFIER_SPLIT_RE.finditer(lowered)})
+    if not opens:
+        return []
+    closes = sorted({m.start() for m in re.finditer(
+        r"\b(?:" + _lexical.axis_marker_alternation() + r")\b", lowered)}
+        | {m.start() for m in re.finditer(r"[,;]", lowered)}
+        | set(opens))
+    spans: List[Tuple[int, int]] = []
+    for start in opens:
+        end = next((c for c in closes if c > start), len(lowered))
+        spans.append((start, end))
+    return spans
+
+
+def _stands_only_in_a_qualifier(term: str, text: str) -> bool:
+    """Does every occurrence of ``term`` in ``text`` sit inside a qualifier?
+
+    Used to decide that a word is naming a POPULATION rather than an axis. A
+    term that appears anywhere else — in the metric position, or after a
+    grouping marker — is left alone, so "ticket size by borrower type" keeps the
+    dimension it names before the marker.
+    """
+    lowered, needle = str(text or "").lower(), str(term or "").lower().strip()
+    if not needle:
+        return False
+    spans = _qualifier_spans(lowered)
+    if not spans:
+        return False
+    found = False
+    for match in re.finditer(r"\b" + re.escape(needle) + r"\b", lowered):
+        found = True
+        if not any(start <= match.start() < end for start, end in spans):
+            return False
+    return found
+
+
 def _categorical_narrowings(text: str, semantics: dict, available_columns=None,
                             available_values=None) -> Dict[str, Any]:
     """EVERY categorical narrowing the text states, not the last one.
@@ -4019,7 +4074,14 @@ def _resolve_population(text: str, semantics: dict, available_columns=None,
     bstruct = _borrower_structure_filter(text, semantics, available_columns)
     if bstruct is not None:
         bfilters, note = bstruct
-        bfilters = {k: v for k, v in (bfilters or {}).items() if k not in exclude}
+        # THE AXIS RULE IS APPLIED ONCE, BELOW, TO EVERY NARROWING. This used to
+        # drop a borrower-structure predicate outright whenever the grouping was
+        # the borrower dimension, while a categorical narrowing on the same axis
+        # got the `_restricts_the_axis` test that asks whether the value arrived
+        # through a QUALIFIER. One rule, two strengths, and the stronger one was
+        # wrong: "total balance by borrower type FOR JOINT BORROWERS" is a
+        # breakdown narrowed to one bar, and it lost the narrowing, was refused
+        # for it, and answered nothing.
         if bfilters:
             filters.update(bfilters)
         elif note:
@@ -4552,7 +4614,7 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     # grouping marker is a qualifier. Dropping it here lets the categorical
     # resolver claim it as a predicate, which is where a narrowing belongs. A
     # term after "by" is untouched, so "balance by occupancy type" still groups.
-    if dim_keys and available_values:
+    if dim_keys:
         # A GROUP SEGMENT ENDS AT ITS OWN QUALIFIER. "by region for owner
         # occupied loans" is one grouping axis narrowed to a value, not two
         # axes: without the cut the value became a second heatmap dimension and
@@ -4563,14 +4625,63 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
             for seg in _grouping_segments(q)[1]).lower()
         _kept_keys, _kept_terms = [], []
         for _key, _term in zip(dim_keys, dim_terms):
-            _is_value = _categorical_value_field(
-                _term, available_values, semantics) is not None
+            _is_value = (available_values is not None
+                         and _categorical_value_field(
+                             _term, available_values, semantics) is not None)
             if _is_value and str(_term).lower() not in _after_by:
                 _dropped_dimension_terms.append(str(_term))
                 continue
             _kept_keys.append(_key)
             _kept_terms.append(_term)
         dim_keys, dim_terms = _kept_keys, _kept_terms
+
+    # A WORD INSIDE A POPULATION IS NOT AN AXIS EITHER, whether or not it
+    # happens to name a value. The rule above needs the book's own catalogue and
+    # so can only see the VALUE spelling of this mistake; the FIELD spelling went
+    # straight through:
+    #
+    #   "total balance by region for single borrower loans"
+    #       -> breakdown by region AND borrower type,
+    #          with "borrower_type = Single" recorded unavailable
+    #
+    # The reader named one axis and one population and received two axes and no
+    # population. `_stands_only_in_a_qualifier` asks the boundary owner rather
+    # than the catalogue, so it covers both spellings.
+    #
+    # ONLY WHERE THE READER NAMED AN AXIS, and that clause is the whole safety
+    # of it. "How many loans are in the 60-70% LTV bucket?" is a population and
+    # nothing else — the qualifier is the entire question — so dropping its term
+    # would leave no axis and no filter. This fires only where a grouping
+    # segment's own AXIS PHRASE resolves to something, which is exactly the
+    # defect's shape: a qualifier supplying an EXTRA axis beside a named one.
+    #
+    # The axis phrase, not the dimension terms, because a NUMERIC axis
+    # ("by ltv") never appears among them — it is resolved by
+    # `_classify_segment` — and that is the reading the qualifier was displacing
+    # most often.
+    # AND ONLY WHERE THE POPULATION OWNER ACTUALLY CLAIMS THE FIELD. A word
+    # standing in a qualifier is only a population if it is BEING USED as one.
+    # "pipeline by stage for broker Alpha" reads as a narrowing on a book whose
+    # brokers include Alpha and as nothing at all on a book whose brokers do
+    # not; dropping the axis in the second case would take the breakdown away
+    # and put nothing in its place, which is a worse answer than the one it
+    # replaced. So the axis is surrendered to the population only when the
+    # population is there to receive it.
+    if dim_keys and any(
+            _classify_segment(_axis_phrase(_seg), semantics, available_columns)
+            for _seg in _grouping_segments(q)[1]):
+        _population, _unavailable, _ = _resolve_population(
+            q, semantics, available_columns, available_values)
+        _claimed = set(_population) | {
+            str(n).split(" ", 1)[0] for n in (_unavailable or ())}
+        _free = [(k, t) for k, t in zip(dim_keys, dim_terms)
+                 if k not in _claimed or not _stands_only_in_a_qualifier(t, q)]
+        if len(_free) < len(dim_keys):
+            _dropped_dimension_terms.extend(
+                str(t) for k, t in zip(dim_keys, dim_terms)
+                if (k, t) not in _free)
+            dim_keys = [k for k, _t in _free]
+            dim_terms = [t for _k, t in _free]
     explicit = bool(dim_keys)
 
     # ---- heatmap (two dimensions + metric) --------------------------------
@@ -4911,7 +5022,27 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     #: Set where THIS branch substitutes the balance for a measure nobody named.
     _grouped_metric_defaulted = False
     if dimension is None and len(by_parts) >= 2:
-        right = by_parts[-1]
+        # THE AXIS PHRASE, NOT THE REST OF THE SENTENCE.
+        #
+        # This offered every word after the last grouping marker as an axis
+        # KEYWORD, qualifier included, and `find_field` took whichever matched:
+        #
+        #   "total balance by LTV for joint borrowers"
+        #       keywords ('ltv', 'for', 'joint', 'borrowers') -> borrowers
+        #       answered as a breakdown by NUMBER OF BORROWERS
+        #
+        # Answered — not refused, not disclosed — as one bar labelled "2"
+        # carrying the whole joint book, for a question about how balance is
+        # distributed across LTV. It stayed hidden because the estate's books do
+        # not carry `number_of_borrowers`, so the executor refused for a missing
+        # column: the right outcome for the wrong reason, and one that vanishes
+        # the moment a book carries a field the registry already defines.
+        #
+        # `_axis_phrase` is the owner of where an axis ends, and the population
+        # resolver, the grouping splitter and the value resolver all read it.
+        # This reads it too.
+        _segments = _grouping_segments(q)[1]
+        right = _axis_phrase(_segments[-1]) if _segments else by_parts[-1]
         if any(t in _REGION_GENERIC_TERMS for t in right.split()):
             # Generic region request: resolve data-aware (display field first,
             # then NUTS code fields). When no region column is available this is
