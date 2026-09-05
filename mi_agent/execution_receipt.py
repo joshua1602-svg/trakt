@@ -2455,6 +2455,15 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
     values = _filter_values(spec)
     comparison_ops = _comparison_ops_applied(spec)
+    #: How many of the spec's COMPARISON filters the executor recorded applying.
+    #: Evidence, not inference — see the threshold branch below.
+    _applied_fields = set(meta.get("applied_filter_fields") or ())
+    executed_comparisons = len([
+        key for key, value in (getattr(spec, "filters", None) or {}).items()
+        if isinstance(value, dict)
+        and str(value.get("op", "")).strip().lower()
+        not in ("", "eq", "equals", "in", "one_of")
+        and key in _applied_fields])
     thresholds_seen = 0
 
     ran = executed_statistics(query_result)
@@ -2525,7 +2534,29 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
 
         elif facet.kind == KIND_THRESHOLD:
             thresholds_seen += 1
-            if narrowed and comparison_ops >= thresholds_seen:
+            # A FILTER THAT MATCHED EVERYTHING IS NOT A FILTER THAT NEVER RAN.
+            #
+            # This asked whether the POPULATION SHRANK, and row count is a side
+            # effect of applying a predicate rather than evidence of it. A bound
+            # every row satisfies is arithmetically identical to one that was
+            # dropped, so a correct answer was refused:
+            #
+            #   executor  filter pipeline_case_age_days gt 30.0 kept 10/10 rows
+            #   guard     "you asked for over 30, but that could not be applied"
+            #
+            # It survived because nearly every threshold in the standing banks
+            # removes rows. It is wrong exactly where a bound sits at or outside
+            # the range the book holds — a concentrated portfolio, a young
+            # pipeline — which is where an operator most needs to trust it.
+            #
+            # The evidence already existed. The executor publishes the fields it
+            # filtered on, and the POPULATION facet one branch above already
+            # reads it through `population_applied`. Only this branch guessed.
+            # The row-count heuristic stays as the fallback for a route that
+            # publishes no record, where it can only add APPLIED verdicts.
+            if executed_comparisons >= thresholds_seen:
+                facet.status, facet.reason = APPLIED, ""
+            elif narrowed and comparison_ops >= thresholds_seen:
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = LOST

@@ -2263,6 +2263,62 @@ def _resolve_subject(kind: str, semantics: dict, available_columns=None):
                       keywords=("valuation", "value"))
 
 
+def _field_names_unit(entry: dict, unit: str) -> bool:
+    """Does this field's GOVERNED VOCABULARY say it is measured in ``unit``?
+
+    Read from the business name, description and synonyms the registry already
+    carries — no new attribute, and no name-sniffing. Measured:
+
+        pipeline_case_age_days      days ✓   ("days in pipeline", "case age in days")
+        number_of_days_in_arrears   days ✓
+        months_on_book              months ✓
+        youngest_borrower_age       —        (an age in years, named in neither)
+    """
+    stem = unit.rstrip("s")
+    hay = " ".join([str(entry.get("business_name") or ""),
+                    str(entry.get("business_description") or ""),
+                    " ".join(entry.get("synonyms") or ())]).lower()
+    return stem in hay
+
+
+def _unit_owner(q: str, semantics: dict, available_columns, resolved: Optional[str]
+                ) -> Optional[str]:
+    """The field a UNIT-BEARING bound belongs to, when the resolved one disagrees.
+
+    "How many pipeline cases are older than 30 DAYS?" resolved to
+    `youngest_borrower_age` — the estate's only field named for age — and
+    filtered the BORROWER's age by a bound stated in days. Nothing about the
+    comparator was wrong; the bound named a quantity the chosen field does not
+    measure.
+
+    DELIBERATELY A DISAGREEMENT RESOLVER, NOT AN OVERRIDE. It acts only when the
+    field already resolved does NOT name the unit and exactly one available
+    field does. So a bound with no unit is untouched ("85 or older" keeps the
+    borrower, and the age theme with it), a unit the resolved field already
+    names is untouched, and an ambiguous unit — two candidate fields — is left
+    to the existing precedence rather than guessed between.
+
+    This is the general form of a rule this function has carried for one unit
+    since long before: "a currency amount is a balance threshold regardless of
+    earlier nouns". Currency was hard-coded because it is a symbol; these are
+    words, and the registry already says which fields wear them.
+    """
+    unit = _lexical.bound_unit(q)
+    if not unit:
+        return None
+    fields = _fields(semantics)
+    if resolved and _field_names_unit(fields.get(resolved, {}) or {}, unit):
+        return None
+    columns = set(available_columns) if available_columns is not None else None
+    candidates = [
+        key for key, entry in fields.items()
+        if _field_names_unit(entry or {}, unit)
+        and (entry or {}).get("role") == "metric"
+        and (columns is None
+             or (entry or {}).get("canonical_field", key) in columns)]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _filter_field_of(q: str, semantics: dict, available_columns=None,
                      anchor: Optional[int] = None,
                      value_end: Optional[int] = None) -> Optional[str]:
@@ -3364,6 +3420,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
         if not clause:
             continue
         field = _filter_field_of(clause, semantics)
+        # A UNIT-BEARING BOUND BELONGS TO THE FIELD MEASURED IN THAT UNIT.
+        field = _unit_owner(clause, semantics, available_columns, field) or field
         # Postfix first ("70+", "70 or above") — a number-before-operator phrase.
         matched = False
         for pattern, op in _POSTFIX_COMPARATORS:
@@ -3386,6 +3444,11 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
             field = _filter_field_of(clause, semantics, available_columns,
                                      anchor=m.start(),
                                      value_end=m.end()) or field
+            # The unit again, because this re-resolution replaces the field the
+            # clause-level pass chose. "older than 30 days" reaches the PREFIX
+            # comparators ("older than"), not the postfix ones, so correcting
+            # only the postfix path left the live sentence untouched.
+            field = _unit_owner(clause, semantics, available_columns, field) or field
             if field:
                 filters[field] = {"op": op, "value": _amount_from_match(m, op)}
                 if spans is not None:

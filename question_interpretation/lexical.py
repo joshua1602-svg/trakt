@@ -389,6 +389,43 @@ def row_noun_alternation() -> str:
     return "|".join(ROW_NOUNS)
 
 
+#: Units a numeric bound can wear as a WORD. Currency and percent are symbols
+#: and are handled where the value is parsed; these are the ones that only a
+#: word distinguishes — and the ones where two governed fields can otherwise
+#: claim the same bound.
+BOUND_UNITS: Tuple[str, ...] = ("days", "weeks", "months", "years")
+
+_BOUND_UNIT_RE = re.compile(
+    r"\b\d[\d,.]*\s*(?:" + "|".join(u[:-1] + "s?" for u in BOUND_UNITS) + r")\b",
+    re.I)
+
+
+def bound_unit(text: str) -> Optional[str]:
+    """The unit a numeric bound in ``text`` is stated in, or None.
+
+    "older than 30 DAYS" and "older than 30 YEARS" are bounds on different
+    quantities, and a resolver that reads only the comparator sees one bound.
+    The unit is part of what the reader said, so it is read here with the rest
+    of the comparator grammar rather than inferred downstream.
+
+    Only the WORD units. `£` and `%` are already decided where the value is
+    parsed, and `_filter_field_of` has carried a currency rule since long before
+    this — "a currency amount is a balance threshold regardless of earlier
+    nouns" is the same idea, for the one unit that had been hard-coded.
+    """
+    match = _BOUND_UNIT_RE.search(text or "")
+    if not match:
+        return None
+    word = re.search(r"[a-z]+$", match.group(0).strip().lower())
+    if not word:
+        return None
+    stem = word.group(0).rstrip("s")
+    for unit in BOUND_UNITS:
+        if unit.rstrip("s") == stem:
+            return unit
+    return None
+
+
 PREDICATE_WINDOW = 32
 
 
