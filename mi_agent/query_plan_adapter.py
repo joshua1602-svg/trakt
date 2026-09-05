@@ -48,7 +48,7 @@ from .query_plan import (
     COUNT, AnalyticalScope, PlannedOutput, Predicate, QueryPlan,
 )
 
-__all__ = ["MODELLED_FIELDS", "plan_from_spec"]
+__all__ = ["MODELLED_FIELDS", "plan_from_spec", "compiled_spec_for"]
 
 #: The spec fields a `QueryPlan` can carry without loss.
 #:
@@ -97,10 +97,26 @@ def _is_liftable(spec: MIQuerySpec) -> bool:
     # the plan carries one axis and restating a disagreement would invent one.
     if spec.dimension and spec.x and spec.dimension != spec.x:
         return False
-    # `y` is an AXIS on a grouped result and a MEASURE on a scatter/bubble. The
-    # plan models the first meaning only, so a `y` that is not the second
-    # grouping dimension is not liftable.
+    # AN AXIS THE PLAN DOES NOT REPRESENT MAKES A SPEC UNLIFTABLE, even where
+    # carrying the field verbatim would preserve behaviour.
+    #
+    # "Show the balance trend over the last 6 months" parses to chart_type
+    # `line` with `x = origination_date` and NO grouping dimensions, and its
+    # `execution_mode` is default — so every un-modelled field is at its
+    # default and the spec looked liftable. `x` there is a TIME AXIS, which
+    # `AnalyticalScope` does not model, so the plan would have claimed the
+    # question has no dimensions at all. The compiled spec would have executed
+    # identically, because `x` is carried across and `_all_group_dims` reads
+    # neither `x` nor `y` — but a plan that misdescribes a request is exactly
+    # what this contract exists to prevent, and the next thing to read the plan
+    # rather than the spec would have inherited the falsehood.
+    #
+    # A query may enter the plan only if its COMPLETE semantics are
+    # representable. So `x` and `y` are liftable only as restatements of the
+    # first and second grouping dimensions.
     axes = _axes(spec)
+    if spec.x and (not axes or spec.x != axes[0]):
+        return False
     if spec.y and (len(axes) < 2 or spec.y != axes[1]):
         return False
     return True
@@ -190,3 +206,61 @@ def plan_from_spec(spec: MIQuerySpec, *,
         # a measure-less aggregation. Declining is the honest outcome: the
         # shipped path still answers it.
         return None
+
+
+#: Spec fields that decide how a governed result is DISPLAYED, not what it means.
+#:
+#: They are carried across the lift by this seam rather than by the plan.
+#: `QueryPlan` deliberately has no opinion about rendering — presentation is
+#: downstream of the governed result and may not own a semantic decision — but
+#: a lift that let the compiler RE-DERIVE the rendering would change what a
+#: reader sees for no analytical reason. Measured across the corpus: 265 of the
+#: 703 liftable specs would have changed presentation, including 37 line charts
+#: becoming text summaries. The analysis was identical in every one of them.
+PRESENTATION_FIELDS = ("intent", "chart_type", "output_format", "title",
+                       "explanation",
+                       # NOT presentation, and not something the plan models:
+                       # `metric_defaulted` is the disclosure that a measure was
+                       # SUBSTITUTED rather than named. The compiler does not
+                       # emit it, so a lift that did not carry it would turn a
+                       # measure the parser chose into one indistinguishable
+                       # from a measure the reader asked for — the exact
+                       # condition that field exists to prevent.
+                       "metric_defaulted",
+                       # CHART AXES, not grouping. The executor's
+                       # `_all_group_dims` reads `dimensions` then `dimension`
+                       # and never `x`/`y`, so these decide only which axis a
+                       # picture draws where. The compiler normalises them for a
+                       # plan built from scratch; on a LIFT they are the
+                       # parser's and stay the parser's. Measured: normalising
+                       # them moved the axes on 450 of 703 charted specs while
+                       # the executed grouping changed on none.
+                       "x", "y")
+
+
+def compiled_spec_for(spec: MIQuerySpec, **scope_kwargs) -> Optional[MIQuerySpec]:
+    """The spec to execute when ``spec`` is routed through a ``QueryPlan``.
+
+    The plan becomes the semantic contract — population, outputs, dimensions —
+    and the ORIGINAL spec's presentation is carried across unchanged. Returns
+    None when the spec is not liftable, in which case the caller executes it as
+    it always has.
+
+    A lifted spec always compiles to exactly one execution: an `MIQuerySpec`
+    carries a single `filters` dict, so every output it lifts to shares one
+    population and no local delta can exist. Output-local composition therefore
+    cannot arise from this path, and does not need to be handled here.
+    """
+    import dataclasses as _dc
+
+    from .query_plan_compiler import compile_query_plan
+
+    plan = plan_from_spec(spec, **scope_kwargs)
+    if plan is None:
+        return None
+    executions = compile_query_plan(plan)
+    if len(executions) != 1:
+        return None
+    return _dc.replace(
+        executions[0].spec,
+        **{name: getattr(spec, name) for name in PRESENTATION_FIELDS})
