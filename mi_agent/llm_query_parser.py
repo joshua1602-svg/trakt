@@ -2263,22 +2263,35 @@ def _resolve_subject(kind: str, semantics: dict, available_columns=None):
                       keywords=("valuation", "value"))
 
 
-def _field_names_unit(entry: dict, unit: str) -> bool:
-    """Does this field's GOVERNED VOCABULARY say it is measured in ``unit``?
+def _field_names_unit(key: str, entry: dict, unit: str) -> bool:
+    """Is this field NAMED for the unit — i.e. is that what it measures?
 
-    Read from the business name, description and synonyms the registry already
-    carries — no new attribute, and no name-sniffing. Measured:
+    THE NAME, NOT THE VOCABULARY, and the difference is a live defect this
+    caught. The first version scanned synonyms and the description too, and
+    `probability_of_default` carries the synonym "one year pd" — so "how many
+    loans are over 80 YEARS old" bound `probability_of_default > 80` instead of
+    the borrower's age. A silent wrong population, from a substring of a
+    synonym in which "year" qualifies a HORIZON rather than naming a unit.
 
-        pipeline_case_age_days      days ✓   ("days in pipeline", "case age in days")
+    A field's key and business name say what it measures; its synonyms say what
+    a reader might call it, and those are different claims. `find_field` in this
+    module already ranks them that way — a name hit is "the strong signal" and a
+    synonym hit ranks below it — and this is the same distinction.
+
+        pipeline_case_age_days      days ✓   (the key says so)
         number_of_days_in_arrears   days ✓
         months_on_book              months ✓
+        probability_of_default      —        ("one year pd" is a synonym)
         youngest_borrower_age       —        (an age in years, named in neither)
+
+    Matched on word boundaries, so "days" is not found inside another word.
     """
     stem = unit.rstrip("s")
-    hay = " ".join([str(entry.get("business_name") or ""),
-                    str(entry.get("business_description") or ""),
-                    " ".join(entry.get("synonyms") or ())]).lower()
-    return stem in hay
+    hay = " ".join([str(key or ""),
+                    str(entry.get("business_name") or ""),
+                    str(entry.get("display_name") or "")]).lower()
+    return bool(re.search(r"\b" + re.escape(stem) + r"s?\b",
+                          hay.replace("_", " ")))
 
 
 def _unit_owner(q: str, semantics: dict, available_columns, resolved: Optional[str]
@@ -2307,12 +2320,12 @@ def _unit_owner(q: str, semantics: dict, available_columns, resolved: Optional[s
     if not unit:
         return None
     fields = _fields(semantics)
-    if resolved and _field_names_unit(fields.get(resolved, {}) or {}, unit):
+    if resolved and _field_names_unit(resolved, fields.get(resolved, {}) or {}, unit):
         return None
     columns = set(available_columns) if available_columns is not None else None
     candidates = [
         key for key, entry in fields.items()
-        if _field_names_unit(entry or {}, unit)
+        if _field_names_unit(key, entry or {}, unit)
         and (entry or {}).get("role") == "metric"
         and (columns is None
              or (entry or {}).get("canonical_field", key) in columns)]
@@ -3824,6 +3837,74 @@ def _business_name_of(field: str, semantics: dict) -> Optional[str]:
     return entry.get("business_name") or entry.get("display_name")
 
 
+#: Words that can open a POPULATION QUALIFIER. Read from the lexical owner's
+#: `SELECTOR_OPENERS`, narrowed to the ones that actually introduce a new
+#: restriction rather than continue one ("is", "equals" attach to a subject
+#: already named).
+_QUALIFIER_OPENERS = ("in", "for", "from", "with", "where", "of", "excluding",
+                      "restricted to", "limited to")
+
+_QUALIFIER_SPLIT_RE = re.compile(
+    r"(?:^|[,;]|\s)\b(?:" + "|".join(_QUALIFIER_OPENERS) + r")\b\s", re.I)
+
+
+def _categorical_narrowings(text: str, semantics: dict, available_columns=None,
+                            available_values=None) -> Dict[str, Any]:
+    """EVERY categorical narrowing the text states, not the last one.
+
+    `_parse_categorical_filter` resolves ONE ``(field, value)`` pair, and the
+    clause splitter does not treat a population qualifier as a boundary — its
+    connectives are "and / with / where / whose / having", which is right for
+    predicates and wrong for qualifiers. So a sentence naming two populations
+    kept whichever came last and dropped the rest, silently:
+
+        "balance in Scotland"                      → Scotland   ✓
+        "balance for lump sum loans"               → Lump Sum   ✓
+        "balance in Scotland for lump sum loans"   → Lump Sum   ✗
+        "balance for lump sum loans in Scotland"   → Scotland   ✗
+
+    That is not a geography defect. It is one resolver returning one answer to a
+    question that can have several, and it made §10's composable filters
+    impossible for any pair of governed populations.
+
+    THE EXISTING RESOLVER IS REUSED, not replaced. The text is cut at qualifier
+    openers and each segment handed to `_parse_categorical_filter`, so the
+    vocabulary, the book's own value catalogue and the registry all still decide
+    what a value means. A segment naming nothing resolvable ("in the last six
+    months") returns nothing, which is what keeps the cut safe: the resolver,
+    not the splitter, decides what is a population.
+
+    First mention wins for a field named twice. Widening one field to two values
+    is a different request ("Scotland and Wales") and `_with_value` already owns
+    it downstream.
+    """
+    found: Dict[str, Any] = {}
+    # The cut is BEFORE the opener, so every segment keeps the word that makes
+    # it a qualifier. `_parse_categorical_filter` reads the selector mark to
+    # know a value is being stated rather than mentioned, and handing it a bare
+    # "scotland" resolves nothing.
+    boundaries = [m.start() + (1 if m.group(0)[:1] in " ,;" else 0)
+                  for m in _QUALIFIER_SPLIT_RE.finditer(text or "")]
+    # Punctuation ends a qualifier too. "in Scotland, balance by product and
+    # region" resolved nothing as one segment: the trailing analysis defeats a
+    # resolver whose job is to read a value out of a short phrase.
+    boundaries += [m.start() for m in re.finditer(r"[,;]", text or "")]
+    boundaries = sorted(set(b for b in boundaries if 0 < b < len(text or "")))
+    if not boundaries:
+        return found
+    starts = [0] + boundaries
+    ends = boundaries + [len(text)]
+    for start, end in zip(starts, ends):
+        segment = (text or "")[start:end].strip(" ,;")
+        if not segment:
+            continue
+        resolved = _parse_categorical_filter(segment, semantics,
+                                             available_columns, available_values)
+        if resolved and resolved[0] not in found:
+            found[resolved[0]] = resolved[1]
+    return found
+
+
 def _resolve_population(text: str, semantics: dict, available_columns=None,
                         available_values=None, *,
                         unresolved: Optional[List[str]] = None
@@ -3869,20 +3950,21 @@ def _resolve_population(text: str, semantics: dict, available_columns=None,
             filters.update(bfilters)
         else:
             unavailable.append(note)
-    # A categorical value the book itself carries ("in Scotland", "Lump Sum").
+    # EVERY categorical narrowing the book itself carries ("in Scotland", "for
+    # Lump Sum loans"), not just the last one — see `_categorical_narrowings`.
+    for field, value in _categorical_narrowings(
+            text, semantics, available_columns, available_values).items():
+        if field not in filters:
+            filters[field] = value
     if not filters:
-        cat = _parse_categorical_filter(text, semantics, available_columns,
-                                        available_values)
-        if cat is None:
-            # A CFO states the scope FIRST — "For the London book, give me …".
-            # The same resolver reads the leading clause; no second pattern.
-            lead = text.split(",", 1)[0].strip()
-            if lead and lead != text.strip():
-                cat = _parse_categorical_filter(lead, semantics,
-                                                available_columns,
-                                                available_values)
-        if cat and cat[0] not in filters:
-            filters[cat[0]] = cat[1]
+        # A CFO states the scope FIRST — "For the London book, give me …".
+        # The same resolver reads the leading clause; no second pattern.
+        lead = (text or "").split(",", 1)[0].strip()
+        if lead and lead != (text or "").strip():
+            cat = _parse_categorical_filter(lead, semantics, available_columns,
+                                            available_values)
+            if cat:
+                filters[cat[0]] = cat[1]
     return filters, unavailable, note
 
 
