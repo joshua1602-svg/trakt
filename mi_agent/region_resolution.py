@@ -75,6 +75,28 @@ _ALIASES: Dict[str, str] = {
     "the humber": "yorkshire and the humber",
     "ni": "northern ireland",
     "ulster": "northern ireland",
+    # ADJECTIVAL FORMS OF THE THREE ITL1 NATIONS.
+    #
+    # The table above is entirely NOMINAL — "greater london", "east anglia",
+    # "ulster" — so a reader who wrote the adjective reached nothing:
+    # `codes_for("scotland")` gave 18 codes and `codes_for("scottish")` gave 0.
+    #
+    # THE BOUNDARY COMES FROM THE TAXONOMY, NOT FROM ENGLISH. The governed ITL1
+    # level has twelve values, and exactly three of them are nations with an
+    # unambiguous adjectival form. "English" is deliberately absent: England is
+    # not one governed value — it spans nine ITL1 regions, North East through
+    # South West — so the adjective has no single referent and resolving it
+    # would invent a region the taxonomy does not have. "British", "UK" and the
+    # rest are absent for the same reason. An alias may be added where the
+    # taxonomy already makes the referent unambiguous; the taxonomy is never
+    # widened to accommodate the language.
+    #
+    # "northern irish" is one governed phrase. `codes_for` normalises the whole
+    # term before this lookup, so a key matches a complete phrase and never a
+    # word inside one.
+    "scottish": "scotland",
+    "welsh": "wales",
+    "northern irish": "northern ireland",
 }
 
 
