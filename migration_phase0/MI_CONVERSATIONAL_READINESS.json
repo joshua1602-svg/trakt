@@ -1,0 +1,1232 @@
+{
+  "phase_b_scope_reconstruction": {
+    "question": "What is the funded balance for joint borrowers in the London region with LTV above 40%?",
+    "observed": {
+      "ok": true,
+      "error": null,
+      "filters": {
+        "geographic_region_obligor": "London",
+        "current_loan_to_value": {
+          "op": "gt",
+          "value": 40.0
+        },
+        "borrower_type": "Joint"
+      },
+      "metric": "current_outstanding_balance",
+      "aggregation": "sum",
+      "dimension": "geographic_region_obligor",
+      "dimensions": [],
+      "measures": [],
+      "unavailable_filters": [],
+      "measures_requested": null,
+      "measures_executed": [],
+      "measures_unavailable": null,
+      "applied_filter_fields": [
+        "geographic_region_obligor",
+        "current_loan_to_value",
+        "borrower_type"
+      ],
+      "dataset": "funded",
+      "population": 21,
+      "population_total": 400,
+      "narrowed": true,
+      "receipt": "Calculated: Total Balance \u00b7 London \u00b7 Current LTV > 40 \u00b7 Borrower Type = Joint \u00b7 grouped by Obligor Region (NUTS3) \u00b7 1 groups \u00b7 21 loans.",
+      "guard": "ok"
+    },
+    "reconstructed_scope": {
+      "dataset": "funded",
+      "population_filters": {
+        "geographic_region_obligor": "London",
+        "current_loan_to_value": {
+          "op": "gt",
+          "value": 40.0
+        },
+        "borrower_type": "Joint"
+      },
+      "grouping": [
+        "geographic_region_obligor"
+      ],
+      "measure": "current_outstanding_balance",
+      "measures": [],
+      "aggregation": "sum",
+      "weight_field": null,
+      "reporting_period": null,
+      "portfolio_lens": null,
+      "comparison_basis": null,
+      "applied_filter_fields": [
+        "geographic_region_obligor",
+        "current_loan_to_value",
+        "borrower_type"
+      ],
+      "population_rows": 21
+    },
+    "slot_owners": {
+      "dataset": "query_result.metadata['dataset']",
+      "population_filters": "spec.filters",
+      "grouping": "spec.dimensions / spec.dimension",
+      "measure": "spec.metric / spec.measures",
+      "aggregation": "spec.aggregation",
+      "weight_field": "spec.weight_field",
+      "reporting_period": "spec.reporting_date / execution_receipt.period",
+      "portfolio_lens": "spec.portfolio_lens (request-supplied)",
+      "comparison_basis": "spec.comparison_basis",
+      "applied_evidence": "query_result.metadata['applied_filter_fields']"
+    },
+    "slot_populated": {
+      "dataset": true,
+      "population_filters": true,
+      "grouping": true,
+      "measure": true,
+      "aggregation": true,
+      "weight_field": false,
+      "reporting_period": false,
+      "portfolio_lens": false,
+      "comparison_basis": false
+    },
+    "replays": [
+      {
+        "case": "INHERIT: WA LTV over the inherited population",
+        "ok": true,
+        "filters_executed": {
+          "geographic_region_obligor": "London",
+          "current_loan_to_value": {
+            "op": "gt",
+            "value": 40.0
+          },
+          "borrower_type": "Joint"
+        },
+        "grouping_executed": [
+          "geographic_region_obligor"
+        ],
+        "applied_filter_fields": [
+          "geographic_region_obligor",
+          "current_loan_to_value",
+          "borrower_type"
+        ],
+        "filtered_row_count": 21,
+        "input_row_count": 400,
+        "columns": [
+          "geographic_region_obligor",
+          "current_loan_to_value_weighted_avg",
+          "loan_count",
+          "concentration_pct"
+        ],
+        "loan_count": 21,
+        "group_rows": 1
+      },
+      {
+        "case": "ADD: + LTV > 80 over the inherited population",
+        "ok": true,
+        "filters_executed": {
+          "geographic_region_obligor": "London",
+          "current_loan_to_value": {
+            "op": "gt",
+            "value": 80.0
+          },
+          "borrower_type": "Joint"
+        },
+        "grouping_executed": [
+          "geographic_region_obligor"
+        ],
+        "applied_filter_fields": [
+          "geographic_region_obligor",
+          "current_loan_to_value",
+          "borrower_type"
+        ],
+        "filtered_row_count": 0,
+        "input_row_count": 400,
+        "columns": [
+          "geographic_region_obligor",
+          "current_outstanding_balance_sum",
+          "loan_count"
+        ],
+        "loan_count": null,
+        "group_rows": 0
+      },
+      {
+        "case": "MODIFY: borrower_type Joint -> Single",
+        "ok": true,
+        "filters_executed": {
+          "geographic_region_obligor": "London",
+          "current_loan_to_value": {
+            "op": "gt",
+            "value": 40.0
+          },
+          "borrower_type": "Single"
+        },
+        "grouping_executed": [
+          "geographic_region_obligor"
+        ],
+        "applied_filter_fields": [
+          "geographic_region_obligor",
+          "current_loan_to_value",
+          "borrower_type"
+        ],
+        "filtered_row_count": 21,
+        "input_row_count": 400,
+        "columns": [
+          "geographic_region_obligor",
+          "current_outstanding_balance_sum",
+          "loan_count",
+          "concentration_pct"
+        ],
+        "loan_count": 21,
+        "group_rows": 1
+      },
+      {
+        "case": "RESET: whole funded book",
+        "ok": true,
+        "filters_executed": {},
+        "grouping_executed": [
+          "geographic_region_obligor"
+        ],
+        "applied_filter_fields": [],
+        "filtered_row_count": 400,
+        "input_row_count": 400,
+        "columns": [
+          "geographic_region_obligor",
+          "current_outstanding_balance_sum",
+          "loan_count",
+          "concentration_pct"
+        ],
+        "loan_count": 87,
+        "group_rows": 5
+      },
+      {
+        "case": "GROUP: inherited population by age bucket",
+        "ok": true,
+        "filters_executed": {
+          "geographic_region_obligor": "London",
+          "current_loan_to_value": {
+            "op": "gt",
+            "value": 40.0
+          },
+          "borrower_type": "Joint"
+        },
+        "grouping_executed": [
+          "age_bucket"
+        ],
+        "applied_filter_fields": [
+          "geographic_region_obligor",
+          "current_loan_to_value",
+          "borrower_type"
+        ],
+        "filtered_row_count": 21,
+        "input_row_count": 400,
+        "columns": [
+          "age_bucket",
+          "current_outstanding_balance_sum",
+          "loan_count",
+          "concentration_pct"
+        ],
+        "loan_count": 10,
+        "group_rows": 3
+      }
+    ],
+    "inherit_population_matches": true
+  },
+  "phase_ef_multi_output": {
+    "total": 7,
+    "atoms_all_green": 7,
+    "composition_verified": 3,
+    "composition_failed_despite_green_atoms": 4,
+    "atomic_blocked": 0,
+    "silent_partial_answers": 1,
+    "rows": [
+      {
+        "id": "A_same_population_two_measures",
+        "dataset": "funded",
+        "question": "For joint borrowers, give me loan count and funded balance.",
+        "verdict": "COMPOSITION_FAILED",
+        "atoms_all_green": true,
+        "combined_ok": false,
+        "outputs_requested": [
+          "loan_count",
+          "current_outstanding_balance"
+        ],
+        "outputs_executed": [
+          "loan_count",
+          "current_outstanding_balance"
+        ],
+        "every_output_executed": true,
+        "clause_scoped_outputs_unrepresentable": [],
+        "population_expected": {
+          "borrower_type": "Joint"
+        },
+        "population_applied": [],
+        "population_ok": false,
+        "silent": false,
+        "combined": {
+          "ok": false,
+          "error": "I could not tell how you meant joint borrower. Did you want the book split by it, or narrowed to one value of it? I have not answered over the whole book in the meantime.",
+          "filters": {},
+          "metric": null,
+          "aggregation": "count",
+          "dimension": null,
+          "dimensions": [],
+          "measures": [
+            "loan_count",
+            "current_outstanding_balance"
+          ],
+          "unavailable_filters": [],
+          "measures_requested": [
+            "loan_count",
+            "current_outstanding_balance"
+          ],
+          "measures_executed": [
+            "loan_count",
+            "current_outstanding_balance"
+          ],
+          "measures_unavailable": [],
+          "applied_filter_fields": [],
+          "dataset": "funded",
+          "population": 400,
+          "population_total": 400,
+          "narrowed": false,
+          "receipt": "Calculated: Loans \u00b7 Balance \u00b7 entire funded portfolio \u00b7 400 loans.",
+          "guard": "clarify"
+        },
+        "atoms": [
+          {
+            "question": "How many loans have a joint borrower type?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 202,
+            "receipt": "Calculated: Count of loans \u00b7 Borrower Type = Joint \u00b7 202 loans."
+          },
+          {
+            "question": "What is the funded balance for joint borrowers?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 202,
+            "receipt": "Calculated: Total Balance \u00b7 Borrower Type = Joint \u00b7 202 loans. Interpretation confidence: medium \u2014 check the scope above matches your question."
+          }
+        ]
+      },
+      {
+        "id": "B_same_population_three_measures",
+        "dataset": "funded",
+        "question": "For joint borrowers, give me count, balance and weighted average LTV.",
+        "verdict": "COMPOSITION_FAILED",
+        "atoms_all_green": true,
+        "combined_ok": false,
+        "outputs_requested": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "outputs_executed": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "every_output_executed": true,
+        "clause_scoped_outputs_unrepresentable": [],
+        "population_expected": {
+          "borrower_type": "Joint"
+        },
+        "population_applied": [],
+        "population_ok": false,
+        "silent": false,
+        "combined": {
+          "ok": false,
+          "error": "I could not tell how you meant joint borrower. Did you want the book split by it, or narrowed to one value of it? I have not answered over the whole book in the meantime.",
+          "filters": {},
+          "metric": null,
+          "aggregation": "count",
+          "dimension": null,
+          "dimensions": [],
+          "measures": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "unavailable_filters": [],
+          "measures_requested": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_executed": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_unavailable": [],
+          "applied_filter_fields": [],
+          "dataset": "funded",
+          "population": 400,
+          "population_total": 400,
+          "narrowed": false,
+          "receipt": "Calculated: Loans \u00b7 Balance \u00b7 Weighted-average Current LTV \u00b7 entire funded portfolio \u00b7 400 loans.",
+          "guard": "clarify"
+        },
+        "atoms": [
+          {
+            "question": "How many loans have a joint borrower type?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 202,
+            "receipt": "Calculated: Count of loans \u00b7 Borrower Type = Joint \u00b7 202 loans."
+          },
+          {
+            "question": "What is the funded balance for joint borrowers?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 202,
+            "receipt": "Calculated: Total Balance \u00b7 Borrower Type = Joint \u00b7 202 loans. Interpretation confidence: medium \u2014 check the scope above matches your question."
+          },
+          {
+            "question": "What is the weighted average LTV for joint borrowers?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 202,
+            "receipt": "Calculated: Weighted-average Current LTV \u00b7 Borrower Type = Joint \u00b7 202 loans. Interpretation confidence: medium \u2014 check the scope above matches your question."
+          }
+        ]
+      },
+      {
+        "id": "B2_geographic_population_three_measures",
+        "dataset": "funded",
+        "question": "For loans in the London region, give me count, balance and weighted average LTV.",
+        "verdict": "COMPOSITION_VERIFIED",
+        "atoms_all_green": true,
+        "combined_ok": true,
+        "outputs_requested": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "outputs_executed": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "every_output_executed": true,
+        "clause_scoped_outputs_unrepresentable": [],
+        "population_expected": {
+          "geographic_region_obligor": "London"
+        },
+        "population_applied": [
+          "geographic_region_obligor"
+        ],
+        "population_ok": true,
+        "silent": false,
+        "combined": {
+          "ok": true,
+          "error": null,
+          "filters": {
+            "geographic_region_obligor": "London"
+          },
+          "metric": null,
+          "aggregation": "count",
+          "dimension": "geographic_region_obligor",
+          "dimensions": [],
+          "measures": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "unavailable_filters": [],
+          "measures_requested": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_executed": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_unavailable": [],
+          "applied_filter_fields": [
+            "geographic_region_obligor"
+          ],
+          "dataset": "funded",
+          "population": 69,
+          "population_total": 400,
+          "narrowed": true,
+          "receipt": "Calculated: Loans \u00b7 Balance \u00b7 Weighted-average Current LTV \u00b7 London \u00b7 grouped by Obligor Region (NUTS3) \u00b7 69 loans.",
+          "guard": "ok"
+        },
+        "atoms": [
+          {
+            "question": "How many loans are in the London region?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "geographic_region_obligor": "London"
+            },
+            "applied_filter_fields": [
+              "geographic_region_obligor"
+            ],
+            "population": 69,
+            "receipt": "Calculated: Count of loans \u00b7 London \u00b7 69 loans."
+          },
+          {
+            "question": "What is the balance in the London region?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "geographic_region_obligor": "London"
+            },
+            "applied_filter_fields": [
+              "geographic_region_obligor"
+            ],
+            "population": 69,
+            "receipt": "Calculated: Total Balance \u00b7 London \u00b7 grouped by Obligor Region (NUTS3) \u00b7 1 groups \u00b7 69 loans."
+          },
+          {
+            "question": "What is the weighted average LTV in the London region?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "geographic_region_obligor": "London"
+            },
+            "applied_filter_fields": [
+              "geographic_region_obligor"
+            ],
+            "population": 69,
+            "receipt": "Calculated: Weighted-average Current LTV \u00b7 London \u00b7 grouped by Obligor Region (NUTS3) \u00b7 1 groups \u00b7 69 loans."
+          }
+        ]
+      },
+      {
+        "id": "C_shared_population_clause_specific_filter",
+        "dataset": "funded",
+        "question": "For loans in the London region, what is the loan count, the balance, and how much of that balance has LTV above 40%?",
+        "verdict": "COMPOSITION_FAILED",
+        "atoms_all_green": true,
+        "combined_ok": true,
+        "outputs_requested": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_outstanding_balance@ltv_gt_40"
+        ],
+        "outputs_executed": [
+          "loan_count",
+          "current_outstanding_balance"
+        ],
+        "every_output_executed": true,
+        "clause_scoped_outputs_unrepresentable": [
+          "current_outstanding_balance@ltv_gt_40"
+        ],
+        "population_expected": {
+          "geographic_region_obligor": "London"
+        },
+        "population_applied": [
+          "geographic_region_obligor",
+          "current_loan_to_value"
+        ],
+        "population_ok": false,
+        "silent": true,
+        "combined": {
+          "ok": true,
+          "error": null,
+          "filters": {
+            "geographic_region_obligor": "London",
+            "current_loan_to_value": {
+              "op": "gt",
+              "value": 40.0
+            }
+          },
+          "metric": null,
+          "aggregation": "count",
+          "dimension": "geographic_region_obligor",
+          "dimensions": [],
+          "measures": [
+            "loan_count",
+            "current_outstanding_balance"
+          ],
+          "unavailable_filters": [],
+          "measures_requested": [
+            "loan_count",
+            "current_outstanding_balance"
+          ],
+          "measures_executed": [
+            "loan_count",
+            "current_outstanding_balance"
+          ],
+          "measures_unavailable": [],
+          "applied_filter_fields": [
+            "geographic_region_obligor",
+            "current_loan_to_value"
+          ],
+          "dataset": "funded",
+          "population": 42,
+          "population_total": 400,
+          "narrowed": true,
+          "receipt": "Calculated: Loans \u00b7 Balance \u00b7 London \u00b7 Current LTV > 40 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 42 loans.",
+          "guard": "ok"
+        },
+        "atoms": [
+          {
+            "question": "How many loans are in the London region?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "geographic_region_obligor": "London"
+            },
+            "applied_filter_fields": [
+              "geographic_region_obligor"
+            ],
+            "population": 69,
+            "receipt": "Calculated: Count of loans \u00b7 London \u00b7 69 loans."
+          },
+          {
+            "question": "What is the balance in the London region?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "geographic_region_obligor": "London"
+            },
+            "applied_filter_fields": [
+              "geographic_region_obligor"
+            ],
+            "population": 69,
+            "receipt": "Calculated: Total Balance \u00b7 London \u00b7 grouped by Obligor Region (NUTS3) \u00b7 1 groups \u00b7 69 loans."
+          },
+          {
+            "question": "What is the balance in the London region with LTV above 40%?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "geographic_region_obligor": "London",
+              "current_loan_to_value": {
+                "op": "gt",
+                "value": 40.0
+              }
+            },
+            "applied_filter_fields": [
+              "geographic_region_obligor",
+              "current_loan_to_value"
+            ],
+            "population": 42,
+            "receipt": "Calculated: Total Balance \u00b7 London \u00b7 Current LTV > 40 \u00b7 grouped by Obligor Region (NUTS3) \u00b7 1 groups \u00b7 42 loans."
+          }
+        ]
+      },
+      {
+        "id": "D_grouped_multi_measure",
+        "dataset": "funded",
+        "question": "By borrower type, show count, balance and WA LTV.",
+        "verdict": "COMPOSITION_VERIFIED",
+        "atoms_all_green": true,
+        "combined_ok": true,
+        "outputs_requested": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "outputs_executed": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "every_output_executed": true,
+        "clause_scoped_outputs_unrepresentable": [],
+        "population_expected": {},
+        "population_applied": [],
+        "population_ok": true,
+        "silent": false,
+        "combined": {
+          "ok": true,
+          "error": null,
+          "filters": {},
+          "metric": null,
+          "aggregation": "count",
+          "dimension": "borrower_type",
+          "dimensions": [],
+          "measures": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "unavailable_filters": [],
+          "measures_requested": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_executed": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_unavailable": [],
+          "applied_filter_fields": [],
+          "dataset": "funded",
+          "population": 400,
+          "population_total": 400,
+          "narrowed": false,
+          "receipt": "Calculated: Loans \u00b7 Balance \u00b7 Weighted-average Current LTV \u00b7 grouped by Borrower Type \u00b7 400 loans.",
+          "guard": "ok"
+        },
+        "atoms": [
+          {
+            "question": "How many loans by borrower type?",
+            "ok": true,
+            "error": null,
+            "filters": {},
+            "applied_filter_fields": [],
+            "population": 400,
+            "receipt": "Calculated: Count of loans \u00b7 grouped by Borrower Type \u00b7 2 groups \u00b7 400 loans."
+          },
+          {
+            "question": "What is the balance by borrower type?",
+            "ok": true,
+            "error": null,
+            "filters": {},
+            "applied_filter_fields": [],
+            "population": 400,
+            "receipt": "Calculated: Total Balance \u00b7 grouped by Borrower Type \u00b7 2 groups \u00b7 400 loans."
+          },
+          {
+            "question": "What is the weighted average LTV by borrower type?",
+            "ok": true,
+            "error": null,
+            "filters": {},
+            "applied_filter_fields": [],
+            "population": 400,
+            "receipt": "Calculated: Weighted-average Current LTV \u00b7 grouped by Borrower Type \u00b7 2 groups \u00b7 400 loans."
+          }
+        ]
+      },
+      {
+        "id": "E_pipeline_multi_measure",
+        "dataset": "pipeline",
+        "question": "For pipeline loans at the OFFER stage, give me case count, balance and weighted average LTV.",
+        "verdict": "COMPOSITION_VERIFIED",
+        "atoms_all_green": true,
+        "combined_ok": true,
+        "outputs_requested": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "outputs_executed": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "every_output_executed": true,
+        "clause_scoped_outputs_unrepresentable": [],
+        "population_expected": {
+          "pipeline_stage": "OFFER"
+        },
+        "population_applied": [
+          "pipeline_stage"
+        ],
+        "population_ok": true,
+        "silent": false,
+        "combined": {
+          "ok": true,
+          "error": null,
+          "filters": {
+            "pipeline_stage": "OFFER"
+          },
+          "metric": null,
+          "aggregation": "count",
+          "dimension": "pipeline_stage",
+          "dimensions": [],
+          "measures": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "unavailable_filters": [],
+          "measures_requested": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_executed": [
+            "loan_count",
+            "current_outstanding_balance",
+            "current_loan_to_value"
+          ],
+          "measures_unavailable": [],
+          "applied_filter_fields": [
+            "pipeline_stage"
+          ],
+          "dataset": "pipeline",
+          "population": 2,
+          "population_total": 10,
+          "narrowed": true,
+          "receipt": "Calculated: Loans \u00b7 Balance \u00b7 Weighted-average Current LTV \u00b7 Pipeline Stage = OFFER \u00b7 grouped by Pipeline Stage \u00b7 2 loans.",
+          "guard": "ok"
+        },
+        "atoms": [
+          {
+            "question": "How many pipeline cases are at the OFFER stage?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "pipeline_stage": "OFFER"
+            },
+            "applied_filter_fields": [
+              "pipeline_stage"
+            ],
+            "population": 2,
+            "receipt": "Calculated: Total Balance \u00b7 Pipeline Stage = OFFER \u00b7 grouped by Pipeline Stage \u00b7 1 groups \u00b7 2 loans."
+          },
+          {
+            "question": "What is the pipeline balance at the OFFER stage?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "pipeline_stage": "OFFER"
+            },
+            "applied_filter_fields": [
+              "pipeline_stage"
+            ],
+            "population": 2,
+            "receipt": "Calculated: Total Balance \u00b7 Pipeline Stage = OFFER \u00b7 grouped by Pipeline Stage \u00b7 1 groups \u00b7 2 loans."
+          },
+          {
+            "question": "What is the weighted average LTV at the OFFER stage?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "pipeline_stage": "OFFER"
+            },
+            "applied_filter_fields": [
+              "pipeline_stage"
+            ],
+            "population": 2,
+            "receipt": "Calculated: Weighted-average Current LTV \u00b7 Pipeline Stage = OFFER \u00b7 grouped by Pipeline Stage \u00b7 1 groups \u00b7 2 loans."
+          }
+        ]
+      },
+      {
+        "id": "E2_pipeline_joint_multi_measure",
+        "dataset": "pipeline",
+        "question": "For pipeline joint borrowers, show case count, pipeline amount and WA LTV.",
+        "verdict": "COMPOSITION_FAILED",
+        "atoms_all_green": true,
+        "combined_ok": false,
+        "outputs_requested": [
+          "loan_count",
+          "current_outstanding_balance",
+          "current_loan_to_value"
+        ],
+        "outputs_executed": [
+          "loan_count",
+          "current_loan_to_value"
+        ],
+        "every_output_executed": false,
+        "clause_scoped_outputs_unrepresentable": [],
+        "population_expected": {
+          "borrower_type": "Joint"
+        },
+        "population_applied": [],
+        "population_ok": false,
+        "silent": false,
+        "combined": {
+          "ok": false,
+          "error": "I understood that you asked for pipeline amount, but that could not be applied to the calculation (pipeline amount \u2014 this was asked for alongside measures that were calculated, but it is not a governed measure in this dataset, so it was not calculated). I have not substituted a broader figure.",
+          "filters": {},
+          "metric": null,
+          "aggregation": "count",
+          "dimension": null,
+          "dimensions": [],
+          "measures": [
+            "loan_count",
+            "current_loan_to_value"
+          ],
+          "unavailable_filters": [],
+          "measures_requested": [
+            "loan_count",
+            "current_loan_to_value"
+          ],
+          "measures_executed": [
+            "loan_count",
+            "current_loan_to_value"
+          ],
+          "measures_unavailable": [],
+          "applied_filter_fields": [],
+          "dataset": "pipeline",
+          "population": 10,
+          "population_total": 10,
+          "narrowed": false,
+          "receipt": "Calculated: Loans \u00b7 Weighted-average Current LTV \u00b7 entire pipeline \u00b7 10 loans.",
+          "guard": "refuse"
+        },
+        "atoms": [
+          {
+            "question": "How many pipeline cases have a joint borrower type?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 10,
+            "receipt": "Calculated: Count of loans \u00b7 10 loans."
+          },
+          {
+            "question": "What is the pipeline balance for joint borrowers?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 10,
+            "receipt": "Calculated: Total Balance \u00b7 entire pipeline \u00b7 10 loans. Interpretation confidence: medium \u2014 check the scope above matches your question."
+          },
+          {
+            "question": "What is the weighted average LTV for joint borrowers?",
+            "ok": true,
+            "error": null,
+            "filters": {
+              "borrower_type": "Joint"
+            },
+            "applied_filter_fields": [
+              "borrower_type"
+            ],
+            "population": 10,
+            "receipt": "Calculated: Weighted-average Current LTV \u00b7 entire pipeline \u00b7 10 loans. Interpretation confidence: medium \u2014 check the scope above matches your question."
+          }
+        ]
+      }
+    ]
+  },
+  "phase_g_multi_turn": {
+    "rows": [
+      {
+        "id": "1_inherit",
+        "expectation": "same population, new measure",
+        "q1": "What is the funded balance for joint borrowers in the London region?",
+        "q2": "What is their weighted average LTV?",
+        "q1_population": [
+          "geographic_region_obligor",
+          "borrower_type"
+        ],
+        "q1_rows": 33,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": 400,
+        "q2_ok": true,
+        "population_owed": {
+          "geographic_region_obligor": "London",
+          "borrower_type": "Joint"
+        },
+        "today": "SILENTLY BROADENED to the whole book",
+        "q2_receipt": "Calculated: Weighted-average Current LTV \u00b7 entire funded portfolio \u00b7 400 loans."
+      },
+      {
+        "id": "2_add_filter",
+        "expectation": "inherit population, add one predicate",
+        "q1": "What is the funded balance for joint borrowers in the London region?",
+        "q2": "How much of that has LTV above 80%?",
+        "q1_population": [
+          "geographic_region_obligor",
+          "borrower_type"
+        ],
+        "q1_rows": 33,
+        "q1_ok": true,
+        "q2_population": [
+          "current_loan_to_value"
+        ],
+        "q2_rows": null,
+        "q2_ok": false,
+        "population_owed": {
+          "geographic_region_obligor": "London",
+          "borrower_type": "Joint",
+          "current_loan_to_value": {
+            "op": "gt",
+            "value": 80.0
+          }
+        },
+        "today": "REFUSED (honest; no state to inherit)",
+        "q2_receipt": "No loans in this book match that filter (Current LTV), so there is nothing to calculate. I have not returned a whole-book figure in its place."
+      },
+      {
+        "id": "3_modify_filter",
+        "expectation": "replace borrower_type, retain geography",
+        "q1": "What is the funded balance for joint borrowers in the London region?",
+        "q2": "What about single borrowers?",
+        "q1_population": [
+          "geographic_region_obligor",
+          "borrower_type"
+        ],
+        "q1_rows": 33,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": null,
+        "q2_ok": false,
+        "population_owed": {
+          "geographic_region_obligor": "London",
+          "borrower_type": "Single"
+        },
+        "today": "REFUSED (honest; no state to inherit)",
+        "q2_receipt": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'."
+      },
+      {
+        "id": "4_numeric_reference",
+        "expectation": "the money phrase is a REFERENCE, never a predicate",
+        "q1": "What is the funded balance for joint borrowers in the London region?",
+        "q2": "Of the \u00a338m, what is the weighted average LTV?",
+        "q1_population": [
+          "geographic_region_obligor",
+          "borrower_type"
+        ],
+        "q1_rows": 33,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": 400,
+        "q2_ok": true,
+        "population_owed": {
+          "geographic_region_obligor": "London",
+          "borrower_type": "Joint"
+        },
+        "today": "SILENTLY BROADENED to the whole book",
+        "q2_receipt": "Calculated: Weighted-average Current LTV \u00b7 entire funded portfolio \u00b7 400 loans."
+      },
+      {
+        "id": "5_ambiguous_referent",
+        "expectation": "refuse / clarify; never pick one cohort silently",
+        "q1": "What is the balance by borrower type?",
+        "q2": "What is their weighted average LTV?",
+        "q1_population": [],
+        "q1_rows": 400,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": 400,
+        "q2_ok": true,
+        "population_owed": null,
+        "today": "ANSWERED WITHOUT CLARIFYING (ambiguity not detected)",
+        "q2_receipt": "Calculated: Weighted-average Current LTV \u00b7 entire funded portfolio \u00b7 400 loans."
+      },
+      {
+        "id": "6_reset",
+        "expectation": "drop every inherited narrowing",
+        "q1": "What is the funded balance for joint borrowers in the London region?",
+        "q2": "Now show me the whole funded book.",
+        "q1_population": [
+          "geographic_region_obligor",
+          "borrower_type"
+        ],
+        "q1_rows": 33,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": 400,
+        "q2_ok": true,
+        "population_owed": {},
+        "today": "CORRECT",
+        "q2_receipt": "Calculated: Count of loans \u00b7 400 loans."
+      },
+      {
+        "id": "7_dataset_boundary",
+        "expectation": "explicit dataset transition, no unchecked field carry-over",
+        "q1": "What is the funded balance for joint borrowers in the London region?",
+        "q2": "What about the pipeline?",
+        "q1_population": [
+          "geographic_region_obligor",
+          "borrower_type"
+        ],
+        "q1_rows": 33,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": null,
+        "q2_ok": false,
+        "population_owed": null,
+        "today": "REFUSED (honest; no state to inherit)",
+        "q2_receipt": "I couldn't map this question to a governed analytic, so I haven't computed an answer (nothing was guessed). Try a metric by a dimension \u2014 e.g. 'balance by region', 'weighted average LTV by ticket size', 'ticket size by borrower type' \u2014 a cross-period comparison ('compare October and November'), a scale-up forecast ('run-rate to \u00a3100m'), risk limits ('are we within limits?'), or 'portfolio summary'."
+      },
+      {
+        "id": "8_failed_prior_turn",
+        "expectation": "no state may be created from an unexecuted population",
+        "q1": "What is the funded balance for platinum borrowers?",
+        "q2": "What about their balance?",
+        "q1_population": [],
+        "q1_rows": 400,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": 400,
+        "q2_ok": true,
+        "population_owed": {},
+        "today": "CORRECT",
+        "q2_receipt": "Calculated: Total Balance \u00b7 entire funded portfolio \u00b7 400 loans."
+      },
+      {
+        "id": "9_presentation",
+        "expectation": "inherit population, add grouping, change renderer",
+        "q1": "What is the funded balance for joint borrowers in the London region?",
+        "q2": "Show that by age bucket.",
+        "q1_population": [
+          "geographic_region_obligor",
+          "borrower_type"
+        ],
+        "q1_rows": 33,
+        "q1_ok": true,
+        "q2_population": [],
+        "q2_rows": 400,
+        "q2_ok": true,
+        "population_owed": {
+          "geographic_region_obligor": "London",
+          "borrower_type": "Joint"
+        },
+        "today": "SILENTLY BROADENED to the whole book",
+        "q2_receipt": "Calculated: Total Balance \u00b7 grouped by Age Bucket \u00b7 3 groups \u00b7 400 loans."
+      }
+    ],
+    "silently_broadened": 3,
+    "refused": 3
+  },
+  "phase_j_numeric_reference": {
+    "rows": [
+      {
+        "question": "Of the \u00a338m, what is the weighted average LTV?",
+        "expected_predicate": false,
+        "filters": {},
+        "ok": true,
+        "correct": true
+      },
+      {
+        "question": "Of the 38 million, what is the weighted average LTV?",
+        "expected_predicate": false,
+        "filters": {},
+        "ok": true,
+        "correct": true
+      },
+      {
+        "question": "What is the weighted average LTV of the \u00a338m?",
+        "expected_predicate": false,
+        "filters": {},
+        "ok": true,
+        "correct": true
+      },
+      {
+        "question": "Of the 43 loans, what is the weighted average LTV?",
+        "expected_predicate": false,
+        "filters": {},
+        "ok": true,
+        "correct": true
+      },
+      {
+        "question": "Of the \u00a338m, how many loans are there?",
+        "expected_predicate": false,
+        "filters": {},
+        "ok": true,
+        "correct": true
+      },
+      {
+        "question": "What is the balance for loans above \u00a3250,000?",
+        "expected_predicate": true,
+        "filters": {
+          "current_outstanding_balance": {
+            "op": "gt",
+            "value": 250000.0
+          }
+        },
+        "ok": true,
+        "correct": true
+      }
+    ],
+    "all_correct": true
+  },
+  "atomic_confounders": {
+    "rows": [
+      {
+        "question": "What is the balance in the London region?",
+        "geography_bound": true,
+        "ok": true,
+        "filters": {
+          "geographic_region_obligor": "London"
+        },
+        "fails_closed": false,
+        "correct": true
+      },
+      {
+        "question": "What is the balance in London?",
+        "geography_bound": true,
+        "ok": true,
+        "filters": {
+          "geographic_region_obligor": "London"
+        },
+        "fails_closed": false,
+        "correct": true
+      },
+      {
+        "question": "What is the funded balance for joint borrowers in the London region?",
+        "geography_bound": true,
+        "ok": true,
+        "filters": {
+          "geographic_region_obligor": "London",
+          "borrower_type": "Joint"
+        },
+        "fails_closed": false,
+        "correct": true
+      },
+      {
+        "question": "What is the funded balance for joint borrowers in London?",
+        "geography_bound": false,
+        "ok": false,
+        "filters": {
+          "borrower_type": "Joint"
+        },
+        "fails_closed": true,
+        "correct": false
+      },
+      {
+        "question": "What is the funded balance for joint borrowers in Scotland?",
+        "geography_bound": false,
+        "ok": false,
+        "filters": {
+          "borrower_type": "Joint"
+        },
+        "fails_closed": true,
+        "correct": false
+      },
+      {
+        "question": "What is the funded balance for joint borrowers in the South East?",
+        "geography_bound": true,
+        "ok": true,
+        "filters": {
+          "geographic_region_obligor": "South East",
+          "borrower_type": "Joint"
+        },
+        "fails_closed": false,
+        "correct": true
+      }
+    ],
+    "dropped": 2,
+    "all_dropped_fail_closed": true
+  }
+}
