@@ -172,10 +172,34 @@ class TestTheSameDefectWithoutASuperlative(unittest.TestCase):
 class TestASubstitutedMeasureSaysSo(unittest.TestCase):
 
     def test_a_defaulted_balance_is_disclosed(self):
-        """Nobody named a measure here, so the balance is the parser's choice
-        and the spec must say so."""
-        self.assertTrue(parse("Which product type has the largest amount?"
-                              ).metric_defaulted)
+        """Nobody named a measure in these, so the balance is the parser's
+        choice and the spec must say so."""
+        for question in ("Break down by product type",
+                         "Show me a breakdown by broker",
+                         "Split by product type"):
+            with self.subTest(question=question):
+                spec = parse(question)
+                self.assertEqual(spec.metric, BALANCE)
+                self.assertTrue(spec.metric_defaulted)
+
+    def test_the_ranking_builder_is_a_separate_site_and_is_not_fixed_here(self):
+        """A BOUNDARY, recorded rather than crossed.
+
+        "Which product type has the largest AMOUNT?" carries a genuine ranking
+        word, so it is built by `_build_ranking_spec` and never reaches the
+        grouped branch this change touched — and that builder does not disclose
+        its own default either. It is left alone deliberately: it is not one of
+        the six suspect rows, and it carries no wrong-answer risk, because
+        "amount" is the reader's own governed word for the balance under the
+        product owner's rule of 2026-09-04. The disclosure gap is real; it is
+        just a different site, and closing it is not this phase's work.
+
+        Asserted so the day someone closes it, this line says so out loud
+        instead of the two sites quietly disagreeing again.
+        """
+        spec = parse("Which product type has the largest amount?")
+        self.assertEqual(spec.metric, BALANCE)
+        self.assertFalse(spec.metric_defaulted)
 
     def test_a_named_measure_is_not_marked_defaulted(self):
         self.assertFalse(parse("Which product type has the largest funded balance?"

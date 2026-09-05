@@ -211,9 +211,38 @@ def _ltv_metric(semantics, available_columns=None) -> Optional[str]:
     return _prefer_present(semantics, default, cand, available_columns)
 
 
+#: A field whose "age" is a DURATION rather than a person's age. The curated
+#: metric token `age` has never meant one of these, and `find_field` cannot tell
+#: them apart: it scans keys and display names for the keyword, and
+#: `pipeline_case_age_days` (role metric, format integer, core tier) matches
+#: "age" exactly as well as `youngest_borrower_age` does.
+#:
+#: Measured the moment that field was registered, before this guard existed:
+#:
+#:     "What is the average age?"                     -> pipeline_case_age_days
+#:     "a borrower aged 85 or older"  filter          -> pipeline_case_age_days
+#:
+#: which is the borrower-age vocabulary being taken away — the one thing the
+#: case-age work was required not to do, and what the 20/20 age theme rests on.
+_DURATION_AGE_FIELDS: Tuple[str, ...] = ("pipeline_case_age_days",)
+
+
 def _age_metric(semantics, available_columns=None) -> Optional[str]:
-    default = find_field(semantics, role="metric", fmt="integer", keywords=("age",))
-    cand = _concept_candidates(semantics, "metric", "integer", ("age",))
+    """The field the curated token `age` means: a BORROWER'S age.
+
+    Asks for the borrower explicitly first, so a field named for some other
+    thing's age cannot capture the bare word. The original search is kept as the
+    fallback — a tape whose age field is named `applicant_age` still resolves —
+    with the durations excluded there too, because the fallback is exactly where
+    an unguarded keyword scan would hand the token to one of them.
+    """
+    borrower = find_field(semantics, role="metric", fmt="integer",
+                          keywords=("borrower age", "youngest"), strict=True)
+    default = borrower or find_field(semantics, role="metric", fmt="integer",
+                                     keywords=("age",),
+                                     exclude=_DURATION_AGE_FIELDS)
+    cand = [c for c in _concept_candidates(semantics, "metric", "integer", ("age",))
+            if c not in _DURATION_AGE_FIELDS]
     return _prefer_present(semantics, default, cand, available_columns)
 
 
@@ -1943,11 +1972,61 @@ def _cohort_progression_recognizer(q: str, title: str, semantics: dict
                            note="cohort_progression")
 
 
+#: The word both subjects use.
+_HEADROOM_RE = re.compile(r"\bheadroom\b")
+
+
+def headroom_is_owned_elsewhere(q: str) -> bool:
+    """Is this a headroom question about something OTHER than a limit?
+
+    HEADROOM IS A RELATIVE NOUN — headroom against what? This route means
+    distance to a Schedule 8 concentration limit. "NNEG headroom" means the
+    equity above the balance, which is a different subject entirely, and
+    `_RISK_LIMIT_RE` carried a bare `\bheadroom\b` that claimed both. At
+    priority 100 that meant:
+
+        "What is the current NNEG headroom on the funded book?"
+            → *"4 passed, 0 warning(s), 7 breach(es) … Nearest to limit:
+               Top 3 brokers (-55.0 pp headroom)"*
+
+    a governing-document concentration report, delivered confidently, about the
+    wrong thing — F044 in the atomic-perimeter bank, and the worst row in it
+    because the answer is internally correct and the reader cannot tell.
+
+    THE TEST BLANKS THE SHARED WORD AND ASKS THE SAME QUESTION AGAIN. If
+    anything ELSE in the sentence is a limit question, this route still claims
+    it — "how does the NNEG headroom compare with our concentration limits?"
+    names limits and is not declined. Only a sentence whose sole claim on this
+    route was the shared word, and which names a subject another owner has, is
+    handed back.
+
+    The NNEG vocabulary is READ FROM ITS OWNER rather than restated here.
+    Two copies of it is the defect, not the fix.
+
+    PUBLIC because `mi_workflows.analytical.intent` asks it too. That module
+    settles governed flags the parse left open, and it carried its OWN limit
+    vocabulary (`_LIMIT_TERMS`) which also contains " headroom " — so guarding
+    only the recogniser below left the question claimed anyway, one layer down.
+    It already imports `risk_limit_category` from here for the same stated
+    reason: "the reader is the parser\'s own, so nothing there decides what a
+    category is".
+    """
+    if not _HEADROOM_RE.search(q):
+        return False
+    from .mi_agent_workflow import NNEG_RE  # local: avoids an import cycle
+
+    if not NNEG_RE.search(q):
+        return False
+    return not _RISK_LIMIT_RE.search(_HEADROOM_RE.sub(" ", q))
+
+
 def _risk_limit_recognizer(q: str, title: str
                            ) -> Optional[Tuple[MIQuerySpec, dict]]:
     """Risk-limit / concentration question → governed
     ``risk_monitor_mode='concentration'`` plan (resolved by /mi/risk-limits)."""
     if not _RISK_LIMIT_RE.search(q):
+        return None
+    if headroom_is_owned_elsewhere(q):
         return None
     category = _risk_limit_category(q)
     spec = MIQuerySpec(
@@ -4321,6 +4400,8 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     # ---- bar (one dimension + metric, optional top_n) ---------------------
     # Determine the dimension WITHOUT substitution.
     dimension = dim_keys[0] if dim_keys else None
+    #: Set where THIS branch substitutes the balance for a measure nobody named.
+    _grouped_metric_defaulted = False
     if dimension is None and len(by_parts) >= 2:
         right = by_parts[-1]
         if any(t in _REGION_GENERIC_TERMS for t in right.split()):
@@ -4576,8 +4657,36 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         # distinction; the bar path did not.
         if _wants_count(q):
             metric, agg = None, "count"
+        elif _counts_a_row_noun(q):
+            # A SUPERLATIVE OVER A ROW NOUN IS STILL A COUNT. "Which product
+            # type has the MOST FUNDED LOANS?" and "which product type has the
+            # LARGEST FUNDED BALANCE?" produced one identical plan — metric
+            # balance, aggregation sum — so the first was answered with the
+            # product carrying the most money rather than the most loans (F039;
+            # P040 is the same sentence about brokers). "most" is deliberately
+            # absent from `_RANK_DESC`, so neither is even seen as a ranking:
+            # they are ordinary grouped bars, and this branch had only the two
+            # arms above.
+            #
+            # `_counts_a_row_noun` is not new vocabulary. It reads the bare
+            # governed row noun standing as the subject and excludes anything
+            # carrying a money word, and it was wired into the LINE branch for
+            # exactly this reason on 2026-09-04 — "a trend of things is a count
+            # of them". A superlative is the same request said with a ranking
+            # word instead of a period; this branch simply never asked.
+            #
+            # It also covers a case the bank never reached: "how many funded
+            # loans BY BROKER" (no superlative at all) answered with summed
+            # balance, because `_wants_count`'s vocabulary is "loan count" /
+            # "case count" and not "how many … by".
+            metric, agg = None, "count"
         else:
+            # THE DEFAULT IS KEPT AND RECORDED, as the line branch records its
+            # own. Nobody named a measure here, so a spec that did not say so
+            # was indistinguishable downstream from one where the reader wrote
+            # "balance" — the condition `metric_defaulted` exists to prevent.
             metric, agg = _balance_metric(semantics, available_columns), "sum"
+            _grouped_metric_defaulted = True
     weight = _default_weight(semantics, metric) if agg == "weighted_avg" else None
     conf = "high" if explicit else ("medium" if not generic else "low")
     # A value filter expressed alongside the grouping ("balance by region where
@@ -4587,6 +4696,7 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         q, semantics, available_columns, exclude_dims=[dimension] if dimension else [], available_values=available_values)
     return (MIQuerySpec(
         intent="chart", chart_type="bar", metric=metric, dimension=dimension,
+        metric_defaulted=_grouped_metric_defaulted,
         aggregation=agg, weight_field=weight, top_n=top_n, title=title,
         filters=g_filters, unavailable_filters=g_unavail,
         explanation=f"Bar chart of {agg} metric by dimension.",

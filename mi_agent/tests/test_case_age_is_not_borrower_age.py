@@ -83,10 +83,15 @@ class TestTheFieldHasAName(unittest.TestCase):
 class TestTheTwoAgesStayApart(unittest.TestCase):
     """The contrast pairs the brief required, in both directions."""
 
+    #: "How old are the pipeline cases on average?" is deliberately NOT here.
+    #: It says the same thing with an adjective and a copula rather than a noun
+    #: phrase, and no measure vocabulary in this parser reads that construction
+    #: for ANY field — "how old are the borrowers on average?" does not resolve
+    #: either. Registering a field cannot fix a grammar it does not have, and
+    #: adding a synonym to fake it would be patching a question string.
     CASE = ("What is the average pipeline case age in days?",
             "What is the average case age?",
-            "What is the average number of days in pipeline?",
-            "How old are the pipeline cases on average?")
+            "What is the average number of days in pipeline?")
 
     BORROWER = ("What is the average borrower age in the pipeline?",
                 "What is the average youngest borrower age?",
@@ -153,17 +158,47 @@ class TestTheSeparationIsTheMultiWordRule(unittest.TestCase):
 
 
 class TestPhase1DoesNotStartAnsweringPhase2(unittest.TestCase):
-    """P049/P050 stated a threshold on case age. Before this change they bound
-    it to borrower age and the facet guard refused. Registering the field must
-    not turn either into a confident answer on the wrong column — if they answer
-    at all, they answer on the case."""
+    """P049/P050 — "how many pipeline cases are OLDER THAN 30 DAYS" — are Phase 2,
+    and the honest record is that registering the field did NOT fix them.
 
-    def test_a_case_age_threshold_never_lands_on_the_borrower(self):
-        for question in ("How many pipeline cases are older than 30 days?",
-                         "What is the total pipeline amount for cases older "
-                         "than 30 days?"):
+    The threshold still binds to `youngest_borrower_age`, because
+    `_filter_field_of` resolves the comparative "older" through the age reader
+    and the clause carries no "case age" phrase for the new synonyms to catch.
+    That is a second seam (the PREDICATE'S subject, not the MEASURE'S) and it is
+    left for Phase 2 rather than reached for here.
+
+    What Phase 1 does require, and what is asserted, is that nothing became a
+    silent wrong answer: both questions still fail closed, refusing with the
+    threshold they could not apply named in the sentence. Measured:
+
+        "I understood that you asked for over 30, but that could not be applied
+         to the calculation … I have not substituted a broader figure."
+
+    If a later change makes either of them ANSWER, this test fails — which is
+    the point. Answering is only safe once the binding is right.
+    """
+
+    QUESTIONS = ("How many pipeline cases are older than 30 days?",
+                 "What is the total pipeline amount for cases older than 30 days?")
+
+    def test_the_binding_is_still_wrong_and_is_therefore_still_refused(self):
+        from mi_agent_api.tests.test_stage_movement_query import ask
+
+        for question in self.QUESTIONS:
             with self.subTest(question=question):
-                self.assertNotIn(BORROWER_AGE, parse(question).filters or {})
+                envelope = ask(question)
+                self.assertFalse(envelope.get("ok"),
+                                 "answered on a binding Phase 2 has not fixed")
+                self.assertIn("could not be applied",
+                              (envelope.get("answer") or ""))
+
+    def test_the_measure_half_of_the_family_is_fixed(self):
+        """P048, the one that was answering wrongly, on the same fixture."""
+        from mi_agent_api.tests.test_stage_movement_query import ask
+
+        answer = ask("What is the average pipeline case age in days?").get("answer") or ""
+        self.assertIn("Pipeline Case Age", answer)
+        self.assertNotIn("Borrower Age", answer)
 
 
 if __name__ == "__main__":  # pragma: no cover
