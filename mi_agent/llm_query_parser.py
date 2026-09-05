@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -2814,6 +2815,25 @@ def _contribution_request(q: str, semantics: dict, available_columns=None
     return metric, weight
 
 
+@lru_cache(maxsize=4096)
+def _region_match(term: str, present: Tuple[str, ...]) -> Tuple[str, ...]:
+    """`region_resolution.resolve`, memoised on (term, the book's values).
+
+    MEASURED, NOT ASSUMED. `resolve` walks the governed taxonomy, and the walk
+    costs ~18ms. Reached from `_categorical_value_field` — which every
+    categorical resolution in the parser goes through — it ran fourteen times
+    per parse and took the median request from 116ms to 205ms. The values a book
+    carries do not change within a request, and a term resolves to the same
+    region every time, so the answer is worth keeping.
+    """
+    try:
+        from .region_resolution import resolve as _resolve_region
+
+        return tuple(str(v) for v in (_resolve_region(term, list(present)) or ()))
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        return ()
+
+
 def _categorical_value_field(value: str, available_values,
                              semantics: Optional[dict] = None
                              ) -> Optional[Tuple[str, str]]:
@@ -2835,7 +2855,45 @@ def _categorical_value_field(value: str, available_values,
     # region filter to nothing. Each call site below hands over the registry it
     # already holds, so one question cannot bind differently depending on which
     # reading of it got there first.
-    return value_field(value, available_values, semantics)
+    owned = value_field(value, available_values, semantics)
+    if owned is not None:
+        return owned
+    # THE REGION OWNER, ASKED AT LAST.
+    #
+    # `region_resolution` maps a term through the governed ITL ladder onto
+    # whatever the book actually stores — alias, ITL name, ITL code, postcode —
+    # and `resolve("scottish", ["London", "North West", "Scotland", "Wales"])`
+    # returns `["Scotland"]`. The EXECUTOR has always used it. The population
+    # resolver never did, so a term the estate's own region owner could resolve
+    # was treated as a category the book does not carry, and "Give me the
+    # Scottish balance." answered over the whole book.
+    #
+    # Narrow on purpose. It runs only where the catalogue has already declined;
+    # it asks only about the field the region owner governs; and it binds only a
+    # value the BOOK CARRIES, because `resolve` is given the book's own values
+    # and returns the ones it matched. A term that reaches nothing returns
+    # nothing, exactly as before.
+    #
+    # MULTI-WORD, OR A TOKEN THE LADDER CANNOT CONFUSE. The ladder resolves
+    # two-letter POSTCODE AREAS — "me" is Medway, "so" is Southampton — so a
+    # short bare token is never read as a place here. "Give me the balance" must
+    # not become a Medway question.
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text or (" " not in text and len(text) < 4):
+        return None
+    for field in _REGION_PREFERENCE:
+        present = _field_values(available_values, field)
+        if not present:
+            continue
+        matched = _region_match(text, tuple(present))
+        if len(matched) == 1:
+            # BACK THROUGH THE VALUE OWNER, so the spelling is the book's own.
+            # `resolve` returns what it matched out of the values it was given,
+            # and the catalogue is keyed lowercase; binding that spelling would
+            # put "scotland" where every other narrowing puts "Scotland".
+            canonical = value_field(str(matched[0]), available_values, semantics)
+            return canonical if canonical is not None else (field, str(matched[0]))
+    return None
 
 
 #: "... is drawdown", "... are second home". Bounded to four words so the
@@ -4015,7 +4073,12 @@ def _categorical_narrowings(text: str, semantics: dict, available_columns=None,
     boundaries += sorted(_axis_starts)
     boundaries = sorted(set(b for b in boundaries if 0 < b < len(text or "")))
     if not boundaries:
-        return found
+        # NO QUALIFIER OPENER IS NOT NO NARROWING. "Give me the Scottish
+        # balance." contains no preposition at all, so this used to return
+        # nothing before the attributive slots were ever looked at — which is
+        # exactly the sentence whose population vanished.
+        return _slot_narrowings(text, semantics, available_columns,
+                                available_values)
     starts = [0] + boundaries
     ends = boundaries + [len(text)]
     for start, end in zip(starts, ends):
@@ -4028,6 +4091,70 @@ def _categorical_narrowings(text: str, semantics: dict, available_columns=None,
                                              available_columns, available_values)
         if resolved and resolved[0] not in found:
             found[resolved[0]] = resolved[1]
+    for field, value in _slot_narrowings(text, semantics, available_columns,
+                                         available_values).items():
+        if field not in found:
+            found[field] = value
+    return found
+
+
+def _slot_narrowings(text: str, semantics: dict, available_columns=None,
+                     available_values=None) -> Dict[str, Any]:
+    """EVERY narrowing standing attributively in a restriction slot.
+
+    THE SCAN USED TO STOP AT ITS FIRST SUCCESS. `_attributive_categorical`
+    resolves one ``(field, value)`` and returns, so
+
+        "How many Scottish lump sum loans are there?"
+
+    resolved Lump Sum, returned, and never looked at the words in front of it:
+    195 loans answered where 45 was asked for, with "Scottish" neither applied
+    nor disclosed. A question may state several independent narrowings, and this
+    is the owner whose docstring says every one of them must survive.
+
+    THE SLOT MAY SIT IN FRONT OF A MEASURE. `restriction_slots` is the lexical
+    owner of where a slot is, and it anchors on a measure head as well as a row
+    head — which is what gives "Scottish balance" anywhere to be read at all.
+
+    Longest phrase first, so a governed value that spans several words ("lump
+    sum", "north west") is claimed whole before its parts are tried, and each
+    field is taken once: a slot naming one field twice is a widening, and
+    `_with_value` owns that downstream.
+    """
+    found: Dict[str, Any] = {}
+    # MEMOISED PER CALL. `restriction_slots` asks whether each WORD names a
+    # measure, and `_detect_metric` rebuilds the registry's term regexes every
+    # time it is asked — 26 rebuilds per parse, which was most of the cost this
+    # scan added. The answer for one word cannot change within a parse.
+    _measure_cache: Dict[str, bool] = {}
+
+    def _names_a_measure(word: str) -> bool:
+        hit = _measure_cache.get(word)
+        if hit is None:
+            hit = bool(_detect_metric(word, semantics)[2])
+            _measure_cache[word] = hit
+        return hit
+
+    try:
+        slots = _lexical.restriction_slots(text, _names_a_measure)
+    except Exception:  # noqa: BLE001 - no grammar, no narrowing
+        return found
+    for _head, slot, _offset in slots:
+        words = [w for w, _o in slot]
+        taken = [False] * len(words)
+        for length in range(min(4, len(words)), 0, -1):
+            for start in range(0, len(words) - length + 1):
+                if any(taken[start:start + length]):
+                    continue
+                phrase = " ".join(words[start:start + length])
+                owned = _categorical_value_field(phrase, available_values,
+                                                 semantics)
+                if owned is None:
+                    continue
+                for i in range(start, start + length):
+                    taken[i] = True
+                if owned[0] not in found:
+                    found[owned[0]] = owned[1]
     return found
 
 

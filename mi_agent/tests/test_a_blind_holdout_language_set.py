@@ -94,6 +94,10 @@ ANSWERED_CORRECTLY = (
     ("Balance across region and broker for joint borrowers.", "any", None),
     ("What's the average loan size?", "any", None),
     ("Average balance in Scotland.", "any", None),
+    # The two that used to be answered wrongly, in silence.
+    ("Give me the Scottish balance.", "total", (SCOTLAND,)),
+    ("How many Scottish lump sum loans are there?", "count",
+     (SCOTLAND, LUMP_SUM)),
 )
 
 #: Refused, and every one of them fail-closed with an explanation naming what
@@ -111,11 +115,24 @@ REFUSED = (
     "Alpha's joint lending.",
 )
 
-#: THE FINDING. Answered, `ok`, and wrong, with nothing said about it.
-SILENTLY_WRONG = (
-    ("Give me the Scottish balance.", "total", (SCOTLAND,)),
-    ("How many Scottish lump sum loans are there?", "count",
-     (SCOTLAND, LUMP_SUM)),
+#: RETIRED. Both were answered, `ok`, and wrong, in silence — the whole book for
+#: "Scottish balance", and 195 loans for "Scottish lump sum" where 45 was asked
+#: for. They are here as history rather than as expectations: three independent
+#: causes had to be repaired before either could answer, and each has its own
+#: bank —
+#:
+#:   the governed region vocabulary carried no adjectival form of Scotland
+#:       (test_adjectival_region_names)
+#:   a restriction slot existed only in front of a ROW noun, so "Scottish
+#:   balance" offered its adjective to nothing at all, and the scan stopped at
+#:   its first success, so "lump sum" masked "Scottish"
+#:       (test_a_restriction_slot_has_one_grammar)
+#:
+#: They now sit in ANSWERED_CORRECTLY above, checked cell for cell against the
+#: oracle like every other row.
+FORMERLY_SILENTLY_WRONG = (
+    "Give me the Scottish balance.",
+    "How many Scottish lump sum loans are there?",
 )
 
 
@@ -194,45 +211,69 @@ class TestTheRefusalsAreRefusals(unittest.TestCase):
                     "a question that used to refuse now answers, wrongly")
 
 
-class TestTheKnownSilentlyWrongAnswers(unittest.TestCase):
-    """The two, recorded so the gap is executable rather than remembered.
+class TestTheTwoThatWereSilentlyWrong(unittest.TestCase):
+    """The primary acceptance target of the repair, stated as figures.
 
-    `expectedFailure` — when one of these starts passing the suite reports an
-    UNEXPECTED SUCCESS, which is the signal to delete it from this class rather
-    than a green tick that hides the fix.
+    Both used to answer `ok` over a broader population with no disclosure of any
+    kind. What makes them a fix rather than two patched sentences is that
+    neither question, nor any word in it, appears in the production logic: the
+    region owner gained three adjectives derived from its own ITL1 taxonomy, and
+    the restriction-slot grammar gained a measure head and lost its first-hit
+    behaviour.
     """
 
-    @unittest.expectedFailure
-    def test_an_unrecognised_demonym_is_not_silently_dropped(self):
-        """"Scottish" names a place the book carries under another spelling.
-        Nothing resolves it, and — because no row noun stands beside it —
-        nothing reports it either, so the whole book is returned for a question
-        about one region."""
-        question, kind, expectation = SILENTLY_WRONG[0]
-        result, frame = _run(question)
-        if not result.get("ok"):
-            return                                # refusing would be fine
-        self.assertTrue(_matches(frame, kind, expectation))
+    def test_neither_is_answered_over_the_whole_book(self):
+        for question in FORMERLY_SILENTLY_WRONG:
+            with self.subTest(question=question):
+                result, frame = _run(question)
+                if not result.get("ok"):
+                    continue                       # refusing would also be safe
+                self.assertNotEqual(
+                    int(frame["loan_count"].sum()), len(_BOOK),
+                    "still answering over the whole book")
 
-    @unittest.expectedFailure
-    def test_one_resolved_category_does_not_hide_an_unresolved_one(self):
-        """"Scottish lump sum loans": the product resolves Lump Sum, and the
-        word it could not resolve is neither applied nor disclosed. Asked alone
-        ("how many Scottish loans are there?") the same word refuses correctly
-        with `unknown category: 'scottish'`."""
-        question, kind, expectation = SILENTLY_WRONG[1]
-        result, frame = _run(question)
-        if not result.get("ok"):
-            return
-        self.assertTrue(_matches(frame, kind, expectation))
 
-    def test_the_word_alone_is_still_refused(self):
-        """The comparison that makes the two above a DISCLOSURE defect rather
-        than a vocabulary one: the estate can already tell that "Scottish" is an
-        unrecognised category — when nothing else in the sentence distracts it."""
-        result, _frame = _run("How many Scottish loans are there?")
+class TestTheDisclosureCapabilitySurvives(unittest.TestCase):
+    """The repair resolves more language; it must not resolve language it cannot
+    justify. "Platinum" names no governed value under any owner — not the
+    catalogue, not the registry, not the region ladder — so it must still refuse
+    rather than quietly widen to the book."""
+
+    def test_an_unresolvable_restriction_in_front_of_a_row_noun_refuses(self):
+        """The position the estate's residue scan has always covered."""
+        result, _frame = _run("How many platinum loans do we have?")
         self.assertFalse(result.get("ok"),
                          "an unrecognised category was answered over the book")
+
+    #: THE CLASS IS NOT CLOSED, only its two known instances.
+    #:
+    #: Resolving "Scottish" fixed the two questions. It did not fix the two
+    #: BLIND SPOTS that let them fail silently, and an unresolvable term still
+    #: finds both:
+    #:
+    #:   "What is the platinum balance?"          measure head, no row noun,
+    #:                                            so nothing is offered to any
+    #:                                            resolver and nothing is
+    #:                                            reported
+    #:   "How many platinum lump sum loans?"      the RESIDUE scan still stops
+    #:                                            at its first success, so a
+    #:                                            resolvable category masks an
+    #:                                            unresolvable one
+    #:
+    #: Resolution and disclosure are separate machinery, and only resolution was
+    #: repaired here. Closing the class is the semantic-accounting invariant's
+    #: job; these two rows are its acceptance test, and they become unexpected
+    #: successes when it lands.
+    UNCLOSED = ("What is the platinum balance?",
+                "How many platinum lump sum loans are there?")
+
+    @unittest.expectedFailure
+    def test_an_unresolvable_restriction_in_other_positions_refuses(self):
+        for question in self.UNCLOSED:
+            result, _frame = _run(question)
+            self.assertFalse(
+                result.get("ok"),
+                f"{question!r} was answered over a broader population")
 
 
 if __name__ == "__main__":

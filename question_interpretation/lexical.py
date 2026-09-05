@@ -1596,3 +1596,64 @@ def ordering_request(question: str) -> OrderingRequest:
 
     return OrderingRequest(requested=True, direction=direction, basis=basis,
                            limit=ordering_limit(question))
+
+
+# --------------------------------------------------------------------------- #
+# Restriction slots — where a question puts a narrowing without a preposition
+# --------------------------------------------------------------------------- #
+#: Words that CLOSE a restriction slot walking leftwards. A slot is the run of
+#: modifiers standing directly in front of a head noun; a preposition, a grouping
+#: marker, a conjunction or punctuation before them belongs to the sentence's
+#: structure, and everything beyond it modifies something else.
+#:
+#: Deliberately structural and deliberately short. A word here does not become
+#: benign — it merely ends the slot — so this cannot be the route by which a
+#: meaningful term vanishes.
+RESTRICTION_SLOT_BOUNDARY = frozenset("""
+for in of on at to with within without across from by per and or but where
+whose having that which than the a an
+""".split())
+
+_SLOT_WORD = re.compile(r"[a-z0-9£][a-z0-9'%£-]*[a-z0-9%£]|[a-z0-9£]")
+
+
+def restriction_slots(text, is_measure_noun=None):
+    """``[(head, [(word, offset), ...], head_offset), ...]``.
+
+    A RESTRICTION SLOT is the run of words standing attributively before a head
+    noun — the position in which a reader states a governed narrowing without a
+    preposition. The head may name a ROW ("Scottish loans") or, when the caller
+    supplies ``is_measure_noun``, a MEASURE ("Scottish balance").
+
+    THE MEASURE HEAD IS THE ONE THAT WAS MISSING, and its absence is why "Give
+    me the Scottish balance." offered its adjective to nothing at all: no row
+    noun, no anchor, no trace of the population anywhere in the parse.
+
+    One owner, because two readers need this boundary — the parser, which
+    resolves what stands in a slot, and the semantic-accounting layer, which
+    checks that something did. Two copies of it is the defect this estate has
+    already paid for more than once. ``is_measure_noun`` is injected rather than
+    imported so this module keeps no dependency on the registry.
+    """
+    body = str(text or "").lower()
+    words = [(m.group(0), m.start()) for m in _SLOT_WORD.finditer(body)]
+    out = []
+    for index, (word, offset) in enumerate(words):
+        row = re.fullmatch(row_noun_alternation(), word) is not None
+        measure = (not row) and bool(is_measure_noun and is_measure_noun(word))
+        if not (row or measure):
+            continue
+        slot = []
+        cursor = index - 1
+        while cursor >= 0:
+            candidate, candidate_offset = words[cursor]
+            if candidate in RESTRICTION_SLOT_BOUNDARY:
+                break
+            gap = body[candidate_offset + len(candidate):words[cursor + 1][1]]
+            if any(ch in gap for ch in ",;:.?!"):
+                break
+            slot.insert(0, (candidate, candidate_offset))
+            cursor -= 1
+        if slot:
+            out.append((word, slot, offset))
+    return out
