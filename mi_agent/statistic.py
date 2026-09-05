@@ -132,9 +132,28 @@ def satisfied_by_any(requested: Optional[str],
 #: name rather than a statistic on it, and "oldest borrower" would have to mean
 #: the maximum of a field whose own name says youngest. That ambiguity is
 #: reported rather than guessed at.
+#: "WA" is the estate's own abbreviation for a weighted average — twenty-seven
+#: questions in its own corpus use it — and until it was listed here NOTHING
+#: owned it. `statistic_named("WA LTV")` returned None, the parser's aggregation
+#: reader returned None, and the measure owner matched only "ltv". The weighted
+#: average arrived anyway, because it is the REGISTRY DEFAULT for a percent
+#: metric: the same answer "LTV" alone produces. Right figure, no reader.
+#:
+#: That is semantic debt rather than a passing test. With no statistic named,
+#: nothing raises a statistic facet, so nothing can reconcile the requested
+#: statistic against the executed one — and the day a field's default changes,
+#: or the abbreviation is used on a field whose default is a plain mean, the
+#: answer moves and no guard notices.
+#:
+#: WORD BOUNDARIES, NEVER A SUBSTRING. A two-letter alias is exactly the kind
+#: that silently eats other words: "Wales", "warehouse", "software" and "await"
+#: all contain it. The role is the statistic and only the statistic — the metric
+#: still comes from the measure owner, so "WA LTV" is LTV and "WA rate" is the
+#: rate.
 _STATISTIC_PHRASES: Sequence[tuple[str, str]] = (
     (r"\bweighted[-\s]+(?:average|avg|mean)\b", "weighted_avg"),
     (r"\bexposure[-\s]+weighted\b", "weighted_avg"),
+    (r"\bwa\b", "weighted_avg"),
     (r"\bmedian\b", "median"),
     (r"\baverage\b", MEAN),
     (r"\bmean\b", MEAN),
