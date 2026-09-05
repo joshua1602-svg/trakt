@@ -158,7 +158,13 @@ def test_find_field_prefers_core_tier(semantics):
 
 
 def test_deterministic_parser_resolves_age_to_core(semantics):
-    spec = parse_user_question("ltv by age by balance", SEMANTICS_PATH,
+    # SEMANTIC-INVARIANT MIGRATION, 2026-09-05: reached the bubble path via
+    # "ltv by age by balance", under the retired rule that numeric concepts
+    # after "by" imply a loan-level bubble. "by" now owns GROUPING semantics
+    # whatever the datatype — see mi_agent/tests/test_by_means_grouping.py —
+    # and the relationship reading is addressed by name. Wording changed;
+    # the capability under test did not.
+    spec = parse_user_question("bubble chart of ltv vs age sized by balance", SEMANTICS_PATH,
                                llm_enabled=False)
     assert spec.chart_type == "bubble"
     # x should be the core borrower-age field, not some extended look-alike

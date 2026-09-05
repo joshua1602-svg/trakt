@@ -70,7 +70,13 @@ def test_balance_by_region(df, semantics):
 
 
 def test_ltv_by_age_by_balance_bubble(df, semantics):
-    res = run_mi_agent_query("ltv by age by balance", df, semantics)
+    # SEMANTIC-INVARIANT MIGRATION, 2026-09-05: reached the bubble path via
+    # "ltv by age by balance", under the retired rule that numeric concepts
+    # after "by" imply a loan-level bubble. "by" now owns GROUPING semantics
+    # whatever the datatype — see mi_agent/tests/test_by_means_grouping.py —
+    # and the relationship reading is addressed by name. Wording changed;
+    # the capability under test did not.
+    res = run_mi_agent_query("bubble chart of ltv vs age sized by balance", df, semantics)
     assert res["ok"], res.get("error")
     assert res["spec"]["chart_type"] == "bubble"
     assert res["chart_result"].chart_type == "bubble"
