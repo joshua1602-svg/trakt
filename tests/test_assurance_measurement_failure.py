@@ -210,14 +210,23 @@ def test_site4_a_routing_fault_fails_loudly(monkeypatch):
 
 
 def test_site4_a_refused_answer_is_a_legitimate_reading():
-    """A REFUSED grade is a measurement, not a failure — 16 of the 34 owned
-    questions refuse, and they must keep counting toward the denominator."""
+    """A REFUSED grade is a measurement, not a failure — the owned questions
+    that refuse must keep counting toward the denominator.
+
+    The owned COUNT is a measurement of today's routing, not an invariant, and
+    it moves when a question changes hands. It went 34 -> 35 when the
+    filtered-summary branch stopped claiming questions that name a breakdown:
+    "Show monthly loan count evolution by broker." had been claimed by that
+    branch and graded unmapped, and now reaches the evolution route this file
+    measures. The assertion is kept exact rather than loosened to ">=" so that a
+    silent drift in the other direction still fails here.
+    """
     import migration_phase0.route_ownership_evolution as roe
 
     rows = _quiet(roe.run)
     assert len(rows) == 882
     owned = [r for r in rows if r.get("owned")]
-    assert len(owned) == 34
+    assert len(owned) == 35
     assert sum(1 for r in owned if r["grade"] == "REFUSED") > 0
     assert sum(1 for r in owned if r["grade"] == "DELIVERED") > 0
     assert not any("error" in r for r in rows)

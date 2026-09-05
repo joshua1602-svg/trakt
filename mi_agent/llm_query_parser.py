@@ -3879,12 +3879,36 @@ def _categorical_narrowings(text: str, semantics: dict, available_columns=None,
     # region" resolved nothing as one segment: the trailing analysis defeats a
     # resolver whose job is to read a value out of a short phrase.
     boundaries += [m.start() for m in re.finditer(r"[,;]", text or "")]
+    # AND SO DOES A GROUPING MARKER, for exactly the same reason — the comma
+    # above is only the punctuated spelling of this boundary. Without it the
+    # qualifier ran on into the breakdown and the population was lost, but only
+    # when the reader put the scope first and used no comma:
+    #
+    #   "In Scotland, how many loans by product?"    Scotland   ✓
+    #   "Loan count by product in Scotland"          Scotland   ✓
+    #   "How many loans in Scotland by product?"     whole book ✗
+    #
+    # Three spellings of one question, and the failing one is the one a person
+    # is most likely to type. `axis_marker_alternation` is the owner of where a
+    # breakdown begins — the same markers `_grouping_segments` splits on — so
+    # this reads that vocabulary rather than growing a second copy of it.
+    #
+    # A marker ENDS a qualifier; it never starts one. The segment that begins at
+    # a marker is axis text, and offering it to the value resolver would read
+    # the breakdown as a narrowing ("balance by lump sum" → one product), so it
+    # is skipped. A qualifier that opens INSIDE an axis segment still resolves,
+    # because its own opener is a boundary in its own right.
+    _axis_starts = {m.start() for m in re.finditer(
+        r"\b(?:" + _lexical.axis_marker_alternation() + r")\b", text or "")}
+    boundaries += sorted(_axis_starts)
     boundaries = sorted(set(b for b in boundaries if 0 < b < len(text or "")))
     if not boundaries:
         return found
     starts = [0] + boundaries
     ends = boundaries + [len(text)]
     for start, end in zip(starts, ends):
+        if start in _axis_starts:
+            continue
         segment = (text or "")[start:end].strip(" ,;")
         if not segment:
             continue
@@ -4330,7 +4354,35 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         wants_balance_too = bool(re.search(_balance_word, _subject))
     else:
         wants_balance_too = bool(re.search(_balance_word, _metric_slot(q)))
-    if is_count_q or is_balance_q:
+    # A NARROWING IS NOT A REASON TO DROP THE BREAKDOWN.
+    #
+    # The branch below returns a filtered SUMMARY — one number over the stated
+    # population — and it used to claim the question on the strength of a
+    # PHRASE, without ever asking whether the same sentence also named a
+    # grouping axis. So a reader who narrowed a breakdown lost the breakdown:
+    #
+    #   "total balance by region"                       breakdown by region
+    #   "total balance by region for joint borrowers"   ONE NUMBER
+    #
+    # and, because the claim was phrase-shaped, which reading they got depended
+    # on how they happened to spell the measure. `total exposure`, `sum of
+    # balance` and `average balance` all reached the grouped path; `total
+    # balance` and `how much balance` did not. Four spellings of one request,
+    # two of them unanswerable — the receipt refused them, correctly, for a
+    # breakdown that never executed, so nothing was ever silently widened. The
+    # capability was simply absent.
+    #
+    # The rule is about grammar, not vocabulary: a filtered summary is the
+    # reading only where the reader named NO breakdown. `_classify_segments` is
+    # already the owner of that question — it is what the grouped paths below
+    # consult — so this consults it rather than growing a second opinion, and a
+    # sentence with no "by" still classifies to nothing and still lands here.
+    #
+    # The population is unaffected either way: both readings resolve it through
+    # the same owner. This decides which SHAPE answers, never which rows.
+    _names_a_breakdown = bool(
+        _classify_segments(q, semantics, available_columns)[1])
+    if (is_count_q or is_balance_q) and not _names_a_breakdown:
         # Support one OR MORE filters joined by "and" (numeric thresholds and a
         # categorical region value), e.g. "youngest age more than 70 and
         # geographic region south west".
