@@ -1013,6 +1013,53 @@ def _metric_side_residue(metric_part: str, semantics: dict,
     return " ".join(residue)
 
 
+def _span_holds_another_role(text: str, start: int, end: int) -> bool:
+    """Is the span at ``[start:end]`` already doing a job other than measuring?
+
+    THE ROLE-OWNERSHIP CHECK, and it exists because only one of the estate's two
+    measure resolvers had it. `_measure_hits` asked these three questions before
+    accepting a hit; `_detect_metric` asked none of them and took the first
+    governed measure word it saw, whatever that word was already doing:
+
+        "balance by ltv bucket"
+            _detect_metric  → current_loan_to_value   ← the grouping AXIS
+            _measure_hits   → current_outstanding_balance
+
+    That question answers correctly today only because its caller hands
+    `_detect_metric` a pre-blanked string with the grouping already removed. The
+    correctness of every call therefore depended on the CALLER knowing to blank
+    the right text first, and where one did not, the axis became the measure:
+
+        "How many loans are in the 60-70% LTV bucket?"
+            → metric LTV, aggregation weighted_avg
+
+    with `_wants_count` true and never consulted, because the branch only asks
+    `if metric is None` and a measure had already been claimed from a phrase
+    that was naming a POPULATION.
+
+    The three questions are unchanged — this is where they now live, so both
+    resolvers ask them and neither can drift.
+
+      1. the subject of a predicate      "LTV above 50%"      → a threshold
+      2. inside a grouping region        "by LTV bucket"      → an axis
+      3. followed by a dimension suffix  "LTV bucket/band"    → a bucket
+
+    A field the reader genuinely asks for is untouched: "weighted average LTV"
+    is in none of these positions.
+    """
+    # Read from the OWNER. `execution_receipt._is_filter_subject` is a
+    # delegating wrapper around this; taking the wrapper would put a third name
+    # on one decision. Local import: `lexical` is the lower layer, and this
+    # module is imported by it at load time in some paths.
+    from question_interpretation.lexical import is_filter_subject
+
+    if is_filter_subject(text, start, end):
+        return True
+    if any(g_start <= start < g_end for g_start, g_end in _grouping_regions(text)):
+        return True
+    return bool(_DIMENSION_SUFFIX_RE.match(text[end:end + 16]))
+
+
 def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List[str]]:
     """Return (metric_key, aggregation, matched_terms) from free text.
 
@@ -1042,13 +1089,15 @@ def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List
     #    beat a curated single token it happens to contain (e.g. "balance").
     multi = sorted((t for t in reg_terms if " " in t), key=len, reverse=True)
     for term in multi:
-        if re.search(r"\b" + re.escape(term) + r"\b", text):
+        match = re.search(r"\b" + re.escape(term) + r"\b", text)
+        if match and not _span_holds_another_role(text, match.start(), match.end()):
             key, agg = _resolve_registry(term)
             matched.append(term)
             return key, agg, matched
     # 2) Curated grammar — the core measures and their disambiguation.
     for term, token in _METRIC_TERMS:
-        if re.search(r"\b" + re.escape(term) + r"\b", text):
+        match = re.search(r"\b" + re.escape(term) + r"\b", text)
+        if match and not _span_holds_another_role(text, match.start(), match.end()):
             key, agg = _resolve_metric(token, semantics)
             if token != "count":
                 agg = _apply_agg_intent(key, agg, intent, semantics)
@@ -1170,11 +1219,7 @@ def _measure_hits(text: str, semantics: dict, available_columns=None
         # BY region" measures balance and GROUPS by region. Neither second word
         # is a measure, and reading it as one turns a good filtered answer into
         # a spurious multi-measure request.
-        if _is_filter_subject(text, match.start(), match.end()):
-            return
-        if any(start <= match.start() < end for start, end in grouping):
-            return
-        if _DIMENSION_SUFFIX_RE.match(text[match.end():match.end() + 16]):
+        if _span_holds_another_role(text, match.start(), match.end()):
             return
         hits.append((match.start(), match.end(), key, default_agg))
 

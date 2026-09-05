@@ -344,9 +344,18 @@ _NOT_A_MODIFIER = (
     "and", "or", "but", "there", "their", "its", "our",
 )
 
-#: Up to three adjectives, none of them a function word.
+#: Any run of adjectives, stopping at the first function word.
+#:
+#: NOT A FIXED COUNT. This was `{0,3}`, which looked generous and was not: "how
+#: many 60 YEAR OLD JOINT borrowers with LTV over 40%" puts four tokens between
+#: the interrogative and the row noun, and the count went unrecognised — the
+#: whole question then parsed as `unmapped` and lost all four of its predicates.
+#: A bound on the NUMBER of modifiers is a guess about how a reader writes;
+#: `_NOT_A_MODIFIER` is a statement about what ends a noun phrase, and it is the
+#: real boundary. "how many regions have loans" still counts regions, because
+#: `have` is a function word and stops the run.
 _ROW_MODIFIER = (r"(?:(?!(?:" + "|".join(_NOT_A_MODIFIER) + r")\b)"
-                 r"[a-z][\w-]*\s+){0,3}")
+                 r"[\w][\w-]*\s+)*")
 
 #: How a reader asks for a count. Both shapes: the interrogative ("how many
 #: funded loans") and the noun phrase ("loan count", "number of cases").
