@@ -117,7 +117,37 @@ def find_field(
         hay = " ".join(_synonyms(entry)).lower()
         return bool(keywords) and any(kw in hay for kw in keywords)
 
+    def claims_the_word(entry: dict) -> bool:
+        """Does this field list the keyword as an explicit governed synonym?
+
+        THE TIE-BREAK AMONG PRIMARY HITS, and it is settled by a DECLARATION
+        rather than by the order a dict happens to iterate in.
+
+        The rule above — a name hit beats a synonym hit — was written when only
+        one field could be NAMED for an ambiguous word. Registering
+        `pipeline_case_age_days` created the first tie: it is named for "age"
+        exactly as `youngest_borrower_age` is, both are core, and the winner was
+        whichever came first alphabetically. That silently took the bare word
+        from the borrower — "what is the average age?" and "a borrower aged 85
+        or older" both bound the pipeline case — which is the one thing the
+        case-age work was required not to do.
+
+        The registry already carries the answer. `youngest_borrower_age` lists
+        `age` among its synonyms; `pipeline_case_age_days` deliberately lists
+        only phrases ("pipeline case age", "days in pipeline"). A field that is
+        named for the word AND claims it outranks one that merely contains it.
+
+        The match is EXACT rather than the substring test `synonym_hit` uses:
+        "age" is a substring of "pipeline case age" too, so a substring test
+        makes both fields claim it and settles nothing. Only the field whose
+        synonym list contains the bare word itself has declared that the bare
+        word means it.
+        """
+        return any(kw == syn.strip().lower()
+                   for syn in _synonyms(entry) for kw in keywords)
+
     preferred_kw: Optional[str] = None
+    preferred_kw_claimed = False
     fallback_kw: Optional[str] = None
     preferred_syn: Optional[str] = None
     fallback_syn: Optional[str] = None
@@ -129,8 +159,9 @@ def find_field(
             continue
         if primary_hit(key, entry):
             if is_preferred(entry):
-                if preferred_kw is None:
-                    preferred_kw = key
+                claimed = claims_the_word(entry)
+                if preferred_kw is None or (claimed and not preferred_kw_claimed):
+                    preferred_kw, preferred_kw_claimed = key, claimed
             elif fallback_kw is None:
                 fallback_kw = key
         elif synonym_hit(key, entry):

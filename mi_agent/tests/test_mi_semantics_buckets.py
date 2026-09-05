@@ -149,12 +149,22 @@ def test_registry_field_count_and_tiers(semantics):
     # governed field to read and bound every region question to the raw source
     # column instead — where the same book carries "LONDON" and "London" and
     # one region came back as two rows.
-    assert m["field_count"] == 121
+    # pipeline_case_age_days == 122. `prepare_pipeline_mi_dataset` has populated
+    # that column on every row since the pipeline contract was written and
+    # `forecast_bridge` reads it; only the DECLARATION was missing — the same
+    # shape as the two entries above. Its absence did not refuse, though: the
+    # concept had no name, so `youngest_borrower_age` (which lists the bare
+    # synonym `age`) claimed the words, and "what is the average pipeline case
+    # age in days?" was answered "Average Borrower Age: 74". A plausible figure
+    # for a lifetime book, about the wrong subject.
+    assert m["field_count"] == 122
     # +2 core: both governed seasoning dimensions are core-tier (P1J-1);
     # +1 core: interest_rate_bucket, core like every other derived bucket;
     # +2 core: the harmonised region pair, core like the region field they
-    # are preferred over.
-    assert m["core_field_count"] == 85
+    # are preferred over;
+    # +1 core: pipeline_case_age_days, core like the pipeline dimensions it
+    # sits beside.
+    assert m["core_field_count"] == 86
     # The generated metadata counts must match the actual entries (drift guard).
     assert m["field_count"] == len(semantics["fields"])
     assert "derived bucket semantic fields added" in (m.get("cleanup_notes") or [])
