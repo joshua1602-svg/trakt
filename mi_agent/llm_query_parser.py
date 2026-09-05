@@ -3531,74 +3531,41 @@ def _grouped_value_filters(q: str, semantics: dict, available_columns,
                            exclude_dims: Iterable[str] = (), *,
                            available_values=None
                            ) -> Tuple[Dict[str, Any], List[str]]:
-    """Value filters expressed ALONGSIDE a grouping, e.g. 'balance by region where
-    LTV above 50%' or 'balance by broker in the north'. Execution applies filters
-    to the mask BEFORE grouping, so a grouped spec may legitimately carry them.
+    """Value filters expressed ALONGSIDE a grouping — now a THIN WRAPPER.
 
-    A filter whose field is itself a grouping dimension is dropped (that is the
-    grouping, not a filter). Returns ``(filters, unavailable_notes)`` — mirrors
-    the filtered-KPI branch so a grouped filter is never silently discarded."""
-    exclude = set(exclude_dims or ())
-    unavailable: List[str] = []
-    filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable,
-                             available_values=available_values)
-    # EVERY stated population, here too. This is the SECOND owner of that
-    # question — `_resolve_population` is the other — and fixing only one left
-    # the grouped path dropping narrowings the ungrouped path kept:
-    #
-    #   "For joint borrowers in Scotland, balance"              Joint + Scotland
-    #   "For joint borrowers in Scotland, balance by product"   Joint only
-    #
-    # A grouping is not supposed to cost a filter. The field that IS the
-    # grouping is still excluded below — that is the breakdown, not a
-    # narrowing — so "balance by region for Scotland" groups by region and
-    # narrows to Scotland without the two competing.
-    #
-    # `exclude` is NOT applied to these. It exists to stop the GROUPING WORD
-    # becoming a filter — "balance by region" must not narrow to a region — and
-    # `_categorical_narrowings` never returns a bare dimension word: it returns
-    # only values resolved against the book's own catalogue. So "balance by
-    # product and region for Scotland" groups by both axes AND narrows to
-    # Scotland, which is what was asked; excluding it dropped the narrowing and
-    # answered over every region.
-    for field, value in _categorical_narrowings(
-            q, semantics, available_columns, available_values).items():
-        if field not in filters:
-            filters[field] = value
-    # A borrower-structure value filter ("... for joint borrowers") resolves to a
-    # categorical filter (or an unavailable note). Skip it when the grouping IS
-    # the borrower dimension (that is the breakdown, not a filter).
-    bstruct = _borrower_structure_filter(q, semantics, available_columns)
-    if bstruct is not None:
-        bfilters, bnote = bstruct
-        bfilters = {k: v for k, v in (bfilters or {}).items() if k not in exclude}
-        if bfilters:
-            filters.update(bfilters)
-        elif bnote and not (bfilters and set(bfilters) & exclude):
-            unavailable.append(bnote)
-    # A FILTER ON THE GROUPED FIELD IS THE AXIS ONLY WHEN IT IS THE AXIS'S OWN
-    # WORDS.
-    #
-    # This used to drop every filter whose field was a grouping dimension. The
-    # case it protects is real: "show balance by lump sum" names the product
-    # axis with a value's own words, and filtering to that value would answer a
-    # one-row question in place of the breakdown the reader asked for. But the
-    # same rule fired on "show balance by region for loans in Wales and
-    # Scotland", where the values arrive through a QUALIFIER and restrict the
-    # axis rather than being it — so a two-region breakdown was parsed with no
-    # filter at all, the executor grouped all five, and the gate refused an
-    # answer that had lost the narrowing.
-    #
-    # The discriminator is where the value's words are. `_axis_phrase` is the
-    # segment without its qualifier, and the two readers of that boundary share
-    # one owner.
-    axis_text = " ".join(_axis_phrase(seg)
-                         for seg in _grouping_segments(str(q or "").lower())[1])
-    for d in exclude:
-        if d in filters and not _restricts_the_axis(d, filters[d], axis_text,
-                                                    available_values):
-            filters.pop(d, None)
-    return filters, unavailable
+    THE DUPLICATE OWNER, RETIRED. This resolved populations independently of
+    `_resolve_population`, and the two were not the same: each knew a narrowing
+    the other did not, so the same defect had to be fixed in both. Measured
+    while fixing the second one:
+
+        "For joint borrowers in Scotland, balance"             Joint + Scotland
+        "For joint borrowers in Scotland, balance by product"  Joint only
+
+    A grouping is not supposed to cost a filter, and two resolvers is how it
+    came to. The one legitimate difference between them — that a GROUPED request
+    must not read the axis's own name as a narrowing — is a parameter of the
+    owner now (`exclude_dims`), not a reason for a second implementation.
+
+    Kept as a wrapper rather than deleted because ten call sites read this name
+    and its `(filters, unavailable)` shape; the wrapper is where that shape is
+    adapted, and nothing here decides anything.
+
+    THE ADAPTATION IS THE UNRESOLVED NOTES, and getting it wrong cost a
+    disclosure. The owner reports a condition it could not map to a governed
+    field through the `unresolved` out-parameter, because the ungrouped callers
+    branch on it: a question whose ONLY predicate is unmappable is refused
+    outright, which is different from a note. A grouped caller has no such
+    branch — the breakdown still stands — so for it an unmappable condition is
+    simply something to DISCLOSE, which is why this shape folds the two lists
+    into one. Dropping the fold silently retired the note on
+    "Show loans for Equity Release Supermarket Limited"; the canonical census
+    is what saw it.
+    """
+    unresolved: List[str] = []
+    filters, unavailable, _note = _resolve_population(
+        q, semantics, available_columns, available_values,
+        unresolved=unresolved, exclude_dims=exclude_dims)
+    return filters, unresolved + unavailable
 
 
 def _restricts_the_axis(field: str, condition: Any, axis_text: str,
@@ -3930,7 +3897,8 @@ def _categorical_narrowings(text: str, semantics: dict, available_columns=None,
 
 def _resolve_population(text: str, semantics: dict, available_columns=None,
                         available_values=None, *,
-                        unresolved: Optional[List[str]] = None
+                        unresolved: Optional[List[str]] = None,
+                        exclude_dims: Iterable[str] = ()
                         ) -> Tuple[Dict[str, Any], List[str], str]:
     """Every governed narrowing this text states → ``(filters, unavailable, note)``.
 
@@ -3966,12 +3934,14 @@ def _resolve_population(text: str, semantics: dict, available_columns=None,
     note = ""
     # Borrower structure ("joint borrowers", "sole borrower"). Where the field
     # is absent the predicate is recorded UNAVAILABLE, never dropped.
+    exclude = set(exclude_dims or ())
     bstruct = _borrower_structure_filter(text, semantics, available_columns)
     if bstruct is not None:
         bfilters, note = bstruct
+        bfilters = {k: v for k, v in (bfilters or {}).items() if k not in exclude}
         if bfilters:
             filters.update(bfilters)
-        else:
+        elif note:
             unavailable.append(note)
     # EVERY categorical narrowing the book itself carries ("in Scotland", "for
     # Lump Sum loans"), not just the last one — see `_categorical_narrowings`.
@@ -3988,6 +3958,22 @@ def _resolve_population(text: str, semantics: dict, available_columns=None,
                                             available_values)
             if cat:
                 filters[cat[0]] = cat[1]
+    # THE AXIS RULE, the one concept a GROUPED request needs that an ungrouped
+    # one does not: a value word that IS the axis's own name is the breakdown,
+    # not a narrowing. "show balance by lump sum" names the product axis;
+    # filtering to that value would answer a one-row question in place of the
+    # breakdown. A value arriving through a QUALIFIER restricts the axis instead
+    # ("balance by region for loans in Wales"), and `_restricts_the_axis` is the
+    # discriminator. Absent `exclude_dims` this loop does nothing, which is why
+    # the ungrouped callers are unaffected by owning it here.
+    if exclude:
+        axis_text = " ".join(
+            _axis_phrase(seg)
+            for seg in _grouping_segments(str(text or "").lower())[1])
+        for dim in exclude:
+            if dim in filters and not _restricts_the_axis(
+                    dim, filters[dim], axis_text, available_values):
+                filters.pop(dim, None)
     return filters, unavailable, note
 
 
