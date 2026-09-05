@@ -1098,10 +1098,10 @@ def _local_aggregation_intent(text: str, start: int) -> Optional[str]:
 _AGG_QUALIFIER_WINDOW = 40
 
 #: How a reader names the loan-count measure inside a multi-measure request.
-_COUNT_MEASURE_RE = re.compile(
-    r"\b(?:loan\s+count|number\s+of\s+(?:loans|cases|accounts|mortgages)|"
-    r"no\.?\s+of\s+(?:loans|cases|accounts)|count\s+of\s+(?:loans|cases|accounts)|"
-    r"how\s+many\s+(?:loans|cases|accounts)|loan\s+numbers)\b", re.I)
+#: READ FROM THE OWNER. This carried its own copy of the phrase, adjacent-only,
+#: so "how many FUNDED loans … and what is their balance" found one measure
+#: instead of two and lost the balance entirely. See `lexical.COUNT_REQUEST_RE`.
+_COUNT_MEASURE_RE = _lexical.COUNT_REQUEST_RE
 
 
 #: Introduces a GROUPING clause. Everything from here to the end of the clause
@@ -1198,6 +1198,24 @@ def _measure_hits(text: str, semantics: dict, available_columns=None
     #     ``_detect_metric``'s single-measure behaviour is untouched.
     for match in _COUNT_MEASURE_RE.finditer(text):
         _record(match, "loan_count", "count")
+    # 2c) `amount`, the reader's own governed default for the balance.
+    #
+    #     ONE MEASURE VOCABULARY, NOT TWO. The product owner's rule — "amount
+    #     defaults to the current outstanding balance" — was owned by a single
+    #     terminal branch of the parse and by `_DEFAULTED_MEASURE_RE`, and the
+    #     measure SET had never heard of it. So the word worked when it was the
+    #     only thing asked for and vanished the moment it was asked for
+    #     alongside something else:
+    #
+    #         "What is the total pipeline amount?"          → balance ✓
+    #         "How many pipeline cases are there and what
+    #          is the total pipeline amount?"               → the amount is lost
+    #
+    #     which reads as a composition defect and is a vocabulary one. The same
+    #     `_balance_metric` resolves it here as there, so the two readings of
+    #     the word cannot diverge again.
+    for match in _DEFAULTED_MEASURE_RE.finditer(text):
+        _record(match, _balance_metric(semantics, available_columns), "sum")
     # 3) Registry single-word synonyms for anything still unnamed.
     for term in sorted((t for t in reg_terms if " " not in t), key=len, reverse=True):
         for match in re.finditer(r"\b" + re.escape(term) + r"\b", text):
@@ -1443,14 +1461,18 @@ _SUMMARY_INTENT_RE = re.compile(
 # A "count of things" intent that the legacy metric grammar does not surface as a
 # metric token (e.g. "number of loans"). Used to keep loan/case COUNT evolutions
 # as a count metric instead of defaulting to balance/sum.
-_COUNT_INTENT_RE = re.compile(
-    r"\b(loan count|case count|number of (?:loans|cases|mortgages|accounts|deals|"
-    r"pipeline cases)|how many (?:loans|cases|borrowers|mortgages|accounts)|"
-    r"count of (?:loans|cases)|loan numbers|case numbers|deal count)\b")
+#: The same owner. This was the second private copy of the phrase.
+_COUNT_INTENT_RE = _lexical.COUNT_REQUEST_RE
 
 
 def _wants_count(q: str) -> bool:
-    return bool(_COUNT_INTENT_RE.search(q)) or bool(re.search(r"\bcount\b", q))
+    """Did the reader ask, in words, for a count of rows?
+
+    The bare token `count` is kept alongside the governed phrase: "count by
+    region" names the measure without naming what is counted, and this branch
+    has always honoured it.
+    """
+    return _lexical.counts_rows(q) or bool(re.search(r"\bcount\b", q))
 
 
 #: A measure word that DEFAULTS rather than resolves. "Amount" is the reader's
@@ -2585,7 +2607,9 @@ _SHARE_RE = re.compile(
     r"\bhow much of the (?:book|portfolio)\b|"
     r"\bwhat\s+(?:%|percent)\s+of\b", re.I)
 #: A share is measured on a balance basis unless the question counts loans.
-_SHARE_COUNT_RE = re.compile(r"\b(?:loans|cases|accounts|borrowers)\b", re.I)
+#: A governed row noun standing alone — the vocabulary, from its owner.
+_SHARE_COUNT_RE = re.compile(r"\b(?:" + _lexical.row_noun_alternation() + r")\b",
+                             re.I)
 
 
 def _share_request(q: str, semantics: dict, available_columns=None
@@ -3664,6 +3688,68 @@ def _contribution_recognizer(q: str, title: str, semantics: dict,
                            note="aggregate_contribution")
 
 
+def _resolve_population(text: str, semantics: dict, available_columns=None,
+                        available_values=None, *,
+                        unresolved: Optional[List[str]] = None
+                        ) -> Tuple[Dict[str, Any], List[str], str]:
+    """Every governed narrowing this text states → ``(filters, unavailable, note)``.
+
+    THE ONE POPULATION OWNER, and it exists because there were two.
+
+    The single-output branch resolved a population with `_parse_filters` plus
+    `_borrower_structure_filter`. The MULTI-measure branch resolved one with
+    `_parse_filters` plus `_parse_categorical_filter`. Neither was a superset,
+    so the population a composed answer described was not the population the
+    same sentence described when asked one thing at a time:
+
+        "For joint borrowers, what is the funded balance?"
+            → filters {borrower_type: Joint}                  ✓
+
+        "For joint borrowers, give me the funded loan count,
+         funded balance, and weighted average LTV."
+            → filters {}                          the WHOLE BOOK, silently
+
+    Three correct figures about the wrong population, and nothing in the
+    envelope said so — the composition bank counts that row as verified. A
+    GEOGRAPHIC population survived the same sentence, because the categorical
+    resolver is the one the measure-set path did consult, which is what made the
+    gap look like a phrasing problem rather than a missing owner.
+
+    Both paths call this now. Adding an output may not change the population,
+    and that is the invariant this function exists to make structural rather
+    than coincidental.
+    """
+    filters = _parse_filters(text, semantics, available_columns,
+                             unresolved=unresolved,
+                             available_values=available_values)
+    unavailable: List[str] = []
+    note = ""
+    # Borrower structure ("joint borrowers", "sole borrower"). Where the field
+    # is absent the predicate is recorded UNAVAILABLE, never dropped.
+    bstruct = _borrower_structure_filter(text, semantics, available_columns)
+    if bstruct is not None:
+        bfilters, note = bstruct
+        if bfilters:
+            filters.update(bfilters)
+        else:
+            unavailable.append(note)
+    # A categorical value the book itself carries ("in Scotland", "Lump Sum").
+    if not filters:
+        cat = _parse_categorical_filter(text, semantics, available_columns,
+                                        available_values)
+        if cat is None:
+            # A CFO states the scope FIRST — "For the London book, give me …".
+            # The same resolver reads the leading clause; no second pattern.
+            lead = text.split(",", 1)[0].strip()
+            if lead and lead != text.strip():
+                cat = _parse_categorical_filter(lead, semantics,
+                                                available_columns,
+                                                available_values)
+        if cat and cat[0] not in filters:
+            filters[cat[0]] = cat[1]
+    return filters, unavailable, note
+
+
 def _measure_set_recognizer(q: str, title: str, semantics: dict,
                             available_columns=None, available_values=None):
     """A governed MULTI-MEASURE plan, or None.
@@ -3701,21 +3787,8 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
     # balance for LUMP SUM loans?" bound a product type to the GEOGRAPHY field,
     # selected nothing, and refused naming a field the reader never mentioned —
     # the exact substitution the catalogue exists to prevent.
-    filters = _parse_filters(remainder, semantics, available_columns,
-                             available_values=available_values)
-    region = _parse_categorical_filter(remainder, semantics, available_columns,
-                                       available_values)
-    if region is None:
-        # A CFO usually states the scope FIRST — "For the London book, give me
-        # …". The existing categorical resolver reads a trailing scope clause,
-        # so the leading clause is handed to that same resolver rather than a
-        # second pattern being invented for it.
-        lead = remainder.split(",", 1)[0].strip()
-        if lead and lead != remainder.strip():
-            region = _parse_categorical_filter(lead, semantics, available_columns,
-                                               available_values)
-    if region and region[0] not in filters:
-        filters[region[0]] = region[1]
+    filters, unavailable, _note = _resolve_population(
+        remainder, semantics, available_columns, available_values)
 
     grouped = bool(dims)
     spec = MIQuerySpec(
@@ -3727,6 +3800,7 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
         dimension=dims[0] if grouped else None,
         x=dims[0] if grouped else None,
         filters=filters,
+        unavailable_filters=unavailable,
         output_format="chart_and_table" if grouped else "table",
         title=title,
         explanation=("Governed multi-measure request: "
@@ -3953,7 +4027,11 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     # A counting/aggregating question with a numeric threshold routes to a
     # filtered summary (count or balance), NOT a bar chart, so "how many loans
     # with youngest age more than 70" answers a number.
-    is_count_q = bool(re.search(r"\bhow many\b|\bnumber of\b|\bcount of\b", q))
+    # THE FIFTH READING, DELETED. This was `\bhow many\b|\bnumber of\b|
+    # \bcount of\b` written inline — modifier-tolerant where the two owners
+    # feeding the measure set were not, which is how the estate came to know and
+    # not know the same fact. One owner now answers for all of them.
+    is_count_q = _lexical.counts_rows(q)
     is_balance_q = bool(re.search(r"\bhow much\b|\btotal balance\b", q))
     # A COUNT question also wants the balance only when the balance word sits
     # BEFORE the counting phrase — "total balance and how many loans over 80".
@@ -3972,21 +4050,9 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         # categorical region value), e.g. "youngest age more than 70 and
         # geographic region south west".
         unresolved_notes: List[str] = []
-        filters = _parse_filters(q, semantics, available_columns,
-                                 unresolved=unresolved_notes,
-                                 available_values=available_values)
-        # Borrower-structure intent ("how many joint borrowers"): resolve joint/sole
-        # to a filter. When the field is unavailable, record the predicate as
-        # UNAVAILABLE (never silently dropped).
-        unavailable: List[str] = []
-        bnote = ""
-        bstruct = _borrower_structure_filter(q, semantics, available_columns)
-        if bstruct is not None:
-            bfilters, bnote = bstruct
-            if bfilters:
-                filters.update(bfilters)
-            else:
-                unavailable.append(bnote)
+        filters, unavailable, bnote = _resolve_population(
+            q, semantics, available_columns, available_values,
+            unresolved=unresolved_notes)
         # When the ONLY predicate is one whose field this dataset does not carry
         # ("how many loans have Risk Score above 700"), the filter IS the
         # question. Answering the unfiltered count would answer a different
@@ -4592,10 +4658,25 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         if re.search(r"\bamounts?\b", q):
             _amount_metric = _balance_metric(semantics, available_columns)
             if _amount_metric:
+                # THE POPULATION COMES WITH IT. Every branch in this terminal
+                # region builds a FRESH spec, and this one built it without the
+                # narrowings `_parse_filters` had already resolved — so a bound
+                # the reader stated was parsed, dropped, and then reported by
+                # the facet guard as "understood but could not be applied":
+                #
+                #   "total pipeline AMOUNT for cases with a rate above 6%"  {}
+                #   "total pipeline BALANCE for cases with a rate above 6%" {rate>6}
+                #
+                # One word decided whether the population survived. The guard
+                # was right to refuse; the spec was wrong to omit it. Read from
+                # the one population owner, as every other branch now does.
+                _amt_filters, _amt_unavail, _ = _resolve_population(
+                    q, semantics, available_columns, available_values)
                 return (MIQuerySpec(
                     intent="summary", chart_type="none", metric=_amount_metric,
                     aggregation="count" if _wants_count(q) else "sum",
                     metric_defaulted=True, title=title,
+                    filters=_amt_filters, unavailable_filters=_amt_unavail,
                     explanation="'amount' resolved to the governed balance "
                                 "measure; no other measure was named.",
                     output_format="text"),

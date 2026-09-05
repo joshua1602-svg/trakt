@@ -297,6 +297,89 @@ _FILTER_BEFORE_RE = re.compile(
 
 #: How far either side of the measure word to look. A predicate binds close;
 #: widening this would start matching a comparator from a different clause.
+# --------------------------------------------------------------------------- #
+# COUNTING ROWS — one owner, because five was the defect
+# --------------------------------------------------------------------------- #
+# "How many loans are there?" asks for a count. So does "how many FUNDED loans",
+# and the estate did not agree about it: five separate readings lived in
+# `llm_query_parser`, and three spelled the phrase `how\s+many\s+(?:loans|
+# cases|accounts)` — ADJACENT ONLY. One adjective split them:
+#
+#     how many loans are there          _wants_count True   _COUNT_MEASURE True
+#     how many FUNDED loans are there   _wants_count False  _COUNT_MEASURE False
+#     how many PIPELINE cases are there _wants_count False  _COUNT_MEASURE False
+#
+# while `is_count_q` — a fifth reading written inline in the middle of the parse
+# — was `\bhow many\b` and saw all of them. The estate simultaneously knew and
+# did not know that these were counts, and which it acted on depended on which
+# branch the sentence reached.
+#
+# The cost was a whole composition family. The two adjacency-bound readings are
+# the two that feed the MEASURE SET, which needs two measures before it reports
+# any; losing the count left one, so "How many funded loans are to joint
+# borrowers, and what is their funded balance?" fell past the multi-measure
+# recogniser and answered the count alone, while the same question with its
+# clauses reversed answered both.
+#
+# This is the one owner. It lives here, with the comparators and the axis
+# markers, because a count is a reading of the QUESTION's grammar and this
+# module is where the estate keeps those.
+
+#: The governed row nouns — the things an MI question counts. A count is a count
+#: OF something, and this is the vocabulary of that something.
+ROW_NOUNS: Tuple[str, ...] = (
+    "loans", "loan", "cases", "case", "accounts", "account",
+    "mortgages", "mortgage", "deals", "deal", "borrowers", "borrower",
+    "applications", "application",
+)
+
+#: Words that may NOT sit between the interrogative and the row noun. Modifiers
+#: are adjectives ("funded", "joint", "acquired", "outstanding"); a preposition
+#: or a verb means the row noun belongs to a different clause, and counting it
+#: would answer a different question — "how many REGIONS have loans" counts
+#: regions.
+_NOT_A_MODIFIER = (
+    "of", "in", "with", "for", "from", "to", "by", "on", "at", "that", "which",
+    "have", "has", "had", "are", "is", "was", "were", "do", "does", "did",
+    "and", "or", "but", "there", "their", "its", "our",
+)
+
+#: Up to three adjectives, none of them a function word.
+_ROW_MODIFIER = (r"(?:(?!(?:" + "|".join(_NOT_A_MODIFIER) + r")\b)"
+                 r"[a-z][\w-]*\s+){0,3}")
+
+#: How a reader asks for a count. Both shapes: the interrogative ("how many
+#: funded loans") and the noun phrase ("loan count", "number of cases").
+COUNT_REQUEST_RE = re.compile(
+    r"\b(?:how\s+many|number\s+of|no\.?\s+of|count\s+of)\s+"
+    + _ROW_MODIFIER + r"\b(?:" + "|".join(ROW_NOUNS) + r")\b"
+    r"|\b(?:loan|case|deal|account|mortgage)\s+(?:count|numbers)\b"
+    r"|\b(?:loan|case|deal|account|mortgage)s?\s+counted\b",
+    re.I)
+
+
+def counts_rows(text: str) -> bool:
+    """Does this text ask, anywhere, for a count of governed rows?"""
+    return bool(COUNT_REQUEST_RE.search(text or ""))
+
+
+def count_request_spans(text: str) -> Tuple[Tuple[int, int], ...]:
+    """Every span in which a count of rows is requested.
+
+    Spans rather than a boolean because the MEASURE SET needs to know WHERE the
+    count was asked for: a measure's span is consumed so the same words cannot
+    also be read as a grouping axis or a second measure.
+    """
+    return tuple((m.start(), m.end())
+                 for m in COUNT_REQUEST_RE.finditer(text or ""))
+
+
+def row_noun_alternation() -> str:
+    """The row-noun vocabulary as a regex fragment, for callers that need to
+    recognise the noun alone ("show pipeline cases over time")."""
+    return "|".join(ROW_NOUNS)
+
+
 PREDICATE_WINDOW = 32
 
 
