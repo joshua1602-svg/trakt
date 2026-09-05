@@ -613,33 +613,6 @@ def run_mi_agent_query(
                 provider=provider, catalog_mode=catalog_mode,
                 zero_cost_first=zero_cost_first)
         spec, parse_meta = parsed.spec, parsed.meta
-        # ---- QueryPlan becomes the governed semantic contract -------------
-        #
-        # For a spec whose COMPLETE semantics a plan can carry, the request is
-        # lifted into `QueryPlan` / `AnalyticalScope` and the spec that executes
-        # is the one the plan compiles to. The plan then owns what the request
-        # means — population, outputs, dimensions — and the executor still owns
-        # every calculation.
-        #
-        # THIS IS A NO-OP BY CONSTRUCTION, and that is the point of routing
-        # through it rather than an argument against. Measured across the
-        # 882-question corpus: 703 lift, and for every one of them the executed
-        # grouping (`_all_group_dims`, the executor's own authority) and the
-        # chart axes are unchanged. The specs differ only where the compiler
-        # normalises `dimensions`/`dimension`, which that function collapses.
-        #
-        # The 179 that do not lift — rankings, temporal comparisons, forecasts,
-        # risk-limit plans — keep the shipped path untouched. A spec may enter
-        # the plan only if every semantic it states is representable, so a field
-        # added to `MIQuerySpec` tomorrow keeps its question on the old path
-        # until someone models it deliberately.
-        from .query_plan_adapter import compiled_spec_for as _compiled_spec_for
-
-        _planned = _compiled_spec_for(spec, dataset=dataset)
-        if _planned is not None:
-            spec = _planned
-            parse_meta = dict(parse_meta or {})
-            parse_meta["semantic_contract"] = "query_plan"
     except Exception as exc:
         result["error"] = f"Parser error: {exc}"
         result["parse_metadata"] = {"parser_mode": parser_mode, "ok": False,
