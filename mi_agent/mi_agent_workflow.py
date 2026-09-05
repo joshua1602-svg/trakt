@@ -231,14 +231,20 @@ def describe_spec(spec: MIQuerySpec, semantics: dict,
 # concepts but the field's column is absent from the data, the agent returns a
 # CONTROLLED unsupported response (never a hallucinated/fallback answer). When the
 # field IS present (a future client pack), the query is processed normally.
+#: THE ONE PLACE THIS ESTATE SAYS WHAT "NNEG" LOOKS LIKE IN A QUESTION.
+#: Named and exported because the parser's risk-limit recogniser has to read it
+#: too: `headroom` is a limit word AND an NNEG word, and the two owners have to
+#: agree about which sentences are which. A second copy over there is precisely
+#: the defect this fixes.
+NNEG_RE = re.compile(r"\bnneg\b|\bnegative equity\b|\bno[- ]negative[- ]equity\b")
+
 _UNSUPPORTED_CONCEPTS = [
     (r"\bdays?\s+in\s+arrears\b|\bin\s+arrears\b|\barrears\b", "arrears",
      ["arrears_balance", "days_in_arrears"]),
     (r"\bdefault(ed|s)?\b", "default", ["default_amount"]),
     (r"\brecover(y|ies)\b", "recoveries", ["recoveries_in_period"]),
     (r"\b(losses|loss amount|allocated loss)\b", "losses", ["allocated_losses"]),
-    (r"\bnneg\b|\bnegative equity\b|\bno[- ]negative[- ]equity\b", "NNEG",
-     ["nneg_flag"]),
+    (NNEG_RE.pattern, "NNEG", ["negative_equity_guarantee"]),
     (r"\bindexed\s+(ltv|value|valuation|loan to value)\b", "indexed valuation",
      ["indexed_loan_to_value", "indexed_valuation_amount"]),
     (r"\bcredit score\b", "credit score", ["credit_score"]),

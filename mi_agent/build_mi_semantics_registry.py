@@ -1161,6 +1161,41 @@ CURATION: Dict[str, dict] = {
                      "pipeline status"],
         "overrides": {"role": "dimension", "format": "string"},
     },
+    "pipeline_case_age_days": {
+        "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],
+        "business_name": "Pipeline Case Age",
+        "business_description": "How long a pipeline case has been open, in days "
+                               "(reporting as-of date minus the case's KFI date). "
+                               "A property of the CASE, not of the borrower on "
+                               "it — see the synonyms.",
+        # THE FIELD EXISTED AND HAD NO NAME. `prepare_pipeline_mi_dataset` has
+        # populated this column on every row since the pipeline contract was
+        # written, and `forecast_bridge` reads it — but it was absent from this
+        # registry, which is the parser's only vocabulary. So "what is the
+        # average pipeline case age in days?" found no governed concept for the
+        # words, and `youngest_borrower_age` (which carries the bare synonym
+        # `age`) was the closest thing in the registry: the question was
+        # answered *"Average Borrower Age: 74"* — a plausible figure for a
+        # lifetime book, about the wrong subject. P048 in the atomic-perimeter
+        # bank.
+        #
+        # An absent concept does not refuse. It gets claimed by whichever
+        # neighbour owns the word. That is why the fix is a name of its own and
+        # NOT a narrowing of the borrower-age vocabulary, which stays exactly as
+        # it is — the age theme scored 20/20 on it.
+        #
+        # Every synonym is a PHRASE, never the bare word "age". Both resolvers
+        # (`_detect_metric` and `_measure_hits`) try registry multi-word phrases
+        # first, longest first, before the curated single tokens, so these beat
+        # `age` without competing with it.
+        "synonyms": ["pipeline case age", "case age", "days in pipeline",
+                     "pipeline age", "case age in days", "age of the case",
+                     "days in the pipeline"],
+        "overrides": {"role": "metric", "format": "integer",
+                      "allowed_aggregations": ["avg", "median", "min", "max",
+                                               "distribution"],
+                      "default_aggregation": "avg"},
+    },
     "pipeline_snapshot_date": {
         "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],
         "business_name": "Pipeline Snapshot Date",

@@ -692,7 +692,7 @@ def classify(question: Optional[str], *, spec: Any = None) -> AnalyticalIntent:
     else:
         matched_prior = []
     rating = _any(text, _RUN_RATE_TERMS)
-    limiting = _any(text, _LIMIT_TERMS)
+    limiting = _any(text, _LIMIT_TERMS) and not _headroom_owned_elsewhere(text)
     forecasting = _any(text, _FORECAST_TERMS) or _spec_forecast(spec)
     # A LIMIT question asking about the risk of BREACHING is forward, and is
     # classified with the other forward-breach phrasings rather than as a
@@ -867,6 +867,33 @@ def _asks_when(text: str) -> bool:
 
 def _spec_forecast(spec: Any) -> bool:
     return getattr(spec, "forecast_mode", None) is not None
+
+
+def _headroom_owned_elsewhere(text: str) -> bool:
+    """Is the only limit signal here a `headroom` another subject owns?
+
+    `_LIMIT_TERMS` contains " headroom ", and headroom is a RELATIVE noun:
+    against a Schedule 8 concentration limit here, against the balance in
+    "NNEG headroom". Measured before this guard, "what is the current NNEG
+    headroom on the funded book?" was classified LIMITS_CONCENTRATION, had
+    `risk_limit_query` set here, and was answered by the risk-limit route with
+    *"4 passed … 7 breach(es) … Nearest to limit: Top 3 brokers"* — a
+    governing-document report about the wrong subject. F044 in the
+    atomic-perimeter bank.
+
+    The parser's recogniser was guarded first and it was not enough: this
+    boundary sets the same flag from its own vocabulary, one layer down. So the
+    guard is asked of the PARSER'S reader, exactly as `risk_limit_category` is
+    below — a second copy of the NNEG words here would be the defect repeating
+    itself. A question naming a limit as well as NNEG is untouched: that reader
+    blanks the shared word and asks whether anything else in the sentence is
+    still a limit question.
+    """
+    try:
+        from mi_agent.llm_query_parser import headroom_is_owned_elsewhere
+    except Exception:  # noqa: BLE001 - no reader, no guard; today's behaviour
+        return False
+    return headroom_is_owned_elsewhere(text)
 
 
 def _spec_risk_limit(spec: Any) -> bool:

@@ -180,7 +180,18 @@ def test_site3_reports_the_denominator_it_examined():
     # the four is a place, none reached a reader — this trace parses without a
     # frame, and serving always has one — and each is now recorded as an
     # unresolved narrowing instead of a filter on a field nobody named.
-    assert "corpus questions carrying spec.filters: 115" in text
+    #
+    # 115 -> 116 when the postfix comparators stopped carrying their own number
+    # grammar. The ONE question that moved, across all 882:
+    #
+    #     "Drill into the 50%+ LTV bucket."
+    #         {}  ->  {current_loan_to_value: {op: ge, value: 50.0}}
+    #
+    # `50%+` is a bound the prefix grammar would have read and the postfix
+    # patterns could not, because theirs had no `%`. This census is the
+    # measurement that says the change reached one corpus question and no
+    # others — which is why the number is asserted rather than computed.
+    assert "corpus questions carrying spec.filters: 116" in text
 
 
 # --------------------------------------------------------------------------- #
