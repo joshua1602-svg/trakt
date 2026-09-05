@@ -3796,6 +3796,34 @@ def _contribution_recognizer(q: str, title: str, semantics: dict,
                            note="aggregate_contribution")
 
 
+def _clause_local_narrowing(q: str, semantics: dict, available_columns=None,
+                            available_values=None) -> Optional[str]:
+    """The narrowing that belongs to ONE clause, or None if every bound is shared.
+
+    A clause qualifies when it does BOTH things: it refers back to a figure or
+    population the request has already established, and it states a bound of its
+    own. Either alone is ordinary — "what is their balance" refers back and
+    narrows nothing; "for loans above 6%" narrows and refers to nothing.
+    """
+    from question_interpretation.lexical import refers_to_prior_result
+
+    clauses = [c.strip() for c in re.split(r",|\band\b", q) if c.strip()]
+    for clause in clauses[1:]:
+        if not refers_to_prior_result(clause):
+            continue
+        local = _parse_filters(clause, semantics, available_columns,
+                               available_values=available_values)
+        if local:
+            field = sorted(local)[0]
+            return _business_name_of(field, semantics) or field
+    return None
+
+
+def _business_name_of(field: str, semantics: dict) -> Optional[str]:
+    entry = _fields(semantics).get(field) or {}
+    return entry.get("business_name") or entry.get("display_name")
+
+
 def _resolve_population(text: str, semantics: dict, available_columns=None,
                         available_values=None, *,
                         unresolved: Optional[List[str]] = None
@@ -3913,6 +3941,39 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
     # balance for LUMP SUM loans?" bound a product type to the GEOGRAPHY field,
     # selected nothing, and refused naming a field the reader never mentioned —
     # the exact substitution the catalogue exists to prevent.
+    # A CLAUSE-LOCAL NARROWING IS NOT A SHARED ONE, and this request cannot yet
+    # execute its outputs under different populations.
+    #
+    #   "How many joint loans are there, what is their balance, and how much OF
+    #    THAT BALANCE has LTV above 40%?"
+    #
+    # produced two outputs — the third collapses into the balance already
+    # requested, because the measure set dedupes by field — and applied the LTV
+    # bound to ALL of them. The reader got three figures, two silently narrowed
+    # to a population neither clause asked for, and nothing in the envelope said
+    # so. Widening or narrowing a stated population is the one thing this estate
+    # never does silently.
+    #
+    # The discriminator is the BACK-REFERENCE, not the position: a bound in a
+    # final clause is SHARED when the clause adds a condition to the request
+    # ("the balance and WA LTV of loans with a rate above 6%") and LOCAL when it
+    # asks a further question about a figure already produced. Read from the one
+    # owner, which conversational scope reads too.
+    local = _clause_local_narrowing(q, semantics, available_columns,
+                                    available_values)
+    if local:
+        return (MIQuerySpec(
+            intent="summary", chart_type="none", aggregation="count",
+            title=title, output_format="text",
+            explanation=(
+                "This asks for figures over MORE THAN ONE population — "
+                f"{local} narrows only the clause it appears in, not the whole "
+                "request. Every figure would have been computed over the "
+                "narrowed population, so no figure was returned. Ask for each "
+                "population separately and both answers stand.")),
+            _det_meta("medium", bool(dims), [m["field"] for m in measures],
+                      note="clause_local_unsupported"))
+
     filters, unavailable, population_note = _resolve_population(
         population_text, semantics, available_columns, available_values)
 

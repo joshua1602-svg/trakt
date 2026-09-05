@@ -447,6 +447,50 @@ def names_defaulted_measure(text: str) -> bool:
     return bool(DEFAULTED_MEASURE_RE.search(text or ""))
 
 
+# --------------------------------------------------------------------------- #
+# REFERRING BACK — to a figure or a population already established
+# --------------------------------------------------------------------------- #
+# "of that balance", "of those loans", "of the £38m". A clause opening with one
+# of these is asking a further question ABOUT something the request has already
+# produced, rather than adding a condition to it. That distinction decides
+# whether a bound is SHARED or CLAUSE-LOCAL:
+#
+#   "the balance and weighted average LTV of loans with a rate above 6%"
+#       → the bound qualifies the population both outputs describe.  SHARED
+#
+#   "how many joint loans, what is their balance, and how much OF THAT BALANCE
+#    has LTV above 40%"
+#       → the bound qualifies a new output carved out of a prior one.  LOCAL
+#
+# Position cannot tell them apart — both state their bound last. The reference
+# can.
+#
+# ONE OWNER FOR SAME-TURN AND MULTI-TURN. "Of that balance, how much is above
+# 80% LTV?" is the second sentence split across two turns, and the sprint brief
+# requires one population model for both. Conversational scope reads this.
+
+#: Determiners that point at something already established.
+_PRIOR_DETERMINERS = ("that", "those", "this", "these", "the same", "its", "their")
+
+#: Nouns a reference can land on — a figure, or the rows behind it. The row
+#: nouns come from ROW_NOUNS so a reference and a count cannot disagree about
+#: what a "case" is.
+_PRIOR_NOUNS = ("balance", "amount", "amounts", "figure", "total", "exposure",
+                "population", "book", "result", "number")
+
+_PRIOR_REFERENCE_RE = re.compile(
+    r"\b(?:" + "|".join(_PRIOR_DETERMINERS) + r")\s+(?:"
+    + "|".join(_PRIOR_NOUNS) + "|" + "|".join(ROW_NOUNS) + r")\b"
+    # "of the £38m" — a rendered figure standing for the result it came from.
+    r"|\bof\s+the\s+(?:£|\$|€)\s*\d[\d,.]*\s*(?:k|m|bn|b)?\b",
+    re.I)
+
+
+def refers_to_prior_result(text: str) -> bool:
+    """Does this text point at a figure or population already established?"""
+    return bool(_PRIOR_REFERENCE_RE.search(text or ""))
+
+
 PREDICATE_WINDOW = 32
 
 
