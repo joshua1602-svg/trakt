@@ -45,15 +45,27 @@ if str(_REPO_ROOT) not in sys.path:
 # --------------------------------------------------------------------------- #
 # Transport — one interface, two implementations
 # --------------------------------------------------------------------------- #
-def _live_asker(base_url: str) -> Callable[[str], Dict[str, Any]]:
+def _live_asker(base_url: str, path: str = "/mi/query",
+                headers: Optional[List[str]] = None,
+                portfolio_id: Optional[str] = None
+                ) -> Callable[[str], Dict[str, Any]]:
     import urllib.error
     import urllib.request
 
+    extra = {"Content-Type": "application/json"}
+    for raw in (headers or []):
+        name, _, value = raw.partition(":")
+        if name.strip():
+            extra[name.strip()] = value.strip()
+
     def ask(question: str) -> Dict[str, Any]:
-        body = json.dumps({"question": question}).encode("utf-8")
+        payload: Dict[str, Any] = {"question": question}
+        if portfolio_id:
+            payload["portfolioId"] = portfolio_id
+        body = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(
-            base_url.rstrip("/") + "/mi/query", data=body,
-            headers={"Content-Type": "application/json"}, method="POST")
+            base_url.rstrip("/") + path, data=body,
+            headers=extra, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 return json.loads(response.read().decode("utf-8"))
@@ -129,11 +141,33 @@ def _count(envelope: Dict[str, Any]) -> Optional[int]:
 
 #: Questions that MUST answer. Each carries an identity the answer has to
 #: satisfy, checked against the response rather than a remembered figure.
+#: Questions any governed book can answer: a measure, a count, a grouping, a
+#: statistic. A semantic refusal here is a certification failure.
 MUST_ANSWER = (
     "What is the total balance?",
     "How many loans are there?",
     "Total balance by region",
     "What is the average loan size?",
+    "What is the total balance in Scotland?",   # geography, prepositional
+    "What is the Scottish balance?",            # geography, adjectival
+    "WA LTV",                                   # a governed statistic
+)
+
+#: Questions that need a FIELD not every book carries. A book without
+#: `erm_product_type` cannot answer a lump-sum question however well it
+#: understands one, and a certification that could not say so would be
+#: asserting the fixture rather than the product.
+#:
+#: These are reported separately and do not decide the verdict when they refuse.
+#: What they DO decide is that they must never be ANSWERED WRONGLY — an
+#: unavailable field must produce a refusal, never a broader figure — which the
+#: subset identities below check independently.
+CONDITIONAL_ON_FIELDS = (
+    ("How many Scottish lump sum loans are there?", "erm_product_type"),
+    ("For joint borrowers, chart balance by LTV by age", "borrower_type"),
+    ("Total balance by region for joint borrowers with LTV over 50%",
+     "borrower_type"),
+    ("Compare balance over time", "a reporting date"),
 )
 
 #: Questions that MUST refuse. A confident figure here is the failure mode this
@@ -158,6 +192,9 @@ MUST_REFUSE = (
     "Show me the premium loans",
     "What is the distressed balance?",
     "What is the unicorn ratio by region?",
+    # Unresolved MATERIAL qualifiers, in each position a restriction can stand.
+    "What is the platinum balance by region?",
+    "Show me the gold tier loans",
 )
 
 #: Pairs that must agree. A narrowed population computed two ways is one
@@ -181,6 +218,63 @@ SUBSET_PAIRS = (
 )
 
 
+def run_bank(ask: Callable[[str], Dict[str, Any]], path: str
+             ) -> Tuple[int, int, int, List[str]]:
+    """Drive a frozen question bank through the live route.
+
+    Accepts a JSON list of strings, a JSON object with a "rows" list of
+    ``{"question": ...}``, or a text file of one question per line — the shapes
+    the estate's banks are actually written in. Reports answered / refused /
+    transport-failed. It asserts no expectation of its own: a frozen bank's
+    verdicts belong to whoever froze it, and what this adds is that the SAME
+    questions were put to the deployed instance over the public route.
+    """
+    import json as _json
+
+    raw = Path(path).read_text(encoding="utf-8")
+    try:
+        loaded = _json.loads(raw)
+        if isinstance(loaded, dict):
+            loaded = loaded.get("rows") or []
+        questions = [q if isinstance(q, str) else (q.get("question") or "")
+                     for q in loaded]
+    except Exception:  # noqa: BLE001 - a plain text bank is a bank too
+        questions = [line.strip() for line in raw.splitlines()]
+    questions = [q for q in questions if q.strip()]
+
+    answered = refused = broken = 0
+    lines: List[str] = []
+    for question in questions:
+        envelope = ask(question)
+        if envelope.get("__transport_error__"):
+            broken += 1
+            lines.append(f"  BROKEN {question[:70]}  {envelope.get('answer')}")
+        elif envelope.get("ok"):
+            answered += 1
+        else:
+            refused += 1
+    return answered, refused, broken, lines
+
+
+#: The estate's own wording for "this book does not report that field". A
+#: MUST-ANSWER question refused for THIS reason is a data-coverage limit, not a
+#: comprehension failure, and a certification that could not tell the two apart
+#: would fail on every book that happens to lack a column — which is how a
+#: harness starts asserting the fixture instead of the product.
+_DATA_COVERAGE_MARKERS = (
+    "not available in this dataset",
+    "unavailable in this dataset",
+    "does not report it",
+    "field is unavailable",
+    "no reporting periods are available",
+)
+
+
+def _refused_for_data_coverage(envelope: Dict[str, Any]) -> bool:
+    answer = str(envelope.get("answer") or envelope.get("error") or "").lower()
+    return any(marker in answer for marker in _DATA_COVERAGE_MARKERS)
+
+
 def certify(ask: Callable[[str], Dict[str, Any]]) -> Tuple[bool, List[str]]:
     lines: List[str] = []
     ok = True
@@ -191,16 +285,29 @@ def certify(ask: Callable[[str], Dict[str, Any]]) -> Tuple[bool, List[str]]:
             ok = False
         lines.append(f"  {status:6} {detail}")
 
-    lines.append("MUST ANSWER")
+    lines.append("MUST ANSWER (or refuse for a DATA reason, never a semantic one)")
     for question in MUST_ANSWER:
         envelope = ask(question)
         if envelope.get("__transport_error__"):
             record("FAIL", f"{question}  [transport] {envelope.get('answer')}")
         elif envelope.get("ok"):
             record("ok", question)
+        elif _refused_for_data_coverage(envelope):
+            record("data", f"{question}  — book does not carry the field")
         else:
-            record("FAIL", f"{question}  refused: "
+            record("FAIL", f"{question}  refused semantically: "
                            f"{str(envelope.get('answer'))[:90]}")
+
+    lines.append("CONDITIONAL ON A FIELD (refusal is a data limit, not a fault)")
+    for question, needs in CONDITIONAL_ON_FIELDS:
+        envelope = ask(question)
+        if envelope.get("__transport_error__"):
+            record("FAIL", f"{question}  [transport] {envelope.get('answer')}")
+        elif envelope.get("ok"):
+            record("ok", f"{question}  (book carries {needs})")
+        else:
+            record("data", f"{question}  refused — needs {needs}: "
+                           f"{str(envelope.get('answer'))[:70]}")
 
     lines.append("MUST REFUSE (a figure here is a silent wrong answer)")
     for question in MUST_REFUSE:
@@ -251,14 +358,30 @@ def certify(ask: Callable[[str], Dict[str, Any]]) -> Tuple[bool, List[str]]:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=None,
-                        help="serving instance, e.g. "
-                             "https://trakt-mi-api.azurewebsites.net. Omitted: "
-                             "run in-process against mi_agent_api.app.")
+                        help="serving instance, e.g. https://app.traktinfra.io/api "
+                             "(the PUBLIC route a real client uses, which also "
+                             "certifies routing, auth, and serialization). "
+                             "Omitted: run in-process against mi_agent_api.app.")
+    parser.add_argument("--path", default="/mi/query",
+                        help="endpoint path appended to --base-url "
+                             "(default /mi/query).")
+    parser.add_argument("--header", action="append", default=[],
+                        metavar="NAME:VALUE",
+                        help="extra request header, repeatable — e.g. an "
+                             "Authorization bearer token for the auth boundary.")
+    parser.add_argument("--portfolio-id", default=None,
+                        help="portfolioId sent with each question, where the "
+                             "deployment selects a book that way.")
+    parser.add_argument("--bank", action="append", default=[], metavar="FILE",
+                        help="frozen question bank to drive through the same "
+                             "live route, repeatable. JSON list, {rows:[...]}, "
+                             "or one question per line.")
     args = parser.parse_args(argv)
 
     if args.base_url:
-        target = args.base_url
-        ask = _live_asker(args.base_url)
+        target = args.base_url.rstrip("/") + args.path
+        ask = _live_asker(args.base_url, args.path, args.header,
+                          args.portfolio_id)
     else:
         target = "in-process (mi_agent_api.app via TestClient)"
         ask = _in_process_asker()
@@ -268,6 +391,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("target:", target)
     print("=" * 74)
     certified, lines = certify(ask)
+    for path in args.bank:
+        answered, refused, broken, bank_lines = run_bank(ask, path)
+        lines.append(f"FROZEN BANK {path}")
+        lines.append(f"  answered {answered} · refused {refused} · "
+                     f"transport-failed {broken}")
+        lines.extend(bank_lines)
+        if broken:
+            certified = False
     print("\n".join(lines))
     print("-" * 74)
     print("VERDICT:", "CERTIFIED" if certified else "NOT CERTIFIED")
