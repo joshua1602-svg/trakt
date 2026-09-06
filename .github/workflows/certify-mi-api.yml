@@ -20,6 +20,13 @@ name: Certify trakt-mi-api (live)
 # Required repository secret:  MI_BEARER            the dashboard / MI token
 # Optional repository variable: TRAKT_PORTFOLIO_ID  default portfolioId
 #
+# Two verdicts are reported, and they answer different questions. CORE is the
+# release smoke gate. BROAD is the scored sweep across the capability surface —
+# semantic equivalence, filter algebra, grouping reconciliation, output
+# completeness and a once-only holdout — and it is scored on RELATIONS, never on
+# how many questions came back with ok: true. A refusal is not a failure there:
+# a book that does not carry a field must be free to say so.
+#
 # Exit codes from the client are the verdict: 0 certified, 1 not certified,
 # 2 not executable (never reached and authorised — no question was asked).
 # A 2 fails the job deliberately: "we could not run it" must not read as a pass.
@@ -43,6 +50,16 @@ on:
         description: Repo ref to take the certification harness from
         default: main
         required: true
+      suite:
+        description: >-
+          core        = the release smoke gate only (a few dozen requests).
+          core+broad  = the smoke gate plus the BROAD SCORED sweep from
+          broad_cases.json — ~150 distinct production requests scored on
+          relations and identities, not on how many came back ok.
+        type: choice
+        options: [core+broad, core]
+        default: core+broad
+        required: true
       banks:
         description: >-
           Optional space-separated paths to frozen question banks, relative to
@@ -60,6 +77,11 @@ concurrency:
 jobs:
   certify:
     runs-on: ubuntu-latest
+    # 30 minutes covers the core suite comfortably. The broad sweep adds ~150
+    # distinct live requests; the client prints a timed line per request to the
+    # job log as it goes, so if this limit is ever hit the log says at which
+    # request and at what latency — which is the measurement that would justify
+    # raising it, rather than raising it on a guess.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -100,12 +122,17 @@ jobs:
             BANKS="$BANKS --bank $bank"
           done
 
+          SUITE=""
+          if [ "${{ inputs.suite }}" = "core" ]; then
+            SUITE="--no-broad"
+          fi
+
           python -m due_diligence.evidence.mi_api_certification.certify_mi_api \
             --base-url "${{ inputs.base_url }}" \
             --path "${{ inputs.path }}" \
             --portfolio-id "${{ inputs.portfolio_id || vars.TRAKT_PORTFOLIO_ID }}" \
             --report certification-report.txt \
-            $BANKS
+            $SUITE $BANKS
 
       - name: Keep the report whatever the verdict
         if: always()

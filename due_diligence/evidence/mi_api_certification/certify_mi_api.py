@@ -136,12 +136,23 @@ def _count(envelope: Dict[str, Any]) -> Optional[int]:
     """
     import re as _re
 
+    summary = envelope.get("executionSummary") or {}
+    if isinstance(summary.get("population"), int):
+        return summary["population"]
+    recon = envelope.get("reconciliation") or {}
+    if isinstance(recon.get("records_included"), int):
+        return recon["records_included"]
     for artifact in (envelope.get("artifacts") or []):
-        for item in (artifact.get("items") or []):
+        # `kpis` is the shape the KPI artefact actually publishes; `items` was
+        # the only one this read at first, which is why half the suite reported
+        # "skip" — and a skip reads like a pass.
+        for item in (artifact.get("kpis") or []) + (artifact.get("items") or []):
             label = str(item.get("label") or "").lower()
-            if "loan" in label and "count" in label:
+            field = str(item.get("field") or "").lower()
+            if field == "loan_count" or ("loan" in label and "count" in label):
                 try:
-                    return int(str(item.get("value")).replace(",", ""))
+                    return int(float(str(item.get("rawValue", item.get("value")))
+                                     .replace(",", "")))
                 except Exception:  # noqa: BLE001
                     pass
     match = _re.search(r"([\d,]+)\s+loans?\b", str(envelope.get("answer") or ""))
@@ -233,17 +244,28 @@ SUBSET_PAIRS = (
 
 
 def run_bank(ask: Callable[[str], Dict[str, Any]], path: str
-             ) -> Tuple[int, int, int, List[str]]:
-    """Drive a frozen question bank through the live route.
+             ) -> Tuple[int, int, int, int, List[str]]:
+    """Drive a frozen question bank through the live route, SCORING each answer.
 
     Accepts a JSON list of strings, a JSON object with a "rows" list of
     ``{"question": ...}``, or a text file of one question per line — the shapes
-    the estate's banks are actually written in. Reports answered / refused /
-    transport-failed. It asserts no expectation of its own: a frozen bank's
-    verdicts belong to whoever froze it, and what this adds is that the SAME
-    questions were put to the deployed instance over the public route.
+    the estate's banks are actually written in.
+
+    This USED TO COUNT AND NOTHING ELSE. It reported answered / refused /
+    transport-failed, and `main` failed a bank only when the transport broke.
+    That is not a certification of anything: a wrong population, a lost filter,
+    a wrong aggregation and an unexpected refusal all arrive as ``ok: true`` or
+    as an ordinary refusal, and every one of them was counted as a pass. A large
+    replay scored that way says only that the service stayed up.
+
+    A frozen bank carries no expectations — its verdicts belong to whoever froze
+    it — so what is scored here is what a response can be held to WITHOUT one:
+    the coherence checks in `broad.coherence`. A response that claims a
+    population larger than the book, drops a filter it parsed, or publishes a
+    breakdown whose rows do not add up to the population it says it covered has
+    convicted itself, and that is a bank failure.
     """
-    import json as _json
+    from due_diligence.evidence.mi_api_certification import broad as _broad
 
     raw = Path(path).read_text(encoding="utf-8")
     try:
@@ -252,18 +274,24 @@ def run_bank(ask: Callable[[str], Dict[str, Any]], path: str
         questions = [line.strip() for line in raw.splitlines()]
     questions = [q for q in questions if q.strip()]
 
-    answered = refused = broken = 0
+    answered = refused = broken = incoherent = 0
     lines: List[str] = []
     for question in questions:
         envelope = ask(question)
         if envelope.get("__transport_error__"):
             broken += 1
             lines.append(f"  BROKEN {question[:70]}  {envelope.get('answer')}")
-        elif envelope.get("ok"):
+            continue
+        evidence = _broad.read_evidence(question, envelope)
+        problems = _broad.coherence(evidence)
+        if problems:
+            incoherent += 1
+            lines.append(f"  FAIL   {question[:70]}  {'; '.join(problems)[:110]}")
+        if evidence.ok:
             answered += 1
         else:
             refused += 1
-    return answered, refused, broken, lines
+    return answered, refused, broken, incoherent, lines
 
 
 #: The estate's own wording for "this book does not report that field". A
@@ -448,6 +476,115 @@ def certify(ask: Callable[[str], Dict[str, Any]]) -> Tuple[bool, List[str]]:
     return ok, lines
 
 
+#: The BROAD section's own bar, from the certification brief. It is deliberately
+#: NOT "how many questions were answered": a book that cannot carry a field must
+#: be free to refuse, and a suite tuned for answer rate is a suite that rewards
+#: the one failure mode this programme exists to prevent.
+def report_broad(ask: Callable[[str], Dict[str, Any]],
+                 progress: bool = False
+                 ) -> Tuple[bool, List[str], Dict[str, Any]]:
+    """Run the broad scored sweep and render it. Returns (passed, lines, facts)."""
+    from due_diligence.evidence.mi_api_certification import broad as _broad
+
+    cases = _broad.load_cases()
+    session, results, holdout = _broad.run_broad(ask, cases, progress=progress)
+
+    lines: List[str] = ["", "=" * 74,
+                        "BROAD SCORED CERTIFICATION", "=" * 74]
+
+    by_class: Dict[str, Dict[str, int]] = {}
+    for result in results + holdout:
+        bucket = by_class.setdefault(result.cls, {})
+        bucket[result.status] = bucket.get(result.status, 0) + 1
+
+    def emit(title: str, rows: List[Any]) -> None:
+        lines.append(title)
+        for result in rows:
+            marker = {"ok": "ok", "FAIL": "FAIL", "data": "data",
+                      "n/e": "NOT-EST", "skip": "skip"}[result.status]
+            lines.append(f"  {marker:7} {result.case_id}  {result.detail}")
+
+    section_titles = {
+        "singles": "COVERAGE MATRIX (A basic · B one filter · C several filters · "
+                   "D 1-D grouping · E 2-D grouping · F filtered grouping · "
+                   "I temporal/specialist · J adversarial)",
+        "outputs": "SAME-TURN MULTI-OUTPUT (every requested output must survive)",
+        "output_local": "OUTPUT-LOCAL NARROWING (a narrowing must not cost the breakdown)",
+        "equivalence_groups": "SEMANTIC EQUIVALENCE (the relation is scored, not ok:true)",
+        "subset_pairs": "SUBSET (a narrowing never grows the population)",
+        "algebra": "FILTER ALGEBRA / METAMORPHIC PROPERTIES",
+        "reconciliations": "GROUPING RECONCILIATION (parts sum to the whole, this run only)",
+        "arithmetic": "NUMERIC IDENTITIES (computed from the responses themselves)",
+    }
+    index = 0
+    for key, _scorer in _broad._SECTIONS:
+        count = len(cases.get(key, []))
+        emit(section_titles[key], results[index:index + count])
+        index += count
+    emit("HOLDOUT (written after the suite was fixed; run exactly once)", holdout)
+
+    # ---- the bar ---------------------------------------------------------- #
+    silent_wrong = [r for r in results + holdout if r.silent_wrong]
+    equivalence_failures = [r for r in results
+                            if r.status == "FAIL" and r.cls == "F_equivalence"]
+    algebra_failures = [r for r in results if r.status == "FAIL"
+                        and r.cls in ("G_subset", "H_filter_algebra")]
+    lost_outputs = [r for r in results if r.status == "FAIL"
+                    and r.cls in ("G_multi_output", "H_output_local")]
+    holdout_wrong = [r for r in holdout if r.silent_wrong]
+    server_errors = [s for s in session.statuses if 500 <= s < 600]
+    client_errors = [s for s in session.statuses if 400 <= s < 500]
+
+    timings = _broad.latency(session)
+    lines += ["", "LIVE PERFORMANCE (measured, not tuned)",
+              f"  distinct requests   : {int(timings.get('requests', 0))}",
+              f"  wall clock (s)      : {timings.get('total_s', 0.0):.1f}",
+              f"  p50 / p95 / max (s) : {timings.get('p50_s', 0.0):.2f} / "
+              f"{timings.get('p95_s', 0.0):.2f} / {timings.get('max_s', 0.0):.2f}",
+              f"  transport failures  : {len(session.transport_failures)}",
+              f"  4xx / 5xx           : {len(client_errors)} / {len(server_errors)}"]
+
+    lines += ["", "COUNTS BY CAPABILITY CLASS"]
+    for cls in sorted(by_class):
+        bucket = by_class[cls]
+        lines.append(f"  {cls:22} ok {bucket.get('ok', 0):3d} · data "
+                     f"{bucket.get('data', 0):3d} · NOT-EST "
+                     f"{bucket.get('n/e', 0):3d} · FAIL {bucket.get('FAIL', 0):3d}")
+
+    lines += ["", "COUNTS BY SAFETY CLASS",
+              f"  silent wrong answers            : {len(silent_wrong)}",
+              f"  unexplained equivalence failures: {len(equivalence_failures)}",
+              f"  unexplained subset/algebra fails: {len(algebra_failures)}",
+              f"  silently lost requested outputs : {len(lost_outputs)}",
+              f"  holdout silent wrong answers    : {len(holdout_wrong)}",
+              f"  transport failures              : "
+              f"{len(session.transport_failures)}",
+              f"  5xx responses                   : {len(server_errors)}"]
+
+    lines += ["", "NOT ESTABLISHED — checks the response does not expose enough to decide",
+              "  metadata.executionReceipt is absent from the live envelope, so no",
+              "  claim here rests on a per-row execution receipt. Population, group",
+              "  cells, applied/dropped filters and applied/dropped dimensions ARE",
+              "  published, and every check above rests on those."]
+    not_established = [r for r in results + holdout if r.status == "n/e"]
+    for result in not_established:
+        lines.append(f"  {result.case_id}  {result.detail}")
+
+    passed = not (silent_wrong or equivalence_failures or algebra_failures
+                  or lost_outputs or session.transport_failures or server_errors)
+    facts = {"silent_wrong": len(silent_wrong),
+             "equivalence_failures": len(equivalence_failures),
+             "algebra_failures": len(algebra_failures),
+             "lost_outputs": len(lost_outputs),
+             "holdout_wrong": len(holdout_wrong),
+             "not_established": len(not_established),
+             "transport": len(session.transport_failures),
+             "http_5xx": len(server_errors), "http_4xx": len(client_errors),
+             "timings": timings, "by_class": by_class,
+             "cases": len(results) + len(holdout)}
+    return passed, lines, facts
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=None,
@@ -468,6 +605,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--report", default=None, metavar="FILE",
                         help="write the report here as well as to stdout, so a "
                              "CI run can keep it as an artifact.")
+    parser.add_argument("--broad", dest="broad", action="store_true",
+                        default=True,
+                        help="run the BROAD scored sweep from broad_cases.json "
+                             "in addition to the core suite (default).")
+    parser.add_argument("--no-broad", dest="broad", action="store_false",
+                        help="core suite only — the release smoke gate on its own.")
     parser.add_argument("--bank", action="append", default=[], metavar="FILE",
                         help="frozen question bank to drive through the same "
                              "live route, repeatable. JSON list, {rows:[...]}, "
@@ -499,23 +642,47 @@ def main(argv: Optional[List[str]] = None) -> int:
                 Path(args.report).write_text("\n".join(header), encoding="utf-8")
             return 2
     print("\n".join(header))
-    certified, lines = certify(ask)
+    lines = ["CORE SUITE — the release smoke gate", "-" * 74]
+    core_ok, core_lines = certify(ask)
+    lines.extend(core_lines)
     for path in args.bank:
-        answered, refused, broken, bank_lines = run_bank(ask, path)
+        answered, refused, broken, incoherent, bank_lines = run_bank(ask, path)
         lines.append(f"FROZEN BANK {path}")
         lines.append(f"  answered {answered} · refused {refused} · "
-                     f"transport-failed {broken}")
+                     f"transport-failed {broken} · INCOHERENT {incoherent}")
         lines.extend(bank_lines)
-        if broken:
-            certified = False
+        if broken or incoherent:
+            core_ok = False
+
+    broad_ok: Optional[bool] = None
+    if args.broad:
+        broad_ok, broad_lines, facts = report_broad(
+            ask, progress=bool(args.base_url))
+        lines.extend(broad_lines)
+
     body = "\n".join(lines)
     print(body)
     print("-" * 74)
+    # The two verdicts are reported SEPARATELY because they answer different
+    # questions. The core suite says the release is safe to ship; the broad
+    # sweep says the semantics hold across the surface an operator actually
+    # uses. A run that passed one and failed the other must not be able to
+    # report a single word.
+    core_verdict = "PASS" if core_ok else "FAIL"
+    print(f"CORE VERDICT : {core_verdict}")
+    if broad_ok is not None:
+        print(f"BROAD VERDICT: {'BROAD LIVE GO' if broad_ok else 'BROAD NO-GO'}")
+    certified = core_ok and (broad_ok is not False)
     verdict = "CERTIFIED" if certified else "NOT CERTIFIED"
     print("VERDICT:", verdict)
     if args.report:
+        trailer = [f"CORE VERDICT : {core_verdict}"]
+        if broad_ok is not None:
+            trailer.append(
+                f"BROAD VERDICT: {'BROAD LIVE GO' if broad_ok else 'BROAD NO-GO'}")
+        trailer.append(f"VERDICT: {verdict}")
         Path(args.report).write_text(
-            "\n".join(header) + "\n" + body + f"\n\nVERDICT: {verdict}\n",
+            "\n".join(header) + "\n" + body + "\n\n" + "\n".join(trailer) + "\n",
             encoding="utf-8")
     if not args.base_url:
         print("NOTE: in-process. This exercises the same ASGI app and the same")
