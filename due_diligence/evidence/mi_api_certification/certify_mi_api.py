@@ -53,6 +53,16 @@ def _live_asker(base_url: str, path: str = "/mi/query",
     import urllib.request
 
     extra = {"Content-Type": "application/json"}
+    # THE TOKEN COMES FROM THE ENVIRONMENT, never an argument. `MI_BEARER` is
+    # the variable `migration_phase0/replay_probe.py` already uses, so the two
+    # live clients share one convention — and a secret passed as an argv value
+    # lands in process listings and CI logs, which is how a bearer token
+    # outlives the run that needed it.
+    import os as _os
+
+    bearer = _os.environ.get("MI_BEARER", "").strip()
+    if bearer:
+        extra["Authorization"] = "Bearer " + bearer.removeprefix("Bearer ").strip()
     for raw in (headers or []):
         name, _, value = raw.partition(":")
         if name.strip():
@@ -70,11 +80,15 @@ def _live_asker(base_url: str, path: str = "/mi/query",
             with urllib.request.urlopen(request, timeout=60) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:               # noqa: PERF203
+            # The SERVICE answered with a status. 401/403 here is the token.
             return {"ok": False, "answer": f"HTTP {exc.code}",
-                    "__transport_error__": True}
+                    "__transport_error__": True, "__http_status__": exc.code}
         except Exception as exc:  # noqa: BLE001
+            # Nothing answered. A proxy's own 403 arrives here as a tunnel
+            # error and is a REACHABILITY fact, not a credential one — scoring
+            # it as auth would send an operator to rotate a working token.
             return {"ok": False, "answer": str(exc),
-                    "__transport_error__": True}
+                    "__transport_error__": True, "__http_status__": None}
 
     return ask
 
@@ -233,11 +247,7 @@ def run_bank(ask: Callable[[str], Dict[str, Any]], path: str
 
     raw = Path(path).read_text(encoding="utf-8")
     try:
-        loaded = _json.loads(raw)
-        if isinstance(loaded, dict):
-            loaded = loaded.get("rows") or []
-        questions = [q if isinstance(q, str) else (q.get("question") or "")
-                     for q in loaded]
+        questions = questions_from_log(path)
     except Exception:  # noqa: BLE001 - a plain text bank is a bank too
         questions = [line.strip() for line in raw.splitlines()]
     questions = [q for q in questions if q.strip()]
@@ -273,6 +283,89 @@ _DATA_COVERAGE_MARKERS = (
 def _refused_for_data_coverage(envelope: Dict[str, Any]) -> bool:
     answer = str(envelope.get("answer") or envelope.get("error") or "").lower()
     return any(marker in answer for marker in _DATA_COVERAGE_MARKERS)
+
+
+#: HTTP statuses that mean the TOKEN failed, never the model. Kept as its own
+#: class because `replay_probe` learned the same lesson the hard way: an auth
+#: failure scored as a wrong answer reports a regression in a question the
+#: service still answers.
+_AUTH_STATUSES = (401, 403)
+
+
+def preflight(base_url: str, path: str, headers: List[str],
+              portfolio_id: Optional[str]) -> Tuple[str, str, Optional[str]]:
+    """``(reached, authorised, observed_commit)`` before any question is asked.
+
+    The three are reported separately because they fail for different reasons
+    and a run that conflates them tells an operator nothing: an unreachable
+    endpoint is a network or DNS fact, a 401 is a credential fact, and a
+    refused question is a semantic fact.
+    """
+    import urllib.error
+    import urllib.request
+
+    ask = _live_asker(base_url, path, headers, portfolio_id)
+    envelope = ask("What is the total balance?")
+    if envelope.get("__transport_error__"):
+        detail = str(envelope.get("answer") or "")
+        status = envelope.get("__http_status__")
+        if status in _AUTH_STATUSES:
+            # Reached: the service replied, and refused the credential.
+            return "YES", f"NO — HTTP {status}", None
+        if status is not None:
+            return "YES", f"NO — service returned HTTP {status}", None
+        # No HTTP status at all: nothing answered.
+        return f"NO — {detail}", "NOT REACHED", None
+
+    commit = None
+    for candidate in ("/health", "/api/health"):
+        try:
+            request = urllib.request.Request(
+                base_url.rstrip("/") + candidate, method="GET")
+            bearer = __import__("os").environ.get("MI_BEARER", "").strip()
+            if bearer:
+                request.add_header(
+                    "Authorization",
+                    "Bearer " + bearer.removeprefix("Bearer ").strip())
+            with urllib.request.urlopen(request, timeout=30) as response:
+                health = json.loads(response.read().decode("utf-8") or "{}")
+            for key in ("commit", "sha", "revision", "build", "version"):
+                if health.get(key):
+                    commit = f"{key}={health[key]}"
+                    break
+            if commit:
+                break
+        except Exception:  # noqa: BLE001 - health is a nicety, not the gate
+            continue
+    return "YES", "YES", commit
+
+
+def questions_from_log(path: str) -> List[str]:
+    """The QUESTIONS from a replay-probe telemetry log, and nothing else.
+
+    The frozen banks are saved `/ops/mi-queries` responses, so they carry
+    production ANSWER data alongside the questions. This reads the question
+    strings only — never an answer, never a figure — so a frozen bank can be
+    driven through the live route without its payload being copied anywhere.
+    Order is preserved and duplicates are kept: a bank's ordering is part of
+    what was frozen.
+    """
+    loaded = json.loads(Path(path).read_text(encoding="utf-8"))
+    rows = loaded.get("rows") if isinstance(loaded, dict) else loaded
+    if isinstance(loaded, dict) and rows is None:
+        for key in ("queries", "items", "data", "results"):
+            if isinstance(loaded.get(key), list):
+                rows = loaded[key]
+                break
+    out: List[str] = []
+    for row in (rows or []):
+        if isinstance(row, str):
+            out.append(row)
+        elif isinstance(row, dict):
+            question = row.get("question") or row.get("q") or row.get("text")
+            if question:
+                out.append(str(question))
+    return out
 
 
 def certify(ask: Callable[[str], Dict[str, Any]]) -> Tuple[bool, List[str]]:
@@ -372,6 +465,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--portfolio-id", default=None,
                         help="portfolioId sent with each question, where the "
                              "deployment selects a book that way.")
+    parser.add_argument("--report", default=None, metavar="FILE",
+                        help="write the report here as well as to stdout, so a "
+                             "CI run can keep it as an artifact.")
     parser.add_argument("--bank", action="append", default=[], metavar="FILE",
                         help="frozen question bank to drive through the same "
                              "live route, repeatable. JSON list, {rows:[...]}, "
@@ -386,10 +482,23 @@ def main(argv: Optional[List[str]] = None) -> int:
         target = "in-process (mi_agent_api.app via TestClient)"
         ask = _in_process_asker()
 
-    print("=" * 74)
-    print("MI Query Agent — production certification")
-    print("target:", target)
-    print("=" * 74)
+    header = ["=" * 74, "MI Query Agent — production certification",
+              f"target: {target}", "=" * 74]
+    if args.base_url:
+        reached, authorised, commit = preflight(
+            args.base_url, args.path, args.header, args.portfolio_id)
+        header.append(f"endpoint reached : {reached}")
+        header.append(f"auth passed      : {authorised}")
+        header.append(f"deployed commit  : {commit or 'not observable'}")
+        header.append("=" * 74)
+        if not (reached == "YES" and authorised == "YES"):
+            print("\n".join(header))
+            print("VERDICT: NOT EXECUTABLE — the service was not reached and "
+                  "authorised, so no question was put to it.")
+            if args.report:
+                Path(args.report).write_text("\n".join(header), encoding="utf-8")
+            return 2
+    print("\n".join(header))
     certified, lines = certify(ask)
     for path in args.bank:
         answered, refused, broken, bank_lines = run_bank(ask, path)
@@ -399,9 +508,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         lines.extend(bank_lines)
         if broken:
             certified = False
-    print("\n".join(lines))
+    body = "\n".join(lines)
+    print(body)
     print("-" * 74)
-    print("VERDICT:", "CERTIFIED" if certified else "NOT CERTIFIED")
+    verdict = "CERTIFIED" if certified else "NOT CERTIFIED"
+    print("VERDICT:", verdict)
+    if args.report:
+        Path(args.report).write_text(
+            "\n".join(header) + "\n" + body + f"\n\nVERDICT: {verdict}\n",
+            encoding="utf-8")
     if not args.base_url:
         print("NOTE: in-process. This exercises the same ASGI app and the same")
         print("      governance envelope, but it does NOT certify deployment,")
