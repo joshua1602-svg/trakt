@@ -52,7 +52,12 @@ def test_duplicate_columns_return_controlled_validation_not_500(monkeypatch):
     df.insert(2, "current_loan_to_value", [0.31, 0.41, 0.26], allow_duplicates=True)
     monkeypatch.setattr(datasets_module, "get_dataframe", lambda: df)
 
-    r = client.post("/mi/query", json={"question": "balance by ltv by age"})
+    # SEMANTIC-INVARIANT MIGRATION, 2026-09-05: the duplicate-role-column guard
+    # is a BUBBLE concern, and this reached the bubble path through wording that
+    # now means a grouped breakdown. Addressed by name so the guard is still
+    # exercised. See mi_agent/tests/test_by_means_grouping.py.
+    r = client.post("/mi/query", json={
+        "question": "bubble chart of ltv vs age sized by balance"})
     assert r.status_code == 200          # NOT a raw 500
     body = r.json()
     assert body["ok"] is False

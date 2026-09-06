@@ -89,7 +89,7 @@ class TestBubbleArtifactKeys(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         warnings.simplefilter("ignore")
-        cls.wf, cls.resp = _run("balance by ltv by age", _prepared())
+        cls.wf, cls.resp = _run("bubble chart of ltv vs age sized by balance", _prepared())
 
     def test_ok_and_row_count(self):
         self.assertTrue(self.resp["ok"])
@@ -127,7 +127,7 @@ class TestFilteredCountIntent(unittest.TestCase):
 class TestGracefulFailureNoValues(unittest.TestCase):
     def test_missing_ltv_fails_with_reason_not_passed(self):
         warnings.simplefilter("ignore")
-        wf, resp = _run("balance by ltv by age", _prepared(n=73, ltv_nan=True))
+        wf, resp = _run("bubble chart of ltv vs age sized by balance", _prepared(n=73, ltv_nan=True))
         self.assertFalse(resp["ok"])
         self.assertFalse(resp["validation"]["ok"])
         self.assertNotEqual(wf["interpreted"].get("Validation"), "Passed")
@@ -155,7 +155,7 @@ class TestDuplicateColumnsControlled(unittest.TestCase):
         warnings.simplefilter("ignore")
         df = _prepared(n=10)
         df = pd.concat([df, df[["current_loan_to_value"]]], axis=1)
-        wf, resp = _run("balance by ltv by age", df)  # must not raise
+        wf, resp = _run("bubble chart of ltv vs age sized by balance", df)  # must not raise
         self.assertFalse(resp["ok"])
         self.assertFalse(resp["validation"]["ok"])
         self.assertIn("current_loan_to_value",

@@ -120,6 +120,31 @@ class ParsedQuestion:
             llm_callable=llm_callable, provider=provider,
             catalog_mode=catalog_mode, zero_cost_first=zero_cost_first)
 
+        # ---- QueryPlan becomes the semantic contract, HERE ----------------
+        #
+        # The lift happens at the single parse site rather than downstream, so
+        # there is only ever ONE spec. It was in `run_mi_agent_query`, which
+        # meant the chat path ROUTED on the parser's spec and then EXECUTED the
+        # compiled one — two objects, provably equivalent today and free to
+        # diverge tomorrow. `test_the_workflow_accepts_a_pre_parsed_question`
+        # asserts that identity precisely because routing and execution
+        # disagreeing about the spec is a defect class this estate has already
+        # paid for.
+        #
+        # A spec whose complete semantics a plan cannot carry is returned
+        # unchanged, so the specialist shapes — rankings, temporal comparisons,
+        # forecasts, risk-limit plans — keep the parse they have always had.
+        try:
+            from .query_plan_adapter import compiled_spec_for
+
+            planned = compiled_spec_for(spec)
+            if planned is not None:
+                spec = planned
+                meta = dict(meta or {})
+                meta["semantic_contract"] = "query_plan"
+        except Exception:  # noqa: BLE001 - the lift may never cost an answer
+            pass
+
         context: Dict[str, Any] = {}
         if semantics_resolver is not None:
             try:

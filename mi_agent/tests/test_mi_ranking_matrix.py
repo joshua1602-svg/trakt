@@ -167,15 +167,34 @@ def test_loan_count_by_two_dims_is_heatmap_count(df, semantics):
     assert spec.aggregation == "count"
 
 
-def test_balance_by_ltv_by_age_stays_bubble(df, semantics):
-    # Two NUMERIC axes remain a loan-level bubble (size = balance), distinct cols.
-    spec, _ = _deterministic_parse("balance by ltv by age", semantics,
+def test_relationship_wording_is_a_loan_level_bubble(df, semantics):
+    # RENAMED from test_balance_by_ltv_by_age_stays_bubble.
+    # SEMANTIC-INVARIANT MIGRATION, 2026-09-05. This reached the bubble path via
+    # "balance by ltv by age", under the retired rule that two NUMERIC concepts
+    # after "by" imply a loan-level bubble. "by" now owns GROUPING semantics
+    # whatever the datatype of the concepts it joins — see
+    # mi_agent/tests/test_by_means_grouping.py — and the relationship reading is
+    # addressed by name. The wording changed; the capability under test did not.
+    #
+    # What this still proves: explicit relationship language produces a
+    # loan-level bubble with three DISTINCT role columns.
+    spec, _ = _deterministic_parse("bubble chart of ltv vs age sized by balance", semantics,
                                    available_columns=_cols(df))
     assert spec.chart_type == "bubble"
     assert spec.x and spec.y and spec.size
     assert len({spec.x, spec.y, spec.size}) == 3  # no duplicate role column
-    res = _run(df, "balance by ltv by age")
+    res = _run(df, "bubble chart of ltv vs age sized by balance")
     assert res["ok"], res.get("error")
+
+
+def test_two_numeric_concepts_after_by_are_a_grouped_breakdown(df, semantics):
+    """The replacement invariant, asserted where the old one lived."""
+    spec, _ = _deterministic_parse("balance by ltv by age", semantics,
+                                   available_columns=_cols(df))
+    assert spec.chart_type != "bubble"
+    assert set(spec.dimensions) == {"ltv_bucket", "age_bucket"}
+    assert spec.metric == "current_outstanding_balance"
+    assert spec.aggregation == "sum"
 
 
 def test_average_ltv_two_dims_is_weighted_avg_heatmap(df, semantics):

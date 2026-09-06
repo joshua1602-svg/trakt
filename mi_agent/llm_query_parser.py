@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -1013,6 +1014,53 @@ def _metric_side_residue(metric_part: str, semantics: dict,
     return " ".join(residue)
 
 
+def _span_holds_another_role(text: str, start: int, end: int) -> bool:
+    """Is the span at ``[start:end]`` already doing a job other than measuring?
+
+    THE ROLE-OWNERSHIP CHECK, and it exists because only one of the estate's two
+    measure resolvers had it. `_measure_hits` asked these three questions before
+    accepting a hit; `_detect_metric` asked none of them and took the first
+    governed measure word it saw, whatever that word was already doing:
+
+        "balance by ltv bucket"
+            _detect_metric  → current_loan_to_value   ← the grouping AXIS
+            _measure_hits   → current_outstanding_balance
+
+    That question answers correctly today only because its caller hands
+    `_detect_metric` a pre-blanked string with the grouping already removed. The
+    correctness of every call therefore depended on the CALLER knowing to blank
+    the right text first, and where one did not, the axis became the measure:
+
+        "How many loans are in the 60-70% LTV bucket?"
+            → metric LTV, aggregation weighted_avg
+
+    with `_wants_count` true and never consulted, because the branch only asks
+    `if metric is None` and a measure had already been claimed from a phrase
+    that was naming a POPULATION.
+
+    The three questions are unchanged — this is where they now live, so both
+    resolvers ask them and neither can drift.
+
+      1. the subject of a predicate      "LTV above 50%"      → a threshold
+      2. inside a grouping region        "by LTV bucket"      → an axis
+      3. followed by a dimension suffix  "LTV bucket/band"    → a bucket
+
+    A field the reader genuinely asks for is untouched: "weighted average LTV"
+    is in none of these positions.
+    """
+    # Read from the OWNER. `execution_receipt._is_filter_subject` is a
+    # delegating wrapper around this; taking the wrapper would put a third name
+    # on one decision. Local import: `lexical` is the lower layer, and this
+    # module is imported by it at load time in some paths.
+    from question_interpretation.lexical import is_filter_subject
+
+    if is_filter_subject(text, start, end):
+        return True
+    if any(g_start <= start < g_end for g_start, g_end in _grouping_regions(text)):
+        return True
+    return bool(_DIMENSION_SUFFIX_RE.match(text[end:end + 16]))
+
+
 def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List[str]]:
     """Return (metric_key, aggregation, matched_terms) from free text.
 
@@ -1042,13 +1090,15 @@ def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List
     #    beat a curated single token it happens to contain (e.g. "balance").
     multi = sorted((t for t in reg_terms if " " in t), key=len, reverse=True)
     for term in multi:
-        if re.search(r"\b" + re.escape(term) + r"\b", text):
+        match = re.search(r"\b" + re.escape(term) + r"\b", text)
+        if match and not _span_holds_another_role(text, match.start(), match.end()):
             key, agg = _resolve_registry(term)
             matched.append(term)
             return key, agg, matched
     # 2) Curated grammar — the core measures and their disambiguation.
     for term, token in _METRIC_TERMS:
-        if re.search(r"\b" + re.escape(term) + r"\b", text):
+        match = re.search(r"\b" + re.escape(term) + r"\b", text)
+        if match and not _span_holds_another_role(text, match.start(), match.end()):
             key, agg = _resolve_metric(token, semantics)
             if token != "count":
                 agg = _apply_agg_intent(key, agg, intent, semantics)
@@ -1098,10 +1148,10 @@ def _local_aggregation_intent(text: str, start: int) -> Optional[str]:
 _AGG_QUALIFIER_WINDOW = 40
 
 #: How a reader names the loan-count measure inside a multi-measure request.
-_COUNT_MEASURE_RE = re.compile(
-    r"\b(?:loan\s+count|number\s+of\s+(?:loans|cases|accounts|mortgages)|"
-    r"no\.?\s+of\s+(?:loans|cases|accounts)|count\s+of\s+(?:loans|cases|accounts)|"
-    r"how\s+many\s+(?:loans|cases|accounts)|loan\s+numbers)\b", re.I)
+#: READ FROM THE OWNER. This carried its own copy of the phrase, adjacent-only,
+#: so "how many FUNDED loans … and what is their balance" found one measure
+#: instead of two and lost the balance entirely. See `lexical.COUNT_REQUEST_RE`.
+_COUNT_MEASURE_RE = _lexical.COUNT_REQUEST_RE
 
 
 #: Introduces a GROUPING clause. Everything from here to the end of the clause
@@ -1170,11 +1220,7 @@ def _measure_hits(text: str, semantics: dict, available_columns=None
         # BY region" measures balance and GROUPS by region. Neither second word
         # is a measure, and reading it as one turns a good filtered answer into
         # a spurious multi-measure request.
-        if _is_filter_subject(text, match.start(), match.end()):
-            return
-        if any(start <= match.start() < end for start, end in grouping):
-            return
-        if _DIMENSION_SUFFIX_RE.match(text[match.end():match.end() + 16]):
+        if _span_holds_another_role(text, match.start(), match.end()):
             return
         hits.append((match.start(), match.end(), key, default_agg))
 
@@ -1198,6 +1244,24 @@ def _measure_hits(text: str, semantics: dict, available_columns=None
     #     ``_detect_metric``'s single-measure behaviour is untouched.
     for match in _COUNT_MEASURE_RE.finditer(text):
         _record(match, "loan_count", "count")
+    # 2c) `amount`, the reader's own governed default for the balance.
+    #
+    #     ONE MEASURE VOCABULARY, NOT TWO. The product owner's rule — "amount
+    #     defaults to the current outstanding balance" — was owned by a single
+    #     terminal branch of the parse and by `_DEFAULTED_MEASURE_RE`, and the
+    #     measure SET had never heard of it. So the word worked when it was the
+    #     only thing asked for and vanished the moment it was asked for
+    #     alongside something else:
+    #
+    #         "What is the total pipeline amount?"          → balance ✓
+    #         "How many pipeline cases are there and what
+    #          is the total pipeline amount?"               → the amount is lost
+    #
+    #     which reads as a composition defect and is a vocabulary one. The same
+    #     `_balance_metric` resolves it here as there, so the two readings of
+    #     the word cannot diverge again.
+    for match in _DEFAULTED_MEASURE_RE.finditer(text):
+        _record(match, _balance_metric(semantics, available_columns), "sum")
     # 3) Registry single-word synonyms for anything still unnamed.
     for term in sorted((t for t in reg_terms if " " not in t), key=len, reverse=True):
         for match in re.finditer(r"\b" + re.escape(term) + r"\b", text):
@@ -1443,20 +1507,24 @@ _SUMMARY_INTENT_RE = re.compile(
 # A "count of things" intent that the legacy metric grammar does not surface as a
 # metric token (e.g. "number of loans"). Used to keep loan/case COUNT evolutions
 # as a count metric instead of defaulting to balance/sum.
-_COUNT_INTENT_RE = re.compile(
-    r"\b(loan count|case count|number of (?:loans|cases|mortgages|accounts|deals|"
-    r"pipeline cases)|how many (?:loans|cases|borrowers|mortgages|accounts)|"
-    r"count of (?:loans|cases)|loan numbers|case numbers|deal count)\b")
+#: The same owner. This was the second private copy of the phrase.
+_COUNT_INTENT_RE = _lexical.COUNT_REQUEST_RE
 
 
 def _wants_count(q: str) -> bool:
-    return bool(_COUNT_INTENT_RE.search(q)) or bool(re.search(r"\bcount\b", q))
+    """Did the reader ask, in words, for a count of rows?
+
+    The bare token `count` is kept alongside the governed phrase: "count by
+    region" names the measure without naming what is counted, and this branch
+    has always honoured it.
+    """
+    return _lexical.counts_rows(q) or bool(re.search(r"\bcount\b", q))
 
 
 #: A measure word that DEFAULTS rather than resolves. "Amount" is the reader's
 #: own governed default for the balance, so a question carrying it has named a
 #: money measure even though `_detect_metric` returns nothing for it.
-_DEFAULTED_MEASURE_RE = re.compile(r"\bamounts?\b", re.I)
+_DEFAULTED_MEASURE_RE = _lexical.DEFAULTED_MEASURE_RE
 
 
 def _counts_a_row_noun(q: str) -> bool:
@@ -1846,6 +1914,43 @@ _RISK_LIMIT_NOUNS = frozenset({
 })
 
 
+#: THE SAME GAP, FOR THE OTHER PHRASE-READING RECOGNISERS. `_RISK_LIMIT_NOUNS`
+#: exists because a recogniser that reads PHRASES cannot answer a question about
+#: one WORD, so its nouns were the gap through which an analytic phrase was
+#: recorded as a category the book does not carry. Every word below has exactly
+#: that shape: it belongs to a governed capability whose recogniser reads a
+#: phrase, and the word-level ownership test could not reach it.
+#:
+#:   compare, versus              the period-comparison recogniser
+#:   forecast, project, reach     the forecast and milestone recognisers
+#:   drill                        the loan-level drill-through
+#:   complete, completeness       the data-quality capability ("how complete
+#:                                is LTV?")
+#:   current, latest              the point-in-time default — the registry's
+#:                                own fields are named `current_*`
+#:   unknown, missing             the executor's own missing-value bucket
+#:                                label, "Unknown / Missing"
+#:   sits, stands                 the copular verbs a threshold is written with
+#:                                ("how much balance SITS above 50% LTV")
+#:
+#: This is NOT an ignore list, and the distinction matters. A word here is
+#: claimed BY AN OWNER — it names something the estate computes — so it can
+#: never be the route by which a population qualifier vanishes. A word with no
+#: owner does not belong here, and "platinum", "risky" and "good" are
+#: deliberately absent: they name restrictions nothing can apply, and they must
+#: keep reaching the unresolved-category refusal.
+_ANALYTIC_CAPABILITY_WORDS = frozenset({
+    "compare", "compares", "compared", "comparison", "versus",
+    "forecast", "forecasts", "forecast", "project", "projected", "projection",
+    "reach", "reaches", "reached",
+    "drill", "drilling",
+    "complete", "completeness", "incomplete",
+    "current", "latest",
+    "unknown", "missing",
+    "sits", "sit", "stands", "stand",
+})
+
+
 # Natural-language risk-limit category -> the category key used by the risk
 # monitor (``risk_limits.testsByCategory``). Order matters (most specific first).
 _RISK_LIMIT_CATEGORY_TERMS: List[Tuple[str, str]] = [
@@ -2194,6 +2299,75 @@ def _resolve_subject(kind: str, semantics: dict, available_columns=None):
         return _balance_metric(semantics, available_columns)
     return find_field(semantics, role="metric", fmt="currency",
                       keywords=("valuation", "value"))
+
+
+def _field_names_unit(key: str, entry: dict, unit: str) -> bool:
+    """Is this field NAMED for the unit — i.e. is that what it measures?
+
+    THE NAME, NOT THE VOCABULARY, and the difference is a live defect this
+    caught. The first version scanned synonyms and the description too, and
+    `probability_of_default` carries the synonym "one year pd" — so "how many
+    loans are over 80 YEARS old" bound `probability_of_default > 80` instead of
+    the borrower's age. A silent wrong population, from a substring of a
+    synonym in which "year" qualifies a HORIZON rather than naming a unit.
+
+    A field's key and business name say what it measures; its synonyms say what
+    a reader might call it, and those are different claims. `find_field` in this
+    module already ranks them that way — a name hit is "the strong signal" and a
+    synonym hit ranks below it — and this is the same distinction.
+
+        pipeline_case_age_days      days ✓   (the key says so)
+        number_of_days_in_arrears   days ✓
+        months_on_book              months ✓
+        probability_of_default      —        ("one year pd" is a synonym)
+        youngest_borrower_age       —        (an age in years, named in neither)
+
+    Matched on word boundaries, so "days" is not found inside another word.
+    """
+    stem = unit.rstrip("s")
+    hay = " ".join([str(key or ""),
+                    str(entry.get("business_name") or ""),
+                    str(entry.get("display_name") or "")]).lower()
+    return bool(re.search(r"\b" + re.escape(stem) + r"s?\b",
+                          hay.replace("_", " ")))
+
+
+def _unit_owner(q: str, semantics: dict, available_columns, resolved: Optional[str]
+                ) -> Optional[str]:
+    """The field a UNIT-BEARING bound belongs to, when the resolved one disagrees.
+
+    "How many pipeline cases are older than 30 DAYS?" resolved to
+    `youngest_borrower_age` — the estate's only field named for age — and
+    filtered the BORROWER's age by a bound stated in days. Nothing about the
+    comparator was wrong; the bound named a quantity the chosen field does not
+    measure.
+
+    DELIBERATELY A DISAGREEMENT RESOLVER, NOT AN OVERRIDE. It acts only when the
+    field already resolved does NOT name the unit and exactly one available
+    field does. So a bound with no unit is untouched ("85 or older" keeps the
+    borrower, and the age theme with it), a unit the resolved field already
+    names is untouched, and an ambiguous unit — two candidate fields — is left
+    to the existing precedence rather than guessed between.
+
+    This is the general form of a rule this function has carried for one unit
+    since long before: "a currency amount is a balance threshold regardless of
+    earlier nouns". Currency was hard-coded because it is a symbol; these are
+    words, and the registry already says which fields wear them.
+    """
+    unit = _lexical.bound_unit(q)
+    if not unit:
+        return None
+    fields = _fields(semantics)
+    if resolved and _field_names_unit(resolved, fields.get(resolved, {}) or {}, unit):
+        return None
+    columns = set(available_columns) if available_columns is not None else None
+    candidates = [
+        key for key, entry in fields.items()
+        if _field_names_unit(key, entry or {}, unit)
+        and (entry or {}).get("role") == "metric"
+        and (columns is None
+             or (entry or {}).get("canonical_field", key) in columns)]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _filter_field_of(q: str, semantics: dict, available_columns=None,
@@ -2585,7 +2759,9 @@ _SHARE_RE = re.compile(
     r"\bhow much of the (?:book|portfolio)\b|"
     r"\bwhat\s+(?:%|percent)\s+of\b", re.I)
 #: A share is measured on a balance basis unless the question counts loans.
-_SHARE_COUNT_RE = re.compile(r"\b(?:loans|cases|accounts|borrowers)\b", re.I)
+#: A governed row noun standing alone — the vocabulary, from its owner.
+_SHARE_COUNT_RE = re.compile(r"\b(?:" + _lexical.row_noun_alternation() + r")\b",
+                             re.I)
 
 
 def _share_request(q: str, semantics: dict, available_columns=None
@@ -2676,6 +2852,25 @@ def _contribution_request(q: str, semantics: dict, available_columns=None
     return metric, weight
 
 
+@lru_cache(maxsize=4096)
+def _region_match(term: str, present: Tuple[str, ...]) -> Tuple[str, ...]:
+    """`region_resolution.resolve`, memoised on (term, the book's values).
+
+    MEASURED, NOT ASSUMED. `resolve` walks the governed taxonomy, and the walk
+    costs ~18ms. Reached from `_categorical_value_field` — which every
+    categorical resolution in the parser goes through — it ran fourteen times
+    per parse and took the median request from 116ms to 205ms. The values a book
+    carries do not change within a request, and a term resolves to the same
+    region every time, so the answer is worth keeping.
+    """
+    try:
+        from .region_resolution import resolve as _resolve_region
+
+        return tuple(str(v) for v in (_resolve_region(term, list(present)) or ()))
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        return ()
+
+
 def _categorical_value_field(value: str, available_values,
                              semantics: Optional[dict] = None
                              ) -> Optional[Tuple[str, str]]:
@@ -2697,7 +2892,45 @@ def _categorical_value_field(value: str, available_values,
     # region filter to nothing. Each call site below hands over the registry it
     # already holds, so one question cannot bind differently depending on which
     # reading of it got there first.
-    return value_field(value, available_values, semantics)
+    owned = value_field(value, available_values, semantics)
+    if owned is not None:
+        return owned
+    # THE REGION OWNER, ASKED AT LAST.
+    #
+    # `region_resolution` maps a term through the governed ITL ladder onto
+    # whatever the book actually stores — alias, ITL name, ITL code, postcode —
+    # and `resolve("scottish", ["London", "North West", "Scotland", "Wales"])`
+    # returns `["Scotland"]`. The EXECUTOR has always used it. The population
+    # resolver never did, so a term the estate's own region owner could resolve
+    # was treated as a category the book does not carry, and "Give me the
+    # Scottish balance." answered over the whole book.
+    #
+    # Narrow on purpose. It runs only where the catalogue has already declined;
+    # it asks only about the field the region owner governs; and it binds only a
+    # value the BOOK CARRIES, because `resolve` is given the book's own values
+    # and returns the ones it matched. A term that reaches nothing returns
+    # nothing, exactly as before.
+    #
+    # MULTI-WORD, OR A TOKEN THE LADDER CANNOT CONFUSE. The ladder resolves
+    # two-letter POSTCODE AREAS — "me" is Medway, "so" is Southampton — so a
+    # short bare token is never read as a place here. "Give me the balance" must
+    # not become a Medway question.
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not text or (" " not in text and len(text) < 4):
+        return None
+    for field in _REGION_PREFERENCE:
+        present = _field_values(available_values, field)
+        if not present:
+            continue
+        matched = _region_match(text, tuple(present))
+        if len(matched) == 1:
+            # BACK THROUGH THE VALUE OWNER, so the spelling is the book's own.
+            # `resolve` returns what it matched out of the values it was given,
+            # and the catalogue is keyed lowercase; binding that spelling would
+            # put "scotland" where every other narrowing puts "Scotland".
+            canonical = value_field(str(matched[0]), available_values, semantics)
+            return canonical if canonical is not None else (field, str(matched[0]))
+    return None
 
 
 #: "... is drawdown", "... are second home". Bounded to four words so the
@@ -2755,7 +2988,7 @@ def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
     # recogniser reads phrases, so it cannot answer a question about one word,
     # and its nouns were the gap through which an analytic phrase was recorded
     # as a category the book does not carry.
-    if token in _RISK_LIMIT_NOUNS:
+    if token in _RISK_LIMIT_NOUNS or token in _ANALYTIC_CAPABILITY_WORDS:
         return True
     if _categorical_value_field(token, available_values, semantics):
         return True
@@ -2952,6 +3185,50 @@ def _whole_clause_value(clause: str, available_values,
     return _categorical_value_field(text, available_values, semantics)
 
 
+def _value_with_its_field_name(phrase: str, semantics: dict,
+                               available_columns=None, available_values=None
+                               ) -> Optional[Tuple[str, str]]:
+    """"the Alpha broker" -> ``("broker_channel", "Alpha")``, or None.
+
+    A GOVERNED VALUE MAY BE WRITTEN NEXT TO ITS OWN FIELD'S NAME, and that names
+    the value, not a breakdown by the field. "The Alpha broker" is one broker.
+
+    This construction already worked for exactly one field, because the
+    prepositional pattern carries a fixed list of trailing nouns and `region` is
+    on it while `broker` and `products` are not:
+
+        "in the Scotland region"      collateral_geography = Scotland   applied
+        "for the Alpha broker"        breakdown by broker, value LOST
+        "for Lump Sum products"       breakdown by product, value LOST
+
+    One construction, and whether it worked depended on which field the reader
+    happened to be asking about — a noun list standing in for a rule.
+
+    The rule is checked against the registry and the book, never a list: the
+    TRAILING words must name exactly one governed field, and the LEADING words
+    must resolve to a value OF THAT SAME FIELD. Both halves are required, which
+    is what keeps it from inventing anything — "the London broker" declines,
+    because London is a place and no broker is called it, and declining is what
+    lets the fail-closed machinery say so.
+
+    Longest head first, so a value that itself ends in a field-naming word is
+    tried whole before it is split.
+    """
+    words = [w for w in str(phrase or "").split() if w]
+    if len(words) < 2 or not available_values:
+        return None
+    for cut in range(len(words) - 1, 0, -1):
+        head, tail = " ".join(words[:cut]), " ".join(words[cut:])
+        keys, _terms, _rem = _explicit_dimensions(
+            tail, semantics, available_columns=available_columns)
+        if len(keys) != 1:
+            continue
+        owned = _categorical_value_field(head, available_values, semantics)
+        if owned is not None and owned[0] == keys[0]:
+            return owned
+    return None
+
+
 def _parse_categorical_filter(clause: str, semantics: dict, available_columns=None,
                               available_values=None, unresolved=None
                               ) -> Optional[Tuple[str, str]]:
@@ -3051,6 +3328,19 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     owned = _categorical_value_field(value, available_values, semantics)
     if owned is not None:
         return owned[0], owned[1]
+    # A VALUE WRITTEN NEXT TO ITS OWN FIELD'S NAME, before the word-level veto
+    # below gets to it. `_NON_PLACE_TERMS` exists to stop an INVENTED geography,
+    # and it contains exactly the words a reader uses to name these fields —
+    # "broker", "product", "products", "type" — so "the Alpha broker" and "Lump
+    # Sum products" were rejected here and never reached the attributive
+    # fallback that could read them. The comment above already states the
+    # governing rule ("the book's own values decide the field, and they decide
+    # it FIRST"); this is that rule applied to the construction the veto was
+    # hiding.
+    named = _value_with_its_field_name(value, semantics, available_columns,
+                                       available_values)
+    if named is not None:
+        return named
     if any(word in _NON_PLACE_TERMS for word in value.split()):
         return None
     if available_values:
@@ -3295,6 +3585,8 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
         if not clause:
             continue
         field = _filter_field_of(clause, semantics)
+        # A UNIT-BEARING BOUND BELONGS TO THE FIELD MEASURED IN THAT UNIT.
+        field = _unit_owner(clause, semantics, available_columns, field) or field
         # Postfix first ("70+", "70 or above") — a number-before-operator phrase.
         matched = False
         for pattern, op in _POSTFIX_COMPARATORS:
@@ -3317,6 +3609,11 @@ def _parse_filters(q: str, semantics: dict, available_columns=None,
             field = _filter_field_of(clause, semantics, available_columns,
                                      anchor=m.start(),
                                      value_end=m.end()) or field
+            # The unit again, because this re-resolution replaces the field the
+            # clause-level pass chose. "older than 30 days" reaches the PREFIX
+            # comparators ("older than"), not the postfix ones, so correcting
+            # only the postfix path left the live sentence untouched.
+            field = _unit_owner(clause, semantics, available_columns, field) or field
             if field:
                 filters[field] = {"op": op, "value": _amount_from_match(m, op)}
                 if spans is not None:
@@ -3386,51 +3683,41 @@ def _grouped_value_filters(q: str, semantics: dict, available_columns,
                            exclude_dims: Iterable[str] = (), *,
                            available_values=None
                            ) -> Tuple[Dict[str, Any], List[str]]:
-    """Value filters expressed ALONGSIDE a grouping, e.g. 'balance by region where
-    LTV above 50%' or 'balance by broker in the north'. Execution applies filters
-    to the mask BEFORE grouping, so a grouped spec may legitimately carry them.
+    """Value filters expressed ALONGSIDE a grouping — now a THIN WRAPPER.
 
-    A filter whose field is itself a grouping dimension is dropped (that is the
-    grouping, not a filter). Returns ``(filters, unavailable_notes)`` — mirrors
-    the filtered-KPI branch so a grouped filter is never silently discarded."""
-    exclude = set(exclude_dims or ())
-    unavailable: List[str] = []
-    filters = _parse_filters(q, semantics, available_columns, unresolved=unavailable,
-                             available_values=available_values)
-    # A borrower-structure value filter ("... for joint borrowers") resolves to a
-    # categorical filter (or an unavailable note). Skip it when the grouping IS
-    # the borrower dimension (that is the breakdown, not a filter).
-    bstruct = _borrower_structure_filter(q, semantics, available_columns)
-    if bstruct is not None:
-        bfilters, bnote = bstruct
-        bfilters = {k: v for k, v in (bfilters or {}).items() if k not in exclude}
-        if bfilters:
-            filters.update(bfilters)
-        elif bnote and not (bfilters and set(bfilters) & exclude):
-            unavailable.append(bnote)
-    # A FILTER ON THE GROUPED FIELD IS THE AXIS ONLY WHEN IT IS THE AXIS'S OWN
-    # WORDS.
-    #
-    # This used to drop every filter whose field was a grouping dimension. The
-    # case it protects is real: "show balance by lump sum" names the product
-    # axis with a value's own words, and filtering to that value would answer a
-    # one-row question in place of the breakdown the reader asked for. But the
-    # same rule fired on "show balance by region for loans in Wales and
-    # Scotland", where the values arrive through a QUALIFIER and restrict the
-    # axis rather than being it — so a two-region breakdown was parsed with no
-    # filter at all, the executor grouped all five, and the gate refused an
-    # answer that had lost the narrowing.
-    #
-    # The discriminator is where the value's words are. `_axis_phrase` is the
-    # segment without its qualifier, and the two readers of that boundary share
-    # one owner.
-    axis_text = " ".join(_axis_phrase(seg)
-                         for seg in _grouping_segments(str(q or "").lower())[1])
-    for d in exclude:
-        if d in filters and not _restricts_the_axis(d, filters[d], axis_text,
-                                                    available_values):
-            filters.pop(d, None)
-    return filters, unavailable
+    THE DUPLICATE OWNER, RETIRED. This resolved populations independently of
+    `_resolve_population`, and the two were not the same: each knew a narrowing
+    the other did not, so the same defect had to be fixed in both. Measured
+    while fixing the second one:
+
+        "For joint borrowers in Scotland, balance"             Joint + Scotland
+        "For joint borrowers in Scotland, balance by product"  Joint only
+
+    A grouping is not supposed to cost a filter, and two resolvers is how it
+    came to. The one legitimate difference between them — that a GROUPED request
+    must not read the axis's own name as a narrowing — is a parameter of the
+    owner now (`exclude_dims`), not a reason for a second implementation.
+
+    Kept as a wrapper rather than deleted because ten call sites read this name
+    and its `(filters, unavailable)` shape; the wrapper is where that shape is
+    adapted, and nothing here decides anything.
+
+    THE ADAPTATION IS THE UNRESOLVED NOTES, and getting it wrong cost a
+    disclosure. The owner reports a condition it could not map to a governed
+    field through the `unresolved` out-parameter, because the ungrouped callers
+    branch on it: a question whose ONLY predicate is unmappable is refused
+    outright, which is different from a note. A grouped caller has no such
+    branch — the breakdown still stands — so for it an unmappable condition is
+    simply something to DISCLOSE, which is why this shape folds the two lists
+    into one. Dropping the fold silently retired the note on
+    "Show loans for Equity Release Supermarket Limited"; the canonical census
+    is what saw it.
+    """
+    unresolved: List[str] = []
+    filters, unavailable, _note = _resolve_population(
+        q, semantics, available_columns, available_values,
+        unresolved=unresolved, exclude_dims=exclude_dims)
+    return filters, unresolved + unavailable
 
 
 def _restricts_the_axis(field: str, condition: Any, axis_text: str,
@@ -3664,6 +3951,391 @@ def _contribution_recognizer(q: str, title: str, semantics: dict,
                            note="aggregate_contribution")
 
 
+def _clause_local_narrowing(q: str, semantics: dict, available_columns=None,
+                            available_values=None) -> Optional[str]:
+    """The narrowing that belongs to ONE clause, or None if every bound is shared.
+
+    A clause qualifies when it does BOTH things: it refers back to a figure or
+    population the request has already established, and it states a bound of its
+    own. Either alone is ordinary — "what is their balance" refers back and
+    narrows nothing; "for loans above 6%" narrows and refers to nothing.
+    """
+    from question_interpretation.lexical import refers_to_prior_result
+
+    clauses = [c.strip() for c in re.split(r",|\band\b", q) if c.strip()]
+    for clause in clauses[1:]:
+        if not refers_to_prior_result(clause):
+            continue
+        local = _parse_filters(clause, semantics, available_columns,
+                               available_values=available_values)
+        if local:
+            field = sorted(local)[0]
+            return _business_name_of(field, semantics) or field
+    return None
+
+
+def _business_name_of(field: str, semantics: dict) -> Optional[str]:
+    entry = _fields(semantics).get(field) or {}
+    return entry.get("business_name") or entry.get("display_name")
+
+
+#: Words that can open a POPULATION QUALIFIER. Read from the lexical owner's
+#: `SELECTOR_OPENERS`, narrowed to the ones that actually introduce a new
+#: restriction rather than continue one ("is", "equals" attach to a subject
+#: already named).
+_QUALIFIER_OPENERS = ("in", "for", "from", "with", "where", "of", "excluding",
+                      "restricted to", "limited to")
+
+_QUALIFIER_SPLIT_RE = re.compile(
+    r"(?:^|[,;]|\s)\b(?:" + "|".join(_QUALIFIER_OPENERS) + r")\b\s", re.I)
+
+
+def _qualifier_spans(text: str) -> List[Tuple[int, int]]:
+    """The character spans of ``text`` that stand inside a POPULATION qualifier.
+
+    ONE OWNER FOR "WHERE THE QUALIFIER IS". Several readers need this boundary
+    and each had grown its own answer: the narrowing resolver cuts at qualifier
+    openers, the grouping splitter cuts at axis markers, `_axis_phrase` is a
+    segment without its qualifier. The readers that did NOT ask were the ones
+    that read an axis out of a population.
+
+    A qualifier opens at one of the governed openers ("for", "in", "within",
+    …) or after a comma, and closes at the next such opener or at a GROUPING
+    MARKER — because "balance for loans in Wales BY REGION" turns back into
+    axis text at the "by", and a span that ran to the end of the sentence would
+    swallow the axis it was written beside.
+    """
+    lowered = str(text or "").lower()
+    if not lowered:
+        return []
+    opens = sorted({m.start() + (1 if m.group(0)[:1] in " ,;" else 0)
+                    for m in _QUALIFIER_SPLIT_RE.finditer(lowered)})
+    if not opens:
+        return []
+    closes = sorted({m.start() for m in re.finditer(
+        r"\b(?:" + _lexical.axis_marker_alternation() + r")\b", lowered)}
+        | {m.start() for m in re.finditer(r"[,;]", lowered)}
+        | set(opens))
+    spans: List[Tuple[int, int]] = []
+    for start in opens:
+        end = next((c for c in closes if c > start), len(lowered))
+        spans.append((start, end))
+    return spans
+
+
+def _stands_only_in_a_qualifier(term: str, text: str) -> bool:
+    """Does every occurrence of ``term`` in ``text`` sit inside a qualifier?
+
+    Used to decide that a word is naming a POPULATION rather than an axis. A
+    term that appears anywhere else — in the metric position, or after a
+    grouping marker — is left alone, so "ticket size by borrower type" keeps the
+    dimension it names before the marker.
+    """
+    lowered, needle = str(text or "").lower(), str(term or "").lower().strip()
+    if not needle:
+        return False
+    spans = _qualifier_spans(lowered)
+    if not spans:
+        return False
+    found = False
+    for match in re.finditer(r"\b" + re.escape(needle) + r"\b", lowered):
+        found = True
+        if not any(start <= match.start() < end for start, end in spans):
+            return False
+    return found
+
+
+def _categorical_narrowings(text: str, semantics: dict, available_columns=None,
+                            available_values=None) -> Dict[str, Any]:
+    """EVERY categorical narrowing the text states, not the last one.
+
+    `_parse_categorical_filter` resolves ONE ``(field, value)`` pair, and the
+    clause splitter does not treat a population qualifier as a boundary — its
+    connectives are "and / with / where / whose / having", which is right for
+    predicates and wrong for qualifiers. So a sentence naming two populations
+    kept whichever came last and dropped the rest, silently:
+
+        "balance in Scotland"                      → Scotland   ✓
+        "balance for lump sum loans"               → Lump Sum   ✓
+        "balance in Scotland for lump sum loans"   → Lump Sum   ✗
+        "balance for lump sum loans in Scotland"   → Scotland   ✗
+
+    That is not a geography defect. It is one resolver returning one answer to a
+    question that can have several, and it made §10's composable filters
+    impossible for any pair of governed populations.
+
+    THE EXISTING RESOLVER IS REUSED, not replaced. The text is cut at qualifier
+    openers and each segment handed to `_parse_categorical_filter`, so the
+    vocabulary, the book's own value catalogue and the registry all still decide
+    what a value means. A segment naming nothing resolvable ("in the last six
+    months") returns nothing, which is what keeps the cut safe: the resolver,
+    not the splitter, decides what is a population.
+
+    First mention wins for a field named twice. Widening one field to two values
+    is a different request ("Scotland and Wales") and `_with_value` already owns
+    it downstream.
+    """
+    found: Dict[str, Any] = {}
+    # The cut is BEFORE the opener, so every segment keeps the word that makes
+    # it a qualifier. `_parse_categorical_filter` reads the selector mark to
+    # know a value is being stated rather than mentioned, and handing it a bare
+    # "scotland" resolves nothing.
+    boundaries = [m.start() + (1 if m.group(0)[:1] in " ,;" else 0)
+                  for m in _QUALIFIER_SPLIT_RE.finditer(text or "")]
+    # Punctuation ends a qualifier too. "in Scotland, balance by product and
+    # region" resolved nothing as one segment: the trailing analysis defeats a
+    # resolver whose job is to read a value out of a short phrase.
+    boundaries += [m.start() for m in re.finditer(r"[,;]", text or "")]
+    # AND SO DOES A GROUPING MARKER, for exactly the same reason — the comma
+    # above is only the punctuated spelling of this boundary. Without it the
+    # qualifier ran on into the breakdown and the population was lost, but only
+    # when the reader put the scope first and used no comma:
+    #
+    #   "In Scotland, how many loans by product?"    Scotland   ✓
+    #   "Loan count by product in Scotland"          Scotland   ✓
+    #   "How many loans in Scotland by product?"     whole book ✗
+    #
+    # Three spellings of one question, and the failing one is the one a person
+    # is most likely to type. `axis_marker_alternation` is the owner of where a
+    # breakdown begins — the same markers `_grouping_segments` splits on — so
+    # this reads that vocabulary rather than growing a second copy of it.
+    #
+    # A marker ENDS a qualifier; it never starts one. The segment that begins at
+    # a marker is axis text, and offering it to the value resolver would read
+    # the breakdown as a narrowing ("balance by lump sum" → one product), so it
+    # is skipped. A qualifier that opens INSIDE an axis segment still resolves,
+    # because its own opener is a boundary in its own right.
+    _axis_starts = {m.start() for m in re.finditer(
+        r"\b(?:" + _lexical.axis_marker_alternation() + r")\b", text or "")}
+    boundaries += sorted(_axis_starts)
+    boundaries = sorted(set(b for b in boundaries if 0 < b < len(text or "")))
+    if not boundaries:
+        # NO QUALIFIER OPENER IS NOT NO NARROWING. "Give me the Scottish
+        # balance." contains no preposition at all, so this used to return
+        # nothing before the attributive slots were ever looked at — which is
+        # exactly the sentence whose population vanished.
+        return _slot_narrowings(text, semantics, available_columns,
+                                available_values)
+    starts = [0] + boundaries
+    ends = boundaries + [len(text)]
+    for start, end in zip(starts, ends):
+        if start in _axis_starts:
+            continue
+        segment = (text or "")[start:end].strip(" ,;")
+        if not segment:
+            continue
+        resolved = _parse_categorical_filter(segment, semantics,
+                                             available_columns, available_values)
+        if resolved and resolved[0] not in found:
+            found[resolved[0]] = resolved[1]
+    for field, value in _slot_narrowings(text, semantics, available_columns,
+                                         available_values).items():
+        if field not in found:
+            found[field] = value
+    return found
+
+
+def _slot_narrowings(text: str, semantics: dict, available_columns=None,
+                     available_values=None) -> Dict[str, Any]:
+    """EVERY narrowing standing attributively in a restriction slot.
+
+    THE SCAN USED TO STOP AT ITS FIRST SUCCESS. `_attributive_categorical`
+    resolves one ``(field, value)`` and returns, so
+
+        "How many Scottish lump sum loans are there?"
+
+    resolved Lump Sum, returned, and never looked at the words in front of it:
+    195 loans answered where 45 was asked for, with "Scottish" neither applied
+    nor disclosed. A question may state several independent narrowings, and this
+    is the owner whose docstring says every one of them must survive.
+
+    THE SLOT MAY SIT IN FRONT OF A MEASURE. `restriction_slots` is the lexical
+    owner of where a slot is, and it anchors on a measure head as well as a row
+    head — which is what gives "Scottish balance" anywhere to be read at all.
+
+    Longest phrase first, so a governed value that spans several words ("lump
+    sum", "north west") is claimed whole before its parts are tried, and each
+    field is taken once: a slot naming one field twice is a widening, and
+    `_with_value` owns that downstream.
+    """
+    found: Dict[str, Any] = {}
+    # MEMOISED PER CALL. `restriction_slots` asks whether each WORD names a
+    # measure, and `_detect_metric` rebuilds the registry's term regexes every
+    # time it is asked — 26 rebuilds per parse, which was most of the cost this
+    # scan added. The answer for one word cannot change within a parse.
+    _measure_cache: Dict[str, bool] = {}
+
+    def _names_a_measure(word: str) -> bool:
+        hit = _measure_cache.get(word)
+        if hit is None:
+            hit = bool(_detect_metric(word, semantics)[2])
+            _measure_cache[word] = hit
+        return hit
+
+    try:
+        slots = _lexical.restriction_slots(text, _names_a_measure)
+    except Exception:  # noqa: BLE001 - no grammar, no narrowing
+        return found
+    for _head, slot, _offset in slots:
+        words = [w for w, _o in slot]
+        taken = [False] * len(words)
+        for length in range(min(4, len(words)), 0, -1):
+            for start in range(0, len(words) - length + 1):
+                if any(taken[start:start + length]):
+                    continue
+                phrase = " ".join(words[start:start + length])
+                owned = _categorical_value_field(phrase, available_values,
+                                                 semantics)
+                if owned is None:
+                    continue
+                for i in range(start, start + length):
+                    taken[i] = True
+                if owned[0] not in found:
+                    found[owned[0]] = owned[1]
+    return found
+
+
+def _resolve_population(text: str, semantics: dict, available_columns=None,
+                        available_values=None, *,
+                        unresolved: Optional[List[str]] = None,
+                        exclude_dims: Iterable[str] = ()
+                        ) -> Tuple[Dict[str, Any], List[str], str]:
+    """Every governed narrowing this text states → ``(filters, unavailable, note)``.
+
+    THE ONE POPULATION OWNER, and it exists because there were two.
+
+    The single-output branch resolved a population with `_parse_filters` plus
+    `_borrower_structure_filter`. The MULTI-measure branch resolved one with
+    `_parse_filters` plus `_parse_categorical_filter`. Neither was a superset,
+    so the population a composed answer described was not the population the
+    same sentence described when asked one thing at a time:
+
+        "For joint borrowers, what is the funded balance?"
+            → filters {borrower_type: Joint}                  ✓
+
+        "For joint borrowers, give me the funded loan count,
+         funded balance, and weighted average LTV."
+            → filters {}                          the WHOLE BOOK, silently
+
+    Three correct figures about the wrong population, and nothing in the
+    envelope said so — the composition bank counts that row as verified. A
+    GEOGRAPHIC population survived the same sentence, because the categorical
+    resolver is the one the measure-set path did consult, which is what made the
+    gap look like a phrasing problem rather than a missing owner.
+
+    Both paths call this now. Adding an output may not change the population,
+    and that is the invariant this function exists to make structural rather
+    than coincidental.
+    """
+    filters = _parse_filters(text, semantics, available_columns,
+                             unresolved=unresolved,
+                             available_values=available_values)
+    unavailable: List[str] = []
+    note = ""
+    # Borrower structure ("joint borrowers", "sole borrower"). Where the field
+    # is absent the predicate is recorded UNAVAILABLE, never dropped.
+    exclude = set(exclude_dims or ())
+    bstruct = _borrower_structure_filter(text, semantics, available_columns)
+    if bstruct is not None:
+        bfilters, note = bstruct
+        # THE AXIS RULE IS APPLIED ONCE, BELOW, TO EVERY NARROWING. This used to
+        # drop a borrower-structure predicate outright whenever the grouping was
+        # the borrower dimension, while a categorical narrowing on the same axis
+        # got the `_restricts_the_axis` test that asks whether the value arrived
+        # through a QUALIFIER. One rule, two strengths, and the stronger one was
+        # wrong: "total balance by borrower type FOR JOINT BORROWERS" is a
+        # breakdown narrowed to one bar, and it lost the narrowing, was refused
+        # for it, and answered nothing.
+        if bfilters:
+            filters.update(bfilters)
+        elif note:
+            unavailable.append(note)
+    # EVERY categorical narrowing the book itself carries ("in Scotland", "for
+    # Lump Sum loans"), not just the last one — see `_categorical_narrowings`.
+    for field, value in _categorical_narrowings(
+            text, semantics, available_columns, available_values).items():
+        if field not in filters:
+            filters[field] = value
+    if not filters:
+        # A CFO states the scope FIRST — "For the London book, give me …".
+        # The same resolver reads the leading clause; no second pattern.
+        lead = (text or "").split(",", 1)[0].strip()
+        if lead and lead != (text or "").strip():
+            cat = _parse_categorical_filter(lead, semantics, available_columns,
+                                            available_values)
+            if cat:
+                filters[cat[0]] = cat[1]
+    # THE AXIS RULE, the one concept a GROUPED request needs that an ungrouped
+    # one does not: a value word that IS the axis's own name is the breakdown,
+    # not a narrowing. "show balance by lump sum" names the product axis;
+    # filtering to that value would answer a one-row question in place of the
+    # breakdown. A value arriving through a QUALIFIER restricts the axis instead
+    # ("balance by region for loans in Wales"), and `_restricts_the_axis` is the
+    # discriminator. Absent `exclude_dims` this loop does nothing, which is why
+    # the ungrouped callers are unaffected by owning it here.
+    if exclude:
+        axis_text = " ".join(
+            _axis_phrase(seg)
+            for seg in _grouping_segments(str(text or "").lower())[1])
+        for dim in exclude:
+            if dim in filters and not _restricts_the_axis(
+                    dim, filters[dim], axis_text, available_values):
+                filters.pop(dim, None)
+    # SEMANTIC ACCOUNTING — the last thing this owner does, and the hole it
+    # closes is the one every other guard is blind to.
+    #
+    # The estate fails closed on a requested population it has first NOTICED.
+    # Every requested-versus-executed guard compares something the question
+    # STATED with something the execution DID, and a qualifier no owner
+    # recognised states nothing — so there is nothing to reconcile and the
+    # answer succeeds over a broader population, confidently and in silence.
+    # That is how "Give me the Scottish balance." returned the whole book.
+    #
+    # Resolving "Scottish" fixed those two questions. It did not fix the CLASS:
+    # an unresolvable term still finds both blind spots, so "What is the
+    # platinum balance?" answered over the book while "How many platinum
+    # loans?" refused, for no reason a reader could hear.
+    #
+    # The accounting layer decides nothing about meaning. It asks the owners
+    # that already ship which spans they claimed, and reports what is left
+    # standing in a restriction position. It never resolves a population of its
+    # own — the residue is recorded as an unresolved CATEGORY, in the estate's
+    # existing vocabulary, so the refusal has ONE owner rather than two.
+    # ... UNLESS THE SCOPE OWNER IS THE ONE WHO SHOULD BE SPEAKING. "the
+    # Highgate Mortgages Book" is an unheld PORTFOLIO, and `portfolio_lens` has
+    # a controlled refusal for exactly that, naming the book and saying it is
+    # not in the governed registry. Announcing "no loans match 'highgate'" over
+    # the top of it is the same fact explained worse, and it costs the caller
+    # the `controlledRefusal` contract. The sibling residue path already defers
+    # here for the same reason; this is that rule, applied to this owner.
+    if unresolved is not None and not _names_a_book(text):
+        try:
+            from question_interpretation.semantic_accounting import material_residue
+
+            for residue in material_residue(
+                    text, semantics, available_columns=available_columns,
+                    available_values=available_values):
+                # ONE OBSTACLE, ONE SENTENCE. Where another owner has already
+                # recorded why a concept could not be applied — "borrower_
+                # structure is not in this dataset" for "joint borrowers" — the
+                # reader must not also be told it is a category the book does
+                # not carry. The estate's rule is that a reader who asks the
+                # same question two ways cannot be told two different things
+                # about the same obstacle; two notes about ONE obstacle is the
+                # same fault.
+                if residue.text in str(filters):
+                    continue
+                if any(residue.text in str(note).lower()
+                       for note in (unavailable or ())):
+                    continue
+                mark = f"{UNKNOWN_CATEGORY_PREFIX}'{residue.text}'"
+                if mark not in unresolved:
+                    unresolved.append(mark)
+        except Exception:  # noqa: BLE001 - accounting may never cost an answer
+            pass
+    return filters, unavailable, note
+
+
 def _measure_set_recognizer(q: str, title: str, semantics: dict,
                             available_columns=None, available_values=None):
     """A governed MULTI-MEASURE plan, or None.
@@ -3696,26 +4368,64 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
     remainder = _mask_spans(q, spans)
     dims, _terms, _rest = _explicit_dimensions(
         remainder, semantics, grouping=True, available_columns=available_columns)
+    # A COUNT'S SPAN IS NOT A MEASURE'S SPAN, and the population lives inside it.
+    #
+    # Masking exists so a measure's own words cannot also be read as an axis —
+    # "average borrower AGE" must not additionally group by age band. A count is
+    # different in kind: its span is the ROW NOUN AND ITS MODIFIERS ("how many
+    # JOINT borrowers"), and those modifiers are the population, not the
+    # measure. Masking them threw the population away:
+    #
+    #     "how many joint borrowers and balance"
+    #         → measures {loan_count, balance} ✓   filters {} ✗
+    #
+    # so a request that named its population in the same breath as the count
+    # answered over the whole book. Dimensions still read the fully masked text
+    # — a count's modifiers are not axes either — and only the POPULATION is
+    # resolved from text where the count's own words survive.
+    population_text = _mask_spans(q, tuple(
+        span for span, measure in zip(spans, measures)
+        if measure.get("field") != "loan_count"))
     # THE BOOK'S OWN VALUES, here too. This was the last governed branch that
     # resolved a category without them, so "which broker channel has the largest
     # balance for LUMP SUM loans?" bound a product type to the GEOGRAPHY field,
     # selected nothing, and refused naming a field the reader never mentioned —
     # the exact substitution the catalogue exists to prevent.
-    filters = _parse_filters(remainder, semantics, available_columns,
-                             available_values=available_values)
-    region = _parse_categorical_filter(remainder, semantics, available_columns,
-                                       available_values)
-    if region is None:
-        # A CFO usually states the scope FIRST — "For the London book, give me
-        # …". The existing categorical resolver reads a trailing scope clause,
-        # so the leading clause is handed to that same resolver rather than a
-        # second pattern being invented for it.
-        lead = remainder.split(",", 1)[0].strip()
-        if lead and lead != remainder.strip():
-            region = _parse_categorical_filter(lead, semantics, available_columns,
-                                               available_values)
-    if region and region[0] not in filters:
-        filters[region[0]] = region[1]
+    # A CLAUSE-LOCAL NARROWING IS NOT A SHARED ONE, and this request cannot yet
+    # execute its outputs under different populations.
+    #
+    #   "How many joint loans are there, what is their balance, and how much OF
+    #    THAT BALANCE has LTV above 40%?"
+    #
+    # produced two outputs — the third collapses into the balance already
+    # requested, because the measure set dedupes by field — and applied the LTV
+    # bound to ALL of them. The reader got three figures, two silently narrowed
+    # to a population neither clause asked for, and nothing in the envelope said
+    # so. Widening or narrowing a stated population is the one thing this estate
+    # never does silently.
+    #
+    # The discriminator is the BACK-REFERENCE, not the position: a bound in a
+    # final clause is SHARED when the clause adds a condition to the request
+    # ("the balance and WA LTV of loans with a rate above 6%") and LOCAL when it
+    # asks a further question about a figure already produced. Read from the one
+    # owner, which conversational scope reads too.
+    local = _clause_local_narrowing(q, semantics, available_columns,
+                                    available_values)
+    if local:
+        return (MIQuerySpec(
+            intent="summary", chart_type="none", aggregation="count",
+            title=title, output_format="text",
+            explanation=(
+                "This asks for figures over MORE THAN ONE population — "
+                f"{local} narrows only the clause it appears in, not the whole "
+                "request. Every figure would have been computed over the "
+                "narrowed population, so no figure was returned. Ask for each "
+                "population separately and both answers stand.")),
+            _det_meta("medium", bool(dims), [m["field"] for m in measures],
+                      note="clause_local_unsupported"))
+
+    filters, unavailable, population_note = _resolve_population(
+        population_text, semantics, available_columns, available_values)
 
     grouped = bool(dims)
     spec = MIQuerySpec(
@@ -3727,13 +4437,21 @@ def _measure_set_recognizer(q: str, title: str, semantics: dict,
         dimension=dims[0] if grouped else None,
         x=dims[0] if grouped else None,
         filters=filters,
+        unavailable_filters=unavailable,
         output_format="chart_and_table" if grouped else "table",
         title=title,
         explanation=("Governed multi-measure request: "
                      + ", ".join(m["field"] for m in measures)
                      + " over one population."))
+    # THE SUBSTITUTION IS DISCLOSED ON EVERY PATH. `_resolve_population` reports
+    # when it reached a population through a PROXY — "joint" resolved as
+    # `number_of_borrowers >= 2` because `borrower_structure` is absent from
+    # this book. The filtered branch has always published that note; routing the
+    # same sentence to the measure set must not quietly drop it, or a proxy
+    # becomes indistinguishable from the field the reader named.
     return spec, _det_meta("high", bool(dims), [m["field"] for m in measures],
-                           note="multi_measure")
+                           note=("multi_measure: " + population_note
+                                 if population_note else "multi_measure"))
 
 
 #: Bare qualitative magnitudes. The COMPARATIVE and SUPERLATIVE forms are
@@ -3953,7 +4671,11 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     # A counting/aggregating question with a numeric threshold routes to a
     # filtered summary (count or balance), NOT a bar chart, so "how many loans
     # with youngest age more than 70" answers a number.
-    is_count_q = bool(re.search(r"\bhow many\b|\bnumber of\b|\bcount of\b", q))
+    # THE FIFTH READING, DELETED. This was `\bhow many\b|\bnumber of\b|
+    # \bcount of\b` written inline — modifier-tolerant where the two owners
+    # feeding the measure set were not, which is how the estate came to know and
+    # not know the same fact. One owner now answers for all of them.
+    is_count_q = _lexical.counts_rows(q)
     is_balance_q = bool(re.search(r"\bhow much\b|\btotal balance\b", q))
     # A COUNT question also wants the balance only when the balance word sits
     # BEFORE the counting phrase — "total balance and how many loans over 80".
@@ -3967,26 +4689,42 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         wants_balance_too = bool(re.search(_balance_word, _subject))
     else:
         wants_balance_too = bool(re.search(_balance_word, _metric_slot(q)))
-    if is_count_q or is_balance_q:
+    # A NARROWING IS NOT A REASON TO DROP THE BREAKDOWN.
+    #
+    # The branch below returns a filtered SUMMARY — one number over the stated
+    # population — and it used to claim the question on the strength of a
+    # PHRASE, without ever asking whether the same sentence also named a
+    # grouping axis. So a reader who narrowed a breakdown lost the breakdown:
+    #
+    #   "total balance by region"                       breakdown by region
+    #   "total balance by region for joint borrowers"   ONE NUMBER
+    #
+    # and, because the claim was phrase-shaped, which reading they got depended
+    # on how they happened to spell the measure. `total exposure`, `sum of
+    # balance` and `average balance` all reached the grouped path; `total
+    # balance` and `how much balance` did not. Four spellings of one request,
+    # two of them unanswerable — the receipt refused them, correctly, for a
+    # breakdown that never executed, so nothing was ever silently widened. The
+    # capability was simply absent.
+    #
+    # The rule is about grammar, not vocabulary: a filtered summary is the
+    # reading only where the reader named NO breakdown. `_classify_segments` is
+    # already the owner of that question — it is what the grouped paths below
+    # consult — so this consults it rather than growing a second opinion, and a
+    # sentence with no "by" still classifies to nothing and still lands here.
+    #
+    # The population is unaffected either way: both readings resolve it through
+    # the same owner. This decides which SHAPE answers, never which rows.
+    _names_a_breakdown = bool(
+        _classify_segments(q, semantics, available_columns)[1])
+    if (is_count_q or is_balance_q) and not _names_a_breakdown:
         # Support one OR MORE filters joined by "and" (numeric thresholds and a
         # categorical region value), e.g. "youngest age more than 70 and
         # geographic region south west".
         unresolved_notes: List[str] = []
-        filters = _parse_filters(q, semantics, available_columns,
-                                 unresolved=unresolved_notes,
-                                 available_values=available_values)
-        # Borrower-structure intent ("how many joint borrowers"): resolve joint/sole
-        # to a filter. When the field is unavailable, record the predicate as
-        # UNAVAILABLE (never silently dropped).
-        unavailable: List[str] = []
-        bnote = ""
-        bstruct = _borrower_structure_filter(q, semantics, available_columns)
-        if bstruct is not None:
-            bfilters, bnote = bstruct
-            if bfilters:
-                filters.update(bfilters)
-            else:
-                unavailable.append(bnote)
+        filters, unavailable, bnote = _resolve_population(
+            q, semantics, available_columns, available_values,
+            unresolved=unresolved_notes)
         # When the ONLY predicate is one whose field this dataset does not carry
         # ("how many loans have Risk Score above 700"), the filter IS the
         # question. Answering the unfiltered count would answer a different
@@ -4092,7 +4830,7 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     # grouping marker is a qualifier. Dropping it here lets the categorical
     # resolver claim it as a predicate, which is where a narrowing belongs. A
     # term after "by" is untouched, so "balance by occupancy type" still groups.
-    if dim_keys and available_values:
+    if dim_keys:
         # A GROUP SEGMENT ENDS AT ITS OWN QUALIFIER. "by region for owner
         # occupied loans" is one grouping axis narrowed to a value, not two
         # axes: without the cut the value became a second heatmap dimension and
@@ -4103,14 +4841,63 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
             for seg in _grouping_segments(q)[1]).lower()
         _kept_keys, _kept_terms = [], []
         for _key, _term in zip(dim_keys, dim_terms):
-            _is_value = _categorical_value_field(
-                _term, available_values, semantics) is not None
+            _is_value = (available_values is not None
+                         and _categorical_value_field(
+                             _term, available_values, semantics) is not None)
             if _is_value and str(_term).lower() not in _after_by:
                 _dropped_dimension_terms.append(str(_term))
                 continue
             _kept_keys.append(_key)
             _kept_terms.append(_term)
         dim_keys, dim_terms = _kept_keys, _kept_terms
+
+    # A WORD INSIDE A POPULATION IS NOT AN AXIS EITHER, whether or not it
+    # happens to name a value. The rule above needs the book's own catalogue and
+    # so can only see the VALUE spelling of this mistake; the FIELD spelling went
+    # straight through:
+    #
+    #   "total balance by region for single borrower loans"
+    #       -> breakdown by region AND borrower type,
+    #          with "borrower_type = Single" recorded unavailable
+    #
+    # The reader named one axis and one population and received two axes and no
+    # population. `_stands_only_in_a_qualifier` asks the boundary owner rather
+    # than the catalogue, so it covers both spellings.
+    #
+    # ONLY WHERE THE READER NAMED AN AXIS, and that clause is the whole safety
+    # of it. "How many loans are in the 60-70% LTV bucket?" is a population and
+    # nothing else — the qualifier is the entire question — so dropping its term
+    # would leave no axis and no filter. This fires only where a grouping
+    # segment's own AXIS PHRASE resolves to something, which is exactly the
+    # defect's shape: a qualifier supplying an EXTRA axis beside a named one.
+    #
+    # The axis phrase, not the dimension terms, because a NUMERIC axis
+    # ("by ltv") never appears among them — it is resolved by
+    # `_classify_segment` — and that is the reading the qualifier was displacing
+    # most often.
+    # AND ONLY WHERE THE POPULATION OWNER ACTUALLY CLAIMS THE FIELD. A word
+    # standing in a qualifier is only a population if it is BEING USED as one.
+    # "pipeline by stage for broker Alpha" reads as a narrowing on a book whose
+    # brokers include Alpha and as nothing at all on a book whose brokers do
+    # not; dropping the axis in the second case would take the breakdown away
+    # and put nothing in its place, which is a worse answer than the one it
+    # replaced. So the axis is surrendered to the population only when the
+    # population is there to receive it.
+    if dim_keys and any(
+            _classify_segment(_axis_phrase(_seg), semantics, available_columns)
+            for _seg in _grouping_segments(q)[1]):
+        _population, _unavailable, _ = _resolve_population(
+            q, semantics, available_columns, available_values)
+        _claimed = set(_population) | {
+            str(n).split(" ", 1)[0] for n in (_unavailable or ())}
+        _free = [(k, t) for k, t in zip(dim_keys, dim_terms)
+                 if k not in _claimed or not _stands_only_in_a_qualifier(t, q)]
+        if len(_free) < len(dim_keys):
+            _dropped_dimension_terms.extend(
+                str(t) for k, t in zip(dim_keys, dim_terms)
+                if (k, t) not in _free)
+            dim_keys = [k for k, _t in _free]
+            dim_terms = [t for _k, t in _free]
     explicit = bool(dim_keys)
 
     # ---- heatmap (two dimensions + metric) --------------------------------
@@ -4150,8 +4937,25 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
             explicit_plot = False
     numeric_bubble = False
     if len(seg_classes) >= 2 and not explicit_plot and "treemap" not in q:
-        n_categorical = sum(1 for c in seg_classes if c[0] == "categorical")
-        if n_categorical >= 1:
+        # A NUMERIC CONCEPT IN A GROUPING POSITION IS A BUCKET, NOT AN AXIS TO
+        # SCATTER. This required at least one CATEGORICAL segment before the
+        # grouped matrix was allowed, so two governed buckets asked for by their
+        # plain names fell through to the bubble reading:
+        #
+        #   "balance by LTV bucket by age bucket"  -> 2D grouped matrix
+        #   "balance by LTV by age"                -> bubble, then loan_level
+        #
+        # One analytical request, two words apart, and the second lost its
+        # measure and its aggregation on the way. The comment above already
+        # states the rule this restores — the axes decide, not the verb — and
+        # `_classify_segment` has always returned each numeric segment's
+        # governed bucket as its third element. Nothing here learns a new
+        # concept; the bucket that was already resolved is now used.
+        #
+        # The scatter reading keeps every sentence that actually asks for one:
+        # `explicit_plot`, the bubble/scatter/"sized by" words and a resolved
+        # pair of scatter axes all still disqualify this branch above.
+        if seg_classes:
             # The two visual dimensions (row/column), in question order.
             dims: List[str] = []
             for c in seg_classes[:2]:
@@ -4434,7 +5238,27 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     #: Set where THIS branch substitutes the balance for a measure nobody named.
     _grouped_metric_defaulted = False
     if dimension is None and len(by_parts) >= 2:
-        right = by_parts[-1]
+        # THE AXIS PHRASE, NOT THE REST OF THE SENTENCE.
+        #
+        # This offered every word after the last grouping marker as an axis
+        # KEYWORD, qualifier included, and `find_field` took whichever matched:
+        #
+        #   "total balance by LTV for joint borrowers"
+        #       keywords ('ltv', 'for', 'joint', 'borrowers') -> borrowers
+        #       answered as a breakdown by NUMBER OF BORROWERS
+        #
+        # Answered — not refused, not disclosed — as one bar labelled "2"
+        # carrying the whole joint book, for a question about how balance is
+        # distributed across LTV. It stayed hidden because the estate's books do
+        # not carry `number_of_borrowers`, so the executor refused for a missing
+        # column: the right outcome for the wrong reason, and one that vanishes
+        # the moment a book carries a field the registry already defines.
+        #
+        # `_axis_phrase` is the owner of where an axis ends, and the population
+        # resolver, the grouping splitter and the value resolver all read it.
+        # This reads it too.
+        _segments = _grouping_segments(q)[1]
+        right = _axis_phrase(_segments[-1]) if _segments else by_parts[-1]
         if any(t in _REGION_GENERIC_TERMS for t in right.split()):
             # Generic region request: resolve data-aware (display field first,
             # then NUTS code fields). When no region column is available this is
@@ -4592,10 +5416,25 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         if re.search(r"\bamounts?\b", q):
             _amount_metric = _balance_metric(semantics, available_columns)
             if _amount_metric:
+                # THE POPULATION COMES WITH IT. Every branch in this terminal
+                # region builds a FRESH spec, and this one built it without the
+                # narrowings `_parse_filters` had already resolved — so a bound
+                # the reader stated was parsed, dropped, and then reported by
+                # the facet guard as "understood but could not be applied":
+                #
+                #   "total pipeline AMOUNT for cases with a rate above 6%"  {}
+                #   "total pipeline BALANCE for cases with a rate above 6%" {rate>6}
+                #
+                # One word decided whether the population survived. The guard
+                # was right to refuse; the spec was wrong to omit it. Read from
+                # the one population owner, as every other branch now does.
+                _amt_filters, _amt_unavail, _ = _resolve_population(
+                    q, semantics, available_columns, available_values)
                 return (MIQuerySpec(
                     intent="summary", chart_type="none", metric=_amount_metric,
                     aggregation="count" if _wants_count(q) else "sum",
                     metric_defaulted=True, title=title,
+                    filters=_amt_filters, unavailable_filters=_amt_unavail,
                     explanation="'amount' resolved to the governed balance "
                                 "measure; no other measure was named.",
                     output_format="text"),

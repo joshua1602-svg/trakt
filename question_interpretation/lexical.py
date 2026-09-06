@@ -297,7 +297,237 @@ _FILTER_BEFORE_RE = re.compile(
 
 #: How far either side of the measure word to look. A predicate binds close;
 #: widening this would start matching a comparator from a different clause.
+# --------------------------------------------------------------------------- #
+# COUNTING ROWS — one owner, because five was the defect
+# --------------------------------------------------------------------------- #
+# "How many loans are there?" asks for a count. So does "how many FUNDED loans",
+# and the estate did not agree about it: five separate readings lived in
+# `llm_query_parser`, and three spelled the phrase `how\s+many\s+(?:loans|
+# cases|accounts)` — ADJACENT ONLY. One adjective split them:
+#
+#     how many loans are there          _wants_count True   _COUNT_MEASURE True
+#     how many FUNDED loans are there   _wants_count False  _COUNT_MEASURE False
+#     how many PIPELINE cases are there _wants_count False  _COUNT_MEASURE False
+#
+# while `is_count_q` — a fifth reading written inline in the middle of the parse
+# — was `\bhow many\b` and saw all of them. The estate simultaneously knew and
+# did not know that these were counts, and which it acted on depended on which
+# branch the sentence reached.
+#
+# The cost was a whole composition family. The two adjacency-bound readings are
+# the two that feed the MEASURE SET, which needs two measures before it reports
+# any; losing the count left one, so "How many funded loans are to joint
+# borrowers, and what is their funded balance?" fell past the multi-measure
+# recogniser and answered the count alone, while the same question with its
+# clauses reversed answered both.
+#
+# This is the one owner. It lives here, with the comparators and the axis
+# markers, because a count is a reading of the QUESTION's grammar and this
+# module is where the estate keeps those.
+
+#: The governed row nouns — the things an MI question counts. A count is a count
+#: OF something, and this is the vocabulary of that something.
+ROW_NOUNS: Tuple[str, ...] = (
+    "loans", "loan", "cases", "case", "accounts", "account",
+    "mortgages", "mortgage", "deals", "deal", "borrowers", "borrower",
+    "applications", "application",
+)
+
+#: Words that may NOT sit between the interrogative and the row noun. Modifiers
+#: are adjectives ("funded", "joint", "acquired", "outstanding"); a preposition
+#: or a verb means the row noun belongs to a different clause, and counting it
+#: would answer a different question — "how many REGIONS have loans" counts
+#: regions.
+_NOT_A_MODIFIER = (
+    "of", "in", "with", "for", "from", "to", "by", "on", "at", "that", "which",
+    "have", "has", "had", "are", "is", "was", "were", "do", "does", "did",
+    "and", "or", "but", "there", "their", "its", "our",
+)
+
+#: Any run of adjectives, stopping at the first function word.
+#:
+#: NOT A FIXED COUNT. This was `{0,3}`, which looked generous and was not: "how
+#: many 60 YEAR OLD JOINT borrowers with LTV over 40%" puts four tokens between
+#: the interrogative and the row noun, and the count went unrecognised — the
+#: whole question then parsed as `unmapped` and lost all four of its predicates.
+#: A bound on the NUMBER of modifiers is a guess about how a reader writes;
+#: `_NOT_A_MODIFIER` is a statement about what ends a noun phrase, and it is the
+#: real boundary. "how many regions have loans" still counts regions, because
+#: `have` is a function word and stops the run.
+_ROW_MODIFIER = (r"(?:(?!(?:" + "|".join(_NOT_A_MODIFIER) + r")\b)"
+                 r"[\w][\w-]*\s+)*")
+
+#: How a reader asks for a count. Both shapes: the interrogative ("how many
+#: funded loans") and the noun phrase ("loan count", "number of cases").
+COUNT_REQUEST_RE = re.compile(
+    r"\b(?:how\s+many|number\s+of|no\.?\s+of|count\s+of)\s+"
+    + _ROW_MODIFIER + r"\b(?:" + "|".join(ROW_NOUNS) + r")\b"
+    r"|\b(?:loan|case|deal|account|mortgage)\s+(?:count|numbers)\b"
+    r"|\b(?:loan|case|deal|account|mortgage)s?\s+counted\b",
+    re.I)
+
+
+def counts_rows(text: str) -> bool:
+    """Does this text ask, anywhere, for a count of governed rows?"""
+    return bool(COUNT_REQUEST_RE.search(text or ""))
+
+
+def count_request_spans(text: str) -> Tuple[Tuple[int, int], ...]:
+    """Every span in which a count of rows is requested.
+
+    Spans rather than a boolean because the MEASURE SET needs to know WHERE the
+    count was asked for: a measure's span is consumed so the same words cannot
+    also be read as a grouping axis or a second measure.
+    """
+    return tuple((m.start(), m.end())
+                 for m in COUNT_REQUEST_RE.finditer(text or ""))
+
+
+def row_noun_alternation() -> str:
+    """The row-noun vocabulary as a regex fragment, for callers that need to
+    recognise the noun alone ("show pipeline cases over time")."""
+    return "|".join(ROW_NOUNS)
+
+
+#: Units a numeric bound can wear as a WORD. Currency and percent are symbols
+#: and are handled where the value is parsed; these are the ones that only a
+#: word distinguishes — and the ones where two governed fields can otherwise
+#: claim the same bound.
+BOUND_UNITS: Tuple[str, ...] = ("days", "weeks", "months", "years")
+
+_BOUND_UNIT_RE = re.compile(
+    r"\b\d[\d,.]*\s*(?:" + "|".join(u[:-1] + "s?" for u in BOUND_UNITS) + r")\b",
+    re.I)
+
+
+def bound_unit(text: str) -> Optional[str]:
+    """The unit a numeric bound in ``text`` is stated in, or None.
+
+    "older than 30 DAYS" and "older than 30 YEARS" are bounds on different
+    quantities, and a resolver that reads only the comparator sees one bound.
+    The unit is part of what the reader said, so it is read here with the rest
+    of the comparator grammar rather than inferred downstream.
+
+    Only the WORD units. `£` and `%` are already decided where the value is
+    parsed, and `_filter_field_of` has carried a currency rule since long before
+    this — "a currency amount is a balance threshold regardless of earlier
+    nouns" is the same idea, for the one unit that had been hard-coded.
+    """
+    match = _BOUND_UNIT_RE.search(text or "")
+    if not match:
+        return None
+    word = re.search(r"[a-z]+$", match.group(0).strip().lower())
+    if not word:
+        return None
+    stem = word.group(0).rstrip("s")
+    for unit in BOUND_UNITS:
+        if unit.rstrip("s") == stem:
+            return unit
+    return None
+
+
+#: `amount` — the reader's own governed default for the balance measure.
+#:
+#: The product owner's rule ("amount defaults to the current outstanding
+#: balance") had three separate homes: a terminal branch of the parse, the
+#: parser's `_DEFAULTED_MEASURE_RE`, and nowhere at all in the receipt layer —
+#: whose measure vocabulary listed "balance" and "exposure" and not this. So the
+#: completeness guard could not see an amount as a requested output:
+#:
+#:     "How many pipeline cases are there and what is the total pipeline
+#:      amount?"     parser: 2 outputs     guard: 1
+#:
+#: and a request for two that returned one was invisible to the machinery built
+#: to catch exactly that. One word, one owner.
+DEFAULTED_MEASURE_RE = re.compile(r"\bamounts?\b", re.I)
+
+
+def names_defaulted_measure(text: str) -> bool:
+    """Does this text name a measure that DEFAULTS rather than resolves?"""
+    return bool(DEFAULTED_MEASURE_RE.search(text or ""))
+
+
+# --------------------------------------------------------------------------- #
+# REFERRING BACK — to a figure or a population already established
+# --------------------------------------------------------------------------- #
+# "of that balance", "of those loans", "of the £38m". A clause opening with one
+# of these is asking a further question ABOUT something the request has already
+# produced, rather than adding a condition to it. That distinction decides
+# whether a bound is SHARED or CLAUSE-LOCAL:
+#
+#   "the balance and weighted average LTV of loans with a rate above 6%"
+#       → the bound qualifies the population both outputs describe.  SHARED
+#
+#   "how many joint loans, what is their balance, and how much OF THAT BALANCE
+#    has LTV above 40%"
+#       → the bound qualifies a new output carved out of a prior one.  LOCAL
+#
+# Position cannot tell them apart — both state their bound last. The reference
+# can.
+#
+# ONE OWNER FOR SAME-TURN AND MULTI-TURN. "Of that balance, how much is above
+# 80% LTV?" is the second sentence split across two turns, and the sprint brief
+# requires one population model for both. Conversational scope reads this.
+
+#: Determiners that point at something already established.
+_PRIOR_DETERMINERS = ("that", "those", "this", "these", "the same", "its", "their")
+
+#: Nouns a reference can land on — a figure, or the rows behind it. The row
+#: nouns come from ROW_NOUNS so a reference and a count cannot disagree about
+#: what a "case" is.
+_PRIOR_NOUNS = ("balance", "amount", "amounts", "figure", "total", "exposure",
+                "population", "book", "result", "number")
+
+_PRIOR_REFERENCE_RE = re.compile(
+    r"\b(?:" + "|".join(_PRIOR_DETERMINERS) + r")\s+(?:"
+    + "|".join(_PRIOR_NOUNS) + "|" + "|".join(ROW_NOUNS) + r")\b"
+    # "of the £38m" — a rendered figure standing for the result it came from.
+    r"|\bof\s+the\s+(?:£|\$|€)\s*\d[\d,.]*\s*(?:k|m|bn|b)?\b",
+    re.I)
+
+
+def refers_to_prior_result(text: str) -> bool:
+    """Does this text point at a figure or population already established?"""
+    return bool(_PRIOR_REFERENCE_RE.search(text or ""))
+
+
 PREDICATE_WINDOW = 32
+
+
+#: A comparator standing at the head of the text that follows a measure word.
+_LEADING_COMPARATOR_RE = re.compile(
+    r"^\s*" + _FILTER_FILLER + r"\s*\b(?:"
+    + "|".join(COMPARATORS + COMPARATORS_AFTER_ONLY) + r")\b(?P<rest>.*)$",
+    re.I | re.S)
+
+
+def _comparator_introduces_a_time_axis(tail: str) -> bool:
+    """Does the comparator after a measure word open an AXIS rather than a bound?
+
+    "over" is a comparator and it is also how a reader names the time axis, so
+    the word alone cannot decide:
+
+        "balance over 50%"      the comparator has a bound   -> a predicate
+        "balance over time"     the comparator has no bound  -> an AXIS
+
+    THE TIME-AXIS OWNER DECIDES. `time_axis_request` already answers "did this
+    sentence ask the answer to vary over time, and in whose words", and
+    `requested_unit` answers "does this name a governed grain". Both are read
+    here rather than a list of temporal words being written out again.
+
+    A digit anywhere after the comparator hands the decision back to the bound
+    reading, so "loans over 6 months old" is untouched: this only claims a
+    continuation that names a period and no number at all.
+    """
+    match = _LEADING_COMPARATOR_RE.match(tail or "")
+    if match is None:
+        return False
+    if _SERIES_PHRASE_RE.match(str(tail).lstrip()):
+        return True
+    rest = match.group("rest")
+    if re.search(r"\d", rest):
+        return False
+    return bool(requested_unit(rest))
 
 
 def is_filter_subject(text: str, start: int, end: int) -> bool:
@@ -305,8 +535,24 @@ def is_filter_subject(text: str, start: int, end: int) -> bool:
 
     Both sides are checked: a comparator immediately after ("LTV above 50%") or
     a comparator and number immediately before ("above 50% LTV").
+
+    A COMPARATOR ALONE IS NOT A PREDICATE, and that is a deliberate change to
+    what this function used to claim. One of the patterns below matches a
+    comparator with nothing after it, so "over" by itself was enough — and
+    "over" is also how a reader names the time axis:
+
+        "Compare balance over time"   ->  balance read as a threshold subject,
+                                          so the question named no measure
+
+    The over-claim was here on main too, and it was DORMANT: only
+    `_measure_hits` asked this question, and `_detect_metric` took the first
+    governed measure word it saw. Wiring the role check into `_detect_metric`
+    was right — it is what stopped "balance by ltv bucket" reading the AXIS as
+    the measure — and it is what made this visible. So the repair belongs here,
+    at the owner of the question, and not at the measure resolver that asked it.
     """
-    if _FILTER_AFTER_RE.search(text[end:end + PREDICATE_WINDOW]):
+    tail = text[end:end + PREDICATE_WINDOW]
+    if _FILTER_AFTER_RE.search(tail) and not _comparator_introduces_a_time_axis(tail):
         return True
     return bool(_FILTER_BEFORE_RE.search(
         text[max(0, start - PREDICATE_WINDOW):start]))
@@ -1402,3 +1648,64 @@ def ordering_request(question: str) -> OrderingRequest:
 
     return OrderingRequest(requested=True, direction=direction, basis=basis,
                            limit=ordering_limit(question))
+
+
+# --------------------------------------------------------------------------- #
+# Restriction slots — where a question puts a narrowing without a preposition
+# --------------------------------------------------------------------------- #
+#: Words that CLOSE a restriction slot walking leftwards. A slot is the run of
+#: modifiers standing directly in front of a head noun; a preposition, a grouping
+#: marker, a conjunction or punctuation before them belongs to the sentence's
+#: structure, and everything beyond it modifies something else.
+#:
+#: Deliberately structural and deliberately short. A word here does not become
+#: benign — it merely ends the slot — so this cannot be the route by which a
+#: meaningful term vanishes.
+RESTRICTION_SLOT_BOUNDARY = frozenset("""
+for in of on at to with within without across from by per and or but so then
+also whose having that which than the a an
+""".split())
+
+_SLOT_WORD = re.compile(r"[a-z0-9£][a-z0-9'%£-]*[a-z0-9%£]|[a-z0-9£]")
+
+
+def restriction_slots(text, is_measure_noun=None):
+    """``[(head, [(word, offset), ...], head_offset), ...]``.
+
+    A RESTRICTION SLOT is the run of words standing attributively before a head
+    noun — the position in which a reader states a governed narrowing without a
+    preposition. The head may name a ROW ("Scottish loans") or, when the caller
+    supplies ``is_measure_noun``, a MEASURE ("Scottish balance").
+
+    THE MEASURE HEAD IS THE ONE THAT WAS MISSING, and its absence is why "Give
+    me the Scottish balance." offered its adjective to nothing at all: no row
+    noun, no anchor, no trace of the population anywhere in the parse.
+
+    One owner, because two readers need this boundary — the parser, which
+    resolves what stands in a slot, and the semantic-accounting layer, which
+    checks that something did. Two copies of it is the defect this estate has
+    already paid for more than once. ``is_measure_noun`` is injected rather than
+    imported so this module keeps no dependency on the registry.
+    """
+    body = str(text or "").lower()
+    words = [(m.group(0), m.start()) for m in _SLOT_WORD.finditer(body)]
+    out = []
+    for index, (word, offset) in enumerate(words):
+        row = re.fullmatch(row_noun_alternation(), word) is not None
+        measure = (not row) and bool(is_measure_noun and is_measure_noun(word))
+        if not (row or measure):
+            continue
+        slot = []
+        cursor = index - 1
+        while cursor >= 0:
+            candidate, candidate_offset = words[cursor]
+            if candidate in RESTRICTION_SLOT_BOUNDARY:
+                break
+            gap = body[candidate_offset + len(candidate):words[cursor + 1][1]]
+            if any(ch in gap for ch in ",;:.?!"):
+                break
+            slot.insert(0, (candidate, candidate_offset))
+            cursor -= 1
+        if slot:
+            out.append((word, slot, offset))
+    return out

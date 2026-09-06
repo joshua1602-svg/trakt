@@ -191,7 +191,27 @@ def test_site3_reports_the_denominator_it_examined():
     # patterns could not, because theirs had no `%`. This census is the
     # measurement that says the change reached one corpus question and no
     # others — which is why the number is asserted rather than computed.
-    assert "corpus questions carrying spec.filters: 116" in text
+    #
+    # 116 -> 115, and it is THE SAME QUESTION MOVING BACK. Measured across all
+    # 882, exactly one differs from the reading above:
+    #
+    #     "Drill into the 50%+ LTV bucket."
+    #         {current_loan_to_value: {op: ge, value: 50.0}}  ->  {}
+    #
+    # The bound is still parsed — `_parse_filters` returns it unchanged — but the
+    # question no longer produces a spec that can carry it, because "drill"
+    # resolves no governed measure and the estate stopped SUBSTITUTING one. That
+    # is this programme's oldest accepted invariant ("the unicorn ratio by
+    # region" answering as balance by region is the failure mode it exists to
+    # prevent), so the question is now refused rather than answered on a measure
+    # nobody named: "'drill' is not a governed measure in this dataset; no
+    # substitute was used."
+    #
+    # A filter that reaches no reader is not a filter this census should count.
+    # The direction of the movement is the point: the population is not applied
+    # to a broader answer, it is not applied at all, and the question fails
+    # closed.
+    assert "corpus questions carrying spec.filters: 115" in text
 
 
 # --------------------------------------------------------------------------- #
@@ -210,14 +230,23 @@ def test_site4_a_routing_fault_fails_loudly(monkeypatch):
 
 
 def test_site4_a_refused_answer_is_a_legitimate_reading():
-    """A REFUSED grade is a measurement, not a failure — 16 of the 34 owned
-    questions refuse, and they must keep counting toward the denominator."""
+    """A REFUSED grade is a measurement, not a failure — the owned questions
+    that refuse must keep counting toward the denominator.
+
+    The owned COUNT is a measurement of today's routing, not an invariant, and
+    it moves when a question changes hands. It went 34 -> 35 when the
+    filtered-summary branch stopped claiming questions that name a breakdown:
+    "Show monthly loan count evolution by broker." had been claimed by that
+    branch and graded unmapped, and now reaches the evolution route this file
+    measures. The assertion is kept exact rather than loosened to ">=" so that a
+    silent drift in the other direction still fails here.
+    """
     import migration_phase0.route_ownership_evolution as roe
 
     rows = _quiet(roe.run)
     assert len(rows) == 882
     owned = [r for r in rows if r.get("owned")]
-    assert len(owned) == 34
+    assert len(owned) == 35
     assert sum(1 for r in owned if r["grade"] == "REFUSED") > 0
     assert sum(1 for r in owned if r["grade"] == "DELIVERED") > 0
     assert not any("error" in r for r in rows)
