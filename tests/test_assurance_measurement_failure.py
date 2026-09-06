@@ -191,7 +191,27 @@ def test_site3_reports_the_denominator_it_examined():
     # patterns could not, because theirs had no `%`. This census is the
     # measurement that says the change reached one corpus question and no
     # others — which is why the number is asserted rather than computed.
-    assert "corpus questions carrying spec.filters: 116" in text
+    #
+    # 116 -> 115, and it is THE SAME QUESTION MOVING BACK. Measured across all
+    # 882, exactly one differs from the reading above:
+    #
+    #     "Drill into the 50%+ LTV bucket."
+    #         {current_loan_to_value: {op: ge, value: 50.0}}  ->  {}
+    #
+    # The bound is still parsed — `_parse_filters` returns it unchanged — but the
+    # question no longer produces a spec that can carry it, because "drill"
+    # resolves no governed measure and the estate stopped SUBSTITUTING one. That
+    # is this programme's oldest accepted invariant ("the unicorn ratio by
+    # region" answering as balance by region is the failure mode it exists to
+    # prevent), so the question is now refused rather than answered on a measure
+    # nobody named: "'drill' is not a governed measure in this dataset; no
+    # substitute was used."
+    #
+    # A filter that reaches no reader is not a filter this census should count.
+    # The direction of the movement is the point: the population is not applied
+    # to a broader answer, it is not applied at all, and the question fails
+    # closed.
+    assert "corpus questions carrying spec.filters: 115" in text
 
 
 # --------------------------------------------------------------------------- #

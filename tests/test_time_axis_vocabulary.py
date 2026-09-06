@@ -164,19 +164,55 @@ def test_a_newly_carried_axis_does_not_answer_a_question_naming_no_measure(seman
     from fastapi.testclient import TestClient
     from mi_agent_api.app import app
 
-    question = "how is the loan book tracking month to month"
-    # The parse still records that no measure was named, which is what the old
-    # assertion was reaching for through chart_type.
-    spec = _spec(question, semantics)
-    assert getattr(spec, "metric_defaulted", False) is True, \
-        "the parse must record that the measure was substituted, not named"
+    # THE SENTENCE MOVED OUT OF THE CLASS; THE GUARANTEE DID NOT.
+    #
+    # This test used one example — "how is the loan book tracking month to
+    # month" — and that sentence is no longer metric-less. Under the governed
+    # reading that a TREND OF THINGS IS A COUNT OF THEM, "the loan book" is a row
+    # noun and the question resolves to a LOAN COUNT over time: `metric=None,
+    # aggregation="count"`, which is what a count measure looks like. Nothing is
+    # substituted, so there is nothing for `metric_defaulted` to record, and
+    # asserting it would now be asserting the absence of the very reading the
+    # estate adopted. It still refuses — "no reporting periods are available to
+    # build a loan count trend" — so no answer is given on the strength of the
+    # axis; only the reason moved.
+    #
+    # The guarantee is therefore asserted over sentences that ARE metric-less,
+    # and there are now three of them rather than one. Each still defaults to
+    # the balance, still RECORDS the substitution, and is still refused with the
+    # message that names what is missing.
+    metricless = ("how has it evolved?",
+                  "show me month by month",
+                  "what does it look like over time?")
+    for question in metricless:
+        spec = _spec(question, semantics)
+        assert getattr(spec, "metric_defaulted", False) is True, \
+            f"{question!r}: the parse must record that the measure was substituted"
 
+        body = TestClient(app).post(
+            "/mi/query",
+            json={"question": question, "portfolioId": cfg.CLIENT_ID}).json()
+        assert body.get("ok") is False, \
+            f"{question!r}: a metric-less question must not be answered on the " \
+            "strength of the axis alone"
+        assert "not said which metric" in (body.get("answer") or "").lower(), \
+            f"{question!r}: the refusal must name what is missing"
+
+    # And the sentence that moved is still not answered.
+    moved = "how is the loan book tracking month to month"
+    assert _spec(moved, semantics).aggregation == "count", \
+        "the reading that moved this sentence out of the metric-less class is gone"
     body = TestClient(app).post(
-        "/mi/query", json={"question": question, "portfolioId": cfg.CLIENT_ID}).json()
+        "/mi/query", json={"question": moved, "portfolioId": cfg.CLIENT_ID}).json()
     assert body.get("ok") is False, \
-        "a metric-less question must not be answered on the strength of the axis alone"
-    assert "not said which metric" in (body.get("answer") or "").lower(), \
-        "the refusal must name what is missing"
+        "the sentence must still not be answered on the strength of the axis"
+
+    # A measure the reader DID name, with temporal language after it, is not a
+    # substitution — the distinction this whole guarantee rests on.
+    named = _spec("show balance over time", semantics)
+    assert named.metric == "current_outstanding_balance"
+    assert getattr(named, "metric_defaulted", False) is False, \
+        "a measure the reader named was recorded as substituted"
 
 
 def test_the_same_question_with_a_measure_named_does_become_a_series(semantics):

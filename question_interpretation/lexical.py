@@ -494,13 +494,65 @@ def refers_to_prior_result(text: str) -> bool:
 PREDICATE_WINDOW = 32
 
 
+#: A comparator standing at the head of the text that follows a measure word.
+_LEADING_COMPARATOR_RE = re.compile(
+    r"^\s*" + _FILTER_FILLER + r"\s*\b(?:"
+    + "|".join(COMPARATORS + COMPARATORS_AFTER_ONLY) + r")\b(?P<rest>.*)$",
+    re.I | re.S)
+
+
+def _comparator_introduces_a_time_axis(tail: str) -> bool:
+    """Does the comparator after a measure word open an AXIS rather than a bound?
+
+    "over" is a comparator and it is also how a reader names the time axis, so
+    the word alone cannot decide:
+
+        "balance over 50%"      the comparator has a bound   -> a predicate
+        "balance over time"     the comparator has no bound  -> an AXIS
+
+    THE TIME-AXIS OWNER DECIDES. `time_axis_request` already answers "did this
+    sentence ask the answer to vary over time, and in whose words", and
+    `requested_unit` answers "does this name a governed grain". Both are read
+    here rather than a list of temporal words being written out again.
+
+    A digit anywhere after the comparator hands the decision back to the bound
+    reading, so "loans over 6 months old" is untouched: this only claims a
+    continuation that names a period and no number at all.
+    """
+    match = _LEADING_COMPARATOR_RE.match(tail or "")
+    if match is None:
+        return False
+    if _SERIES_PHRASE_RE.match(str(tail).lstrip()):
+        return True
+    rest = match.group("rest")
+    if re.search(r"\d", rest):
+        return False
+    return bool(requested_unit(rest))
+
+
 def is_filter_subject(text: str, start: int, end: int) -> bool:
     """True when the word at ``[start:end]`` is the subject of a predicate.
 
     Both sides are checked: a comparator immediately after ("LTV above 50%") or
     a comparator and number immediately before ("above 50% LTV").
+
+    A COMPARATOR ALONE IS NOT A PREDICATE, and that is a deliberate change to
+    what this function used to claim. One of the patterns below matches a
+    comparator with nothing after it, so "over" by itself was enough — and
+    "over" is also how a reader names the time axis:
+
+        "Compare balance over time"   ->  balance read as a threshold subject,
+                                          so the question named no measure
+
+    The over-claim was here on main too, and it was DORMANT: only
+    `_measure_hits` asked this question, and `_detect_metric` took the first
+    governed measure word it saw. Wiring the role check into `_detect_metric`
+    was right — it is what stopped "balance by ltv bucket" reading the AXIS as
+    the measure — and it is what made this visible. So the repair belongs here,
+    at the owner of the question, and not at the measure resolver that asked it.
     """
-    if _FILTER_AFTER_RE.search(text[end:end + PREDICATE_WINDOW]):
+    tail = text[end:end + PREDICATE_WINDOW]
+    if _FILTER_AFTER_RE.search(tail) and not _comparator_introduces_a_time_axis(tail):
         return True
     return bool(_FILTER_BEFORE_RE.search(
         text[max(0, start - PREDICATE_WINDOW):start]))

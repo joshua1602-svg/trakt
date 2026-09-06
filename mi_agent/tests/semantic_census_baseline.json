@@ -856,12 +856,12 @@
   "unavailable": []
  },
  "Project funded balance over the next twelve months.": {
-  "aggregation": "count",
+  "aggregation": "sum",
   "dimensions": [],
   "filters": {},
   "intent": "summary",
   "measures": [],
-  "metric": null,
+  "metric": "current_outstanding_balance",
   "unavailable": []
  },
  "Show 2024 vintage performance.": {
