@@ -76,11 +76,23 @@ CORRECT = (
      ("broker_channel", (SCOTLAND, JOINT))),
 )
 
-#: Must never be answered over a broader population. The first two are real
-#: places the governed taxonomy does not uniquely define; the rest name nothing.
+#: Must never be answered over a broader population.
+#:
+#: "Cornish" is a real place the governed ITL1 taxonomy does not uniquely define
+#: — Cornwall sits inside South West (England) and no ITL1 value bears its name —
+#: so it must refuse rather than resolve to its neighbour. The rest name nothing
+#: any governed vocabulary claims.
+#:
+#: "Yorkshire" was here and has been REMOVED, because the claim was wrong: the
+#: region owner carries it as a governed alias for "Yorkshire and The Humber"
+#: (13 ITL3 codes). It refused on THIS book only because this book holds no
+#: Yorkshire rows, which is a property of the fixture and not of the taxonomy —
+#: asserting it here would have pinned a fixture accident as a semantic rule.
+#: The production certification suite found that, on a book that does carry the
+#: region, and it is asserted correctly in `TestAGovernedRegionAliasResolves`
+#: below.
 MUST_REFUSE = (
     "What is the Cornish balance?",
-    "How many Yorkshire loans are there?",
     "Show me the premium loans",
     "What is the distressed balance?",
     "How many gold tier lump sum loans?",
@@ -146,14 +158,39 @@ class TestTheFreshHoldoutRefusesWhatItCannotBind(unittest.TestCase):
                     "broader population")
 
     def test_a_near_miss_place_is_not_resolved_to_a_neighbour(self):
-        """"Cornish" and "Yorkshire" must refuse, not quietly become South West
-        or Yorkshire and The Humber. An alias is added where the taxonomy makes
-        the referent unambiguous, and neither of these does."""
-        for question in ("What is the Cornish balance?",
-                         "How many Yorkshire loans are there?"):
-            result, frame = _run(question)
-            with self.subTest(question=question):
-                self.assertFalse(result.get("ok"))
+        """"Cornish" must refuse, not quietly become South West. An alias exists
+        where the taxonomy makes the referent unambiguous, and Cornwall is not
+        an ITL1 value — it sits inside South West (England)."""
+        result, _frame = _run("What is the Cornish balance?")
+        self.assertFalse(result.get("ok"))
+
+
+class TestAGovernedRegionAliasResolves(unittest.TestCase):
+    """The other side of the near-miss rule, and it is here because the
+    certification suite caught this file claiming the opposite.
+
+    "Yorkshire" IS governed: the region owner carries it as an alias for
+    "Yorkshire and The Humber". That it refuses on the canonical book is a fact
+    about the fixture — the book holds no Yorkshire rows — and not a fact about
+    the taxonomy. The distinction matters, because pinning the first as if it
+    were the second would make a correct answer look like a defect the day a
+    book carries the region.
+    """
+
+    def test_the_owner_knows_it(self):
+        import mi_agent.region_resolution as region
+
+        self.assertEqual(region.codes_for("yorkshire"),
+                         region.codes_for("yorkshire and the humber"))
+        self.assertTrue(region.codes_for("yorkshire"))
+
+    def test_and_it_binds_on_a_book_that_carries_it(self):
+        book = truth.canonical_book()
+        book.loc[book.index[:40], "collateral_geography"] = "Yorkshire and The Humber"
+        result = run_mi_agent_query("How many Yorkshire loans are there?",
+                                    book, _SEMANTICS)
+        self.assertTrue(result.get("ok"), result.get("error"))
+        self.assertEqual(int(result["query_result"].data["loan_count"].sum()), 40)
 
 
 class TestOrdinaryPhrasingIsNotRefused(unittest.TestCase):
