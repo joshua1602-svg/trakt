@@ -1,0 +1,116 @@
+name: Certify trakt-mi-api (live)
+
+# Certifies the ALREADY-DEPLOYED MI Query Agent against the PUBLIC production
+# route a real client uses — https://app.traktinfra.io/api — which is what makes
+# this a certification of the system rather than of the code: it exercises
+# public routing, the auth boundary, request and response serialization,
+# portfolio selection and the deployed D4 path, none of which an in-process run
+# can see.
+#
+# THIS WORKFLOW DEPLOYS NOTHING. It is read-only against production. The
+# deployed application commit is whatever `deploy-mi-api.yml` last shipped;
+# running this must never be a reason to redeploy.
+#
+# The token is read from a SECRET into the environment, never onto a command
+# line — an argv value lands in process listings and run logs, and a bearer
+# token that outlives its run is the one credential leak this whole file could
+# cause. `MI_BEARER` is the variable `migration_phase0/replay_probe.py` already
+# uses, so the two live clients share one convention.
+#
+# Required repository secret:  MI_BEARER            the dashboard / MI token
+# Optional repository variable: TRAKT_PORTFOLIO_ID  default portfolioId
+#
+# Exit codes from the client are the verdict: 0 certified, 1 not certified,
+# 2 not executable (never reached and authorised — no question was asked).
+# A 2 fails the job deliberately: "we could not run it" must not read as a pass.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Public API base URL
+        default: https://app.traktinfra.io/api
+        required: true
+      path:
+        description: MI endpoint path appended to the base URL
+        default: /mi/query
+        required: true
+      portfolio_id:
+        description: portfolioId as {client_id}/{run_id}
+        default: ERE/2026-06-30
+        required: true
+      ref:
+        description: Repo ref to take the certification harness from
+        default: main
+        required: true
+      banks:
+        description: >-
+          Optional space-separated paths to frozen question banks, relative to
+          the checkout. Only the QUESTIONS are read from them.
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: certify-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refuse to run without a token
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          # Checked here rather than left to the client, so the failure names
+          # the missing SECRET instead of surfacing as a 401 that looks like a
+          # production auth defect.
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set — the live"
+            echo "::error::certification cannot authenticate. Set it in"
+            echo "::error::Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "MI_BEARER is present (${#MI_BEARER} characters)."
+
+      - name: Certify the deployed service
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          BANKS=""
+          for bank in ${{ inputs.banks }}; do
+            if [ ! -f "$bank" ]; then
+              echo "::error::bank file not found in the checkout: $bank"
+              exit 1
+            fi
+            BANKS="$BANKS --bank $bank"
+          done
+
+          python -m due_diligence.evidence.mi_api_certification.certify_mi_api \
+            --base-url "${{ inputs.base_url }}" \
+            --path "${{ inputs.path }}" \
+            --portfolio-id "${{ inputs.portfolio_id || vars.TRAKT_PORTFOLIO_ID }}" \
+            --report certification-report.txt \
+            $BANKS
+
+      - name: Keep the report whatever the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-api-certification-report
+          path: certification-report.txt
+          if-no-files-found: warn
