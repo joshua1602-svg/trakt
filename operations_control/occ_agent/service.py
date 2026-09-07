@@ -62,6 +62,7 @@ from ..onboarding.case import (
     OnboardingCase,
 )
 from ..onboarding.service import STEP_LABELS, STEPS, OnboardingService
+from ..stores import OpsLayout, OpsStore
 from . import adapters as _adapters
 from . import classification as _classification
 from . import client_form as _client_form
@@ -69,6 +70,7 @@ from . import communication as _comms
 from . import derive as _derive
 from . import pack as _pack
 from . import planning as _planning
+from . import promotion as _promotion
 from . import readiness as _readiness
 from . import review as _review
 from . import states as _states
@@ -242,7 +244,8 @@ class OccAgentService:
                  onboarding: Optional[OnboardingService] = None,
                  adapter: Optional[ExecutionAdapter] = None,
                  communication: Optional[_comms.CommunicationAdapter] = None,
-                 engine: Optional[Any] = None):
+                 engine: Optional[Any] = None,
+                 live_onboarding: Optional[OnboardingService] = None):
         self.store = store or SyntheticRunStore(storage, container=container,
                                                 sandbox=sandbox)
         # The onboarding service, pinned to the synthetic container. Everything
@@ -250,6 +253,16 @@ class OccAgentService:
         # the live operations container.
         self.onboarding = onboarding or OnboardingService(
             synthetic_ops_store(storage, self.store.container))
+        # The governed side of the doorway: the SAME onboarding service against
+        # the real operations container. Nothing reaches it until an operator
+        # confirms activation, and then only through
+        # `operations_control.occ_agent.promotion`. Built only where live
+        # execution is switched on, so an ordinary rehearsal deployment never
+        # even holds a handle to the governed store.
+        self.live_onboarding = live_onboarding
+        if self.live_onboarding is None and _adapters.live_enabled():
+            self.live_onboarding = OnboardingService(
+                OpsStore(storage, OpsLayout.from_env()))
         self.policy = policy or synthetic_policy(audit_sink=self._audit_refusal)
         self.interpreter = interpreter or DeterministicInterpreter(
             cat=self.onboarding.catalogue)
@@ -272,9 +285,15 @@ class OccAgentService:
         The live adapter is still constructed when the flag is on, so the
         refusal an operator sees comes from the one activation gate rather than
         from a missing object.
+
+        It is given the GOVERNED onboarding service, not the practice one. That
+        is the point of the doorway: the case is authored in the practice
+        container and promoted across at activation, so the configuration the
+        regulatory return reads is built by production, in production.
         """
-        if _adapters.live_enabled() and engine is not None:
-            return LiveExecutionAdapter(self.onboarding, engine)
+        if (_adapters.live_enabled() and engine is not None
+                and self.live_onboarding is not None):
+            return LiveExecutionAdapter(self.live_onboarding, engine)
         return SyntheticExecutionAdapter(self.policy)
 
     # ------------------------------------------------------------------ #
@@ -333,18 +352,33 @@ class OccAgentService:
     # ------------------------------------------------------------------ #
     def create_case(self, *, tenant: str, initiating_user: str,
                     instruction: str = "",
-                    fixture_id: str = "") -> AgentCase:
-        """Open a practice case.
+                    fixture_id: str = "", live: bool = False) -> AgentCase:
+        """Open a case — a rehearsal unless ``live`` is asked for explicitly.
 
         The onboarding case is opened by Client Onboarding itself — same
         reference series, same blank start, same event history — and the run
         record is created beside it.
+
+        A live case is authored in exactly the same isolated container as a
+        rehearsal; ``live`` marks where it is ALLOWED to end, not where it is
+        written. The single difference arrives at activation, where a live case
+        crosses into the governed store through
+        :mod:`~operations_control.occ_agent.promotion`. It is a parameter and
+        never a default because a case that turns out to be real by accident is
+        the failure this whole boundary exists to prevent.
         """
         validate_segment(tenant, "tenant")
+        if live and not _adapters.live_enabled():
+            raise OpsError(
+                "OPS_LIVE_NOT_ENABLED",
+                "Live execution is not switched on in this environment, so a "
+                "live case cannot be opened here.", 409)
         case = self.onboarding.start_new_client(by=initiating_user)
         run = SyntheticRun(case_ref=case.case_id, tenant=tenant,
                            initiating_user=initiating_user,
-                           fixture_id=fixture_id)
+                           fixture_id=fixture_id,
+                           mode=_adapters.MODE_LIVE if live
+                           else _adapters.MODE_SYNTHETIC)
         self.store.save(run)
         self._audit(run, "practice_case_opened", actor_type=ACTOR_HUMAN,
                     actor=initiating_user,
@@ -1809,12 +1843,36 @@ class OccAgentService:
                     detail={"files": len(intent.files),
                             "targets": intent.target_locations})
 
+        # The doorway. The approved answers cross into the governed container
+        # here and nowhere else, immediately before the adapter activates them
+        # there. Ordering matters: a failure to promote must stop the
+        # activation, not leave a delivery running against a configuration the
+        # governed side never received.
+        if self.adapter.mode == _adapters.MODE_LIVE:
+            _promotion.promote(source=self.onboarding,
+                               target=self.live_onboarding,
+                               case_ref=run.case_ref, actor=actor)
+            self._audit(run, "case_promoted_to_live", actor_type=ACTOR_SYSTEM,
+                        actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                        decision_basis="the approved answers were copied into "
+                                       "the governed store for activation",
+                        output_reference=run.case_ref)
+
         result = self.adapter.activate(pre=pre, intent=intent, actor=actor,
                                        payloads=self._payloads(run))
         run.activation_result = result.to_dict()
         if result.ok:
             self._move(run, _states.INGESTION_STARTED)
-            agent_case.case = self.onboarding.load_case(run.case_ref)
+            if self.adapter.mode == _adapters.MODE_LIVE:
+                # The activation stamp was written on the governed side; carry
+                # it back so the practice case — which every precondition reads
+                # — no longer reads as merely approved.
+                activated = self.live_onboarding.load_case(run.case_ref)
+                _promotion.record_activation(source=self.onboarding,
+                                             activated=activated)
+                agent_case.case = activated
+            else:
+                agent_case.case = self.onboarding.load_case(run.case_ref)
         else:
             self._move(run, _states.ACTIVATION_FAILED)
             run.blockers = [result.error or "Activation failed."]

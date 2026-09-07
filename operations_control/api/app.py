@@ -134,8 +134,15 @@ def mount_occ_agent(application: FastAPI) -> bool:
         from ..occ_agent import api as occ_agent_api
         from ..occ_agent.service import OccAgentService
         storage = open_storage()
+        # The engine is what turns a confirmed activation into a real delivery.
+        # Without it the Agent can only ever rehearse, whatever the live flag
+        # says — `_default_adapter` requires BOTH. Passing it here is half of
+        # switching live execution on; the other half is the governed
+        # onboarding service the Agent promotes into, which it builds itself
+        # from the same flag.
         occ_agent_api.configure(
-            OccAgentService(storage, communication=_outbound_mail(storage)))
+            OccAgentService(storage, communication=_outbound_mail(storage),
+                            engine=get_engine()))
         application.include_router(occ_agent_api.router)
         logger.info("OCC Agent (synthetic) routes mounted")
         return True

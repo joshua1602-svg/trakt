@@ -102,6 +102,11 @@ class CreateCase(BaseModel):
     instruction: str = ""
     tenant: Optional[str] = None
     fixture_id: str = ""
+    #: Open this case as a real onboarding rather than a rehearsal. Defaults to
+    #: a rehearsal, and is refused outright where live execution is not
+    #: switched on — a case that turns out to be real by accident is the thing
+    #: the whole isolation boundary exists to prevent.
+    live: bool = False
 
 
 class Instruct(BaseModel):
@@ -255,7 +260,8 @@ def create_case(body: CreateCase,
     case = service.create_case(tenant=_tenant_for(principal, body.tenant),
                                initiating_user=principal.name,
                                instruction=body.instruction,
-                               fixture_id=body.fixture_id)
+                               fixture_id=body.fixture_id,
+                               live=body.live)
     return {"ok": True, **service.status(case)}
 
 
