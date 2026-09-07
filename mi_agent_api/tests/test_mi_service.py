@@ -118,9 +118,17 @@ def test_geography_concentration_needs_no_run_id(governed_dataset):
 
 
 def test_balance_by_geography_uses_the_governed_geography_field(governed_dataset):
+    """SEMANTIC MIGRATION, 2026-09-07. This asserted the substring "region" in
+    the bound field name, as a proxy for "a governed region field". The question
+    names the COLLATERAL basis, and the field that answers it on this book is
+    `collateral_geography` — which is a governed collateral region field and does
+    not contain the substring. The proxy is replaced by the thing it stood for:
+    the field must belong to the basis the question stated."""
+    from mi_agent import mi_geography as geo
+
     env = _ask("Show balance by collateral region.")
     assert env["ok"] is True
-    assert "region" in str(_dimension(env)), env["spec"]
+    assert geo.basis_of_field(_dimension(env)) == geo.BASIS_COLLATERAL, env["spec"]
     assert _rows(env)
 
 

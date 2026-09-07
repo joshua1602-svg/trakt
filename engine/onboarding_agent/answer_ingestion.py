@@ -176,6 +176,32 @@ def _overlap_columns_for(ctx: ProjectContext, canonical: str, primary_file: str)
     return "", "", "", 0.0
 
 
+def _mi_geography_policy(asset_class: Any) -> Dict[str, Any]:
+    """The MI geography block of the approved onboarding config.
+
+    ``primary_basis`` is the decision that matters and it is not a constant: a
+    loan carries a borrower geography and a collateral geography, they are
+    different facts, and which one "balance by region" means is a property of the
+    ASSET. It is derived from the class this onboarding established, using the
+    governed table `mi_agent.mi_geography` owns — the same table
+    `portfolio_registry_writer` seeds the runtime registry from, so the approved
+    config and the registry MI actually reads can never state different bases.
+
+    An asset class with no governed default is written WITHOUT a basis rather
+    than with a guessed one, which is what puts it in front of an operator.
+
+    ``region_display_field`` is retained unchanged. It names the readable column
+    the review pack renders, which is a presentation choice and not the basis.
+    """
+    from mi_agent.mi_geography import default_primary_basis
+
+    policy: Dict[str, Any] = {"region_display_field": "collateral_geography"}
+    basis = default_primary_basis(asset_class)
+    if basis:
+        policy["primary_basis"] = basis
+    return policy
+
+
 def _build_approved_config(
     ctx: ProjectContext, answered: Dict[str, Dict[str, Any]], mode: str = "regulatory_mi"
 ) -> Dict[str, Any]:
@@ -222,12 +248,12 @@ def _build_approved_config(
         out["classification_year"] = val("classification_year", "2021")
         out["geography_policy"] = {
             "ESMA_Annex2": {"uk_geography_mode": uk_geo_mode},
-            "MI": {"region_display_field": "collateral_geography"},
+            "MI": _mi_geography_policy(out.get("asset_class")),
         }
     elif mode in ("mi_only", "mna_dd", "mi_mna"):
         # MI / M&A: display geography only; regulatory config is out of scope and
         # is never required for approval. mna_dd surfaces an indicative regime.
-        out["geography_policy"] = {"MI": {"region_display_field": "collateral_geography"}}
+        out["geography_policy"] = {"MI": _mi_geography_policy(out.get("asset_class"))}
         possible = val("possible_regime") or (val("regime") if mode != "mi_only" else "")
         if possible:
             out["possible_regime"] = possible

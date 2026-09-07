@@ -72,9 +72,16 @@ def test_onboarding_publishes_the_asset_class_it_decided(tmp_path):
                     {"source_portfolio_id": "acquired_001"}],
                    asset_class="equity_release_mortgage")
     document = yaml.safe_load(target.read_text())
-    assert document["portfolios"] == [
-        {"source_portfolio_id": "direct_001", "asset_class": "equity_release"},
-        {"source_portfolio_id": "acquired_001", "asset_class": "equity_release"}]
+    # SEMANTIC-INVARIANT MIGRATION, 2026-09-07. This asserted the whole entry by
+    # equality, so it also asserted that onboarding publishes NOTHING ELSE —
+    # which was never what the test is named for. The registry entry now also
+    # carries the primary MI geography basis seeded from that same asset class
+    # (see tests/test_mi_geography_basis_lifecycle.py). The fact under test here
+    # — that the class onboarding decided reaches the registry, normalised, for
+    # every portfolio — is asserted exactly as before.
+    assert [(e["source_portfolio_id"], e["asset_class"])
+            for e in document["portfolios"]] == [
+        ("direct_001", "equity_release"), ("acquired_001", "equity_release")]
 
 
 def test_a_per_portfolio_class_beats_the_client_default(tmp_path):

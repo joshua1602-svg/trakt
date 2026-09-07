@@ -82,10 +82,50 @@ class TestTheHarmonisedColumnWinsWhenItIsThere(unittest.TestCase):
     def setUp(self):
         self.semantics = _semantics()
 
-    def test_a_harmonised_dataset_reads_the_harmonised_column(self):
+    def test_a_harmonised_dataset_reads_the_basis_the_book_reports_on(self):
+        """SEMANTIC MIGRATION, 2026-09-07. Renamed from
+        `test_a_harmonised_dataset_reads_the_harmonised_column`, which asserted
+        that a frame carrying RAW + DETAIL + REPORTING binds REPORTING.
+
+        The claim that moved is stated in this module's docstring: the harmonised
+        column "is what a region question should read". It is not, because it is
+        derived from whichever of BOTH geography bases was populated first, so it
+        answers a question the reader did not ask — which geography? — by
+        accident of delivery. Measured on the live platform book it also answered
+        nothing: NULL on 11,035 of 11,035 rows while the readable collateral
+        names sat beside it, and the presence-only preference bound it anyway.
+
+        The column's own reason for existing survives intact, and is asserted
+        below: one vocabulary, so "LONDON" and "London" are one row. What changed
+        is WHERE it is applied — MI now states the source columns the taxonomy
+        harmonises FROM, taking them from the book's configured basis — and that
+        it is no longer the thing a generic region question binds to.
+        """
         chosen = P._preferred_region(
             self.semantics, available_columns={RAW, DETAIL, REPORTING})
+        self.assertEqual(chosen, RAW)
+
+    def test_the_harmonised_column_still_answers_where_it_is_all_there_is(self):
+        """A frame carrying no basis column keeps its region rather than losing
+        it: the harmonised columns sit at the tail of the order, not off it."""
+        chosen = P._preferred_region(
+            self.semantics, available_columns={DETAIL, REPORTING})
         self.assertEqual(chosen, REPORTING)
+
+    def test_the_configured_basis_decides_where_both_are_present(self):
+        from mi_agent import mi_geography as geo
+
+        columns = {RAW, DETAIL, REPORTING, "geographic_region_obligor"}
+        self.assertEqual(
+            P._preferred_region(self.semantics, available_columns=columns,
+                                geography=geo.resolve_contract(
+                                    asset_class="equity_release")),
+            RAW)
+        self.assertEqual(
+            P._preferred_region(self.semantics, available_columns=columns,
+                                geography=geo.resolve_contract(
+                                    asset_class="auto_finance")),
+            "geographic_region_obligor")
 
     def test_the_reporting_column_is_preferred_over_the_detail_one(self):
         """`canonical_region_reporting` is the client-level value used when
@@ -120,8 +160,19 @@ class TestTheHarmonisedColumnWinsWhenItIsThere(unittest.TestCase):
             P._preferred_region(self.semantics, available_columns={"loan_id"}),
             RAW)
 
-    def test_the_default_is_not_simply_the_head_of_the_preference_order(self):
-        self.assertNotEqual(P._REGION_DEFAULT, P._REGION_PREFERENCE[0])
+    def test_the_default_is_a_column_every_tape_carries(self):
+        """SEMANTIC MIGRATION, 2026-09-07. Renamed from
+        `test_the_default_is_not_simply_the_head_of_the_preference_order`.
+
+        That assertion was a PROXY for the rule stated two tests above: the
+        no-columns default must not be a harmonised column that exists only where
+        harmonisation ran. It expressed the rule as an inequality because, at the
+        time, the head of the order WAS such a column. It no longer is — the head
+        is the readable field every tape carries — so the inequality now forbids
+        the very state the rule wanted, and the rule itself is asserted directly.
+        """
+        self.assertEqual(P._REGION_DEFAULT, RAW)
+        self.assertNotIn(P._REGION_DEFAULT, (DETAIL, REPORTING))
 
     def test_the_raw_column_still_wins_over_the_nuts_code_fields(self):
         chosen = P._preferred_region(

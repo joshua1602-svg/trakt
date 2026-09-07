@@ -636,6 +636,22 @@ def _value_owner(token: str, keys: Set[str], fields: Mapping[str, Any]
     harmless on a book with one direct cohort, an undeclared empty intersection
     on a book with two. One declaration, one reader; the other defers.
 
+    ALIASES OF ONE CONCEPT ARE NOT A COLLISION. Several fields may declare the
+    same ``value_domain``; the region family all declare ``uk_region``. A value
+    they all carry is not two claims about different things, it is the SAME claim
+    written down more than once, and dropping it as ambiguous refuses a question
+    the book can answer. Measured when the harmonised region columns started
+    resolving: `london` went from one claimant to three, left this map, and
+    "For the London book, give me balance, number of loans, weighted-average LTV
+    and average borrower age" — a governed CFO question in this estate's own
+    golden bank — was refused as naming a portfolio nobody onboarded, while its
+    spec carried the correct `collateral_geography = London` filter all along.
+
+    The tie is broken by the order the GROUPING owner already walks
+    (`llm_query_parser.domain_field_preference`), which is the same order
+    `categorical_spans.preferred_field` uses to bind the filter. One declaration,
+    one order: this map and the binder cannot name different fields.
+
     Between fields of EQUAL standing the value stays ambiguous and is dropped, so
     a collision this rule cannot decide is still not decided by iteration order.
     """
@@ -646,6 +662,13 @@ def _value_owner(token: str, keys: Set[str], fields: Mapping[str, Any]
                                               .get("source_criteria") or ())}
     if len(segmentation) == 1:
         return next(iter(segmentation))
+    domains = {str((fields.get(k) or {}).get("value_domain") or "") for k in keys}
+    if len(domains) == 1 and next(iter(domains)):
+        from .llm_query_parser import domain_field_preference
+
+        for candidate in domain_field_preference(next(iter(domains))):
+            if candidate in keys:
+                return candidate
     return None
 
 
@@ -1168,7 +1191,8 @@ def executed_measure_concepts(query_result: Any) -> Set[str]:
 
 
 def requested_dimension_terms(question: str, semantics: dict,
-                              available_columns: Optional[Iterable[str]] = None
+                              available_columns: Optional[Iterable[str]] = None,
+                              geography: Any = None
                               ) -> List[Tuple[str, str, Tuple[str, ...]]]:
     """``[(field_key, matched_term, alt_keys)]`` the user explicitly named.
 
@@ -1211,13 +1235,15 @@ def requested_dimension_terms(question: str, semantics: dict,
     # the grouping is what makes the question answerable.
     _population = resolve_population_predicate(question, available_columns)
     _suppress = set(_population or ())
-    keys, terms, _ = _explicit_dimensions(q, semantics, available_columns=None)
+    keys, terms, _ = _explicit_dimensions(q, semantics, available_columns=None,
+                                          geography=geography)
     by_term: Dict[str, List[str]] = {}
     for key, term in zip(keys, terms):
         by_term.setdefault(term, []).append(key)
     if available_columns is not None:
         a_keys, a_terms, _ = _explicit_dimensions(
-            q, semantics, available_columns=set(available_columns))
+            q, semantics, available_columns=set(available_columns),
+            geography=geography)
         for key, term in zip(a_keys, a_terms):
             by_term.setdefault(term, []).append(key)
     out: List[Tuple[str, str, Tuple[str, ...]]] = []
@@ -1232,7 +1258,8 @@ def requested_dimension_terms(question: str, semantics: dict,
     singular = re.sub(r"\b(\w{4,})s\b", r"\1", q)
     if singular != q:
         s_keys, s_terms, _ = _explicit_dimensions(singular, semantics,
-                                                  available_columns=None)
+                                                  available_columns=None,
+                                                  geography=geography)
         for key, term in zip(s_keys, s_terms):
             if key in seen or key in _suppress:
                 continue

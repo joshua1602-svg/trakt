@@ -206,6 +206,68 @@ _VERSUS_RE = re.compile(
 _SINCE_RE = re.compile(rf"\bsince\s+{_PERIOD_TOKEN}", re.IGNORECASE)
 _CALENDAR_TOKEN_RE = re.compile(_PERIOD_TOKEN, re.IGNORECASE)
 
+#: POINT-IN-TIME FRAMING — "as at", "as of", and a bare "at"/"on" standing in
+#: front of a period token. The explicit pair is unambiguous in this domain; the
+#: bare pair is admitted ONLY when a governed period token follows it, because
+#: "at" and "on" are ordinary English ("loans at 50% LTV", "a view on risk") and
+#: claiming them on their own would make a temporal request out of every second
+#: sentence.
+_AS_AT_EXPLICIT_RE = re.compile(r"\bas\s+(?:at|of)\b", re.IGNORECASE)
+_AS_AT_DATED_RE = re.compile(
+    rf"\b(?:as\s+(?:at|of)|at|on)\s+(?:the\s+)?{_PERIOD_TOKEN}", re.IGNORECASE)
+
+
+@dataclass(frozen=True)
+class AsAtRequest:
+    """A moment the sentence asked the answer to describe.
+
+    ``token`` is the governed period token when the sentence carried one, and
+    ``None`` when it used point-in-time framing the date owner cannot resolve
+    ("as at the 45th of Octember"). BOTH are material: the reader asked for one
+    moment rather than another, and an answer over a different moment is wrong
+    either way. Resolving the token to an actual snapshot is deliberately NOT
+    done here — that is the executor's job, and doing it here would make this a
+    second period resolver beside `periods.resolve_periods`.
+    """
+
+    phrase: str
+    token: Optional[str] = None
+
+
+def as_at_request(question: Optional[str]) -> Optional[AsAtRequest]:
+    """The POINT IN TIME this sentence names, or ``None``.
+
+    THE OWNER OF PERIOD LANGUAGE ANSWERS THIS, and it did not before. This
+    module already owns `since`, `between`, `from…to` and `versus`; the one
+    shape missing was the one that names a single moment. Nothing asked what
+    period a sentence named, so "What is the balance as at 31 December 1999?"
+    put its date to no owner at all, entered no ledger, and was answered over
+    the current book — receipted "as at 30 June 2026", a date the reader never
+    asked for.
+
+    It looked like it failed closed only because a year inside the book's
+    `vintage_year` range is claimed by the CATEGORICAL owner. Move the year
+    outside that range and the refusal goes with it.
+
+    A SERIES IS NOT A MOMENT. "over time", "by month" and "since last month" ask
+    how something moved and are owned by the trend and change recognisers above;
+    claiming them here would refuse the capabilities that already work.
+    """
+    text = str(question or "")
+    if not text.strip():
+        return None
+    dated = _AS_AT_DATED_RE.search(text)
+    if dated is not None:
+        return AsAtRequest(phrase=dated.group(0).strip(), token=dated.group(1).strip())
+    explicit = _AS_AT_EXPLICIT_RE.search(text)
+    if explicit is not None:
+        # Framing without a resolvable date. Reported rather than dropped: the
+        # restriction is material even though this owner cannot say which moment
+        # it names, and the ledger's job is to notice that nobody could.
+        tail = text[explicit.start():].strip().rstrip("?.!,;: ")
+        return AsAtRequest(phrase=tail, token=None)
+    return None
+
 # Decline reason codes — stable, and reported so a routing decision is auditable.
 DECLINE_NO_CHANGE_LANGUAGE = "no_change_language"
 DECLINE_FORECAST = "forecast_question"

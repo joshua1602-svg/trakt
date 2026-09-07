@@ -51,6 +51,12 @@ _ALLOWED_KEYS = frozenset({
     # rather than on the tape because it is a fact about the BOOK, not about any
     # individual loan, and because onboarding — not the extract — decides it.
     "asset_class",
+    # The PRIMARY MI GEOGRAPHY BASIS — borrower or collateral — which decides
+    # what generic region language means for this book. Like the asset class it
+    # is a fact about the BOOK, established once (onboarding seeds it from the
+    # asset class; an operator may override it here), and read by MI from here.
+    # It names a basis and never a place: see mi_agent.mi_geography.
+    "mi_geography",
 })
 
 #: Asset-class synonyms, mapped onto the Business Semantics Registry vocabulary.

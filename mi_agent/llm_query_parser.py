@@ -23,6 +23,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -31,6 +33,7 @@ from question_interpretation import lexical as _lexical
 
 from .mi_query_spec import MAX_MEASURES, MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
+from . import mi_geography as _geo
 from . import statistic as _statistic
 from . import population as _population_mod
 
@@ -438,9 +441,19 @@ def _registry_dimension_terms(semantics: dict) -> Dict[str, str]:
     return out
 
 
-# Generic region terms resolved by data-aware preference (see _preferred_region).
+# Generic region terms — resolved onto the book's CONFIGURED primary geography
+# basis (see _preferred_region).
 _REGION_GENERIC_TERMS = {"region", "regions", "regional", "geography",
                          "geographic", "geographic region"}
+
+#: Region terms that STATE their basis, from the module that owns the table.
+#: These resolve onto the named basis and onto no other, whatever the book's
+#: configured primary is: a reader who says "borrower region" has stated the
+#: basis and is owed that basis or a refusal. The FIELD within the basis is
+#: still chosen by what the book carries, because every field in one basis means
+#: the same thing at a different granularity.
+_REGION_BASIS_TERMS = _geo.BASIS_TERMS
+
 # Borrower-type terms resolved by data-aware preference (see
 # _preferred_borrower_dim). borrower_type is the dimension the funded prep
 # actually materialises; borrower_structure is a legacy band kept for datasets
@@ -479,28 +492,49 @@ def _preferred_borrower_dim(semantics: dict, available_columns=None) -> Optional
         if cols is None or entry.get("canonical_field", key) in cols:
             return key
     return known[0] if known else None
-# Preference for the MI "Region" dimension: the HARMONISED columns first, then
-# the readable display field, then NUTS3 code fields.
-# geographic_region_classification (a YEAR) is never a region.
-#
-# The harmonised pair leads because it is the only vocabulary that is the same
-# across books. The raw display field holds whatever each source system wrote —
-# the acquired book carries "LONDON" and "London" in it — so grouping on it
-# splits one region into two rows, each carrying part of the answer.
-#
-# Nothing changes for a dataset that never harmonised: this function is
-# data-aware and takes the first field whose column is PRESENT, so a tape
-# without the canonical columns keeps `collateral_geography` exactly as before.
-_REGION_PREFERENCE = ("canonical_region_reporting", "canonical_region_detail",
-                      "collateral_geography", "geographic_region_collateral",
-                      "geographic_region_obligor")
 
-#: THE DEFAULT WHEN NOTHING IS KNOWN ABOUT THE DATA, which is not the head of
-#: the preference order and must not become it. The harmonised columns exist
-#: only where harmonisation ran; naming one at parse time on a tape that has no
-#: such column makes the executor refuse an ordinary "balance by region" for a
-#: field the reader never mentioned and the book never carried. Preference is
-#: for choosing among columns KNOWN to be present; this is for the rest.
+
+# WHICH FIELD THE MI "REGION" DIMENSION MEANS.
+#
+# A book carries a BORROWER geography and a COLLATERAL geography, and they are
+# different facts about the loan. Which one generic region language means is a
+# property of the ASSET, established at onboarding and carried in the governed
+# portfolio registry — see `mi_agent.mi_geography`. That contract, when the
+# caller supplies one, is what decides here.
+#
+# This used to be a flat preference order headed by the harmonised columns, and
+# the choice among them was made by asking which column was PRESENT. Measured on
+# the live platform book that produced a breakdown over
+# `canonical_region_reporting`: present on every serving frame, populated on
+# none of its 11,035 rows, chosen anyway — while the readable region names sat
+# untouched in the column beside it. Presence is not a semantics.
+#
+# The order below is the LAST RESORT, for a parse with no book and no contract
+# (a bare unit test, a registry lint). It is an order over BASES — the
+# collateral basis, then the borrower basis, then the harmonised columns that
+# belong to neither — rather than over an undifferentiated pool of region
+# columns. Within a basis the granularity is chosen by presence, which is safe
+# there and nowhere else, because every field in one basis means the same thing.
+#
+# geographic_region_classification (a YEAR) is never a region, and appears in no
+# basis for that reason.
+#: The HARMONISED columns, last. They are derived from whichever source field
+#: was populated first, so they belong to no basis and cannot answer a question
+#: that is about one — but for a frame that carries nothing else they are the
+#: only region there is, and refusing a book its own region column would be a
+#: capability lost for no gain. Last, therefore, not first: on a frame that
+#: carries both they lose to the basis columns, which is what stops an empty
+#: harmonised column from being chosen over a populated readable one.
+_REGION_HARMONISED = ("canonical_region_reporting", "canonical_region_detail")
+
+_REGION_PREFERENCE = (_geo.AXIS_FIELDS[_geo.BASIS_COLLATERAL]
+                      + _geo.AXIS_FIELDS[_geo.BASIS_BORROWER]
+                      + _REGION_HARMONISED)
+
+#: THE DEFAULT WHEN NOTHING IS KNOWN ABOUT THE DATA. The readable collateral
+#: field: it is the one every tape carries, and it is the head of the last-resort
+#: order above, so a parse with no columns and a parse with columns but no
+#: contract agree with each other.
 _REGION_DEFAULT = "collateral_geography"
 
 
@@ -524,10 +558,109 @@ def domain_field_preference(domain: Optional[str]) -> Tuple[str, ...]:
     return tuple(_DOMAIN_FIELD_PREFERENCE.get(str(domain or ""), ()))
 
 
-def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
-    """Pick the MI 'Region' field: readable collateral_geography first, then a
-    NUTS3 code field. When available_columns is given, prefer a field whose
-    canonical column is actually present in the dataset."""
+#: THE GEOGRAPHY CONTRACT IN FORCE FOR THE PARSE BEING RUN.
+#:
+#: Which geography a book reports on is decided ONCE per request, from the asset
+#: class onboarding established (:mod:`mi_agent.mi_geography`). Reading it is not
+#: one decision, though — a dozen places inside a single parse ask "which column
+#: does 'region' mean", from the dimension binder to the categorical-filter
+#: resolver to the population resolver — and if they disagree, a question that
+#: groups by region and filters by region binds two different fields and answers
+#: over nothing. That is a defect this file has already been through once, for
+#: aliased value domains.
+#:
+#: A context variable is what makes the disagreement impossible rather than
+#: merely unlikely: one value, set at the entry point for the duration of one
+#: parse, read wherever it is needed, and torn down after. The public entry
+#: points still take the contract as an explicit argument — the plumbing is
+#: implicit, the interface is not — and every reader accepts an explicit
+#: override for the cases that have one in hand.
+_ACTIVE_GEOGRAPHY: "ContextVar[Any]" = ContextVar("mi_active_geography",
+                                                  default=None)
+
+
+@contextmanager
+def geography_context(contract):
+    """Run a parse under ``contract``. Restores whatever was in force before."""
+    token = _ACTIVE_GEOGRAPHY.set(contract)
+    try:
+        yield contract
+    finally:
+        _ACTIVE_GEOGRAPHY.reset(token)
+
+
+def bind_geography(contract):
+    """Install ``contract`` for the remainder of the enclosing
+    :func:`geography_context`.
+
+    The contract cannot be known when a request begins: it depends on the frame,
+    which is not resolved until authorisation has run. So the request opens an
+    empty context at its outermost edge and binds into it here, once the book is
+    in hand. ``geography_context.__exit__`` restores whatever was in force before
+    it — a ``ContextVar`` token restores the value at the time of ITS set,
+    discarding anything bound afterwards — so this can never leak into the next
+    request.
+    """
+    _ACTIVE_GEOGRAPHY.set(contract)
+    return contract
+
+
+def active_geography():
+    """The geography contract in force, or None outside a parse that set one."""
+    return _ACTIVE_GEOGRAPHY.get()
+
+
+def _basis_region_field(basis: Optional[str], semantics: dict,
+                        available_columns=None) -> Optional[str]:
+    """The column this book carries ``basis`` in, restricted to the registry.
+
+    Returns the basis's most readable field even when the book carries none of
+    them, so the caller keeps the CONCEPT the reader named. The executor then
+    refuses naming the field that is absent, exactly as it does for any other
+    absent dimension — which is the honest answer to "borrower region" on a book
+    that never collected one, and is emphatically not a quiet substitution of
+    the other basis.
+    """
+    fields = _fields(semantics)
+    known = [f for f in _geo.axis_fields(basis) if f in fields]
+    if not known:
+        return None
+    if available_columns is not None:
+        cols = set(available_columns)
+        for key in known:
+            entry = fields.get(key) or {}
+            if entry.get("canonical_field", key) in cols:
+                return key
+    return known[0]
+
+
+def _region_search_order(geography=None) -> Tuple[str, ...]:
+    """``_REGION_PREFERENCE`` with the book's own basis moved to the front."""
+    basis = getattr(geography if geography is not None else active_geography(),
+                    "primary_basis", None)
+    if not basis:
+        return _REGION_PREFERENCE
+    lead = _geo.axis_fields(basis)
+    return tuple(lead) + tuple(f for f in _REGION_PREFERENCE if f not in lead)
+
+
+def _preferred_region(semantics: dict, available_columns=None,
+                      geography=None) -> Optional[str]:
+    """Pick the MI 'Region' field for GENERIC region language.
+
+    ``geography`` is the request's :class:`mi_agent.mi_geography.GeographyContract`
+    — what this book reports on, decided from its asset class at onboarding. When
+    one is supplied and names a primary basis, that basis owns the answer and the
+    only remaining choice is which of ITS columns this book populates.
+
+    Without a contract the last-resort order applies: see ``_REGION_PREFERENCE``.
+    """
+    basis = getattr(geography if geography is not None else active_geography(),
+                    "primary_basis", None)
+    if basis:
+        chosen = _basis_region_field(basis, semantics, available_columns)
+        if chosen:
+            return chosen
     fields = _fields(semantics)
     cols = set(available_columns) if available_columns is not None else None
     known = [k for k in _REGION_PREFERENCE if k in fields]
@@ -537,12 +670,7 @@ def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
             entry = fields.get(key) or {}
             if entry.get("canonical_field", key) in cols:
                 return key
-        # None present. Return the readable default, not the head of the
-        # preference order: the harmonised columns lead that order and exist
-        # only where harmonisation ran.
-        if _REGION_DEFAULT in known:
-            return _REGION_DEFAULT
-        # Otherwise the FIRST KNOWN choice, not None.
+        # None present. Return the readable default, not None.
         #
         # The intent recorded here was always "fail clearly rather than
         # substitute an absent field" — but returning None achieved the
@@ -551,10 +679,10 @@ def _preferred_region(semantics: dict, available_columns=None) -> Optional[str]:
         # claim. Keeping the concept is what makes the failure clear: the
         # executor then refuses NAMING the field the user asked for, exactly as
         # it does for any ordinary absent dimension.
+        if _REGION_DEFAULT in known:
+            return _REGION_DEFAULT
         return known[0] if known else None
-    # No column context — a parse with no dataset in hand. The readable field
-    # is the one every tape carries, so it stays the parse-time default and the
-    # harmonised columns are chosen only where they are known to be present.
+    # No column context — a parse with no dataset in hand.
     if _REGION_DEFAULT in known:
         return _REGION_DEFAULT
     return known[0] if known else None
@@ -600,7 +728,7 @@ _METRIC_TERMS = (
 
 
 def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
-                         available_columns=None
+                         available_columns=None, geography=None
                          ) -> Tuple[List[str], List[str], str]:
     """Find explicitly-requested dimensions in order of appearance.
 
@@ -661,7 +789,15 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
     found: List[Tuple[int, str, str]] = []  # (position, key, term)
     for term in sorted(terms_map, key=len, reverse=True):
         if term in _REGION_GENERIC_TERMS:
-            key = _preferred_region(semantics, available_columns)
+            key = _preferred_region(semantics, available_columns, geography)
+        elif term in _REGION_BASIS_TERMS:
+            # A STATED basis. Resolved onto that basis's own columns, never onto
+            # the book's primary: an answer labelled "borrower region" that was
+            # measured on collateral is worse than no answer, because the reader
+            # cannot tell.
+            key = (_basis_region_field(_REGION_BASIS_TERMS[term], semantics,
+                                       available_columns)
+                   or terms_map.get(term))
         elif term in _BORROWER_GENERIC_TERMS:
             key = _preferred_borrower_dim(semantics, available_columns)
         else:
@@ -2918,7 +3054,12 @@ def _categorical_value_field(value: str, available_values,
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if not text or (" " not in text and len(text) < 4):
         return None
-    for field in _REGION_PREFERENCE:
+    # THE CONFIGURED BASIS LEADS HERE TOO. "Give me the Scottish balance" states
+    # no basis, so it narrows on the one the book reports on — the same field the
+    # axis would have grouped. Without this the walk starts at the head of the
+    # last-resort order, and on a borrower book a value carried by both columns
+    # would be filtered on the collateral one while the axis grouped the other.
+    for field in _region_search_order():
         present = _field_values(available_values, field)
         if not present:
             continue
@@ -4559,8 +4700,8 @@ def _spec_shape_is_coherent(spec) -> bool:
 
 
 def _deterministic_parse(question: str, semantics: dict,
-                         available_columns=None, available_values=None
-                         ) -> "Tuple[MIQuerySpec, dict]":
+                         available_columns=None, available_values=None,
+                         geography=None) -> "Tuple[MIQuerySpec, dict]":
     """The deterministic parse, with the spec-shape invariant enforced.
 
     FAILS CLOSED. An internally contradictory spec is not emitted: the caller is
@@ -4574,9 +4715,11 @@ def _deterministic_parse(question: str, semantics: dict,
     trip this, because the one builder that emitted the pair now names the shape
     it carries. The guard is here so the class cannot return silently.
     """
-    parsed = _deterministic_parse_unchecked(
-        question, semantics, available_columns=available_columns,
-        available_values=available_values)
+    with geography_context(geography if geography is not None
+                           else active_geography()):
+        parsed = _deterministic_parse_unchecked(
+            question, semantics, available_columns=available_columns,
+            available_values=available_values)
     spec = parsed[0] if isinstance(parsed, tuple) else parsed
     if spec is not None and not _spec_shape_is_coherent(spec):
         logger.info("deterministic parse discarded an incoherent spec shape for "
