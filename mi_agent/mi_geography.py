@@ -423,7 +423,20 @@ def _carries_geography(series) -> bool:
     regional questions on, and saying so is the honest result.
     """
     try:
+        from engine.region_taxonomy import clean as _clean_region_key
         from mi_agent.region_resolution import looks_like_region_term
+
+        def _is_place(value: str) -> bool:
+            """Both estate owners, in the order they are authoritative.
+
+            The ladder answers for a value as written; the taxonomy's own key
+            cleaner then folds the punctuation and separator variants it already
+            treats as one region — "south-west" and "South West" are the same
+            place, and a book that spells it with a hyphen still records a
+            geography. Neither owner is copied here; both are asked.
+            """
+            return (looks_like_region_term(value)
+                    or looks_like_region_term(_clean_region_key(value)))
 
         # A HEAD SAMPLE FIRST, then the whole column only if it found nothing.
         #
@@ -434,8 +447,7 @@ def _carries_geography(series) -> bool:
         # a column carries NO geography, which refuses a question.
         def _probe(values) -> bool:
             for value in values:
-                if value and value.lower() not in _BLANK \
-                        and looks_like_region_term(value):
+                if value and value.lower() not in _BLANK and _is_place(value):
                     return True
             return False
 

@@ -188,12 +188,51 @@ class TestBorrowerAgeDerivation(unittest.TestCase):
 class TestRegionMappingAndTaxonomy(unittest.TestCase):
 
     def test_acquired_region_reaches_the_catalogue_primary(self):
-        """The defect: the primary existed (direct only), so acquired was skipped."""
-        out, derived = augment_platform_canonical_dimensions(_platform_frame())
-        self.assertIn("geographic_region_obligor", derived)
-        populated = out.groupby("source_portfolio_id")["geographic_region_obligor"].apply(
-            lambda s: s.notna().sum())
-        self.assertEqual(int(populated["acquired_001"]), ACQUIRED_ROWS)
+        """SEMANTIC MIGRATION, 2026-09-07. The original defect was real and is
+        still fixed: a column-level "is the primary already here?" test skipped
+        every book after the first, so an acquired tape delivering its region
+        under a different name reported "region not supplied".
+
+        What has changed is WHICH primary. This asserted that the acquired book's
+        COLLATERAL region was coalesced into `geographic_region_obligor` — the
+        BORROWER column — so that both books reported under one field. The result
+        was a column carrying borrower geography for the direct book and property
+        geography for the acquired one, with nothing saying so: a breakdown of it
+        is two different facts stacked in one bar chart.
+
+        The two geographies are different facts about a loan
+        (`mi_agent/mi_geography.py`). Each book's region now reaches the primary
+        of ITS OWN basis, and the combined tape declares that its books report on
+        different geographies rather than hiding it in one column."""
+        out, _derived = augment_platform_canonical_dimensions(_platform_frame())
+        acquired = out.source_portfolio_id == "acquired_001"
+        direct = out.source_portfolio_id == "direct_001"
+        # The acquired book's region reaches the COLLATERAL primary, in full.
+        self.assertEqual(int(out.loc[acquired, "geographic_region_collateral"]
+                             .notna().sum()), ACQUIRED_ROWS)
+        # And does not leak into the borrower column, which it is not.
+        self.assertEqual(int(out.loc[acquired, "geographic_region_obligor"]
+                             .notna().sum()), 0)
+        # The direct book keeps its own, on its own basis.
+        self.assertEqual(int(out.loc[direct, "geographic_region_obligor"]
+                             .notna().sum()), DIRECT_ROWS)
+
+    def test_a_tape_whose_books_report_on_different_geographies_says_so(self):
+        """The affirmative half of the migration above. This fixture is exactly
+        that tape: one book records where its borrowers are, the other where its
+        properties are. "Balance by region" over both has no single meaning, and
+        the contract returns no primary basis rather than inventing one."""
+        from mi_agent import mi_geography as geo
+
+        out, _ = augment_platform_canonical_dimensions(_platform_frame())
+        # Both bases are carried by the combined tape...
+        self.assertEqual(sorted(geo.supported_bases(frame=out)),
+                         [geo.BASIS_BORROWER, geo.BASIS_COLLATERAL])
+        # ...but neither book's own basis governs the other, so a scope whose
+        # portfolios disagree resolves to none.
+        mixed = geo.resolve_contract(registry_entry=None, frame=out)
+        self.assertIsNone(mixed.primary_basis)
+        self.assertEqual(mixed.source, geo.SOURCE_NONE)
 
     def test_direct_region_is_unchanged(self):
         out, _ = augment_platform_canonical_dimensions(_platform_frame())
