@@ -89,8 +89,12 @@ _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "collateral_geography": {
         "kind": "group", "primary": "collateral_geography",
         "sources": list(_GEO_GROUPS["collateral_geography"])},
+    # The collateral CODE tier coalesces within itself, but is not a dimension
+    # every book is expected to carry: it is the granularity `collateral_geography`
+    # falls back to on a book that only ever delivered codes, and reporting it
+    # "missing" on every book that carries readable names instead would be noise.
     "geographic_region_collateral": {
-        "kind": "group", "primary": "geographic_region_collateral",
+        "kind": "group", "primary": "geographic_region_collateral", "core": False,
         "sources": list(_GEO_GROUPS["geographic_region_collateral"])},
     "geographic_region_obligor": {
         "kind": "group", "primary": "geographic_region_obligor",
@@ -99,7 +103,11 @@ _DIM_SPEC: Dict[str, Dict[str, Any]] = {
         "kind": "group", "primary": "origination_channel",
         "sources": ["origination_channel", "broker_channel"]},
 }
-CORE_FUNDED_DIMENSIONS = list(_DIM_SPEC.keys())
+#: The dimensions a funded book is EXPECTED to carry, reported as available or
+#: missing on every prepared frame. A spec may opt out with ``core: False`` where
+#: it exists to coalesce a granularity rather than to name a stratification.
+CORE_FUNDED_DIMENSIONS = [d for d, spec in _DIM_SPEC.items()
+                          if spec.get("core", True)]
 
 # LTV (target -> (balance/numerator field, valuation/denominator field)).
 _LTV_INPUTS = {
@@ -582,6 +590,8 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
             out[col].astype(str).str.strip() != "").any()
 
     for dim, spec in _DIM_SPEC.items():
+        if not spec.get("core", True):
+            continue
         if _has_values(dim):
             available.append(dim)
             continue

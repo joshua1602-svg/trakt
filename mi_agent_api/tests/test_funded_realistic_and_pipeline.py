@@ -68,10 +68,26 @@ class TestRealisticPackTrace(unittest.TestCase):
         self.assertGreater(len(self.df), 0)
 
     def test_region_available_via_group_alias(self):
-        # collateral_region -> collateral_geography; region dimension available.
+        """SEMANTIC MIGRATION, 2026-09-07. This asserted that a book delivering
+        `collateral_region` -> `collateral_geography` made
+        `geographic_region_obligor` — the BORROWER column — available.
+
+        It did, and that was the defect: the preparation layer gap-filled the
+        borrower column from the collateral one, so "balance by borrower region"
+        answered with where the houses are, labelled as where the borrowers are.
+        The two are different facts about the loan (mi_agent/mi_geography.py).
+
+        The capability the test is named for is unchanged and asserted below: a
+        book delivering its region under an alias has a region dimension. It is
+        now the COLLATERAL one, which is what the book actually supplied."""
         self.assertIn("collateral_geography", self.df.columns)
-        self.assertIn("geographic_region_obligor", self.report["dimensions_available"])
-        self.assertEqual(self.trace["geographic_region_obligor"]["status"], "available")
+        self.assertIn("collateral_geography", self.report["dimensions_available"])
+        self.assertNotIn("geographic_region_obligor",
+                         self.report["dimensions_available"])
+        # The pack delivers it under an alias, so the trace records the promotion
+        # rather than a direct hit; either way the field reached the frame.
+        self.assertIn(self.trace["collateral_geography"]["status"],
+                      ("available", "promoted"))
 
     def test_current_ltv_available(self):
         self.assertIn("ltv_bucket", self.report["dimensions_available"])
@@ -95,12 +111,20 @@ class TestRealisticPackTrace(unittest.TestCase):
 
 
 class TestRegionAndChannelGrouping(unittest.TestCase):
-    def test_collateral_geography_satisfies_region(self):
+    def test_collateral_geography_satisfies_the_collateral_region(self):
+        """RENAMED from `test_collateral_geography_satisfies_region`, which
+        asserted it satisfied `geographic_region_obligor`.
+
+        A property's region does not tell you where the borrower is. A book that
+        supplies only collateral geography can answer a collateral region
+        question and cannot answer a borrower one, and saying so is the honest
+        result — the alternative was answering both from one column."""
         df = pd.DataFrame({"loan_identifier": [1, 2, 3],
                            "current_outstanding_balance": [100000, 120000, 90000],
                            "collateral_geography": ["UKI", "UKJ", "UKI"]})
         _prep, rep = prepare_funded_mi_dataset(df)
-        self.assertIn("geographic_region_obligor", rep["dimensions_available"])
+        self.assertIn("collateral_geography", rep["dimensions_available"])
+        self.assertNotIn("geographic_region_obligor", rep["dimensions_available"])
 
     def test_broker_channel_satisfies_channel(self):
         df = pd.DataFrame({"loan_identifier": [1, 2],
