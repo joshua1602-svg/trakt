@@ -13,11 +13,11 @@ describe("AppShell — data-driven landing", () => {
     expect(screen.getByText("73")).toBeInTheDocument();
   });
 
-  it("presents the lifecycle top-level tabs (Funded / Pipeline / Forecast / Risk Limits)", async () => {
+  it("presents the lifecycle top-level tabs (Funded / Pipeline / Forecast / Eligibility & Concentrations)", async () => {
     render(<AppShell />);
     const nav = await screen.findByRole("tablist", { name: "MI workspace view" });
     const labels = within(nav).getAllByRole("tab").map((t) => t.textContent?.trim());
-    expect(labels).toEqual(["Funded", "Pipeline", "Forecast", "Risk Limits"]);
+    expect(labels).toEqual(["Funded", "Pipeline", "Forecast", "Eligibility & Concentrations"]);
     // Evolution and Geography are no longer top-level tabs.
     expect(labels).not.toContain("Evolution");
     expect(labels).not.toContain("Geography");

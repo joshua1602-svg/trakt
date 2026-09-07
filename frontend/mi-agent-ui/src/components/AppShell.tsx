@@ -69,7 +69,7 @@ const VIEW_SUBTITLES: Record<string, string> = {
   funded: "Funded book — the funded-loan book as of the selected reporting date: stratifications, geographic exposure, time-series evolution and static-pool cohorts.",
   pipeline: "Pipeline — the open origination pipeline: current stratifications, its evolution (stock levels over time and the weekly origination funnel flow), and the case-level stage movement between the two latest governed extracts.",
   forecast: "Forecast — forward projection from the latest run (funded + weighted pipeline + run-rate scale-up), and how the forecast has moved across runs.",
-  risk_limits: "Risk Limits — Schedule 8 concentration limits vs funded actual exposure, headroom and status.",
+  risk_limits: "Eligibility & Concentrations — the facility borrowing base and the eligible / ineligible / undetermined split of the Financing Portfolio, with the Schedule 8 concentration limits measured over Eligible Mortgage Loans: current exposure, limit, headroom and status.",
 };
 
 type FundedTab = "strat" | "geo" | "evo" | "cohorts";
@@ -410,8 +410,9 @@ export function AppShell() {
                   />
                 )}
                 {/* FUNDED — stratifications · geography · evolution · cohorts.
-                    Risk Limits lives ONCE, as the top-level tab (no duplicate
-                    sub-tab entry pointing at the same workspace). */}
+                    Eligibility & Concentrations lives ONCE, as the top-level
+                    tab (no duplicate sub-tab entry pointing at the same
+                    workspace). */}
                 {ws.activeView === "funded" && (
                   <div className="stack-section">
                     <SubTabs ariaLabel="Funded sub-view" testId="funded-subtabs"

@@ -188,6 +188,10 @@ class TestProposal:
     concern_messages: List[str] = field(default_factory=list)
     confirmation_questions: List[str] = field(default_factory=list)
     confirmation_answers: List[Dict[str, str]] = field(default_factory=list)
+    #: The population the CONTRACT states this test is measured over, read
+    #: from the clause's own wording. Empty means the whole funded book — what
+    #: every test extracted before facility populations existed resolves to.
+    population: str = ""
     status: str = PROPOSAL_PROPOSED
     #: The recorded operator decision, once one is taken (ApprovalRecord dict).
     approval: Dict[str, Any] = field(default_factory=dict)
@@ -275,6 +279,16 @@ class ActiveTest:
     approval: ApprovalRecord = field(default_factory=ApprovalRecord)
     severity: str = "high"           # high | critical (display/escalation only)
     definition_notes: str = ""       # the confirmed contractual definition
+    #: The POPULATION this test is measured over. Empty (the default, and what
+    #: every existing configuration document deserialises to) means the whole
+    #: funded book, exactly as before. ``eligible_mortgage_loans`` restricts
+    #: both numerator and denominator to loans the governed borrowing-base
+    #: eligibility derivation marked ELIGIBLE — what a facility Schedule 8
+    #: means when it says "Eligible Mortgage Loans". A population the caller
+    #: cannot supply makes the test unavailable, never a whole-book fallback:
+    #: silently widening the population would answer a different question
+    #: under the contractual test's name.
+    population: str = ""
     schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:

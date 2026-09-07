@@ -1,5 +1,13 @@
 /**
- * Funded → Risk Limits — three-state concentration workspace.
+ * Eligibility & Concentrations — the facility position and the three-state
+ * concentration workspace, in one tab.
+ *
+ * The tab leads with the BORROWING BASE (eligible collateral, the borrowing
+ * base, drawings, headroom, utilisation) and the eligible / ineligible /
+ * undetermined split of the Financing Portfolio, then the Schedule 8
+ * concentration limits measured over Eligible Mortgage Loans. Both come from
+ * ONE request and ONE governed evaluation of ONE frame, so the two halves of
+ * the tab cannot disagree with each other.
  *
  * One governed evaluation (`/mi/concentration-tests`) supplies everything:
  * the contractual **Funded** position, the **Expected Forecast** (existing
@@ -22,6 +30,8 @@ import type {
   ConcentrationTestsSnapshot,
 } from "@/domain";
 import { Badge, Card } from "@/components/ui";
+import { BorrowingBasePanel } from "./BorrowingBasePanel";
+import { EligibilityLoansPanel } from "./EligibilityLoansPanel";
 import { ConcentrationDetailPanel } from "./ConcentrationDetailPanel";
 import {
   RISK_CHIP,
@@ -217,6 +227,9 @@ export function RiskLimitsWorkspace({
   const [stressOnly, setStressOnly] = useState(false);
   const [showPrior, setShowPrior] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [eligibilityStatus, setEligibilityStatus] = useState<
+    "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED" | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -311,8 +324,9 @@ export function RiskLimitsWorkspace({
           className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[12px] text-amber-300/90"
           data-testid="concentration-error"
         >
-          The Risk Limits service could not be reached. The last governed results will
-          reappear when it recovers — nothing is estimated in the meantime.
+          The Eligibility &amp; Concentrations service could not be reached. The last
+          governed results will reappear when it recovers — nothing is estimated in the
+          meantime.
         </p>
       </Card>
     );
@@ -320,9 +334,28 @@ export function RiskLimitsWorkspace({
   if (!snapshot) return null;
 
   if (!snapshot.available || tests.length === 0) {
+    // No approved concentration tests does NOT mean no facility position: the
+    // borrowing base has its own inputs and is shown either way.
     return (
-      <Card className="p-4 space-y-2" testId="risk-limits-panel">
-        <h2 className="text-[14px] font-semibold text-ink-100">Risk Limits</h2>
+      <div className="space-y-3" data-testid="risk-limits-panel">
+        <h2 className="text-[14px] font-semibold text-ink-100">
+          Eligibility &amp; Concentrations
+        </h2>
+        <BorrowingBasePanel
+          snapshot={snapshot.borrowingBase}
+          population={snapshot.eligiblePopulation}
+          onShowLoans={setEligibilityStatus}
+        />
+        {eligibilityStatus && (
+          <EligibilityLoansPanel
+            client={client}
+            portfolioId={portfolioId}
+            portfolioContext={portfolioContext}
+            status={eligibilityStatus}
+            onClose={() => setEligibilityStatus(null)}
+          />
+        )}
+        <Card className="p-4">
         <p
           className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[12px] text-ink-400"
           data-testid="concentration-empty"
@@ -339,7 +372,8 @@ export function RiskLimitsWorkspace({
             <span className="block text-ink-500">{String(snapshot.lineage.note)}</span>
           ) : null}
         </p>
-      </Card>
+        </Card>
+      </div>
     );
   }
 
@@ -348,7 +382,9 @@ export function RiskLimitsWorkspace({
   return (
     <div className="space-y-3" data-testid="risk-limits-panel">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[14px] font-semibold text-ink-100">Risk Limits</h2>
+        <h2 className="text-[14px] font-semibold text-ink-100">
+          Eligibility &amp; Concentrations
+        </h2>
         <p className="text-[11px] text-ink-500">
           Reporting date {formatDate(snapshot.reportingDate)}
           {s.priorAvailable && <> · prior {formatDate(s.priorReportingDate)}</>}
@@ -361,6 +397,27 @@ export function RiskLimitsWorkspace({
 
       <SourceBanner snapshot={snapshot} />
       <ForecastBanner snapshot={snapshot} />
+
+      {/* The facility position leads the tab: what collateral is eligible,
+          what it supports, and how much of that is drawn. */}
+      <BorrowingBasePanel
+        snapshot={snapshot.borrowingBase}
+        population={snapshot.eligiblePopulation}
+        onShowLoans={setEligibilityStatus}
+      />
+      {eligibilityStatus && (
+        <EligibilityLoansPanel
+          client={client}
+          portfolioId={portfolioId}
+          portfolioContext={portfolioContext}
+          status={eligibilityStatus}
+          onClose={() => setEligibilityStatus(null)}
+        />
+      )}
+
+      <h3 className="pt-1 text-[12px] font-semibold text-ink-100">
+        Schedule 8 concentrations
+      </h3>
 
       {/* Portfolio summary — grouped by state, left → right. */}
       <div

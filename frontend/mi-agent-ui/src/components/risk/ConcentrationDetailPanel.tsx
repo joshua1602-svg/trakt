@@ -588,12 +588,36 @@ export function ConcentrationDetailPanel({
             <span className="font-mono tabular-nums">
               {formatValue(test.headroom, test.unit === "percent" ? "percent" : test.unit)}
             </span>
+            {/* Headroom in CURRENCY, where the maths permits it: a percentage
+                test measured against a stated denominator converts exactly.
+                A test with no denominator (an average, a count, a rate) has no
+                currency headroom, and none is shown rather than one built from
+                a denominator the test never used. */}
+            {test.unit === "percent" &&
+              test.headroom !== null &&
+              test.denominatorValue !== null && (
+                <span className="ml-2 font-mono tabular-nums text-ink-400">
+                  ({formatValue((test.headroom * test.denominatorValue) / 100,
+                                "currency")})
+                </span>
+              )}
             {test.utilization !== null && (
               <span className="ml-2 text-ink-500">
                 utilization {test.utilization.toFixed(1)}%
               </span>
             )}
           </Row>
+          {test.population && (
+            <Row label="Population">
+              {test.populationLabel ?? test.population.replace(/_/g, " ")}
+              {test.populationBasis && test.populationBasis !== "governed_eligibility" && (
+                <span className="ml-2 text-amber-300/90">
+                  measured over the whole funded book — no governed eligibility
+                  determination exists for this portfolio
+                </span>
+              )}
+            </Row>
+          )}
           <Row label="Period movement">
             {formatChange(test.absoluteChange, test.unit)}
             {test.priorValue !== null && (

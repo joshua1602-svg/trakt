@@ -36,6 +36,7 @@ _BY_RULE = {
     "date_or_nd": "2026-06-30",
     "yes_no": "yes",
     "boolean": "yes",
+    "number": "250,000,000",
 }
 
 

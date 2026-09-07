@@ -157,6 +157,67 @@ class Validator:
                                index=index, owner=owner))
         return out
 
+    # -- funding facility (advisory) --------------------------------------- #
+    #: The one message the onboarding surfaces show when a book's funding rules
+    #: are not yet governed. Named so the UI, the tests and the OCC agent all
+    #: quote the same words.
+    FACILITY_NOT_GOVERNED = "Funding facility rules not fully governed"
+
+    def _funding_facility(self, case: OnboardingCase) -> List["Problem"]:
+        """Advisory notes on facility governance. Never blocks onboarding."""
+        status_field = self.catalogue.field("funding_facility",
+                                            "facility_documentation_status")
+        if status_field is None or not self.catalogue.is_asked(status_field,
+                                                              case.answers):
+            return []
+        block = case.answers.get("funding_facility") or {}
+        status = str(block.get("facility_documentation_status") or "").strip()
+        if status == "no_facility":
+            return []
+
+        out: List[Problem] = []
+        if status in ("", "pending_client_response", "deferred_with_reason"):
+            out.append(Problem(
+                "funding_facility", "facility_documentation_status",
+                f"{self.FACILITY_NOT_GOVERNED} — the warehouse / funding "
+                "facility documentation has not been received, so eligible "
+                "collateral, the borrowing base and facility headroom cannot "
+                "be reported. Nothing else in onboarding is held up by it.",
+                severity=SEVERITY_ADVISORY, owner="client"))
+            return out
+
+        # Supplied: the terms an operator must have taken off the document
+        # before the borrowing base means anything.
+        missing = [self.catalogue.field("funding_facility", key).label
+                   for key in ("facility_id", "facility_commitment",
+                               "facility_advance_rate")
+                   if self.catalogue.field("funding_facility", key) is not None
+                   and not _present(block.get(key))]
+        if missing:
+            out.append(Problem(
+                "funding_facility", "facility_id",
+                f"{self.FACILITY_NOT_GOVERNED} — the documentation is "
+                "recorded as supplied but "
+                + ", ".join(missing).lower()
+                + " has not been taken off it yet.",
+                severity=SEVERITY_ADVISORY))
+        if str(block.get("facility_eligibility_status") or "") != "approved":
+            out.append(Problem(
+                "funding_facility", "facility_eligibility_status",
+                f"{self.FACILITY_NOT_GOVERNED} — the Eligible Mortgage Loan "
+                "definition has not been approved, so every loan's governed "
+                "eligibility status is UNDETERMINED and no eligible "
+                "collateral balance is reported.",
+                severity=SEVERITY_ADVISORY))
+        if not _present(block.get("facility_current_drawn_amount")):
+            out.append(Problem(
+                "funding_facility", "facility_current_drawn_amount",
+                "No current drawn amount has been supplied, so facility "
+                "headroom and utilisation report NOT CALCULABLE. The "
+                "borrowing base itself is unaffected.",
+                severity=SEVERITY_ADVISORY))
+        return out
+
     # -- structural rules ------------------------------------------------- #
     def _structural(self, case: OnboardingCase) -> List[Problem]:
         out: List[Problem] = []
@@ -190,6 +251,14 @@ class Validator:
                     "risk_limits", "concentration_tests",
                     "The request is marked supplied but no response is "
                     "recorded — a blank answer cannot count as supplied."))
+
+        # Funding-facility governance is ADVISORY, never blocking. A client
+        # who finances the book some other way is not held up by a warehouse
+        # question, and a client who does have a facility but has not sent the
+        # agreement still onboards — Trakt simply cannot report a governed
+        # borrowing base for them yet, and says so rather than reporting one
+        # built on assumptions.
+        out.extend(self._funding_facility(case))
 
         # A new client may not take an identifier already in use. An amendment
         # or migration keeps the identifier it already has, so the collision

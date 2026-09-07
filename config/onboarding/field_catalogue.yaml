@@ -808,6 +808,315 @@ sections:
   # config/regime/onboarding_standing_fields.yaml so that a future regime is a
   # configuration change; this section tells the wizard where to render them.
   # -----------------------------------------------------------------------
+  # -----------------------------------------------------------------------
+  # Warehouse / funding facility governance.
+  #
+  # A funded book that finances itself through a warehouse or borrowing-base
+  # facility is monitored against a CONTRACT, not against house policy. Trakt
+  # cannot report an eligible collateral balance, a borrowing base or headroom
+  # until somebody has read that contract and recorded its terms.
+  #
+  # This section is deliberately shaped as ONE document request to the client
+  # plus a block of OPERATOR-approved structured terms. The client sends what
+  # they have; an operator reads it and records the terms. Trakt does not
+  # interpret a facility agreement autonomously — a legal document read by a
+  # model and silently turned into a live control is exactly the failure this
+  # split exists to prevent.
+  #
+  # The structured terms below write into the client's own configuration under
+  # `funding_facility:`, which is what mi_agent/borrowing_base/config.py reads.
+  # Nothing here is required: a client with no facility is unaffected, and a
+  # client who has one but has not sent it is flagged "Funding facility rules
+  # not fully governed" rather than blocked.
+  # -----------------------------------------------------------------------
+  - key: funding_facility
+    optional_context: true
+    label: Warehouse / funding facility
+    help: >-
+      If this portfolio is financed through a warehouse, borrowing-base or
+      other secured facility, Trakt can monitor eligible collateral, the
+      borrowing base and facility headroom alongside the concentration tests.
+      That needs the facility documentation and a short set of terms taken
+      from it.
+    fields:
+
+      - key: facility_documentation
+        # Funding-facility monitoring only exists where the client takes an MI
+        # surface, on the same rule as the concentration tests above.
+        asked_when: "reporting.products contains mi"
+        label: Warehouse / Funding Facility Documentation
+        help: >-
+          If the portfolio is financed through a warehouse, borrowing-base or
+          other secured facility, please provide the current facility agreement
+          and relevant schedules/amendments. If available, also provide the
+          latest borrowing-base certificate or facility statement showing
+          current drawings.
+        scope: risk
+        source: client_supplied
+        type: multiline
+        required: false
+        required_when: "funding_facility.facility_documentation_status == supplied"
+        max_length: 20000
+        consumers: [Facility configuration, Borrowing base,
+                    Eligibility and Concentrations, MI Query]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: facility_documentation_status
+        asked_when: "reporting.products contains mi"
+        label: Facility documentation status
+        help: >-
+          Where the facility documentation request stands. Only an operator
+          moves it off "pending client response". "No facility" is a complete,
+          valid answer for a book that finances itself no other way.
+        scope: risk
+        source: operator_supplied
+        type: enum
+        options:
+          - {value: pending_client_response, label: Pending client response}
+          - {value: supplied, label: Supplied}
+          - {value: no_facility, label: No funding facility}
+          - {value: deferred_with_reason, label: Deferred with reason}
+        default: pending_client_response
+        required: false
+        consumers: [Onboarding readiness, Facility configuration]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: facility_documentation_reference
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Facility document references
+        help: >-
+          Which documents the terms below were read from — agreement name and
+          date, schedule numbers, amendment references, and the certificate or
+          statement the drawn balance came from. Recorded as the provenance of
+          every facility figure Trakt reports.
+        scope: risk
+        source: operator_supplied
+        type: multiline
+        required: false
+        required_when: "funding_facility.facility_documentation_status == supplied"
+        max_length: 4000
+        consumers: [Facility configuration, Borrowing-base receipt]
+        writes_to: client_config:funding_facility.governance.source_reference
+        amendable: true
+
+      # -- the structured terms, read off the document by an operator -------- #
+      - key: facility_id
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Facility identifier
+        help: >-
+          A short stable identifier for this facility, used to attribute every
+          loan-level eligibility determination to it, such as WAREHOUSE_01.
+        scope: risk
+        source: operator_supplied
+        type: identifier
+        validation: identifier
+        required: false
+        required_when: "funding_facility.facility_documentation_status == supplied"
+        consumers: [Facility configuration, Borrowing base, Canonical eligibility]
+        writes_to: client_config:funding_facility.facility_id
+        amendable: true
+
+      - key: facility_type
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Facility type
+        scope: risk
+        source: operator_supplied
+        type: enum
+        options:
+          - {value: warehouse, label: Warehouse facility}
+          - {value: borrowing_base, label: Borrowing-base facility}
+          - {value: repo, label: Repo}
+          - {value: forward_flow, label: Forward flow}
+          - {value: other, label: Other secured facility}
+        default: warehouse
+        required: false
+        consumers: [Facility configuration]
+        writes_to: client_config:funding_facility.facility_type
+        amendable: true
+
+      - key: facility_currency
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Facility currency
+        help: The currency the commitment and drawings are denominated in.
+        scope: risk
+        source: operator_supplied
+        type: currency
+        validation: currency
+        required: false
+        consumers: [Facility configuration, Borrowing base]
+        writes_to: client_config:funding_facility.currency
+        amendable: true
+
+      - key: facility_commitment
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Facility commitment
+        help: >-
+          The committed amount, as an amount rather than a description
+          (e.g. 250,000,000). The available borrowing base is capped at it.
+        scope: risk
+        source: operator_supplied
+        type: number
+        validation: number
+        required: false
+        required_when: "funding_facility.facility_documentation_status == supplied"
+        consumers: [Borrowing base]
+        writes_to: client_config:funding_facility.commitment
+        amendable: true
+
+      - key: facility_advance_rate
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Advance rate
+        help: >-
+          The contractual advance rate against eligible collateral, as a
+          percentage: enter 103 for 103%.
+        scope: risk
+        source: operator_supplied
+        type: number
+        validation: number
+        required: false
+        required_when: "funding_facility.facility_documentation_status == supplied"
+        consumers: [Borrowing base]
+        writes_to: client_config:funding_facility.advance_rate
+        amendable: true
+
+      - key: facility_concentration_denominator_floor
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Concentration Limit Denominator floor
+        help: >-
+          The contractual floor in the Concentration Limit Denominator
+          definition — the amount the eligible balance is compared against, as
+          in "the greater of £33,000,000 and the Current Balance of all
+          Eligible Mortgage Loans". Leave blank if the definition has no floor.
+        scope: risk
+        source: operator_supplied
+        type: number
+        validation: number
+        required: false
+        consumers: [Schedule 8 concentrations, Borrowing base]
+        writes_to: client_config:funding_facility.concentration_denominator_floor
+        amendable: true
+
+      - key: facility_current_drawn_amount
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Current drawn amount
+        help: >-
+          Current drawings under the facility, from the latest borrowing-base
+          certificate or facility statement. LEAVE IT BLANK if you do not have
+          one: headroom and utilisation are then reported as NOT CALCULABLE
+          with the missing input named, which is the truth. A placeholder here
+          becomes a headroom figure somebody relies on.
+        scope: risk
+        source: operator_supplied
+        type: number
+        validation: number
+        required: false
+        consumers: [Borrowing base]
+        writes_to: client_config:funding_facility.current_drawn_amount
+        amendable: true
+
+      - key: facility_current_drawn_amount_as_of
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Drawn amount as at
+        help: The date the drawn balance above was stated (YYYY-MM-DD).
+        scope: risk
+        source: operator_supplied
+        type: text
+        validation: date
+        required: false
+        consumers: [Borrowing base, Borrowing-base receipt]
+        writes_to: client_config:funding_facility.current_drawn_amount_as_of
+        amendable: true
+
+      - key: facility_effective_date
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Facility effective date
+        scope: risk
+        source: operator_supplied
+        type: text
+        validation: date
+        required: false
+        consumers: [Facility configuration]
+        writes_to: client_config:funding_facility.effective_date
+        amendable: true
+
+      - key: facility_maturity_date
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Facility maturity date
+        help: Leave blank if the agreement does not state one.
+        scope: risk
+        source: operator_supplied
+        type: text
+        validation: date
+        required: false
+        consumers: [Facility configuration]
+        writes_to: client_config:funding_facility.maturity_date
+        amendable: true
+
+      - key: facility_eligibility_status
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Eligible Mortgage Loan definition
+        help: >-
+          Whether the contractual definition of an eligible loan has been
+          supplied and turned into approved eligibility rules. Until it is,
+          every loan's governed eligibility status is UNDETERMINED — Trakt does
+          not infer eligibility from the concentration limits, because passing
+          a portfolio-level concentration test says nothing about whether an
+          individual loan qualifies.
+        scope: risk
+        source: operator_supplied
+        type: enum
+        options:
+          - {value: awaiting_facility_agreement,
+             label: Awaiting the facility agreement}
+          - {value: supplied_pending_approval,
+             label: Supplied, pending operator approval}
+          - {value: approved, label: Approved and active}
+        default: awaiting_facility_agreement
+        required: false
+        consumers: [Canonical eligibility, Borrowing base, Onboarding readiness]
+        writes_to: client_config:funding_facility.eligibility.status
+        amendable: true
+
+      - key: facility_eligibility_criteria
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Eligible Mortgage Loan criteria
+        help: >-
+          The contractual criteria a loan must meet to be an Eligible Mortgage
+          Loan, as the agreement states them. Recorded verbatim for review;
+          each criterion becomes an approved eligibility rule only after an
+          operator confirms how it is measured on this book.
+        scope: risk
+        source: operator_supplied
+        type: multiline
+        required: false
+        max_length: 20000
+        consumers: [Canonical eligibility, Facility configuration]
+        writes_to: onboarding_record
+        amendable: true
+
+      - key: facility_breach_treatment
+        asked_when: "funding_facility.facility_documentation_status == supplied"
+        label: Consequence of a concentration breach
+        help: >-
+          What the agreement says a concentration breach does to the borrowing
+          base. Until this is known, breaches are MONITORED and nothing is
+          deducted — Trakt does not invent a contractual consequence.
+        scope: risk
+        source: operator_supplied
+        type: enum
+        options:
+          - {value: monitor_only,
+             label: Not stated / monitor only (nothing deducted)}
+          - {value: exclude_excess,
+             label: Excess over the limit is excluded from eligible collateral}
+        default: monitor_only
+        required: false
+        consumers: [Borrowing base]
+        writes_to: client_config:funding_facility.concentration.borrowing_base_treatment
+        amendable: true
+
   - key: regime
     label: Regulatory information
     help: >-

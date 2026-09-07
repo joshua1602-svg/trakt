@@ -48,6 +48,12 @@ logger = logging.getLogger("mi_agent_api.funded_prep")
 # an LTV column whose median exceeds this is treated as a percentage (÷100).
 _PERCENT_MEDIAN = 1.5
 
+#: The governed borrowing-base eligibility columns, named by the module that
+#: produces them so the two never drift apart.
+_BORROWING_BASE_FIELDS: Tuple[str, ...] = (
+    "borrowing_base_eligible", "borrowing_base_eligibility_status",
+    "borrowing_base_eligibility_reason", "borrowing_base_facility_id")
+
 # Core funded stratification dimensions and how each is sourced.
 #   kind: bucket_ltv | bucket | bucket_derived | derived | group
 # A ``group`` dimension is satisfied by ANY of several interchangeable source
@@ -475,6 +481,47 @@ def _derive_borrower_type(out: pd.DataFrame, derived: List[str]) -> None:
         derived.append("borrower_type")
 
 
+def _derive_borrowing_base_eligibility(out: pd.DataFrame,
+                                      client_id: Optional[str] = None
+                                      ) -> Dict[str, Any]:
+    """Stamp the governed borrowing-base eligibility columns onto the frame.
+
+    Eligibility is a property of a LOAN against a FACILITY, so it belongs in
+    the canonical preparation layer beside the region harmonisation, not in a
+    dashboard: the Risk Limits workspace, MI Query, Teams, the PPTX pack and
+    any future funding or regulatory component then read one already-resolved
+    determination instead of each applying its own.
+
+    A client with no configured funding facility gets a no-op and behaves
+    exactly as before — the four columns are simply absent, and every consumer
+    already treats their absence as "no facility". Failure is a no-op too:
+    eligibility is additive and must never break preparation for a book that
+    has nothing to do with a warehouse.
+    """
+    try:
+        from mi_agent.borrowing_base.config import load_facility
+        from mi_agent.borrowing_base.eligibility import derive_eligibility
+        client = client_id or _client_hint(out)
+        if not client:
+            return {"applied": False, "reason": "client_not_identified"}
+        facility = load_facility(client)
+        if facility is None:
+            return {"applied": False, "reason": "no_facility_configured"}
+        problems = facility.validate()
+        blocking = [p for p in problems if not p.endswith("It will NOT be honoured.")]
+        if blocking:
+            logger.warning("facility configuration unusable for %s: %s",
+                           client, "; ".join(blocking))
+            return {"applied": False, "reason": "facility_configuration_invalid",
+                    "problems": problems}
+        receipt = derive_eligibility(out, facility)
+        receipt["configuration_warnings"] = problems
+        return receipt
+    except Exception as exc:  # noqa: BLE001 - additive layer, never fatal
+        logger.warning("borrowing-base eligibility derivation skipped: %s", exc)
+        return {"applied": False, "reason": "derivation_error", "detail": str(exc)}
+
+
 def _dedupe_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
     """Collapse duplicate-named columns into one, coalescing values row-wise.
 
@@ -534,6 +581,13 @@ def augment_platform_canonical_dimensions(df: pd.DataFrame, *, geography: Any = 
         for f in (_region.FIELD_DETAIL, _region.FIELD_REPORTING):
             if f not in derived:
                 derived.append(f)
+    # Governed borrowing-base eligibility, on the same read-time principle as
+    # the derivations above: a facility determination reaches the platform
+    # canonical without an onboarding re-run.
+    if _derive_borrowing_base_eligibility(out).get("applied"):
+        for f in _BORROWING_BASE_FIELDS:
+            if f not in derived:
+                derived.append(f)
     return out, derived
 
 
@@ -561,6 +615,16 @@ def _derive_source_fields(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str], Li
 def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Return ``(analytics_ready_df, report)`` for a funded central lender tape."""
     out, derived, ltv_basis, dedup = _derive_source_fields(df)
+
+    # Governed borrowing-base eligibility. Runs BEFORE bucketing so a later
+    # dimension can stratify on it, and produces the four canonical columns the
+    # Schedule 8 view, the borrowing-base engine and MI all read. A book with
+    # no configured facility is untouched.
+    eligibility = _derive_borrowing_base_eligibility(out)
+    if eligibility.get("applied"):
+        for f in _BORROWING_BASE_FIELDS:
+            if f not in derived:
+                derived.append(f)
 
     applied: Dict[str, Any] = {}
     issues: List[Dict[str, Any]] = []
@@ -637,6 +701,11 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
         "buckets_applied": {k: v for k, v in applied.items() if v},
         "group_aliases": group_aliases,
         "duplicate_columns_collapsed": dedup,
+        # Provenance for the eligibility determination: which facility, which
+        # rule version, what each rule could read, and every prototype
+        # assumption in play. A derived status can never be mistaken for a
+        # supplied one.
+        "borrowing_base_eligibility": eligibility,
         "dimensions_available": sorted(available),
         "missing_dimensions": missing,
         "bucket_errors": [i for i in (issues or []) if i.get("severity") == "error"][:20],

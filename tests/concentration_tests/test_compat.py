@@ -24,8 +24,12 @@ class TestLegacyPythonDict:
         for p in proposals:
             by_metric.setdefault(p.proposed_metric_id, []).append(p)
         # The regional grid maps onto ONE library metric with parameters —
-        # not twelve bespoke calculators.
-        assert len(by_metric.get("geo_region_share", [])) == 12
+        # not a bespoke calculator per region. ELEVEN, not twelve: the supplied
+        # Schedule 8 states London and South East as ONE combined UKI + UKJ
+        # limit, so the two separate regional entries the legacy config used to
+        # carry are now one, alongside the Northern Ireland entry the schedule
+        # does not cover and the legacy monitor keeps.
+        assert len(by_metric.get("geo_region_share", [])) == 11
         assert "borrower_largest_share" in by_metric
         assert "borrower_max_loans" in by_metric
         assert "rate_type_share" in by_metric

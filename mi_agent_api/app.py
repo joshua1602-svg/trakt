@@ -1802,6 +1802,84 @@ def concentration_tests(portfolioId: Optional[str] = None,
                 "error": str(exc)}
 
 
+@app.get("/mi/borrowing-base")
+def borrowing_base(portfolioId: Optional[str] = None,
+                   client_id: Optional[str] = None,
+                   toRunId: Optional[str] = None,
+                   to_run_id: Optional[str] = None,
+                   portfolioContext: Optional[str] = None,
+                   request: Request = None, response: Response = None
+                   ) -> Dict[str, Any]:
+    """Governed facility borrowing base for the funded book.
+
+    Eligible collateral, the Concentration Limit Denominator, the gross and
+    available borrowing base, drawings, headroom, deficiency and utilisation —
+    each either a number or NOT_CALCULABLE with the missing input named, never
+    a zero standing in for an absent fact. The figures are the SAME block the
+    Eligibility & Concentrations tab renders, taken from one evaluation of one
+    frame. Never 500s."""
+    from . import borrowing_base_api as bb_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    etag = http_cache.begin(
+        request, route="mi.borrowing-base", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
+    try:
+        def _compute():
+            resolved = _resolve_portfolio_context(portfolioContext, cid)
+            result = bb_mod.compute_borrowing_base(
+                root, cid, trid, scope=resolved.scope if resolved else None)
+            if resolved is not None:
+                result["portfolioScope"] = resolved.scope.to_dict()
+            return result
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
+    except Exception as exc:  # noqa: BLE001 - the monitor must never 500
+        logger.warning("borrowing-base failed: %s", exc)
+        return {"portfolioId": cid, "toRunId": trid, "available": False,
+                "reason": "The borrowing-base service could not be reached.",
+                "measures": {}, "error": str(exc)}
+
+
+@app.get("/mi/borrowing-base/loans")
+def borrowing_base_loans(status: str,
+                         portfolioId: Optional[str] = None,
+                         client_id: Optional[str] = None,
+                         toRunId: Optional[str] = None,
+                         to_run_id: Optional[str] = None,
+                         portfolioContext: Optional[str] = None,
+                         request: Request = None, response: Response = None
+                         ) -> Dict[str, Any]:
+    """The loans carrying one governed eligibility status (ELIGIBLE /
+    INELIGIBLE / UNDETERMINED), with the reason each was classified that way.
+
+    Discloses the same governed field roles the concentration drill-through
+    does — no wider view of the tape — plus the eligibility determination
+    itself. Never 500s."""
+    from . import borrowing_base_api as bb_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    etag = http_cache.begin(
+        request, route="mi.borrowing-base.loans", scope=portfolioContext,
+        # The status is part of the cache identity: two statuses are two
+        # different answers. `dataset_identity` is None when the dataset cannot
+        # be identified, and stays None here rather than becoming the string
+        # "None|ELIGIBLE", which would look like a real identity.
+        identity=(f"{http_cache.dataset_identity(cid, trid)}|{status}"
+                  if http_cache.dataset_identity(cid, trid) else None))
+    try:
+        def _compute():
+            resolved = _resolve_portfolio_context(portfolioContext, cid)
+            return bb_mod.compute_eligibility_loans(
+                root, cid, trid, status,
+                scope=resolved.scope if resolved else None)
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
+    except Exception as exc:  # noqa: BLE001 - never 500
+        logger.warning("borrowing-base loans failed: %s", exc)
+        return {"available": False,
+                "reason": "The eligibility drill-down could not be reached.",
+                "rows": [], "columns": [], "error": str(exc)}
+
+
 @app.get("/mi/concentration-tests/drillthrough")
 def concentration_drillthrough(testId: str,
                                portfolioId: Optional[str] = None,

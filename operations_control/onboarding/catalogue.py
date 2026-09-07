@@ -49,6 +49,11 @@ EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 IDENT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$")
 COLOUR_RE = re.compile(r"^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+#: A money or rate amount as an operator types it: an optional currency symbol,
+#: thousands separators and an optional decimal part. Accepted so a facility
+#: commitment can be entered as "250,000,000" or "£250000000" and still reach
+#: configuration as a number.
+NUMBER_RE = re.compile(r"^[£$€]?\s*-?\d{1,3}(?:,\d{3})*(?:\.\d+)?$|^[£$€]?\s*-?\d+(?:\.\d+)?$")
 
 
 @dataclass
@@ -523,6 +528,10 @@ def validate_value(f: Field, value: Any) -> str:
         return f"{f.label} must be a date, or ND where none applies."
     if rule == "yes_no" and text.upper() not in ("Y", "N"):
         return f"{f.label} must be yes or no."
+    if rule == "number" and not NUMBER_RE.fullmatch(text):
+        return f"{f.label} must be an amount, such as 250,000,000."
+    if rule == "date" and not DATE_RE.fullmatch(text):
+        return f"{f.label} must be a date in YYYY-MM-DD form."
     if f.max_length and len(text) > int(f.max_length):
         return f"{f.label} is longer than {f.max_length} characters."
     if rule == "enum" and f.options:

@@ -164,13 +164,19 @@ export function WeeklyBriefPanel({
     client, portfolioId, portfolioContext, asOf, enabled: on, ready,
   });
 
-  // Read once this brief's identity is known, and again whenever a NEW brief
-  // (a new data upload) arrives with a different one — so a stale "dismissed"
-  // flag from last week's brief never hides this week's.
+  // Read SYNCHRONOUSLY on mount, and again whenever a NEW brief (a new data
+  // upload) arrives with a different identity — so a stale "dismissed" flag
+  // from last week's brief never hides this week's.
+  //
+  // The initial read is lazy state rather than an effect on purpose. Reading it
+  // in an effect left one committed frame in which the brief had arrived but
+  // the dismissal had not been read yet, so an already-read brief flashed on
+  // every load before hiding itself.
   const identity = brief ? briefIdentity(brief) : null;
-  const [dismissedId, setDismissedId] = useState<string | null>(null);
+  const [dismissedId, setDismissedId] = useState<string | null>(
+    () => readDismissed(portfolioId));
   useEffect(() => {
-    if (identity) setDismissedId(readDismissed(portfolioId));
+    setDismissedId(readDismissed(portfolioId));
   }, [portfolioId, identity]);
   const dismissed = Boolean(identity) && identity === dismissedId;
 
