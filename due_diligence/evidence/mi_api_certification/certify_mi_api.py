@@ -790,6 +790,83 @@ def basis_of_field_owner() -> Optional[Callable[[Optional[str]], Optional[str]]]
     return _BASIS_OF_FIELD[0]
 
 
+#: Cache for the governed region owner, on the same by-path contract.
+_REGION_RESOLVE: List[Any] = []
+
+
+def region_resolver_owner() -> Optional[Callable[..., Any]]:
+    """``mi_agent.region_resolution.resolve``, loaded BY PATH.
+
+    WHY THE HARNESS ASKS RATHER THAN MAPS. "Scottish" covers whichever governed
+    labels the region ladder says it covers, and that set is a property of the
+    estate's taxonomy, not of this gate. A mapping written here would be a
+    second taxonomy — able to disagree with the one production actually used,
+    and to disagree silently, which is how a certification ends up asserting its
+    own fixture.
+
+    Same by-path load as the field-to-basis owner, and for the same reason: this
+    module's imports are stdlib only, and the certification workflow installs no
+    dependencies. Returns None if it cannot be loaded; the caller must then
+    report the question as UNADJUDICATED rather than pass it.
+    """
+    if not _REGION_RESOLVE:
+        import importlib.util
+
+        source = _REPO_ROOT / "mi_agent" / "region_resolution.py"
+        try:
+            name = "_trakt_region_resolution_for_acceptance"
+            spec = importlib.util.spec_from_file_location(name, source)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)      # type: ignore[union-attr]
+            _REGION_RESOLVE.append(module.resolve)
+        except Exception as exc:                 # noqa: BLE001
+            print(f"  the governed region owner could not be loaded: {exc}")
+            _REGION_RESOLVE.append(None)
+    return _REGION_RESOLVE[0]
+
+
+def _group_table(envelope: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Every returned group, with its label and both measures.
+
+    THE EVIDENCE THAT ADJUDICATES A DISAGREEMENT. A filtered answer and a
+    grouped cell that disagree have two possible explanations — one governed
+    taxonomy spread over several labels, or two different geography semantics —
+    and they are indistinguishable from a total. Printing the labels makes the
+    log itself sufficient, which matters when the artefact store is unreachable.
+    """
+    rows = _acceptance_rows(envelope)
+    key = _measured_region_field(envelope)
+    if not rows or not key:
+        return []
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        if key not in row:
+            continue
+        entry: Dict[str, Any] = {"label": str(row[key])}
+        for name, candidates in (
+                ("balance", ("current_outstanding_balance_sum", "balance")),
+                ("count", ("loan_count", "count"))):
+            for candidate in candidates:
+                if candidate in row:
+                    try:
+                        entry[name] = float(row[candidate])
+                    except (TypeError, ValueError):
+                        pass
+                    break
+        out.append(entry)
+    return out
+
+
+def _resolved_filters(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """The filter the service actually applied, as it reports it."""
+    recon = envelope.get("reconciliation") or {}
+    if isinstance(recon.get("filters"), dict) and recon["filters"]:
+        return recon["filters"]
+    spec = envelope.get("spec") or {}
+    return spec.get("filters") or {}
+
+
 def _measured_region_field(envelope: Dict[str, Any]) -> Optional[str]:
     """The region column the answer was actually MEASURED on.
 
@@ -952,6 +1029,14 @@ def geography_acceptance(ask: Callable[[str], Dict[str, Any]], *,
             "basisSource": block.get("basisSource"),
             "measuredField": _measured_region_field(envelope),
             "measuredBasis": _measured_basis(envelope),
+            # PUBLISHED BY THE SERVICE ALL ALONG, and not recorded until a live
+            # run refused an explicit basis that the generic question had just
+            # been answered on. `supportedBases` is what the guard consults, so
+            # it is the field that says whether a refusal was the availability
+            # check or something else.
+            "supportedBases": block.get("supportedBases"),
+            "groups": _group_table(envelope),
+            "filters": _resolved_filters(envelope),
             "records": (envelope.get("executionSummary") or {}).get("population"),
             "balance": _balance(envelope),
             "answer": str(envelope.get("answer") or envelope.get("error") or "")[:160],
@@ -1074,19 +1159,47 @@ def geography_acceptance(ask: Callable[[str], Dict[str, Any]], *,
             f"G02 cells sum to {sum(by_region.values()):.2f}, G01 total is "
             f"{total if total is None else format(total, '.2f')}")
 
+    # WHICH GROUPED LABELS "Scottish" COVERS is the region ladder's decision,
+    # not this gate's. Matching the literal label "Scotland" was wrong: a book
+    # whose labels are finer-grained than ITL1 spreads Scotland over several of
+    # them, and comparing a filtered total against one of those rows would
+    # report a defect that is really a granularity difference.
+    resolve = region_resolver_owner()
     scots_balance = _balance(envelopes["G03"])
-    if by_region and not _close(scots_balance, by_region.get("Scotland")):
-        recon_problems.append(
-            f"G03 Scottish balance {scots_balance} != G02 Scotland cell "
-            f"{by_region.get('Scotland')}")
-
     scots_count = _count(envelopes["G04"])
-    if counts_by_region:
-        cell = counts_by_region.get("Scotland")
-        if cell is None or scots_count is None or int(cell) != int(scots_count):
+    scots_note = "not adjudicated"
+    if resolve is None:
+        recon_problems.append(
+            "the governed region owner could not be loaded, so the Scottish "
+            "answer cannot be reconciled against the grouped labels")
+    elif by_region:
+        try:
+            members = {str(v) for v in resolve("Scottish", list(by_region))}
+        except Exception as exc:                 # noqa: BLE001
+            members = set()
+            recon_problems.append(f"the region owner could not resolve "
+                                  f"'Scottish' over the returned labels: {exc}")
+        scots_note = (f"'Scottish' resolves to {sorted(members) or 'no label'} "
+                      f"of {len(by_region)} returned")
+        if members:
+            grouped_balance = sum(by_region.get(m, 0.0) for m in members)
+            if not _close(scots_balance, grouped_balance):
+                recon_problems.append(
+                    f"G03 Scottish balance {scots_balance} != the governed "
+                    f"Scottish membership of G02 {grouped_balance} "
+                    f"({sorted(members)})")
+            if counts_by_region:
+                grouped_count = sum(counts_by_region.get(m, 0.0)
+                                    for m in members)
+                if scots_count is None or int(grouped_count) != int(scots_count):
+                    recon_problems.append(
+                        f"G04 Scotland count {scots_count} != the governed "
+                        f"Scottish membership of G05 {grouped_count}")
+        else:
             recon_problems.append(
-                f"G04 Scotland count {scots_count} != G05 Scotland cell {cell}")
-    else:
+                "the region owner resolved 'Scottish' to none of the returned "
+                "labels, so the filtered answer cannot be reconciled")
+    if not counts_by_region:
         recon_problems.append("G05 published no regional cells")
 
     # ERE's configured basis IS collateral, so "by property region" and "by
@@ -1126,22 +1239,42 @@ def geography_acceptance(ask: Callable[[str], Dict[str, Any]], *,
     else:
         recon_problems.append("G09 did not answer")
 
-    snapshot_note = "no snapshot recorded for this portfolio"
-    if snap:
-        snapshot_note = f"snapshot for {portfolio_id}"
-        if not _close(total, snap.get("totalBalance")):
-            recon_problems.append(
-                f"total balance {total} != snapshot {snap.get('totalBalance')}")
-        for region, truth in (snap.get("regions") or {}).items():
-            if by_region and not _close(by_region.get(region), truth.get("balance")):
+    # A NUMERIC FIXTURE IS APPLIED ONLY IF ONE IS RECORDED, and one is not.
+    # The figures that used to live here were demo-derived and keyed to the live
+    # portfolio without ever being checked against it, so the gate failed the
+    # deployed service for not matching a book it does not hold. They are gone
+    # rather than corrected, and deliberately not replaced with what the API
+    # returned — a service that supplies its own expectations cannot fail.
+    #
+    # A future fixture must carry the identity of the dataset it was computed
+    # from; a run against a different dataset is STALE_FIXTURE, not a numerical
+    # failure. Until then the scoring above is entirely relational.
+    snapshot_note = "no numeric fixture: scored on cross-response identities"
+    truth_total = snap.get("totalBalance") if snap else None
+    if truth_total is not None:
+        identity = snap.get("datasetIdentity")
+        observed = ((envelopes["G01"].get("reconciliation") or {})
+                    .get("dataset_identity"))
+        if identity and observed and str(identity) != str(observed):
+            snapshot_note = (f"STALE_FIXTURE: recorded for dataset {identity}, "
+                             f"served {observed} — numeric truth not applied")
+        else:
+            snapshot_note = f"numeric fixture for {portfolio_id}"
+            if not _close(total, truth_total):
                 recon_problems.append(
-                    f"{region} balance {by_region.get(region)} != snapshot "
-                    f"{truth.get('balance')}")
-            cell = counts_by_region.get(region) if counts_by_region else None
-            if cell is not None and int(cell) != int(truth.get("loanCount", -1)):
-                recon_problems.append(
-                    f"{region} loan count {cell} != snapshot "
-                    f"{truth.get('loanCount')}")
+                    f"total balance {total} != fixture {truth_total}")
+            for region, fixed in (snap.get("regions") or {}).items():
+                if by_region and not _close(by_region.get(region),
+                                            fixed.get("balance")):
+                    recon_problems.append(
+                        f"{region} balance {by_region.get(region)} != fixture "
+                        f"{fixed.get('balance')}")
+                cell = counts_by_region.get(region) if counts_by_region else None
+                if cell is not None and int(cell) != int(
+                        fixed.get("loanCount", -1)):
+                    recon_problems.append(
+                        f"{region} loan count {cell} != fixture "
+                        f"{fixed.get('loanCount')}")
     _record("NUMERICAL_RECONCILIATION_PASS", not recon_problems,
             "; ".join(recon_problems))
 
@@ -1163,12 +1296,20 @@ def geography_acceptance(ask: Callable[[str], Dict[str, Any]], *,
                      f"effective={row['effectiveBasis']}  "
                      f"source={row['basisSource']}  "
                      f"measured={row['measuredBasis']} ({row['measuredField']})")
+        lines.append(f"        supportedBases={row['supportedBases']}")
         if row["records"] is not None or row["balance"] is not None:
             lines.append(f"        records={row['records']}  "
                          f"balance={row['balance']}")
+        if row["filters"]:
+            lines.append(f"        filters={row['filters']}")
+        for group in row["groups"]:
+            lines.append(f"          group {group.get('label')!r:>34}  "
+                         f"count={group.get('count')}  "
+                         f"balance={group.get('balance')}")
         if not row["answered"]:
             lines.append(f"        {row['answer']}")
     lines.append("")
+    lines.append(f"  Scottish membership : {scots_note}")
     lines.append(f"  {snapshot_note}")
     lines.append("")
     for name in ACCEPTANCE_CHECKS:
