@@ -149,6 +149,16 @@ def _coerce(f: Field, value: Any) -> Any:
         return text.upper()
     if f.type == "boolean":
         return str(value).strip().lower() in ("true", "yes", "y", "1")
+    if f.type == "number" or f.validation == "number":
+        # A facility commitment must reach configuration as a NUMBER. Writing
+        # "250,000,000" as a string would make every reader parse it, and one
+        # of them would eventually parse it differently.
+        cleaned = text.replace(",", "").lstrip("£$€").strip()
+        try:
+            number = float(cleaned)
+        except ValueError:
+            return text
+        return int(number) if number.is_integer() else number
     return text
 
 

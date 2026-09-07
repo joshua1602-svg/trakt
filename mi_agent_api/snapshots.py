@@ -804,7 +804,20 @@ def _prepared_run_key(path: Path) -> Optional[str]:
         st = path.stat()
     except OSError:
         return None
-    return f"{path}:{st.st_mtime_ns}:{st.st_size}"
+    # Preparation now stamps a governed borrowing-base eligibility
+    # determination onto the frame, and that determination is a function of the
+    # FACILITY CONFIGURATION as well as of the tape. Without the configuration
+    # generation in the key, an approved change to a facility's terms would not
+    # reach a served frame until the tape itself changed.
+    return f"{path}:{st.st_mtime_ns}:{st.st_size}:{_facility_generation()}"
+
+
+def _facility_generation() -> str:
+    try:
+        from mi_agent.borrowing_base.config import configuration_generation
+        return configuration_generation()
+    except Exception:  # noqa: BLE001 - a cache key must never break a read
+        return "unknown"
 
 
 @_perf.stage_fn("load_prepared_run")

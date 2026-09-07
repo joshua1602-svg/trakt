@@ -4,13 +4,20 @@ import type { WorkspaceView } from "@/domain";
 import { cn } from "@/lib/utils";
 
 // Top-level tabs follow the book lifecycle: Funded → Pipeline → Forecast, plus
-// the cross-cutting Risk Limits monitor. Each of Funded/Pipeline/Forecast hosts
-// its own sub-tabs (stratifications / geography / evolution / cohorts / …).
+// the cross-cutting Eligibility & Concentrations monitor. Each of
+// Funded/Pipeline/Forecast hosts its own sub-tabs (stratifications / geography
+// / evolution / cohorts / …).
+//
+// The `risk_limits` VIEW ID is unchanged and stays unchanged: it is in shared
+// links, saved navigation state and the governed capability contract. Only the
+// LABEL moved — the tab now carries the facility borrowing base and the loan
+// eligibility split alongside the Schedule 8 concentrations, and "Risk Limits"
+// no longer described what an operator finds there.
 const VIEWS: { id: WorkspaceView; label: string; icon: typeof Landmark }[] = [
   { id: "funded", label: "Funded", icon: Landmark },
   { id: "pipeline", label: "Pipeline", icon: GitBranch },
   { id: "forecast", label: "Forecast", icon: TrendingUp },
-  { id: "risk_limits", label: "Risk Limits", icon: ShieldAlert },
+  { id: "risk_limits", label: "Eligibility & Concentrations", icon: ShieldAlert },
 ];
 
 const VIEW_LABEL: Record<string, string> = Object.fromEntries(

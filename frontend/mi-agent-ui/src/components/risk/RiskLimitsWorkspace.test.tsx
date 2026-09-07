@@ -1,5 +1,5 @@
 /**
- * Funded → Risk Limits workspace: renders the governed evaluation verbatim —
+ * Eligibility & Concentrations workspace: renders the governed evaluation verbatim —
  * summary, filters, accessible statuses, detail panel with provenance and
  * drill-through, period change, and the honest unavailable / legacy / empty
  * states. No number is computed here; everything asserts against the mock
@@ -14,6 +14,7 @@ import {
   mockConcentrationDrivers,
   mockConcentrationHistory,
   mockConcentrationTests,
+  mockEligibilityLoans,
 } from "@/data/mockConcentrationTests";
 import { RiskLimitsWorkspace } from "./RiskLimitsWorkspace";
 
@@ -325,5 +326,79 @@ describe("RiskLimitsWorkspace", () => {
     expect(await screen.findByTestId("concentration-error")).toHaveTextContent(
       "nothing is estimated",
     );
+  });
+});
+
+// --------------------------------------------------------------------------
+// The borrowing base sits ON this tab, above the concentrations. These tests
+// exist to prove the tab still does everything it did BEFORE the borrowing
+// base arrived, and that the two halves come from one request.
+// --------------------------------------------------------------------------
+describe("Eligibility & Concentrations — the borrowing base on the same tab", () => {
+  it("renders the borrowing base above the concentration table", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    await screen.findByTestId("concentration-table");
+    expect(screen.getByTestId("borrowing-base-panel")).toBeInTheDocument();
+    const panel = screen.getByTestId("risk-limits-panel");
+    const nodes = Array.from(panel.querySelectorAll("[data-testid]"));
+    const bb = nodes.findIndex((n) => n.getAttribute("data-testid") === "borrowing-base-panel");
+    const table = nodes.findIndex((n) => n.getAttribute("data-testid") === "concentration-table");
+    expect(bb).toBeGreaterThanOrEqual(0);
+    expect(bb).toBeLessThan(table);
+  });
+
+  it("takes both halves from ONE concentration-tests request", async () => {
+    const spy = vi.fn(async () => mockConcentrationTests("client_001"));
+    render(
+      <RiskLimitsWorkspace client={client({ getConcentrationTests: spy })} portfolioId="p" />,
+    );
+    await screen.findByTestId("borrowing-base-panel");
+    await screen.findByTestId("concentration-table");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("still shows the borrowing base when no concentration test is active", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, available: false, tests: [], source: "none" as const,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    await screen.findByTestId("concentration-empty");
+    expect(screen.getByTestId("borrowing-base-panel")).toBeInTheDocument();
+  });
+
+  it("opens the eligibility drill-down through the existing client", async () => {
+    const spy = vi.fn(async () =>
+      mockEligibilityLoans("client_001", "UNDETERMINED"));
+    render(
+      <RiskLimitsWorkspace
+        client={client({ getEligibilityLoans: spy })}
+        portfolioId="p"
+      />,
+    );
+    await screen.findByTestId("borrowing-base-panel");
+    fireEvent.click(screen.getByText("Show undetermined loans"));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const panel = await screen.findByTestId("eligibility-loans-panel");
+    expect(panel).toHaveTextContent("Undetermined loans");
+    expect(panel).toHaveTextContent("borrowing base eligibility reason");
+  });
+
+  it("keeps the concentration table's own plumbing working unchanged", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const table = await screen.findByTestId("concentration-table");
+    // Search, category filter and the detail panel are the pre-existing
+    // controls; the borrowing base must not have disturbed any of them.
+    expect(within(table).getAllByRole("button").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Search tests"), {
+      target: { value: "no such test" },
+    });
+    expect(await screen.findByTestId("concentration-no-match")).toBeInTheDocument();
   });
 });

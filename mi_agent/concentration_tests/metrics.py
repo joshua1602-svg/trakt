@@ -445,6 +445,18 @@ def _eval_weighted_average(df, lib, metric, params, external=None):
                                          unit=metric.unit, total_loans=len(df))
     values = _normalise_ltv(df[col]) if role.startswith("ltv_") else coerce_numeric(df[col])
     deduction = params.get("deduction_percent")
+    if deduction is None and "deduction_percent" in (metric.parameters or {}):
+        # A NET average with no confirmed deduction is not a net average. The
+        # library says so in as many words — "'Net' has no default meaning" —
+        # so treating an absent deduction as zero would report the GROSS
+        # weighted average under the net test's name and its threshold. Refuse
+        # and say which input is missing.
+        return MetricComputation(
+            value=None, unit=metric.unit, data_status=DATA_MISSING,
+            total_loans=len(df), missing_fields=["deduction_percent"],
+            notes=("No confirmed deduction is configured for this net average, "
+                   "so it cannot be calculated. A gross average is not "
+                   "reported in its place."))
     if deduction is not None:
         values = values - float(deduction)
     prob = _probability(df)

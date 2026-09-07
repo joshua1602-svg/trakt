@@ -32,6 +32,7 @@ import type {
   WeeklyBrief,
   PipelineEvolution,
   ConcentrationDrillthrough,
+  EligibilityLoans,
   ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
@@ -159,6 +160,16 @@ export interface AgentClient {
   getConcentrationDrillthrough(portfolioId: string, testId: string,
                                portfolioContext?: string,
                                signal?: AbortSignal): Promise<ConcentrationDrillthrough>;
+
+  /** Loans carrying one governed borrowing-base eligibility status, with the
+   *  reason each was classified that way. Optional, on the same convention as
+   *  the other capability-gated methods: a client that cannot serve it says so
+   *  and the panel shows the reason, rather than every test double having to
+   *  stub it. */
+  getEligibilityLoans?(portfolioId: string,
+                       status: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED",
+                       portfolioContext?: string,
+                       signal?: AbortSignal): Promise<EligibilityLoans>;
 
   /** Metric history across real governed snapshots (never fabricated). */
   getConcentrationHistory(portfolioId: string, testId?: string,

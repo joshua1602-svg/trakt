@@ -156,6 +156,10 @@ export interface ConcentrationTest {
   loansInNumerator: number;
   totalLoans: number;
   severity: string;
+  /** The population the contract states this test is measured over. */
+  population?: string | null;
+  populationLabel?: string | null;
+  populationBasis?: string | null;
   effectiveDate: string | null;
   expiryDate: string | null;
   notes: string;
@@ -231,6 +235,10 @@ export interface ConcentrationTestsSnapshot {
   states?: { available: boolean; reason?: string } & Record<string, unknown>;
   emergingRisks?: EmergingRisk[];
   lineage?: Record<string, unknown> & { source?: string; note?: string };
+  /** The facility position, from the SAME frame and evaluation as `tests`. */
+  borrowingBase?: BorrowingBaseSnapshot;
+  facility?: FacilitySummary | null;
+  eligiblePopulation?: EligiblePopulationDisclosure;
   error?: string;
 }
 
@@ -275,4 +283,176 @@ export interface ConcentrationHistory {
   series: ConcentrationHistorySeries[];
   configurationVersion?: number;
   periods?: { runId: string | null; reportingDate: string | null }[];
+}
+
+// --------------------------------------------------------------------------
+// Borrowing base — mirrors `mi_agent_api.borrowing_base_api` /
+// `mi_agent.borrowing_base`. Carried inside the concentration-test envelope so
+// the Eligibility & Concentrations tab renders one consistent position from a
+// single request, and served standalone at `/mi/borrowing-base`.
+// --------------------------------------------------------------------------
+
+/**
+ * Every borrowing-base figure is a number OR the literal "NOT_CALCULABLE".
+ * There is no third possibility, and a measure is never zero because an input
+ * was missing — the UI must render the sentinel as a governed status, not as
+ * a dash that reads like nothing to report.
+ */
+export const NOT_CALCULABLE = "NOT_CALCULABLE";
+export type Measure = number | typeof NOT_CALCULABLE | null;
+
+export function isCalculable(value: Measure): value is number {
+  return typeof value === "number";
+}
+
+export interface FacilitySummary {
+  clientId: string;
+  facilityId: string;
+  facilityLabel: string;
+  facilityType: string;
+  currency: string;
+  commitment: number | null;
+  advanceRate: number | null;
+  advanceRatePct: number | null;
+  concentrationDenominatorFloor: number | null;
+  currentDrawnAmount: number | null;
+  currentDrawnAmountAsOf: string | null;
+  effectiveDate: string | null;
+  maturityDate: string | null;
+  environment: "prototype" | "production" | string;
+  eligibilityRuleVersion: string | null;
+  eligibilityRuleCount: number;
+  eligibilityGoverned: boolean;
+  prototypeAssumptionActive: boolean;
+  concentrationPopulation: string;
+  borrowingBaseTreatment: string;
+  configSource: string;
+  configVersion: string;
+  configHash: string;
+  governance?: Record<string, unknown>;
+}
+
+export interface BorrowingBaseInvariant {
+  invariant: string;
+  statement: string;
+  expected: number;
+  actual: number;
+  holds: boolean;
+}
+
+export interface BreachedConcentration {
+  testId: string | null;
+  displayName: string | null;
+  currentValue: number | null;
+  threshold: number | null;
+  unit: string | null;
+  utilization: number | null;
+  breachAmount: number | null;
+  excessAmount: number | null;
+  denominatorValue: number | null;
+}
+
+export interface BorrowingBaseSnapshot {
+  available: boolean;
+  reason?: string | null;
+  portfolioId?: string;
+  reportingDate?: string | null;
+  toRunId?: string | null;
+  facility: FacilitySummary | null;
+  configurationProblems?: string[];
+  eligibilityDerived?: boolean;
+
+  facilityId?: string;
+  currency?: string;
+
+  // -- eligibility reconciliation ----------------------------------------
+  financingPortfolioLoanCount?: number;
+  financingPortfolioBalance?: number;
+  eligibleLoanCount?: number;
+  eligibleCurrentBalance?: number;
+  eligibleShareOfFinancingPortfolioPct?: number | null;
+  ineligibleLoanCount?: number;
+  ineligibleCurrentBalance?: number;
+  ineligibleShareOfFinancingPortfolioPct?: number | null;
+  undeterminedLoanCount?: number;
+  undeterminedCurrentBalance?: number;
+  undeterminedShareOfFinancingPortfolioPct?: number | null;
+  balanceColumn?: string;
+  invariants?: BorrowingBaseInvariant[];
+  reconciles?: boolean;
+
+  // -- the facility calculation ------------------------------------------
+  concentrationLimitDenominator?: Measure;
+  concentrationLimitDenominatorFloor?: number | null;
+  concentrationDenominatorFloorBinding?: boolean | null;
+  advanceRate?: number | null;
+  advanceRatePct?: number | null;
+  grossBorrowingBase?: Measure;
+  facilityCommitment?: number | null;
+  availableBorrowingBase?: Measure;
+  facilityCapBinding?: boolean | null;
+  currentDrawnAmount?: Measure;
+  borrowingBaseHeadroom?: Measure;
+  borrowingBaseDeficiency?: Measure;
+  borrowingBaseUtilisationPct?: Measure;
+  facilityUtilisationPct?: Measure;
+
+  concentrationAdjustment?: {
+    treatment: string;
+    amount: number;
+    breachedTestCount: number;
+    excessMeasuredPct: number | null;
+    note: string;
+  };
+
+  // -- binding concentration (deterministic, never modelled) --------------
+  nearestConcentrationLimit?: string | typeof NOT_CALCULABLE;
+  nearestConcentrationLimitTestId?: string | null;
+  nearestConcentrationHeadroomPct?: Measure;
+  nearestConcentrationHeadroomAmount?: Measure;
+  nearestConcentrationUtilisationPct?: Measure;
+  nearestConcentrationStatus?: string;
+  breachedConcentrationCount?: number;
+  breachedConcentrations?: BreachedConcentration[];
+
+  missingInputs?: string[];
+  prototypeAssumptionsUsed?: string[];
+  notes?: string[];
+  measures?: Record<string, number | string>;
+  receipt?: Record<string, unknown>;
+}
+
+/** How the Eligible Mortgage Loan population reaching the evaluator was formed. */
+export interface EligiblePopulationDisclosure {
+  basis:
+    | "governed_eligibility"
+    | "whole_book_no_facility_configured"
+    | "whole_book_eligibility_not_derived";
+  facilityId: string | null;
+  eligibilityGoverned: boolean;
+  prototypeAssumptionActive: boolean;
+  eligibleLoanCount: number | null;
+  fundedLoanCount: number;
+  priorBasis: string;
+  note: string;
+}
+
+/**
+ * The loans carrying one governed eligibility status, with the reason each was
+ * classified that way. Same governed field roles the concentration
+ * drill-through discloses — an eligibility drill-down is a reason to show WHY
+ * a loan was classified, not a wider view of the tape.
+ */
+export interface EligibilityLoans {
+  available: boolean;
+  reason?: string;
+  status?: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED";
+  facilityId?: string | null;
+  columns: string[];
+  rows: Record<string, unknown>[];
+  rowCount?: number;
+  truncated?: boolean;
+  reportingDate?: string | null;
+  toRunId?: string | null;
+  error?: string;
 }

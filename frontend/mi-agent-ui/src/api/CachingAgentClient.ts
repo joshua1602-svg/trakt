@@ -192,6 +192,15 @@ export function withCache(
     getConcentrationDrillthrough: (portfolioId, testId, portfolioContext, signal) =>
       resource(`concentrationDrill|${portfolioId}|${testId}|${portfolioContext ?? ""}`,
         () => client.getConcentrationDrillthrough(portfolioId, testId, portfolioContext, signal)),
+    getEligibilityLoans: (portfolioId, status, portfolioContext, signal) =>
+      resource(`eligibilityLoans|${portfolioId}|${status}|${portfolioContext ?? ""}`,
+        () => {
+          const fetchLoans = client.getEligibilityLoans?.bind(client);
+          return fetchLoans
+            ? fetchLoans(portfolioId, status, portfolioContext, signal)
+            : Promise.reject(
+                new Error("the eligibility drill-down is not supported"));
+        }),
     getConcentrationHistory: (portfolioId, testId, portfolioContext, signal) =>
       resource(`concentrationHistory|${portfolioId}|${testId ?? ""}|${portfolioContext ?? ""}`,
         () => client.getConcentrationHistory(portfolioId, testId, portfolioContext, signal)),

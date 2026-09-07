@@ -17,6 +17,7 @@ import type {
   PipelineEvolution,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
+  EligibilityLoans,
   ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
@@ -42,6 +43,7 @@ import { mockGeoExposure } from "@/data/mockGeoExposure";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import {
   mockConcentrationDrillthrough,
+  mockEligibilityLoans,
   mockConcentrationDrivers,
   mockConcentrationHistory,
   mockConcentrationTests,
@@ -216,6 +218,12 @@ export class MockAgentClient implements AgentClient {
   getConcentrationDrillthrough(portfolioId: string, testId: string):
       Promise<ConcentrationDrillthrough> {
     return Promise.resolve(mockConcentrationDrillthrough(portfolioId, testId));
+  }
+
+  getEligibilityLoans(portfolioId: string,
+                      status: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED"):
+      Promise<EligibilityLoans> {
+    return Promise.resolve(mockEligibilityLoans(portfolioId, status));
   }
 
   getConcentrationHistory(portfolioId: string, testId?: string):

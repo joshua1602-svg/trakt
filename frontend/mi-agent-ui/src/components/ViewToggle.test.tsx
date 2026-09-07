@@ -10,10 +10,12 @@ describe("ViewToggle", () => {
     expect(screen.getByRole("tab", { name: /Forecast/ })).toHaveAttribute("aria-selected", "false");
   });
 
-  it("exposes the Risk Limits tab and fires onChange for it", () => {
+  it("exposes the Eligibility & Concentrations tab and fires onChange for it", () => {
     const onChange = vi.fn();
     render(<ViewToggle active="funded" onChange={onChange} />);
-    const tab = screen.getByRole("tab", { name: /Risk Limits/ });
+    // The tab is LABELLED "Eligibility & Concentrations"; its view id stays
+    // `risk_limits`, because that id is in shared links and saved state.
+    const tab = screen.getByRole("tab", { name: /Eligibility & Concentrations/ });
     expect(tab).toBeInTheDocument();
     fireEvent.click(tab);
     expect(onChange).toHaveBeenCalledWith("risk_limits");

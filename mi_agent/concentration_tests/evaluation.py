@@ -113,6 +113,36 @@ def _breach_amount(value: Optional[float], threshold: Optional[float],
                  else (value - threshold), 4)
 
 
+#: The frame key a test with no declared population reads.
+POPULATION_DEFAULT = ""
+
+#: A population a test declares but the caller did not supply. Not an error and
+#: not a fallback: the test reports UNAVAILABLE naming the population, because
+#: measuring a contractual "Eligible Mortgage Loans" test over the whole book
+#: would answer a different question under the same name.
+_POPULATION_LABELS = {
+    "eligible_mortgage_loans": "Eligible Mortgage Loans",
+    "all_funded_loans": "all funded loans",
+}
+
+
+def resolve_population(
+        test: ActiveTest,
+        frames: Optional[Dict[str, Optional[pd.DataFrame]]],
+        default: Optional[pd.DataFrame],
+) -> "tuple[Optional[pd.DataFrame], Optional[str]]":
+    """``(frame, unavailable_reason)`` for one test's declared population."""
+    population = str(getattr(test, "population", "") or "")
+    if not population:
+        return default, None
+    if frames is not None and population in frames:
+        return frames[population], None
+    label = _POPULATION_LABELS.get(population, population)
+    return None, (f"This test is measured over {label}, which this book does "
+                  "not currently supply. It is not measured over the whole "
+                  "portfolio instead.")
+
+
 def _evaluate_one(df: Optional[pd.DataFrame], lib: ConcentrationLibrary,
                   test: ActiveTest, *, reporting_date: str,
                   external: Optional[ExternalIndexProvider]
@@ -156,6 +186,15 @@ def _evaluate_one(df: Optional[pd.DataFrame], lib: ConcentrationLibrary,
         return STATUS_UNAVAILABLE, comp
     status = _status_for(comp.value, test.threshold, test.operator,
                          test.warning_fraction)
+    if (status == STATUS_PASS and test.threshold == 0
+            and test.operator != OPERATOR_MIN
+            and comp.loans_in_numerator):
+        # A ZERO limit has no tolerance, and the reported value is rounded to
+        # the metric's output precision. £1 of exposure in a £100m book is
+        # 0.000001%, which rounds to 0.00 and would otherwise read as a pass
+        # on a test that permits nothing at all. The contributing population
+        # is what the clause actually forbids, so it decides.
+        status = STATUS_BREACH
     return status, comp
 
 
@@ -168,27 +207,54 @@ def evaluate_active_tests(
     reporting_date: str = "",
     prior_reporting_date: str = "",
     external: Optional[ExternalIndexProvider] = None,
+    populations: Optional[Dict[str, Optional[pd.DataFrame]]] = None,
+    prior_populations: Optional[Dict[str, Optional[pd.DataFrame]]] = None,
+    population_basis: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Evaluate every test in an activated configuration version.
 
     Returns the full governed envelope: per-test results (current, prior,
     movement, status transition), a summary, and the configuration provenance.
     Keys are camelCase to match the existing ``/mi/risk-limits`` wire shape.
+
+    ``populations`` maps a population name to the frame that IS that population
+    — ``{"eligible_mortgage_loans": eligible_df}``. A test declaring a
+    population the caller did not supply comes back UNAVAILABLE with the
+    population named; it is never quietly measured over the whole book.
+
+    ``population_basis`` records HOW each supplied population was arrived at
+    (``governed_eligibility``, or a disclosed stand-in). It is carried onto
+    every affected test row so a reader can never be shown a contractual
+    population that was in fact something else.
     """
     tests_out: List[Dict[str, Any]] = []
     evaluated_at = _now_iso()
     prior_available = prior_df is not None and not getattr(prior_df, "empty", True)
 
     for test in config.tests:
-        status, comp = _evaluate_one(df, lib, test,
-                                     reporting_date=reporting_date,
-                                     external=external)
+        frame, unavailable = resolve_population(test, populations, df)
+        if unavailable:
+            status = STATUS_UNAVAILABLE
+            comp = MetricComputation(value=None, unit=test.unit,
+                                     data_status=DATA_MISSING,
+                                     notes=unavailable)
+        else:
+            status, comp = _evaluate_one(frame, lib, test,
+                                         reporting_date=reporting_date,
+                                         external=external)
         prior_value = None
         prior_status = None
         if prior_available:
-            prior_status, prior_comp = _evaluate_one(
-                prior_df, lib, test, reporting_date=prior_reporting_date,
-                external=external)
+            prior_frame, prior_unavailable = resolve_population(
+                test, prior_populations, prior_df)
+            if prior_unavailable:
+                prior_status, prior_comp = STATUS_UNAVAILABLE, MetricComputation(
+                    value=None, unit=test.unit, data_status=DATA_MISSING,
+                    notes=prior_unavailable)
+            else:
+                prior_status, prior_comp = _evaluate_one(
+                    prior_frame, lib, test, reporting_date=prior_reporting_date,
+                    external=external)
             prior_value = prior_comp.value
 
         absolute_change = (round(comp.value - prior_value, 4)
@@ -239,6 +305,11 @@ def evaluate_active_tests(
             "loansInNumerator": comp.loans_in_numerator,
             "totalLoans": comp.total_loans,
             "severity": test.severity,
+            "population": str(getattr(test, "population", "") or "") or None,
+            "populationLabel": _POPULATION_LABELS.get(
+                str(getattr(test, "population", "") or ""), None),
+            "populationBasis": (population_basis or {}).get(
+                str(getattr(test, "population", "") or "")) or None,
             "effectiveDate": test.effective_date or None,
             "expiryDate": test.expiry_date or None,
             "notes": comp.notes,
@@ -334,14 +405,21 @@ _DRILL_CONTEXT_ROLES = ("loan_id", "region", "balance_current",
 
 def drillthrough(df: Optional[pd.DataFrame], lib: ConcentrationLibrary,
                  test: ActiveTest, *, max_rows: int = 500,
-                 external: Optional[ExternalIndexProvider] = None
+                 external: Optional[ExternalIndexProvider] = None,
+                 populations: Optional[Dict[str, Optional[pd.DataFrame]]] = None
                  ) -> Dict[str, Any]:
     """Contributing-loan population for one active test.
 
     Reuses the SAME evaluator and mask that produced the numerator, so the
     returned rows reconcile exactly: their count equals ``loansInNumerator``
-    and their basis-balance sum equals ``numeratorValue``.
+    and their basis-balance sum equals ``numeratorValue``. It also reads the
+    same POPULATION the evaluation did, so a test measured over Eligible
+    Mortgage Loans never drills through into ineligible ones.
     """
+    df, unavailable = resolve_population(test, populations, df)
+    if unavailable:
+        return {"available": False, "reason": unavailable,
+                "rows": [], "columns": []}
     metric = lib.get(test.metric_id)
     if metric is None or df is None or df.empty:
         return {"available": False,

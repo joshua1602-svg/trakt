@@ -25,6 +25,7 @@ import type {
   PipelineEvolution,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
+  EligibilityLoans,
   ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
@@ -293,6 +294,15 @@ export class HttpAgentClient implements AgentClient {
                                signal?: AbortSignal): Promise<ConcentrationDrillthrough> {
     return this.getJson<ConcentrationDrillthrough>(
       `/mi/concentration-tests/drillthrough?${this.scoped(portfolioId, portfolioContext, { testId })}`,
+      signal);
+  }
+
+  getEligibilityLoans(portfolioId: string,
+                      status: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED",
+                      portfolioContext?: string,
+                      signal?: AbortSignal): Promise<EligibilityLoans> {
+    return this.getJson<EligibilityLoans>(
+      `/mi/borrowing-base/loans?${this.scoped(portfolioId, portfolioContext, { status })}`,
       signal);
   }
 
