@@ -626,16 +626,38 @@ def field_for_basis(basis: Optional[str], *, available_columns=None,
     return None
 
 
+def resolved_basis_fields(*, available_columns=None, frame=None
+                          ) -> Tuple[Tuple[str, Optional[str]], ...]:
+    """``((basis, field | None), ...)`` — the availability decision, made ONCE.
+
+    THE ONE PLACE THAT DECIDES. There used to be two. The parser asked whether a
+    basis's column was PRESENT BY NAME; this module asked whether it CARRIES A
+    GEOGRAPHY, by putting its values to the region ladder. A book can satisfy
+    one and fail the other, and then the same request answered generic "region"
+    on a column while refusing "property region" as unavailable — which is what
+    production did: `supportedBases: []` beside a regional breakdown measured on
+    `collateral_geography`.
+
+    A stated basis may override which basis is measured. It must not select a
+    different answer to whether that basis is available, so both paths read this.
+
+    The frame is scanned ONCE and shared across the bases: reading every region
+    column twice per request is a cost with nothing to show for it.
+    """
+    carrying = _carrying_columns(frame)
+    return tuple((b, field_for_basis(b, available_columns=available_columns,
+                                     frame=frame, carrying=carrying))
+                 for b in BASES)
+
+
 def supported_bases(*, available_columns=None, frame=None) -> Tuple[str, ...]:
     """The bases this book can answer on, in governed order.
 
-    The frame is scanned ONCE and the result shared across the bases: reading
-    every region column twice per request is a cost with nothing to show for it.
+    Derived from :func:`resolved_basis_fields` rather than computed beside it,
+    so "this basis is supported" and "this is its column" cannot disagree.
     """
-    carrying = _carrying_columns(frame)
-    return tuple(b for b in BASES
-                 if field_for_basis(b, available_columns=available_columns,
-                                    frame=frame, carrying=carrying))
+    return tuple(b for b, field in resolved_basis_fields(
+        available_columns=available_columns, frame=frame) if field)
 
 
 # --------------------------------------------------------------------------- #
@@ -655,11 +677,30 @@ class GeographyContract:
     source: str = SOURCE_NONE
     asset_class: Optional[str] = None
     supported: Tuple[str, ...] = ()
+    #: ``((basis, field | None), ...)`` as resolved for THIS request's frame.
+    #: Carried on the contract so every reader gets the decision that was
+    #: actually made, rather than making its own from whatever it happens to
+    #: hold — column names, in the parser's case, which is a different question.
+    fields: Tuple[Tuple[str, Optional[str]], ...] = ()
 
     def field_for(self, basis: Optional[str], *, available_columns=None,
                   frame=None) -> Optional[str]:
+        """The column this book carries ``basis`` in, per THIS contract.
+
+        The contract's own resolution is authoritative when it has one: it was
+        made against the request's frame, which is strictly more information
+        than a caller holding only column names can bring.
+        """
+        resolved = normalise_basis(basis)
+        for candidate, field in self.fields:
+            if candidate == resolved:
+                return field
         return field_for_basis(basis, available_columns=available_columns,
                                frame=frame)
+
+    def decided(self) -> bool:
+        """Whether this contract carries an availability decision of its own."""
+        return bool(self.fields)
 
     def supports(self, basis: Optional[str]) -> bool:
         resolved = normalise_basis(basis)
@@ -714,10 +755,11 @@ def resolve_contract(*, asset_class: Any = None,
     else:
         basis = default_primary_basis(asset_class, location=config_location)
         source = SOURCE_ASSET_DEFAULT if basis else SOURCE_NONE
+    resolved = resolved_basis_fields(available_columns=available_columns,
+                                     frame=frame)
     return GeographyContract(
         primary_basis=basis, source=source, asset_class=resolved_class,
-        supported=supported_bases(available_columns=available_columns,
-                                  frame=frame))
+        supported=tuple(b for b, f in resolved if f), fields=resolved)
 
 
 def contract_for_scope(*, client_id: Optional[str] = None,
@@ -755,7 +797,9 @@ def contract_for_scope(*, client_id: Optional[str] = None,
         client_asset_class, client_geography_basis, load_portfolio_metadata,
         normalise_asset_class)
 
-    supported = supported_bases(available_columns=available_columns, frame=frame)
+    resolved = resolved_basis_fields(available_columns=available_columns,
+                                     frame=frame)
+    supported = tuple(b for b, field in resolved if field)
 
     entries: Dict[str, Mapping[str, Any]] = {}
     try:
@@ -778,13 +822,13 @@ def contract_for_scope(*, client_id: Optional[str] = None,
         return GeographyContract(
             primary_basis=next(iter(declared)), source=SOURCE_PORTFOLIO,
             asset_class=(sorted(classes)[0] if len(classes) == 1 else None),
-            supported=supported)
+            supported=supported, fields=resolved)
     if len(declared) > 1:
         logger.info("portfolios in scope declare different geography bases "
                     "(%s); generic region language is unresolved for this scope",
                     ", ".join(sorted(declared)))
         return GeographyContract(primary_basis=None, source=SOURCE_NONE,
-                                 asset_class=None, supported=supported)
+                                 asset_class=None, supported=supported, fields=resolved)
 
     # ---- 2. an explicit CLIENT-level exception ---------------------------- #
     client_basis = normalise_basis(client_geography_basis(client_id))
@@ -793,7 +837,7 @@ def contract_for_scope(*, client_id: Optional[str] = None,
             primary_basis=client_basis, source=SOURCE_CLIENT,
             asset_class=(sorted(classes)[0] if len(classes) == 1
                          else client_asset_class(client_id)),
-            supported=supported)
+            supported=supported, fields=resolved)
 
     # ---- 3. the ASSET CLASS DEFAULT, from whichever layer declares it ------ #
     #
@@ -809,7 +853,7 @@ def contract_for_scope(*, client_id: Optional[str] = None,
                     "generic region language is unresolved for this scope",
                     ", ".join(sorted(classes)))
         return GeographyContract(primary_basis=None, source=SOURCE_NONE,
-                                 asset_class=None, supported=supported)
+                                 asset_class=None, supported=supported, fields=resolved)
     if resolved_class is None:
         resolved_class = client_asset_class(client_id)
 
@@ -817,11 +861,11 @@ def contract_for_scope(*, client_id: Optional[str] = None,
     if basis:
         return GeographyContract(primary_basis=basis,
                                  source=SOURCE_ASSET_DEFAULT,
-                                 asset_class=resolved_class, supported=supported)
+                                 asset_class=resolved_class, supported=supported, fields=resolved)
 
     # ---- 4. nothing established one ---------------------------------------- #
     return GeographyContract(primary_basis=None, source=SOURCE_NONE,
-                             asset_class=resolved_class, supported=supported)
+                             asset_class=resolved_class, supported=supported, fields=resolved)
 
 
 def contract_for_portfolio(portfolio_id: Optional[str] = None, *,

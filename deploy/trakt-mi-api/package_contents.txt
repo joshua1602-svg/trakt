@@ -45,3 +45,24 @@ trakt_notifications   # recipients + layout, reached from teams_bot
 config                # semantics registry, tenancy, organisations, principals,
                       # entitlements, buckets, portfolio + field registries
 configs               # configs/pptx/investor_pack.yaml — the deck definition
+
+# THE GOVERNED UK ITL/NUTS LADDER, and its absence was a production defect.
+#
+# `mi_agent.region_resolution` maps a region TERM onto region VALUES through
+# this table — postcode, ITL3 code, ITL3/ITL2/ITL1 name, alias. It is the one
+# owner that answers "is this value a place?", and `mi_geography` asks it before
+# reporting which geography bases a book can be measured on.
+#
+# It was not staged. The file loader is deliberately non-raising — "if the table
+# is absent this returns empty and every caller degrades to exact matching,
+# never to a fabricated mapping" — so the deployed service did not fail. It
+# quietly lost the ladder, and the live acceptance run showed exactly what that
+# costs: `supportedBases: []` on a book whose regions are Scotland and London,
+# every explicitly-stated geography basis refused as unavailable, and a regional
+# breakdown that returned SCOTLAND and Scotland as two separate rows because
+# nothing was left to harmonise them.
+#
+# Staged rather than left to the loader's degradation, on the same reasoning as
+# the entry above: a silent fallback in production is worse than a failed deploy,
+# and the workflow fails here if this path ever stops existing.
+uk_itl_master_lookup_v2.csv

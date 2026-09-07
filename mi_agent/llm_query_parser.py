@@ -611,8 +611,16 @@ def active_geography():
 
 
 def _basis_region_field(basis: Optional[str], semantics: dict,
-                        available_columns=None) -> Optional[str]:
+                        available_columns=None, geography=None) -> Optional[str]:
     """The column this book carries ``basis`` in, restricted to the registry.
+
+    THE CONTRACT DECIDES WHEN THERE IS ONE. This used to answer from column
+    NAMES while ``GeographyContract.supports`` answered from column CONTENT, and
+    a book can satisfy one and fail the other. Production did exactly that:
+    generic "region" was answered on ``collateral_geography`` in the same
+    request that refused "property region" because no basis was available. A
+    stated basis may override which basis is measured; it must never reach a
+    different answer about whether that basis is available.
 
     Returns the basis's most readable field even when the book carries none of
     them, so the caller keeps the CONCEPT the reader named. The executor then
@@ -625,6 +633,13 @@ def _basis_region_field(basis: Optional[str], semantics: dict,
     known = [f for f in _geo.axis_fields(basis) if f in fields]
     if not known:
         return None
+    contract = geography if geography is not None else active_geography()
+    if contract is not None and getattr(contract, "decided", None) \
+            and contract.decided():
+        chosen = contract.field_for(basis)
+        # A basis the contract resolved to nothing is UNAVAILABLE on this book.
+        # Keep the concept so the refusal can name it; never answer on it.
+        return chosen if chosen in known else known[0]
     if available_columns is not None:
         cols = set(available_columns)
         for key in known:
@@ -655,12 +670,15 @@ def _preferred_region(semantics: dict, available_columns=None,
 
     Without a contract the last-resort order applies: see ``_REGION_PREFERENCE``.
     """
-    basis = getattr(geography if geography is not None else active_geography(),
-                    "primary_basis", None)
+    contract = geography if geography is not None else active_geography()
+    basis = getattr(contract, "primary_basis", None)
     if basis:
-        chosen = _basis_region_field(basis, semantics, available_columns)
-        if chosen:
-            return chosen
+        # NO FALL-THROUGH. When the book's own basis is established, the answer
+        # is one of ITS columns or none — dropping into the cross-basis order
+        # below would answer "region" on the other geography, which is the
+        # substitution this whole contract exists to prevent.
+        return _basis_region_field(basis, semantics, available_columns,
+                                   geography=contract)
     fields = _fields(semantics)
     cols = set(available_columns) if available_columns is not None else None
     known = [k for k in _REGION_PREFERENCE if k in fields]
@@ -796,7 +814,7 @@ def _explicit_dimensions(q: str, semantics: dict, grouping: bool = False,
             # measured on collateral is worse than no answer, because the reader
             # cannot tell.
             key = (_basis_region_field(_REGION_BASIS_TERMS[term], semantics,
-                                       available_columns)
+                                       available_columns, geography=geography)
                    or terms_map.get(term))
         elif term in _BORROWER_GENERIC_TERMS:
             key = _preferred_borrower_dim(semantics, available_columns)
