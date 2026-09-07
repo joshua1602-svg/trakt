@@ -115,6 +115,40 @@ function SourceBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
   return null;
 }
 
+/**
+ * A contractual limit the facility imposes that is NOT in the active
+ * configuration is invisible in the table below — it has no row, because it
+ * was never activated. On a tab whose job is to say what the facility requires
+ * and whether the book meets it, "we cannot calculate this one" has to be on
+ * the screen, not only in the proposal queue.
+ */
+function UncalculableLimitsBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
+  const open = snapshot.openProposals ?? 0;
+  const unsupported = snapshot.unsupportedProposals ?? 0;
+  const outstanding = open + unsupported;
+  if (snapshot.source !== "approved_configuration" || outstanding === 0) return null;
+  return (
+    <p
+      role="note"
+      data-testid="uncalculable-limits-banner"
+      className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[11px] text-ink-400"
+    >
+      <span className="font-semibold text-ink-300">
+        {outstanding} further contractual limit{outstanding === 1 ? "" : "s"} not
+        calculable.
+      </span>{" "}
+      {outstanding === 1 ? "It is" : "They are"} stated in the facility
+      documentation but{" "}
+      {outstanding === 1 ? "does" : "do"} not appear below, because{" "}
+      {outstanding === 1 ? "an input it needs is" : "inputs they need are"} not
+      available — the definition is unresolved or the data is not supplied.{" "}
+      {outstanding === 1 ? "It is" : "They are"} awaiting confirmation in the OCC
+      concentration-test workflow and{" "}
+      {outstanding === 1 ? "is" : "are"} not being reported as passing.
+    </p>
+  );
+}
+
 function ForecastBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
   const forecast = snapshot.forecast;
   const statesAvailable = Boolean(snapshot.states?.available);
@@ -418,6 +452,7 @@ export function RiskLimitsWorkspace({
       <h3 className="pt-1 text-[12px] font-semibold text-ink-100">
         Schedule 8 concentrations
       </h3>
+      <UncalculableLimitsBanner snapshot={snapshot} />
 
       {/* Portfolio summary — grouped by state, left → right. */}
       <div

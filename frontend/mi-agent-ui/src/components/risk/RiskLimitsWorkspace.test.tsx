@@ -402,3 +402,54 @@ describe("Eligibility & Concentrations — the borrowing base on the same tab", 
     expect(await screen.findByTestId("concentration-no-match")).toBeInTheDocument();
   });
 });
+
+describe("contractual limits that cannot be calculated", () => {
+  it("says so on the tab, not only in the proposal queue", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, openProposals: 1, unsupportedProposals: 0,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    const banner = await screen.findByTestId("uncalculable-limits-banner");
+    expect(banner).toHaveTextContent("1 further contractual limit not calculable");
+    expect(banner).toHaveTextContent("not being reported as passing");
+  });
+
+  it("counts unsupported limits alongside the ones awaiting confirmation", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, openProposals: 2, unsupportedProposals: 1,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    expect(await screen.findByTestId("uncalculable-limits-banner"))
+      .toHaveTextContent("3 further contractual limits not calculable");
+  });
+
+  it("stays out of the way when every contractual limit is active", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, openProposals: 0, unsupportedProposals: 0,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    await screen.findByTestId("concentration-table");
+    expect(screen.queryByTestId("uncalculable-limits-banner")).toBeNull();
+  });
+});

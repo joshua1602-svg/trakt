@@ -54,6 +54,7 @@ from .models import (
     ELIGIBLE,
     INELIGIBLE,
     NOT_CALCULABLE,
+    PROTOTYPE_ASSUMPTION_NOTE,
     TREATMENT_MONITOR_ONLY,
     UNDETERMINED,
     FacilityConfiguration,
@@ -458,6 +459,13 @@ def calculate(
         result.notes.append(
             "Reconciliation failed: " + ", ".join(failed)
             + ". Figures below are diagnostic only.")
+
+    # Declared from the FACILITY, not from a receipt plumbed in from
+    # elsewhere. An assumption that only reaches the envelope when some caller
+    # remembers to pass a derivation receipt is an assumption that will
+    # eventually go unreported — which is the one thing it must never do.
+    if facility.prototype_assumption_active:
+        result.prototype_assumptions_used.append(PROTOTYPE_ASSUMPTION_NOTE)
 
     result.concentration_adjustment = concentration_adjustment(
         facility, concentration_results)

@@ -40,6 +40,7 @@ from .models import (
     FIELD_ELIGIBLE,
     FIELD_FACILITY_ID,
     INELIGIBLE,
+    PROTOTYPE_ASSUMPTION_NOTE,
     REASON_NO_APPROVED_RULES,
     REASON_OUTSIDE_FINANCING_PORTFOLIO,
     REASON_PROTOTYPE_ASSUMPTION,
@@ -195,11 +196,7 @@ def derive_eligibility(df: pd.DataFrame, facility: FacilityConfiguration
         if facility.prototype_assumption_active:
             status = status.mask(in_scope, ELIGIBLE)
             reason = reason.mask(in_scope, REASON_PROTOTYPE_ASSUMPTION)
-            assumptions.append(
-                "prototype_assume_financing_portfolio_eligible: every loan in "
-                "the configured Financing Portfolio is treated as an Eligible "
-                "Mortgage Loan. This is a PROTOTYPE ASSUMPTION, not a "
-                "contractual eligibility determination.")
+            assumptions.append(PROTOTYPE_ASSUMPTION_NOTE)
         else:
             status = status.mask(in_scope, UNDETERMINED)
             reason = reason.mask(in_scope, REASON_NO_APPROVED_RULES)
