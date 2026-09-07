@@ -51,7 +51,7 @@ products:
   # -----------------------------------------------------------------------
   # ESMA Annex 2 — non-ABCP underlying exposure report.
   # Standing fields are the three `defaults:` entries the projector injects
-  # into every row (config/client/config_client_ERM_UK.yaml) plus the two
+  # into every row (config/client/config_client_ERE.yaml) plus the two
   # original-lender defaults the delivery rules permit.
   # -----------------------------------------------------------------------
   esma_annex2:

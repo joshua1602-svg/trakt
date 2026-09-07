@@ -25,7 +25,7 @@ import pandas as pd
 
 # Valid LEIs (check digits included) for two unrelated lenders.
 LEI_A = "549300ABCDE123456702"
-#: Deliberately unlike the repository ERM_UK configuration's LEI, so a value
+#: Deliberately unlike the repository ERE configuration's LEI, so a value
 #: appearing in Client B's return can only have come from Client B.
 LEI_B = "2138LTM0000000000199"
 

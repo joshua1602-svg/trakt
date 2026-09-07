@@ -594,7 +594,7 @@ asset subtype.
 
 | File | Role |
 |------|------|
-| `config/client/config_client_ERM_UK.yaml` | Master client config — identity, transformations, enrichment rules, UI branding |
+| `config/client/config_client_ERE.yaml` | Master client config — identity, transformations, enrichment rules, UI branding |
 | `config/client/config_client_annex12.yaml` | ESMA Annex 12 deal metadata and structural overlay |
 | `config/system/fields_registry.yaml` | Canonical field definitions (200+ fields, all portfolio types) |
 | `config/system/config_agent.yaml` | LLM Tier 7 agent settings (model, thresholds, budget caps) |
@@ -678,7 +678,7 @@ trakt/
       aliases_optional.yaml          # Optional field aliases
       aliases_analytics.yaml         # Analytics-specific aliases
     client/
-      config_client_ERM_UK.yaml      # Master client configuration
+      config_client_ERE.yaml      # Master client configuration
       config_client_annex12.yaml     # ESMA Annex 12 configuration
     asset/                           # Product defaults and policies
     regime/                          # Regulatory regime configurations

@@ -8,7 +8,7 @@
 #
 # This is the same fact OCC records as `client.client_name` in its adoption
 # answers, sourced from the client configuration's `client.display_name`
-# (config/client/config_client_ERM_UK.yaml) — restated here against the tenant
+# (config/client/config_client_ERE.yaml) — restated here against the tenant
 # id the MI service actually serves, because that configuration declares
 # `client_id: ere_funding_uk` and a name is only trustworthy when the source is
 # addressed to the client being rendered.

@@ -1,5 +1,31 @@
-# config_ERM_UK.yaml
+# config_client_ERE.yaml
 # LAYER 3: MASTER CLIENT CONFIG
+#
+# WHO THIS FILE IS FOR, AND WHY IT IS NAMED WHAT IT IS NAMED.
+#
+# ERE is a CLIENT — ERE Funding, the lender. ERM is an ASSET — equity release
+# mortgages, the product. They are different layers of the configuration
+# hierarchy (system < regime < asset < client < portfolio < approved run
+# decisions), and this file is the client one.
+#
+# It used to be called `config_client_ERM_UK.yaml`, which named it after the
+# asset, and the consequences were not cosmetic. `mi_agent_api.currency`
+# locates a client's governed configuration at
+# `config/client/config_client_{client_id}.yaml`; the live portfolio
+# `ERE/2026-06-30` therefore looked under `ERE`, found nothing, and every
+# client-layer fact — base currency, asset class, and with it the MI geography
+# basis — came back "unconfigured" for the one client the platform actually
+# runs. Nothing was wrong with the lookup. The file was misnamed, so it is
+# renamed rather than aliased: an alias would have left two names for one
+# client and taught the estate that either would do.
+#
+# WHAT BELONGS HERE, AND WHAT DOES NOT. Facts about the LENDER: its identity
+# and LEI, the currency it reports in, the regimes it is in scope for, its
+# branding. Facts about the PRODUCT belong to the asset configuration
+# (`config/asset/product_defaults_ERM.yaml`, which this client selects below by
+# declaring its asset class) and are composed underneath this file by the
+# effective-configuration resolver. A product fact restated here would be a
+# second source able to drift from the pack.
 
 client:
   client_id: ere_funding_uk
@@ -7,6 +33,20 @@ client:
   environment: production
 
 portfolio:
+  # WHICH ASSET CONFIGURATION THIS CLIENT RUNS ON. `equity_release` selects the
+  # ERM pack (`config/asset/product_defaults_ERM.yaml`, which declares
+  # `asset_class: equity_release`), and the effective-configuration resolver
+  # composes that pack UNDER this file: the asset says what the product does by
+  # default, the client overrides only what is genuinely its own.
+  #
+  # This one key is the whole declaration. The class is deliberately not
+  # restated anywhere else in this file, and the pack is deliberately not named
+  # here by path: `operations_control.configuration.packages.ASSET_MODEL` maps
+  # the class onto its pack, so a book changing asset class changes one value.
+  #
+  # It is an OCC standing field (`config/onboarding/field_catalogue.yaml`
+  # writes it to `client_config:portfolio.asset_class`), operator-confirmed at
+  # onboarding, which is why it is the fact the rest of the estate reads.
   asset_class: equity_release
   country: GB
   base_currency: GBP

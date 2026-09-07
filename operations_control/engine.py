@@ -140,7 +140,7 @@ class OpsEngine:
         # substitute a stub with the same method signatures.
         self._annex2_stages = annex2_stages
         self.client_config_path = Path(client_config_path or os.environ.get(
-            "TRAKT_OPS_CLIENT_CONFIG", "config/client/config_client_ERM_UK.yaml"))
+            "TRAKT_OPS_CLIENT_CONFIG", "config/client/config_client_ERE.yaml"))
         self.real_agents = real_agents
         self._adapter_factory = adapter_factory
         self._source_registry_factory = source_registry_factory

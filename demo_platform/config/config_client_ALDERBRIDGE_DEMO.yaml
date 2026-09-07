@@ -8,7 +8,7 @@
 # demonstration. This config is isolated from config/client/* so it can never be
 # picked up by a real run.
 #
-# Layer 3 (master client config) — same shape as config/client/config_client_ERM_UK.yaml.
+# Layer 3 (master client config) — same shape as config/client/config_client_ERE.yaml.
 
 client:
   client_id: alderbridge

@@ -62,9 +62,31 @@ records what kind of book this is:
 ```
 OCC onboarding captures the asset class   (required, operator-confirmed)
   -> config/client/config_client_<id>.yaml    portfolio.asset_class
-  -> config/asset/mi_geography.yaml           asset_class -> basis
+  -> the asset configuration for that class  asset_class -> basis
+       config/asset/product_defaults_<X>.yaml  a class with a pack of its own
+       config/asset/mi_geography.yaml          a class with no pack
   -> mi_agent.mi_geography.GeographyContract  the contract for a request
 ```
+
+**Which client, which asset.** These are different layers and they are named
+separately. `ERE` is the client — ERE Funding, the lender, configured in
+`config/client/config_client_ERE.yaml`. `ERM` is the asset — equity release,
+configured in `config/asset/product_defaults_ERM.yaml`. The client file used to
+be called `config_client_ERM_UK.yaml`, naming the client layer after the asset,
+and it was not cosmetic: `mi_agent_api.currency` resolves a client's governed
+configuration at `config/client/config_client_{client_id}.yaml`, so the live
+portfolio `ERE/2026-06-30` looked under `ERE`, found nothing, and every
+client-layer fact — currency, asset class, and with it the geography basis —
+came back unconfigured for the one client the platform runs. The file is named
+for the client it configures. It is not *aliased* to the asset name: an alias
+would leave two names for one client and no rule about which is right.
+
+The client declares its asset once, as `portfolio.asset_class`, and
+`operations_control.configuration.packages.ASSET_MODEL` maps that class onto its
+pack. The OCC effective-config resolver composes the layers in the governed
+order — system < regime < **asset** < **client** < portfolio < approved run
+decisions — so the asset pack states what the product does by default and the
+client overrides only what is genuinely its own.
 
 **The ordinary case needs no portfolio registry.** The asset layer says what
 region means for a kind of book; the client layer says what kind of book this
@@ -80,11 +102,24 @@ fell back to a field order no layer had chosen. The registry keeps what it
 genuinely owns (per-portfolio metadata, and a per-portfolio exception) and loses
 only the burden of being mandatory.
 
-`config/asset/mi_geography.yaml`:
+**Where an asset class declares its basis.** An asset class large enough to
+have its own configuration pack declares it there, beside the rest of what that
+product does; the shared table answers for the classes that have no pack. Packs
+are discovered by scanning `config/asset/product_defaults_*.yaml` and indexing
+each file on the `asset_class:` **it itself declares**, so adding a pack needs no
+second registration. A class named in both would be two sources able to drift,
+and `tests/test_mi_geography_precedence.py` forbids it.
+
+`config/asset/product_defaults_ERM.yaml` — the equity-release pack:
 
 | asset class | primary basis |
 |---|---|
-| equity_release, lifetime_mortgage | collateral |
+| equity_release (and its alias lifetime_mortgage) | collateral |
+
+`config/asset/mi_geography.yaml` — the classes with no pack of their own:
+
+| asset class | primary basis |
+|---|---|
 | residential_mortgage, residential_real_estate | collateral |
 | commercial_real_estate | collateral |
 | auto_finance, auto_loan | borrower |

@@ -58,7 +58,7 @@ class EffectiveConfigResolver:
         self.rules = rules
         self.packages = packages or ConfigPackageStore(store)
         self.client_config_path = Path(client_config_path
-                                       or "config/client/config_client_ERM_UK.yaml")
+                                       or "config/client/config_client_ERE.yaml")
         self._generated_cache: Dict[str, Path] = {}
 
     # ------------------------------------------------------------------ #
@@ -152,8 +152,11 @@ class EffectiveConfigResolver:
                          client_rules["run"] for p in [r.payload]
                          if p.get("setting")}
 
-        asset_defaults = self._pkg_yaml(pkg_asset,
-                                        "config/asset/product_defaults_ERM.yaml")
+        # The ASSET layer is the pack the resolved asset class selects, not a
+        # fixed filename: composing client over asset only means anything if the
+        # asset underneath is the one this client declared.
+        asset_defaults = self._pkg_yaml(pkg_asset, asset["pack"]) \
+            if asset.get("pack") else {}
         resolved = cr.resolve_layers(
             context={"client": client_id, "portfolio": portfolio_id,
                      "asset": asset_type, "regime": regime_id or "none"},

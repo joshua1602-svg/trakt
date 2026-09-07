@@ -249,7 +249,7 @@ def test_the_shipped_ere_client_configuration_resolves_to_collateral(monkeypatch
     """Not a fixture: the file this estate actually ships for ERE."""
     monkeypatch.delenv(ENV_REGISTRY_PATH, raising=False)
     monkeypatch.setenv(ENV_CLIENT_CONFIG,
-                       str(_REPO_ROOT / "config/client/config_client_ERM_UK.yaml"))
+                       str(_REPO_ROOT / "config/client/config_client_ERE.yaml"))
     contract = geo.contract_for_scope(client_id="ERE")
     assert contract.asset_class == "equity_release"
     assert contract.primary_basis == geo.BASIS_COLLATERAL
@@ -304,3 +304,132 @@ def test_occ_does_not_need_a_second_geography_artefact():
     A per-client copy of that mapping would be a second source able to drift."""
     catalogue = (_REPO_ROOT / "config/onboarding/field_catalogue.yaml").read_text()
     assert "mi_geography" not in catalogue
+
+
+# =========================================================================== #
+# Config OWNERSHIP: ERE is the client, ERM is the asset
+# =========================================================================== #
+#
+# These two were conflated in a filename and it cost a live book its
+# configuration. `config/client/config_client_ERM_UK.yaml` named the CLIENT
+# layer after the ASSET, so `mi_agent_api.currency.client_config_path`, which
+# resolves `config/client/config_client_{client_id}.yaml`, found nothing for the
+# client the platform actually runs — ERE — and every client-layer fact came
+# back unconfigured. The fix is ownership, not an alias: the client file is
+# named for the client, the asset pack owns the asset's behaviour, and the
+# effective configuration composes one under the other.
+
+
+def test_the_client_layer_is_named_for_the_client():
+    """The locator's own arithmetic, against the shipped file.
+
+    `client_config_path` builds the path from the client id. Asserting the file
+    exists AT THAT PATH is the whole defect: nothing about the lookup was ever
+    wrong, and an alias from ERM_UK to ERE would have left two names for one
+    client and no rule about which is right.
+    """
+    from mi_agent_api.currency import client_config_path
+
+    location = client_config_path("ERE")
+    assert location is not None, "ERE has no governed client configuration"
+    assert Path(location).name == "config_client_ERE.yaml"
+    assert Path(location).exists()
+
+
+def test_ere_resolves_to_collateral_with_no_registry_and_no_environment(
+        monkeypatch):
+    """The live case, with every escape hatch closed.
+
+    No ``TRAKT_MI_CLIENT_CONFIG`` pointing at the file by hand, no portfolio
+    registry entry, no explicit asset class passed in: just the client id the
+    live portfolio ``ERE/2026-06-30`` splits to. This is the assertion that was
+    impossible before the rename, and it is the one that matters — the
+    deployment sets neither variable.
+    """
+    monkeypatch.delenv(ENV_CLIENT_CONFIG, raising=False)
+    monkeypatch.delenv(ENV_REGISTRY_PATH, raising=False)
+    contract = geo.contract_for_scope(client_id="ERE")
+    assert contract.asset_class == "equity_release"
+    assert contract.primary_basis == geo.BASIS_COLLATERAL
+    assert contract.source == geo.SOURCE_ASSET_DEFAULT
+
+
+def test_the_erm_pack_owns_the_equity_release_geography():
+    """The asset's behaviour is declared in the asset's own configuration.
+
+    Which geography an equity-release book reports on is a fact about equity
+    release, so it sits beside the rest of what equity release does rather than
+    in a shared table keyed by asset class. The pack is discovered by the class
+    IT declares, so nothing hard-codes `ERM -> equity_release` twice.
+    """
+    pack = yaml.safe_load(
+        (_REPO_ROOT / "config/asset/product_defaults_ERM.yaml").read_text())
+    assert pack["asset_class"] == "equity_release"
+    assert pack["mi_geography"]["primary_basis"] == geo.BASIS_COLLATERAL
+    assert geo.declaring_sources("equity_release") == ("asset_pack",)
+
+
+def test_no_asset_class_declares_its_basis_in_two_places():
+    """Two sources for one decision are two sources able to drift.
+
+    A class with a pack declares its basis there; a class without one is
+    declared in the shared table. Never both — and this is the check that keeps
+    it that way, because the runtime preference (pack first) would otherwise
+    hide the duplicate until the two disagreed.
+    """
+    packs = geo._load_pack_defaults(geo.asset_pack_dir())
+    table = geo._load_defaults()
+    assert packs, "no asset pack declares a geography basis"
+    overlap = sorted(set(packs) & set(table))
+    assert overlap == [], (
+        f"declared in both the asset pack and config/asset/mi_geography.yaml: "
+        f"{overlap}")
+    for asset_class in sorted(set(packs) | set(table)):
+        assert len(geo.declaring_sources(asset_class)) == 1
+
+
+def test_the_pack_the_orchestrator_runs_is_the_pack_geography_reads():
+    """One class-to-pack mapping, agreed by every module that needs one.
+
+    The orchestrator picks an asset pack to RUN with; OCC picks one to COMPOSE
+    under the client; MI reads one to learn what region means. If those three
+    ever named different files for the same asset class, MI would answer from a
+    pack the pipeline never used.
+    """
+    from engine.orchestrator.trakt_run import ASSET_PACKS
+    from operations_control.configuration.packages import ASSET_MODEL
+
+    for asset_class, pack in ASSET_PACKS.items():
+        model = ASSET_MODEL.get(asset_class)
+        assert model is not None, f"{asset_class} is not a configured asset"
+        assert Path(model["pack"]).name == Path(pack).name
+        declared = yaml.safe_load(Path(pack).read_text())["asset_class"]
+        assert declared == asset_class, (
+            f"{Path(pack).name} declares {declared!r}, but the orchestrator "
+            f"runs it for {asset_class!r}")
+
+
+def test_the_client_declares_its_asset_exactly_once():
+    """ERE says which asset it runs, in the one key OCC writes.
+
+    The class is what selects the pack, so restating it — a second key here, a
+    pack path spelled out by hand — would be a second place to change when a
+    book's asset class changes, and a second place to get it wrong.
+    """
+    text = (_REPO_ROOT / "config/client/config_client_ERE.yaml").read_text()
+    doc = yaml.safe_load(text)
+    assert doc["portfolio"]["asset_class"] == "equity_release"
+
+    from operations_control.configuration.packages import ASSET_MODEL
+    pack = ASSET_MODEL[doc["portfolio"]["asset_class"]]["pack"]
+    assert Path(_REPO_ROOT / pack).exists()
+
+    # The pack is named by the model, not by the client file.
+    body = "\n".join(line for line in text.splitlines()
+                     if not line.lstrip().startswith("#"))
+    assert "product_defaults" not in body
+    assert body.count("asset_class") == 1
+
+    # And the client states no geography of its own: it has no reason to
+    # override what its asset already decided.
+    assert "mi_geography" not in doc

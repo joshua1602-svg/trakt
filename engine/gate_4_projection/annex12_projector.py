@@ -311,7 +311,7 @@ def _load_cashflow_executed(path: Optional[str]) -> List[Dict[str, Any]]:
 def parse_args():
     ap = argparse.ArgumentParser(description="Annex 12 Regime Projector")
     ap.add_argument("--config", required=True)
-    ap.add_argument("--master-config", required=False, help="Path to Master Config (config_ERM_UK.yaml)")
+    ap.add_argument("--master-config", required=False, help="Path to Master Config (config_client_ERE.yaml)")
     ap.add_argument("--canonical", required=True)
     ap.add_argument("--as-of-date", required=False, help="Override IVSS2 (YYYY-MM-DD)")
     ap.add_argument("--constraints", required=True)

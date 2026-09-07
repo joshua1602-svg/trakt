@@ -7,6 +7,28 @@
 # layer (e.g. fields_registry maturity_date.applicability.equity_release).
 asset_class: equity_release
 
+# WHICH GEOGRAPHY AN ERM BOOK REPORTS ON.
+#
+# A loan carries a borrower geography and a collateral geography and they are
+# different facts. Which one an unqualified "region" means is a property of the
+# ASSET, not of the client or of the data: a lifetime mortgage is advanced
+# against a first charge on the borrower's own home, so its regional
+# concentration is a concentration of HOUSES. An auto book's is a concentration
+# of people, and its asset pack says so instead.
+#
+# This is the ERM pack's own declaration, so the asset that owns the behaviour
+# owns the setting. `config/asset/mi_geography.yaml` carries the same statement
+# for asset classes that have no pack of their own; a class declared in both
+# would be two sources able to drift, which
+# `tests/test_mi_geography_precedence.py` forbids.
+#
+# A client may override it for one book in the governed portfolio registry, or
+# for itself in its client configuration. Nothing regulatory reads it: Annex
+# geography fields are projected from their own sources under their own
+# contract, and an ND code there is a declaration, never an absence MI fills.
+mi_geography:
+  primary_basis: collateral
+
 defaults:
   # --- 1. Core Product Structure ---
   amortisation_type: Bullet           # ERMs roll up; they do not amortise

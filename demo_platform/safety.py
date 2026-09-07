@@ -109,8 +109,8 @@ _TEXT_SUFFIXES = {".json", ".csv", ".txt", ".md", ".yaml", ".yml", ".ts", ".tsx"
 # Prohibited strings, including values read live from the production config
 # --------------------------------------------------------------------------- #
 _PRODUCTION_CONFIGS = (
-    Path("config") / "client" / "config_client_ERM_UK.yaml",
-    Path("config") / "client" / "config_client_ERM_UK_demo.yaml",
+    Path("config") / "client" / "config_client_ERE.yaml",
+    Path("config") / "client" / "config_client_ERE_demo.yaml",
     Path("config") / "client" / "config_client_annex12.yaml",
 )
 

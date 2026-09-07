@@ -24,7 +24,7 @@ Usage:
       --regime ESMA_Annex2 \\
       --registry fields_registry.yaml \\
       --enum-mapping enum_mapping.yaml \\
-      --config config_ERM_UK.yaml \\
+      --config config_client_ERE.yaml \\
       --output-dir out \\
       --output-prefix ERE_122025
 """

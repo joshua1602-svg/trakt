@@ -118,6 +118,19 @@ DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "asset" / "mi_geography.yaml"
 #: somewhere else.
 ENV_CONFIG_PATH = "TRAKT_MI_GEOGRAPHY_CONFIG"
 
+#: An asset class large enough to have its OWN configuration pack declares its
+#: basis there, beside the rest of that asset's behaviour, rather than in the
+#: shared table. `config/asset/product_defaults_ERM.yaml` is the equity-release
+#: pack: it says `asset_class: equity_release` and carries
+#: `mi_geography: {primary_basis: collateral}`. The packs are discovered by
+#: scanning for this glob and indexing each file on the asset class IT ITSELF
+#: declares, so a new pack needs no second registration and no code change.
+#:
+#: The packs are looked for BESIDE the table, because a pack and the table are
+#: one layer — the asset configuration — and a deployment that relocates that
+#: layer with ENV_CONFIG_PATH relocates all of it.
+ASSET_PACK_GLOB = "product_defaults_*.yaml"
+
 #: The registry key a portfolio entry uses to override its asset class default.
 REGISTRY_KEY = "mi_geography"
 REGISTRY_BASIS_KEY = "primary_basis"
@@ -401,20 +414,97 @@ def _load_defaults(location: Optional[str] = None) -> Dict[str, str]:
     return out
 
 
-def default_primary_basis(asset_class: Any,
-                          *, location: Optional[str] = None) -> Optional[str]:
-    """The governed default basis for ``asset_class``, or None when the table
-    declares none. An unlisted asset class is NOT given a basis: MI would rather
-    say it does not know than assume one."""
+def asset_pack_dir(location: Optional[str] = None) -> Optional[str]:
+    """The directory the asset packs are read from — the table's own directory.
+
+    One layer, one location: relocating the asset configuration relocates the
+    packs with it, and a test that points ENV_CONFIG_PATH at a temporary table
+    gets a world with no packs rather than the repository's.
+    """
+    loc = location or config_path()
+    if loc:
+        return str(Path(loc).resolve().parent)
+    return None
+
+
+@lru_cache(maxsize=8)
+def _load_pack_defaults(directory: Optional[str] = None) -> Dict[str, str]:
+    """``{asset_class: basis}`` declared by the asset packs themselves.
+
+    Each pack is indexed on the asset class it declares in its own
+    ``asset_class:`` key, not on its filename: the pack is the authority on what
+    it configures. A pack that declares no basis simply contributes nothing —
+    absence here falls through to the shared table, and absence in both is "no
+    governed default", which is refused rather than guessed. Never raises.
+    """
+    where = directory if directory is not None else asset_pack_dir()
+    if not where:
+        return {}
+    root = Path(where)
+    if not root.is_dir():
+        return {}
+    try:
+        import yaml
+    except Exception as exc:                                     # noqa: BLE001
+        logger.warning("MI geography asset packs unreadable: %s", exc)
+        return {}
+    out: Dict[str, str] = {}
+    for pack in sorted(root.glob(ASSET_PACK_GLOB)):
+        try:
+            doc = yaml.safe_load(pack.read_text(encoding="utf-8")) or {}
+        except Exception as exc:                                 # noqa: BLE001
+            logger.warning("asset pack unreadable (%s): %s", pack, exc)
+            continue
+        if not isinstance(doc, Mapping):
+            continue
+        asset = str(doc.get("asset_class") or "").strip().lower()
+        basis = configured_basis(doc)
+        if asset and basis:
+            out[asset] = basis
+    return out
+
+
+def declaring_sources(asset_class: Any,
+                      *, location: Optional[str] = None) -> Tuple[str, ...]:
+    """Which asset-configuration files declare a basis for ``asset_class``.
+
+    Two would be two sources able to drift, so a test — not a silent runtime
+    preference — is what keeps this at most one.
+    """
     from mi_agent.portfolio_metadata import normalise_asset_class
 
+    keys = {str(asset_class or "").strip().lower()
+            .replace("-", "_").replace(" ", "_"),
+            normalise_asset_class(asset_class) or ""}
+    keys.discard("")
+    found = []
+    if keys & set(_load_pack_defaults(asset_pack_dir(location))):
+        found.append("asset_pack")
+    if keys & set(_load_defaults(location)):
+        found.append("asset_table")
+    return tuple(found)
+
+
+def default_primary_basis(asset_class: Any,
+                          *, location: Optional[str] = None) -> Optional[str]:
+    """The governed default basis for ``asset_class``, or None when the asset
+    configuration declares none. An asset class nobody has configured is NOT
+    given a basis: MI would rather say it does not know than assume one.
+
+    An asset class with a pack of its own is answered by that pack; the shared
+    table answers the classes that have none.
+    """
+    from mi_agent.portfolio_metadata import normalise_asset_class
+
+    packs = _load_pack_defaults(asset_pack_dir(location))
     table = _load_defaults(location)
     raw = str(asset_class or "").strip().lower().replace("-", "_").replace(" ", "_")
-    if raw and raw in table:
-        return table[raw]
     normalised = normalise_asset_class(asset_class)
-    if normalised and normalised in table:
-        return table[normalised]
+    for source in (packs, table):
+        if raw and raw in source:
+            return source[raw]
+        if normalised and normalised in source:
+            return source[normalised]
     return None
 
 
