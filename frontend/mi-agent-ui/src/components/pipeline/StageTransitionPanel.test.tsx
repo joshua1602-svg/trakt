@@ -222,6 +222,36 @@ describe("the same payload answers both measures", () => {
     // One payload, both measures — the toggle is presentation, not a new query.
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it("switches the per-stage reconciliation table to amounts too", async () => {
+    renderPanel();
+    const table = await screen.findByTestId("stage-transitions-reconciliation");
+    // Before the toggle: still cases (the table's own prior gap — it used to
+    // ignore the Cases/Value toggle above it entirely).
+    const kfi = DETAIL.reconciliation!.by_stage.find((r) => r.stage === "KFI")!;
+    expect(
+      within(within(table).getByRole("row", { name: /^Kfi/i }))
+        .getAllByRole("cell").map((c) => c.textContent),
+    ).toEqual([
+      String(kfi.opening_case_count), String(kfi.new_arrivals),
+      String(kfi.transitions_in), String(kfi.transitions_out),
+      String(kfi.departures), String(kfi.closing_case_count),
+    ]);
+
+    (await screen.findByRole("tab", { name: "Value" })).click();
+
+    await waitFor(() => {
+      const row = within(table).getByRole("row", { name: /^Kfi/i });
+      const cells = within(row).getAllByRole("cell").map((c) => c.textContent);
+      // formatGBP compacts — the fixture's opening_amount (£1.2MM) and
+      // new_arrival_amount (£900K) are the engine's, not recomputed.
+      expect(kfi.opening_amount).toBe(1_200_000);
+      expect(kfi.new_arrival_amount).toBe(900_000);
+      expect(cells[0]).toContain("1.2MM");
+      expect(cells[1]).toContain("900K");
+      expect(cells[5]).toContain(String((kfi.closing_amount / 1e6).toFixed(1)));
+    });
+  });
 });
 
 // --------------------------------------------------------------------------- //

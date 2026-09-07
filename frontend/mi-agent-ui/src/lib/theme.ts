@@ -26,6 +26,9 @@ export const THEME = {
   positive: "#2E7D5B",
   negative: "#B23A48",
   neutral: "#8893A8",
+  mint: "#36c2a8", // mirrors --color-mint-400 / mi_agent_pptx theme.mint — a
+                    // SECOND series beside cyan (e.g. upside/base scenario
+                    // pairs), distinct from `positive`'s pass/fail semantics.
   // Validated categorical set (dataviz skill reference palette, slot 1
   // re-stepped to cyan-600 for the dark categorical band; see comment above).
   categorical: [

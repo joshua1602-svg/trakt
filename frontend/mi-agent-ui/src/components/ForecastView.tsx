@@ -1,11 +1,9 @@
-import { useState } from "react";
 import type { ForecastSnapshot } from "@/domain";
 import { ForecastBridgeCard } from "@/components/ForecastBridgeCard";
 import { TimingDisclosureBanner } from "@/components/TimingDisclosureBanner";
 import { PipelineWatchlist } from "@/components/PipelineWatchlist";
 import { LineagePanel } from "@/components/LineagePanel";
-import { BarList, MeasureToggle, BAR_MEASURE_FORMAT,
-  type BarDatum, type BarMeasure } from "@/components/pipeline/bits";
+import { BarList, type BarDatum } from "@/components/pipeline/bits";
 
 /**
  * Forecast view: the deterministic funded + pipeline bridge, forecast-by-dimension
@@ -19,7 +17,6 @@ export function ForecastView({
   forecast: ForecastSnapshot | null;
   loading?: boolean;
 }) {
-  const [measure, setMeasure] = useState<BarMeasure>("balance");
   if (loading && !forecast) {
     return (
       <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">
@@ -31,18 +28,22 @@ export function ForecastView({
   const bridge = forecast?.forecastBridge ?? null;
   const breakdowns = forecast?.forecastBreakdowns;
 
-  // Region and LTV carry a case count alongside the amount, so both can be
-  // drawn. Completion month carries only the weighted amount, so it stays on
-  // balance rather than being given a measure it does not have.
+  // Forecast is a probability-weighted BALANCE composition (funded exposure +
+  // amount x completion-probability for pipeline; see
+  // mi_agent_api/workspace.py forecast_dimension_breakdown), not a loan-level
+  // model — a pipeline case contributes a fraction of itself, so "how many
+  // cases" has no meaning here the way it does for Funded/Pipeline's own
+  // stratifications. The backend's caseCount on this payload is a stub 0
+  // (cap_breakdown's shared "Other" aggregation needs SOME numeric value),
+  // never a real count, so it is never offered as a measure or shown as a
+  // suffix — a displayed "0" would read as "no cases", not "not counted".
   const byRegion: BarDatum[] = (breakdowns?.byRegionCapped ?? []).map((r) => ({
     label: r.key,
-    value: measure === "count" ? r.caseCount : r.pipelineAmount,
-    count: r.caseCount,
+    value: r.pipelineAmount,
   }));
   const byLtv: BarDatum[] = (breakdowns?.byLtvBucketCapped ?? []).map((r) => ({
     label: r.key,
-    value: measure === "count" ? r.caseCount : r.pipelineAmount,
-    count: r.caseCount,
+    value: r.pipelineAmount,
   }));
   const byMonth: BarDatum[] = (breakdowns?.byCompletionMonth ?? []).map((m) => ({
     label: m.month,
@@ -56,30 +57,21 @@ export function ForecastView({
       <LineagePanel lineage={forecast?.lineage} />
       {(byRegion.length > 0 || byLtv.length > 0 || byMonth.length > 0) && (
         <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h3 className="text-sm font-semibold text-ink-100">Forecast funded balance breakdowns</h3>
-              <p className="mt-0.5 text-[11px] text-ink-400">
-                Funded actual exposure + probability-weighted pipeline (derived).
-              </p>
-            </div>
-            <MeasureToggle
-              measures={["balance", "count"]}
-              active={measure}
-              onChange={setMeasure}
-              label="Forecast breakdown measure"
-              testIdPrefix="forecast-measure"
-            />
+          <div>
+            <h3 className="text-sm font-semibold text-ink-100">Forecast funded balance breakdowns</h3>
+            <p className="mt-0.5 text-[11px] text-ink-400">
+              Funded actual exposure + probability-weighted pipeline (derived).
+            </p>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {byRegion.length > 0 && (
-              <Panel title={`Forecast ${measure === "count" ? "case count" : "balance"} by region`}>
-                <BarList data={byRegion} format={BAR_MEASURE_FORMAT[measure]} />
+              <Panel title="Forecast balance by region">
+                <BarList data={byRegion} format="gbp" />
               </Panel>
             )}
             {byLtv.length > 0 && (
-              <Panel title={`Forecast ${measure === "count" ? "case count" : "balance"} by LTV bucket`}>
-                <BarList data={byLtv} format={BAR_MEASURE_FORMAT[measure]} />
+              <Panel title="Forecast balance by LTV bucket">
+                <BarList data={byLtv} format="gbp" />
               </Panel>
             )}
             {byMonth.length > 0 && (
