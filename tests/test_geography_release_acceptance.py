@@ -184,14 +184,32 @@ def test_the_frozen_release_envelopes_are_accepted():
     assert len(rows) == len(GEOGRAPHY_QUESTIONS)
 
 
-def test_the_shipped_snapshot_is_the_one_being_read():
-    """The contract lives in the release harness and is keyed to the book."""
+def test_the_shipped_contract_carries_configuration_not_demo_figures():
+    """The fixture states what this client CONFIGURES, and no longer what some
+    other book MEASURED.
+
+    It used to carry 11,035 loans / GBP 1,964,886,258.21 / Scotland 570, keyed
+    to `ERE/2026-06-30`. Those figures were taken from in-process runs against
+    the demonstration dataset and were never checked against production, which
+    reported 958 loans — so the gate failed the deployed service for not
+    matching a book it does not hold.
+
+    They are not replaced with the live figures either: a service that supplies
+    its own expectations cannot fail. This pins both halves of that decision.
+    """
     snap = load_snapshot(PORTFOLIO)
     assert snap["expectedAssetClass"] == "equity_release"
     assert snap["expectedPrimaryBasis"] == "collateral"
-    assert snap["totalBalance"] == TOTAL
-    assert snap["regions"]["Scotland"] == {"loanCount": 570,
-                                           "balance": 64330457.03}
+
+    # The demo-derived constants are gone, and nothing replaced them.
+    for banned in ("totalBalance", "regions", "loanCount"):
+        assert banned not in snap, f"{banned} is back in the production fixture"
+    text = (_REPO_ROOT / "due_diligence" / "evidence" / "mi_api_certification"
+            / "geography_snapshot.json").read_text()
+    for figure in ("1964886258", "64330457", "159097304", "6903105"):
+        assert f'"{figure}' not in text and f": {figure}" not in text, (
+            f"{figure} is asserted as production truth again")
+
     assert load_snapshot("SOMEONE_ELSE/2026-06-30") == {}
 
 
