@@ -74,6 +74,16 @@ REASON_RULES_SATISFIED = "all_approved_eligibility_rules_satisfied"
 REASON_RULE_INPUT_MISSING = "eligibility_rule_input_missing"
 REASON_OUTSIDE_FINANCING_PORTFOLIO = "outside_financing_portfolio"
 
+#: The words every surface uses for the demonstration assumption. Written once
+#: so the derivation receipt, the calculation, the borrowing-base envelope and
+#: the dashboard banner cannot drift into describing it differently — or, worse,
+#: into one of them not describing it at all.
+PROTOTYPE_ASSUMPTION_NOTE = (
+    "prototype_assume_financing_portfolio_eligible: every loan in the "
+    "configured Financing Portfolio is treated as an Eligible Mortgage Loan. "
+    "This is a PROTOTYPE ASSUMPTION, not a contractual eligibility "
+    "determination.")
+
 
 def canonical_json(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), default=str)

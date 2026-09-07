@@ -368,3 +368,38 @@ class TestNearestConcentration:
         assert calc.nearest_concentration(tied)["nearest_concentration_limit"] == "A"
         assert calc.nearest_concentration(list(reversed(tied)))[
             "nearest_concentration_limit"] == "A"
+
+
+class TestThePrototypeAssumptionIsAlwaysDeclared:
+    """It must reach the envelope from the FACILITY, not from a receipt.
+
+    A disclosure that depends on some caller remembering to pass a derivation
+    receipt is a disclosure that will eventually go missing — and this is the
+    one that must not, because every figure beside it rests on it.
+    """
+
+    def test_the_calculation_declares_it_with_no_receipt_plumbed_in(self):
+        r = result(book(100_000_000.0), facility())
+        assert r.prototype_assumptions_used
+        assert "PROTOTYPE ASSUMPTION" in r.prototype_assumptions_used[0]
+
+    def test_it_reaches_the_serialised_envelope(self):
+        r = result(book(100_000_000.0), facility())
+        assert r.to_dict()["prototypeAssumptionsUsed"]
+
+    def test_a_governed_facility_declares_nothing(self):
+        fac = production_facility([EligibilityRule(
+            rule_id="max_ltv", field="original_loan_to_value",
+            operator="max", value=50.0)])
+        df = book(100_000_000.0)
+        df["original_loan_to_value"] = [40.0]
+        derive_eligibility(df, fac)
+        assert calc.calculate(df, fac).prototype_assumptions_used == []
+
+    def test_the_derivation_and_the_calculation_use_the_SAME_words(self):
+        from mi_agent.borrowing_base.models import PROTOTYPE_ASSUMPTION_NOTE
+        df = book(100_000_000.0)
+        derivation = derive_eligibility(df, facility())
+        r = calc.calculate(df, facility())
+        assert derivation["prototype_assumptions_used"] == [PROTOTYPE_ASSUMPTION_NOTE]
+        assert r.prototype_assumptions_used == [PROTOTYPE_ASSUMPTION_NOTE]

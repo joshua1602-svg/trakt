@@ -211,3 +211,29 @@ class TestTheRoutes:
             f"/mi/borrowing-base/loans?portfolioId={CLIENT}&status=UNDETERMINED")
         assert response.status_code == 200
         assert response.json()["rowCount"] == 0
+
+
+class TestThePrototypeAssumptionSurvivesTheWholePath:
+    """From configuration, through the canonical frame, to the wire payload.
+
+    The dashboard banner reads `prototypeAssumptionsUsed`. If the assumption is
+    active and that list arrives empty, the tab presents an assumed eligible
+    collateral balance as a governed one.
+    """
+
+    def test_the_envelope_says_the_figures_rest_on_an_assumption(
+            self, facility_configured, frames):
+        out = bb_mod.compute_borrowing_base(None, CLIENT, None)
+        assert out["prototypeAssumptionsUsed"]
+        assert "PROTOTYPE ASSUMPTION" in out["prototypeAssumptionsUsed"][0]
+
+    def test_the_concentration_envelope_says_it_too(self, facility_configured,
+                                                    frames):
+        out = conc_mod.compute_concentration_tests(None, CLIENT, None)
+        assert out["borrowingBase"]["prototypeAssumptionsUsed"]
+        assert out["eligiblePopulation"]["prototypeAssumptionActive"] is True
+
+    def test_the_receipt_records_it_for_the_auditor(self, facility_configured,
+                                                    frames):
+        out = bb_mod.compute_borrowing_base(None, CLIENT, None)
+        assert out["receipt"]["prototype_assumptions_used"]
