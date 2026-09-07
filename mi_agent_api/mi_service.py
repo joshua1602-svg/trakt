@@ -1421,6 +1421,29 @@ _BASIS_REFUSAL = (
     "You asked about the %s's geography. This book does not record one, so I "
     "have not answered on that basis%s.")
 
+#: The same fact, for a question that named no basis and was measured on the
+#: book's configured one. The reader did not say "collateral", so the sentence
+#: does not pretend they did.
+_CONFIGURED_BASIS_REFUSAL = (
+    "This book reports regions on the %s's geography, and it does not record "
+    "one, so there is no regional breakdown to give%s.")
+
+
+def _measured_on_a_region(envelope: Dict[str, Any]) -> bool:
+    """Did this answer group or filter on a geography at all?
+
+    Only an answer that USED a region is refused for the book not having one. A
+    total balance is still a total balance on a book with no geography, and
+    refusing it would punish every question for a fact about one dimension.
+    """
+    from mi_agent import mi_geography
+
+    spec = envelope.get("spec") or {}
+    candidates = [spec.get("dimension")]
+    candidates.extend(spec.get("dimensions") or [])
+    candidates.extend((spec.get("filters") or {}).keys())
+    return any(mi_geography.basis_of_field(str(c)) for c in candidates if c)
+
 
 def _guard_stated_geography_basis(envelope: Dict[str, Any], *, question: str,
                                   geography: Any) -> Dict[str, Any]:
@@ -1443,14 +1466,30 @@ def _guard_stated_geography_basis(envelope: Dict[str, Any], *, question: str,
         return envelope
     from mi_agent import mi_geography
 
-    basis = mi_geography.stated_basis(question)
+    # THE BASIS THIS ANSWER WAS MEASURED ON, however it was chosen.
+    #
+    # This used to fire only for a basis the QUESTION named, and that left the
+    # two halves of one contract disagreeing: an unqualified "balance by region"
+    # was answered on the configured basis without ever asking whether the book
+    # supports it, while "balance by property region" — the same basis, named
+    # out loud — was refused. Production showed exactly that, reporting
+    # `supportedBases: []` beside a regional breakdown it had just produced.
+    #
+    # Stated wording still decides WHICH basis is measured. It no longer decides
+    # whether availability is checked at all.
+    stated = mi_geography.stated_basis(question)
+    basis = stated or getattr(geography, "primary_basis", None)
     if not basis or geography.supports(basis):
+        return envelope
+    if not stated and not _measured_on_a_region(envelope):
+        # An answer that never touched geography is not refused for lacking one.
         return envelope
     other = mi_geography.other_basis(basis)
     alternative = (f"; it records the {other}'s geography, which is a different "
                    "thing and not what you asked for"
                    if other and geography.supports(other) else "")
-    message = _BASIS_REFUSAL % (basis, alternative)
+    template = _BASIS_REFUSAL if stated else _CONFIGURED_BASIS_REFUSAL
+    message = template % (basis, alternative)
     envelope["ok"] = False
     envelope["error"] = message
     envelope["answer"] = message
