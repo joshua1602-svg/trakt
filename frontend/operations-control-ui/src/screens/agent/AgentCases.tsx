@@ -76,6 +76,11 @@ export function AgentCasesScreen() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [createdNotOpened, setCreatedNotOpened] = useState(false);
   const busy = busyAction !== null;
+  /** Rehearsal unless an operator deliberately says otherwise, and then only
+   *  after typing the confirmation word. Two steps, because a live case writes
+   *  a real client's configuration and there is no undo. */
+  const [live, setLive] = useState(false);
+  const [liveConfirm, setLiveConfirm] = useState("");
 
   const meta = useLoad(() => client.getAgentMeta(), []);
   const cases = useLoad(() => client.listAgentCases(), []);
@@ -115,10 +120,17 @@ export function AgentCasesScreen() {
     }
   }
 
+  /** A live case needs the choice AND the typed word. Anything less is a
+   *  rehearsal, which is the safe direction to fail in. */
+  const liveConfirmed =
+    live && liveConfirm.trim().toUpperCase() === copy.agent.modeLiveConfirmWord;
+  const liveOffered = meta.data?.live_available === true;
+
   function create() {
     const text = instruction.trim();
     if (!text) return;
-    void start("create", () => client.createAgentCase(text));
+    if (live && !liveConfirmed) return;
+    void start("create", () => client.createAgentCase(text, undefined, liveConfirmed));
   }
 
   function runScenario(scenario: ScenarioSummary) {
@@ -148,9 +160,63 @@ export function AgentCasesScreen() {
           value={instruction}
           onChange={(event) => setInstruction(event.target.value)}
         />
+        {liveOffered && (
+          <fieldset className="mt-4 rounded-xl border border-stone-200 p-3">
+            <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              {copy.agent.modeHeading}
+            </legend>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                name="case-mode"
+                className="mt-1"
+                checked={!live}
+                onChange={() => {
+                  setLive(false);
+                  setLiveConfirm("");
+                }}
+              />
+              <span>
+                <span className="font-medium text-stone-900">{copy.agent.modeRehearsal}</span>
+                <span className="block text-stone-500">{copy.agent.modeRehearsalHint}</span>
+              </span>
+            </label>
+            <label className="mt-3 flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                name="case-mode"
+                className="mt-1"
+                checked={live}
+                onChange={() => setLive(true)}
+              />
+              <span>
+                <span className="font-medium text-stone-900">{copy.agent.modeLive}</span>
+                <span className="block text-stone-500">{copy.agent.modeLiveHint}</span>
+              </span>
+            </label>
+            {live && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <label
+                  className="block text-sm font-medium text-amber-900"
+                  htmlFor="live-confirm"
+                >
+                  {copy.agent.modeLiveConfirmLabel}
+                </label>
+                <input
+                  id="live-confirm"
+                  type="text"
+                  autoComplete="off"
+                  className="mt-2 w-40 rounded-lg border border-amber-300 px-3 py-1.5 text-sm"
+                  value={liveConfirm}
+                  onChange={(event) => setLiveConfirm(event.target.value)}
+                />
+              </div>
+            )}
+          </fieldset>
+        )}
         <button
           type="button"
-          disabled={busy || !instruction.trim()}
+          disabled={busy || !instruction.trim() || (live && !liveConfirmed)}
           onClick={create}
           className="mt-3 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
         >
@@ -160,6 +226,11 @@ export function AgentCasesScreen() {
             <Plus className="h-4 w-4" aria-hidden />
           )}
           {busyAction === "create" ? copy.agent.sending : copy.agent.createButton}
+          {liveConfirmed && (
+            <span className="ml-1 rounded-md bg-amber-400/90 px-1.5 py-0.5 text-xs font-semibold text-amber-950">
+              {copy.agent.modeLiveBadge}
+            </span>
+          )}
         </button>
       </section>
 

@@ -366,6 +366,13 @@ const AMBIGUOUS_DECISION: DecisionCard = {
 const TENANT = "Alpine Capital";
 const ACTOR = "Operator";
 
+/** Test seam: whether the mocked environment offers a REAL onboarding, and
+ *  what the last create actually asked for. A mock deployment is a rehearsal
+ *  by default, exactly as a real one is. */
+export const mockAgentLive: { available: boolean; lastCreateLive?: boolean } = {
+  available: false,
+};
+
 export class MockAgent {
   /** The agent's OWN onboarding store, isolated from the one the `/onboarding`
    *  screens use — the mock's equivalent of the synthetic container. */
@@ -378,6 +385,7 @@ export class MockAgent {
       enabled: true,
       flag: "OCC_AGENT_SYNTHETIC_ENABLED",
       runtime_mode: "synthetic",
+      live_available: mockAgentLive.available,
       policy: POLICY,
       lifecycle: lifecycle(),
       onboarding_reference: this.onboarding.reference(),

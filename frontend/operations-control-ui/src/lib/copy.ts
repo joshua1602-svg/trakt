@@ -401,6 +401,22 @@ export const copy = {
       "be a loan tape and executed cashflows.”",
     newCasePlaceholder: "Describe the client and what they need…",
     createButton: "Start",
+    // The rehearsal / real choice. Deliberately plain: an operator should not
+    // have to infer which of these writes a client's configuration.
+    modeHeading: "Is this a rehearsal or a real client?",
+    modeRehearsal: "Rehearsal",
+    modeRehearsalHint:
+      "Practice. Nothing reaches the client's live configuration, and the " +
+      "case cannot be activated.",
+    modeLive: "Real onboarding",
+    modeLiveHint:
+      "This case can be activated. When you confirm activation at the end, " +
+      "the approved answers create the client's live configuration and start " +
+      "their first delivery.",
+    modeLiveConfirmLabel:
+      "Type the word REAL to confirm this is a real client onboarding",
+    modeLiveConfirmWord: "REAL",
+    modeLiveBadge: "Real onboarding",
     scenariosHeading: "Or start from a prepared example",
     scenarioRun: "Run this example",
     scenarioRunning: "Creating the practice case…",
