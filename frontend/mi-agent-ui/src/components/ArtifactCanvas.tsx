@@ -95,7 +95,7 @@ export function ArtifactCanvas({
     <section className="flex h-full min-w-0 flex-1 flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-6 py-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-peri-300">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-cyan-300">
             <LayoutGrid size={18} />
           </div>
           <div>
@@ -174,7 +174,7 @@ export function ArtifactCanvas({
                 className={cn(
                   "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
                   i === Math.min(activeTab, groups.length - 1)
-                    ? "border-peri-400/40 bg-navy-700/60 text-ink-100"
+                    ? "border-cyan-400/40 bg-navy-700/60 text-ink-100"
                     : "border-[var(--color-line)] text-ink-400 hover:text-ink-100",
                 )}
               >
@@ -231,7 +231,7 @@ function FilterChip({ label, active, onClick }: { label: string; active: boolean
       className={cn(
         "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
         active
-          ? "border-peri-400/40 bg-navy-700/60 text-peri-200"
+          ? "border-cyan-400/40 bg-navy-700/60 text-cyan-200"
           : "border-[var(--color-line)] text-ink-400 hover:text-ink-100",
       )}
     >

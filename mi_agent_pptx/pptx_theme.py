@@ -5,10 +5,17 @@ MI Agent **React** dashboard theme
 (``frontend/mi-agent-ui/src/lib/theme.ts`` and ``src/index.css``) — NOT the
 legacy Streamlit / light-theme PPTX generator.
 
-The deck is a dark, enterprise, institutional-grade pack: near-black navy
-surfaces, periwinkle secondary, Inter typography, tabular figures. Matplotlib
-charts are rendered onto the *same* navy surface so there are no white pasted
-boxes on the coloured slide background.
+SLATE & CYAN. The deck is a dark, enterprise, institutional-grade pack:
+near-black slate surfaces, one cyan accent, Inter typography, tabular
+figures. Matplotlib charts are rendered onto the *same* slate surface so
+there are no white pasted boxes on the coloured slide background.
+
+The ``peri`` field name is kept even though its value is now the cyan
+accent (``#22d3ee``, not periwinkle) — it is read at ~50 call sites across
+this package (chart_resolver.py, deck.py, pptx_builder.py, render.py), and
+renaming it would touch every one of them for zero visual change. Only the
+hex values move when the brand repaints; the field names are the stable
+contract.
 
 Nothing here performs I/O; it is a pure styling module so it can be imported by
 both the chart renderer and the pptx assembler without side effects.
@@ -35,22 +42,22 @@ class PptxTheme:
     name: str = "trakt_mi_agent_dark"
 
     # --- brand palette (shared across React / Plotly / this deck) -----------
-    navy: str = "#232D55"          # PRIMARY
-    peri: str = "#919DD1"          # SECONDARY (periwinkle)
-    accent: str = "#BFBFBF"
+    navy: str = "#1c2027"          # PRIMARY (structural dark; was #232D55)
+    peri: str = "#22d3ee"          # SECONDARY / accent (cyan; was periwinkle)
+    accent: str = "#8893A8"
 
     # --- dark surfaces (from index.css design tokens) -----------------------
-    bg_page: str = "#0c1024"       # --color-navy-950 (page background)
-    bg_panel: str = "#12152b"      # --surface-dashboard (chart / card panel)
-    bg_panel_alt: str = "#161d3a"  # --surface-artifact (alt panel)
-    line: str = "#232b48"          # --color-line
-    line_soft: str = "#1c2440"     # --color-line-soft (grid)
+    bg_page: str = "#171a1f"       # --color-app-ground (page background)
+    bg_panel: str = "#232830"      # --surface-dashboard (chart / card panel)
+    bg_panel_alt: str = "#2c323c"  # --surface-artifact (alt panel)
+    line: str = "#262a31"          # --color-line
+    line_soft: str = "#1a1c20"     # --color-line-soft (grid)
 
     # --- ink / text ---------------------------------------------------------
-    ink_100: str = "#eef1f8"       # primary text
-    ink_300: str = "#b8c0d6"       # secondary text
-    ink_400: str = "#8c95b0"       # muted text
-    ink_500: str = "#6b7493"       # faint text / footers
+    ink_100: str = "#eef1f2"       # primary text
+    ink_300: str = "#9da4ab"       # secondary text
+    ink_400: str = "#767d87"       # muted text
+    ink_500: str = "#656b74"       # faint text / footers
 
     # --- semantic accents ---------------------------------------------------
     positive: str = "#2E7D5B"
@@ -60,10 +67,14 @@ class PptxTheme:
     amber: str = "#e0a93b"
     rose: str = "#e0607a"
 
-    # --- categorical series palette (navy -> periwinkle ramp + hues) --------
+    # --- categorical series palette --------------------------------------
+    # Mirrors frontend/mi-agent-ui/src/lib/theme.ts THEME.categorical exactly
+    # — the dataviz skill's validated 8-hue set, slot 1 re-stepped to cyan-600
+    # for the dark categorical band. See that file's comment for the
+    # validation detail; keep the two lists identical.
     categorical: List[str] = field(default_factory=lambda: [
-        "#232D55", "#3d4a82", "#5a67a8", "#919dd1",
-        "#36c2a8", "#e0a93b", "#c46b8f",
+        "#0891b2", "#d95926", "#199e70", "#c98500",
+        "#d55181", "#008300", "#9085e9", "#e66767",
     ])
 
     # --- RAG (risk monitor) -------------------------------------------------
@@ -90,9 +101,9 @@ class PptxTheme:
     )
     font_mono: str = "DejaVu Sans Mono"
 
-    # --- sequential scale (navy -> periwinkle) for heatmaps -----------------
+    # --- sequential scale (slate -> cyan) for heatmaps ----------------------
     sequential: List[str] = field(default_factory=lambda: [
-        "#11162e", "#3d4a82", "#919dd1",
+        "#101318", "#1c2027", "#22d3ee",
     ])
 
     # ---------------------------------------------------------------- helpers

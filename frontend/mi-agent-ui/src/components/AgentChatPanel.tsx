@@ -142,7 +142,7 @@ export function AgentChatPanel({
               line-height padding that put them off-centre against each
               other in a plain `items-center` row. */}
           <span
-            className="inline-flex items-center self-center rounded-full border border-[var(--color-line-strong)] bg-navy-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-wider text-peri-300"
+            className="inline-flex items-center self-center rounded-full border border-[var(--color-line-strong)] bg-navy-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-wider text-cyan-300"
             title="In active development — behaviour and answers may still change"
           >
             Beta

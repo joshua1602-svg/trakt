@@ -32,8 +32,10 @@ plt.rcParams.update({"font.family": _SANS, "font.size": 11,
                      "axes.unicode_minus": False})
 _MONO_FP = fm.FontProperties(family=_MONO)
 
-# Dashboard evolution palette (EvolutionPanel PALETTE).
-EVO_PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"]
+# Dashboard evolution palette — mirrors EvolutionPanel's PALETTE, which is
+# THEME.categorical (frontend/mi-agent-ui/src/lib/theme.ts). Both sides read
+# the same validated 8-hue set rather than keeping an independent local one.
+EVO_PALETTE = THEME.categorical
 
 
 def _fig(w, h, theme, dpi=220):
@@ -160,7 +162,7 @@ def draw_bars_with_line(path, x_labels: Sequence[str], bars: Sequence[Optional[f
     bvals = [0.0 if v is None else float(v) for v in bars]
     ax.bar(x, bvals, width=0.62, color=theme.peri, alpha=0.85, zorder=2)
     if avg:
-        ax.axhline(float(avg), color=theme.rag.get("amber", "#e0a458"), linewidth=1.2,
+        ax.axhline(float(avg), color=theme.rag.get("amber", theme.amber), linewidth=1.2,
                    linestyle=(0, (5, 4)), zorder=3)
     ax.yaxis.set_major_formatter(FuncFormatter(
         lambda v, p: compact_currency(v) if bar_currency else compact_number(v)))

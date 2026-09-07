@@ -27,10 +27,13 @@ import { InsightStageCard } from "@/components/insight/InsightStageCard";
 import { enhancedHoversEnabled } from "@/lib/featureFlags";
 import { DETAIL_COMPLETIONS, DETAIL_PIPELINE } from "@/domain";
 import { cn, formatGBP, formatValue } from "@/lib/utils";
+import { THEME } from "@/lib/theme";
 
 type EvoView = "funded" | "pipeline" | "forecast" | "origination" | "cohorts";
 
-const PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"];
+// One categorical system app-wide — see lib/theme.ts for how this set was
+// validated (dataviz skill, six checks against this dashboard's own surface).
+const PALETTE = THEME.categorical;
 
 // Explicit funnel process order. WITHDRAWN sits after the main funnel; UNKNOWN
 // last. Synonyms (COMPLETION/COMPLETED) and case are normalised first.
@@ -596,7 +599,7 @@ function CohortSelect({ label, value, onChange, options, testId }: {
         data-testid={testId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-[var(--color-line)] bg-navy-900 px-2 py-1 text-[11px] text-ink-100 focus:border-peri-400/50 focus:outline-none"
+        className="rounded-md border border-[var(--color-line)] bg-navy-900 px-2 py-1 text-[11px] text-ink-100 focus:border-cyan-400/50 focus:outline-none"
       >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
@@ -933,7 +936,7 @@ export function EvolutionPanel({
         <div className="flex items-center justify-between">
           {heading && (
             <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-              <Activity size={16} className="text-peri-300" /> Evolution
+              <Activity size={16} className="text-cyan-300" /> Evolution
             </div>
           )}
           {allowed.length > 1 && (
@@ -945,7 +948,7 @@ export function EvolutionPanel({
                   className={cn(
                     "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
                     view === v
-                      ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
+                      ? "bg-cyan-400/20 text-ink-100 ring-1 ring-inset ring-cyan-400/50"
                       : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
                   )}>
                   {EVO_TAB_LABEL[v]}

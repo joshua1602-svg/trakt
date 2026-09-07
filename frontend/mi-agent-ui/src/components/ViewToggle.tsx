@@ -96,7 +96,7 @@ export function ViewToggle({
                 )}
               >
                 <Icon size={15} strokeWidth={selected && !isDisabled ? 2.25 : 1.75}
-                  className={selected && !isDisabled ? "text-peri-200" : "text-current opacity-70"} />
+                  className={selected && !isDisabled ? "text-cyan-200" : "text-current opacity-70"} />
                 {label}
               </button>
             </span>

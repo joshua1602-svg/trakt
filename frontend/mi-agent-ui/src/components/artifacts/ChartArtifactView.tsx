@@ -62,8 +62,8 @@ function ChartTooltip({
 }
 
 const WF_COLORS: Record<string, string> = {
-  base: "#3d4a82",
-  add: THEME.peri,
+  base: THEME.navy,
+  add: THEME.cyan,
   sub: THEME.negative,
   total: THEME.positive,
 };
@@ -92,8 +92,8 @@ function Legend({ artifact }: { artifact: ChartArtifact }) {
   const items =
     artifact.chartType === "waterfall"
       ? [
-          { label: "Base / total", color: "#3d4a82" },
-          { label: "Inflow", color: THEME.peri },
+          { label: "Base / total", color: THEME.navy },
+          { label: "Inflow", color: THEME.cyan },
           { label: "Fallout", color: THEME.negative },
           { label: "Forecast", color: THEME.positive },
         ]
@@ -159,7 +159,7 @@ function Body({
           <Bar dataKey="base" stackId="w" fill="transparent" />
           <Bar dataKey="bar" stackId="w" radius={[3, 3, 0, 0]}>
             {rows.map((r, i) => (
-              <Cell key={i} fill={WF_COLORS[String(r._kind)] ?? THEME.peri} />
+              <Cell key={i} fill={WF_COLORS[String(r._kind)] ?? THEME.cyan} />
             ))}
           </Bar>
         </BarChart>
@@ -249,7 +249,7 @@ function Body({
 
           {artifact.chartType === "bubble" && sizeKey && <ZAxis type="number" dataKey={sizeKey} range={[40, 400]} />}
           {tip}
-          <Scatter data={artifact.rows} fill={THEME.peri} fillOpacity={0.6} />
+          <Scatter data={artifact.rows} fill={THEME.cyan} fillOpacity={0.6} />
         </ScatterChart>
       </ResponsiveContainer>
     );

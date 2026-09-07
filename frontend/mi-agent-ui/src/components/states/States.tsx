@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 
 export function LoadingState() {
   return (
-    <div className="mb-4 flex items-center gap-2 rounded-lg border border-peri-400/20 bg-navy-800/40 px-4 py-3 text-sm text-peri-200">
-      <Sparkles size={15} className="text-peri-300" />
+    <div className="mb-4 flex items-center gap-2 rounded-lg border border-cyan-400/20 bg-navy-800/40 px-4 py-3 text-sm text-cyan-200">
+      <Sparkles size={15} className="text-cyan-300" />
       MI Agent is composing artifacts
       <span className="ml-1 inline-flex gap-0.5">
-        <span className="dot-1 h-1 w-1 rounded-full bg-peri-300" />
-        <span className="dot-2 h-1 w-1 rounded-full bg-peri-300" />
-        <span className="dot-3 h-1 w-1 rounded-full bg-peri-300" />
+        <span className="dot-1 h-1 w-1 rounded-full bg-cyan-300" />
+        <span className="dot-2 h-1 w-1 rounded-full bg-cyan-300" />
+        <span className="dot-3 h-1 w-1 rounded-full bg-cyan-300" />
       </span>
     </div>
   );
@@ -48,7 +48,7 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
         <button
           type="button"
           onClick={onRetry}
-          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-navy-800 px-3 py-1.5 text-xs font-medium text-ink-200 transition-colors hover:border-peri-400/40 hover:text-ink-100"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--color-line)] bg-navy-800 px-3 py-1.5 text-xs font-medium text-ink-200 transition-colors hover:border-cyan-400/40 hover:text-ink-100"
         >
           <RefreshCw size={13} />
           Retry

@@ -63,7 +63,7 @@ export function ForecastExtrapolationPanel({
   return (
     <section className="space-y-4" data-testid="forecast-extrapolation-panel">
       <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-        <TrendingUp size={16} className="text-peri-300" /> Scale-up run-rate — when does the book reach scale?
+        <TrendingUp size={16} className="text-cyan-300" /> Scale-up run-rate — when does the book reach scale?
       </div>
       <p className="-mt-2 text-[11px] text-ink-500">
         Forward projection from the recent completion run-rate (net funded growth). The point-in-time

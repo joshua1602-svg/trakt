@@ -32,9 +32,9 @@ function Loading() {
     <div className="flex h-[320px] items-center justify-center text-xs font-medium text-ink-400">
       Loading chart
       <span className="ml-1 inline-flex gap-0.5">
-        <span className="dot-1 h-1 w-1 rounded-full bg-peri-300" />
-        <span className="dot-2 h-1 w-1 rounded-full bg-peri-300" />
-        <span className="dot-3 h-1 w-1 rounded-full bg-peri-300" />
+        <span className="dot-1 h-1 w-1 rounded-full bg-cyan-300" />
+        <span className="dot-2 h-1 w-1 rounded-full bg-cyan-300" />
+        <span className="dot-3 h-1 w-1 rounded-full bg-cyan-300" />
       </span>
     </div>
   );

@@ -67,7 +67,7 @@ export function PortfolioContextSelector({
         onClick={() => !single && setOpen((o) => !o)}
         className="flex items-center gap-2.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 px-3 py-1.5 text-left transition-colors hover:border-navy-500"
       >
-        <Building2 size={15} className="text-peri-300" />
+        <Building2 size={15} className="text-cyan-300" />
         <div className="leading-tight">
           <div className="text-[10px] uppercase tracking-wider text-ink-500">Scope</div>
           <div className="text-[13px] font-medium text-ink-100">{active?.label ?? "Total"}</div>
@@ -106,7 +106,7 @@ export function PortfolioContextSelector({
                 </div>
                 <div className="truncate text-[10px] text-ink-400">{subtitle(c)}</div>
               </div>
-              {c.context_id === active?.context_id && <Check size={14} className="text-peri-300" />}
+              {c.context_id === active?.context_id && <Check size={14} className="text-cyan-300" />}
             </button>
           ))}
         </div>

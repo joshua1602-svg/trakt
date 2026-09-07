@@ -35,7 +35,7 @@ export function Badge({
 }) {
   const tones: Record<string, string> = {
     neutral: "bg-transparent text-ink-400 border-[var(--color-line)]",
-    navy: "bg-navy-700/50 text-peri-200 border-navy-600",
+    navy: "bg-navy-700/50 text-cyan-200 border-navy-600",
     mint: "bg-mint-400/10 text-mint-400 border-mint-400/35",
     amber: "bg-amber-400/10 text-amber-400 border-amber-400/35",
     rose: "bg-rose-400/10 text-rose-400 border-rose-400/35",
@@ -76,7 +76,7 @@ export function IconButton({
       className={cn(
         "inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-ink-400 transition-colors",
         "hover:border-[var(--color-line)] hover:bg-navy-800 hover:text-ink-100",
-        active && "border-peri-400/50 bg-navy-700 text-peri-200",
+        active && "border-cyan-400/50 bg-navy-700 text-cyan-200",
         className,
       )}
     >

@@ -167,7 +167,7 @@ function EmergingRisks({
                 {r.testId && (
                   <button
                     type="button"
-                    className="ml-2 text-[11px] text-peri-200 underline-offset-2 hover:underline"
+                    className="ml-2 text-[11px] text-cyan-200 underline-offset-2 hover:underline"
                     onClick={() => onOpen(r.testId!)}
                   >
                     Open test
@@ -481,7 +481,7 @@ export function RiskLimitsWorkspace({
               onClick={() => setExpectedOnly((v) => !v)}
               className={`rounded-md border px-2 py-1 text-[11px] ${
                 expectedOnly
-                  ? "border-peri-400/40 bg-navy-800 text-peri-200"
+                  ? "border-cyan-400/40 bg-navy-800 text-cyan-200"
                   : "border-[var(--color-line)] text-ink-400 hover:bg-navy-800"
               }`}
             >
@@ -493,7 +493,7 @@ export function RiskLimitsWorkspace({
               onClick={() => setStressOnly((v) => !v)}
               className={`rounded-md border px-2 py-1 text-[11px] ${
                 stressOnly
-                  ? "border-peri-400/40 bg-navy-800 text-peri-200"
+                  ? "border-cyan-400/40 bg-navy-800 text-cyan-200"
                   : "border-[var(--color-line)] text-ink-400 hover:bg-navy-800"
               }`}
             >
@@ -508,7 +508,7 @@ export function RiskLimitsWorkspace({
             onClick={() => setShowPrior((v) => !v)}
             className={`rounded-md border px-2 py-1 text-[11px] ${
               showPrior
-                ? "border-peri-400/40 bg-navy-800 text-peri-200"
+                ? "border-cyan-400/40 bg-navy-800 text-cyan-200"
                 : "border-[var(--color-line)] text-ink-400 hover:bg-navy-800"
             }`}
           >
@@ -565,7 +565,7 @@ export function RiskLimitsWorkspace({
                 t.expectedBreach ? ", breach expected" : ""
               }${t.fullPipelineBreach && !t.expectedBreach && t.status !== "breach"
                 ? ", stress-only breach" : ""}`}
-              className={`grid w-full ${CONCENTRATION_GRID} items-center gap-2 border-b border-[var(--color-line-soft)] px-1 py-2 text-left text-[12px] last:border-0 hover:bg-navy-800/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-peri-400 ${
+              className={`grid w-full ${CONCENTRATION_GRID} items-center gap-2 border-b border-[var(--color-line-soft)] px-1 py-2 text-left text-[12px] last:border-0 hover:bg-navy-800/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyan-400 ${
                 selectedId === t.testId ? "bg-navy-800/60" : ""
               }`}
             >

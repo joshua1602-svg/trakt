@@ -7,7 +7,7 @@ import { buildSuggestedActions } from "@/lib/suggestedActions";
 
 const SEVERITY_META: Record<Severity, { icon: typeof Info; tone: string; label: string }> = {
   info: { icon: Info, tone: "text-ink-500", label: "Info" },
-  watch: { icon: Eye, tone: "text-peri-300", label: "Watch" },
+  watch: { icon: Eye, tone: "text-cyan-300", label: "Watch" },
   significant: { icon: Activity, tone: "text-amber-300", label: "Significant" },
 };
 
@@ -75,7 +75,7 @@ export function InsightPanel({
   return (
     <div className="mt-3 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/30 p-3">
       <div className="flex items-center gap-1.5">
-        <Sparkles size={13} className="text-peri-300" />
+        <Sparkles size={13} className="text-cyan-300" />
         <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">Key observations</span>
       </div>
 
@@ -101,7 +101,7 @@ export function InsightPanel({
                 onClick={() => onAsk?.(s.question)}
                 title={s.question}
                 disabled={!onAsk}
-                className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 text-[11px] text-ink-300 transition-colors enabled:hover:border-peri-400/40 enabled:hover:text-ink-100 disabled:opacity-60"
+                className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 text-[11px] text-ink-300 transition-colors enabled:hover:border-cyan-400/40 enabled:hover:text-ink-100 disabled:opacity-60"
               >
                 {s.label}
               </button>

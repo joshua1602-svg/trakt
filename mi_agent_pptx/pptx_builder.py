@@ -196,7 +196,7 @@ class DeckBuilder:
         # Layered brand backdrop.
         glow = self._panel(slide, Inches(-1), Inches(-2), Inches(9), Inches(6),
                            fill=self.theme.bg_panel, radius=False)
-        glow.fill.fore_color.rgb = self._rgb("#0e1430")
+        glow.fill.fore_color.rgb = self._rgb(self.theme.bg_panel_alt)
         bar = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(0.9), Inches(3.02),
                                      Inches(2.2), Inches(0.07))
         bar.fill.solid()

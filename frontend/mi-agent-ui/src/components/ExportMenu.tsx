@@ -162,7 +162,7 @@ export function ExportMenu({
               }}
               className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12px] text-ink-200 transition-colors hover:bg-navy-800"
             >
-              {done === it.key ? <Check size={13} className="text-mint-400" /> : <it.icon size={13} className="text-peri-300" />}
+              {done === it.key ? <Check size={13} className="text-mint-400" /> : <it.icon size={13} className="text-cyan-300" />}
               {it.label}
             </button>
           ))}
