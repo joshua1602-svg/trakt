@@ -1269,8 +1269,8 @@ class DeckBuilder:
 
     _STAGE_PRETTY = {"KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
                      "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn"}
-    _STAGE_COLOR = {"APPLICATION": "#7c9cf0", "OFFER": "#5ec6b8",
-                    "COMPLETED": "#e0a458", "WITHDRAWN": "#eb6f6f"}
+    _STAGE_COLOR = {"APPLICATION": THEME.categorical[0], "OFFER": THEME.categorical[1],
+                    "COMPLETED": THEME.categorical[2], "WITHDRAWN": THEME.categorical[7]}
 
     def slide_pipeline_evolution(self, spec):
         s = self._slide()
@@ -1658,10 +1658,13 @@ class DeckBuilder:
         path = self.work / "projection.png"
         if proj:
             x = [str(p.get("month")) for p in proj]
+            # Downside/base/upside carries polarity (bad/neutral/good), not bare
+            # series identity, so it wears the semantic scale rather than a
+            # categorical slot.
             series = [
-                {"name": "Downside", "values": [p.get("downside") for p in proj], "color": "#eb6f6f"},
-                {"name": "Base", "values": [p.get("base") for p in proj], "color": "#7c9cf0"},
-                {"name": "Upside", "values": [p.get("upside") for p in proj], "color": "#5ec6b8"},
+                {"name": "Downside", "values": [p.get("downside") for p in proj], "color": self.theme.negative},
+                {"name": "Base", "values": [p.get("base") for p in proj], "color": self.theme.peri},
+                {"name": "Upside", "values": [p.get("upside") for p in proj], "color": self.theme.mint},
             ]
             R.draw_lines(path, x, series, iw, ih, theme=self.theme, currency=True)
         else:
@@ -1693,9 +1696,9 @@ class DeckBuilder:
         ph = self._evolution_lines(s, spec, self.d.forecast_evolution, [
             {"id": "fevo", "title": "Forecast funded balance by run",
              "series": [
-                 {"name": "Funded actual", "key": "funded_balance", "color": "#7c9cf0"},
-                 {"name": "Weighted pipeline", "key": "weighted_expected_pipeline", "color": "#5ec6b8"},
-                 {"name": "Forecast", "key": "forecast_funded_balance", "color": "#e0a458"}],
+                 {"name": "Funded actual", "key": "funded_balance", "color": THEME.categorical[0]},
+                 {"name": "Weighted pipeline", "key": "weighted_expected_pipeline", "color": THEME.categorical[1]},
+                 {"name": "Forecast", "key": "forecast_funded_balance", "color": THEME.categorical[2]}],
              "currency": True}])
         self._footer(s)
         self._record("forecast_evolution", spec.get("title"), "", placeholder=ph)

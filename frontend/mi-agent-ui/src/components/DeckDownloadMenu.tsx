@@ -206,7 +206,7 @@ export function DeckDownloadMenu({
         title="Building the investor pack from the governed MI"
         className="inline-flex h-8 cursor-wait items-center gap-1.5 rounded-md border border-navy-600 bg-navy-800/70 px-2.5 text-[12px] font-medium text-ink-200"
       >
-        <Loader2 size={14} className="animate-spin text-peri-300" />
+        <Loader2 size={14} className="animate-spin text-cyan-300" />
         {job?.state === "queued" ? "Queued…" : "Generating…"}
       </button>
     );
@@ -276,7 +276,7 @@ export function DeckDownloadMenu({
       >
         {job?.state === "completed" && done === null
           ? <Check size={14} className="text-mint-400" />
-          : <Presentation size={14} className="text-peri-300" />}
+          : <Presentation size={14} className="text-cyan-300" />}
         Investor deck
         <ChevronDown size={13} className="text-ink-400" />
       </button>
@@ -290,7 +290,7 @@ export function DeckDownloadMenu({
               onClick={() => download(null, "latest")}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-ink-100 transition-colors hover:bg-navy-800"
             >
-              {done === "latest" ? <Check size={14} className="text-mint-400" /> : <FileDown size={14} className="text-peri-300" />}
+              {done === "latest" ? <Check size={14} className="text-mint-400" /> : <FileDown size={14} className="text-cyan-300" />}
               <span>
                 Latest deck
                 {index?.latest?.period && (
@@ -315,7 +315,7 @@ export function DeckDownloadMenu({
                 ? "flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-ink-100 transition-colors hover:bg-navy-800"
                 : "flex w-full cursor-not-allowed items-center gap-2 px-3 py-2 text-left text-[12px] text-ink-500"}
             >
-              {done === "selected" ? <Check size={14} className="text-mint-400" /> : <FileDown size={14} className="text-peri-300" />}
+              {done === "selected" ? <Check size={14} className="text-mint-400" /> : <FileDown size={14} className="text-cyan-300" />}
               <span>
                 Selected reporting date
                 <span className="block text-[10px] text-ink-500">

@@ -96,7 +96,7 @@ export function DrillThroughPanel({
   return (
     <div className="mt-3 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Layers size={13} className="text-peri-300" />
+        <Layers size={13} className="text-cyan-300" />
         <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">
           Drill into {model.dimensionLabel}
         </span>
@@ -104,7 +104,7 @@ export function DrillThroughPanel({
           aria-label={`Drill into ${model.dimensionLabel}`}
           value={selected}
           onChange={(e) => onSelect(e.target.value)}
-          className="ml-auto rounded-md border border-[var(--color-line)] bg-navy-950/60 px-2 py-1 text-[11px] text-ink-200 focus:border-peri-400/50 focus:outline-none"
+          className="ml-auto rounded-md border border-[var(--color-line)] bg-navy-950/60 px-2 py-1 text-[11px] text-ink-200 focus:border-cyan-400/50 focus:outline-none"
         >
           <option value="">Select a value…</option>
           {model.values.map((v) => (
@@ -118,7 +118,7 @@ export function DrillThroughPanel({
       {agg && (
         <div className="mt-3">
           <div className="flex items-center gap-1.5 text-[12px] font-semibold text-ink-100">
-            <ChevronRight size={13} className="text-peri-300" />
+            <ChevronRight size={13} className="text-cyan-300" />
             {selected}
             {agg.records > 1 && (
               <span className="text-[11px] font-normal text-ink-500">· {agg.records} rows</span>
@@ -147,7 +147,7 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
       <div className="truncate text-[10px] font-medium uppercase tracking-wider text-ink-500" title={label}>
         {label}
       </div>
-      <div className={`mt-0.5 font-mono text-sm tabular-nums ${accent ? "text-peri-200" : "text-ink-100"}`}>
+      <div className={`mt-0.5 font-mono text-sm tabular-nums ${accent ? "text-cyan-200" : "text-ink-100"}`}>
         {value}
       </div>
     </div>

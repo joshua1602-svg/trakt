@@ -64,7 +64,7 @@ export function ChatMessage({
             ? "bg-slate-600/40 text-slate-200"
             : message.error
               ? "bg-rose-400/15 text-rose-400"
-              : "bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40",
+              : "bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-900/40",
         )}
       >
         {isUser ? <User size={14} /> : message.error ? <AlertTriangle size={14} /> : <Sparkles size={14} />}
@@ -72,17 +72,17 @@ export function ChatMessage({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className={cn("text-xs font-semibold", isUser ? "text-slate-300" : "text-teal-200")}>
+          <span className={cn("text-xs font-semibold", isUser ? "text-slate-300" : "text-cyan-200")}>
             {isUser ? "You" : "MI Agent"}
           </span>
           <span className="text-[10px] text-ink-500">{formatTime(message.createdAt)}</span>
         </div>
 
         {message.pending ? (
-          <div className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-teal-700/30 bg-teal-900/20 px-3 py-2">
-            <span className="dot-1 h-1.5 w-1.5 rounded-full bg-teal-300" />
-            <span className="dot-2 h-1.5 w-1.5 rounded-full bg-teal-300" />
-            <span className="dot-3 h-1.5 w-1.5 rounded-full bg-teal-300" />
+          <div className="mt-1.5 inline-flex items-center gap-1 rounded-lg border border-cyan-700/30 bg-cyan-900/20 px-3 py-2">
+            <span className="dot-1 h-1.5 w-1.5 rounded-full bg-cyan-300" />
+            <span className="dot-2 h-1.5 w-1.5 rounded-full bg-cyan-300" />
+            <span className="dot-3 h-1.5 w-1.5 rounded-full bg-cyan-300" />
           </div>
         ) : (
           <div
@@ -93,7 +93,7 @@ export function ChatMessage({
                 ? "border-slate-600/30 bg-slate-700/20 text-slate-100"
                 : message.error
                   ? "border-rose-400/25 bg-rose-400/5 text-rose-200"
-                  : "border-teal-700/30 bg-teal-900/15 text-ink-100",
+                  : "border-cyan-700/30 bg-cyan-900/15 text-ink-100",
             )}
           >
             {message.content}
@@ -104,7 +104,7 @@ export function ChatMessage({
           <button
             type="button"
             onClick={onRetry}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800 px-2.5 py-1 text-[11px] font-medium text-ink-200 transition-colors hover:border-teal-400/40 hover:text-ink-100"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-line)] bg-navy-800 px-2.5 py-1 text-[11px] font-medium text-ink-200 transition-colors hover:border-cyan-400/40 hover:text-ink-100"
           >
             <RefreshCw size={12} />
             Retry
@@ -200,12 +200,12 @@ export function ChatMessage({
                     "group inline-flex items-center gap-2 rounded-md border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1.5 text-left text-[11px] text-ink-300 transition-colors",
                     stale
                       ? "cursor-not-allowed opacity-50"
-                      : "hover:border-teal-400/40 hover:text-ink-100",
+                      : "hover:border-cyan-400/40 hover:text-ink-100",
                   )}
                 >
-                  <FileBarChart size={13} className="text-teal-300" />
+                  <FileBarChart size={13} className="text-cyan-300" />
                   <span className="truncate">{ref.title}</span>
-                  <span className="ml-auto text-[10px] uppercase tracking-wider text-ink-500 group-hover:text-teal-300">
+                  <span className="ml-auto text-[10px] uppercase tracking-wider text-ink-500 group-hover:text-cyan-300">
                     {stale ? "cleared" : `${ref.type} →`}
                   </span>
                 </button>

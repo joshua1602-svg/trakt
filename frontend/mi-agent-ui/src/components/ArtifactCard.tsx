@@ -135,18 +135,18 @@ export function ArtifactCard({
     <Card
       className={cn(
         "animate-fade-in overflow-hidden transition-shadow duration-700",
-        anyPinned && "ring-1 ring-peri-400/30",
-        highlight && "ring-2 ring-teal-400/50 shadow-lg shadow-teal-900/30",
+        anyPinned && "ring-1 ring-cyan-400/30",
+        highlight && "ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-900/30",
       )}
     >
       <div className="flex items-start gap-3 border-b border-[var(--color-line-soft)] px-4 py-3">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-navy-700/60 text-peri-300">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-navy-700/60 text-cyan-300">
           <Icon size={15} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="truncate text-sm font-semibold text-ink-100">{formatHeading(current.title)}</h3>
-            {anyPinned && <Pin size={12} className="shrink-0 fill-peri-400 text-peri-400" />}
+            {anyPinned && <Pin size={12} className="shrink-0 fill-cyan-400 text-cyan-400" />}
             {current.mock && <Badge tone="amber">Mock</Badge>}
           </div>
           {current.description && (
@@ -185,7 +185,7 @@ export function ArtifactCard({
                     className={cn(
                       "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
                       selected
-                        ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/40"
+                        ? "bg-cyan-400/20 text-ink-100 ring-1 ring-inset ring-cyan-400/40"
                         : "text-ink-400 hover:text-ink-100",
                     )}
                   >
@@ -224,14 +224,14 @@ export function ArtifactCard({
           data-testid="drill-filter-chips"
           className="flex flex-wrap items-center gap-1.5 border-b border-[var(--color-line-soft)] bg-navy-900/40 px-4 py-2"
         >
-          <FilterX size={13} className="shrink-0 text-peri-300" />
+          <FilterX size={13} className="shrink-0 text-cyan-300" />
           <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
             Drilled to
           </span>
           {drillEntries.map(([key, value]) => (
             <span
               key={key}
-              className="inline-flex items-center gap-1 rounded-full border border-peri-400/30 bg-peri-400/10 px-2 py-0.5 text-[11px] text-peri-200"
+              className="inline-flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[11px] text-cyan-200"
             >
               <span className="font-medium">{formatHeading(key)}:</span> {filterValueLabel(value)}
               {onDrill && (
@@ -240,7 +240,7 @@ export function ArtifactCard({
                   aria-label={`Remove ${formatHeading(key)} filter`}
                   title="Remove this filter (re-runs the query without it)"
                   onClick={() => removeDrillFilter(key)}
-                  className="ml-0.5 rounded-full p-0.5 text-peri-300/70 hover:bg-peri-400/20 hover:text-peri-100"
+                  className="ml-0.5 rounded-full p-0.5 text-cyan-300/70 hover:bg-cyan-400/20 hover:text-cyan-100"
                 >
                   <X size={11} />
                 </button>

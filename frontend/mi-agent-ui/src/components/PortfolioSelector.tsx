@@ -61,7 +61,7 @@ export function PortfolioSelector({
         onClick={() => !single && setOpen((o) => !o)}
         className="flex max-w-[16rem] items-center gap-2.5 rounded-lg border border-[var(--color-line)] bg-navy-900/60 px-3 py-1.5 text-left transition-colors hover:border-navy-500"
       >
-        <Layers size={15} className="text-peri-300" />
+        <Layers size={15} className="text-cyan-300" />
         <div className="min-w-0 leading-tight">
           <div className="text-[10px] uppercase tracking-wider text-ink-500">Client</div>
           {/* A governed name can be long; it truncates rather than pushing the
@@ -96,7 +96,7 @@ export function PortfolioSelector({
                 </div>
                 <div className="text-[10px] text-ink-400">{p.runs.length} reporting run{p.runs.length === 1 ? "" : "s"}</div>
               </div>
-              {p.client_id === active?.client_id && <Check size={14} className="text-peri-300" />}
+              {p.client_id === active?.client_id && <Check size={14} className="text-cyan-300" />}
             </button>
           ))}
         </div>

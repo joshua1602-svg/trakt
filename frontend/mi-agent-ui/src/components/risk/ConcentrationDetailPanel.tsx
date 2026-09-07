@@ -143,7 +143,7 @@ function TrendChart({
           <Line
             type="monotone"
             dataKey="value"
-            stroke="#919DD1"
+            stroke="#22d3ee"
             strokeWidth={2}
             dot={{ r: 3 }}
             isAnimationActive={false}
@@ -193,7 +193,7 @@ function DrillThrough({
     <div data-testid="concentration-drillthrough">
       <button
         type="button"
-        className="rounded-md border border-[var(--color-line)] px-2 py-1 text-[11px] text-peri-200 hover:bg-navy-800"
+        className="rounded-md border border-[var(--color-line)] px-2 py-1 text-[11px] text-cyan-200 hover:bg-navy-800"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
@@ -367,7 +367,7 @@ function DriversPanel({
     <div data-testid="pipeline-drivers">
       <button
         type="button"
-        className="rounded-md border border-[var(--color-line)] px-2 py-1 text-[11px] text-peri-200 hover:bg-navy-800"
+        className="rounded-md border border-[var(--color-line)] px-2 py-1 text-[11px] text-cyan-200 hover:bg-navy-800"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
@@ -702,7 +702,7 @@ export function ConcentrationDetailPanel({
           <div>
             <button
               type="button"
-              className="rounded-md border border-[var(--color-line)] px-2 py-1 text-[11px] text-peri-200 hover:bg-navy-800"
+              className="rounded-md border border-[var(--color-line)] px-2 py-1 text-[11px] text-cyan-200 hover:bg-navy-800"
               aria-expanded={methodologyOpen}
               onClick={() => setMethodologyOpen((v) => !v)}
             >

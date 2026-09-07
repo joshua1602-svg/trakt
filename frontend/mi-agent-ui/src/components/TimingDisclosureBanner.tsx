@@ -24,7 +24,7 @@ export function TimingDisclosureBanner({
   const warning = timing.level === "warning";
   const tone = warning
     ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-    : "border-peri-500/30 bg-peri-500/10 text-peri-100";
+    : "border-cyan-500/30 bg-cyan-500/10 text-cyan-100";
   const Icon = warning ? AlertTriangle : Clock;
 
   return (

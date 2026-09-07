@@ -89,7 +89,7 @@ export function regionChartArtifact(ctx: Ctx): ChartArtifact {
     rows: REGION_ROWS,
     valueFormat: "gbp",
     unit: "MM",
-    series: [{ key: "balance", label: "Balance (£MM)", color: THEME.peri }],
+    series: [{ key: "balance", label: "Balance (£MM)", color: THEME.cyan }],
   };
 }
 
@@ -148,7 +148,7 @@ export function pipelineBridgeArtifact(ctx: Ctx): ChartArtifact {
     rows: PIPELINE_BRIDGE,
     valueFormat: "gbp",
     unit: "MM",
-    series: [{ key: "value", label: "£MM", color: THEME.peri }],
+    series: [{ key: "value", label: "£MM", color: THEME.cyan }],
   };
 }
 
@@ -168,7 +168,7 @@ export function pipelineFlowArtifact(ctx: Ctx, chartType: "area" | "line" = "lin
     unit: "MM",
     series: [
       { key: "funded", label: "Funded", color: THEME.positive },
-      { key: "pipeline", label: "Pipeline", color: THEME.peri },
+      { key: "pipeline", label: "Pipeline", color: THEME.cyan },
     ],
   };
 }

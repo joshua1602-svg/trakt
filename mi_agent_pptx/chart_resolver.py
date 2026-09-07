@@ -448,7 +448,7 @@ class ChartResolver:
                                      f"Dimension '{spec.get('dimension')}' unavailable for a bridge.")
         # Colours mirror the React waterfall (base / inflow / fallout / total).
         col = {"add": self.theme.peri, "sub": self.theme.negative,
-               "total": self.theme.mint, "base": "#3d4a82"}
+               "total": self.theme.mint, "base": self.theme.navy}
         n = len(items)
         bar_w = 0.62
         levels: List[float] = []
@@ -514,7 +514,8 @@ class ChartResolver:
             return self._placeholder(chart_id, title, "heatmap", w, h, "No data.")
 
         ramp = LinearSegmentedColormap.from_list(
-            "trakt_ramp", [(0.0, "#1b2240"), (0.55, "#919dd1"), (1.0, "#36c2a8")])
+            "trakt_ramp",
+            [(0.0, self.theme.line_soft), (0.55, self.theme.peri), (1.0, self.theme.mint)])
         vals = pivot.values.astype(float)
         vmax = max(vals.max(), 1.0)
 
@@ -530,7 +531,7 @@ class ChartResolver:
                     (j + gap / 2, (nrows - 1 - i) + gap / 2), 1 - gap, 1 - gap,
                     facecolor=ramp(t), edgecolor="none"))
                 if vals[i, j] > 0:
-                    txt_c = "#0c1024" if t > 0.45 else self.theme.ink_100
+                    txt_c = self.theme.bg_page if t > 0.45 else self.theme.ink_100
                     ax.text(j + 0.5, (nrows - 1 - i) + 0.5, compact_currency(vals[i, j]),
                             ha="center", va="center", color=txt_c, fontsize=8.5,
                             fontproperties=_MONO_FP)

@@ -116,7 +116,7 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
               {vintages.map((v) => (
                 <tr key={v.vintage}
                   className={"cursor-pointer border-b border-[var(--color-line-soft)] last:border-0 "
-                    + (v.vintage === selected ? "bg-peri-400/10" : "hover:bg-navy-800/40")}
+                    + (v.vintage === selected ? "bg-cyan-400/10" : "hover:bg-navy-800/40")}
                   onClick={() => setVintage(v.vintage)} data-testid={`vintage-${v.vintage}`}>
                   <td className="px-3 py-1.5 text-left font-medium text-ink-100">{v.vintage}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{v.originalLoanCount.toLocaleString("en-GB")}</td>
@@ -175,7 +175,7 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
                     {p.forming && (
                       <span
                         title="The vintage was still originating at this date, so the pool was not yet fixed and there is no survival rate to report."
-                        className="ml-2 rounded-full border border-peri-400/30 bg-peri-400/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-peri-200"
+                        className="ml-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-cyan-200"
                       >Forming</span>
                     )}
                   </td>
@@ -197,7 +197,7 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
         The pool is fixed once the vintage stops originating{pool?.formationEnd
           ? ` (${pool.formationEnd})` : ""}. From that point a falling count is redemption
         or exit and the count can never rise; balance retention above 100% is interest
-        roll-up, not new lending. Periods marked <span className="text-peri-200">Forming</span>{" "}
+        roll-up, not new lending. Periods marked <span className="text-cyan-200">Forming</span>{" "}
         pre-date that: the vintage was still admitting loans, so no retention is shown.
       </p>
     </div>

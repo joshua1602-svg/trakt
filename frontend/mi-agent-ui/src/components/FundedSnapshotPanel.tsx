@@ -118,7 +118,7 @@ export function FundedSnapshotPanel({
     <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/50 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700/70 text-peri-300">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700/70 text-cyan-300">
             <Landmark size={17} />
           </div>
           <div className="leading-tight">
@@ -135,9 +135,9 @@ export function FundedSnapshotPanel({
             {loading && (
               <span
                 data-testid="snapshot-updating"
-                className="inline-flex items-center gap-1.5 rounded-md border border-peri-400/30 bg-peri-400/10 px-2 py-1 text-[10px] font-medium text-peri-200"
+                className="inline-flex items-center gap-1.5 rounded-md border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[10px] font-medium text-cyan-200"
               >
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-peri-300" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
                 Updating for new selection…
               </span>
             )}

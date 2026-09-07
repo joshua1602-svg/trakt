@@ -29,7 +29,7 @@ export function ScenarioArtifactView({ artifact }: { artifact: ScenarioArtifact 
       </div>
 
       <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-400">
-        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.peri }} />Balance (£MM)</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.cyan }} />Balance (£MM)</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.positive }} />Portfolio LTV (%)</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.negative }} />Cumulative NNEG (£MM)</span>
       </div>
@@ -62,7 +62,7 @@ export function ScenarioArtifactView({ artifact }: { artifact: ScenarioArtifact 
               );
             }}
           />
-          <Bar yAxisId="left" dataKey="balance" name="Balance" fill={THEME.peri} fillOpacity={0.5} radius={[3, 3, 0, 0]} />
+          <Bar yAxisId="left" dataKey="balance" name="Balance" fill={THEME.cyan} fillOpacity={0.5} radius={[3, 3, 0, 0]} />
           <Line yAxisId="right" type="monotone" dataKey="ltv" name="LTV" stroke={THEME.positive} strokeWidth={2} dot={false} />
           <Line yAxisId="left" type="monotone" dataKey="cumulativeNneg" name="Cumulative NNEG" stroke={THEME.negative} strokeWidth={2} dot={false} />
         </ComposedChart>

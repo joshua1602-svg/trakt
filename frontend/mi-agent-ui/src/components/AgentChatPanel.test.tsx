@@ -20,12 +20,12 @@ const context: AnalysisContext = {
 };
 
 describe("AgentChatPanel surface", () => {
-  it("marks the chat as a distinct AI surface with teal styling", () => {
+  it("marks the chat as a distinct AI surface with cyan styling", () => {
     const { container } = render(<AgentChatPanel {...baseProps} context={null} />);
     const surface = container.querySelector('[data-surface="ai-chat"]');
     expect(surface).not.toBeNull();
-    // Distinct teal palette, not the navy analytics card colour.
-    expect(surface!.className).toMatch(/teal/);
+    // Distinct cyan accent (Slate & Cyan), not the navy analytics card colour.
+    expect(surface!.className).toMatch(/cyan/);
   });
 
   it("carries a Beta tag beside the MI Agent title", () => {

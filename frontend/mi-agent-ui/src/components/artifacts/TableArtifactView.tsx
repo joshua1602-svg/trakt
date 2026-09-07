@@ -48,7 +48,7 @@ export function TableArtifactView({ artifact }: { artifact: TableArtifact }) {
                     )}
                   >
                     {col.bar && (
-                      <span className="absolute inset-y-1 left-0 -z-0 rounded-sm bg-peri-400/10" style={{ width: `${pct}%` }} aria-hidden />
+                      <span className="absolute inset-y-1 left-0 -z-0 rounded-sm bg-cyan-400/10" style={{ width: `${pct}%` }} aria-hidden />
                     )}
                     <span className="relative z-10">{cell(raw, col)}</span>
                   </td>
