@@ -345,8 +345,16 @@ def preflight(base_url: str, path: str, headers: List[str],
         # No HTTP status at all: nothing answered.
         return f"NO — {detail}", "NOT REACHED", None
 
+    # WHICH COMMIT IS SERVING. This used to fall back through
+    # ("commit", "sha", "revision", "build", "version") and settle on
+    # `version=1.0.0` — the application's hand-written version string, identical
+    # across every deploy this year. It looked like provenance and established
+    # nothing: it could not tell the release being certified from an older build
+    # that was never replaced, or from a rollback nobody recorded. Only the
+    # immutable build stamp counts now, and its ABSENCE is reported as absence
+    # rather than filled in with something that reads like an answer.
     commit = None
-    for candidate in ("/health", "/api/health"):
+    for candidate in ("/health", "/api/health", "/", "/api/"):
         try:
             request = urllib.request.Request(
                 base_url.rstrip("/") + candidate, method="GET")
@@ -357,13 +365,11 @@ def preflight(base_url: str, path: str, headers: List[str],
                     "Bearer " + bearer.removeprefix("Bearer ").strip())
             with urllib.request.urlopen(request, timeout=30) as response:
                 health = json.loads(response.read().decode("utf-8") or "{}")
-            for key in ("commit", "sha", "revision", "build", "version"):
-                if health.get(key):
-                    commit = f"{key}={health[key]}"
-                    break
-            if commit:
+            build = health.get("build")
+            if isinstance(build, dict) and build.get("commit"):
+                commit = str(build["commit"]).strip()
                 break
-        except Exception:  # noqa: BLE001 - health is a nicety, not the gate
+        except Exception:  # noqa: BLE001 - health is a nicety, the stamp is not
             continue
     return "YES", "YES", commit
 
@@ -523,6 +529,22 @@ def report_broad(ask: Callable[[str], Dict[str, Any]],
         index += count
     emit("HOLDOUT (written after the suite was fixed; run exactly once)", holdout)
 
+    # A SECOND HOLDOUT, WRITTEN AFTER THE SEMANTIC REPAIR. The first one was
+    # written before it and three of its questions are what found the defect, so
+    # it can no longer be blind to the change it caused. This one uses head nouns
+    # and modifiers that appear nowhere in the repair, the property tests, the
+    # six production failures or the first holdout — and half of it is
+    # LEGITIMATE language, because a repair that refuses everything would pass a
+    # holdout made only of nonsense.
+    fresh = [_broad.score_single(session, case)
+             for case in cases.get("fresh_holdout", [])]
+    for result in fresh:
+        bucket = by_class.setdefault(result.cls, {})
+        bucket[result.status] = bucket.get(result.status, 0) + 1
+    emit("FRESH HOLDOUT (written after the semantic repair; run exactly once)",
+         fresh)
+    holdout = holdout + fresh
+
     # ---- the bar ---------------------------------------------------------- #
     silent_wrong = [r for r in results + holdout if r.silent_wrong]
     equivalence_failures = [r for r in results
@@ -550,6 +572,20 @@ def report_broad(ask: Callable[[str], Dict[str, Any]],
         lines.append(f"  {cls:22} ok {bucket.get('ok', 0):3d} · data "
                      f"{bucket.get('data', 0):3d} · NOT-EST "
                      f"{bucket.get('n/e', 0):3d} · FAIL {bucket.get('FAIL', 0):3d}")
+
+    # §7 — WHY EACH REFUSAL HAPPENED, counted. A report that says "data" for
+    # everything it did not get an answer to sends an operator to load columns
+    # that are already loaded. These four are different conversations.
+    classified: Dict[str, int] = {}
+    for evidence in session._seen.values():          # noqa: SLF001 - same package
+        if evidence.transport_error:
+            continue
+        reason = _broad.refusal_class(evidence.envelope)
+        classified[reason or "ANSWERED"] = classified.get(reason or "ANSWERED", 0) + 1
+    lines += ["", "REFUSAL CLASSIFICATION (of the distinct live requests)"]
+    for name in ("ANSWERED", _broad.DATA_UNAVAILABLE, _broad.CAPABILITY_UNAVAILABLE,
+                 _broad.SEMANTIC_UNRESOLVED, _broad.GOVERNED_REFUSAL):
+        lines.append(f"  {name:24} {classified.get(name, 0)}")
 
     lines += ["", "COUNTS BY SAFETY CLASS",
               f"  silent wrong answers            : {len(silent_wrong)}",
@@ -581,6 +617,7 @@ def report_broad(ask: Callable[[str], Dict[str, Any]],
              "transport": len(session.transport_failures),
              "http_5xx": len(server_errors), "http_4xx": len(client_errors),
              "timings": timings, "by_class": by_class,
+             "classified": classified,
              "cases": len(results) + len(holdout)}
     return passed, lines, facts
 
@@ -602,6 +639,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--portfolio-id", default=None,
                         help="portfolioId sent with each question, where the "
                              "deployment selects a book that way.")
+    parser.add_argument("--expect-commit", default=None, metavar="SHA",
+                        help="the Git commit this deployment is supposed to be "
+                             "serving. The run FAILS if the deployed commit "
+                             "cannot be established, or differs from this. "
+                             "Provenance that cannot tell two builds apart is "
+                             "not provenance, and an application version string "
+                             "cannot tell two builds apart.")
     parser.add_argument("--report", default=None, metavar="FILE",
                         help="write the report here as well as to stdout, so a "
                              "CI run can keep it as an artifact.")
@@ -627,12 +671,28 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     header = ["=" * 74, "MI Query Agent — production certification",
               f"target: {target}", "=" * 74]
+    provenance = "not checked (in-process run)"
     if args.base_url:
         reached, authorised, commit = preflight(
             args.base_url, args.path, args.header, args.portfolio_id)
         header.append(f"endpoint reached : {reached}")
         header.append(f"auth passed      : {authorised}")
-        header.append(f"deployed commit  : {commit or 'not observable'}")
+        header.append(f"deployed commit  : {commit or 'NOT ESTABLISHED'}")
+        expected = (args.expect_commit or "").strip()
+        if expected:
+            header.append(f"expected commit  : {expected}")
+            if not commit:
+                provenance = ("NO — the service publishes no build stamp, so "
+                              "which commit is serving cannot be established")
+            elif commit.lower().startswith(expected.lower()[:7]) or \
+                    expected.lower().startswith(commit.lower()[:7]):
+                provenance = "YES"
+            else:
+                provenance = (f"NO — serving {commit[:12]}, expected "
+                              f"{expected[:12]}")
+        else:
+            provenance = "not checked (no --expect-commit given)"
+        header.append(f"provenance       : {provenance}")
         header.append("=" * 74)
         if not (reached == "YES" and authorised == "YES"):
             print("\n".join(header))
@@ -668,6 +728,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     # sweep says the semantics hold across the surface an operator actually
     # uses. A run that passed one and failed the other must not be able to
     # report a single word.
+    # PROVENANCE IS PART OF THE VERDICT, not a note beside it. A green
+    # certification against a build nobody can identify certifies nothing an
+    # operator can act on: "it passed" is only useful if "it" is a commit.
+    if args.base_url and (args.expect_commit or "").strip():
+        if not str(provenance).startswith("YES"):
+            core_ok = False
+            lines.append("")
+            lines.append(f"  FAIL   deployed-build provenance: {provenance}")
     core_verdict = "PASS" if core_ok else "FAIL"
     print(f"CORE VERDICT : {core_verdict}")
     if broad_ok is not None:

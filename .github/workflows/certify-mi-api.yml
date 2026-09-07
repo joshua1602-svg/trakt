@@ -50,6 +50,15 @@ on:
         description: Repo ref to take the certification harness from
         default: main
         required: true
+      expect_commit:
+        description: >-
+          The Git SHA this deployment is supposed to be serving. Leave blank to
+          use the SHA of the checked-out ref. The run FAILS if the deployed
+          commit cannot be established or differs — an application version
+          string ("1.0.0") is identical across every deploy and cannot tell one
+          build from another, so it is not accepted as provenance.
+        default: ''
+        required: false
       suite:
         description: >-
           core        = the release smoke gate only (a few dozen requests).
@@ -127,11 +136,18 @@ jobs:
             SUITE="--no-broad"
           fi
 
+          EXPECT="${{ inputs.expect_commit }}"
+          if [ -z "${EXPECT}" ]; then
+            EXPECT="$(git rev-parse HEAD)"
+          fi
+          echo "expecting the deployed service to be serving ${EXPECT}"
+
           python -m due_diligence.evidence.mi_api_certification.certify_mi_api \
             --base-url "${{ inputs.base_url }}" \
             --path "${{ inputs.path }}" \
             --portfolio-id "${{ inputs.portfolio_id || vars.TRAKT_PORTFOLIO_ID }}" \
             --report certification-report.txt \
+            --expect-commit "${EXPECT}" \
             $SUITE $BANKS
 
       - name: Keep the report whatever the verdict

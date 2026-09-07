@@ -87,6 +87,25 @@ jobs:
           # requirements.txt — the file Oryx detects and builds.
           cp deploy/trakt-mi-api/requirements.txt "${STAGE_DIR}/requirements.txt"
 
+          # WHICH COMMIT IS IN THIS ZIP. Written here, from the SHA this job
+          # checked out, because the artefact has no `.git` and the application
+          # version string ("1.0.0") is hand-written and identical across every
+          # deploy — so a certification pointed at the live service could not
+          # tell the release it meant to certify from an older build that was
+          # never replaced. The stamp travels inside the artefact, so a rollback
+          # carries its own provenance back with it.
+          cat > "${STAGE_DIR}/build_info.json" <<STAMP
+          {
+            "commit": "${GITHUB_SHA}",
+            "ref": "${GITHUB_REF}",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          STAMP
+          python -c "import json,sys; d=json.load(open('${STAGE_DIR}/build_info.json')); \
+            sys.exit(0 if len(d.get('commit') or '')==40 else 1)" \
+            || { echo "::error::build_info.json does not carry a 40-character commit SHA"; exit 1; }
+          echo "artefact stamped with commit ${GITHUB_SHA}"
+
           # Test suites and caches are not runtime code; they only slow the
           # upload. Nothing under the packages above imports from a tests/ dir.
           find "${STAGE_DIR}" -type d -name '__pycache__' -prune -exec rm -rf {} +

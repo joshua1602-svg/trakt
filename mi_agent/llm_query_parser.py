@@ -4328,6 +4328,16 @@ def _resolve_population(text: str, semantics: dict, available_columns=None,
                 if any(residue.text in str(note).lower()
                        for note in (unavailable or ())):
                     continue
+                # ...AND THE SAME RULE FOR THIS RESOLVER'S OWN NOTES. "Show
+                # loans for Equity Release Supermarket Limited." already records
+                # the WHOLE phrase as an unresolved category; adding `limited`,
+                # `release` and `supermarket` beside it names one obstacle four
+                # times. The check above only ever looked at the OTHER owner's
+                # notes, so the duplication this rule exists to prevent was
+                # possible against notes written a line earlier.
+                if any(residue.text in str(note).lower()
+                       for note in unresolved):
+                    continue
                 mark = f"{UNKNOWN_CATEGORY_PREFIX}'{residue.text}'"
                 if mark not in unresolved:
                     unresolved.append(mark)

@@ -213,6 +213,15 @@ def _claimed_phrase_uncached(text: str, semantics: dict, available_columns,
     # that answered. Both readings are offered: the apostrophe removed
     # ("what's" -> "whats") and the stem before it ("what's" -> "what"), because
     # the estate's lists carry each form somewhere.
+    # A POSSESSIVE IS A DETERMINER, NOT A CATEGORY NAME. "today's pipeline",
+    # "last month's balance" — the possessive says WHOSE, and the thing it
+    # qualifies is owned by the period and scope owners. No governed value in
+    # this estate is spelled possessively, so a word ending in "'s" standing in
+    # a restriction slot is grammar, not an unrecognised category. Without this
+    # the analytical-head rule reported `today's` as a category the book does
+    # not carry.
+    if " " not in text and text.endswith("'s"):
+        return True
     if "'" in text:
         for variant in (text.replace("'", ""), text.split("'", 1)[0]):
             if variant and variant != text and claimed_phrase(
@@ -317,13 +326,107 @@ def _is_measure_noun(word: str, semantics: dict) -> bool:
         return False
 
 
+_HEAD_TOKEN_CACHE: Dict[int, frozenset] = {}
+
+
+def _analytical_head_tokens(semantics: dict) -> frozenset:
+    """The words a governed DIMENSION's own name ends in.
+
+    THE HEAD OF A GOVERNED NAME, not every word in one. `ltv band`, `product
+    type`, `seasoning cohort` and `borrower structure` end in `band`, `type`,
+    `cohort` and `structure`, and those are the nouns a reader puts a modifier
+    in front of. Taking every word instead made a head out of `months` (from
+    "months on book band") and `time`, and a slot in front of a period noun
+    turns "over the next twelve months" into two unresolved categories — which
+    is the reverse failure, measured on the census, at 23 movements.
+
+    DIMENSIONS ONLY, because the defect is a recognised CATEGORY head absorbing
+    its modifier. Measures and rows already anchor slots of their own through
+    `is_measure_noun` and the row-noun vocabulary, so `balance`, `loans` and
+    `properties` are covered without widening this set — and widening it to
+    metric names is what put `pipeline` beside `plus` and `today's`.
+
+    Read from the registry, never written here: the estate adds a dimension and
+    this set follows, with no list to maintain and no vocabulary invented.
+    """
+    key = id(semantics)
+    cached = _HEAD_TOKEN_CACHE.get(key)
+    if cached is not None:
+        return cached
+    heads = set()
+    for entry in ((semantics or {}).get("fields") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("role") or "").lower() != "dimension":
+            continue
+        names = [entry.get("business_name"), entry.get("display_name")]
+        names.extend(entry.get("synonyms") or ())
+        for name in names:
+            tokens = re.findall(r"[a-z0-9]+", str(name or "").lower())
+            if tokens:
+                heads.add(tokens[-1])
+    cached = frozenset(heads)
+    _HEAD_TOKEN_CACHE[key] = cached
+    return cached
+
+
+def _is_analytical_noun(word: str, semantics: dict) -> bool:
+    """Does this word NAME a governed analytical concept?
+
+    THE REGISTRY IS THE WHOLE ANSWER, and deliberately: `band`, `bucket`,
+    `cohort`, `segment`, `product` and `type` are the nouns a governed dimension
+    name ends in, and `sparkle`, `velvet`, `bronze` and `aurora` are not. So the
+    head-noun vocabulary is not written here — it is READ from the same registry
+    the dimension owner resolves against, which is what stops this from becoming
+    a second parser with a list of nouns to maintain.
+
+    NOT "is it claimed". Ordinary framing words are claimed by their owners too,
+    and a slot in front of `is`, `show` or `the` is not a restriction position —
+    it is noise, and noise here becomes a refusal of a working question. A
+    boundary word is by definition not a head, whatever the registry spells.
+
+    The singular is tried because a reader writes `products` where the registry
+    spells `product`. That fold only ever CREATES a slot, so it can make this
+    layer stricter and never laxer.
+    """
+    if not word or word in _lexical.RESTRICTION_SLOT_BOUNDARY or word in _BENIGN:
+        return False
+    if word.isdigit():
+        return False
+    heads = _analytical_head_tokens(semantics)
+    if word in heads:
+        return True
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1] in heads
+    return False
+
+
 def _slots(question: str, semantics: dict):
-    """THE SHARED GRAMMAR. `lexical.restriction_slots` is the single owner of
-    where a restriction slot is; the parser reads it to RESOLVE what stands in
-    one, and this layer reads it to check that something did. A second copy of
-    that boundary is the duplicate-owner defect, and it would drift."""
-    return _lexical.restriction_slots(
-        question, lambda word: _is_measure_noun(word, semantics))
+    """THE SHARED GRAMMAR, in both positions a restriction stands in.
+
+    `lexical` is the single owner of where a restriction slot is; the parser
+    reads it to RESOLVE what stands in one, and this layer reads it to check
+    that something did. A second copy of that boundary is the duplicate-owner
+    defect, and it would drift.
+
+    Two positions, tagged, because they differ in one respect that matters. In
+    an ATTRIBUTIVE slot the head is the thing being restricted — `loans`,
+    `balance`, `band` — and the restriction is the run in front of it. In a
+    PREPOSITIONAL object there is no separate thing: "in Atlantis" restricts the
+    population to Atlantis, so the head is itself material and must be
+    accounted for like any modifier.
+    """
+    measure = lambda word: _is_measure_noun(word, semantics)          # noqa: E731
+    analytical = lambda word: _is_analytical_noun(word, semantics)    # noqa: E731
+    out = [(head, slot, offset, "attributive") for head, slot, offset
+           in _lexical.restriction_slots(question, measure, analytical)]
+    try:
+        out += [(head, slot, offset, "prepositional") for head, slot, offset
+                in _lexical.prepositional_restriction_objects(
+                    question, _is_row_noun)]
+    except AttributeError:  # an older lexical module claims only the one position
+        pass
+    return out
 
 
 def consumed_spans(question: str, semantics: dict, *,
@@ -486,19 +589,35 @@ def material_residue(question: str, semantics: dict, *,
 
     out: List[Residue] = []
     seen: Set[str] = set()
-    for head, slot, head_offset in _slots(question, semantics):
+    for head, slot, head_offset, kind in _slots(question, semantics):
         words = [(w, o) for w, o in slot if o not in covered]
-        if not words:
-            continue
-        unclaimed = _unclaimed_in_slot(words + [(head, head_offset)], semantics,
-                                       available_columns, available_values,
-                                       head_index=len(words))
+        if kind == "attributive":
+            if not words:
+                continue
+            # The head is the thing being restricted, not a restriction: it is
+            # offered to the owners as part of the phrase and never reported.
+            entries = words + [(head, head_offset)]
+            head_index = len(words)
+            position = "row" if _is_row_noun(head) else "measure"
+        else:
+            # THE HEAD OF A PREPOSITIONAL OBJECT IS ITSELF THE RESTRICTION.
+            # "in Atlantis" names no thing being narrowed — the object IS the
+            # narrowing — so excluding the head here would exclude the only
+            # material word in it, which is exactly how that question returned
+            # the whole book.
+            entries = words + ([] if head_offset in covered
+                               else [(head, head_offset)])
+            if not entries:
+                continue
+            head_index = -1
+            position = "prepositional"
+        unclaimed = _unclaimed_in_slot(entries, semantics, available_columns,
+                                       available_values, head_index=head_index)
         for word in unclaimed:
             if word in seen:
                 continue
             seen.add(word)
-            out.append(Residue(word, head,
-                               "row" if _is_row_noun(head) else "measure"))
+            out.append(Residue(word, head, position))
     result = tuple(out)
     if len(_RESIDUE_MEMO) >= _RESIDUE_MEMO_CAP:
         _RESIDUE_MEMO.clear()

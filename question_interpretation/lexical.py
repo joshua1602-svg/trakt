@@ -1663,29 +1663,45 @@ def ordering_request(question: str) -> OrderingRequest:
 #: meaningful term vanishes.
 RESTRICTION_SLOT_BOUNDARY = frozenset("""
 for in of on at to with within without across from by per and or but so then
-also whose having that which than the a an
+also whose having that which than the a an plus versus vs
 """.split())
 
 _SLOT_WORD = re.compile(r"[a-z0-9£][a-z0-9'%£-]*[a-z0-9%£]|[a-z0-9£]")
 
 
-def restriction_slots(text, is_measure_noun=None):
+def restriction_slots(text, is_measure_noun=None, is_analytical_noun=None):
     """``[(head, [(word, offset), ...], head_offset), ...]``.
 
     A RESTRICTION SLOT is the run of words standing attributively before a head
     noun — the position in which a reader states a governed narrowing without a
-    preposition. The head may name a ROW ("Scottish loans") or, when the caller
-    supplies ``is_measure_noun``, a MEASURE ("Scottish balance").
+    preposition. The head may name a ROW ("Scottish loans"), or, when the caller
+    supplies the predicate, a MEASURE ("Scottish balance") or a governed
+    ANALYTICAL concept ("lump sum products", "LTV band", "seasoning cohort").
 
     THE MEASURE HEAD IS THE ONE THAT WAS MISSING, and its absence is why "Give
     me the Scottish balance." offered its adjective to nothing at all: no row
     noun, no anchor, no trace of the population anywhere in the parse.
 
+    THE ANALYTICAL HEAD IS THE ONE AFTER THAT, and its absence let six confident
+    figures out of production. `products`, `band`, `cohort` and `segment` are
+    none of them a row noun and none of them a measure, so no slot was formed in
+    front of them and the modifier standing there was offered to nobody:
+
+        "the total balance for velvet products"   -> grouped by product type
+        "the balance by sparkle band"             -> grouped by age bucket
+        "loans in the bronze cohort"              -> grouped by portfolio cohort
+
+    In each case an owner recognised the HEAD and the material modifier ceased
+    to exist between the question and the plan. A recognised head must not
+    account for an unknown modifier, and it can only be held to that if a slot
+    exists there to be checked.
+
     One owner, because two readers need this boundary — the parser, which
     resolves what stands in a slot, and the semantic-accounting layer, which
     checks that something did. Two copies of it is the defect this estate has
-    already paid for more than once. ``is_measure_noun`` is injected rather than
-    imported so this module keeps no dependency on the registry.
+    already paid for more than once. The predicates are injected rather than
+    imported so this module keeps no dependency on the registry, and a caller
+    that supplies neither sees exactly the row-noun grammar it saw before.
     """
     body = str(text or "").lower()
     words = [(m.group(0), m.start()) for m in _SLOT_WORD.finditer(body)]
@@ -1693,7 +1709,9 @@ def restriction_slots(text, is_measure_noun=None):
     for index, (word, offset) in enumerate(words):
         row = re.fullmatch(row_noun_alternation(), word) is not None
         measure = (not row) and bool(is_measure_noun and is_measure_noun(word))
-        if not (row or measure):
+        analytical = (not (row or measure)
+                      and bool(is_analytical_noun and is_analytical_noun(word)))
+        if not (row or measure or analytical):
             continue
         slot = []
         cursor = index - 1
@@ -1708,4 +1726,84 @@ def restriction_slots(text, is_measure_noun=None):
             cursor -= 1
         if slot:
             out.append((word, slot, offset))
+    return out
+
+
+#: Prepositions that introduce a RESTRICTION ON THE POPULATION rather than a
+#: grouping axis or a possessive. `by` is deliberately absent: it names the axis
+#: a breakdown runs along and the dimension owner owns it. `of` is absent for
+#: the same kind of reason — "count of loans" restricts nothing.
+RESTRICTION_PREPOSITIONS = frozenset(
+    "in for with within across at on per".split())
+
+#: Determiners a reader puts between the preposition and the thing itself. They
+#: are skipped rather than treated as the object, or "in the bronze cohort"
+#: would have an empty object and the modifier would again be examined by
+#: nobody.
+_OBJECT_DETERMINERS = frozenset(
+    "the a an each every all any this that these those our their its".split())
+
+
+def prepositional_restriction_objects(text, is_row_noun=None):
+    """``[(head, [(word, offset), ...], head_offset), ...]`` after a preposition.
+
+    THE OTHER POSITION A RESTRICTION STANDS IN, and the one that let
+
+        "What is the balance for borrowers in Atlantis?"
+
+    return the whole book. `borrowers` is a row noun, but the slot in front of
+    it is empty — the word before it is the preposition `for` — so the
+    attributive scan found nothing, and `Atlantis` sits AFTER the row noun where
+    no slot has ever been looked for. Its sibling "What is the balance in
+    Ruritania?" refuses correctly, and the only difference between them is that
+    a row noun intervened.
+
+    The object runs from the preposition to the next boundary word or
+    punctuation, with leading determiners skipped. Its LAST word is the head and
+    the run before it the modifiers, which is the same shape the attributive
+    scan returns — so one consumer reads both.
+
+    An object of a single word is still a restriction, so these are emitted with
+    an empty modifier run. That is why the caller must not assume the head of a
+    slot is already accounted for: here the head IS the restriction.
+
+    ONLY AFTER A ROW NOUN, and that narrowing is the whole reason this is safe.
+    A preposition introduces a restriction on a POPULATION when it follows the
+    thing being restricted — "borrowers in Atlantis", "loans in the bronze
+    cohort" — and introduces framing, timing or an argument when it does not:
+    "at the moment", "at offer", "excluded from weighting", "forecast to get to
+    from today's pipeline". Reading every prepositional phrase as a restriction
+    turned four of those into unresolved categories on the 882-question census.
+    A caller that supplies no row-noun predicate gets nothing, because without
+    it there is no way to tell the two apart.
+    """
+    body = str(text or "").lower()
+    words = [(m.group(0), m.start()) for m in _SLOT_WORD.finditer(body)]
+    out = []
+    for index, (word, _offset) in enumerate(words):
+        if word not in RESTRICTION_PREPOSITIONS:
+            continue
+        if index == 0:
+            continue
+        previous = words[index - 1][0]
+        if not (is_row_noun and is_row_noun(previous)):
+            continue
+        cursor = index + 1
+        while (cursor < len(words)
+               and words[cursor][0] in _OBJECT_DETERMINERS):
+            cursor += 1
+        obj = []
+        while cursor < len(words):
+            candidate, candidate_offset = words[cursor]
+            if candidate in RESTRICTION_SLOT_BOUNDARY:
+                break
+            gap = body[words[cursor - 1][1] + len(words[cursor - 1][0]):
+                       candidate_offset]
+            if any(ch in gap for ch in ",;:.?!"):
+                break
+            obj.append((candidate, candidate_offset))
+            cursor += 1
+        if obj:
+            head, head_offset = obj[-1]
+            out.append((head, obj[:-1], head_offset))
     return out
