@@ -152,7 +152,7 @@ export function PipelineSnapshotPanel({
     <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/50 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700/70 text-peri-300">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700/70 text-cyan-300">
             <GitBranch size={17} />
           </div>
           <div className="leading-tight">

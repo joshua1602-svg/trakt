@@ -2,42 +2,62 @@
 
 /* ------------------------------------------------------------------ *
  * Trakt MI Agent — enterprise design tokens
- * Palette derived from analytics/charts_plotly.py:
- *   PRIMARY  #232D55 (Trakt navy)   SECONDARY #919DD1 (periwinkle)
  *
- * Register: institutional terminal. Structure comes from SPACING,
- * WEIGHT and CONTRAST. Colour is reserved for state and emphasis —
- * accent hues are never used decoratively.
+ * SLATE & CYAN — one hue family, one accent, everywhere. This replaced the
+ * old "PRIMARY #232D55 / SECONDARY #919DD1 (periwinkle)" brand pair that used
+ * to anchor this file (itself once mirrored from analytics/charts_plotly.py,
+ * which is dead: the live product renders charts through this file and
+ * mi_agent_pptx/pptx_theme.py, and charts_plotly.py is imported only by the
+ * legacy analytics/streamlit_app_erm.py prototype). That pair is why a
+ * KPI tile (--color-navy-800, indigo) used to sit on a Core Dashboard panel
+ * (--surface-dashboard, Slate & Cyan neutral) as two visibly different blues
+ * on one screen — the surfaces were repainted in an earlier pass but the
+ * raised-card ramp underneath them, the text ramp, and the accent used for
+ * bars/lines/selection were not. All four are now one system:
+ *
+ *   --color-navy-*   the raised-card / tile / tooltip ramp (bg-navy-800 etc,
+ *                    used across ~40 components) — same neutral hue family
+ *                    (H ~220°, low saturation) as the region surfaces below,
+ *                    just its own lightness steps for "sits on top of a
+ *                    surface" elevation.
+ *   --color-ink-*    body/heading text — same hue family, desaturated from
+ *                    its old indigo tint; every step keeps its ORIGINAL
+ *                    lightness (and therefore its measured contrast ratio),
+ *                    only the hue moved.
+ *   --color-line-*   hairlines/borders — same treatment as ink.
+ *   --color-cyan-*   THE one accent: selected tab, focus ring, chart bars
+ *                    and lines, the chat rail's own chrome. Standard
+ *                    Tailwind cyan values, so `var(--color-cyan-400)` here
+ *                    and a `bg-cyan-400` class in a component are the same
+ *                    pixel. Nothing else carries colour decoratively.
+ *
+ * Register: institutional terminal. Structure comes from SPACING, WEIGHT and
+ * CONTRAST; colour is reserved for state and emphasis.
  * ------------------------------------------------------------------ */
 @theme {
   /* --- Surface ladder ------------------------------------------------
      Five deliberate steps from page ground to raised control. Each step
      is a visible increment, so elevation alone can separate a card from
-     the panel behind it without a border doing the work. */
-  --color-navy-950: #090c1c; /* page ground */
-  --color-navy-900: #0e1226; /* region panel */
-  --color-navy-850: #131834; /* inset / table head */
-  --color-navy-800: #191f3f; /* raised card */
-  --color-navy-700: #232d55; /* active control fill */
-  --color-navy-600: #303b6b; /* control border */
-  --color-navy-500: #3d4a82;
+     the panel behind it without a border doing the work. Same neutral
+     slate hue family as the region surfaces further down this file —
+     previously an unrelated indigo/navy-blue, which is what made a KPI
+     tile (--color-navy-800) read as a different palette from the Core
+     Dashboard panel (--surface-dashboard) it sits on. */
+  --color-navy-950: #0a0b0d; /* page ground / tooltip */
+  --color-navy-900: #101318; /* region panel */
+  --color-navy-850: #151920; /* inset / table head */
+  --color-navy-800: #1c2027; /* raised card */
+  --color-navy-700: #262b34; /* active control fill */
+  --color-navy-600: #333a45; /* control border */
+  --color-navy-500: #454e5c;
 
-  /* --- Accent: STATE ONLY -------------------------------------------
-     Periwinkle marks selection and emphasis on CHARTS and the brand mark
-     (analytics/charts_plotly.py SECONDARY) — untouched by the Slate & Cyan
-     repaint below, which only ever changed panel fills. */
-  --color-peri-500: #7b8ac9;
-  --color-peri-400: #919dd1;
-  --color-peri-300: #aab4dd;
-  --color-peri-200: #c6cdea;
-
-  /* Cyan marks INTERFACE state — the selected tab, the focus ring — the
-     one thing "Slate & Cyan" reserves colour for. Standard Tailwind cyan
-     values, so a raw `var(--color-cyan-400)` in this file and a `bg-cyan-400`
-     class in a component (the chat rail's own accent, see AgentChatPanel)
-     are guaranteed to be the same pixel. */
+  /* --- Accent: STATE ONLY ---------------------------------------------
+     Cyan marks selection and emphasis — the selected tab, the focus ring,
+     chart bars and lines — and nothing else. Standard Tailwind cyan values. */
+  --color-cyan-500: #06b6d4;
   --color-cyan-400: #22d3ee;
   --color-cyan-300: #67e8f9;
+  --color-cyan-200: #a5f3fc;
 
   /* --- Semantic: direction and severity ------------------------------ */
   --color-mint-400: #36c2a8;
@@ -48,22 +68,24 @@
      Six separated steps rather than four bunched ones. Contrast on the
      region panel runs ≈16.4 / 12.7 / 7.9 / 4.8 / 3.7 / 2.2 : 1, so a
      figure, its label and its footnote cannot be confused for each
-     other. ink-200 and ink-600 were referenced across the app but never
-     defined — they are defined here. */
+     other. Each step keeps that ORIGINAL lightness (contrast unchanged);
+     only the hue moved off its old indigo tint to the neutral slate family
+     the rest of this file uses, so heading and body text stop reading as a
+     leftover blue against the new neutral panels. */
   --color-ink-50: #ffffff; /* nothing above a headline figure */
-  --color-ink-100: #f0f3fb; /* figures, terminal column, active tab */
-  --color-ink-200: #ced6ec; /* table body, primary reading text */
-  --color-ink-300: #9fa9c6; /* row headers, secondary text */
-  --color-ink-400: #78829f; /* field labels, inactive tabs */
-  --color-ink-500: #656e8d; /* footnotes, hints, provenance */
-  --color-ink-600: #454d66; /* disabled only */
+  --color-ink-100: #eef1f2; /* figures, terminal column, active tab */
+  --color-ink-200: #ccd2d6; /* table body, primary reading text */
+  --color-ink-300: #9da4ab; /* row headers, secondary text */
+  --color-ink-400: #767d87; /* field labels, inactive tabs */
+  --color-ink-500: #656b74; /* footnotes, hints, provenance */
+  --color-ink-600: #454a52; /* disabled only */
 
   /* --- Rules ---------------------------------------------------------
      Three weights so a hairline between rows and a structural division
-     between sections are not the same mark. */
-  --color-line-soft: #1b2240; /* hairline: row separation */
-  --color-line: #262f52; /* default: panel + control edges */
-  --color-line-strong: #38436f; /* structural: column headers, tier-1 rail */
+     between sections are not the same mark. Same neutral hue as ink-*. */
+  --color-line-soft: #1a1c20; /* hairline: row separation */
+  --color-line: #262a31; /* default: panel + control edges */
+  --color-line-strong: #3a3f48; /* structural: column headers, tier-1 rail */
 
   /* Region surfaces (A — clear UI division) — SLATE & CYAN.
      Chosen from an 8-direction wireframe review (screenshotted, compared
@@ -89,16 +111,13 @@
      Portfolio Brief included — the one step that failed AA under both prior
      anchors.
 
-     Colour is spent once: --color-cyan-400 marks state (selected tab, focus
-     ring) and nothing else. The chat rail's own chrome (borders, the Beta
-     chip's neighbour badges, the send control) moved off hardcoded Tailwind
-     `teal-*` classes to `cyan-*` in AgentChatPanel / ChatMessage / ArtifactCard
-     for the same reason — a panel with its own unrelated accent colour is
-     not "distinct from the others", it's a fourth palette.
-
-     surface-artifact-accent stays its own neutral grey (a decorative rail,
-     never the interactive accent) recomputed at the new lightness. Text and
-     chart colours (ink-*, peri-*) are untouched, as in every prior repaint. */
+     This pass carries that same neutral hue OUTWARD, to the raised-card
+     ramp, ink and line tokens above, and the chart palette in lib/theme.ts /
+     mi_agent_pptx/pptx_theme.py (both updated alongside this file) — the
+     things sitting ON TOP of these surfaces, which is what made two
+     palettes visible on one screen even after the surfaces themselves
+     moved. surface-artifact-accent stays its own neutral grey (a decorative
+     rail, never the interactive accent) recomputed at the new lightness. */
   --color-app-ground: #171a1f;
   --surface-dashboard: #232830;
   --surface-dashboard-line: #363d47;
@@ -145,13 +164,13 @@
   /* --- Elevation ----------------------------------------------------- */
   --elev-card: inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 1px 2px rgba(0, 0, 0, 0.4);
-  --elev-thumb: inset 0 1px 0 rgba(170, 180, 221, 0.22),
+  --elev-thumb: inset 0 1px 0 rgba(200, 208, 214, 0.18),
     0 1px 2px rgba(0, 0, 0, 0.5);
   --elev-inset: inset 0 1px 3px rgba(0, 0, 0, 0.5);
 
   /* --- Focus ---------------------------------------------------------
-     One ring, everywhere, keyboard-only. Cyan — the interface state
-     accent — not peri, which stays reserved for charts and the brand mark. */
+     One ring, everywhere, keyboard-only. Cyan is the ONE interface-state
+     accent now — nothing else carries colour decoratively. */
   --focus-color: var(--color-cyan-400);
   --focus-width: 2px;
   --focus-offset: 2px;
@@ -166,13 +185,14 @@ body,
 body {
   margin: 0;
   /* The page ground is the Slate & Cyan ground colour itself; the
-     decorative glow above it is unchanged. --color-navy-950 stays the
+     decorative glow above it is now cyan-tinted rather than the old
+     periwinkle, at the same low opacity. --color-navy-950 stays the
      page-ground colour everywhere ELSE it is used (tooltips, overlays,
      chrome) — only the actual page background moved, to the dedicated
      --color-app-ground token. */
   background: radial-gradient(
       1200px 600px at 80% -10%,
-      rgba(145, 157, 209, 0.07),
+      rgba(34, 211, 238, 0.07),
       transparent 60%
     ),
     var(--color-app-ground);
@@ -503,7 +523,7 @@ body {
      without losing its place. */
   .data-table tbody tr:hover th,
   .data-table tbody tr:hover td {
-    background: rgba(145, 157, 209, 0.06);
+    background: rgba(34, 211, 238, 0.06);
     color: var(--color-ink-100);
   }
 

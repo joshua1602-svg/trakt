@@ -346,7 +346,7 @@ export function AppShell() {
           >
             <header className="flex items-center justify-between gap-3 border-b border-[var(--surface-dashboard-line)] px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-peri-300">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-cyan-300">
                   <LayoutDashboard size={18} />
                 </div>
                 <h2 className="t-title">Core Dashboard</h2>

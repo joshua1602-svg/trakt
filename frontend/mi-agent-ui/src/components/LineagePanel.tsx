@@ -57,7 +57,7 @@ export function LineagePanel({ lineage }: { lineage: ViewLineage | null | undefi
     <div className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/40 px-3.5 py-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-400">
-          <Info size={13} className="shrink-0 text-peri-300" />
+          <Info size={13} className="shrink-0 text-cyan-300" />
           <span className="truncate" title={headline ?? undefined}>{headline}</span>
         </div>
         <button

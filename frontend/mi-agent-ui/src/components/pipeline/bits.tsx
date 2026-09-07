@@ -179,7 +179,7 @@ export function BarList({
             </span>
             <div className="h-3 overflow-hidden rounded-[2px] bg-navy-950">
               <div
-                className="h-full rounded-[2px] bg-peri-500"
+                className="h-full rounded-[2px] bg-cyan-500"
                 style={{ width: `${Math.max(2, (d.value / max) * 100)}%` }}
               />
             </div>

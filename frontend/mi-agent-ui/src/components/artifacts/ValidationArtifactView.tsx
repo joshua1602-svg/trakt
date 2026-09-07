@@ -9,7 +9,7 @@ const SEV: Record<
 > = {
   blocker: { icon: AlertOctagon, tone: "rose", label: "Blocker", color: "text-rose-400" },
   warning: { icon: AlertTriangle, tone: "amber", label: "Warning", color: "text-amber-400" },
-  info: { icon: Info, tone: "navy", label: "Info", color: "text-peri-300" },
+  info: { icon: Info, tone: "navy", label: "Info", color: "text-cyan-300" },
   pass: { icon: CheckCircle2, tone: "mint", label: "Pass", color: "text-mint-400" },
 };
 
@@ -32,7 +32,7 @@ export function ValidationArtifactView({ artifact }: { artifact: ValidationArtif
         <Stat value={artifact.summary.blockers} label="Blockers" color="text-rose-400" />
         <Stat value={artifact.summary.warnings} label="Warnings" color="text-amber-400" />
         <Stat value={artifact.summary.passed} label="Passed" color="text-mint-400" />
-        <Stat value={`${artifact.summary.coverage}%`} label="Coverage" color="text-peri-300" />
+        <Stat value={`${artifact.summary.coverage}%`} label="Coverage" color="text-cyan-300" />
       </div>
 
       <ul className="mt-3 flex flex-col gap-2">

@@ -73,7 +73,7 @@ export function HeaderBar({
       {/* Brand */}
       <div className="flex items-center gap-2.5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-navy-700">
-          <span className="font-mono text-sm font-bold text-peri-300">T</span>
+          <span className="font-mono text-sm font-bold text-cyan-300">T</span>
         </div>
         <div className="leading-tight">
           <div className="text-sm font-semibold tracking-tight text-ink-100">
@@ -92,7 +92,7 @@ export function HeaderBar({
 
       {/* Reporting date — only runs that actually exist for this portfolio. */}
       <label className="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-navy-900/60 px-3 py-1.5">
-        <CalendarDays size={15} className="text-peri-300" />
+        <CalendarDays size={15} className="text-cyan-300" />
         <span className="text-[10px] uppercase tracking-wider text-ink-500">Reporting Date</span>
         <select
           value={selectedRunId ?? ""}
@@ -175,7 +175,7 @@ export function HeaderBar({
             no hardcoded fallback name. */}
         {displayName && (
           <div className="flex items-center gap-2 rounded-lg border border-[var(--color-line)] bg-navy-900/60 py-1 pl-1 pr-3" data-testid="user-identity">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-peri-400 to-navy-600 text-[11px] font-bold text-navy-950">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-cyan-400 to-navy-600 text-[11px] font-bold text-navy-950">
               {displayInitials(identity?.user)}
             </div>
             <div className="leading-tight">
