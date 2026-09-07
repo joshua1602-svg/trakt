@@ -136,7 +136,7 @@ export function ArtifactCard({
       className={cn(
         "animate-fade-in overflow-hidden transition-shadow duration-700",
         anyPinned && "ring-1 ring-peri-400/30",
-        highlight && "ring-2 ring-teal-400/50 shadow-lg shadow-teal-900/30",
+        highlight && "ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-900/30",
       )}
     >
       <div className="flex items-start gap-3 border-b border-[var(--color-line-soft)] px-4 py-3">

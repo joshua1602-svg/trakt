@@ -23,12 +23,21 @@
   --color-navy-500: #3d4a82;
 
   /* --- Accent: STATE ONLY -------------------------------------------
-     Periwinkle marks selection and emphasis. It is not a surface tint
-     and not a decorative fill. */
+     Periwinkle marks selection and emphasis on CHARTS and the brand mark
+     (analytics/charts_plotly.py SECONDARY) — untouched by the Slate & Cyan
+     repaint below, which only ever changed panel fills. */
   --color-peri-500: #7b8ac9;
   --color-peri-400: #919dd1;
   --color-peri-300: #aab4dd;
   --color-peri-200: #c6cdea;
+
+  /* Cyan marks INTERFACE state — the selected tab, the focus ring — the
+     one thing "Slate & Cyan" reserves colour for. Standard Tailwind cyan
+     values, so a raw `var(--color-cyan-400)` in this file and a `bg-cyan-400`
+     class in a component (the chat rail's own accent, see AgentChatPanel)
+     are guaranteed to be the same pixel. */
+  --color-cyan-400: #22d3ee;
+  --color-cyan-300: #67e8f9;
 
   /* --- Semantic: direction and severity ------------------------------ */
   --color-mint-400: #36c2a8;
@@ -56,51 +65,50 @@
   --color-line: #262f52; /* default: panel + control edges */
   --color-line-strong: #38436f; /* structural: column headers, tier-1 rail */
 
-  /* Region surfaces (A — clear UI division), derived from one anchor —
-     Steel Blue — by tinting it toward white (a lighter region) or shading it
-     toward black (a darker one). Each step is a plain white/black mix at a
-     stated percentage, so the ladder is reproducible from the one anchor
-     value:
-       app ground        Steel Blue,         0%
-       MI Agent           -15% (shade 15% toward black)
-       Core Dashboard     +15% (tint 15% toward white)
-       Artifact Workspace +30%
-       Portfolio Brief    +45%
+  /* Region surfaces (A — clear UI division) — SLATE & CYAN.
+     Chosen from an 8-direction wireframe review (screenshotted, compared
+     side by side), not derived by a tint/shade formula off one anchor the
+     way Petroleum Blue and Steel Blue both were. That formula was the
+     recurring problem: pushed far enough to separate five regions, its
+     lightest steps (Artifact Workspace, Portfolio Brief) drifted toward
+     mid-grey and lost contrast, and every anchor swap fixed the hue but
+     reopened the same contrast question at +30% / +45%. Slate & Cyan
+     instead picks each of the four surfaces on its own terms — one
+     consistent near-black hue family (H ~220°, low saturation), stepped by
+     small, deliberate jumps in lightness only, all four kept dark:
 
-     STEEL BLUE, NOT X11 "steelblue". The CSS/X11 named colour (#4682b4) is a
-     mid-tone (relative luminance 0.21) built for a LIGHT page — used as a
-     dark-UI anchor it fails contrast even on the two steps that previously
-     worked (MI Agent 4.85:1, Core Dashboard 2.89:1 against ink-100, both
-     below the 4.5:1 AA floor for body text). #182937 holds the same hue and
-     saturation family (H 207°, S 40% — steel's grey-blue, not sky's brighter
-     one) at a dark-UI lightness, the same interpretive move Petroleum Blue
-     was: a named colour read for the role it has to play here, not its
-     brightest literal swatch.
+       app ground          #171a1f   (the page gutter and header bar)
+       MI Agent             #0f1114  (darkest — a recessed sidebar)
+       Core Dashboard       #232830  (the hero surface, lightest step up)
+       Artifact Workspace   #2c323c  (lightest of the three panels)
+       Portfolio Brief      #3c4652  (one step past Workspace — still dark)
 
-     Borders, accent rails and tints below are UNCHANGED — only the fill each
-     region sits on moved. Text and chart colours are untouched everywhere.
+     Kept deliberately narrow (darkest to lightest spans ~17 points of
+     lightness, against Steel Blue's ~50) so nothing approaches mid-grey:
+     ink-100 now reads 11.8:1+ against every one of the five surfaces,
+     Portfolio Brief included — the one step that failed AA under both prior
+     anchors.
 
-     MEASURED (unchanged from the Petroleum Blue palette's own finding — this
-     is the white-mix formula at high percentages, not a property of either
-     anchor): app ground and MI Agent read cleanly against every ink colour
-     (13.4:1 / 14.4:1 vs ink-100). Core Dashboard is workable (8.3:1 vs
-     ink-100, 2.4:1 vs the ink-400 field labels it mostly avoids). Artifact
-     Workspace and Portfolio Brief remain the two to watch: 5.1:1 / 3.2:1 vs
-     ink-100 (the second fails AA body text), and ink-400/ink-500 footnotes
-     fall to ~1.1-1.4:1 on both — a lighter anchor moves this the same
-     direction (worse), a darker one the same amount would move it the other
-     way; there is no anchor choice that clears the +45% step at these ink
-     colours without also changing them. */
-  --color-app-ground: #182937; /* Steel Blue — the main page background */
-  --surface-dashboard: #3b4955; /* Steel Blue +15% white */
-  --surface-dashboard-line: #283154;
-  --surface-artifact: #5d6973; /* Steel Blue +30% white */
-  --surface-artifact-tint: rgba(150, 155, 170, 0.05);
-  --surface-artifact-line: #343845;
-  --surface-artifact-accent: #656b7a; /* neutral grey accent rail */
-  --surface-chat: #14232f; /* Steel Blue -15% white (shaded toward black) */
-  --surface-chat-line: #243059;
-  --surface-brief: #808991; /* Steel Blue +45% white */
+     Colour is spent once: --color-cyan-400 marks state (selected tab, focus
+     ring) and nothing else. The chat rail's own chrome (borders, the Beta
+     chip's neighbour badges, the send control) moved off hardcoded Tailwind
+     `teal-*` classes to `cyan-*` in AgentChatPanel / ChatMessage / ArtifactCard
+     for the same reason — a panel with its own unrelated accent colour is
+     not "distinct from the others", it's a fourth palette.
+
+     surface-artifact-accent stays its own neutral grey (a decorative rail,
+     never the interactive accent) recomputed at the new lightness. Text and
+     chart colours (ink-*, peri-*) are untouched, as in every prior repaint. */
+  --color-app-ground: #171a1f;
+  --surface-dashboard: #232830;
+  --surface-dashboard-line: #363d47;
+  --surface-artifact: #2c323c;
+  --surface-artifact-tint: rgba(150, 160, 175, 0.05);
+  --surface-artifact-line: #363d47;
+  --surface-artifact-accent: #4a5260; /* neutral grey accent rail */
+  --surface-chat: #0f1114;
+  --surface-chat-line: #363d47;
+  --surface-brief: #3c4652;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, Helvetica, Arial, sans-serif;
@@ -142,8 +150,9 @@
   --elev-inset: inset 0 1px 3px rgba(0, 0, 0, 0.5);
 
   /* --- Focus ---------------------------------------------------------
-     One ring, everywhere, keyboard-only. */
-  --focus-color: var(--color-peri-300);
+     One ring, everywhere, keyboard-only. Cyan — the interface state
+     accent — not peri, which stays reserved for charts and the brand mark. */
+  --focus-color: var(--color-cyan-400);
   --focus-width: 2px;
   --focus-offset: 2px;
 }
@@ -156,10 +165,11 @@ body,
 
 body {
   margin: 0;
-  /* The page ground is Steel Blue itself; the decorative glow above it is
-     unchanged. --color-navy-950 stays the page-ground colour everywhere ELSE
-     it is used (tooltips, overlays, chrome) — only the actual page
-     background moved, to the dedicated --color-app-ground token. */
+  /* The page ground is the Slate & Cyan ground colour itself; the
+     decorative glow above it is unchanged. --color-navy-950 stays the
+     page-ground colour everywhere ELSE it is used (tooltips, overlays,
+     chrome) — only the actual page background moved, to the dedicated
+     --color-app-ground token. */
   background: radial-gradient(
       1200px 600px at 80% -10%,
       rgba(145, 157, 209, 0.07),
@@ -347,7 +357,8 @@ body {
     );
   }
   .nav-primary-item[aria-selected="true"]::after {
-    background: var(--color-peri-300);
+    /* Cyan, not peri — the interface-state accent, not the chart one. */
+    background: var(--color-cyan-400);
   }
   .nav-primary-item[aria-disabled="true"] {
     color: var(--color-ink-600);
