@@ -37,7 +37,7 @@ from .catalogue import Catalogue, catalogue, validate_value
 
 REPO = Path(__file__).resolve().parents[2]
 
-DEFAULT_CLIENT_CONFIG = REPO / "config/client/config_client_ERM_UK.yaml"
+DEFAULT_CLIENT_CONFIG = REPO / "config/client/config_client_ERE.yaml"
 DEFAULT_ANNEX12_CONFIG = REPO / "config/client/config_client_annex12.yaml"
 DEFAULT_PORTFOLIO_REGISTRY = REPO / "config/client/portfolio_registry.yaml"
 DEFAULT_TENANCY = REPO / "config/tenancy.yaml"

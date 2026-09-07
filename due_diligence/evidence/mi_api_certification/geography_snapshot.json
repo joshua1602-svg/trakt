@@ -1,0 +1,33 @@
+{
+  "_comment": [
+    "IMMUTABLE PRODUCTION SNAPSHOT TRUTH, keyed by portfolio.",
+    "",
+    "These are figures for one frozen book on one frozen date. They belong to",
+    "the release evidence harness and NOWHERE ELSE: the MI engine must never",
+    "import them, because a figure the engine can read is a figure the engine",
+    "could be made to agree with, and then the certification is asserting its",
+    "own fixture rather than the product.",
+    "",
+    "Everything else the acceptance gate checks is an IDENTITY computed from",
+    "the responses themselves (cells reconcile to the total, the Scottish",
+    "question agrees with the Scotland cell). Identities hold on any book on",
+    "any date. These constants hold only for the snapshot they are keyed to,",
+    "which is why they are keyed to it — a run against another portfolio",
+    "checks the identities and reports the snapshot as not applicable, rather",
+    "than failing on figures that were never about it.",
+    "",
+    "expectedAssetClass / expectedPrimaryBasis are the CONFIGURATION this",
+    "release is gating: ERE declares portfolio.asset_class = equity_release,",
+    "and the ERM asset pack declares mi_geography.primary_basis = collateral."
+  ],
+  "portfolios": {
+    "ERE/2026-06-30": {
+      "expectedAssetClass": "equity_release",
+      "expectedPrimaryBasis": "collateral",
+      "totalBalance": 1964886258.21,
+      "regions": {
+        "Scotland": {"loanCount": 570, "balance": 64330457.03}
+      }
+    }
+  }
+}

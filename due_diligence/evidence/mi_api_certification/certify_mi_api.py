@@ -93,7 +93,8 @@ def _live_asker(base_url: str, path: str = "/mi/query",
     return ask
 
 
-def _in_process_asker() -> Callable[[str], Dict[str, Any]]:
+def _in_process_asker(portfolio_id: Optional[str] = None
+                      ) -> Callable[[str], Dict[str, Any]]:
     import os
     import warnings
 
@@ -111,10 +112,17 @@ def _in_process_asker() -> Callable[[str], Dict[str, Any]]:
 
     client = TestClient(app)
 
+    # THE CALLER'S PORTFOLIO, when it named one. This used to send the demo
+    # client id unconditionally, which meant `--portfolio-id` was silently
+    # ignored in process — and a gate that resolves a DIFFERENT book from the
+    # one it was asked about still prints a verdict, which is worse than not
+    # running at all.
+    selected = portfolio_id or cfg.CLIENT_ID
+
     def ask(question: str) -> Dict[str, Any]:
         response = client.post("/mi/query",
                                json={"question": question,
-                                     "portfolioId": cfg.CLIENT_ID})
+                                     "portfolioId": selected})
         if response.status_code != 200:
             return {"ok": False, "answer": f"HTTP {response.status_code}",
                     "__transport_error__": True}
@@ -622,6 +630,548 @@ def report_broad(ask: Callable[[str], Dict[str, Any]],
     return passed, lines, facts
 
 
+# --------------------------------------------------------------------------- #
+# GEOGRAPHY / CONFIG-OWNERSHIP RELEASE ACCEPTANCE
+# --------------------------------------------------------------------------- #
+#
+# WHAT THIS GATE IS FOR. The estate now says, in configuration rather than in
+# code, which geography a book reports on:
+#
+#     ERE is the CLIENT       config/client/config_client_ERE.yaml
+#       declares              portfolio.asset_class: equity_release
+#     ERM is the ASSET        config/asset/product_defaults_ERM.yaml
+#       declares              mi_geography.primary_basis: collateral
+#
+# so a request for `ERE/2026-06-30` should resolve collateral from the asset
+# class default, with no portfolio registry, no environment variable and no
+# hand-seeded source_portfolio_id. Every part of that is testable in a checkout
+# and none of it proves the DEPLOYED service does it. This does, over the public
+# route, against a named commit.
+#
+# WHY IT IS SMALL. The broad sweep already scores ~150 questions across the
+# capability surface and takes the time that implies. This gate asks one thing —
+# is the geography configuration the one we shipped, and is it being applied —
+# so it asks ten questions and scores them on identities and provenance.
+#
+# WHAT IT REFUSES TO ACCEPT. HTTP 200. A question that comes back `ok` having
+# quietly measured the other geography has failed at precisely the thing this
+# architecture exists to prevent, and a gate that read the status line would
+# call it a pass.
+
+#: The ten questions, in the order the report prints them.
+GEOGRAPHY_QUESTIONS: Tuple[Tuple[str, str], ...] = (
+    ("G01", "What is the total balance?"),
+    ("G02", "Total balance by region"),
+    ("G03", "What is the Scottish balance?"),
+    ("G04", "How many loans are there in Scotland?"),
+    ("G05", "Loan count by region"),
+    ("G06", "Total balance by property region"),
+    ("G07", "Total balance by borrower region"),
+    ("G08", "Total balance by region for joint borrowers with LTV over 50%"),
+    ("G09", "Show total balance and loan count by region"),
+    ("G10", "What is the platinum balance by region?"),
+)
+
+#: Questions whose geography is UNQUALIFIED: they must resolve the configured
+#: basis, and the source must be the asset class default — not the registry, not
+#: a client override, and emphatically not `unconfigured`.
+_GENERIC_GEOGRAPHY = ("G02", "G05", "G09")
+
+#: The scorer's checks, in report order. Every one must pass for the release to
+#: be accepted; they are named separately because they fail for different
+#: reasons and an operator needs to know which.
+ACCEPTANCE_CHECKS: Tuple[str, ...] = (
+    "DEPLOYED_PROVENANCE_PASS",
+    "AUTH_PASS",
+    "PORTFOLIO_PASS",
+    "ASSET_CLASS_PASS",
+    "CONFIGURED_BASIS_PASS",
+    "GENERIC_REGION_PASS",
+    "EXPLICIT_PROPERTY_PASS",
+    "EXPLICIT_BORROWER_PASS",
+    "NUMERICAL_RECONCILIATION_PASS",
+    "SILENT_WRONG_SAFETY_PASS",
+)
+
+_SNAPSHOT_PATH = Path(__file__).resolve().parent / "geography_snapshot.json"
+
+
+def load_snapshot(portfolio_id: Optional[str],
+                  path: Optional[str] = None) -> Dict[str, Any]:
+    """The frozen truth for ``portfolio_id``, or ``{}`` when none is recorded.
+
+    An absent entry is not a failure: the identities still hold, and a book this
+    harness has no snapshot for is gated on them alone rather than on figures
+    that were never about it.
+    """
+    try:
+        doc = json.loads(Path(path or _SNAPSHOT_PATH).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - a missing snapshot degrades, never raises
+        return {}
+    entry = ((doc.get("portfolios") or {}).get(portfolio_id or ""))
+    return entry if isinstance(entry, dict) else {}
+
+
+def _geography_block(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    block = (envelope.get("metadata") or {}).get("geographyBasis")
+    return block if isinstance(block, dict) else {}
+
+
+def _configured_basis(envelope: Dict[str, Any]) -> Optional[str]:
+    """The basis the CONFIGURATION established, whatever the question asked.
+
+    The envelope names it explicitly only when the question overrode it — that
+    is when there are two bases to tell apart. For an unqualified question the
+    configured basis IS the primary basis, so this reads the field that is
+    there rather than asking the service to publish a duplicate one for the
+    convenience of a smoke test.
+    """
+    block = _geography_block(envelope)
+    if "configuredBasis" in block:
+        # Present-but-None is a STATEMENT: the configuration established no
+        # basis and the question supplied one. Falling through to the stated
+        # basis here would report the question's own answer as though the
+        # configuration had agreed with it, which is the failure this gate is
+        # built to catch.
+        return block["configuredBasis"]
+    return block.get("primaryBasis")
+
+
+def _measured_region_field(envelope: Dict[str, Any]) -> Optional[str]:
+    """The region column the answer was actually MEASURED on.
+
+    This is the check that catches a silent substitution, and it deliberately
+    does not trust the metadata: `geographyBasis` says which basis was
+    RESOLVED, and an answer that resolved `borrower` and then grouped by a
+    collateral column would publish exactly the metadata we want to see while
+    doing the thing we are trying to forbid. The spec's dimension, and failing
+    that the column the rows are actually keyed by, is what was measured.
+    """
+    from mi_agent.mi_geography import basis_of_field
+
+    spec = envelope.get("spec") or {}
+    candidates: List[Any] = [spec.get("dimension")]
+    candidates.extend(spec.get("dimensions") or [])
+    candidates.extend((spec.get("filters") or {}).keys())
+    for row in _acceptance_rows(envelope)[:1]:
+        candidates.extend(row.keys())
+    for candidate in candidates:
+        name = str(candidate or "")
+        if name and basis_of_field(name):
+            return name
+    return None
+
+
+def _measured_basis(envelope: Dict[str, Any]) -> Optional[str]:
+    from mi_agent.mi_geography import basis_of_field
+
+    field = _measured_region_field(envelope)
+    return basis_of_field(field) if field else None
+
+
+def _acceptance_rows(envelope: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """The grouped rows, from whichever artefact carries them."""
+    best: List[Dict[str, Any]] = []
+    for artifact in (envelope.get("artifacts") or []):
+        rows = artifact.get("rows") or []
+        if rows and len(rows) > len(best):
+            best = [r for r in rows if isinstance(r, dict)]
+    return best
+
+
+def _cells(envelope: Dict[str, Any], *value_keys: str
+           ) -> Dict[str, float]:
+    """``{region: value}`` from a grouped answer, or ``{}``.
+
+    The value column is found by name from the candidates given, so a rename in
+    one answer shape does not silently score as "no cells", which would read as
+    a pass.
+    """
+    rows = _acceptance_rows(envelope)
+    key = _measured_region_field(envelope)
+    if not rows or not key:
+        return {}
+    out: Dict[str, float] = {}
+    for row in rows:
+        if key not in row:
+            continue
+        for value_key in value_keys:
+            if value_key in row:
+                try:
+                    out[str(row[key])] = float(row[value_key])
+                except (TypeError, ValueError):
+                    pass
+                break
+    return out
+
+
+def _balance(envelope: Dict[str, Any]) -> Optional[float]:
+    """The balance figure for the population this answer measured."""
+    recon = envelope.get("reconciliation") or {}
+    for key in ("balance_after_filters", "total_balance"):
+        value = recon.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    for artifact in (envelope.get("artifacts") or []):
+        for item in (artifact.get("kpis") or []):
+            if str(item.get("field") or "").startswith("current_outstanding_balance"):
+                try:
+                    return float(item.get("rawValue"))
+                except (TypeError, ValueError):
+                    pass
+    return None
+
+
+def _close(left: Optional[float], right: Optional[float],
+           tolerance: float = 0.02) -> bool:
+    """Money compared as money: a penny of float noise is not a discrepancy,
+    and a relative term keeps the test meaningful at £1.9bn."""
+    if left is None or right is None:
+        return False
+    return abs(left - right) <= max(tolerance, abs(right) * 1e-9)
+
+
+def _answered(envelope: Dict[str, Any]) -> bool:
+    return bool(envelope.get("ok"))
+
+
+def _refused_for_missing_field(envelope: Dict[str, Any]) -> bool:
+    """A refusal that NAMES the facet it could not apply.
+
+    A book that does not carry a borrower-type field cannot answer a joint
+    borrower question however well it understands one. Saying so is correct
+    behaviour; the failure mode is answering anyway over a broader population,
+    which `_facets_preserved` checks independently.
+    """
+    if _answered(envelope):
+        return False
+    if (envelope.get("spec") or {}).get("unavailable_filters"):
+        return True
+    return _refused_for_data_coverage(envelope)
+
+
+def geography_acceptance(ask: Callable[[str], Dict[str, Any]], *,
+                         portfolio_id: Optional[str] = None,
+                         provenance: str = "not checked",
+                         reached: str = "YES", authorised: str = "YES",
+                         snapshot: Optional[Dict[str, Any]] = None,
+                         snapshot_path: Optional[str] = None,
+                         ) -> Tuple[Dict[str, Optional[bool]],
+                                    List[Dict[str, Any]], List[str]]:
+    """Score the geography release acceptance.
+
+    Returns ``(checks, rows, lines)`` — the named verdicts, a machine-readable
+    row per question, and the human report. Never raises: a check that cannot be
+    established is ``False`` with a stated reason, because "we could not tell"
+    must not be able to read as "it passed".
+    """
+    snap = snapshot if snapshot is not None else load_snapshot(portfolio_id,
+                                                               snapshot_path)
+    want_class = str(snap.get("expectedAssetClass") or "equity_release")
+    want_basis = str(snap.get("expectedPrimaryBasis") or "collateral")
+
+    envelopes: Dict[str, Dict[str, Any]] = {}
+    rows: List[Dict[str, Any]] = []
+    lines: List[str] = ["GEOGRAPHY RELEASE ACCEPTANCE", "-" * 74,
+                        f"portfolio        : {portfolio_id or '(none sent)'}",
+                        f"expected asset   : {want_class}",
+                        f"expected basis   : {want_basis}", ""]
+
+    for qid, question in GEOGRAPHY_QUESTIONS:
+        envelope = ask(question)
+        envelopes[qid] = envelope
+        block = _geography_block(envelope)
+        rows.append({
+            "id": qid, "question": question,
+            "answered": _answered(envelope),
+            "transportError": bool(envelope.get("__transport_error__")),
+            "assetClass": block.get("assetClass"),
+            "configuredBasis": _configured_basis(envelope),
+            "effectiveBasis": block.get("primaryBasis"),
+            "basisSource": block.get("basisSource"),
+            "measuredField": _measured_region_field(envelope),
+            "measuredBasis": _measured_basis(envelope),
+            "records": (envelope.get("executionSummary") or {}).get("population"),
+            "balance": _balance(envelope),
+            "answer": str(envelope.get("answer") or envelope.get("error") or "")[:160],
+        })
+
+    checks: Dict[str, Optional[bool]] = {}
+    why: Dict[str, str] = {}
+
+    def _record(name: str, ok: bool, reason: str = "") -> None:
+        checks[name] = ok
+        if reason:
+            why[name] = reason
+
+    # ---- provenance and access, decided before any semantics ------------- #
+    _record("DEPLOYED_PROVENANCE_PASS", str(provenance).startswith("YES")
+            or provenance == "not checked (in-process run)",
+            f"provenance: {provenance}")
+    _record("AUTH_PASS", reached == "YES" and authorised == "YES",
+            f"reached {reached}, authorised {authorised}")
+
+    # ---- the request reached the book it named --------------------------- #
+    if portfolio_id:
+        named = []
+        for qid, envelope in envelopes.items():
+            meta = envelope.get("metadata") or {}
+            seen = str(meta.get("portfolioId") or meta.get("selectedPortfolio")
+                       or meta.get("selectedClient") or "")
+            if seen:
+                named.append(portfolio_id.split("/")[0].lower() in seen.lower()
+                             or seen.lower() in portfolio_id.lower())
+        _record("PORTFOLIO_PASS", bool(named) and all(named),
+                "no answer named the requested portfolio" if not named
+                else "")
+    else:
+        _record("PORTFOLIO_PASS", False, "no portfolio was requested")
+
+    # ---- the configuration this release ships ---------------------------- #
+    classes = {r["assetClass"] for r in rows if r["assetClass"] is not None}
+    _record("ASSET_CLASS_PASS", classes == {want_class},
+            f"asset classes seen: {sorted(classes) or 'none'}")
+    configured = {r["configuredBasis"] for r in rows
+                  if r["configuredBasis"] is not None}
+    _record("CONFIGURED_BASIS_PASS", configured == {want_basis},
+            f"configured bases seen: {sorted(configured) or 'none'}")
+
+    # ---- unqualified "region" means the configured basis ----------------- #
+    generic_problems = []
+    for qid in _GENERIC_GEOGRAPHY:
+        row = next(r for r in rows if r["id"] == qid)
+        if not row["answered"]:
+            generic_problems.append(f"{qid} did not answer")
+            continue
+        if row["basisSource"] != "asset_class_default":
+            generic_problems.append(
+                f"{qid} basisSource={row['basisSource']!r}, expected "
+                "asset_class_default")
+        if row["effectiveBasis"] != want_basis:
+            generic_problems.append(
+                f"{qid} resolved {row['effectiveBasis']!r}, expected {want_basis!r}")
+        if row["measuredBasis"] not in (None, want_basis):
+            generic_problems.append(
+                f"{qid} MEASURED {row['measuredBasis']!r} on "
+                f"{row['measuredField']!r}")
+    _record("GENERIC_REGION_PASS", not generic_problems,
+            "; ".join(generic_problems))
+
+    # ---- an explicitly stated basis is honoured, both ways --------------- #
+    prop = next(r for r in rows if r["id"] == "G06")
+    prop_problems = []
+    if not prop["answered"]:
+        prop_problems.append("G06 did not answer")
+    if prop["basisSource"] != "explicit_query":
+        prop_problems.append(f"G06 basisSource={prop['basisSource']!r}")
+    if prop["configuredBasis"] != want_basis:
+        prop_problems.append(f"G06 configured={prop['configuredBasis']!r}")
+    if prop["effectiveBasis"] != "collateral":
+        prop_problems.append(f"G06 effective={prop['effectiveBasis']!r}")
+    if prop["answered"] and prop["measuredBasis"] != "collateral":
+        prop_problems.append(f"G06 measured={prop['measuredBasis']!r}")
+    _record("EXPLICIT_PROPERTY_PASS", not prop_problems, "; ".join(prop_problems))
+
+    # THE ONE THAT MATTERS MOST. A borrower-region question answered on the
+    # collateral column, because collateral is what the asset configures, is a
+    # confident answer to a question nobody asked. A refusal is acceptable —
+    # the book may not carry an obligor geography — and a substitution is not.
+    borrower = next(r for r in rows if r["id"] == "G07")
+    borrower_problems = []
+    if borrower["configuredBasis"] != want_basis:
+        borrower_problems.append(f"configured={borrower['configuredBasis']!r}")
+    if borrower["answered"]:
+        if borrower["basisSource"] != "explicit_query":
+            borrower_problems.append(f"basisSource={borrower['basisSource']!r}")
+        if borrower["effectiveBasis"] != "borrower":
+            borrower_problems.append(f"effective={borrower['effectiveBasis']!r}")
+        if borrower["measuredBasis"] != "borrower":
+            borrower_problems.append(
+                f"SILENT SUBSTITUTION: measured {borrower['measuredBasis']!r} "
+                f"on {borrower['measuredField']!r}")
+    elif not _refused_for_missing_field(envelopes["G07"]):
+        # A refusal is fine, but it has to be a governed one that says why.
+        borrower_problems.append("refused without naming what it could not apply")
+    _record("EXPLICIT_BORROWER_PASS", not borrower_problems,
+            "; ".join(borrower_problems))
+
+    # ---- identities, and then the snapshot ------------------------------- #
+    recon_problems: List[str] = []
+    total = _balance(envelopes["G01"])
+    by_region = _cells(envelopes["G02"], "current_outstanding_balance_sum",
+                       "balance", "value")
+    counts_by_region = _cells(envelopes["G05"], "loan_count", "count", "value")
+
+    if not by_region:
+        recon_problems.append("G02 published no regional cells")
+    elif not _close(sum(by_region.values()), total):
+        recon_problems.append(
+            f"G02 cells sum to {sum(by_region.values()):.2f}, G01 total is "
+            f"{total if total is None else format(total, '.2f')}")
+
+    scots_balance = _balance(envelopes["G03"])
+    if by_region and not _close(scots_balance, by_region.get("Scotland")):
+        recon_problems.append(
+            f"G03 Scottish balance {scots_balance} != G02 Scotland cell "
+            f"{by_region.get('Scotland')}")
+
+    scots_count = _count(envelopes["G04"])
+    if counts_by_region:
+        cell = counts_by_region.get("Scotland")
+        if cell is None or scots_count is None or int(cell) != int(scots_count):
+            recon_problems.append(
+                f"G04 Scotland count {scots_count} != G05 Scotland cell {cell}")
+    else:
+        recon_problems.append("G05 published no regional cells")
+
+    # ERE's configured basis IS collateral, so "by property region" and "by
+    # region" are the same question asked two ways and must agree cell for cell.
+    prop_cells = _cells(envelopes["G06"], "current_outstanding_balance_sum",
+                        "balance", "value")
+    if want_basis == "collateral" and by_region and prop_cells:
+        disagreeing = [region for region in set(by_region) | set(prop_cells)
+                       if not _close(by_region.get(region), prop_cells.get(region))]
+        if disagreeing:
+            recon_problems.append(
+                f"G06 disagrees with G02 for {sorted(disagreeing)[:5]}")
+
+    # G08: answered means every facet survived; refused-for-coverage is allowed.
+    g08 = envelopes["G08"]
+    if _answered(g08):
+        spec = g08.get("spec") or {}
+        grouped = bool(spec.get("dimension") or spec.get("dimensions"))
+        filters = {str(k).lower() for k in (spec.get("filters") or {})}
+        if not grouped:
+            recon_problems.append("G08 answered without the region grouping")
+        if not any("loan_to_value" in f or "ltv" in f for f in filters):
+            recon_problems.append("G08 answered without the LTV filter")
+        if not any("borrower" in f for f in filters):
+            recon_problems.append("G08 answered without the joint borrower filter")
+    elif not _refused_for_missing_field(g08):
+        recon_problems.append("G08 refused without naming what it could not apply")
+
+    # G09 asked for two outputs and must return both.
+    g09_rows = _acceptance_rows(envelopes["G09"])
+    if _answered(envelopes["G09"]):
+        keys = set().union(*(set(r) for r in g09_rows)) if g09_rows else set()
+        if not any("balance" in str(k).lower() for k in keys):
+            recon_problems.append("G09 dropped the balance")
+        if not any("count" in str(k).lower() for k in keys):
+            recon_problems.append("G09 dropped the loan count")
+    else:
+        recon_problems.append("G09 did not answer")
+
+    snapshot_note = "no snapshot recorded for this portfolio"
+    if snap:
+        snapshot_note = f"snapshot for {portfolio_id}"
+        if not _close(total, snap.get("totalBalance")):
+            recon_problems.append(
+                f"total balance {total} != snapshot {snap.get('totalBalance')}")
+        for region, truth in (snap.get("regions") or {}).items():
+            if by_region and not _close(by_region.get(region), truth.get("balance")):
+                recon_problems.append(
+                    f"{region} balance {by_region.get(region)} != snapshot "
+                    f"{truth.get('balance')}")
+            cell = counts_by_region.get(region) if counts_by_region else None
+            if cell is not None and int(cell) != int(truth.get("loanCount", -1)):
+                recon_problems.append(
+                    f"{region} loan count {cell} != snapshot "
+                    f"{truth.get('loanCount')}")
+    _record("NUMERICAL_RECONCILIATION_PASS", not recon_problems,
+            "; ".join(recon_problems))
+
+    # ---- an unresolved qualifier must not quietly disappear -------------- #
+    g10 = envelopes["G10"]
+    safety_problems = []
+    if _answered(g10):
+        safety_problems.append("G10 answered a question containing 'platinum'")
+    elif total is not None and _close(_balance(g10), total):
+        safety_problems.append("G10 refused but published the whole-book figure")
+    _record("SILENT_WRONG_SAFETY_PASS", not safety_problems,
+            "; ".join(safety_problems))
+
+    # ---- the report ------------------------------------------------------ #
+    for row in rows:
+        verdict = "answered" if row["answered"] else "REFUSED "
+        lines.append(f"  {row['id']}  {verdict}  {row['question']}")
+        lines.append(f"        configured={row['configuredBasis']}  "
+                     f"effective={row['effectiveBasis']}  "
+                     f"source={row['basisSource']}  "
+                     f"measured={row['measuredBasis']} ({row['measuredField']})")
+        if row["records"] is not None or row["balance"] is not None:
+            lines.append(f"        records={row['records']}  "
+                         f"balance={row['balance']}")
+        if not row["answered"]:
+            lines.append(f"        {row['answer']}")
+    lines.append("")
+    lines.append(f"  {snapshot_note}")
+    lines.append("")
+    for name in ACCEPTANCE_CHECKS:
+        state = checks.get(name)
+        mark = "PASS" if state else "FAIL"
+        detail = why.get(name, "")
+        lines.append(f"  {mark}  {name}" + (f"  — {detail}" if detail else ""))
+    return checks, rows, lines
+
+
+def acceptance_markdown(payload: Dict[str, Any]) -> str:
+    """The acceptance result as a GitHub job summary.
+
+    Rendered from the SAME payload the JSON artefact carries, so the summary a
+    reviewer reads and the file a machine reads cannot disagree — which they
+    would the moment two renderers existed.
+    """
+    ready = payload.get("TIME_X_DIMENSION_READY", "NO")
+    badge = "✅" if ready == "YES" else "❌"
+    out = [f"## {badge} Geography release acceptance — "
+           f"TIME_X_DIMENSION_READY = **{ready}**", "",
+           f"_{payload.get('reason', '')}_", "",
+           "| | |", "|---|---|",
+           f"| portfolio | `{payload.get('portfolio') or '(none)'}` |",
+           f"| expected SHA | `{payload.get('expectedCommit') or 'not given'}` |",
+           f"| deployed SHA | `{payload.get('deployedCommit') or 'NOT ESTABLISHED'}` |",
+           f"| reached service | {payload.get('reached')} |",
+           f"| authorised | {payload.get('authorised')} |",
+           f"| provenance | {payload.get('provenance')} |", ""]
+    questions = payload.get("questions") or []
+    if questions:
+        out += ["### Questions", "",
+                "| id | question | outcome | configured | effective | source | "
+                "measured | records | key result |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        for row in questions:
+            out.append(
+                f"| {row.get('id')} | {row.get('question')} | "
+                f"{'answered' if row.get('answered') else '**refused**'} | "
+                f"{row.get('configuredBasis')} | {row.get('effectiveBasis')} | "
+                f"{row.get('basisSource')} | {row.get('measuredBasis')} | "
+                f"{row.get('records')} | {row.get('balance')} |")
+        out.append("")
+    out += ["### Checks", "", "| check | verdict |", "|---|---|"]
+    checks = payload.get("checks") or {}
+    for name in ACCEPTANCE_CHECKS:
+        out.append(f"| {name} | {'✅ PASS' if checks.get(name) else '❌ FAIL'} |")
+    out.append("")
+    return "\n".join(out)
+
+
+def acceptance_verdict(checks: Dict[str, Optional[bool]]
+                       ) -> Tuple[str, str]:
+    """``(TIME_X_DIMENSION_READY, reason)``.
+
+    An infrastructure blockage is NOT a semantic verdict. A run that could not
+    reach or authenticate against the service has not found anything wrong with
+    the geography configuration, and reporting it as though it had would send
+    somebody to debug the wrong system.
+    """
+    if not checks.get("AUTH_PASS") or not checks.get("DEPLOYED_PROVENANCE_PASS"):
+        return "NO", "NOT_EXECUTABLE"
+    failed = [name for name in ACCEPTANCE_CHECKS if not checks.get(name)]
+    if failed:
+        return "NO", "FAILED: " + ", ".join(failed)
+    return "YES", "all acceptance checks passed"
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default=None,
@@ -655,6 +1205,24 @@ def main(argv: Optional[List[str]] = None) -> int:
                              "in addition to the core suite (default).")
     parser.add_argument("--no-broad", dest="broad", action="store_false",
                         help="core suite only — the release smoke gate on its own.")
+    parser.add_argument("--geography-acceptance", dest="geography",
+                        action="store_true", default=False,
+                        help="run the GEOGRAPHY / CONFIG-OWNERSHIP release "
+                             "acceptance instead of the core and broad suites: "
+                             "ten questions scored on configuration provenance, "
+                             "explicit-basis semantics and numerical identity. "
+                             "This is the release gate for the ERE-client / "
+                             "ERM-asset ownership model, and it is deliberately "
+                             "small — the broad sweep is not rerun for it.")
+    parser.add_argument("--acceptance-json", default=None, metavar="FILE",
+                        help="write the acceptance verdicts and per-question "
+                             "rows here as JSON, for a CI job summary.")
+    parser.add_argument("--summary-markdown", default=None, metavar="FILE",
+                        help="write the acceptance result as GitHub-flavoured "
+                             "markdown here, for $GITHUB_STEP_SUMMARY.")
+    parser.add_argument("--snapshot", default=None, metavar="FILE",
+                        help="override the frozen snapshot contract "
+                             "(geography_snapshot.json).")
     parser.add_argument("--bank", action="append", default=[], metavar="FILE",
                         help="frozen question bank to drive through the same "
                              "live route, repeatable. JSON list, {rows:[...]}, "
@@ -667,11 +1235,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                           args.portfolio_id)
     else:
         target = "in-process (mi_agent_api.app via TestClient)"
-        ask = _in_process_asker()
+        ask = _in_process_asker(args.portfolio_id)
 
     header = ["=" * 74, "MI Query Agent — production certification",
               f"target: {target}", "=" * 74]
     provenance = "not checked (in-process run)"
+    reached, authorised = "YES", "YES"
     if args.base_url:
         reached, authorised, commit = preflight(
             args.base_url, args.path, args.header, args.portfolio_id)
@@ -700,8 +1269,62 @@ def main(argv: Optional[List[str]] = None) -> int:
                   "authorised, so no question was put to it.")
             if args.report:
                 Path(args.report).write_text("\n".join(header), encoding="utf-8")
+            if args.geography and (args.acceptance_json
+                                   or args.summary_markdown):
+                # An infrastructure blockage still has to be REPORTED as one.
+                # Writing nothing here would leave the job summary silent, and
+                # a silent gate is indistinguishable from a passing one.
+                checks = {name: False for name in ACCEPTANCE_CHECKS}
+                ready, reason = acceptance_verdict(checks)
+                payload = {
+                    "portfolio": args.portfolio_id, "expectedCommit": expected,
+                    "deployedCommit": commit, "reached": reached,
+                    "authorised": authorised, "provenance": provenance,
+                    "checks": checks, "questions": [],
+                    "TIME_X_DIMENSION_READY": ready, "reason": reason,
+                }
+                if args.acceptance_json:
+                    Path(args.acceptance_json).write_text(
+                        json.dumps(payload, indent=1), encoding="utf-8")
+                if args.summary_markdown:
+                    Path(args.summary_markdown).write_text(
+                        acceptance_markdown(payload), encoding="utf-8")
             return 2
     print("\n".join(header))
+
+    if args.geography:
+        checks, rows, geo_lines = geography_acceptance(
+            ask, portfolio_id=args.portfolio_id, provenance=provenance,
+            reached=reached, authorised=authorised,
+            snapshot_path=args.snapshot)
+        ready, reason = acceptance_verdict(checks)
+        body = "\n".join(geo_lines)
+        print(body)
+        print("-" * 74)
+        print(f"TIME_X_DIMENSION_READY = {ready}")
+        print(f"reason: {reason}")
+        payload = {
+            "portfolio": args.portfolio_id,
+            "expectedCommit": (args.expect_commit or "").strip() or None,
+            "deployedCommit": commit if args.base_url else None,
+            "reached": reached, "authorised": authorised,
+            "provenance": provenance, "checks": checks, "questions": rows,
+            "TIME_X_DIMENSION_READY": ready, "reason": reason,
+        }
+        if args.acceptance_json:
+            Path(args.acceptance_json).write_text(
+                json.dumps(payload, indent=1, default=str), encoding="utf-8")
+        if args.summary_markdown:
+            Path(args.summary_markdown).write_text(
+                acceptance_markdown(payload), encoding="utf-8")
+        if args.report:
+            Path(args.report).write_text(
+                "\n".join(header) + "\n" + body
+                + f"\n\nTIME_X_DIMENSION_READY = {ready}\nreason: {reason}\n",
+                encoding="utf-8")
+        # 2 is "we could not run it", and it must never read as a pass.
+        return 0 if ready == "YES" else (2 if reason == "NOT_EXECUTABLE" else 1)
+
     lines = ["CORE SUITE — the release smoke gate", "-" * 74]
     core_ok, core_lines = certify(ask)
     lines.extend(core_lines)

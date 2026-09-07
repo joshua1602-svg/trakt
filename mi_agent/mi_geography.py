@@ -28,9 +28,32 @@ question by taking whichever geography column happened to be POPULATED FIRST:
     head of a fixed preference order whose first entry was that empty column.
 
 "First populated wins" is not a semantics. It is the absence of one. A geography
-basis is a decision about what the book IS, so it belongs where the book's other
-established facts live: the asset class onboarding settled, and the governed
-portfolio registry that carries it.
+basis is a decision about what the book IS, so it is read from the governed
+configuration hierarchy that already records what kind of book this is.
+
+THE PRECEDENCE
+--------------
+::
+
+    explicit query          "borrower region" — stated outright, so it wins
+      > portfolio registry  an exception for one book
+      > client config       an exception for one client
+      > asset class default the ordinary case
+      > nothing             generic region is unresolved, and says so
+
+The ordinary case needs NO per-portfolio entry. The asset layer
+(``config/asset/mi_geography.yaml``) already says what region means for a kind
+of book; the client layer (``config/client/config_client_<id>.yaml``, the file
+OCC onboarding writes) already says what kind of book this client runs. Joining
+them is the whole mechanism.
+
+That join is what this module was missing. The basis used to come from the
+portfolio registry ALONE, keyed by ``source_portfolio_id`` — so a deployment
+whose client configuration declared ``portfolio.asset_class: equity_release``,
+a complete governed statement, still reported ``basisSource: unconfigured``
+because a second file listing its portfolios by id happened not to exist. The
+registry keeps what it genuinely owns and loses only the burden of being
+mandatory.
 
 WHAT THIS MODULE OWNS, AND WHAT IT DOES NOT
 -------------------------------------------
@@ -94,6 +117,19 @@ DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "asset" / "mi_geography.yaml"
 #: Environment override, for a deployment that keeps its asset configuration
 #: somewhere else.
 ENV_CONFIG_PATH = "TRAKT_MI_GEOGRAPHY_CONFIG"
+
+#: An asset class large enough to have its OWN configuration pack declares its
+#: basis there, beside the rest of that asset's behaviour, rather than in the
+#: shared table. `config/asset/product_defaults_ERM.yaml` is the equity-release
+#: pack: it says `asset_class: equity_release` and carries
+#: `mi_geography: {primary_basis: collateral}`. The packs are discovered by
+#: scanning for this glob and indexing each file on the asset class IT ITSELF
+#: declares, so a new pack needs no second registration and no code change.
+#:
+#: The packs are looked for BESIDE the table, because a pack and the table are
+#: one layer — the asset configuration — and a deployment that relocates that
+#: layer with ENV_CONFIG_PATH relocates all of it.
+ASSET_PACK_GLOB = "product_defaults_*.yaml"
 
 #: The registry key a portfolio entry uses to override its asset class default.
 REGISTRY_KEY = "mi_geography"
@@ -237,9 +273,17 @@ def interchangeable_field_groups() -> Tuple[Tuple[str, Tuple[str, ...]], ...]:
 _BASIS_BY_FIELD: Dict[str, str] = {
     field: basis for basis, fields in BASIS_FIELDS.items() for field in fields}
 
-#: How the effective basis was arrived at, for the receipt.
-SOURCE_QUESTION = "stated_in_question"
+#: How the effective basis was arrived at, for the receipt. These are the
+#: governed configuration hierarchy's own layers, named as the reader sees them:
+#:
+#:   explicit_query      the question stated the basis; nothing else applies
+#:   portfolio_registry  a per-portfolio exception to the asset default
+#:   client_override     a client-level exception to the asset default
+#:   asset_class_default the ordinary case — the asset says what region means
+#:   unconfigured        no layer established one, so generic region is unresolved
+SOURCE_QUESTION = "explicit_query"
 SOURCE_PORTFOLIO = "portfolio_registry"
+SOURCE_CLIENT = "client_override"
 SOURCE_ASSET_DEFAULT = "asset_class_default"
 SOURCE_NONE = "unconfigured"
 
@@ -370,20 +414,97 @@ def _load_defaults(location: Optional[str] = None) -> Dict[str, str]:
     return out
 
 
-def default_primary_basis(asset_class: Any,
-                          *, location: Optional[str] = None) -> Optional[str]:
-    """The governed default basis for ``asset_class``, or None when the table
-    declares none. An unlisted asset class is NOT given a basis: MI would rather
-    say it does not know than assume one."""
+def asset_pack_dir(location: Optional[str] = None) -> Optional[str]:
+    """The directory the asset packs are read from — the table's own directory.
+
+    One layer, one location: relocating the asset configuration relocates the
+    packs with it, and a test that points ENV_CONFIG_PATH at a temporary table
+    gets a world with no packs rather than the repository's.
+    """
+    loc = location or config_path()
+    if loc:
+        return str(Path(loc).resolve().parent)
+    return None
+
+
+@lru_cache(maxsize=8)
+def _load_pack_defaults(directory: Optional[str] = None) -> Dict[str, str]:
+    """``{asset_class: basis}`` declared by the asset packs themselves.
+
+    Each pack is indexed on the asset class it declares in its own
+    ``asset_class:`` key, not on its filename: the pack is the authority on what
+    it configures. A pack that declares no basis simply contributes nothing —
+    absence here falls through to the shared table, and absence in both is "no
+    governed default", which is refused rather than guessed. Never raises.
+    """
+    where = directory if directory is not None else asset_pack_dir()
+    if not where:
+        return {}
+    root = Path(where)
+    if not root.is_dir():
+        return {}
+    try:
+        import yaml
+    except Exception as exc:                                     # noqa: BLE001
+        logger.warning("MI geography asset packs unreadable: %s", exc)
+        return {}
+    out: Dict[str, str] = {}
+    for pack in sorted(root.glob(ASSET_PACK_GLOB)):
+        try:
+            doc = yaml.safe_load(pack.read_text(encoding="utf-8")) or {}
+        except Exception as exc:                                 # noqa: BLE001
+            logger.warning("asset pack unreadable (%s): %s", pack, exc)
+            continue
+        if not isinstance(doc, Mapping):
+            continue
+        asset = str(doc.get("asset_class") or "").strip().lower()
+        basis = configured_basis(doc)
+        if asset and basis:
+            out[asset] = basis
+    return out
+
+
+def declaring_sources(asset_class: Any,
+                      *, location: Optional[str] = None) -> Tuple[str, ...]:
+    """Which asset-configuration files declare a basis for ``asset_class``.
+
+    Two would be two sources able to drift, so a test — not a silent runtime
+    preference — is what keeps this at most one.
+    """
     from mi_agent.portfolio_metadata import normalise_asset_class
 
+    keys = {str(asset_class or "").strip().lower()
+            .replace("-", "_").replace(" ", "_"),
+            normalise_asset_class(asset_class) or ""}
+    keys.discard("")
+    found = []
+    if keys & set(_load_pack_defaults(asset_pack_dir(location))):
+        found.append("asset_pack")
+    if keys & set(_load_defaults(location)):
+        found.append("asset_table")
+    return tuple(found)
+
+
+def default_primary_basis(asset_class: Any,
+                          *, location: Optional[str] = None) -> Optional[str]:
+    """The governed default basis for ``asset_class``, or None when the asset
+    configuration declares none. An asset class nobody has configured is NOT
+    given a basis: MI would rather say it does not know than assume one.
+
+    An asset class with a pack of its own is answered by that pack; the shared
+    table answers the classes that have none.
+    """
+    from mi_agent.portfolio_metadata import normalise_asset_class
+
+    packs = _load_pack_defaults(asset_pack_dir(location))
     table = _load_defaults(location)
     raw = str(asset_class or "").strip().lower().replace("-", "_").replace(" ", "_")
-    if raw and raw in table:
-        return table[raw]
     normalised = normalise_asset_class(asset_class)
-    if normalised and normalised in table:
-        return table[normalised]
+    for source in (packs, table):
+        if raw and raw in source:
+            return source[raw]
+        if normalised and normalised in source:
+            return source[normalised]
     return None
 
 
@@ -552,6 +673,26 @@ class GeographyContract:
             "supportedBases": list(self.supported),
         }
 
+    def effective_for(self, question: Optional[str] = None) -> Dict[str, Any]:
+        """What this REQUEST was measured on, and how that was decided.
+
+        A question that names a basis is measured on it whatever the book's
+        configuration says, so the effective basis is the stated one and its
+        source is the question. The configured contract stays alongside it
+        rather than being replaced: a reader comparing two answers needs to see
+        both that this one was steered and what it would otherwise have used.
+        """
+        payload = self.to_dict()
+        stated = stated_basis(question)
+        if stated:
+            payload.update({
+                "primaryBasis": stated,
+                "basisSource": SOURCE_QUESTION,
+                "configuredBasis": self.primary_basis,
+                "configuredBasisSource": self.source,
+            })
+        return payload
+
 
 def resolve_contract(*, asset_class: Any = None,
                      registry_entry: Optional[Mapping[str, Any]] = None,
@@ -583,19 +724,41 @@ def contract_for_scope(*, client_id: Optional[str] = None,
                       portfolio_ids: Sequence[str] = (),
                       asset_class: Any = None,
                       available_columns=None, frame=None) -> GeographyContract:
-    """The contract for a request that may span several portfolios.
+    """The contract for a request, resolved down the governed config hierarchy.
 
-    Every portfolio in scope resolves its own basis, from its own declaration or
-    its own asset class. They then have to AGREE: a mixed-asset scope containing
-    a mortgage book (collateral) and an auto book (borrower) has no single
-    meaning for "balance by region", and inventing one would put two different
-    facts in the same column of the same table. Disagreement therefore yields no
-    primary basis, and generic region language on that scope is unresolved —
-    which a reader can act on, unlike a silently mixed answer.
+    THE PRECEDENCE, most specific first::
+
+        portfolio registry override   an exception for one book
+        client configuration override an exception for one client
+        asset class default           the ordinary case
+        nothing                       generic region is unresolved
+
+    THE ORDINARY CASE NEEDS NO REGISTRY. A client whose configuration declares
+    ``portfolio.asset_class`` has said what kind of book it runs, and the asset
+    layer already says what region means for that kind of book — so the default
+    follows without anybody naming a single ``source_portfolio_id``. Requiring
+    one was the defect this replaced: a deployment with a perfectly well-formed
+    client configuration reported ``basisSource: unconfigured`` because a file
+    listing its portfolios by id happened not to exist, and the answer fell back
+    to an order that no layer had chosen.
+
+    The registry keeps what it genuinely owns — per-portfolio metadata, and a
+    per-portfolio EXCEPTION to the asset default — and loses only the burden of
+    being mandatory.
+
+    A scope whose portfolios disagree still yields no basis: a mixed-asset scope
+    containing a mortgage book (collateral) and an auto book (borrower) has no
+    single meaning for "balance by region", and inventing one would put two
+    different facts in the same column of the same table.
     """
+    from mi_agent.portfolio_metadata import (
+        client_asset_class, client_geography_basis, load_portfolio_metadata,
+        normalise_asset_class)
+
+    supported = supported_bases(available_columns=available_columns, frame=frame)
+
     entries: Dict[str, Mapping[str, Any]] = {}
     try:
-        from mi_agent.portfolio_metadata import load_portfolio_metadata
         entries = dict(load_portfolio_metadata(client_id))
     except Exception as exc:                                     # noqa: BLE001
         logger.info("portfolio geography overlay unavailable: %s", exc)
@@ -603,51 +766,62 @@ def contract_for_scope(*, client_id: Optional[str] = None,
     # Narrow to the portfolios named, when any of them is one this registry
     # knows. A caller that names none — or names a client rather than a book —
     # gets every entry the client has, which is the same reading of an
-    # unqualified scope the rest of the service uses.
+    # unqualified scope the rest of this service uses.
     wanted = [str(p).strip().lower() for p in (portfolio_ids or ()) if str(p).strip()]
     matched = [entries[p] for p in wanted if p in entries]
     selected = matched or list(entries.values())
 
-    bases: set = set()
-    sources: set = set()
-    classes: set = set()
-    for entry in selected:
-        declared = configured_basis(entry)
-        if declared:
-            bases.add(declared)
-            sources.add(SOURCE_PORTFOLIO)
-        else:
-            fallback = default_primary_basis(entry.get("asset_class"))
-            if fallback:
-                bases.add(fallback)
-                sources.add(SOURCE_ASSET_DEFAULT)
-        resolved_class = entry.get("asset_class")
-        if resolved_class:
-            classes.add(str(resolved_class))
-
-    if not bases and asset_class is not None:
-        fallback = default_primary_basis(asset_class)
-        if fallback:
-            bases.add(fallback)
-            sources.add(SOURCE_ASSET_DEFAULT)
-        classes.add(str(asset_class))
-
-    supported = supported_bases(available_columns=available_columns, frame=frame)
-    if len(bases) != 1:
-        if len(bases) > 1:
-            logger.info("portfolios in scope report on different geography bases "
-                        "(%s); generic region language is unresolved for this scope",
-                        ", ".join(sorted(bases)))
+    # ---- 1. the portfolio registry, most specific ------------------------- #
+    declared = {b for b in (configured_basis(e) for e in selected) if b}
+    classes = {str(e.get("asset_class")) for e in selected if e.get("asset_class")}
+    if len(declared) == 1:
+        return GeographyContract(
+            primary_basis=next(iter(declared)), source=SOURCE_PORTFOLIO,
+            asset_class=(sorted(classes)[0] if len(classes) == 1 else None),
+            supported=supported)
+    if len(declared) > 1:
+        logger.info("portfolios in scope declare different geography bases "
+                    "(%s); generic region language is unresolved for this scope",
+                    ", ".join(sorted(declared)))
         return GeographyContract(primary_basis=None, source=SOURCE_NONE,
-                                 asset_class=(sorted(classes)[0] if len(classes) == 1
-                                              else None),
-                                 supported=supported)
-    return GeographyContract(
-        primary_basis=next(iter(bases)),
-        source=(SOURCE_PORTFOLIO if SOURCE_PORTFOLIO in sources
-                else SOURCE_ASSET_DEFAULT),
-        asset_class=(sorted(classes)[0] if len(classes) == 1 else None),
-        supported=supported)
+                                 asset_class=None, supported=supported)
+
+    # ---- 2. an explicit CLIENT-level exception ---------------------------- #
+    client_basis = normalise_basis(client_geography_basis(client_id))
+    if client_basis:
+        return GeographyContract(
+            primary_basis=client_basis, source=SOURCE_CLIENT,
+            asset_class=(sorted(classes)[0] if len(classes) == 1
+                         else client_asset_class(client_id)),
+            supported=supported)
+
+    # ---- 3. the ASSET CLASS DEFAULT, from whichever layer declares it ------ #
+    #
+    # The registry's per-portfolio class is the more specific statement, so it
+    # is read first; the client's own declaration is what makes the ordinary
+    # case work with no registry at all. An explicit argument still wins over
+    # both, for a caller that knows its book.
+    resolved_class = normalise_asset_class(asset_class)
+    if resolved_class is None and len(classes) == 1:
+        resolved_class = normalise_asset_class(sorted(classes)[0])
+    if resolved_class is None and len(classes) > 1:
+        logger.info("portfolios in scope declare different asset classes (%s); "
+                    "generic region language is unresolved for this scope",
+                    ", ".join(sorted(classes)))
+        return GeographyContract(primary_basis=None, source=SOURCE_NONE,
+                                 asset_class=None, supported=supported)
+    if resolved_class is None:
+        resolved_class = client_asset_class(client_id)
+
+    basis = default_primary_basis(resolved_class)
+    if basis:
+        return GeographyContract(primary_basis=basis,
+                                 source=SOURCE_ASSET_DEFAULT,
+                                 asset_class=resolved_class, supported=supported)
+
+    # ---- 4. nothing established one ---------------------------------------- #
+    return GeographyContract(primary_basis=None, source=SOURCE_NONE,
+                             asset_class=resolved_class, supported=supported)
 
 
 def contract_for_portfolio(portfolio_id: Optional[str] = None, *,

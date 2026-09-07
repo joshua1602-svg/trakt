@@ -60,9 +60,9 @@ DASHBOARD_BUILD_SHA = os.getenv("TRAKT_DASHBOARD_BUILD_SHA", "").strip()
 # Load YAML to override defaults
 def load_client_config():
     candidate_paths = [
-        Path(__file__).resolve().parent.parent / "config" / "client" / "config_client_ERM_UK.yaml",
-        Path.cwd() / "config" / "client" / "config_client_ERM_UK.yaml",
-        Path("config_client_ERM_UK.yaml"),
+        Path(__file__).resolve().parent.parent / "config" / "client" / "config_client_ERE.yaml",
+        Path.cwd() / "config" / "client" / "config_client_ERE.yaml",
+        Path("config_client_ERE.yaml"),
     ]
 
     for config_path in candidate_paths:

@@ -48,8 +48,11 @@ primary_basis_by_asset_class:
 
   # --- Secured on real property: the SECURITY is what the book is about. A
   # lifetime mortgage's regional concentration is a concentration of houses.
-  equity_release: collateral
-  lifetime_mortgage: collateral
+  #
+  # `equity_release` / `lifetime_mortgage` are deliberately ABSENT: that class
+  # has an asset pack of its own (`config/asset/product_defaults_ERM.yaml`) and
+  # declares its basis there, where the rest of ERM's behaviour is declared. A
+  # class named in both files would be two sources able to drift.
   residential_mortgage: collateral
   residential_real_estate: collateral
   commercial_real_estate: collateral
