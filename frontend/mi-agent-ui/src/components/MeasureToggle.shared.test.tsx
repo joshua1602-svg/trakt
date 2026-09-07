@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { PipelineSnapshotPanel } from "@/components/PipelineSnapshotPanel";
 import { ForecastView } from "@/components/ForecastView";
 import { MeasureToggle } from "@/components/pipeline/bits";
@@ -20,12 +20,16 @@ const PIPELINE = mockForecastSnapshot("client_001/mi_2025_11").pipelineSnapshot!
 const FORECAST = {
   forecastBridge: null,
   forecastBreakdowns: {
+    // caseCount is a stub 0 on the REAL payload (mi_agent_api/workspace.py
+    // forecast_dimension_breakdown composes a probability-weighted BALANCE —
+    // funded exposure + amount x completion-probability — never a loan-level
+    // count), so the fixture matches that rather than inventing a real one.
     byRegionCapped: [
-      { key: "Greater London", caseCount: 125, pipelineAmount: 58_200_000,
+      { key: "Greater London", caseCount: 0, pipelineAmount: 58_200_000,
         weightedExpectedFundedAmount: null },
     ],
     byLtvBucketCapped: [
-      { key: "20-30%", caseCount: 40, pipelineAmount: 12_000_000,
+      { key: "20-30%", caseCount: 0, pipelineAmount: 12_000_000,
         weightedExpectedFundedAmount: null },
     ],
     // Carries only a weighted amount — no case count.
@@ -68,20 +72,21 @@ describe("pipeline breakdown measure toggle", () => {
 });
 
 describe("forecast breakdown measure toggle", () => {
-  it("switches region and LTV onto their case counts", () => {
+  // Forecast has no case-count measure to toggle to (see the FORECAST fixture
+  // comment above), so it offers no toggle at all — not a toggle stuck on
+  // "Balance", and not a "0" suffix implying zero cases contributed.
+  it("offers no measure toggle — the payload carries no real count", () => {
     render(<ForecastView forecast={FORECAST} />);
-    expect(screen.getByText("£58.2MM")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("forecast-measure-count"));
-    expect(screen.getByText("125")).toBeInTheDocument();
-    expect(screen.getByText("40")).toBeInTheDocument();
+    expect(screen.getByText("Forecast balance by region")).toBeInTheDocument();
+    expect(screen.getByText("Forecast balance by LTV bucket")).toBeInTheDocument();
+    expect(screen.queryByTestId("forecast-measure-count")).toBeNull();
+    expect(screen.queryByTestId("forecast-measure-balance")).toBeNull();
   });
 
-  it("leaves completion month on balance — it carries no count", () => {
+  it("never shows the stub caseCount as a '· 0' suffix", () => {
     render(<ForecastView forecast={FORECAST} />);
-    fireEvent.click(screen.getByTestId("forecast-measure-count"));
-    const month = screen.getByText("Forecast contribution by completion month")
-      .closest("div")!.parentElement!;
-    expect(within(month).getByText("£11.1MM")).toBeInTheDocument();
+    expect(screen.getByText("£58.2MM")).toBeInTheDocument();
+    expect(screen.queryByText("· 0")).toBeNull();
   });
 });
 

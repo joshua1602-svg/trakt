@@ -264,7 +264,7 @@ function Available({ detail, measure, onMeasure }: {
           <table className="data-table min-w-[560px]"
             data-testid="stage-transitions-reconciliation">
             <caption className="sr-only">
-              Opening to closing case reconciliation by pipeline stage
+              Opening to closing {measure === "count" ? "case" : "value"} reconciliation by pipeline stage
             </caption>
             <thead>
               <tr>
@@ -276,15 +276,33 @@ function Available({ detail, measure, onMeasure }: {
               </tr>
             </thead>
             <tbody>
+              {/* Same Cases/Value toggle as the four blocks above — the row's
+                  own opening/closing identity already reconciles in both
+                  units, the governed payload carries both (StageReconciliationRow),
+                  so the table showing only counts regardless of the toggle was
+                  a display gap, not a data one. */}
               {recon.by_stage.map((r) => (
                 <tr key={r.stage}>
                   <th scope="row">{stageLabel(r.stage)}</th>
-                  <td>{r.opening_case_count}</td>
-                  <td>{r.new_arrivals}</td>
-                  <td>{r.transitions_in}</td>
-                  <td>{r.transitions_out}</td>
-                  <td>{r.departures}</td>
-                  <td data-terminal>{r.closing_case_count}</td>
+                  {measure === "count" ? (
+                    <>
+                      <td>{r.opening_case_count}</td>
+                      <td>{r.new_arrivals}</td>
+                      <td>{r.transitions_in}</td>
+                      <td>{r.transitions_out}</td>
+                      <td>{r.departures}</td>
+                      <td data-terminal>{r.closing_case_count}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{formatGBP(r.opening_amount)}</td>
+                      <td>{formatGBP(r.new_arrival_amount)}</td>
+                      <td>{formatGBP(r.transferred_in_latest_amount)}</td>
+                      <td>{formatGBP(r.transferred_out_prior_amount)}</td>
+                      <td>{formatGBP(r.departure_prior_amount)}</td>
+                      <td data-terminal>{formatGBP(r.closing_amount)}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

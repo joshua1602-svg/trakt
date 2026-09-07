@@ -169,12 +169,12 @@ export const EvoLineChart = memo(function EvoLineChart({
                   if (onPointClick && s?.activeLabel != null) onPointClick(String(s.activeLabel));
                 },
               } : {})}>
-              <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
-              <XAxis dataKey="period" tick={{ fill: "#8a97ad", fontSize: 11 }} />
-              <YAxis tickFormatter={fmt} tick={{ fill: "#8a97ad", fontSize: 11 }} width={64} />
+              <CartesianGrid stroke="#262a31" strokeDasharray="3 3" />
+              <XAxis dataKey="period" tick={{ fill: "#767d87", fontSize: 11 }} />
+              <YAxis tickFormatter={fmt} tick={{ fill: "#767d87", fontSize: 11 }} width={64} />
               <Tooltip
                 formatter={(v: number) => fmt(Number(v))}
-                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }}
+                contentStyle={{ background: "#0a0b0d", border: "1px solid #262a31", fontSize: 12 }}
                 {...(tooltipContent ? { content: tooltipContent } : {})}
               />
               {lines.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
@@ -432,27 +432,27 @@ export function FunnelStageCard({
                   if (onPointClick && st?.activeLabel != null) onPointClick(String(st.activeLabel));
                 },
               } : {})}>
-              <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
-              <XAxis dataKey="week" tick={{ fill: "#8a97ad", fontSize: large ? 11 : 10 }} />
+              <CartesianGrid stroke="#262a31" strokeDasharray="3 3" />
+              <XAxis dataKey="week" tick={{ fill: "#767d87", fontSize: large ? 11 : 10 }} />
               <YAxis yAxisId="flow" tickFormatter={gbpCompact}
-                tick={{ fill: "#8a97ad", fontSize: large ? 11 : 10 }} width={56} />
+                tick={{ fill: "#767d87", fontSize: large ? 11 : 10 }} width={56} />
               {showCumulative && (
                 <YAxis yAxisId="stock" orientation="right" tickFormatter={gbpCompact}
-                  tick={{ fill: "#6f7b91", fontSize: large ? 11 : 10 }} width={56} />
+                  tick={{ fill: "#656b74", fontSize: large ? 11 : 10 }} width={56} />
               )}
               <Tooltip
                 formatter={(v: number, name: string) => [gbpCompact(Number(v)), name]}
-                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }}
+                contentStyle={{ background: "#0a0b0d", border: "1px solid #262a31", fontSize: 12 }}
                 {...(tooltipContent ? { content: tooltipContent } : {})} />
               {avgFlow != null && (
                 <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeDasharray="4 3"
                   label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
               )}
               <Bar yAxisId="flow" dataKey="flow" name="Weekly flow (£)"
-                fill="#7c9cf0" radius={[2, 2, 0, 0]} />
+                fill={THEME.cyan} radius={[2, 2, 0, 0]} />
               {showCumulative && (
                 <Line yAxisId="stock" type="monotone" dataKey="stock" name="Stock (£)"
-                  stroke="#5ec6b8" strokeWidth={2} dot={false} />
+                  stroke={THEME.mint} strokeWidth={2} dot={false} />
               )}
             </ComposedChart>
           </ResponsiveContainer>
