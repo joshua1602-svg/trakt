@@ -737,6 +737,59 @@ def _configured_basis(envelope: Dict[str, Any]) -> Optional[str]:
     return block.get("primaryBasis")
 
 
+#: Cache for the field->basis owner. Module-global rather than lru_cache so
+#: this file keeps its dependency-free import list.
+_BASIS_OF_FIELD: List[Any] = []
+
+
+def basis_of_field_owner() -> Optional[Callable[[Optional[str]], Optional[str]]]:
+    """``mi_agent.mi_geography.basis_of_field``, loaded BY PATH.
+
+    WHY NOT `from mi_agent.mi_geography import basis_of_field`. That is the
+    obvious line and it broke the gate in production. Importing it executes
+    `mi_agent/__init__.py`, which imports the whole package — including
+    `mi_query_validator`, which imports `yaml` — and THIS WORKFLOW INSTALLS NO
+    DEPENDENCIES. It is a thin HTTP client by design; the core and broad suites
+    never imported the engine, so nothing had ever needed them. The acceptance
+    run reached production, authenticated, confirmed the deployed commit, and
+    then died on `ModuleNotFoundError: No module named 'yaml'` before scoring a
+    single question.
+
+    Loading the module by file path executes THAT FILE and nothing else. Its
+    module-level imports are stdlib only (`yaml` is imported lazily inside the
+    functions that read configuration, and `basis_of_field` is a dict lookup
+    that never reads any). So the field-to-basis mapping keeps exactly ONE
+    owner — this reads the same source the engine does — without the harness
+    growing a dependency contract it was deliberately built not to have.
+
+    Returns None if the owner cannot be loaded. The caller must treat that as a
+    FAILURE, never as "no region field": a gate that cannot tell which basis was
+    measured has not checked the thing it exists to check.
+    """
+    if not _BASIS_OF_FIELD:
+        import importlib.util
+
+        source = _REPO_ROOT / "mi_agent" / "mi_geography.py"
+        try:
+            name = "_trakt_mi_geography_for_acceptance"
+            spec = importlib.util.spec_from_file_location(name, source)
+            module = importlib.util.module_from_spec(spec)
+            # REGISTERED BEFORE EXECUTION, and it is not optional. The module
+            # declares dataclasses, and `dataclasses._is_type` resolves a
+            # field's type through `sys.modules.get(cls.__module__)` — which is
+            # None for a module loaded by path and never registered, so the
+            # decorator raises `'NoneType' object has no attribute '__dict__'`
+            # at import time. Found by running this loader in a subprocess with
+            # `yaml` blocked, which is the only way to see what CI sees.
+            sys.modules[name] = module
+            spec.loader.exec_module(module)          # type: ignore[union-attr]
+            _BASIS_OF_FIELD.append(module.basis_of_field)
+        except Exception as exc:                     # noqa: BLE001
+            print(f"  the field-to-basis owner could not be loaded: {exc}")
+            _BASIS_OF_FIELD.append(None)
+    return _BASIS_OF_FIELD[0]
+
+
 def _measured_region_field(envelope: Dict[str, Any]) -> Optional[str]:
     """The region column the answer was actually MEASURED on.
 
@@ -747,7 +800,9 @@ def _measured_region_field(envelope: Dict[str, Any]) -> Optional[str]:
     doing the thing we are trying to forbid. The spec's dimension, and failing
     that the column the rows are actually keyed by, is what was measured.
     """
-    from mi_agent.mi_geography import basis_of_field
+    basis_of_field = basis_of_field_owner()
+    if basis_of_field is None:
+        return None
 
     spec = envelope.get("spec") or {}
     candidates: List[Any] = [spec.get("dimension")]
@@ -763,10 +818,9 @@ def _measured_region_field(envelope: Dict[str, Any]) -> Optional[str]:
 
 
 def _measured_basis(envelope: Dict[str, Any]) -> Optional[str]:
-    from mi_agent.mi_geography import basis_of_field
-
+    basis_of_field = basis_of_field_owner()
     field = _measured_region_field(envelope)
-    return basis_of_field(field) if field else None
+    return basis_of_field(field) if (basis_of_field and field) else None
 
 
 def _acceptance_rows(envelope: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -865,6 +919,13 @@ def geography_acceptance(ask: Callable[[str], Dict[str, Any]], *,
     established is ``False`` with a stated reason, because "we could not tell"
     must not be able to read as "it passed".
     """
+    # Established BEFORE any question is asked. Without the field-to-basis owner
+    # the scorer cannot tell which geography an answer was measured on, which is
+    # the one thing this gate exists to check — so it fails, loudly, with the
+    # reason stated, rather than reporting `measuredBasis: null` ten times and
+    # passing everything else.
+    owner_available = basis_of_field_owner() is not None
+
     snap = snapshot if snapshot is not None else load_snapshot(portfolio_id,
                                                                snapshot_path)
     want_class = str(snap.get("expectedAssetClass") or "equity_release")
@@ -954,6 +1015,10 @@ def geography_acceptance(ask: Callable[[str], Dict[str, Any]], *,
             generic_problems.append(
                 f"{qid} MEASURED {row['measuredBasis']!r} on "
                 f"{row['measuredField']!r}")
+    if not owner_available:
+        generic_problems.insert(0, "the field-to-basis owner "
+                                   "(mi_agent/mi_geography.py) could not be "
+                                   "loaded, so what was MEASURED is unknown")
     _record("GENERIC_REGION_PASS", not generic_problems,
             "; ".join(generic_problems))
 

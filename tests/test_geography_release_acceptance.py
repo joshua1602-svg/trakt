@@ -405,3 +405,98 @@ def test_a_semantic_failure_is_not_reported_as_not_executable():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# =========================================================================== #
+# The harness must run where the engine's dependencies do not
+# =========================================================================== #
+def test_the_field_basis_owner_loads_without_the_engines_dependencies():
+    """The live certification workflow installs NOTHING.
+
+    `certify-mi-api.yml` is a thin HTTP client by design — it sets up Python and
+    runs the harness, with no `pip install`. The core and broad suites never
+    imported the engine, so nothing had ever needed a dependency.
+
+    Then the geography scorer imported `mi_agent.mi_geography` to learn which
+    basis a column carries. That executes `mi_agent/__init__.py`, which imports
+    the whole package, which imports `yaml` — and the acceptance run reached
+    production, authenticated, confirmed the deployed commit, and died on
+    `ModuleNotFoundError: No module named 'yaml'` before scoring one question.
+
+    So the owner is loaded BY PATH. This test is the guard, and it has to run in
+    a subprocess with `yaml` genuinely blocked: asserting anything in THIS
+    process would prove nothing, because the test environment has yaml
+    installed — which is exactly why the defect shipped.
+    """
+    import subprocess
+    import textwrap
+
+    program = textwrap.dedent(f'''
+        import sys
+
+        class BlockYaml:
+            """Refuse `yaml` the way a runner without it would."""
+            def find_spec(self, name, path=None, target=None):
+                if name == "yaml" or name.startswith("yaml."):
+                    raise ImportError("No module named 'yaml'")
+                return None
+
+        sys.meta_path.insert(0, BlockYaml())
+        sys.path.insert(0, {str(_REPO_ROOT)!r})
+
+        try:
+            import yaml
+            raise SystemExit("the block did not work; this proves nothing")
+        except ImportError:
+            pass
+
+        from due_diligence.evidence.mi_api_certification.certify_mi_api import (
+            basis_of_field_owner, _measured_basis, _measured_region_field)
+
+        basis_of_field = basis_of_field_owner()
+        assert basis_of_field is not None, "the owner did not load"
+        assert basis_of_field("collateral_geography") == "collateral"
+        assert basis_of_field("geographic_region_obligor") == "borrower"
+        assert basis_of_field("not_a_region_at_all") is None
+
+        # THE PATH THAT ACTUALLY RAN IN PRODUCTION. Asserting only on the
+        # loader would leave this test green against the original defect,
+        # because that defect was the direct package import inside
+        # `_measured_region_field` — which is the function the scorer calls for
+        # every question. Exercise the real call site.
+        envelope = {{"spec": {{"dimension": "geographic_region_obligor",
+                             "dimensions": ["geographic_region_obligor"],
+                             "filters": {{}}}},
+                    "artifacts": []}}
+        assert _measured_region_field(envelope) == "geographic_region_obligor"
+        assert _measured_basis(envelope) == "borrower"
+
+        # By PATH, not as a package: importing the package is the bug.
+        assert "mi_agent" not in sys.modules, "the mi_agent package was imported"
+        print("OK")
+    ''')
+    result = subprocess.run([sys.executable, "-c", program],
+                            capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0, (result.stdout + result.stderr)[-3000:]
+    assert "OK" in result.stdout
+
+
+def test_a_scorer_that_cannot_tell_what_was_measured_fails_loudly():
+    """If the owner cannot be loaded at all, the gate must go red.
+
+    Returning `measuredBasis: null` ten times and passing everything else would
+    be the worst outcome available: a green run that never performed the one
+    check it exists to perform.
+    """
+    import due_diligence.evidence.mi_api_certification.certify_mi_api as C
+
+    saved = list(C._BASIS_OF_FIELD)
+    C._BASIS_OF_FIELD.clear()
+    C._BASIS_OF_FIELD.append(None)          # simulate a load failure
+    try:
+        checks, _, _ = _score(_baseline())
+        assert checks["GENERIC_REGION_PASS"] is False
+        assert acceptance_verdict(checks)[0] == "NO"
+    finally:
+        C._BASIS_OF_FIELD.clear()
+        C._BASIS_OF_FIELD.extend(saved)
