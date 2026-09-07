@@ -61,6 +61,7 @@ FIELD_RULE = "region_mapping_rule"
 #: always explain where each category came from.
 METHOD_EXACT = "exact"                # already a governed canonical value
 METHOD_SYNONYM = "synonym"            # matched an approved synonym
+METHOD_ITL_LADDER = "itl_ladder"      # resolved through the governed ITL hierarchy
 METHOD_UNRESOLVED = "unresolved"      # no governed mapping — NOT guessed
 METHOD_ABSENT = "absent"              # no raw value supplied
 
@@ -143,7 +144,46 @@ class RegionTaxonomy:
             return self.values_by_key[key], METHOD_EXACT
         if key in self.synonyms:
             return self.synonyms[key], METHOD_SYNONYM
+        # THE GOVERNED ITL HIERARCHY, ASKED LAST.
+        #
+        # A raw tape may write its geography at any rung of the ladder — an ITL3
+        # code (`TLC31`), a postcode prefix, an ITL2 name — and this vocabulary
+        # is NAMES, so every code fell through to unresolved. Measured on the
+        # consolidated platform book: 11,035 rows, every one `unresolved`,
+        # `canonical_region_reporting` entirely null, and "balance by region"
+        # refusing on a book whose regions were in the tape all along.
+        #
+        # The answer is NOT a `TLC31 -> North East` table here. That would be a
+        # second geography vocabulary beside `uk_itl_master_lookup_v2.csv`, and
+        # the two would drift. `mi_agent.region_resolution` owns the ladder and
+        # already resolves every rung of it; it is asked which of THIS
+        # taxonomy's own governed values the raw value denotes, so nothing is
+        # added to either vocabulary and the ITL hierarchy stays authoritative.
+        #
+        # LAST, so it can only ever resolve what the deterministic lookups above
+        # already declined. An exact value and an approved synonym keep their
+        # existing methods and their existing behaviour.
+        resolved = self._ladder_value(raw)
+        if resolved is not None:
+            return resolved, METHOD_ITL_LADDER
         return None, METHOD_UNRESOLVED
+
+    def _ladder_value(self, raw: Any) -> Optional[str]:
+        """The governed value the ITL ladder says ``raw`` denotes, or ``None``.
+
+        Ambiguity is NOT resolved by preference: a raw value the ladder places
+        in two governed regions denotes neither, and is reported unresolved
+        rather than assigned to whichever came first.
+        """
+        try:
+            from mi_agent.region_resolution import same_governed_region
+        except Exception:  # noqa: BLE001 - no ladder owner, no claim
+            return None
+        try:
+            hits = [v for v in self.values if same_governed_region(raw, v)]
+        except Exception:  # noqa: BLE001 - the ladder must never break prep
+            return None
+        return hits[0] if len(hits) == 1 else None
 
     def to_reporting(self, detail: Optional[str]) -> Tuple[Optional[str], str]:
         """``(reporting value, rule)`` for a resolved detail value."""
@@ -245,6 +285,14 @@ SOURCE_FIELDS: Tuple[str, ...] = (
 )
 
 
+#: Every column `apply` stamps. Named once so a caller that decides a book should
+#: not carry the canonical vocabulary can remove exactly what was added, and
+#: cannot drift from what this module writes.
+REPORTING_STAMPED_FIELDS: Tuple[str, ...] = (
+    FIELD_SOURCE_VALUE, FIELD_DETAIL, FIELD_REPORTING, FIELD_METHOD, FIELD_RULE,
+)
+
+
 def apply(df, taxonomy: Optional[RegionTaxonomy], *,
           source_fields: Sequence[str] = SOURCE_FIELDS) -> Dict[str, Any]:
     """Stamp the governed region columns onto ``df`` in place. Returns a report.
@@ -316,7 +364,8 @@ def apply(df, taxonomy: Optional[RegionTaxonomy], *,
         "rows_unresolved": int(len(df) - resolved_rows),
         "unresolved_values": dict(sorted(unresolved.items(), key=lambda kv: -kv[1])),
         "methods": {m: int((df[FIELD_METHOD] == m).sum())
-                    for m in (METHOD_EXACT, METHOD_SYNONYM, METHOD_UNRESOLVED, METHOD_ABSENT)},
+                    for m in (METHOD_EXACT, METHOD_SYNONYM, METHOD_ITL_LADDER,
+                              METHOD_UNRESOLVED, METHOD_ABSENT)},
     }
 
 

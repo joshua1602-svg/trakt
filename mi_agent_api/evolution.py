@@ -28,9 +28,16 @@ from . import pipeline_contract as pipeline_mod
 
 _BALANCE = "current_outstanding_balance"
 # Funded breakdown dimensions exposed over time (kept small + governed).
+#: THE ANALYTICAL REGION IS THE CANONICAL ONE, here as everywhere else.
+#: This read `geographic_region_obligor`, which holds ITL3 CODES — so the
+#: dashboard's region series was published as `ND1`, `TLC31`, `TLC32` while MI
+#: answered "balance by region" in ITL1 NAMES. Two surfaces, one word, two
+#: vocabularies, and no way for a reader comparing them to know. The raw field
+#: remains a derivation INPUT to the canonical column; it is not a second
+#: analytical answer to "region".
 _FUNDED_BREAKDOWN_DIMS = {
     "broker": "broker_channel",
-    "region": "geographic_region_obligor",
+    "region": "canonical_region_reporting",
     "ltv_bucket": "ltv_bucket",
 }
 MISSING_BUCKET = "Unknown / Missing"

@@ -198,6 +198,38 @@ def looks_like_region_term(term: str) -> bool:
     return bool(codes_for(term))
 
 
+def same_governed_region(left, right) -> bool:
+    """Do these two values name the SAME governed region, by the ITL ladder?
+
+    THE LADDER ANSWERS, and it is the only thing that does. Both sides are taken
+    down to the granular ITL3 codes they denote — through whichever rung each
+    happens to be written at, postcode prefix, ITL3, ITL2 or ITL1 name, and
+    through the alias table for the spellings people actually use — and they
+    name the same region when those code sets meet.
+
+    WHY THIS SHAPE. The canonicalisation layer needs to ask "which of MY governed
+    values does this raw value denote?" and every alternative answer to that
+    question is a second geography vocabulary: a `TLC31 -> North East` table
+    written beside this one, free to drift from it and certain to. Asking in
+    terms of the codes both sides already resolve to adds no vocabulary at all —
+    which is also why the one name the two vocabularies spell differently, the
+    ITL's "East (England)" against the taxonomy's "East of England", needs no
+    bridge written for it: `_ALIASES` already carries that equivalence and
+    `codes_for` already applies it.
+
+    A value the ladder does not know denotes nothing and matches nothing. That
+    is what keeps `ND1` — present in a real book and not an ITL code — out of a
+    region rather than assigned to the nearest one.
+
+    Deliberately does NOT consult `engine.region_taxonomy`. That owner delegates
+    the NAMING question here through `_canonical_matches`; this goes the other
+    way and stays inside the ladder, so the two keep one direction each and
+    cannot recurse.
+    """
+    first, second = codes_for(left), codes_for(right)
+    return bool(first and second and (first & second))
+
+
 def _names_for(code: str) -> Set[str]:
     """Every readable name a code can be stored under."""
     code = (code or "").strip().upper()
