@@ -321,7 +321,24 @@ class TestAnEmptyCanonicalColumnIsNeverStamped:
         assert report["region_harmonisation"]["applied"] is False
         assert report["region_harmonisation"]["withheld"]
 
-    def test_the_axis_owner_then_keeps_the_populated_field(self) -> None:
+    def test_an_unharmonisable_book_still_reaches_its_raw_geography(self) -> None:
+        """What actually happens today on a book the taxonomy cannot read.
+
+        No canonical column is stamped (above), so the axis owner's preference
+        order falls through to the populated raw field and the book answers
+        "balance by region" out of its own ungoverned vocabulary.
+
+        THAT FALLBACK IS KNOWN DEBT, NOT THE INTENDED END STATE. Retiring it —
+        making `canonical_region_reporting` the only analytical answer and
+        refusing where it cannot be derived — was implemented and MEASURED:
+        127 new failures across 31 files and 85 movements in the 882-question
+        census, every one of them a book or fixture that never went through the
+        canonical derivation at all. Deleting the fallback without first running
+        the derivation over those books does not remove the ungoverned reading;
+        it relocates the failure. The patch is kept rather than shipped, and
+        this assertion records the current contract honestly so the change is
+        visible when it lands.
+        """
         import pandas as pd
 
         from mi_agent import llm_query_parser as parser
@@ -334,6 +351,7 @@ class TestAnEmptyCanonicalColumnIsNeverStamped:
             "geographic_region_obligor": ["GBZZZ", "GBZZZ"],
         })
         out, _report = prepare_funded_mi_dataset(raw)
+        assert "canonical_region_reporting" not in out.columns
         chosen = next((f for f in parser._REGION_PREFERENCE if f in out.columns), None)
         assert chosen == "geographic_region_obligor"
         assert out[chosen].notna().all()

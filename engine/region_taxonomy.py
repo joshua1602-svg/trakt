@@ -314,14 +314,51 @@ def apply(df, taxonomy: Optional[RegionTaxonomy], *,
     if not present:
         return {}
 
-    # First populated source column per row, in preference order.
+    # FIRST RESOLVABLE SOURCE COLUMN PER ROW, in preference order — not the
+    # first POPULATED one.
+    #
+    # THE DIFFERENCE IS NOT ACADEMIC. Measured on the consolidated platform
+    # book: 5 loans carry `ND1` in `geographic_region_obligor` — populated, and
+    # not an ITL code — while `collateral_geography` names "South East" and
+    # "Wales" for the same rows. Taking the first POPULATED value handed the
+    # taxonomy `ND1`, which resolves to nothing, and those loans became
+    # Unknown / Missing on a book that says exactly where they are. £609,577.70
+    # moved out of two named regions for no reason a reader could defend.
+    #
+    # The preference order is a statement about which source is most specific,
+    # and it only means that if a source that CANNOT BE READ yields to the next
+    # one. A row still resolves to nothing when no source resolves, which is the
+    # case `ND1`-only books are actually in, and it is disclosed rather than
+    # filled.
+    resolved_by_value: Dict[str, Tuple[Optional[str], str]] = {}
+
+    def _resolve(value) -> Tuple[Optional[str], str]:
+        key = str(value)
+        if key not in resolved_by_value:
+            resolved_by_value[key] = taxonomy.resolve_detail(value)
+        return resolved_by_value[key]
+
     raw = pd.Series(pd.NA, index=df.index, dtype="object")
     for col in present:
         candidate = df[col]
         blank = raw.isna() | raw.astype(str).str.strip().str.lower().isin(_NULL_TOKENS)
-        take = blank & candidate.notna()
+        if not blank.any():
+            break
+        usable = candidate.notna() & candidate.map(
+            lambda v: _resolve(v)[0] is not None if v is not None else False)
+        take = blank & usable
         if take.any():
             raw = raw.mask(take, candidate)
+    # Nothing resolved for these rows; keep the first POPULATED value so the
+    # provenance columns still say what the tape actually carried.
+    still_blank = raw.isna() | raw.astype(str).str.strip().str.lower().isin(_NULL_TOKENS)
+    if still_blank.any():
+        for col in present:
+            candidate = df[col]
+            take = still_blank & candidate.notna()
+            if take.any():
+                raw = raw.mask(take, candidate)
+                still_blank = still_blank & ~take
 
     # Resolve once per DISTINCT value, then map — a tape has thousands of rows
     # and a handful of regions.
