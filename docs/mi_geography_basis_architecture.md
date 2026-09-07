@@ -48,15 +48,37 @@ measurable defects on the live platform book (11,035 loans, 2026-06-30):
 
 The basis is a property of the **asset**. A lifetime mortgage's regional
 concentration is a concentration of houses; an auto book's is a concentration of
-people. So it travels the handoff the asset class already travels:
+people. It is read from the governed configuration hierarchy that already
+records what kind of book this is:
+
+| precedence | layer | owns |
+|---|---|---|
+| 1 | the question itself | a basis stated outright — `explicit_query` |
+| 2 | portfolio registry | an exception for one book — `portfolio_registry` |
+| 3 | client configuration | an exception for one client — `client_override` |
+| 4 | asset configuration | the ordinary case — `asset_class_default` |
+| 5 | — | nothing established one — `unconfigured`, and it says so |
 
 ```
-onboarding decides the asset class
-  -> config/asset/mi_geography.yaml          the governed default basis per class
-  -> portfolio_registry.yaml                 engine.onboarding_agent.portfolio_registry_writer
-  -> mi_agent.portfolio_metadata             the overlay MI reads
-  -> mi_agent.mi_geography.GeographyContract the effective contract for a request
+OCC onboarding captures the asset class   (required, operator-confirmed)
+  -> config/client/config_client_<id>.yaml    portfolio.asset_class
+  -> config/asset/mi_geography.yaml           asset_class -> basis
+  -> mi_agent.mi_geography.GeographyContract  the contract for a request
 ```
+
+**The ordinary case needs no portfolio registry.** The asset layer says what
+region means for a kind of book; the client layer says what kind of book this
+client runs. Joining them is the whole mechanism, and OCC already writes the
+client key (`writes_to: client_config:portfolio.asset_class`) that MI reads.
+
+That join is what was missing at first. The basis came from the portfolio
+registry alone, keyed by `source_portfolio_id`, so a deployment whose client
+configuration declared `portfolio.asset_class: equity_release` — a complete
+governed statement — still reported `basisSource: unconfigured` because a second
+file listing its portfolios by id happened not to exist, and generic "region"
+fell back to a field order no layer had chosen. The registry keeps what it
+genuinely owns (per-portfolio metadata, and a per-portfolio exception) and loses
+only the burden of being mandatory.
 
 `config/asset/mi_geography.yaml`:
 

@@ -164,7 +164,9 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     # get wrong. Absent rather than guessed when nothing established it.
     if geography is not None:
         try:
-            meta["geographyBasis"] = geography.to_dict()
+            # The EFFECTIVE basis for this request: a question that names one is
+            # measured on it, and the configured contract is published beside it.
+            meta["geographyBasis"] = geography.effective_for(req.question)
         except Exception:  # noqa: BLE001 - provenance must never fail a query
             pass
     try:

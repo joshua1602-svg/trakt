@@ -63,6 +63,12 @@ portfolios:
     # asked with no qualifier, has no answer until somebody has decided which
     # geography this book reports on.
     #
+    # OPTIONAL, and an EXCEPTION rather than the normal path. The ordinary
+    # default comes from the governed configuration hierarchy without any entry
+    # here at all: the client configuration declares `portfolio.asset_class`
+    # and `config/asset/mi_geography.yaml` says what region means for that
+    # class. Set this key only where THIS BOOK differs from its asset default.
+    #
     # ONBOARDING SEEDS THIS from the asset class above
     # (config/asset/mi_geography.yaml holds the governed default per class:
     # property-secured books report on the collateral, movable and unsecured
