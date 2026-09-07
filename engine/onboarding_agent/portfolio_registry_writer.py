@@ -44,7 +44,31 @@ logger = logging.getLogger("engine.onboarding_agent.portfolio_registry_writer")
 #: re-run of onboarding.
 _OWNED_KEYS = ("asset_class",)
 
+#: Keys this writer SEEDS but does not own: written when the entry has none, and
+#: never overwritten. The MI geography basis is derived from the asset class, so
+#: onboarding can supply it — but an operator who overrode it did so knowing the
+#: default, and a re-run of onboarding must not quietly undo that decision.
+_SEEDED_KEYS = (_MI_GEOGRAPHY_KEY := "mi_geography",)
+
 _ID_KEY = "source_portfolio_id"
+
+
+def default_geography_basis(asset_class: Any) -> Optional[str]:
+    """The governed primary MI geography basis for ``asset_class``, or None.
+
+    Delegates to :mod:`mi_agent.mi_geography`, which owns the table, for the same
+    reason ``normalise_asset_class`` delegates: the writer and every MI reader
+    must resolve one vocabulary, and a second copy of the table is a second
+    answer waiting to disagree.
+
+    Returns None for an asset class with no governed default — including one
+    onboarding could not classify at all. Nothing is invented: the portfolio is
+    written without a basis, and MI reads the absence as "not established"
+    rather than assuming one, exactly as it already does for the asset class.
+    """
+    from mi_agent.mi_geography import default_primary_basis
+
+    return default_primary_basis(asset_class)
 
 
 def normalise_asset_class(value: Any) -> Optional[str]:
@@ -78,6 +102,14 @@ def build_entries(portfolios: Iterable[Mapping[str, Any]], *,
         entry: Dict[str, Any] = {_ID_KEY: pid}
         if resolved:
             entry["asset_class"] = resolved
+            basis = default_geography_basis(resolved)
+            if basis:
+                entry[_MI_GEOGRAPHY_KEY] = {"primary_basis": basis}
+            else:
+                logger.info("no governed MI geography basis for asset class %r "
+                            "on portfolio %r; MI reads generic region language "
+                            "as unresolved rather than assuming a basis",
+                            resolved, pid)
         else:
             logger.info("no governed asset class for portfolio %r; MI will read "
                         "it as unknown rather than assume one", pid)
@@ -104,6 +136,9 @@ def merge_entries(existing: Iterable[Mapping[str, Any]],
             continue
         for key in _OWNED_KEYS:
             if key in update:
+                target[key] = update[key]
+        for key in _SEEDED_KEYS:
+            if key in update and not target.get(key):
                 target[key] = update[key]
     return merged
 
@@ -136,6 +171,9 @@ def publish(path: str | Path, portfolios: Iterable[Mapping[str, Any]], *,
         "# Written by engine.onboarding_agent.portfolio_registry_writer at\n"
         "# onboarding. `asset_class` is the decision onboarding made about what\n"
         "# kind of book this is; MI reads it from here and from nowhere else.\n"
+        "# `mi_geography.primary_basis` is seeded from that class — it says\n"
+        "# whether generic region language means the BORROWER's geography or the\n"
+        "# COLLATERAL's — and an operator override of it is never overwritten.\n"
         "# Hand-authored keys (runoff curves, forecast treatment) are preserved.\n"
         + yaml.safe_dump(document, sort_keys=False),
         encoding="utf-8")

@@ -1168,7 +1168,8 @@ def executed_measure_concepts(query_result: Any) -> Set[str]:
 
 
 def requested_dimension_terms(question: str, semantics: dict,
-                              available_columns: Optional[Iterable[str]] = None
+                              available_columns: Optional[Iterable[str]] = None,
+                              geography: Any = None
                               ) -> List[Tuple[str, str, Tuple[str, ...]]]:
     """``[(field_key, matched_term, alt_keys)]`` the user explicitly named.
 
@@ -1211,13 +1212,15 @@ def requested_dimension_terms(question: str, semantics: dict,
     # the grouping is what makes the question answerable.
     _population = resolve_population_predicate(question, available_columns)
     _suppress = set(_population or ())
-    keys, terms, _ = _explicit_dimensions(q, semantics, available_columns=None)
+    keys, terms, _ = _explicit_dimensions(q, semantics, available_columns=None,
+                                          geography=geography)
     by_term: Dict[str, List[str]] = {}
     for key, term in zip(keys, terms):
         by_term.setdefault(term, []).append(key)
     if available_columns is not None:
         a_keys, a_terms, _ = _explicit_dimensions(
-            q, semantics, available_columns=set(available_columns))
+            q, semantics, available_columns=set(available_columns),
+            geography=geography)
         for key, term in zip(a_keys, a_terms):
             by_term.setdefault(term, []).append(key)
     out: List[Tuple[str, str, Tuple[str, ...]]] = []
@@ -1232,7 +1235,8 @@ def requested_dimension_terms(question: str, semantics: dict,
     singular = re.sub(r"\b(\w{4,})s\b", r"\1", q)
     if singular != q:
         s_keys, s_terms, _ = _explicit_dimensions(singular, semantics,
-                                                  available_columns=None)
+                                                  available_columns=None,
+                                                  geography=geography)
         for key, term in zip(s_keys, s_terms):
             if key in seen or key in _suppress:
                 continue

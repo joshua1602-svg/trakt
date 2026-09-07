@@ -60,6 +60,12 @@ class ParsedQuestion:
     available_columns: Optional[Set[str]] = None
     #: Additive governed semantic metadata. See the module docstring.
     semantics_context: Dict[str, Any] = field(default_factory=dict)
+    #: The geography contract this parse ran under — which geography the book
+    #: reports on, and how that was decided. Carried so the answer can DISCLOSE
+    #: the basis it was measured on instead of leaving the reader to guess, and
+    #: so a stated basis the book cannot support can be refused by name. ``None``
+    #: when no contract was supplied (a parse with no portfolio in hand).
+    geography: Any = None
 
     # -- parser metadata a caller commonly branches on ---------------------- #
     @property
@@ -105,20 +111,28 @@ class ParsedQuestion:
               catalog_mode: str = "core",
               zero_cost_first: bool = True,
               semantics_resolver: Optional[SemanticsResolver] = None,
+              geography: Any = None,
               ) -> "ParsedQuestion":
         """THE parse entry point for the chat path.
 
         Wraps ``parse_with_repair`` so there is exactly one place a question
         becomes a spec. Tests assert this is called once per request.
         """
-        from .llm_query_parser import parse_with_repair
+        from .llm_query_parser import geography_context, parse_with_repair
 
-        spec, meta = parse_with_repair(
-            question, semantics, available_columns=available_columns,
-            available_values=available_values,
-            llm_enabled=llm_enabled, model=model, max_attempts=max_attempts,
-            llm_callable=llm_callable, provider=provider,
-            catalog_mode=catalog_mode, zero_cost_first=zero_cost_first)
+        # ONE geography contract for the whole parse. Every reader inside —
+        # dimension binder, categorical filter, population resolver — asks the
+        # same question ("which column does 'region' mean here"), and they must
+        # not be able to answer it differently: a question that groups by region
+        # and filters by region would then bind two fields and answer over
+        # nothing. See ``llm_query_parser._ACTIVE_GEOGRAPHY``.
+        with geography_context(geography):
+            spec, meta = parse_with_repair(
+                question, semantics, available_columns=available_columns,
+                available_values=available_values,
+                llm_enabled=llm_enabled, model=model, max_attempts=max_attempts,
+                llm_callable=llm_callable, provider=provider,
+                catalog_mode=catalog_mode, zero_cost_first=zero_cost_first)
 
         # ---- QueryPlan becomes the semantic contract, HERE ----------------
         #
@@ -154,4 +168,4 @@ class ParsedQuestion:
         return cls(question=question, spec=spec, meta=dict(meta or {}),
                    available_columns=set(available_columns)
                    if available_columns is not None else None,
-                   semantics_context=context)
+                   semantics_context=context, geography=geography)

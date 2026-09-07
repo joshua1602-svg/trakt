@@ -74,18 +74,37 @@ class TestOneDomainIsOneConcept(unittest.TestCase):
             (_GEO, "London"))
 
     def test_the_preference_is_the_grouping_owner_s_own_order(self):
-        """Where the harmonised column is present it wins — for the FILTER as
-        well as the axis, so a question that groups and filters on region binds
-        one field rather than two."""
-        from mi_agent.llm_query_parser import _REGION_PREFERENCE
+        """THE INVARIANT: the FILTER binds whatever the AXIS binds, so a question
+        that groups and filters on region binds one field rather than two.
 
-        self.assertEqual(_REGION_PREFERENCE[0], _REPORTING)
+        SEMANTIC MIGRATION, 2026-09-07. This used to assert that the field both
+        bind is the HARMONISED column, at the head of the order. It is now at the
+        tail: the harmonised column is derived across both geography bases — the
+        borrower's and the collateral's — so it belongs to neither and cannot own
+        a question that is about one. On the live platform book that derivation
+        also resolved nothing, leaving the column present and empty on all 11,035
+        rows while the readable collateral names sat beside it, and a
+        presence-only preference bound it anyway. What owns generic region now is
+        the book's configured primary basis; see mi_agent/mi_geography.py.
+
+        The invariant this test is named for did not move: axis and filter still
+        bind the same field, and it is still whichever field heads the order.
+        """
+        from mi_agent.llm_query_parser import _REGION_PREFERENCE
+        from mi_agent import llm_query_parser as P
+
+        head = _REGION_PREFERENCE[0]
+        self.assertEqual(head, _GEO)
+        self.assertEqual(
+            P._preferred_region(self.semantics,
+                                available_columns={_GEO, _OBLIGOR, _REPORTING}),
+            head, "the AXIS binds the head of the order")
         self.assertEqual(
             CS.value_field("london",
                            {_GEO: ["London"], _OBLIGOR: ["London"],
                             _REPORTING: ["London"]},
                            self.semantics),
-            (_REPORTING, "London"))
+            (head, "London"), "and the FILTER binds the same field")
 
     def test_a_value_two_domains_claim_is_still_ambiguous(self):
         """The protection the rule was written for. A product type carried by a

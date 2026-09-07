@@ -39,6 +39,7 @@ from analytics_lib.numeric import coerce_numeric
 from trakt_core import perf as _perf
 
 from engine import region_taxonomy as _region
+from mi_agent import mi_geography as _geo
 from mi_agent import seasoning as _seasoning
 
 logger = logging.getLogger("mi_agent_api.funded_prep")
@@ -53,6 +54,11 @@ _PERCENT_MEDIAN = 1.5
 # fields (region may arrive as obligor / collateral / collateral_geography;
 # channel as origination_channel / broker_channel). The first present is aliased
 # onto the catalogue ``primary`` so MI queries resolve regardless of which arrived.
+#: The interchangeable region column groups, from the module that owns the
+#: geography bases. Read once so the spec below states a name, not a theory
+#: about which geographies substitute for which.
+_GEO_GROUPS: Dict[str, Tuple[str, ...]] = dict(_geo.interchangeable_field_groups())
+
 _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "ltv_bucket": {"kind": "bucket_ltv", "target": "current_loan_to_value"},
     "original_ltv_bucket": {"kind": "bucket_ltv", "target": "original_loan_to_value"},
@@ -62,10 +68,33 @@ _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "time_on_book_bucket": {"kind": "bucket_derived", "source": "months_on_book"},
     "vintage_year": {"kind": "derived", "source": "vintage_year"},
     "borrower_type": {"kind": "derived", "source": "borrower_type"},
+    # REGION — ONE GROUP PER (BASIS, GRANULARITY), never one group across both
+    # bases.
+    #
+    # These columns used to form a single group whose primary was the BORROWER
+    # column and whose sources included the COLLATERAL columns, so a row that
+    # never collected an obligor region had it gap-filled from the property's.
+    # "Balance by borrower region" then answered with where the houses are,
+    # labelled as where the borrowers are. Where the obligor column held an ESMA
+    # no-data code the error was worse still: ND1 means "not collected", a
+    # declaration, and filling it fabricates a fact.
+    #
+    # Coalescing WITHIN one basis at ONE granularity is still right — a book
+    # delivering its collateral region as `collateral_geography` and another
+    # delivering it as `property_region` describe the same thing — so each
+    # (basis, tier) keeps its own group. The membership is read from the one
+    # place that owns it, `mi_agent.mi_geography`, rather than restated here, so
+    # preparation and the query layer cannot disagree about which region columns
+    # are the same fact.
+    "collateral_geography": {
+        "kind": "group", "primary": "collateral_geography",
+        "sources": list(_GEO_GROUPS["collateral_geography"])},
+    "geographic_region_collateral": {
+        "kind": "group", "primary": "geographic_region_collateral",
+        "sources": list(_GEO_GROUPS["geographic_region_collateral"])},
     "geographic_region_obligor": {
         "kind": "group", "primary": "geographic_region_obligor",
-        "sources": ["geographic_region_obligor", "geographic_region_collateral",
-                    "collateral_geography"]},
+        "sources": list(_GEO_GROUPS["geographic_region_obligor"])},
     "origination_channel": {
         "kind": "group", "primary": "origination_channel",
         "sources": ["origination_channel", "broker_channel"]},
@@ -356,8 +385,8 @@ def _coalesce_group_dimensions(out: pd.DataFrame) -> List[str]:
     return notes
 
 
-def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None
-                           ) -> Dict[str, Any]:
+def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None,
+                           geography: Any = None) -> Dict[str, Any]:
     """Stamp the governed region detail / reporting columns onto a prepared frame.
 
     Harmonisation happens HERE, in the canonical preparation layer, so every
@@ -367,8 +396,26 @@ def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None
     configured gets a no-op and behaves exactly as before.
     """
     try:
-        taxonomy = _region.resolve_taxonomy(client_id or _client_hint(out))
-        return _region.apply(out, taxonomy)
+        client = client_id or _client_hint(out)
+        if geography is None:
+            # THE BOOK'S OWN BASIS, resolved here when the caller did not supply
+            # one. Without this the harmonisation would read the collateral
+            # columns first on a borrower book, so the harmonised column and
+            # every MI answer about the same book would be measured on two
+            # different geographies — the exact divergence this work closed.
+            try:
+                geography = _geo.contract_for_scope(client_id=client, frame=out)
+            except Exception as exc:  # noqa: BLE001 - never block preparation
+                logger.info("geography contract unavailable for prep: %s", exc)
+        taxonomy = _region.resolve_taxonomy(client)
+        # WHICH COLUMNS FEED THE HARMONISATION, stated by MI rather than taken
+        # from the projector's default order. That order leads with the obligor
+        # column; on the live platform book it holds ITL3 codes, so every one of
+        # 11,035 rows came back `region_mapping_method: unresolved` while the
+        # readable collateral names sat in the column behind it. See
+        # `mi_agent.mi_geography.taxonomy_source_fields`.
+        return _region.apply(out, taxonomy, source_fields=_geo.taxonomy_source_fields(
+            geography, extra=_region.SOURCE_FIELDS))
     except Exception as exc:  # noqa: BLE001 - harmonisation must never break prep
         logger.warning("region harmonisation skipped: %s", exc)
         return {}
@@ -444,7 +491,8 @@ def _dedupe_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict[str, Any]
     return pd.DataFrame(new, index=df.index), collapsed
 
 
-def augment_platform_canonical_dimensions(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+def augment_platform_canonical_dimensions(df: pd.DataFrame, *, geography: Any = None
+                                          ) -> Tuple[pd.DataFrame, List[str]]:
     """Additively derive the MI dimensions the platform assembler does NOT emit —
     ``borrower_type`` (single vs joint) and ``youngest_borrower_age`` (NNEG) — onto
     an already-typed platform canonical, WITHOUT the full funded-tape prep (no LTV
@@ -474,7 +522,7 @@ def augment_platform_canonical_dimensions(df: pd.DataFrame) -> Tuple[pd.DataFram
     # Governed region harmonisation: one shared vocabulary across books, with the
     # source granularity retained alongside it. Deterministic and persisted — no
     # LLM is consulted on this path.
-    if _apply_region_taxonomy(out).get("applied"):
+    if _apply_region_taxonomy(out, geography=geography).get("applied"):
         for f in (_region.FIELD_DETAIL, _region.FIELD_REPORTING):
             if f not in derived:
                 derived.append(f)

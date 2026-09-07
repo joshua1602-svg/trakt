@@ -32,6 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
+from mi_agent import mi_geography as _geo
 from engine.region_taxonomy import (
     FIELD_METHOD, METHOD_ABSENT, METHOD_EXACT, METHOD_SYNONYM,
     METHOD_UNRESOLVED)
@@ -102,6 +103,15 @@ class RegionBasis:
     rows: Optional[int] = None
     resolved: Optional[int] = None
     methods: Optional[Dict[str, int]] = None
+    #: WHICH GEOGRAPHY — the borrower's or the collateral's. Read from the field
+    #: that was measured, so it describes what actually happened rather than what
+    #: was configured. None for the harmonised columns, which are derived from
+    #: whichever source was populated first and so belong to no basis: that is a
+    #: statement about them worth publishing, not a gap.
+    basis: Optional[str] = None
+    #: How the book's primary basis was established, when a contract was in
+    #: force. See ``mi_agent.mi_geography``.
+    basis_source: Optional[str] = None
 
     @property
     def share(self) -> Optional[float]:
@@ -117,12 +127,18 @@ class RegionBasis:
     def label(self) -> str:
         return LEVEL_LABELS.get(self.level, self.level)
 
+    def basis_label(self) -> Optional[str]:
+        """"borrower geography" / "collateral geography", for the reader."""
+        return f"{self.basis} geography" if self.basis else None
+
     def disclosure(self) -> Optional[str]:
         """The sentence for a PARTIALLY covered basis. Full coverage is silent:
         a caveat printed on every answer is a caveat nobody reads."""
         if not self.partial:
             return None
-        return (f"Region basis: {self.label()} — {self.resolved:,} of "
+        named = self.basis_label()
+        prefix = f"{named}, {self.label()}" if named else self.label()
+        return (f"Region basis: {prefix} — {self.resolved:,} of "
                 f"{self.rows:,} rows carry a governed region "
                 f"({self.share * 100:.1f}%); the rest are excluded from the "
                 "regional breakdown")
@@ -132,6 +148,9 @@ class RegionBasis:
             "field": self.field,
             "level": self.level,
             "levelLabel": self.label(),
+            "basis": self.basis,
+            "basisLabel": self.basis_label(),
+            "basisSource": self.basis_source,
             "rows": self.rows,
             "resolved": self.resolved,
             "share": self.share,
@@ -139,7 +158,8 @@ class RegionBasis:
         }
 
 
-def basis_for(fields: Iterable[Optional[str]], frame=None) -> Optional[RegionBasis]:
+def basis_for(fields: Iterable[Optional[str]], frame=None,
+              geography=None) -> Optional[RegionBasis]:
     """The basis for a query that measured ``fields``, or None if none is a
     region field. The FIRST region field wins — a query grouped by region and
     filtered by region is measured at one level, and the group is the axis the
@@ -150,7 +170,9 @@ def basis_for(fields: Iterable[Optional[str]], frame=None) -> Optional[RegionBas
     field = candidates[0]
     rows, resolved, methods = _coverage(field, frame)
     return RegionBasis(field=field, level=level_of(field) or "",
-                       rows=rows, resolved=resolved, methods=methods)
+                       rows=rows, resolved=resolved, methods=methods,
+                       basis=_geo.basis_of_field(field),
+                       basis_source=getattr(geography, "source", None))
 
 
 def _coverage(field: str, frame):

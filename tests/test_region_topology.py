@@ -80,11 +80,49 @@ class TestTheFamilies(unittest.TestCase):
 class TestWhatEachSurfaceReads(unittest.TestCase):
     """The five owners. Each line here is a real coupling, not a preference."""
 
-    def test_mi_prefers_the_harmonised_reporting_region(self):
-        from mi_agent.llm_query_parser import _REGION_DEFAULT, _REGION_PREFERENCE
+    def test_mi_measures_region_on_a_geography_basis_not_on_a_derived_column(self):
+        """SEMANTIC MIGRATION, 2026-09-07. Renamed from
+        `test_mi_prefers_the_harmonised_reporting_region`, which asserted
+        `_REGION_PREFERENCE[0] == "canonical_region_reporting"`.
 
-        self.assertEqual(_REGION_PREFERENCE[0], "canonical_region_reporting")
+        WHY THE HEAD MOVED. The harmonised columns are derived by
+        `engine.region_taxonomy` from the FIRST POPULATED of its source fields,
+        which spans both geography bases — so the column belongs to no basis and
+        cannot answer a question that is about one. Measured on the live platform
+        book, that derivation also produced nothing at all: the obligor column
+        leads the projector's default source order and holds ITL3 codes, so
+        `canonical_region_reporting` came back NULL on 11,035 of 11,035 rows,
+        `region_mapping_method: unresolved`, while the readable collateral names
+        sat in the column behind it. `_preferred_region` is data-aware on column
+        PRESENCE, not on values, so it bound that empty column anyway.
+
+        WHAT NOW OWNS IT. The book's configured PRIMARY GEOGRAPHY BASIS — a fact
+        about the asset, established at onboarding (`mi_agent.mi_geography`). The
+        order below is the last resort for a parse with no contract: an order
+        over BASES, collateral then borrower, with the harmonised columns at the
+        tail for a frame that carries nothing else.
+
+        The harmonised columns are not retired. MI now states the source order
+        the taxonomy harmonises FROM, so on that same book they resolve 11,033
+        of 11,035 rows to eleven governed regions, method `exact`.
+        """
+        from mi_agent.llm_query_parser import (
+            _REGION_DEFAULT, _REGION_HARMONISED, _REGION_PREFERENCE)
+        from mi_agent import mi_geography as geo
+
+        self.assertEqual(_REGION_PREFERENCE[0], "collateral_geography")
         self.assertEqual(_REGION_DEFAULT, "collateral_geography")
+        # Every axis ahead of the harmonised tail belongs to exactly one basis.
+        head = _REGION_PREFERENCE[:-len(_REGION_HARMONISED)]
+        self.assertTrue(head)
+        for field in head:
+            self.assertIn(geo.basis_of_field(field), (geo.BASIS_BORROWER,
+                                                      geo.BASIS_COLLATERAL))
+        # And the harmonised columns belong to none, and come last.
+        self.assertEqual(_REGION_PREFERENCE[-len(_REGION_HARMONISED):],
+                         _REGION_HARMONISED)
+        for field in _REGION_HARMONISED:
+            self.assertIsNone(geo.basis_of_field(field))
 
     def test_mi_never_offers_a_sub_geography_as_the_region_axis(self):
         """ITL3 is a finer geography, not another spelling of Region."""

@@ -288,7 +288,8 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
                     available_values: Any = None,
                     available_columns: Optional[Iterable[str]] = None,
                     frame: Any = None,
-                    default_dataset: str = "funded") -> List[StatedConcept]:
+                    default_dataset: str = "funded",
+                    geography: Any = None) -> List[StatedConcept]:
     """Every governed concept an EXISTING owner resolves out of ``question``.
 
     Owner precedence is the estate's, not this module's: the axis owner claims
@@ -305,7 +306,12 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
     out: List[StatedConcept] = []
 
     # ---- the AXIS owner, first, so its terms are not re-read as values ---- #
-    dim_terms = R.requested_dimension_terms(q, semantics, available_columns) or []
+    # THE SAME GEOGRAPHY CONTRACT THE PARSE RAN UNDER. Without it the ledger
+    # re-resolves "region" onto the default basis, disagrees with the spec on a
+    # book that reports on the other one, and refuses a correct answer for having
+    # lost a concept it had actually applied.
+    dim_terms = R.requested_dimension_terms(q, semantics, available_columns,
+                                            geography=geography) or []
     axis_words = set()
     #: The axis owner's OWN alternates, keyed by the field it resolved. The
     #: facet owner re-reads the same terms and reports only the resolved key, so
@@ -606,7 +612,8 @@ def coverage_report(question: str, envelope: Dict[str, Any],
                     semantics: Dict[str, Any], *,
                     available_values: Any = None,
                     available_columns: Optional[Iterable[str]] = None,
-                    frame: Any = None) -> Dict[str, Any]:
+                    frame: Any = None,
+                    geography: Any = None) -> Dict[str, Any]:
     """Every governed concept the question states, and how it was accounted for.
 
     THE ONE OWNER of "all material user meaning has been accounted for". Routes
@@ -629,7 +636,8 @@ def coverage_report(question: str, envelope: Dict[str, Any],
     """
     concepts = stated_concepts(question, semantics,
                                available_values=available_values,
-                               available_columns=available_columns, frame=frame)
+                               available_columns=available_columns, frame=frame,
+                               geography=geography)
     contract = from_envelope(envelope)
     declined = {label for kind, label, status in contract.facets
                 if status in _DECLINED_STATUSES}

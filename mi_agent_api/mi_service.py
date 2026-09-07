@@ -60,6 +60,8 @@ from trakt_core.errors import ErrorCategory, ErrorCode, TraktError
 from trakt_core.policy import evaluate_source_approval
 from trakt_core.tenancy import AuthorisedPortfolio, authorise_portfolio_access
 
+from mi_agent import llm_query_parser as _parser_mod
+
 from . import chat_routing as chat_routing_mod
 from . import currency as currency_mod
 from . import workspace as workspace_mod
@@ -137,7 +139,7 @@ def split_portfolio(portfolio_id: Optional[str],
 def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
                       client_id: str, run_id: Optional[str], view: str,
                       run_required: bool, semantics: Optional[Dict[str, Any]] = None,
-                      frame: Any = None) -> Dict[str, Any]:
+                      frame: Any = None, geography: Any = None) -> Dict[str, Any]:
     """Stamp the channel-neutral analytical metadata onto the envelope.
 
     Additive only — every pre-existing React key is left exactly as the adapter
@@ -155,6 +157,16 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     # point-in-time question against the active governed dataset has none.
     meta["selectedRun"] = run_id if run_required else None
     meta["runRequired"] = bool(run_required)
+    # WHICH GEOGRAPHY THIS BOOK REPORTS ON, and how that was decided. Published
+    # on every answer, not only the regional ones: a reader comparing two
+    # answers needs to know they were measured on the same basis, and the answer
+    # that did not mention geography is exactly the one where that is easy to
+    # get wrong. Absent rather than guessed when nothing established it.
+    if geography is not None:
+        try:
+            meta["geographyBasis"] = geography.to_dict()
+        except Exception:  # noqa: BLE001 - provenance must never fail a query
+            pass
     try:
         meta["dataSourceKind"] = data_source_kind()
         meta["dataSourceLabel"] = data_source_label()
@@ -167,13 +179,14 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     envelope.setdefault("diagnostics", [])
     envelope.setdefault("sourceNotes", [])
     _stamp_semantic_coverage(envelope, question=req.question,
-                             semantics=semantics, frame=frame)
+                             semantics=semantics, frame=frame,
+                             geography=geography)
     return _enforce_model_availability(_enforce_semantic_coverage(envelope))
 
 
 def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
                              semantics: Optional[Dict[str, Any]],
-                             frame: Any) -> None:
+                             frame: Any, geography: Any = None) -> None:
     """Record which governed concepts the question stated, and their disposition.
 
     THE ONE SEAM. Both return paths — routed and point-in-time — pass through
@@ -197,7 +210,10 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
             question, envelope, semantics,
             available_values=_book_values(frame, semantics) if frame is not None else None,
             available_columns=set(frame.columns) if frame is not None else None,
-            frame=frame)
+            frame=frame,
+            # The SAME contract the parse ran under, so the ledger and the spec
+            # cannot disagree about which column "region" meant.
+            geography=geography)
     except Exception as exc:  # noqa: BLE001 - coverage must never cost an answer
         logger.info("semantic coverage unavailable: %s: %s", type(exc).__name__, exc)
 
@@ -577,7 +593,18 @@ def execute_governed_mi_query(
     # the reader gets the governed "I could not answer this" envelope every
     # channel already renders, and the cause is logged rather than published.
     try:
-        payload = _run_analysis(request, authorised, view, deps)
+        # ONE GEOGRAPHY CONTRACT FOR THE WHOLE REQUEST.
+        #
+        # A dozen readers ask "which column does 'region' mean" between here and
+        # the receipt — the dimension binder, the categorical filter, the
+        # population resolver, the facet detector, the coverage ledger — and if
+        # any two answer differently, a correct answer is refused for having
+        # lost a concept it applied, or a wrong one is published as right. The
+        # slot is opened here, empty, because the contract depends on the frame
+        # and the frame is not resolved until inside; `_run_analysis` binds into
+        # it as soon as the book is in hand, and this `with` tears it down.
+        with _parser_mod.geography_context(None):
+            payload = _run_analysis(request, authorised, view, deps)
     except Exception as exc:  # noqa: BLE001 - surface a refusal, never a 500
         logger.exception("MI analysis failed for question=%r portfolio=%r",
                          request.question, authorised.portfolio_id)
@@ -848,6 +875,32 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     if "no rows" in joined or "no matching" in joined:
         return ErrorCode.NO_MATCHING_RECORDS
     return ErrorCode.CALCULATION_FAILED
+
+
+def _resolve_geography(client_id: Optional[str], portfolio_id: Optional[str],
+                       frame) -> Any:
+    """The geography contract for this request, or an empty one.
+
+    ``portfolio_id`` narrows the registry where it names a book the registry
+    knows. It usually does not — the analytical layer carries a ``client/run``
+    selector, not a source portfolio id — and the contract is then resolved over
+    every portfolio the client has, which is the same reading of an unqualified
+    scope the rest of this service uses. Portfolios that report on DIFFERENT
+    bases yield no primary basis rather than an arbitrary one.
+
+    Never raises and never blocks: a book with no governed geography basis still
+    answers every question that does not depend on one, and answers generic
+    region language as unresolved rather than guessing a basis.
+    """
+    from mi_agent import mi_geography
+
+    try:
+        return mi_geography.contract_for_scope(
+            client_id=client_id,
+            portfolio_ids=(portfolio_id,) if portfolio_id else (), frame=frame)
+    except Exception as exc:  # noqa: BLE001 - metadata must never fail a query
+        logger.info("geography contract resolution skipped: %s", exc)
+        return mi_geography.GeographyContract()
 
 
 def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
@@ -1360,6 +1413,54 @@ def _is_controlled_non_delivery(envelope: Dict[str, Any]) -> bool:
     return bool(meta.get("controlledUnsupported")) and not meta.get("executionFailure")
 
 
+#: The sentence for a basis this book does not carry. No implementation
+#: vocabulary reaches the reader: "basis", "column" and "contract" are ours.
+_BASIS_REFUSAL = (
+    "You asked about the %s's geography. This book does not record one, so I "
+    "have not answered on that basis%s.")
+
+
+def _guard_stated_geography_basis(envelope: Dict[str, Any], *, question: str,
+                                  geography: Any) -> Dict[str, Any]:
+    """A geography the question NAMED and this book does not carry.
+
+    A loan has a borrower's region and a property's region, and they are
+    different facts. When a reader says which one they mean, the only two honest
+    answers are that geography or none — and the tempting third, quietly
+    measuring the other one and labelling it with the word they used, is the
+    worst outcome available, because nothing in the answer tells them.
+
+    So a stated basis the book cannot support REFUSES, and says which basis it
+    does hold rather than silently using it. A question that states no basis is
+    untouched: it is measured on the book's configured primary and the answer
+    discloses which that was.
+    """
+    if not isinstance(envelope, dict) or not envelope.get("ok"):
+        return envelope
+    if geography is None:
+        return envelope
+    from mi_agent import mi_geography
+
+    basis = mi_geography.stated_basis(question)
+    if not basis or geography.supports(basis):
+        return envelope
+    other = mi_geography.other_basis(basis)
+    alternative = (f"; it records the {other}'s geography, which is a different "
+                   "thing and not what you asked for"
+                   if other and geography.supports(other) else "")
+    message = _BASIS_REFUSAL % (basis, alternative)
+    envelope["ok"] = False
+    envelope["error"] = message
+    envelope["answer"] = message
+    envelope["artifacts"] = []
+    envelope["controlledRefusal"] = True
+    meta = envelope.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        meta["refusalClass"] = "DATA_UNAVAILABLE"
+    envelope.setdefault("warnings", []).append(message)
+    return envelope
+
+
 def _guard_unknown_category(envelope: Dict[str, Any]) -> Dict[str, Any]:
     """A category the question NAMED and no governed field carries.
 
@@ -1538,10 +1639,26 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                             view, owned_view)
                 view, df, frame_error = owned_view, base_df, base_error
 
+    # WHICH GEOGRAPHY THIS BOOK REPORTS ON, resolved once, before the parse.
+    #
+    # A book carries a borrower geography and a collateral geography and they are
+    # different facts, so "balance by region" has no answer until somebody has
+    # decided which one this book is about. That decision is a property of the
+    # ASSET — established at onboarding, carried in the governed portfolio
+    # registry — not something to infer from which column happened to be
+    # populated. See mi_agent.mi_geography.
+    with _perf.stage("mi_query.geography"):
+        geography = _parser_mod.bind_geography(
+            _resolve_geography(client_id, portfolio_id, df))
+
     try:
         with _perf.stage("mi_query.parse"):
             parsed = ParsedQuestion.parse(
                 req.question, semantics,
+                # The contract in force for the whole parse, so the dimension
+                # binder, the categorical filter and the population resolver
+                # cannot bind "region" to three different columns.
+                geography=geography,
                 available_columns=set(df.columns) if df is not None else None,
                 # THE BOOK'S OWN CATEGORY VALUES. Without them the parser has
                 # no way to tell which governed field a named category belongs
@@ -1668,7 +1785,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                                          semantics=semantics, frame=df)
         # SITE 1 OF 2 — a named category this book does not carry.
         routed = _guard_unknown_category(routed)
+        # SITE 1 OF 2 — a named GEOGRAPHY this book does not carry.
+        routed = _guard_stated_geography_basis(
+            routed, question=req.question, geography=geography)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
+                                 geography=geography,
                                  view=view, run_required=_route_requires_run(route),
                                  semantics=semantics, frame=df)
 
@@ -1747,10 +1868,14 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                                        semantics=semantics, frame=df)
     # PHASE 1E SITE 2 OF 2 — an unresolved portfolio scope, on the same terms.
     result = _guard_unknown_category(result)
+    # SITE 2 OF 2 — a named GEOGRAPHY this book does not carry.
+    result = _guard_stated_geography_basis(
+        result, question=req.question, geography=geography)
     result = _guard_unresolved_scope(result, question=req.question,
                                      semantics=semantics, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
+                             geography=geography,
                              semantics=semantics, frame=df,
                              view=view, run_required=bool(run_id))
 
