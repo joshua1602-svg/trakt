@@ -259,3 +259,25 @@ class TestTheCrossing:
 
         _promotion.record_activation(source=_Broken,
                                      activated=object())   # no exception
+
+
+# --------------------------------------------------------------------------- #
+# What the tab is told about this environment
+# --------------------------------------------------------------------------- #
+
+class TestTheTabIsToldWhatIsPossible:
+    """`/meta` decides whether the operator is even offered a real onboarding.
+
+    Offering the choice where confirming it would only be refused later teaches
+    an operator to expect refusals; withholding it where it WOULD work hides the
+    capability. So it reports the same two conditions the adapter itself needs.
+    """
+
+    def test_a_rehearsal_environment_offers_no_live_case(self, service):
+        from operations_control.occ_agent import api as agent_api
+        agent_api.configure(service)
+        assert service.adapter.mode != _adapters.MODE_LIVE
+
+    def test_a_live_environment_does(self, live_service):
+        assert live_service.adapter.mode == _adapters.MODE_LIVE
+        assert _adapters.live_enabled() is True

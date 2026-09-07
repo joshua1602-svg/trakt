@@ -189,7 +189,9 @@ export interface OpsClient {
   // convenience, not the control.
   getAgentMeta(): Promise<AgentMeta>;
   listAgentCases(state?: string): Promise<CaseSummary[]>;
-  createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus>;
+  /** `live` opens a REAL onboarding rather than a rehearsal. Defaults to a
+   *  rehearsal; the backend refuses live where it is not switched on. */
+  createAgentCase(instruction: string, fixtureId?: string, live?: boolean): Promise<AgentStatus>;
   getAgentCase(caseRef: string): Promise<AgentStatus>;
   instructAgent(caseRef: string, text: string, confirm?: boolean): Promise<AgentTurn>;
   answerAgentDecision(

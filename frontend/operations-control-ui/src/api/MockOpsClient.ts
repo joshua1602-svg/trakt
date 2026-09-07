@@ -1,4 +1,4 @@
-import { MockAgent } from "./MockAgent";
+import { MockAgent, mockAgentLive } from "./MockAgent";
 import { MockConcentration } from "./MockConcentration";
 import { MockConfigAdmin } from "./MockConfigAdmin";
 import { MockOnboarding } from "./MockOnboarding";
@@ -1892,8 +1892,10 @@ export class MockOpsClient implements OpsClient {
     return this.agent.list(state);
   }
 
-  async createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus> {
+  async createAgentCase(instruction: string, fixtureId?: string,
+                        live?: boolean): Promise<AgentStatus> {
     await this.wait();
+    mockAgentLive.lastCreateLive = live === true;
     return this.agent.create(instruction, fixtureId);
   }
 

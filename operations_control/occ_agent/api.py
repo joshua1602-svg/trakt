@@ -33,6 +33,7 @@ from pydantic import BaseModel
 
 from ..api.auth import Principal, authenticate
 from ..engine import OpsError
+from . import adapters as _adapters
 from . import fixtures as _fixtures
 from . import states as _states
 from .policy import FEATURE_FLAG_ENV, feature_enabled
@@ -230,6 +231,13 @@ def meta(principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
             "enabled": True,
             "flag": FEATURE_FLAG_ENV,
             "runtime_mode": service.policy.runtime_mode,
+            # Whether THIS environment can open a real onboarding at all. Both
+            # halves must hold — the flag, and an adapter that can actually
+            # reach production — so the tab offers the choice only where
+            # confirming it would do something, rather than offering it
+            # everywhere and refusing later.
+            "live_available": (_adapters.live_enabled()
+                               and service.adapter.mode == _adapters.MODE_LIVE),
             "policy": service.policy.to_dict(),
             "lifecycle": _states.lifecycle(),
             "onboarding_reference": service.onboarding.reference(),

@@ -630,10 +630,15 @@ export class HttpOpsClient implements OpsClient {
     return body.cases;
   }
 
-  async createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus> {
+  async createAgentCase(
+    instruction: string,
+    fixtureId?: string,
+    live?: boolean,
+  ): Promise<AgentStatus> {
     return this.post<AgentStatus>("/ops/agent/cases", {
       instruction,
       fixture_id: fixtureId ?? "",
+      live: live === true,
     });
   }
 
