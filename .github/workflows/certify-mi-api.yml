@@ -30,8 +30,57 @@ name: Certify trakt-mi-api (live)
 # Exit codes from the client are the verdict: 0 certified, 1 not certified,
 # 2 not executable (never reached and authorised — no question was asked).
 # A 2 fails the job deliberately: "we could not run it" must not read as a pass.
+#
+# A THIRD SUITE, `geography`, is the release acceptance gate for the
+# ERE-client / ERM-asset configuration ownership model. It is deliberately ten
+# questions rather than the broad sweep's ~150: it asks whether the deployed
+# service resolves the geography basis from the configuration we shipped, and
+# nothing else. It reports TIME_X_DIMENSION_READY.
+#
+# THIS WORKFLOW IS ALSO CALLABLE (`workflow_call`), which is how
+# `hardening-smoke.yml` runs the live acceptance after its deterministic job
+# passes. It is called rather than copied so there stays ONE live transport,
+# ONE MI_BEARER convention, ONE reachability/auth classifier and ONE
+# deployed-SHA provenance check in this repository.
 
 on:
+  workflow_call:
+    inputs:
+      base_url:
+        type: string
+        default: https://app.traktinfra.io/api
+        required: false
+      path:
+        type: string
+        default: /mi/query
+        required: false
+      portfolio_id:
+        type: string
+        default: ERE/2026-06-30
+        required: false
+      ref:
+        type: string
+        default: ''
+        required: false
+      expect_commit:
+        type: string
+        default: ''
+        required: false
+      suite:
+        type: string
+        default: geography
+        required: false
+      banks:
+        type: string
+        default: ''
+        required: false
+    secrets:
+      MI_BEARER:
+        required: false
+    outputs:
+      ready:
+        description: TIME_X_DIMENSION_READY, for the geography suite.
+        value: ${{ jobs.certify.outputs.ready }}
   workflow_dispatch:
     inputs:
       base_url:
@@ -65,8 +114,12 @@ on:
           core+broad  = the smoke gate plus the BROAD SCORED sweep from
           broad_cases.json — ~150 distinct production requests scored on
           relations and identities, not on how many came back ok.
+          geography   = the GEOGRAPHY / CONFIG-OWNERSHIP release acceptance
+          only — ten questions scored on configuration provenance, explicit
+          basis semantics and numerical identity. Reports
+          TIME_X_DIMENSION_READY.
         type: choice
-        options: [core+broad, core]
+        options: [core+broad, core, geography]
         default: core+broad
         required: true
       banks:
@@ -86,6 +139,8 @@ concurrency:
 jobs:
   certify:
     runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.acceptance.outputs.ready }}
     # 30 minutes covers the core suite comfortably. The broad sweep adds ~150
     # distinct live requests; the client prints a timed line per request to the
     # job log as it goes, so if this limit is ever hit the log says at which
@@ -95,7 +150,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          # Called from another workflow, an empty ref means "the commit that
+          # called us" — the caller has already decided which tree is being
+          # released, and taking `main` instead would certify a different one.
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -117,7 +175,49 @@ jobs:
           fi
           echo "MI_BEARER is present (${#MI_BEARER} characters)."
 
+      - name: Geography release acceptance
+        id: acceptance
+        if: ${{ inputs.suite == 'geography' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          EXPECT="${{ inputs.expect_commit }}"
+          if [ -z "${EXPECT}" ]; then
+            EXPECT="$(git rev-parse HEAD)"
+          fi
+          echo "expecting the deployed service to be serving ${EXPECT}"
+
+          # `set -e` would abort on the client's non-zero verdict before the
+          # summary is written, and a gate that fails without saying why is a
+          # gate nobody can act on. The exit code is captured and re-raised
+          # after the report exists.
+          set +e
+          python -m due_diligence.evidence.mi_api_certification.certify_mi_api \
+            --base-url "${{ inputs.base_url }}" \
+            --path "${{ inputs.path }}" \
+            --portfolio-id "${{ inputs.portfolio_id }}" \
+            --expect-commit "${EXPECT}" \
+            --geography-acceptance \
+            --report certification-report.txt \
+            --acceptance-json geography-acceptance.json \
+            --summary-markdown geography-acceptance.md
+          status=$?
+          set -e
+
+          if [ -f geography-acceptance.md ]; then
+            cat geography-acceptance.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          READY="NO"
+          if [ -f geography-acceptance.json ]; then
+            READY="$(python -c "import json;print(json.load(open('geography-acceptance.json'))['TIME_X_DIMENSION_READY'])")"
+          fi
+          echo "ready=${READY}" >> "$GITHUB_OUTPUT"
+          echo "TIME_X_DIMENSION_READY = ${READY}"
+          exit $status
+
       - name: Certify the deployed service
+        if: ${{ inputs.suite != 'geography' }}
         env:
           MI_BEARER: ${{ secrets.MI_BEARER }}
         run: |
@@ -155,5 +255,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mi-api-certification-report
-          path: certification-report.txt
+          path: |
+            certification-report.txt
+            geography-acceptance.json
+            geography-acceptance.md
           if-no-files-found: warn
