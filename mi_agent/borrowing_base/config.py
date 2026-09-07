@@ -210,6 +210,26 @@ def load_facility(client_id: str) -> Optional[FacilityConfiguration]:
         return None
 
 
+def configuration_generation() -> str:
+    """A cheap token that CHANGES when facility configuration changes.
+
+    The prepared canonical frame now carries an eligibility determination, so a
+    cache keyed only on the tape would keep serving the determination made
+    under the previous configuration until the tape itself changed. Folding
+    this token into that key means an approved change to a facility's terms
+    reaches the next request rather than the next upload.
+
+    Cheap on purpose: modification times only, never a read or a parse.
+    """
+    stamps: List[str] = []
+    for path in (facilities_path(), client_config_dir()):
+        try:
+            stamps.append(f"{path}:{Path(path).stat().st_mtime_ns}")
+        except OSError:
+            stamps.append(f"{path}:absent")
+    return "|".join(stamps)
+
+
 def load_facility_checked(client_id: str
                           ) -> "tuple[Optional[FacilityConfiguration], List[str]]":
     """``(facility, problems)`` — the same load, with validation surfaced."""
