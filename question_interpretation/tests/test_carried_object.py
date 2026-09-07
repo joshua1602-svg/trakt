@@ -81,10 +81,7 @@ def test_population_is_faithful_and_does_not_correct_a_role(run):
     qi = run("balance by region for joint borrowers")["question_interpretation"]
     roles = {d["candidate_concept"]: d["role"] for d in qi["dimensions"]}
     reasons = {d["candidate_concept"]: d["reason"] for d in qi["dimensions"]}
-    # MIGRATED: RAW_REGION_FIELD -> CANONICAL_REGION_REPORTING. The grouping
-    # role belongs to the governed region field; the raw column is a derivation
-    # input and no longer carries an analytical role of its own.
-    assert roles.get("canonical_region_reporting") == "grouping"
+    assert roles.get("collateral_geography") == "grouping"
     assert roles.get("borrower_type") == "unresolved"
     assert reasons.get("borrower_type") == "no source supplies a role"
 

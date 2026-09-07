@@ -660,7 +660,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -671,7 +671,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance grouped by region.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_034
   category: single_dim
   question: balance by borrower type
@@ -924,7 +924,7 @@ questions:
   expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -936,7 +936,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Loan count grouped by region.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_046
   category: single_dim
   question: loan count by borrower type
@@ -1200,7 +1200,7 @@ questions:
   expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1211,7 +1211,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: WA LTV by region.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_058
   category: single_dim
   question: average LTV by product type
@@ -1377,7 +1377,7 @@ questions:
   expected_answer_type: age
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1388,7 +1388,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_066
   category: single_dim
   question: average borrower age by product type
@@ -1470,7 +1470,7 @@ questions:
   expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1481,7 +1481,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: ''
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_070
   category: single_dim
   question: weighted average interest rate by product type
@@ -1605,7 +1605,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1616,7 +1616,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_076
   category: single_dim
   question: show me balance by borrower type
@@ -1698,7 +1698,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1709,7 +1709,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_080
   category: single_dim
   question: break down balance by borrower type
@@ -1791,7 +1791,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1802,7 +1802,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_084
   category: single_dim
   question: balance split by borrower type
@@ -1884,7 +1884,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1895,7 +1895,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance breakdown (phrasing variant).
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_088
   category: single_dim
   question: exposure by borrower type
@@ -1977,7 +1977,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -1988,7 +1988,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Collateral valuation by dimension.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_092
   category: single_dim
   question: original balance by region
@@ -1999,7 +1999,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -2010,7 +2010,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Original advance by dimension.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp1_093
   category: single_dim
   question: total valuation by product type
@@ -2118,7 +2118,7 @@ questions:
   expected_metrics: null
   expected_dimensions:
   - borrower_type
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2128,7 +2128,7 @@ questions:
   expected_columns_include: []
   expected_min_columns: 3
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
@@ -2216,7 +2216,7 @@ questions:
   expected_metrics: null
   expected_dimensions:
   - account_status
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2227,7 +2227,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_102
   category: two_dim
   question: balance by product type by age bucket
@@ -2263,7 +2263,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   - ltv_bucket
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2275,7 +2275,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_104
   category: two_dim
   question: balance by occupancy type by region
@@ -2287,7 +2287,7 @@ questions:
   expected_metrics: null
   expected_dimensions:
   - occupancy_type
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2298,7 +2298,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_105
   category: two_dim
   question: balance by rate type by product type
@@ -2359,7 +2359,7 @@ questions:
   expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   - age_bucket
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2371,7 +2371,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_108
   category: two_dim
   question: average interest rate by product type and rate type
@@ -2407,7 +2407,7 @@ questions:
   expected_answer_type: count
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   - borrower_type
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2418,7 +2418,7 @@ questions:
   expected_columns_include: []
   expected_min_columns: 3
   notes: Two-dim count matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
@@ -2505,7 +2505,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   - age_bucket
   expected_filters: []
   expected_artifact_type: heatmap
@@ -2517,7 +2517,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_114
   category: two_dim
   question: balance by broker by region
@@ -2604,7 +2604,7 @@ questions:
   expected_metrics: null
   expected_dimensions:
   - ticket_bucket
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2615,7 +2615,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_118
   category: two_dim
   question: average LTV by borrower type and region
@@ -2627,7 +2627,7 @@ questions:
   expected_metrics: null
   expected_dimensions:
   - borrower_type
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2637,7 +2637,7 @@ questions:
   expected_columns_include: []
   expected_min_columns: 3
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
@@ -2652,7 +2652,7 @@ questions:
   expected_metrics: null
   expected_dimensions:
   - origination_channel
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2663,7 +2663,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_120
   category: two_dim
   question: balance by rate type by region
@@ -2675,7 +2675,7 @@ questions:
   expected_metrics: null
   expected_dimensions:
   - interest_rate_type
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: heatmap
   expected_reconciliation: true
@@ -2686,7 +2686,7 @@ questions:
   expected_min_columns: 3
   known_gap: null
   notes: Two categorical dims -> matrix.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: grp2_121
   category: two_dim
   question: balance by borrower type by age bucket
@@ -2901,7 +2901,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2913,7 +2913,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_131
   category: filtered
   question: balance by broker where LTV above 50%
@@ -2974,7 +2974,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -2986,7 +2986,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped query + value filter (mask before grouping).
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_134
   category: filtered
   question: count by borrower type where age is over 70
@@ -3021,7 +3021,7 @@ questions:
   expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - borrower_type
   expected_artifact_type: bar
@@ -3032,7 +3032,7 @@ questions:
   expected_columns_include: []
   expected_min_columns: 2
   notes: Grouped query + value filter (mask before grouping).
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
@@ -3096,7 +3096,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -3108,7 +3108,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_139
   category: filtered
   question: balance by region where LTV above 40%
@@ -3119,7 +3119,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -3131,7 +3131,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_140
   category: filtered
   question: balance by region where LTV above 60%
@@ -3142,7 +3142,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -3154,7 +3154,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_141
   category: filtered
   question: balance by region where LTV above 70%
@@ -3165,7 +3165,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -3177,7 +3177,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance filtered by LTV threshold.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_142
   category: filtered
   question: balance by broker where LTV above 50%
@@ -3284,7 +3284,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_outstanding_balance
   expected_artifact_type: bar
@@ -3296,7 +3296,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + balance-threshold filter.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_147
   category: filtered
   question: balance by broker for loans above £250k
@@ -3401,7 +3401,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - borrower_type
   expected_artifact_type: bar
@@ -3412,7 +3412,7 @@ questions:
   expected_columns_include: []
   expected_min_columns: 2
   notes: Grouped balance + categorical (borrower-structure) filter.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."
@@ -3476,7 +3476,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - youngest_borrower_age
   expected_artifact_type: bar
@@ -3488,7 +3488,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + age filter.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_155
   category: filtered
   question: balance by region where borrower age is over 75
@@ -3499,7 +3499,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - youngest_borrower_age
   expected_artifact_type: bar
@@ -3511,7 +3511,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + age filter.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_156
   category: filtered
   question: balance by region where borrower age is over 80
@@ -3522,7 +3522,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - youngest_borrower_age
   expected_artifact_type: bar
@@ -3534,7 +3534,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Grouped balance + age filter.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: filt_157
   category: filtered
   question: WA LTV by broker where LTV above 40%
@@ -3616,7 +3616,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3627,7 +3627,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_161
   category: ranking
   question: top 5 brokers by balance
@@ -3686,7 +3686,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3697,7 +3697,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_164
   category: ranking
   question: which broker has the largest balance
@@ -3756,7 +3756,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3767,7 +3767,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_167
   category: ranking
   question: highest average LTV regions
@@ -3778,7 +3778,7 @@ questions:
   expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3789,7 +3789,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_168
   category: ranking
   question: which region has the highest average LTV
@@ -3800,7 +3800,7 @@ questions:
   expected_answer_type: rate
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3811,7 +3811,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_169
   category: ranking
   question: smallest region by balance
@@ -3822,7 +3822,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3833,7 +3833,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Ranked grouped bar.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_170
   category: ranking
   question: largest loans
@@ -3944,7 +3944,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -3955,7 +3955,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Top-N grouped ranking.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: rank_176
   category: ranking
   question: top 5 broker by balance
@@ -4568,7 +4568,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4579,7 +4579,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Concentration view.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_205
   category: risk
   question: balance by LTV bucket
@@ -4611,7 +4611,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4622,7 +4622,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Concentration view.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_207
   category: risk
   question: largest regional concentration
@@ -4633,7 +4633,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4644,7 +4644,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: "D2: 'regional' added as the adjectival form of the governed region dimension."
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_208
   category: risk
   question: how many loans have a balance above £250k
@@ -4719,7 +4719,7 @@ questions:
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
-  - canonical_region_reporting
+  - collateral_geography
   expected_artifact_type: kpi
   expected_reconciliation: true
   expected_dimension_invariant_ok: true
@@ -4740,7 +4740,7 @@ questions:
   expected_metrics: null
   expected_dimensions: []
   expected_filters:
-  - canonical_region_reporting
+  - collateral_geography
   expected_artifact_type: kpi
   expected_reconciliation: true
   expected_dimension_invariant_ok: true
@@ -4750,7 +4750,7 @@ questions:
   expected_min_columns: 1
   known_gap: null
   notes: "D2: 'exposure to <place>' names a geography filter."
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_213
   category: risk
   question: concentration by region
@@ -4761,7 +4761,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -4772,7 +4772,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Balance concentration by a categorical dimension.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: risk_214
   category: risk
   question: concentration by product type
@@ -4997,7 +4997,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -5008,7 +5008,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Coverage is delivered via the reconciliation block on the grouped result.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: dq_225
   category: data_quality
   question: coverage by borrower type
@@ -5042,7 +5042,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters: []
   expected_artifact_type: bar
   expected_reconciliation: true
@@ -5053,7 +5053,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Coverage is delivered via the reconciliation block on the grouped result.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: dq_227
   category: data_quality
   question: reconciliation for balance by region where LTV above 50%
@@ -5064,7 +5064,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   expected_filters:
   - current_loan_to_value
   expected_artifact_type: bar
@@ -5076,7 +5076,7 @@ questions:
   expected_min_columns: 2
   known_gap: null
   notes: Filtered grouped result carries a reconciliation block.
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
 - id: dq_228
   category: data_quality
   question: missing region count
@@ -5556,7 +5556,7 @@ questions:
   expected_answer_type: currency
   expected_metrics: null
   expected_dimensions:
-  - canonical_region_reporting
+  - collateral_geography
   - borrower_type
   - ltv_bucket
   expected_filters: []
@@ -5570,7 +5570,7 @@ questions:
   expected_min_columns: 4
   notes: '3+ dims: all requested dimensions preserved as a table (no silent truncation); the dimension
     invariant sees all three applied.'
-  repoint_note: "MIGRATED to canonical_region_reporting. 'Region' is now owned analytically by canonical_region_reporting; collateral_geography, geographic_region_obligor and the other raw geography columns are DERIVATION INPUTS only. The canonical field is derived once, from whichever rung the tape writes its geography at, through the governed ITL ladder -- so the same word means the same population in serving MI, historical frames and dashboard evolution, which it did not before. Previously re-pointed from geographic_region_obligor to collateral_geography for the same class of reason: the expectation had been fitted to whichever raw column the book happened to fill."
+  repoint_note: "Re-pointed from geographic_region_obligor to collateral_geography. build_fixture put English region names in the NUTS3 code field, which no real book does -- there it holds TLI43 and the readable label lives in collateral_geography, whose business_name is 'Region'. The product was already correct on a real book; the expectation was fitted to the fixture."
   requires_fields:
   - borrower_type
   requires_fields_reason: "Declared PREREQUISITE, not a re-declared expectation. Answerable on any book that reports borrower type; no real book in this repository does, and build_fixture fabricated it. Where the field is absent the evaluator requires a controlled refusal that NAMES it."

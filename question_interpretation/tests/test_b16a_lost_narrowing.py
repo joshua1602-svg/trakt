@@ -203,12 +203,7 @@ def test_geography_is_left_to_its_own_owner(semantics, frame):
             "what is the balance of south east loans", semantics,
             list(frame.columns)))
     kinds = {(f.kind, f.field_key) for f in facets}
-    # MIGRATED: RAW_REGION_FIELD -> CANONICAL_REGION_REPORTING. Geography is
-    # still left to its own owner — the point of this test — and that owner now
-    # names the GOVERNED region field rather than a raw source column.
-    geographic = {k[1] for k in kinds if k[0] == "geographic_scope"}
-    assert geographic and geographic <= {"canonical_region_reporting",
-                                         "canonical_region_detail"}, geographic
+    assert ("geographic_scope", "collateral_geography") in kinds
     assert not [k for k in kinds if k[0] == R.KIND_LOST_NARROWING]
 
 

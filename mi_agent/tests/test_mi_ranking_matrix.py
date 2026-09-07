@@ -115,11 +115,7 @@ def test_largest_balance_by_region_is_grouped_bar(df, semantics):
     spec, _ = _deterministic_parse("largest balance by region", semantics,
                                    available_columns=_cols(df))
     assert spec.chart_type == "bar"
-    # MIGRATED: RAW_REGION_FIELD -> CANONICAL_REGION_REPORTING. "region" is
-    # owned analytically by the canonical field; the fixture still SUPPLIES
-    # its geography in `geographic_region_obligor`, which is a derivation
-    # input the canonical column is stamped from.
-    assert spec.dimension == "canonical_region_reporting"
+    assert spec.dimension == "geographic_region_obligor"
     assert spec.metric == "current_outstanding_balance"
 
 
@@ -145,7 +141,7 @@ def test_two_dim_grouped_is_heatmap(df, semantics, q):
     spec, _ = _deterministic_parse(q, semantics, available_columns=_cols(df))
     assert spec.chart_type == "heatmap", q
     assert spec.metric == "current_outstanding_balance"
-    assert set(spec.dimensions) == {"ltv_bucket", "canonical_region_reporting"}
+    assert set(spec.dimensions) == {"ltv_bucket", "geographic_region_obligor"}
     # explicitly NOT a loan-level bubble
     assert spec.x is None and spec.y is None and spec.size is None
 
@@ -160,7 +156,7 @@ def test_heatmap_executes_without_duplicate_column_error(df):
     assert not any("duplicate" in str(e).lower() for e in val.get("errors", []))
     qr = res["query_result"].to_dict()
     cols = set(qr["data"][0].keys())
-    assert {"ltv_bucket", "canonical_region_reporting"} <= cols
+    assert {"ltv_bucket", "geographic_region_obligor"} <= cols
     assert "current_outstanding_balance_sum" in cols
 
 
@@ -222,7 +218,7 @@ def test_multi_filter_count_applies_both(df, semantics):
     assert spec.intent == "summary"
     assert spec.aggregation == "count"
     assert spec.filters["youngest_borrower_age"] == {"op": "gt", "value": 70.0}
-    assert spec.filters["canonical_region_reporting"] == "South West"
+    assert spec.filters["geographic_region_obligor"] == "South West"
 
     res = _run(df, q)
     assert res["ok"], res.get("error")
@@ -248,16 +244,7 @@ def test_single_filter_count_still_works(df, semantics):
 # --------------------------------------------------------------------------- #
 def test_heatmap_missing_dimension_fails_gracefully(df):
     # Region present, but request a dimension with no values in this data.
-    #
-    # MIGRATED: RAW_REGION_FIELD -> CANONICAL_REGION_REPORTING. Dropping the raw
-    # SOURCE column no longer removes the region axis — the canonical column is
-    # derived from it during preparation and is what the axis owner reads. To
-    # keep this test's intent ("the requested dimension has no values"), the
-    # ANALYTICAL field is the one that has to go.
-    no_region = df.drop(columns=[c for c in ("canonical_region_reporting",
-                                             "canonical_region_detail",
-                                             "geographic_region_obligor")
-                                 if c in df.columns])
+    no_region = df.drop(columns=["geographic_region_obligor"])
     res = _run(no_region, "balance by ltv by region")
     assert res["ok"] is False
     assert res["error"]  # controlled failure, not an exception

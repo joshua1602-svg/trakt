@@ -368,31 +368,10 @@ def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None
     """
     try:
         taxonomy = _region.resolve_taxonomy(client_id or _client_hint(out))
-        report = _region.apply(out, taxonomy)
+        return _region.apply(out, taxonomy)
     except Exception as exc:  # noqa: BLE001 - harmonisation must never break prep
         logger.warning("region harmonisation skipped: %s", exc)
         return {}
-    # A COLUMN THAT RESOLVED NOTHING IS NOT A COLUMN.
-    #
-    # `canonical_region_reporting` is the sole analytical region field, and the
-    # axis owner takes it whenever it is PRESENT. So a book whose geography this
-    # taxonomy cannot read — a tape carrying `GBZZZ`, or one whose vocabulary was
-    # never harmonised — would get an all-null canonical column, the axis would
-    # choose it over the populated raw field, and "balance by region" would
-    # refuse with `dimension_no_values` on a book that can answer it. That is
-    # exactly the defect this sprint set out to remove, arriving by the other
-    # door.
-    #
-    # The rule is the one `prepare_funded_mi_dataset` already applies to buckets:
-    # a stratification that exists and is empty is not a usable stratification.
-    # Decided HERE, at derivation, once — not as a runtime fallback that would
-    # put the analytical choice back into the query path.
-    if report.get("applied") and not report.get("rows_resolved"):
-        out.drop(columns=[c for c in _region.REPORTING_STAMPED_FIELDS
-                          if c in out.columns], inplace=True, errors="ignore")
-        return {**report, "applied": False,
-                "withheld": "no row resolved to a governed region"}
-    return report
 
 
 def _client_hint(out: pd.DataFrame) -> Optional[str]:
@@ -542,26 +521,6 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
     # which region/channel field the source supplied (obligor vs collateral, etc.).
     group_aliases = _coalesce_group_dimensions(out)
 
-    # ONE GOVERNED REGION VOCABULARY, ON EVERY PREPARATION PATH.
-    #
-    # `augment_platform_canonical_dimensions` — the SERVING path — has always
-    # stamped the canonical region columns. This function prepares the HISTORICAL
-    # frames (`evolution.funded_frames`) and did not, so the same book prepared
-    # two ways carried two different answers to "what is region": the serving
-    # dataset resolved `canonical_region_reporting` and a period frame, lacking
-    # the column entirely, fell through to a raw source field. Measured: the
-    # latest historical frame was row-identical to the serving dataset and short
-    # of exactly these five columns.
-    #
-    # The same owner, called from both paths. Nothing is re-implemented and the
-    # derivation stays idempotent, so a frame that already carries the columns is
-    # unchanged by running it again.
-    region_report = _apply_region_taxonomy(out)
-    if region_report.get("applied"):
-        for f in (_region.FIELD_DETAIL, _region.FIELD_REPORTING):
-            if f not in derived:
-                derived.append(f)
-
     cols = set(out.columns)
     available: List[str] = []
     missing: List[Dict[str, Any]] = []
@@ -619,7 +578,6 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
         "ltv_derivation_basis": ltv_basis,
         "buckets_applied": {k: v for k, v in applied.items() if v},
         "group_aliases": group_aliases,
-        "region_harmonisation": region_report,
         "duplicate_columns_collapsed": dedup,
         "dimensions_available": sorted(available),
         "missing_dimensions": missing,
