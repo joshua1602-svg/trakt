@@ -3,7 +3,7 @@
  "purpose": "Question strings and EXPECTATIONS only. No production answer payload, no monetary total and no row from any book is recorded here. Every expectation is either a safety class the product must honour on any governed book, or an identity between two live responses that stays true when the portfolio changes. A book that lacks a field must be free to refuse: refusal for a DATA reason is reported, never failed.",
  "expectation_types": {
   "MUST_ANSWER": "any governed book can answer this; a semantic refusal is a failure",
-  "MUST_REFUSE": "names something no governed vocabulary claims; a figure here is a silent wrong answer",
+  "MUST_REFUSE": "names something no governed vocabulary claims, in a position where a restriction goes; a figure here is a silent wrong answer",
   "MAY_REFUSE_FOR_DATA": "needs a field not every book carries; scored fully if answered, reported as data if refused",
   "EQUAL_TO": "same population AND same measure fingerprint",
   "SAME_RESULT_AS": "same population, same measure fingerprint, same group keys and per-group values",
@@ -1411,6 +1411,128 @@
    "cls": "holdout",
    "q": "Total balance for filigree products",
    "expect": "MUST_REFUSE"
+  }
+ ],
+ "fresh_holdout": [
+  {
+   "id": "P01",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for cinnabar products?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P02",
+   "cls": "fresh_holdout",
+   "q": "Show me the balance by pergola band",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P03",
+   "cls": "fresh_holdout",
+   "q": "How many loans are in the thimble cohort?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P04",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for alabaster borrowers?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P05",
+   "cls": "fresh_holdout",
+   "q": "Total balance by region for sextant loans",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P06",
+   "cls": "fresh_holdout",
+   "q": "What is the balance for borrowers in Mulberry Vale?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P07",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for loans in the nutmeg segment?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P08",
+   "cls": "fresh_holdout",
+   "q": "Chart loan count by wicker type",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P09",
+   "cls": "fresh_holdout",
+   "q": "What is the marzipan balance?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P10",
+   "cls": "fresh_holdout",
+   "q": "How many loans have a quillon rating?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P11",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for loans of the lantern vintage?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P12",
+   "cls": "fresh_holdout",
+   "q": "Show balance by region for borrowers in Sableford",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P13",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance by ticket size?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P14",
+   "cls": "fresh_holdout",
+   "q": "Loan count by tenure",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P15",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for loans in Scotland and Wales?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P16",
+   "cls": "fresh_holdout",
+   "q": "Chart balance by original LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P17",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for borrowers in the North West?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P18",
+   "cls": "fresh_holdout",
+   "q": "How many loans are in each region?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P19",
+   "cls": "fresh_holdout",
+   "q": "What is the weighted average LTV by region?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P20",
+   "cls": "fresh_holdout",
+   "q": "Total balance for loans with a balance over 100000",
+   "expect": "MAY_REFUSE_FOR_DATA"
   }
  ]
 }

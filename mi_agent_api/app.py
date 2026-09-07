@@ -31,6 +31,7 @@ from . import react_auth
 from mi_agent.mi_agent_config import get_llm_config
 from mi_agent.mi_agent_workflow import run_mi_agent_query
 from mi_agent.mi_query_validator import load_mi_semantics
+from mi_agent_api.build_info import build_info as _build_info
 
 from .adapters import adapt_workflow_result
 from .catalogue import build_catalogue
@@ -448,6 +449,11 @@ def root() -> Dict[str, Any]:
     return {
         "service": "mi_agent_api",
         "version": app.version,
+        # WHICH COMMIT, not which version string. `version` is hand-written and
+        # was identical across every deploy this year, so it could not tell one
+        # build from another — see `build_info` for why that made the live
+        # certification's provenance line worthless.
+        "build": _build_info(),
         "warm": data_source.is_loaded(),
         "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot",
                       "/mi/pipeline/snapshots", "/mi/pipeline/snapshot",
@@ -464,6 +470,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "service": "mi_agent_api",
         "version": app.version,
+        "build": _build_info(),
         "dataSource": csv,
         "dataSourceKind": info.get("kind"),
         "preparationApplied": info.get("preparation_applied", False),

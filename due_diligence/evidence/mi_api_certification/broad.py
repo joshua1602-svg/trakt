@@ -445,14 +445,18 @@ def score_single(session: Session, case: Dict[str, Any]) -> Result:
     if ev.ok:
         return Result(cid, cls, OK, f"{question!r} answered coherently")
     if expect == "MUST_ANSWER":
-        if ev.data_refusal:
+        reason = refusal_class(ev.envelope)
+        if reason == DATA_UNAVAILABLE:
             return Result(cid, cls, DATA,
-                          f"{question!r} refused for a data reason: "
-                          f"{ev.answer[:70]}")
+                          f"{question!r} {reason}: {ev.answer[:70]}")
+        if reason == CAPABILITY_UNAVAILABLE:
+            return Result(cid, cls, DATA,
+                          f"{question!r} {reason}: {ev.answer[:70]}")
         return Result(cid, cls, FAIL,
-                      f"{question!r} refused semantically: {ev.answer[:80]}")
+                      f"{question!r} refused as {reason}: {ev.answer[:80]}")
     return Result(cid, cls, DATA,
-                  f"{question!r} refused (needs {case.get('needs', 'a field')})")
+                  f"{question!r} {refusal_class(ev.envelope)} "
+                  f"(needs {case.get('needs', 'a field')})")
 
 
 # ---- relations ------------------------------------------------------------ #
@@ -853,3 +857,95 @@ def latency(session: Session) -> Dict[str, float]:
 
     return {"requests": float(len(times)), "total_s": float(sum(times)),
             "p50_s": pick(0.50), "p95_s": pick(0.95), "max_s": times[-1]}
+
+
+# --------------------------------------------------------------------------- #
+# Why a refusal happened — four classes, kept apart
+# --------------------------------------------------------------------------- #
+#: The certification report must not describe an UNSUPPORTED CAPABILITY as
+#: missing data, and it must not describe a SEMANTIC refusal as either. They are
+#: three different conversations with an operator: one is "load the column", one
+#: is "this product cannot do that yet", and one is "the question named something
+#: no governed vocabulary carries" — which is the only one that is a safety
+#: success rather than a limitation.
+DATA_UNAVAILABLE = "DATA_UNAVAILABLE"
+CAPABILITY_UNAVAILABLE = "CAPABILITY_UNAVAILABLE"
+SEMANTIC_UNRESOLVED = "SEMANTIC_UNRESOLVED"
+GOVERNED_REFUSAL = "GOVERNED_REFUSAL"
+
+#: The estate's own sentences for "the reader named something no governed
+#: vocabulary claims". The first is written by
+#: `llm_query_parser.unknown_category_refusal`; the second is the measure and
+#: dimension owners saying the same thing about a different role. Matched on the
+#: wording those owners author, so this reader and those writers stay one fact.
+_SEMANTIC_MARKERS = (
+    "no loans in this book match that filter",
+    "is not a governed measure",
+    "is not a governed dimension",
+    "is not a governed statistic",
+)
+
+#: The estate's own wording for "this book does not report that field". Checked
+#: BEFORE the capability markers, because a field-unavailability refusal also
+#: says the concept "could not be applied to the calculation" — and the clause
+#: that names the missing field is the one that tells an operator what to do.
+_DATA_CLASS_MARKERS = (
+    "not available in this dataset",
+    "unavailable in this dataset",
+    "is not in this dataset",
+    "does not report it",
+    "field is unavailable",
+    "no reporting periods are available",
+    "no governed pipeline data is available",
+    "no governed pipeline source is available",
+)
+
+#: The estate's own wording for "understood, governed, and this product cannot
+#: do it". THE DISTINCTION THIS EXISTS FOR: "Loan count and balance by region
+#: and LTV band" refuses while both `Loan count by LTV band` and `Total balance
+#: by region and LTV band` answer, and the reason is that multi-measure and
+#: two-dimensional grouping are not supported TOGETHER. Reporting that as
+#: missing data would send an operator to load a column that is already there.
+_CAPABILITY_MARKERS = (
+    "could not be applied to the calculation",
+    "was not applied",
+    "not supported",
+    "cannot compute",
+    "can't compute",
+    "cannot be answered from",
+    "no capability",
+)
+
+
+def refusal_class(envelope: Dict[str, Any]) -> Optional[str]:
+    """Which of the four a refusal is, or None when the response answered.
+
+    Read from the response's own words and its own `metadata` flags, in the
+    order that keeps the classes disjoint and keeps the ADVICE right:
+
+      1. SEMANTIC first — the estate has one authored sentence for an unresolved
+         term, and a book that also lacks a column would otherwise hide it;
+      2. DATA next — a refusal naming a missing FIELD is a data limit even
+         though it also says the concept could not be applied;
+      3. CAPABILITY last — understood, governed, and not supported.
+
+    The order is the whole content of the function. Getting it wrong does not
+    produce a wrong count, it produces wrong advice: "load the column" for a
+    feature that does not exist, or "build the feature" for a column nobody
+    mapped.
+    """
+    if envelope.get("ok"):
+        return None
+    text = str(envelope.get("answer") or envelope.get("error") or "").lower()
+    for marker in _SEMANTIC_MARKERS:
+        if marker in text:
+            return SEMANTIC_UNRESOLVED
+    for marker in _DATA_CLASS_MARKERS:
+        if marker in text:
+            return DATA_UNAVAILABLE
+    if (envelope.get("metadata") or {}).get("controlledUnsupported"):
+        return CAPABILITY_UNAVAILABLE
+    for marker in _CAPABILITY_MARKERS:
+        if marker in text:
+            return CAPABILITY_UNAVAILABLE
+    return GOVERNED_REFUSAL

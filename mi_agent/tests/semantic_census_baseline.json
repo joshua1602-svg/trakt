@@ -686,6 +686,7 @@
   "measures": [],
   "metric": null,
   "unavailable": [
+   "unknown category: 'active'",
    "unknown category: 'weighting'"
   ]
  },
@@ -788,7 +789,9 @@
   "intent": "summary",
   "measures": [],
   "metric": null,
-  "unavailable": []
+  "unavailable": [
+   "unknown category: 'withdrawn'"
+  ]
  },
  "How much pipeline is expected to complete next month?": {
   "aggregation": "count",
@@ -853,7 +856,9 @@
   "intent": "summary",
   "measures": [],
   "metric": null,
-  "unavailable": []
+  "unavailable": [
+   "unknown category: 'offer'"
+  ]
  },
  "Project funded balance over the next twelve months.": {
   "aggregation": "sum",

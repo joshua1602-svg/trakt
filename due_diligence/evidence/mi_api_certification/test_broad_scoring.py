@@ -462,3 +462,90 @@ class TestTheHarnessDefectsFoundInTheDryRun:
             "identity": "group shares sum to the whole",
             "grouped": "Total balance by region"})
         assert result.status == broad.NOT_ESTABLISHED
+
+
+class TestDeployedBuildProvenance:
+    """`version=1.0.0` is not provenance, and the harness must not accept it.
+
+    The live certification reported `deployed commit : version=1.0.0` for every
+    run, because the reader fell through to the application's hand-written
+    version string when no commit was published. That string has not changed
+    this year, so it could not distinguish the release being certified from an
+    older build that was never replaced. These assert that the reader now takes
+    the immutable build stamp or reports nothing at all.
+    """
+
+    def test_an_unstamped_build_reports_no_commit(self, monkeypatch) -> None:
+        from mi_agent_api import build_info as module
+
+        module.build_info.cache_clear()
+        monkeypatch.delenv("TRAKT_BUILD_COMMIT", raising=False)
+        monkeypatch.setattr(module, "_STAMP",
+                            module.Path("/nonexistent/build_info.json"))
+        info = module.build_info()
+        module.build_info.cache_clear()
+        assert info["commit"] is None and info["source"] == "unstamped"
+
+    def test_a_stamped_build_reports_its_commit(self, monkeypatch) -> None:
+        from mi_agent_api import build_info as module
+
+        module.build_info.cache_clear()
+        monkeypatch.setenv("TRAKT_BUILD_COMMIT", "0" * 40)
+        info = module.build_info()
+        module.build_info.cache_clear()
+        assert info["commit"] == "0" * 40 and info["source"] == "environment"
+
+    def test_a_version_string_is_never_read_as_a_commit(self) -> None:
+        """The exact regression: a health payload carrying only `version`."""
+        import json as _json
+        from unittest import mock
+
+        from due_diligence.evidence.mi_api_certification import certify_mi_api
+
+        payload = _json.dumps({"ok": True, "version": "1.0.0",
+                               "service": "mi_agent_api"}).encode()
+
+        class _Response:
+            def read(self):
+                return payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_a):
+                return False
+
+        with mock.patch.object(certify_mi_api, "_live_asker",
+                               return_value=lambda q: {"ok": True}), \
+             mock.patch("urllib.request.urlopen", return_value=_Response()):
+            _reached, _auth, commit = certify_mi_api.preflight(
+                "https://example.invalid", "/mi/query", [], None)
+        assert commit is None, (
+            f"a version string was read as provenance: {commit!r}")
+
+    def test_a_published_stamp_is_read_as_the_commit(self) -> None:
+        import json as _json
+        from unittest import mock
+
+        from due_diligence.evidence.mi_api_certification import certify_mi_api
+
+        payload = _json.dumps({"ok": True, "version": "1.0.0",
+                               "build": {"commit": "a" * 40,
+                                         "source": "artefact"}}).encode()
+
+        class _Response:
+            def read(self):
+                return payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_a):
+                return False
+
+        with mock.patch.object(certify_mi_api, "_live_asker",
+                               return_value=lambda q: {"ok": True}), \
+             mock.patch("urllib.request.urlopen", return_value=_Response()):
+            _reached, _auth, commit = certify_mi_api.preflight(
+                "https://example.invalid", "/mi/query", [], None)
+        assert commit == "a" * 40
