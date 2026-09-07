@@ -171,6 +171,12 @@ class ExecutedContract:
     #: The answer IS a forecast — the estate's own record, from the analytical
     #: plan's `projected` flag or the spec's forecast mode.
     projected: bool = False
+    #: THE POINT IN TIME THE ANSWER HONOURED, from the parse's own record
+    #: (`spec.as_of_date`). Deliberately NOT `metadata.asOfDate`, which carries
+    #: the book's own reporting date on every ordinary answer and would
+    #: therefore mark a dropped request as honoured — the exact substitution the
+    #: temporal concept exists to catch.
+    as_of: Optional[str] = None
     applied_fields: Tuple[str, ...] = ()
     facets: Tuple[Tuple[str, str, str], ...] = ()   # (kind, label, status)
 
@@ -227,6 +233,7 @@ def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
     dims = list(spec.get("dimensions") or [])
     if spec.get("dimension"):
         dims.append(spec["dimension"])
+    as_of = spec.get("as_of_date") or spec.get("reporting_date") or None
 
     facets = tuple((f.get("kind") or "", f.get("label") or "", f.get("status") or "")
                    for f in (ex.get("facets") or []))
@@ -271,6 +278,7 @@ def from_envelope(envelope: Dict[str, Any]) -> ExecutedContract:
         projected=bool((meta.get("analyticalComposition") or {}).get("projected")
                        or spec.get("forecast_mode")
                        or spec.get("forecast_question")),
+        as_of=(str(as_of) if as_of else None),
         applied_fields=applied,
         facets=facets,
     )
@@ -383,6 +391,40 @@ def stated_concepts(question: str, semantics: Dict[str, Any], *,
                                      str(target), "",
                                      "llm_query_parser._forecast_target_value"))
 
+    # ---- the PERIOD owner: which MOMENT did the sentence name? ------------ #
+    #
+    # THE OWNER THAT WAS NEVER ASKED. Every concept above is claimed by an owner
+    # that already ships, and no owner was asked what PERIOD the sentence named
+    # — so a point-in-time span entered no ledger and the gate that refuses on
+    # unaccounted concepts had nothing to refuse. Measured on the governed
+    # three-period book: "the balance as at 31 December 1999" answered £1.96BN
+    # over the current book, receipted "as at 30 June 2026".
+    #
+    # It is not resolved to a snapshot here. `periods.resolve_periods` owns
+    # that, and resolving it twice is the duplicate-owner defect this module
+    # exists to avoid. The ledger records that a moment was NAMED; the executor
+    # records, in `spec.as_of_date`, that one was HONOURED.
+    try:
+        from mi_agent.period_change import recognition as _period
+
+        as_at = _period.as_at_request(q)
+    except Exception:  # noqa: BLE001 - no owner reachable, no claim
+        as_at = None
+    if as_at is not None:
+        named = as_at.token or as_at.phrase
+        # ONE OBSTACLE, ONE SENTENCE. A year inside the book's `vintage_year`
+        # range is also claimed by the VALUE owner, so "the balance as at 31
+        # December 2024" reported `2024` and `31 December 2024` as two lost
+        # concepts and the refusal named the same obstacle twice. The temporal
+        # reading subsumes the categorical one whenever the value's term sits
+        # inside the moment that was named, and it is the more specific of the
+        # two, so it is the one that survives.
+        lowered = named.lower()
+        out = [c for c in out
+               if not (c.kind == "value" and str(c.term).lower() in lowered)]
+        out.append(StatedConcept("temporal", "as_of_date", named, named,
+                                 "period_change.recognition.as_at_request"))
+
     # ---- the FACET owner -------------------------------------------------- #
     for facet in R.detect_requested_facets(q, semantics, frame=frame,
                                            requested_dimensions=dim_terms):
@@ -438,6 +480,15 @@ def _carried(concept: StatedConcept, contract: ExecutedContract) -> bool:
         return field in filters or field in dims or field in applied
     if kind.startswith("facet:"):
         return contract.facet_applied(kind.split(":", 1)[1], value)
+    if kind == "temporal":
+        # A MOMENT IS CARRIED ONLY WHEN THE PARSE RECORDS HONOURING ONE. No
+        # point-in-time capability exists yet, so `spec.as_of_date` is never
+        # set and every as-at question is UNACCOUNTED — which is a refusal, and
+        # is correct: answering the current book under a question about another
+        # moment is the substitution this whole ledger exists to prevent. When
+        # point-in-time execution lands it records the date it resolved to, and
+        # the same rule passes it with no edit here.
+        return bool(contract.as_of)
     if kind == "value":
         if field in filters or field in dims or field in applied:
             return True
