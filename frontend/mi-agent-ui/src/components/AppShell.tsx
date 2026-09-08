@@ -349,7 +349,7 @@ export function AppShell() {
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-navy-700 text-cyan-300">
                   <LayoutDashboard size={18} />
                 </div>
-                <h2 className="t-title">Core Dashboard</h2>
+                <h2 className="t-title uppercase tracking-wide">Core Dashboard</h2>
               </div>
               <button
                 type="button"

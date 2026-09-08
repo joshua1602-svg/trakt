@@ -99,7 +99,7 @@ export function ArtifactCanvas({
             <LayoutGrid size={18} />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-ink-100">Artifact Workspace</h2>
+            <h2 className="text-base font-semibold uppercase tracking-wide text-ink-100">Artifact Workspace</h2>
             <p className="text-[11px] text-ink-400">
               {artifacts.length} artifact{artifacts.length === 1 ? "" : "s"} · {portfolioName}
             </p>
