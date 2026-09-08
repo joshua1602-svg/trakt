@@ -325,7 +325,7 @@ def test_pipeline_present_includes_the_pipeline_sections(mixed_run, pipeline_roo
     # Movement reconciles the same question case by case and supersedes it
     # where a stable case identifier exists. The durable property is that the
     # question is answered, not which page answers it.
-    assert ids & {"funnel", "pipeline_movement"}, ids
+    assert ids & {"funnel", "stage_transitions"}, ids
 
     # And the pipeline is narrated as an outlook, labelled direct-origination only.
     outlook = [i for i in data.insights["insights"]

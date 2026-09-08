@@ -149,39 +149,10 @@ def test_missing_stable_identity_suppresses_the_analysis_rather_than_guessing():
 # One payload, two surfaces.
 # --------------------------------------------------------------------------- #
 
-def test_the_deck_reads_the_same_reconciliation_the_route_serves(deployed, payload):
-    """Catches: a PPTX-only visual.
-
-    The deck calls ``evolution.pipeline_stage_movement`` in-process and the
-    route calls the same function, so the numbers on the slide and the numbers
-    in the dashboard are one computation.
-    """
-    from fastapi.testclient import TestClient
-    from mi_agent_api.app import app
-
-    api = TestClient(app)
-    accepted = api.post("/mi/decks/generate", json={})
-    assert accepted.status_code == 202, accepted.text
-    job = accepted.json()["jobId"]
-    deadline, body = time.time() + 420, None
-    while time.time() < deadline:
-        body = api.get(f"/mi/decks/generate/{job}").json()
-        if body["state"] in ("completed", "blocked", "failed"):
-            break
-        time.sleep(0.4)
-    assert body and body["state"] == "completed", body
-    content = api.get("/mi/decks/download").content
-
-    deck = pptx.Presentation(io.BytesIO(content))
-    page = None
-    for slide in deck.slides:
-        lines = [sh.text_frame.text.strip() for sh in slide.shapes
-                 if sh.has_text_frame and sh.text_frame.text.strip()]
-        if lines and "Pipeline Stage Movement" in lines[0]:
-            page = "\n".join(lines)
-            break
-    assert page, "no Pipeline Stage Movement page in the pack"
-    # The window and the identifier the route reported are on the page.
-    assert payload["openingWeek"] in page, page
-    assert payload["closingWeek"] in page, page
-    assert payload["identifierField"] in page, page
+# THE DECK NO LONGER DRAWS THIS RECONCILIATION. Two "Pipeline Stage Movement"
+# slides existed — this one and the governed stage-transition payload — and one
+# title cannot mean two pages, so the deck carries the transition payload and
+# its parity is pinned by tests/mi_agent_pptx/test_stage_transition_parity.py.
+#
+# Everything above still applies: /mi/evolution/pipeline-movement is live, the
+# dashboard reads it, and the identity it reconciles is worth holding to.

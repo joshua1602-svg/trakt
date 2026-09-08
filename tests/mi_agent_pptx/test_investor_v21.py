@@ -218,7 +218,7 @@ def test_pipeline_sections_appear_when_a_source_exists(run_root, pipeline_root):
     # book — Pipeline Stage Movement supersedes the flow-based funnel where it
     # is.
     assert "pipeline" in ids
-    assert ids & {"funnel", "pipeline_movement"}, ids
+    assert ids & {"funnel", "stage_transitions"}, ids
 
 
 def test_pipeline_sections_are_omitted_with_a_reason_when_absent(run_root):
