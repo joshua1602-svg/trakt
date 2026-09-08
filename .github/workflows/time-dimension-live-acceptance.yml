@@ -1,0 +1,82 @@
+name: TIME x DIMENSION live acceptance
+
+# EVIDENCE COLLECTION ONLY. Deploys nothing, changes nothing, and asserts
+# nothing about the service: it drives the acceptance matrix through the
+# EXISTING certification transport (`certify_mi_api._live_asker`) and the
+# EXISTING provenance check (`certify_mi_api.preflight`), and prints what came
+# back. The verdict is adjudicated by a human from that output.
+#
+# `ref` exists so the harness can be taken from a certification branch while
+# `expect_commit` pins the DEPLOYED build being certified. The two are
+# deliberately separate: the code under certification is whatever is deployed,
+# not whatever this workflow was checked out from.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      path:
+        default: /mi/query
+        required: true
+      portfolio_id:
+        default: ERE/2026-06-30
+        required: true
+      expect_commit:
+        description: The deployed SHA this acceptance is certifying.
+        required: true
+      ref:
+        description: Repo ref to take the harness from.
+        default: main
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: certify-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refuse to run without a token
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"
+            exit 1
+          fi
+          echo "MI_BEARER is present (${#MI_BEARER} characters)."
+
+      - name: Collect the acceptance evidence
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          python -m due_diligence.evidence.mi_api_certification.time_dimension_acceptance \
+            --base-url "${{ inputs.base_url }}" \
+            --path "${{ inputs.path }}" \
+            --portfolio-id "${{ inputs.portfolio_id }}" \
+            --expect-commit "${{ inputs.expect_commit }}" \
+            --json-out time-dimension-acceptance.json
+
+      - name: Keep the evidence whatever the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: time-dimension-live-acceptance
+          path: time-dimension-acceptance.json
+          if-no-files-found: warn
