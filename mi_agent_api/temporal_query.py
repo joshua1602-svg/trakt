@@ -118,7 +118,7 @@ def is_grouped(spec) -> bool:
 
 def execute_temporal(frames: Sequence[Dict[str, Any]], spec, semantics, *,
                      executor: Optional[Callable[..., Any]] = None,
-                     missing_dimension_policy: str = "exclude",
+                     missing_dimension_policy: str = "bucket",
                      ) -> Dict[str, Any]:
     """Run ONE governed spec across the prepared period frames.
 
@@ -127,6 +127,12 @@ def execute_temporal(frames: Sequence[Dict[str, Any]], spec, semantics, *,
     and already narrowed to the governed portfolio scope. This function does not
     read tapes, resolve configuration, or prepare anything: it would be a second
     owner of those too.
+
+    ``missing_dimension_policy`` is the CALLER's, and the default matches the
+    current-period path's so a caller that says nothing gets the same treatment
+    of missing grouping values a question with no time axis would get. This
+    module does not decide it: `mi_agent_workflow.missing_dimension_policy_for`
+    reads the question, once, for both paths.
 
     RAISES on a period the spec cannot be executed against, and that is the
     governed behaviour rather than an oversight. A dimension that is genuinely
@@ -166,6 +172,11 @@ def execute_temporal(frames: Sequence[Dict[str, Any]], spec, semantics, *,
             # The executor's own statement of which columns it grouped on, so a
             # composer never has to guess which key in a row is the category.
             "groupKeys": tuple(metadata.get("group_field_keys") or ()),
+            # The executor's structural record of every predicate it ran on THIS
+            # period — field, operator, values. Passed through untouched; the
+            # composition below never reads a value and never decides anything
+            # about one.
+            "appliedPredicates": list(metadata.get("applied_predicates") or ()),
             "reconciliation": metadata.get("reconciliation"),
         })
         if frame.get("source"):
@@ -181,6 +192,44 @@ def _records(result) -> List[Dict[str, Any]]:
     if data is None or getattr(data, "empty", True):
         return []
     return data.to_dict(orient="records")
+
+
+def predicates_applied_in_every_period(periods: Sequence[Dict[str, Any]]
+                                       ) -> List[Dict[str, Any]]:
+    """The predicates the executor ran IDENTICALLY on every period.
+
+    A temporal answer narrowed to Scotland is only narrowed to Scotland if
+    Scotland was the population in EVERY period the series publishes. A
+    predicate that ran on the latest frame and not on an earlier one produces a
+    series whose points are about different populations, and evidence taken from
+    the last period alone would present it as though they were the same. So the
+    evidence this publishes is the INTERSECTION, keyed on the whole executed
+    identity — field, operator and values — never on the field alone.
+
+    Row counts are deliberately not part of the key: the same predicate keeps
+    different numbers of rows in different months, which is the series. They
+    travel with each period's own evidence for audit.
+    """
+    if not periods:
+        return []
+
+    def identity(entry):
+        return (str(entry.get("field")), str(entry.get("canonical_field")),
+                str(entry.get("op")), tuple(entry.get("values") or ()))
+
+    first = list(periods[0].get("appliedPredicates") or ())
+    common = {identity(e) for e in first}
+    for period in periods[1:]:
+        common &= {identity(e) for e in (period.get("appliedPredicates") or ())}
+    out: List[Dict[str, Any]] = []
+    seen = set()
+    for entry in first:
+        key = identity(entry)
+        if key in common and key not in seen:
+            seen.add(key)
+            out.append({k: v for k, v in entry.items()
+                        if k not in ("rows_before", "rows_after")})
+    return out
 
 
 #: Keys the executor adds to EVERY grouped row alongside the measure. They are

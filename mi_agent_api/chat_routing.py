@@ -1499,8 +1499,17 @@ def _funded_temporal(output_root, client_id, run_id, question, spec, semantics,
         # breakdown over time and a breakdown today are the same execution.
         run_spec = dataclasses.replace(spec, dimension=grouping,
                                        dimensions=[grouping])
+    # THE MISSING-DIMENSION POLICY IS THE QUESTION'S, NOT THE ROUTE'S. Asked of
+    # the same owner the current-period path asks, so the latest period of a
+    # trend and the ordinary grouped answer bucket or exclude identically — a
+    # difference here would put an "Unknown / Missing" group in one and not the
+    # other, with no cause in the book.
+    from mi_agent.mi_agent_workflow import missing_dimension_policy_for
+
     try:
-        executed = _temporal.execute_temporal(frames, run_spec, semantics)
+        executed = _temporal.execute_temporal(
+            frames, run_spec, semantics,
+            missing_dimension_policy=missing_dimension_policy_for(question))
     except MIQueryExecutionError as exc:
         _logger.info("temporal seam deferred to the point-in-time path: %s", exc)
         return None
@@ -1527,6 +1536,7 @@ def _funded_temporal(output_root, client_id, run_id, question, spec, semantics,
             "reporting_date": executed_period.get("reporting_date"),
             "period": executed_period.get("period"),
             "reconciliation": recon or None,
+            "appliedPredicates": executed_period.get("appliedPredicates") or [],
             "source_file": frame.get("source"),
         }
         rows = executed_period.get("rows") or []
@@ -1556,7 +1566,12 @@ def _funded_temporal(output_root, client_id, run_id, question, spec, semantics,
                                             if rows else 0)
         periods.append(entry)
     return {"periods": periods,
-            "sourceFiles": executed.get("sourceFiles") or []}, grouping
+            "sourceFiles": executed.get("sourceFiles") or [],
+            # The predicates the executor ran IDENTICALLY on every period. A
+            # series is narrowed to a population only if that population was the
+            # one measured in every point it publishes.
+            "executedPredicates": _temporal.predicates_applied_in_every_period(
+                executed["periods"])}, grouping
 
 
 def _filter_summary(predicates) -> str:
@@ -1689,6 +1704,7 @@ def _grouped_evolution_answer(*, question, spec_dict, periods, grain_key,
         out["metadata"]["populationApplied"] = {
             "applied": [f"{p.field} (applied within each period)" for p in predicates],
             "unavailable": [], "rowsBefore": None, "rowsAfter": last,
+            "executed": evo.get("executedPredicates") or [],
         }
     return out
 
@@ -1980,6 +1996,13 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
             "applied": [f"{p.field} (applied within each period)"
                         for p in predicates],
             "unavailable": [], "rowsBefore": before, "rowsAfter": last,
+            # STRUCTURAL EXECUTION EVIDENCE, beside the prose. `applied` is
+            # field-named by a contract with two existing readers and is left
+            # exactly as it was; this says the same thing completely — which
+            # field, which operator, which values the executor actually
+            # compared — so a facet whose identity is a VALUE has something to
+            # be proven against. See `mi_query_executor.predicate_evidence`.
+            "executed": evo.get("executedPredicates") or [],
         }
     return out
 

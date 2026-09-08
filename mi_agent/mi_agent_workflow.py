@@ -482,6 +482,31 @@ def _contribution_answer(spec, qres, semantics: dict) -> Optional[str]:
         return None
 
 
+#: Phrases by which a reader opts OUT of the reconciling default.
+_EXCLUDE_MISSING_PHRASES = ("exclude missing", "excluding missing",
+                            "without missing", "drop missing", "ignore missing")
+
+
+def missing_dimension_policy_for(question: Optional[str]) -> str:
+    """How a grouped answer treats rows whose grouping value is missing.
+
+    Missing grouping values are bucketed under "Unknown / Missing" by default so
+    results reconcile to the funded book; the operator opts out by asking to
+    exclude missing data.
+
+    ONE OWNER, because the answer must not depend on which path ran. A grouped
+    question and the SAME grouped question with a time axis are executed by the
+    same executor over the same frame, so if the two callers chose this policy
+    separately the latest period of a trend could carry an "Unknown / Missing"
+    group the current-period answer did not, or the reverse — a difference with
+    no cause in the book. Extracted from `run_mi_agent_query`, unchanged, so the
+    temporal route can ask rather than decide.
+    """
+    lowered = (question or "").lower()
+    return ("exclude" if any(p in lowered for p in _EXCLUDE_MISSING_PHRASES)
+            else "bucket")
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -914,15 +939,7 @@ def run_mi_agent_query(
     result["interpreted"]["Validation"] = "Passed"
 
     # ---- execute ----------------------------------------------------------
-    # Missing grouping values are bucketed under "Unknown / Missing" by default so
-    # results reconcile to the funded book; the operator can opt out by asking to
-    # exclude missing data.
-    q_lower = (question or "").lower()
-    missing_policy = ("exclude"
-                      if any(p in q_lower for p in ("exclude missing", "excluding missing",
-                                                    "without missing", "drop missing",
-                                                    "ignore missing"))
-                      else "bucket")
+    missing_policy = missing_dimension_policy_for(question)
     try:
         qres: MIQueryResult = execute_mi_query(
             spec, df, semantics, validate=False,
