@@ -3350,6 +3350,168 @@ class DeckBuilder:
         self._record(spec.get("id", "watchlist"), spec.get("title"),
                      f"{len(watch)} watch item(s).")
 
+    # ------------------------------------------------- borrowing base
+    #: Tile tones, by the adapter's governed status word.
+    _BB_TONE = {"breach": "red", "warning": "amber", "pass": "green"}
+
+    def slide_borrowing_base(self, spec):
+        """Borrowing Base — *how much can this facility actually draw?*
+
+        The page a funder turns to first: what collateral is eligible, what
+        that supports, what is drawn against it, and what is left. It mirrors
+        the dashboard's Borrowing Base panel — same five measures in the same
+        order, the same eligibility split, the same vocabulary — because a
+        covenant figure that reads differently on a screen and in a pack is a
+        figure nobody trusts.
+
+        Nothing is computed here. The advance rate, the gross and available
+        base, the facility cap, headroom, deficiency and both utilisations are
+        ``mi_agent.borrowing_base.calculator``'s, carried on the concentration
+        envelope. A measure the facility configuration cannot support arrives
+        as NOT_CALCULABLE and is printed as the named missing input, never as a
+        dash and never as a zero.
+        """
+        from . import borrowing_base as BB
+
+        s = self._slide()
+        env = self.d.concentration or {}
+        snap = BB.snapshot(env)
+        self._header(s, spec.get("title", "Borrowing Base"),
+                     BB.headline(snap) if snap else
+                     "Governed facility eligibility and headroom",
+                     accent=self.theme.peri)
+        if not BB.available(env):
+            self._placeholder_body(s, BB.reason(env))
+            self._footer(s)
+            return self._record(spec.get("id", "borrowing_base"),
+                                spec.get("title"), "", placeholder=True)
+
+        # -- what must be said before the figures are read -------------------
+        # An unreconciled population disqualifies everything below it, so it is
+        # stated above the tiles rather than footnoted under them.
+        top = 1.56
+        for alert in BB.alerts(snap)[:2]:
+            colour = (self.theme.rag["red"] if alert["tone"] == "breach"
+                      else self.theme.rag["amber"])
+            self._panel(s, Inches(self.CONTENT_L), Inches(top),
+                        Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.40),
+                        fill=self.theme.bg_panel_alt, line=colour)
+            self._text(s, Inches(self.CONTENT_L + 0.18), Inches(top + 0.07),
+                       Inches(self.CONTENT_R - self.CONTENT_L - 0.36),
+                       Inches(0.28), alert["text"], size=9.5, color=colour)
+            top += 0.48
+
+        # -- the five measures, in the dashboard's order ---------------------
+        tw = Inches(2.35)
+        for i, tile in enumerate(BB.tiles(snap)):
+            l = Emu(int(Inches(0.55)) + i * int(Inches(2.45)))
+            self._panel(s, l, Inches(top), tw, Inches(1.06),
+                        fill=self.theme.bg_panel_alt, line=self.theme.line_soft)
+            self._text(s, l + Inches(0.18), Inches(top + 0.10),
+                       tw - Inches(0.3), Inches(0.26), tile["label"],
+                       size=8, color=self.theme.ink_400, bold=True)
+            # A measure the configuration cannot support says WHICH input is
+            # missing. "—" would read as nil and a 0 as fully drawn.
+            if tile["value"] is None:
+                self._text(s, l + Inches(0.18), Inches(top + 0.38),
+                           tw - Inches(0.3), Inches(0.56),
+                           tile.get("missing") or "not calculable",
+                           size=9, color=self.theme.ink_500, italic=True)
+                continue
+            self._text(s, l + Inches(0.18), Inches(top + 0.34),
+                       tw - Inches(0.3), Inches(0.40), tile["value"],
+                       size=18, bold=True,
+                       color=self.theme.rag_color(
+                           self._BB_TONE.get(tile["status"], ""))
+                       if tile["status"] in self._BB_TONE else self.theme.ink_100)
+            if tile.get("sub"):
+                self._text(s, l + Inches(0.18), Inches(top + 0.76),
+                           tw - Inches(0.3), Inches(0.24),
+                           self._fit_label(str(tile["sub"]), 2.05, 8),
+                           size=8, color=self.theme.ink_500)
+        top += 1.22
+
+        # -- the eligibility split -------------------------------------------
+        # NATIVE POWERPOINT TEXT, not a chart image: this is the table a funder
+        # copies figures out of, and an image is not that.
+        #
+        # SIZED TO ITS CONTENT, not to the bottom of the slide. Three rows in a
+        # panel stretched to the footer left half a page of empty card under
+        # them, which reads as a chart that failed to draw.
+        rows = BB.split(snap)
+        body_h = 0.50 + len(rows) * 0.34 + 0.46
+        self._panel(s, Inches(self.CONTENT_L), Inches(top),
+                    Inches(self.CONTENT_R - self.CONTENT_L), Inches(body_h),
+                    fill=self.theme.bg_panel, line=self.theme.line_soft)
+        cols = [("Financing Portfolio", 0.22, 3.60, PP_ALIGN.LEFT),
+                ("Loans", 3.90, 1.40, PP_ALIGN.RIGHT),
+                ("Current balance", 5.50, 2.60, PP_ALIGN.RIGHT),
+                ("% of book", 8.30, 1.80, PP_ALIGN.RIGHT)]
+        hdr = top + 0.16
+        for label, dx, w, align in cols:
+            self._text(s, Inches(self.CONTENT_L + dx), Inches(hdr),
+                       Inches(w), Inches(0.24), label.upper(), size=8,
+                       color=self.theme.ink_500, bold=True, align=align)
+        row_y = hdr + 0.34
+        for row in rows:
+            colour = (self.theme.rag_color(self._BB_TONE[row["status"]])
+                      if row["status"] in self._BB_TONE else self.theme.ink_300)
+            for value, (_l, dx, w, align) in zip(
+                    (row["label"], row["count"], row["balance"], row["share"]),
+                    cols):
+                self._text(s, Inches(self.CONTENT_L + dx), Inches(row_y),
+                           Inches(w), Inches(0.28), str(value), size=11,
+                           color=(colour if align == PP_ALIGN.LEFT
+                                  else self.theme.ink_100),
+                           bold=(align == PP_ALIGN.LEFT), align=align)
+            row_y += 0.34
+
+        self._text(s, Inches(self.CONTENT_L + 0.22), Inches(row_y + 0.10),
+                   Inches(self.CONTENT_R - self.CONTENT_L - 0.44), Inches(0.26),
+                   BB.population_line(snap), size=9, color=self.theme.ink_500)
+
+        # -- why loans are out ------------------------------------------------
+        # The dashboard answers this with a drill-down button. A pack cannot
+        # link anywhere, so it carries the SHAPE of the answer: the derivation's
+        # own reason counts, largest group first. Nothing is classified here.
+        reasons = BB.exclusion_reasons(snap)
+        if reasons:
+            rtop = top + body_h + 0.22
+            rh = 0.50 + len(reasons) * 0.30
+            self._panel(s, Inches(self.CONTENT_L), Inches(rtop),
+                        Inches(self.CONTENT_R - self.CONTENT_L), Inches(rh),
+                        fill=self.theme.bg_panel, line=self.theme.line_soft)
+            self._text(s, Inches(self.CONTENT_L + 0.22), Inches(rtop + 0.14),
+                       Inches(6.0), Inches(0.26),
+                       "WHY LOANS ARE NOT ELIGIBLE", size=8,
+                       color=self.theme.ink_500, bold=True)
+            self._text(s, Inches(self.CONTENT_L + 6.30), Inches(rtop + 0.14),
+                       Inches(5.0), Inches(0.26), "LOANS", size=8,
+                       color=self.theme.ink_500, bold=True, align=PP_ALIGN.RIGHT)
+            ry = rtop + 0.44
+            for row in reasons:
+                self._text(s, Inches(self.CONTENT_L + 0.22), Inches(ry),
+                           Inches(6.0), Inches(0.26),
+                           self._fit_label(row["label"], 5.9, 10.5), size=10.5,
+                           color=self.theme.ink_300)
+                self._text(s, Inches(self.CONTENT_L + 6.30), Inches(ry),
+                           Inches(5.0), Inches(0.26), f"{row['count']:,.0f}",
+                           size=10.5, color=self.theme.ink_100,
+                           align=PP_ALIGN.RIGHT)
+                ry += 0.30
+            body_h += 0.22 + rh
+
+        # -- the binding limit, and how a breach is treated ------------------
+        note = BB.concentration_note(snap)
+        if note:
+            self._text(s, Inches(self.CONTENT_L), Inches(min(top + body_h + 0.16, 6.44)),
+                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.44),
+                       note, size=9, color=self.theme.ink_400, italic=True,
+                       spacing=1.06)
+        self._footer(s)
+        self._record(spec.get("id", "borrowing_base"), spec.get("title"),
+                     BB.headline(snap))
+
     def slide_concentration(self, spec):
         """Concentration Tests and Headroom — *am I within my limits?*
 
@@ -3968,6 +4130,7 @@ class DeckBuilder:
         "forecast_bridge": "slide_forecast_bridge",
         "forecast_projection": "slide_forecast_projection",
         "forecast_evolution": "slide_forecast_evolution", "risk": "slide_risk",
+        "borrowing_base": "slide_borrowing_base",
         "concentration": "slide_concentration",
         "methodology": "slide_methodology", "appendix": "slide_appendix",
     }

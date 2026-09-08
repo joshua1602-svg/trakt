@@ -211,6 +211,13 @@ def build_facts(data: Any) -> Dict[str, Any]:
         # The engine's OWN typed availability decides this. The deck never
         # re-derives whether a transition answer exists — a second opinion here
         # could contradict the payload it is about to render.
+        # A funding facility, evaluated. The borrowing base travels on the
+        # concentration envelope because the two share an eligibility
+        # population; the FACT is separate because most books have
+        # concentration tests and no facility.
+        "has_borrowing_base": bool(
+            ((getattr(data, "concentration", {}) or {}).get("borrowingBase")
+             or {}).get("available")),
         "has_stage_transitions": bool(
             (getattr(data, "stage_transitions", {}) or {}).get("available")),
         "has_funnel": bool((getattr(data, "funnel", {}) or {}).get("series")
@@ -222,7 +229,8 @@ def build_facts(data: Any) -> Dict[str, Any]:
         "has_forecast_history": _periods(getattr(data, "forecast_evolution", {})),
         "has_risk": bool(risk.get("tests")),
         # -- concentration ----------------------------------------------------
-        "has_concentration": bool((getattr(data, "concentration", {}) or {}).get("tests")),
+        "has_concentration": bool(
+            (getattr(data, "concentration", {}) or {}).get("tests")),
         "has_concentration_forward": bool(
             ((getattr(data, "concentration", {}) or {}).get("states") or {}).get("available")),
     }
@@ -537,6 +545,7 @@ _CONDITION_WORDING: Dict[str, str] = {
     "has_risk": "no governed risk-limit artefact for this run",
     "has_funded_history": "fewer than two reporting periods are available",
     "has_movement": "no prior reporting period to compare against",
+    "has_borrowing_base": "no funding facility is configured for this portfolio",
     "has_concentration": "no governed concentration tests are configured for this portfolio",
     "has_attribution": "no prior reporting period to attribute movement against",
     "has_pipeline_history": "fewer than two weekly pipeline extracts are available",

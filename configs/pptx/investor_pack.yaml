@@ -391,8 +391,22 @@ slides:
     question: "What requires attention before the next reporting period?"
 
   # ======================================================================
-  # 8 — CONCENTRATION
+  # 8 — THE FACILITY: WHAT CAN BE DRAWN, AND AGAINST WHICH LIMITS
   # ======================================================================
+
+  # BEFORE the limits, because it is the question the limits are asked about.
+  # The dashboard orders it the same way: BorrowingBasePanel leads the
+  # Eligibility & Concentrations tab, above the tests.
+  #
+  # Governed throughout — eligibility, advance rate, cap, headroom, deficiency
+  # and both utilisations are mi_agent.borrowing_base's, carried on the
+  # concentration envelope. Omitted where no facility is configured, which is
+  # most books: this is a funding-facility page, not a portfolio page.
+  - id: borrowing_base
+    type: borrowing_base
+    title: "Borrowing Base"
+    question: "How much can this facility draw, and how much is left?"
+    when: "has_borrowing_base"
 
   # The governed, operator-approved concentration capability. Carries CURRENT
   # funded, EXPECTED forecast and the ALL-PIPELINE-CONVERTS stress as three
