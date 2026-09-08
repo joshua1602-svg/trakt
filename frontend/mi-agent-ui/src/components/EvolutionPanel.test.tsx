@@ -195,10 +195,13 @@ describe("EvolutionPanel", () => {
     expect(await screen.findByTestId("forecast-evolution")).toBeInTheDocument();
     // Distinct subtitle clarifies this is the forecast HISTORY, not the projection.
     expect(screen.getByTestId("evo-subtitle").textContent).toMatch(/historical movement/i);
-    expect(screen.getByText("Forecast funded balance by reporting run")).toBeInTheDocument();
+    // "Combined total", not "Forecast" — a run-over-run reconstruction next to a
+    // line that stops at today read as a forward projection when it said "Forecast".
+    expect(screen.getByText("Combined total by reporting run (funded + that run's pipeline)"))
+      .toBeInTheDocument();
     // Actual-vs-prior-forecast chart present (mock has >1 run) + lineage caption.
     expect(screen.getByText("Actual funded vs prior-run forecast")).toBeInTheDocument();
-    expect(screen.getByTestId("forecast-evolution-lineage").textContent).toMatch(/Forecast basis/i);
+    expect(screen.getByTestId("forecast-evolution-lineage").textContent).toMatch(/Combined-total basis/i);
     expect(c.getForecastEvolution).toHaveBeenCalled();
   });
 

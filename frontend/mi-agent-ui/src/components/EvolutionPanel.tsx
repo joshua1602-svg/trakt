@@ -1141,12 +1141,19 @@ export function EvolutionPanel({
             </div>
           )}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <EvoLineChart title="Forecast funded balance by reporting run" data={forecastSeries}
+            {/* NOT a forward projection — every point is reconstructed AS OF that
+                past run (mi_agent_api/evolution.py: funded_balance +
+                weighted_expected_pipeline, both taken at that run), which is why
+                "Combined total" replaces the word "Forecast" here: a run-over-run
+                total reads as a forward curve exactly when it says "Forecast" next
+                to a line that stops at today. The actual forward projection is the
+                Projection sub-tab. */}
+            <EvoLineChart title="Combined total by reporting run (funded + that run's pipeline)" data={forecastSeries}
               lines={[
                 { key: "funded_balance", label: "Funded actual" },
                 { key: "weighted_expected_pipeline", label: "Weighted pipeline" },
-                { key: "forecast_funded_balance", label: "Forecast (funded + pipeline)" },
-              ]} valueFormat="gbp" source="funded tapes + weighted pipeline" />
+                { key: "forecast_funded_balance", label: "Combined total (funded + pipeline)" },
+              ]} valueFormat="gbp" source="funded tapes + weighted pipeline, as at each run" />
             {forecastVariance.length > 0 && (
               <EvoLineChart title="Actual funded vs prior-run forecast" data={forecastVariance}
                 lines={[
@@ -1157,7 +1164,7 @@ export function EvolutionPanel({
           </div>
           <p className="text-[10px] text-ink-500" data-testid="forecast-evolution-lineage">
             Runs: {(forecast?.periods ?? []).map((p) => p.run_id ?? p.period).join(", ") || "—"}.
-            {" "}Forecast basis: funded balance + Σ(weighted expected pipeline) per run.
+            {" "}Combined-total basis: funded balance + Σ(weighted expected pipeline), both taken as at each run.
             {" "}Actual-vs-forecast: {forecastVariance.length > 0 ? "available" : "needs a prior run"}.
           </p>
         </div>
