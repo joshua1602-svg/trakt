@@ -1346,6 +1346,82 @@ def write_html(payload: Dict[str, Any], path: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Which side of a 401 failed
+# --------------------------------------------------------------------------- #
+def credential_diagnosis() -> Dict[str, Any]:
+    """WHY the credential was refused, measured rather than guessed.
+
+    A 401 has three quite different causes and an operator sent to the wrong
+    one loses an afternoon: the token has EXPIRED, the token is for a
+    different audience, or the token is current and the SERVICE is refusing
+    it. The first is decidable here, from the token this run is holding, and
+    the last live run of this estate spent two cycles on a hypothesis about
+    Azure app settings that turned out to be the credential all along.
+
+    NOTHING SECRET IS RETURNED. The token is never printed, and neither is
+    any claim that identifies a principal. Only the lifetime windows come
+    back: issued-at, not-before, expiry, and how long ago that was. An
+    absence is reported as an absence — a token this cannot parse yields
+    "not a JSON Web Token", which is a statement about parsing and not a
+    statement about validity."""
+    import base64
+    import os as _os
+
+    raw = _os.environ.get("MI_BEARER", "").strip().removeprefix("Bearer ").strip()
+    if not raw:
+        return {"readable": False, "detail": "MI_BEARER is not set in this process"}
+    parts = raw.split(".")
+    if len(parts) != 3:
+        return {"readable": False,
+                "detail": ("the credential is not a JSON Web Token, so its "
+                           "lifetime cannot be read here")}
+    try:
+        payload = parts[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
+    except Exception:  # noqa: BLE001
+        return {"readable": False,
+                "detail": "the token's payload segment could not be decoded"}
+
+    now = int(time.time())
+    out: Dict[str, Any] = {"readable": True}
+    for name in ("iat", "nbf", "exp"):
+        value = claims.get(name)
+        if isinstance(value, int):
+            out[name] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(value))
+    exp = claims.get("exp")
+    if isinstance(exp, int):
+        out["expired"] = exp < now
+        out["seconds_past_expiry"] = max(0, now - exp)
+        out["lifetime_seconds"] = (exp - claims["iat"]
+                                   if isinstance(claims.get("iat"), int) else None)
+    else:
+        out["expired"] = None
+        out["detail"] = "the token carries no exp claim, so expiry cannot be read"
+    return out
+
+
+def _report_credential(diag: Dict[str, Any]) -> None:
+    if not diag.get("readable"):
+        print(f"  credential: {diag.get('detail')}")
+        print("  this run therefore CANNOT SAY whether the token or the service "
+              "is at fault.")
+        return
+    if diag.get("expired") is True:
+        print(f"  credential: EXPIRED at {diag.get('exp')} "
+              f"({diag['seconds_past_expiry']} seconds ago). The token this run "
+              f"holds was no longer valid when it was presented; nothing about "
+              f"the deployed service is established either way.")
+    elif diag.get("expired") is False:
+        print(f"  credential: current (expires {diag.get('exp')}). The token was "
+              f"live when it was refused, so the refusal is NOT a lifetime "
+              f"problem — audience, scope or the service's own configuration "
+              f"is where to look next.")
+    else:
+        print(f"  credential: {diag.get('detail')}")
+
+
+# --------------------------------------------------------------------------- #
 # The run
 # --------------------------------------------------------------------------- #
 def run(base_url: str, path: str, portfolio_id: Optional[str],
@@ -1372,6 +1448,10 @@ def run(base_url: str, path: str, portfolio_id: Optional[str],
 
     if reached != "YES" or authorised != "YES":
         print(f"NOT EXECUTABLE — reached={reached} authorised={authorised}")
+        diagnosis = credential_diagnosis() if "401" in str(authorised) else {}
+        if diagnosis:
+            _report_credential(diagnosis)
+            provenance["credential_diagnosis"] = diagnosis
         return {"run_started_at": started, "provenance": provenance,
                 "not_executable": "the deployed service was not reached and authorised",
                 "bank_version": bank["bank_version"],

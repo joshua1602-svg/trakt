@@ -535,3 +535,46 @@ class TestTheFrozenBankIsWhatWasCommissioned:
                         "evolution_wa_ltv_series", "evolution_region_breakdown",
                         "evolution_scotland_series", "forecast_current_balance")},
                     {}, {}, {}, {}, {}, {}, {}, {}, {})
+
+
+class TestA401SaysWhichSideFailed:
+
+    @staticmethod
+    def _token(**claims) -> str:
+        import base64
+        def seg(obj):
+            raw = json.dumps(obj).encode("utf-8")
+            return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+        return f"{seg({'alg': 'RS256'})}.{seg(claims)}.signature"
+
+    def test_an_expired_token_is_reported_as_expired(self, monkeypatch):
+        import time
+        monkeypatch.setenv("MI_BEARER", self._token(
+            iat=int(time.time()) - 7200, exp=int(time.time()) - 3600))
+        diag = acc.credential_diagnosis()
+        assert diag["expired"] is True
+        assert diag["seconds_past_expiry"] >= 3595
+
+    def test_a_live_token_refused_is_reported_as_NOT_a_lifetime_problem(
+            self, monkeypatch):
+        import time
+        monkeypatch.setenv("MI_BEARER", self._token(
+            iat=int(time.time()), exp=int(time.time()) + 3600))
+        assert acc.credential_diagnosis()["expired"] is False
+
+    def test_a_token_it_cannot_read_says_it_cannot_say(self, monkeypatch):
+        monkeypatch.setenv("MI_BEARER", "an-opaque-string")
+        diag = acc.credential_diagnosis()
+        assert diag["readable"] is False
+        assert diag.get("expired") is None
+
+    def test_nothing_from_the_token_but_its_lifetime_is_returned(self, monkeypatch):
+        import time
+        monkeypatch.setenv("MI_BEARER", self._token(
+            iat=int(time.time()), exp=int(time.time()) + 60,
+            oid="a-principal-id", upn="someone@example.com", aud="an-audience"))
+        diag = acc.credential_diagnosis()
+        # A diagnostic that leaks the principal it was diagnosing is worse than
+        # no diagnostic.
+        assert set(diag) <= {"readable", "iat", "nbf", "exp", "expired",
+                             "seconds_past_expiry", "lifetime_seconds", "detail"}
