@@ -59,6 +59,7 @@ R_CELLS = "CELLS_DO_NOT_RECONCILE"
 R_BASIS = "BASIS_MISMATCH"
 R_SERIES = "SERIES_DISAGREES_WITH_INDEPENDENT_TRUTH"
 R_BRIDGE = "BRIDGE_DOES_NOT_RECONCILE"
+R_BRIDGE_PERIODS = "BRIDGE_SPANS_THE_WRONG_PERIOD_PAIR"
 R_REFUSAL_REASON = "REFUSAL_REASON_NOT_GOVERNED"
 R_REFUSED_ANSWERABLE = "REFUSED_AN_ANSWERABLE_QUESTION"
 R_ANSWERED_UNSUPPORTED = "ANSWERED_AN_UNSUPPORTED_FACET"
@@ -771,24 +772,92 @@ def _c_bridge_reconciles_to_truth(c: Ctx) -> Tuple[str, str, Optional[str]]:
     rows = [r for r in ((artifact or {}).get("rows") or []) if isinstance(r, dict)]
     if not rows:
         return INDET, "the answer published no bridge rows", R_NO_PRIMARY
+    # WHICH COLUMN IS A DRIVER.
+    #
+    # This took "the first number in the row", which on the live bridge was the
+    # OPENING balance of each regional band. The drivers then summed to the
+    # opening total — an arithmetic impossibility for a set of deltas, and the
+    # check reported it as a reconciliation failure instead of as its own bug.
+    # A waterfall names its delta column; read that, and say so when it cannot
+    # be found rather than summing whatever came first.
+    delta_key = _delta_column(artifact, rows)
+    if delta_key is None:
+        return INDET, ("the bridge publishes no column identifiable as a driver "
+                       f"delta (columns: {sorted(rows[0])})"), R_NO_PRIMARY
     deltas = []
     for row in rows:
         kind = str(row.get("type") or row.get("kind") or "").lower()
-        value = next((v for v in row.values()
-                      if isinstance(v, (int, float)) and not isinstance(v, bool)), None)
-        if value is None:
+        if kind in ("total", "start", "end", "opening", "closing", "subtotal"):
             continue
-        if kind in ("total", "start", "end", "opening", "closing"):
-            continue
-        deltas.append(float(value))
+        value = row.get(delta_key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            deltas.append(float(value))
     if not deltas:
         return INDET, "the bridge publishes no drivers", R_NO_PRIMARY
+
+    # BEFORE blaming the arithmetic, check the two sides are bridging the same
+    # pair of periods. A decomposition that reconciles perfectly over the wrong
+    # period pair is a different defect from one that does not add up, and
+    # calling both "does not reconcile" hides which was found.
+    stated = _stated_period_pair(c.text)
+    expected_pair = _truth_period_pair(c)
     summed = sum(deltas)
+    if (stated and expected_pair and stated != expected_pair
+            and not _close(summed, float(movement), rel=0.01, absolute=1.0)):
+        return FAIL, (f"the bridge runs {stated[0]} to {stated[1]}, but the "
+                      f"independent movement {float(movement):,.2f} is measured "
+                      f"over {expected_pair[0]} to {expected_pair[1]}; its "
+                      f"{len(deltas)} drivers sum to {summed:,.2f}"), R_BRIDGE_PERIODS
     if _close(summed, float(movement), rel=0.01, absolute=1.0):
-        return PASS, (f"{len(deltas)} drivers sum to {summed:,.2f} against the "
-                      f"independent movement {float(movement):,.2f}"), None
-    return FAIL, (f"{len(deltas)} drivers sum to {summed:,.2f}; the independent "
-                  f"movement is {float(movement):,.2f}"), R_BRIDGE
+        return PASS, (f"{len(deltas)} drivers (column '{delta_key}') sum to "
+                      f"{summed:,.2f} against the independent movement "
+                      f"{float(movement):,.2f}"), None
+    return FAIL, (f"{len(deltas)} drivers (column '{delta_key}') sum to "
+                  f"{summed:,.2f}; the independent movement is "
+                  f"{float(movement):,.2f}"), R_BRIDGE
+
+
+_DELTA_HINTS = ("delta", "change", "movement", "contribution", "impact", "effect")
+
+
+def _delta_column(artifact: Dict[str, Any], rows: List[Dict[str, Any]]
+                  ) -> Optional[str]:
+    """The column a waterfall's drivers live in."""
+    keys = list(rows[0].keys())
+    for hint in _DELTA_HINTS:
+        for key in keys:
+            if hint in key.lower() and isinstance(rows[0].get(key), (int, float)):
+                return key
+    declared = artifact.get("valueKey") or artifact.get("yKey")
+    if declared in keys and isinstance(rows[0].get(declared), (int, float)):
+        return declared
+    # A waterfall that types its rows carries its delta in a plain `value`.
+    if any(str(r.get("type") or r.get("kind") or "").lower() == "delta" for r in rows):
+        for key in ("value", "amount"):
+            if key in keys and isinstance(rows[0].get(key), (int, float)):
+                return key
+    return None
+
+
+_PERIOD_RE = re.compile(r"\b(20\d\d)[-/](\d{2})\b")
+
+
+def _stated_period_pair(text: str) -> Optional[Tuple[str, str]]:
+    """The opening and closing period the ANSWER says it bridged."""
+    found = _PERIOD_RE.findall(text or "")
+    if len(found) < 2:
+        return None
+    ordered = sorted(f"{y}-{m}" for y, m in found)
+    return ordered[0], ordered[-1]
+
+
+def _truth_period_pair(c: Ctx) -> Optional[Tuple[str, str]]:
+    """The pair the independent movement is measured over."""
+    series = c.t.get("evolution_balance_series", UNAVAILABLE)
+    if isinstance(series, list) and len(series) >= 2:
+        return (_period_key(series[-2].get("period") or ""),
+                _period_key(series[-1].get("period") or ""))
+    return None
 
 
 def _c_refusal_matches_envelope_reason(c: Ctx) -> Tuple[str, str, Optional[str]]:
@@ -1027,6 +1096,18 @@ def score(question: Dict[str, Any], envelope: Dict[str, Any],
 # --------------------------------------------------------------------------- #
 # Paraphrase invariance — its own gate
 # --------------------------------------------------------------------------- #
+def _share_a_figure(left: List[Dict[str, Any]],
+                    right: List[Dict[str, Any]]) -> bool:
+    """Whether two answers assert any quantity in common, at the precision each
+    was shown at. Order is irrelevant; a shared figure is a shared claim."""
+    for a in left:
+        for b in right:
+            if abs(a["value"] - b["value"]) <= max(a["tolerance"], b["tolerance"],
+                                                   abs(a["value"]) * 1e-9):
+                return True
+    return False
+
+
 def paraphrase_gate(rows: List[Dict[str, Any]],
                     envelopes: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Three genuinely different phrasings of one semantic case must produce ONE
@@ -1051,18 +1132,34 @@ def paraphrase_gate(rows: List[Dict[str, Any]],
                 f"answered: {[r['variant_id'] for r in answered]}; "
                 f"refused: {[r['variant_id'] for r in refused]}")
 
-        values: List[Tuple[str, Optional[Dict[str, Any]]]] = []
+        # WHAT "THE SAME ANSWER" MEANS ACROSS PHRASINGS.
+        #
+        # This compared the FIRST figure in each answer. On the live run it
+        # then failed six cases where all three phrasings were CORRECT, because
+        # "Balance: £159.1MM · 958 loans" and "958 loans · £159.1MM" are the
+        # same answer in a different order and the check could not see it. A
+        # gate that fires on word order is not measuring paraphrase invariance;
+        # it is measuring sentence construction, and every false alarm it
+        # raises costs the real ones their credibility.
+        #
+        # Two answering phrasings agree when the sets of figures they assert
+        # OVERLAP: some quantity is common to both. They disagree when they
+        # share nothing — which is what a substitution looks like, and what
+        # C41's valuation-for-borrowing-base actually did.
+        sets: List[Tuple[str, List[Dict[str, Any]]]] = []
         for row in answered:
-            values.append((row["variant_id"], primary_value(envelopes[row["question_id"]])))
-        stated = [(vid, v) for vid, v in values if v is not None]
-        if len(stated) >= 2:
-            base = stated[0][1]["value"]
-            for vid, v in stated[1:]:
-                tol = max(v["tolerance"], stated[0][1]["tolerance"], abs(base) * 1e-6)
-                if abs(v["value"] - base) > tol:
+            stated_figures = candidates(envelopes[row["question_id"]])
+            if stated_figures:
+                sets.append((row["variant_id"], stated_figures))
+        if len(sets) >= 2:
+            first_id, first = sets[0]
+            for vid, other in sets[1:]:
+                if not _share_a_figure(first, other):
                     failures.append("DIVERGENT_VALUE")
-                    detail.append(f"{stated[0][0]} leads with {stated[0][1]['shown']}, "
-                                  f"{vid} leads with {v['shown']}")
+                    detail.append(
+                        f"{first_id} and {vid} assert no figure in common: "
+                        f"{[x['shown'] for x in first[:4]]} against "
+                        f"{[x['shown'] for x in other[:4]]}")
                     break
 
         outcomes = {r["outcome"] for r in group}
@@ -1469,6 +1566,29 @@ def _report_credential(diag: Dict[str, Any]) -> None:
 # --------------------------------------------------------------------------- #
 # The run
 # --------------------------------------------------------------------------- #
+#: How long this bank takes to ask, generously. Measured: 135 questions at a
+#: median 6.2s and a p95 of 8.6s ran in 14m33s. A token with less than this
+#: left cannot see the run out.
+RUN_BUDGET_SECONDS = 1500
+
+
+def _not_executable(started: str, provenance: Dict[str, Any],
+                    bank: Dict[str, Any], why: str) -> Dict[str, Any]:
+    return {
+        "run_started_at": started, "provenance": provenance,
+        "not_executable": why,
+        "bank_version": bank["bank_version"],
+        "canonical_case_count": bank["canonical_case_count"],
+        "questions": [], "paraphrase_gate": [], "latency": latency_block([]),
+        "adjudication": {"MI_QUERY_AGENT_V1_LIVE_READY": "NO",
+                         "MI_QUERY_AGENT_V1_RELEASE_CLOSED": "NO",
+                         "hard_criteria": {}, "closure_criteria": {},
+                         "outcome_counts": {}, "failure_reason_counts": {},
+                         "independent_truth": {}, "paraphrase_invariance": {},
+                         "route_conformance": {}},
+    }
+
+
 def run(base_url: str, path: str, portfolio_id: Optional[str],
         expect_commit: str, bank: Dict[str, Any],
         headers: Optional[List[str]] = None,
@@ -1528,6 +1648,31 @@ def run(base_url: str, path: str, portfolio_id: Optional[str],
                                  "paraphrase_invariance": {}, "route_conformance": {}}}, 2
 
     print(f"deployed commit verified: {observed_commit}")
+
+    # WILL THE CREDENTIAL OUTLIVE THE RUN. Three runs of this bank have now
+    # been lost to an expired token, and the dangerous case is not the one that
+    # fails at the door: it is the token that expires at question ninety, where
+    # every later question returns 401 and the verdict is computed over a book
+    # that stopped answering. Checked here, before anything is asked.
+    diagnosis = credential_diagnosis()
+    provenance["credential_diagnosis"] = diagnosis
+    if diagnosis.get("readable"):
+        remaining = -diagnosis.get("seconds_past_expiry", 0)
+        if diagnosis.get("expired") is False and diagnosis.get("exp"):
+            import calendar
+            expiry = calendar.timegm(time.strptime(diagnosis["exp"],
+                                                   "%Y-%m-%dT%H:%M:%SZ"))
+            remaining = int(expiry - time.time())
+        print(f"credential expires {diagnosis.get('exp')} "
+              f"({remaining} seconds from now)")
+        if remaining < RUN_BUDGET_SECONDS:
+            print(f"NOT EXECUTABLE — the token has {remaining}s left and this "
+                  f"bank takes about {RUN_BUDGET_SECONDS}s to ask. Starting "
+                  f"would produce a verdict over a book that stopped answering "
+                  f"part way through.")
+            return _not_executable(started, provenance, bank,
+                                   "the credential would expire during the run"), 2
+
     print("reading the independent surfaces before any question is asked …")
     collected = truth_mod.collect(base_url, portfolio_id)
     for name, status in collected["endpoint_status"].items():
@@ -1545,6 +1690,13 @@ def run(base_url: str, path: str, portfolio_id: Optional[str],
         envelope = ask(q["question"])
         elapsed = round(time.time() - started_at, 3)
         envelope["__latency__"] = elapsed
+        if envelope.get("__http_status__") in (401, 403):
+            print(f"NOT EXECUTABLE — the credential was refused at "
+                  f"{q['question_id']}, {len(rows)} questions in. A verdict "
+                  f"over a bank that stopped being answered is not a verdict.")
+            return _not_executable(
+                started, provenance, bank,
+                f"the credential was refused mid-run at {q['question_id']}"), 2
         envelopes[q["question_id"]] = envelope
         row = score(q, envelope, collected, run_state)
         rows.append(row)

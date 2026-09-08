@@ -208,6 +208,8 @@ def collect(base_url: str, portfolio_id: Optional[str]) -> Dict[str, Any]:
         "cohort_progression": get("/mi/cohorts/progression"),
         "source_portfolios": get("/mi/source-portfolios"),
         "pipeline_snapshots": get("/mi/pipeline/snapshots"),
+        "pipeline_evolution": get("/mi/evolution/pipeline"),
+        "portfolio_context": get("/mi/portfolio-context"),
     }
 
     snap = endpoints["snapshot"] if _ok(endpoints["snapshot"]) else {}
@@ -220,6 +222,8 @@ def collect(base_url: str, portfolio_id: Optional[str]) -> Dict[str, Any]:
     cohort = endpoints["cohort_progression"] if _ok(endpoints["cohort_progression"]) else {}
     sources = endpoints["source_portfolios"] if _ok(endpoints["source_portfolios"]) else {}
     pipe_snaps = endpoints["pipeline_snapshots"] if _ok(endpoints["pipeline_snapshots"]) else {}
+    pipe_evo = endpoints["pipeline_evolution"] if _ok(endpoints["pipeline_evolution"]) else {}
+    context = endpoints["portfolio_context"] if _ok(endpoints["portfolio_context"]) else {}
 
     total_balance = snap.get("current_outstanding_balance")
     loan_count = snap.get("loan_count")
@@ -322,11 +326,18 @@ def collect(base_url: str, portfolio_id: Optional[str]) -> Dict[str, Any]:
     if cohort.get("available") and isinstance(cohort.get("periods"), list):
         cohort_counts = [p.get("survivingLoanCount") for p in cohort["periods"]]
 
+    # `/mi/source-portfolios` returns {available, lenses, source} — it names its
+    # scopes `lenses`, not `portfolios`. Reading for the wrong key made a
+    # readable, authoritative answer look like an absent one, and two whole
+    # cases were reported UNSCOREABLE for it.
     source_count = UNAVAILABLE
-    for key in ("portfolios", "sourcePortfolios", "items"):
-        if isinstance(sources.get(key), list):
-            source_count = len(sources[key])
-            break
+    if isinstance(sources.get("lenses"), list):
+        source_count = len(sources["lenses"])
+    else:
+        for key in ("portfolios", "sourcePortfolios", "items"):
+            if isinstance(sources.get(key), list):
+                source_count = len(sources[key])
+                break
 
     geo_supported = UNAVAILABLE
     for key in ("supportedBases", "availableBases", "bases"):
@@ -387,13 +398,113 @@ def collect(base_url: str, portfolio_id: Optional[str]) -> Dict[str, Any]:
         truths["funded_wa_current_ltv"], truths["funded_wa_rate"]]
 
     availability = _availability(truths, snap, geo, pipe, evo, risk, bbase,
-                                 fcast, cohort, pipe_snaps)
+                                 fcast, cohort, pipe_snaps, pipe_evo, context)
 
     return {
         "truths": truths,
         "availability": availability,
         "endpoint_status": {name: _status(doc) for name, doc in endpoints.items()},
     }
+
+
+def _stated_availability(doc: Dict[str, Any]) -> Any:
+    """``available`` as the surface stated it — unless it declined for a MISSING
+    PARAMETER, which is a fact about the request and not about the book."""
+    if not doc:
+        return UNRESOLVED
+    if doc.get("available"):
+        return True
+    reason = str(doc.get("reason") or doc.get("error") or "").lower()
+    if "required" in reason or "portfolioid" in reason:
+        return UNRESOLVED
+    return False
+
+
+def _region_evidence(snap: Dict[str, Any], evo: Dict[str, Any],
+                     geo: Dict[str, Any], t: Dict[str, Any]) -> Any:
+    """CAN THIS BOOK BE MEASURED BY REGION — asked of every surface that knows.
+
+    This rule used to read one thing: whether the Portfolio tab drew a region
+    chart. It does not, on this book, and twenty questions were therefore
+    expected to refuse a regional breakdown that the service produced correctly.
+    The dashboard tile and the query route resolve region through DIFFERENT
+    owners; a tile that is not drawn says nothing about whether the analytic is
+    supported.
+
+    So the rule is now the union of the surfaces that would each independently
+    establish it, and it is False only when a surface that could have shown
+    region was read and none did."""
+    signals = []
+    strat = _strat_state(snap, "region")
+    if strat is not UNRESOLVED:
+        signals.append(bool(strat))
+    breakdown = (evo.get("breakdowns") or {}).get("region") if isinstance(
+        evo.get("breakdowns"), dict) else None
+    if evo:
+        signals.append(bool(breakdown))
+    if geo:
+        signals.append(bool(geo.get("available")))
+    if not signals:
+        return UNRESOLVED
+    return any(signals)
+
+
+def _obligor_basis_state(geo: Dict[str, Any]) -> Any:
+    """Whether an OBLIGOR geography basis is established for this book.
+
+    When the surfaces disagree this returns UNRESOLVED rather than picking one.
+    The geography endpoint reported `postcode_derived` on the live book while
+    the query route labelled its own answers `Obligor Region (NUTS3)`; two
+    production surfaces naming different bases is a finding to be audited, not
+    a rule to be resolved by whichever this harness happened to read."""
+    if not geo:
+        return UNRESOLVED
+    for key in ("supportedBases", "availableBases", "bases"):
+        if isinstance(geo.get(key), list):
+            return any("obligor" in str(b).lower() for b in geo[key])
+    basis = str(geo.get("basis") or "").lower()
+    if not basis:
+        return UNRESOLVED
+    if "obligor" in basis:
+        return True
+    if "collateral" in basis:
+        return False
+    # `postcode_derived` names neither side: the basis was DERIVED, so this
+    # surface cannot say which of the two the book reports on.
+    return UNRESOLVED
+
+
+def _pipeline_history_state(pipe_evo: Dict[str, Any],
+                            pipe_snaps: Dict[str, Any]) -> Any:
+    """More than one governed weekly extract retained, from the surface that
+    owns the weekly series rather than the one that lists sources."""
+    for key in ("availableExtractDates", "extractDates", "reportingDates"):
+        dates = pipe_evo.get(key)
+        if isinstance(dates, list):
+            return len(dates) >= 2
+    used = pipe_evo.get("uniqueWeeklyExtractsUsed")
+    if isinstance(used, int):
+        return used >= 2
+    for key in ("extractDates", "availableExtractDates", "dates", "reportingDates"):
+        dates = pipe_snaps.get(key)
+        if isinstance(dates, list):
+            return len(dates) >= 2
+    return UNRESOLVED
+
+
+def _scope_state(sources_doc: Any, count: Any, context: Dict[str, Any]) -> Any:
+    """At least two governed portfolio scopes to compare."""
+    if isinstance(count, int):
+        return count >= 2
+    contexts = context.get("contexts") if isinstance(context, dict) else None
+    if isinstance(contexts, list) and contexts:
+        # `Total` is a scope but not a comparison partner: two scopes means two
+        # things to put side by side.
+        return len(contexts) >= 3
+    portfolios = context.get("portfolios") if isinstance(context, dict) else None
+    if isinstance(portfolios, list):
+        return len(portfolios) >= 2
+    return UNRESOLVED
 
 
 def _geo_state(geo: Dict[str, Any]) -> Any:
@@ -412,7 +523,8 @@ def _geo_state(geo: Dict[str, Any]) -> Any:
 def _availability(t: Dict[str, Any], snap: Dict[str, Any], geo: Dict[str, Any],
                   pipe: Dict[str, Any], evo: Dict[str, Any], risk: Dict[str, Any],
                   bbase: Dict[str, Any], fcast: Dict[str, Any],
-                  cohort: Dict[str, Any], pipe_snaps: Dict[str, Any]
+                  cohort: Dict[str, Any], pipe_snaps: Dict[str, Any],
+                  pipe_evo: Dict[str, Any], context: Dict[str, Any]
                   ) -> Dict[str, Any]:
     """Resolve every frozen answerability rule from the independent surfaces.
 
@@ -435,6 +547,9 @@ def _availability(t: Dict[str, Any], snap: Dict[str, Any], geo: Dict[str, Any],
             pipeline_dates = pipe_snaps[key]
             break
 
+    region_evidence = _region_evidence(snap, evo, geo, t)
+    basis_state = _obligor_basis_state(geo)
+
     return {
         "kpi_wa_current_ltv_available": (
             UNRESOLVED if not snap else t["funded_wa_current_ltv"] is not UNAVAILABLE),
@@ -442,26 +557,29 @@ def _availability(t: Dict[str, Any], snap: Dict[str, Any], geo: Dict[str, Any],
             UNRESOLVED if not snap
             else (t["funded_wa_current_ltv"] is not UNAVAILABLE
                   and t["funded_wa_rate"] is not UNAVAILABLE)),
-        "strat_region_available": _strat_state(snap, "region"),
-        "strat_ltv_available": _strat_state(snap, "ltv"),
+        "strat_region_available": region_evidence,
+        "strat_ltv_available": (
+            True if _strat_state(snap, "ltv") is True
+            # A governed LTV BAND is configuration applied to the LTV column.
+            # If the book carries a weighted-average current LTV, the column
+            # has values and the bands are computable, whatever the dashboard
+            # happened to draw.
+            else (True if t["funded_wa_current_ltv"] is not UNAVAILABLE
+                  else _strat_state(snap, "ltv"))),
         "strat_product_available": _strat_state(snap, "product"),
         "region_scotland_present": (
-            UNRESOLVED if _strat_state(snap, "region") is UNRESOLVED
-            else t["region_scotland_balance"] is not UNAVAILABLE),
+            UNRESOLVED if region_evidence is UNRESOLVED
+            else (t["region_scotland_balance"] is not UNAVAILABLE
+                  or isinstance(t["evolution_scotland_series"], list))),
         "geo_available": _geo_state(geo),
-        "geo_obligor_basis_supported": (
-            any("obligor" in str(b).lower() for b in t["geo_supported_bases"])
-            if isinstance(t["geo_supported_bases"], list)
-            else ("obligor" in str(t["geo_basis"]).lower()
-                  if t["geo_basis"] is not UNAVAILABLE else UNRESOLVED)),
+        "geo_obligor_basis_supported": basis_state,
         "pipeline_available": (
             UNRESOLVED if not pipe else bool(pipe.get("ok") is not False
                                              and t["pipeline_case_count"] is not UNAVAILABLE)),
-        "pipeline_history_available": (
-            (len(pipeline_dates) >= 2) if isinstance(pipeline_dates, list) else UNRESOLVED),
-        "two_governed_scopes": (
-            (t["source_portfolio_count"] >= 2)
-            if isinstance(t["source_portfolio_count"], int) else UNRESOLVED),
+        "pipeline_history_available": _pipeline_history_state(pipe_evo, pipe_snaps),
+        "two_governed_scopes": _scope_state(sources_doc=None,
+                                            count=t["source_portfolio_count"],
+                                            context=context),
         "multi_period": multi,
         "multi_period_ltv": (
             UNRESOLVED if multi is UNRESOLVED
@@ -480,10 +598,8 @@ def _availability(t: Dict[str, Any], snap: Dict[str, Any], geo: Dict[str, Any],
             if snap.get("monthly_change") else UNRESOLVED),
         "forecast_available": (
             UNRESOLVED if not fcast else t["forecast_current_balance"] is not UNAVAILABLE),
-        "cohort_progression_available": (
-            bool(cohort.get("available")) if cohort else UNRESOLVED),
-        "risk_limits_available": (
-            bool(risk.get("available")) if risk else UNRESOLVED),
+        "cohort_progression_available": _stated_availability(cohort),
+        "risk_limits_available": _stated_availability(risk),
         "borrowing_base_available": (
             bool(bbase.get("available")) if bbase else UNRESOLVED),
     }

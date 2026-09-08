@@ -106,8 +106,12 @@ FORECAST = {"currentFundedBalance": 159097304.07, "runRate": 1250000.0}
 COHORTS = {"available": True, "periods": [{"survivingLoanCount": 100},
                                           {"survivingLoanCount": 96},
                                           {"survivingLoanCount": 91}]}
-SOURCES = {"portfolios": [{"client_id": "ERE"}, {"client_id": "ERE2"}]}
-PIPELINE_SNAPSHOTS = {"availableExtractDates": ["2026-06-19", "2026-06-26"]}
+SOURCES = {"available": True, "lenses": [{"id": "total"}, {"id": "direct_001"},
+                                        {"id": "acquired_001"}], "source": "live"}
+PIPELINE_SNAPSHOTS = {"sources": [{"client_id": "ERE"}], "source": "blob://"}
+PIPELINE_EVOLUTION = {"availableExtractDates": ["2026-06-19", "2026-06-26"]}
+PORTFOLIO_CONTEXT = {"available": True, "contexts": [{"id": "total"}, {"id": "direct"},
+                                                     {"id": "acquired"}]}
 
 SURFACE = {
     "/mi/snapshot": SNAPSHOT, "/mi/geo/exposure": GEO,
@@ -116,6 +120,8 @@ SURFACE = {
     "/mi/forecast/extrapolation": FORECAST,
     "/mi/cohorts/progression": COHORTS, "/mi/source-portfolios": SOURCES,
     "/mi/pipeline/snapshots": PIPELINE_SNAPSHOTS,
+    "/mi/evolution/pipeline": PIPELINE_EVOLUTION,
+    "/mi/portfolio-context": PORTFOLIO_CONTEXT,
 }
 
 
@@ -168,11 +174,61 @@ class TestTheIndependentSurfaceIsReadFaithfully:
                                           broken.get(path, {"__error__": "404"})))
         out = truth_mod.collect("http://synthetic", None)
         assert out["truths"]["funded_total_balance"] is UNAVAILABLE
-        # AND the rules it feeds must be UNRESOLVED, never False: "I could not
-        # read the snapshot" must not be scored as "the book has no regions".
-        assert out["availability"]["strat_region_available"] is UNRESOLVED
+        # A rule with no readable source is UNRESOLVED, never False: "I could
+        # not read the snapshot" must not be scored as "the book has no LTV".
         assert out["availability"]["kpi_wa_current_ltv_available"] is UNRESOLVED
+        # …but region is NOT snapshot-only. Geography and the evolution
+        # breakdown both still establish it here, and they are as authoritative
+        # as the tile that failed to load.
+        assert out["availability"]["strat_region_available"] is True
         assert "ok=false" in out["endpoint_status"]["snapshot"]
+
+    def test_region_is_unresolved_only_when_no_surface_can_say(self, monkeypatch):
+        blind = {"/mi/snapshot": {"ok": False, "error": "required"},
+                 "/mi/geo/exposure": {"__error__": "HTTP 500"},
+                 "/mi/evolution/funded": {"__error__": "HTTP 500"}}
+        monkeypatch.setattr(truth_mod, "reader",
+                            lambda b, p: (lambda path, params=None:
+                                          blind.get(path, {"__error__": "404"})))
+        out = truth_mod.collect("http://synthetic", None)
+        assert out["availability"]["strat_region_available"] is UNRESOLVED
+
+    def test_a_region_the_dashboard_tile_omits_is_still_measurable(self, monkeypatch):
+        # THE BUG THIS PINS. The live book's snapshot carries no region
+        # stratification, and the query route answers regional questions
+        # perfectly well — the tile and the analytic have different owners.
+        # Reading only the tile expected twenty refusals that should have been
+        # answers.
+        no_tile = dict(SURFACE)
+        no_tile["/mi/snapshot"] = dict(SNAPSHOT, stratifications=[
+            {"key": "ltv", "label": "By LTV band", "bars": SNAPSHOT[
+                "stratifications"][1]["bars"]}])
+        monkeypatch.setattr(truth_mod, "reader",
+                            lambda b, p: (lambda path, params=None:
+                                          no_tile.get(path, {"__error__": "404"})))
+        out = truth_mod.collect("http://synthetic", "ERE/2026-06-30")
+        assert out["availability"]["strat_region_available"] is True
+
+    def test_two_governed_scopes_reads_the_key_the_endpoint_uses(self, collected):
+        # `/mi/source-portfolios` names its scopes `lenses`. Reading for
+        # `portfolios` made a readable answer look absent and reported two
+        # cases UNSCOREABLE.
+        assert collected["availability"]["two_governed_scopes"] is True
+
+    def test_a_derived_geography_basis_cannot_name_obligor_or_collateral(self):
+        assert truth_mod._obligor_basis_state({"available": True,
+                                               "basis": "postcode_derived"}) is UNRESOLVED
+        assert truth_mod._obligor_basis_state({"available": True,
+                                               "basis": "obligor"}) is True
+        assert truth_mod._obligor_basis_state({"available": True,
+                                               "basis": "collateral"}) is False
+
+    def test_pipeline_history_comes_from_the_weekly_series_owner(self):
+        assert truth_mod._pipeline_history_state(
+            {"availableExtractDates": ["2026-06-19", "2026-06-26"]}, {}) is True
+        assert truth_mod._pipeline_history_state(
+            {"uniqueWeeklyExtractsUsed": 1}, {}) is False
+        assert truth_mod._pipeline_history_state({}, {}) is UNRESOLVED
 
 
 class TestAnAvailabilityRuleSaysWhichOfThreeThingsItMeans:
@@ -534,7 +590,7 @@ class TestTheFrozenBankIsWhatWasCommissioned:
                         "source_portfolio_count", "evolution_balance_series",
                         "evolution_wa_ltv_series", "evolution_region_breakdown",
                         "evolution_scotland_series", "forecast_current_balance")},
-                    {}, {}, {}, {}, {}, {}, {}, {}, {})
+                    {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
 
 
 class TestA401SaysWhichSideFailed:
@@ -578,3 +634,152 @@ class TestA401SaysWhichSideFailed:
         # no diagnostic.
         assert set(diag) <= {"readable", "iat", "nbf", "exp", "expired",
                              "seconds_past_expiry", "lifetime_seconds", "detail"}
+
+
+class TestTheExaminerRepairs:
+    """E1-E4: what the first live baseline got wrong about itself."""
+
+    def _case(self, **over):
+        base = {"question_id": "Q001", "canonical_case_id": "C28", "variant_id": "v1",
+                "capability_family": "period_movement_change_bridge", "question": "q",
+                "expected_route": "funded_bridge", "acceptable_routes": ["funded_bridge"],
+                "expected_answerability": "ANSWER", "expected_semantics": "s",
+                "expected_refusal_reason": None,
+                "truth_method": "T2_RECOMPUTED_IDENTITY",
+                "truth_key": "mom_balance_change", "truth_endpoint": "GET /mi/snapshot",
+                "checks": ["bridge_reconciles_to_truth"], "answerability_rule": None,
+                "notes": ""}
+        base.update(over)
+        return base
+
+    # --- E2 -----------------------------------------------------------------
+    def test_word_order_is_no_longer_a_paraphrase_failure(self):
+        rows, envs = [], {}
+        for i, text in enumerate(["Balance: £159.1MM · 958 loans.",
+                                  "958 loans · Balance: £159.1MM.",
+                                  "£159.1MM across 958 loans."], start=1):
+            qid = f"Q{i:03d}"
+            rows.append({"question_id": qid, "canonical_case_id": "C01",
+                         "variant_id": f"v{i}", "capability_family": "core",
+                         "question": text, "outcome": acc.CORRECT,
+                         "observed_route": "generic",
+                         "observed_answerability": "ANSWER"})
+            envs[qid] = envelope(text)
+        gate = acc.paraphrase_gate(rows, envs)
+        assert gate[0]["invariant"] is True, gate[0]["detail"]
+
+    def test_a_real_substitution_still_fails_the_gate(self):
+        # C41 live: two phrasings refuse, one answers with property valuation.
+        rows, envs = [], {}
+        for i, text in enumerate(["Borrowing base: £120.0MM.",
+                                  "Valuation: £393.6MM · 958 loans.",
+                                  "Borrowing base: £120.0MM."], start=1):
+            qid = f"Q{i:03d}"
+            rows.append({"question_id": qid, "canonical_case_id": "C41",
+                         "variant_id": f"v{i}", "capability_family": "bb",
+                         "question": text, "outcome": acc.CORRECT,
+                         "observed_route": "generic",
+                         "observed_answerability": "ANSWER"})
+            envs[qid] = envelope(text)
+        gate = acc.paraphrase_gate(rows, envs)
+        assert gate[0]["invariant"] is False
+        assert "DIVERGENT_VALUE" in gate[0]["failure_modes"]
+
+    # --- E3 -----------------------------------------------------------------
+    def _bridge(self, rows):
+        return envelope("bridge", artifacts=[{"type": "table", "rows": rows}])
+
+    def test_the_opening_balance_column_is_not_mistaken_for_a_driver(self, collected):
+        # THE BUG. Each band carries its opening balance AND its delta; the old
+        # extractor took the first number and summed the openings, which cannot
+        # be a set of deltas and was reported as the service failing to
+        # reconcile.
+        rows = [{"region": "London", "opening_balance": 79000000.0, "delta": 1000000.0},
+                {"region": "Scotland", "opening_balance": 39500000.0, "delta": 500000.0},
+                {"region": "Wales", "opening_balance": 39347304.07, "delta": -250000.0}]
+        out = acc.score(self._case(), self._bridge(rows), collected, {})
+        chk = out["checks"][0]
+        assert chk["verdict"] == acc.PASS, chk["detail"]
+        assert "delta" in chk["detail"]
+
+    def test_a_bridge_that_genuinely_does_not_add_up_still_fails(self, collected):
+        rows = [{"region": "London", "delta": 9000000.0},
+                {"region": "Scotland", "delta": 500000.0}]
+        out = acc.score(self._case(), self._bridge(rows), collected, {})
+        assert acc.R_BRIDGE in out["failure_reasons"]
+
+    def test_the_wrong_period_pair_is_named_as_such(self, collected):
+        # Live: "from last month to this month" was answered as a seven-month
+        # bridge. That is a period defect, not an arithmetic one, and calling
+        # both "does not reconcile" hides which was found.
+        rows = [{"region": "London", "delta": 100000.0}]
+        env = envelope("funded balance moved from £4.2m in 2025-10 to £159.1m at "
+                       "2026-06 — a net change of +£154.9m",
+                       artifacts=[{"type": "table", "rows": rows}])
+        out = acc.score(self._case(), env, collected, {})
+        assert acc.R_BRIDGE_PERIODS in out["failure_reasons"]
+        assert "2025-10" in out["checks"][0]["detail"]
+
+    # --- the repairs must not soften anything -------------------------------
+    def test_no_threshold_moved(self):
+        assert acc.RECONCILE_REL if hasattr(acc, "RECONCILE_REL") else True
+        # The reconciliation tolerances are still the ones the frozen run used.
+        import inspect
+        source = inspect.getsource(acc._close)
+        assert "rel: float = 0.005" in source and "absolute: float = 0.02" in source
+
+
+class TestAPartialRunIsNeverAVerdict:
+
+    @staticmethod
+    def _token(seconds_left: int) -> str:
+        import base64, json as _json, time
+        def seg(obj):
+            return base64.urlsafe_b64encode(
+                _json.dumps(obj).encode()).decode().rstrip("=")
+        return (f"{seg({'alg':'RS256'})}."
+                f"{seg({'iat': int(time.time()), 'exp': int(time.time()) + seconds_left})}"
+                f".sig")
+
+    def test_a_token_that_cannot_see_the_run_out_does_not_start_it(
+            self, monkeypatch, tmp_path):
+        import pathlib
+        monkeypatch.setenv("MI_BEARER", self._token(120))
+        monkeypatch.setattr(acc, "preflight",
+                            lambda *a, **k: ("YES", "YES", "ea8c65b5"))
+        asked = []
+        monkeypatch.setattr(acc, "_live_asker",
+                            lambda *a, **k: (lambda q: asked.append(q) or {"ok": True}))
+        bank = json.loads(pathlib.Path(acc.BANK_PATH).read_text(encoding="utf-8"))
+        payload, status = acc.run("http://x", "/mi/query", "ERE/2026-06-30",
+                                  "ea8c65b5", bank, progress=False)
+        assert status == 2
+        assert asked == [], "no question may be asked on a doomed credential"
+        assert "expire during the run" in payload["not_executable"]
+
+    def test_a_credential_refused_mid_run_aborts_instead_of_scoring(
+            self, monkeypatch, collected):
+        import pathlib
+        monkeypatch.setenv("MI_BEARER", self._token(3600))
+        monkeypatch.setattr(acc, "preflight",
+                            lambda *a, **k: ("YES", "YES", "ea8c65b5"))
+        monkeypatch.setattr(acc.truth_mod, "collect", lambda *a, **k: collected)
+        seen = {"n": 0}
+
+        def asker(*a, **k):
+            def ask(question):
+                seen["n"] += 1
+                if seen["n"] > 3:
+                    return {"ok": False, "answer": "HTTP 401",
+                            "__transport_error__": True, "__http_status__": 401}
+                return {"ok": True, "answer": "Balance: £159.1MM.",
+                        "artifacts": [], "metadata": {}}
+            return ask
+        monkeypatch.setattr(acc, "_live_asker", asker)
+        bank = json.loads(pathlib.Path(acc.BANK_PATH).read_text(encoding="utf-8"))
+        payload, status = acc.run("http://x", "/mi/query", "ERE/2026-06-30",
+                                  "ea8c65b5", bank, progress=False)
+        assert status == 2
+        assert payload["adjudication"]["MI_QUERY_AGENT_V1_LIVE_READY"] == "NO"
+        assert payload["questions"] == []
+        assert "refused mid-run" in payload["not_executable"]
