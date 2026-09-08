@@ -61,15 +61,39 @@ def pptx_mandatory() -> bool:
 
 def pptx_persist_enabled() -> bool:
     """Whether the generated deck is uploaded to durable storage (so the MI API
-    can serve it). Defaults ON in Azure (a blob connection is configured) and OFF
-    in local dev / tests where the scratch deck is enough. Force with
-    ``TRAKT_INVESTOR_PPTX_PERSIST=true|false``."""
+    can serve it). ON wherever the deck store is durable, OFF in local dev /
+    tests where the scratch deck is enough. Force with
+    ``TRAKT_INVESTOR_PPTX_PERSIST=true|false``.
+
+    THE WRITE GATE ASKS THE SAME QUESTION THE READ PATH ASKS. It used to keep
+    its own list of connection variables — ``AZURE_STORAGE_CONNECTION_STRING``
+    or ``TRAKT_BLOB_CONNECTION`` — while ``storage.decide_backend`` resolves
+    blob storage from an Azure marker alone, falling back to
+    ``AzureWebJobsStorage`` for the connection. An App Service configured with
+    only ``AzureWebJobsStorage`` therefore READ the deck store perfectly and
+    silently published nothing into it: every regeneration reported success and
+    served the previous deck forever. Two answers to "is there durable storage
+    here" is one too many, so this defers to the one that owns the question.
+    """
     override = os.environ.get("TRAKT_INVESTOR_PPTX_PERSIST")
     if override is not None:
         return override.strip().lower() in ("1", "true", "yes", "on")
-    # Auto: only when durable Azure blob storage is configured.
-    return bool(os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
-                or os.environ.get("TRAKT_BLOB_CONNECTION"))
+    return publication_expected()
+
+
+def publication_expected() -> bool:
+    """Whether the deck store this deployment serves from is durable.
+
+    Where it is, a generation that publishes nothing has not changed what the
+    download route serves, and the caller has to be told. Never raises — an
+    unreadable storage configuration is reported as "not durable" rather than
+    failing a run that has already produced a deck.
+    """
+    try:
+        from .storage import decide_backend
+        return decide_backend().get("backend") == "azure_blob"
+    except Exception:  # noqa: BLE001 - a publication hint, never a run failure
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -520,6 +544,17 @@ def generate_investor_pptx(
             log=log, context=sidecar)
         if published:
             artifact["published"] = published
+        elif publication_expected():
+            # THE DECK WAS GENERATED AND THE DECK STORE STILL HOLDS THE OLD ONE.
+            # This used to be silent: the status was set to "available" above
+            # and nothing downgraded it, so the job reported success while the
+            # download route went on serving the previous deck. A caller cannot
+            # see the blob, so the only place this can be said is here.
+            artifact["publication_skipped"] = (
+                "the deck was generated but not published to the deck store, "
+                "so the previously published deck is still what downloads")
+            log.warning("Investor PPTX NOT published to durable storage — the "
+                        "deck store still holds the previous deck.")
         _update_manifest(run_dir, artifact)
         log.info("Investor PPTX successfully generated:\n%s", output)
         return artifact

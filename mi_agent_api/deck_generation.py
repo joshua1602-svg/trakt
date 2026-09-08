@@ -39,7 +39,7 @@ from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from trakt_core.audit import emit_audit_event
 from trakt_core.context import (
@@ -266,6 +266,43 @@ def resolve_run(client_id: str, period: Optional[str]) -> Optional[ResolvedRun]:
 # The worker.
 # --------------------------------------------------------------------------- #
 
+
+def outcome_of(artifact: Mapping[str, Any]) -> "tuple[str, Optional[str], Any]":
+    """What a generated artifact means for the caller: ``(state, message, code)``.
+
+    THE ONLY QUESTION THAT MATTERS IS WHETHER A DOWNLOAD NOW HANDS BACK THIS
+    PACK. Generating one is not the same as publishing it, and the two ways it
+    can fail to reach the reader are different failures:
+
+      * ``generated_not_published`` — the pack exists but did not pass its
+        publication gates, so it was deliberately withheld;
+      * ``publication_skipped`` — the pack passed, and the deck store was not
+        updated anyway, so the download route still serves the previous deck.
+        This one used to report as COMPLETED, which sent the reader to a button
+        that hands back a stale pack and told them it was new.
+
+    Neither is a failure of generation, so neither is FAILED; both are BLOCKED,
+    which is the state that means "there is a pack, and it is not the one you
+    would receive".
+    """
+    status = artifact.get("status")
+    if status == "generated_not_published":
+        return (STATE_BLOCKED,
+                "The pack was generated but did not pass its publication "
+                "checks, so it has not been released. The previously "
+                "published deck is unchanged.", None)
+    if status == "available" and artifact.get("publication_skipped"):
+        return (STATE_BLOCKED,
+                "The pack was generated but could not be published to the "
+                "deck store, so downloads still serve the previously "
+                "published deck. This is a storage configuration problem, "
+                "not a problem with the pack.", None)
+    if status == "available":
+        return (STATE_COMPLETED, None, None)
+    return (STATE_FAILED, "The pack could not be generated for this period.",
+            ErrorCode.ARTEFACT_INCOMPLETE)
+
+
 def _run_generation(job: GenerationJob, run: ResolvedRun) -> None:
     """Build the deck for ``run`` and record the outcome on ``job``.
 
@@ -297,20 +334,9 @@ def _run_generation(job: GenerationJob, run: ResolvedRun) -> None:
             job.completed_at = _now()
             job.gate_count = len(gates) if isinstance(gates, list) else None
             job.failed_gates = list(preflight.get("failed_gates") or [])
-            status = artifact.get("status")
-            if status == "generated_not_published":
-                job.state = STATE_BLOCKED
-                job.message = (
-                    "The pack was generated but did not pass its publication "
-                    "checks, so it has not been released. The previously "
-                    "published deck is unchanged.")
-            elif status == "available":
-                job.state = STATE_COMPLETED
-                job.message = None
-            else:
-                job.state = STATE_FAILED
-                job.error_code = ErrorCode.ARTEFACT_INCOMPLETE
-                job.message = "The pack could not be generated for this period."
+            job.state, job.message, code = outcome_of(artifact)
+            if code is not None:
+                job.error_code = code
     except Exception:  # noqa: BLE001 — the caller gets a job, not a traceback
         logger.exception("investor pack generation failed for tenant=%s run=%s",
                          job.tenant_id, run.run_id)
