@@ -137,6 +137,19 @@ def main() -> int:
     reached, authorised, commit = preflight(
         args.base_url, args.path, [], args.portfolio_id)
 
+    # THE DEPLOYED BUILD IS ESTABLISHABLE WITHOUT A CREDENTIAL, and it must be.
+    # `preflight` asks a QUESTION first and returns early on 401 — so an expired
+    # `MI_BEARER` reported the build as NOT ESTABLISHED even though `/health` is
+    # in the API's OPEN_PATHS allowlist and answers unauthenticated. That
+    # conflated two independent facts: WHICH BUILD IS SERVING (a deployment
+    # fact) and WHETHER WE MAY ASK IT ANYTHING (a credential fact). Reading
+    # /health directly keeps them apart, so a stale token can no longer hide a
+    # deployment that did or did not land.
+    health = _get_json(args.base_url, "/health")
+    served = str(((health.get("build") or {}).get("commit") or "")).strip() or None
+    if served and not commit:
+        commit = served
+
     print("=" * 74)
     print("BORROWING BASE — LIVE ACCEPTANCE")
     print(f"target      : {args.base_url.rstrip('/')}{args.path}")
@@ -146,9 +159,15 @@ def main() -> int:
     print(f"deployed    : {commit or 'NOT ESTABLISHED'}")
     print(f"expected    : {args.expect_commit or '(not supplied)'}")
     match = bool(commit and args.expect_commit and commit == args.expect_commit)
+    print(f"served      : {served or 'NOT ESTABLISHED'}  "
+          f"(GET /health, unauthenticated — open path)")
     print(f"SHA match   : {'YES' if match else 'NO'}")
     print("=" * 74)
     if not str(authorised).startswith("YES"):
+        # The deployed build is still REPORTED, because it was established
+        # without the credential that failed.
+        print(f"deployed build established: {served or 'NO'}"
+              + (" — matches --expect-commit" if match else ""))
         print("VERDICT: NOT EXECUTABLE — auth")
         return 2
     if not match:
