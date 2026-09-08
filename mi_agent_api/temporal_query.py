@@ -39,6 +39,18 @@ second taxonomy in the temporal layer and hide the real defect.
 THE DASHBOARD IS NOT TOUCHED. `/mi/evolution/funded`, movement summaries,
 cohorts, the bridge and forecast still use `evolution.py` as before. This module
 is the MI query route's seam only.
+
+WHAT IS SUPPORTED, STATED EXACTLY. TIME x DIMENSION x FILTER is supported for
+governed SINGLE-filter compositions proven in this release — region x LTV > 50,
+region x front book. Multiple named narrowings such as "Scotland for the front
+book" remain a governed REFUSAL, because the pre-existing segmented-series
+interpretation reads two named segments as a request to see them tracked
+separately. Both predicates are proven executed and the geographic facet is
+stamped applied; what is withheld is the answer, by a different owner. That
+refusal is not this seam's, and removing it is not this seam's to do — it is a
+separate capability (a series split by the segments a question names), and
+stating the boundary here is what stops the next reader inferring one from the
+other.
 """
 from __future__ import annotations
 
