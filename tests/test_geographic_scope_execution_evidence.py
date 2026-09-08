@@ -114,7 +114,23 @@ def _env(tmp_path, monkeypatch):
                    "MI_AGENT_CLIENT_ID", "MI_AGENT_REPORTING_DATE",
                    "MI_AGENT_LLM_ENABLED"):
         monkeypatch.delenv(leaked, raising=False)
+    # AND THE CACHES THE ENVIRONMENT NO LONGER DESCRIBES. Clearing the variables
+    # is not enough: the active dataset, the governed portfolio registry derived
+    # from it, and the semantics registry are all process-global and outlive the
+    # test that populated them. A neighbour that served a different book leaves
+    # this file answering over that book with a correct-looking envelope, which
+    # is how three of these cases failed inside the suite and passed alone.
+    # Reset on the way IN so this file states its own world, and on the way OUT
+    # so it does not become the neighbour that breaks the next one.
+    def _reset_caches():
+        from mi_agent_api import data_source
+        from mi_workflows import semantics as _semantics
+        data_source.reset_cache()
+        _semantics.reset_cache()
+
+    _reset_caches()
     yield
+    _reset_caches()
 
 
 def _ask(question: str) -> dict:
