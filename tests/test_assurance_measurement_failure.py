@@ -240,13 +240,38 @@ def test_site4_a_refused_answer_is_a_legitimate_reading():
     branch and graded unmapped, and now reaches the evolution route this file
     measures. The assertion is kept exact rather than loosened to ">=" so that a
     silent drift in the other direction still fails here.
+
+    It went 35 -> 30 when the MI temporal route began executing the measure the
+    question NAMES. This instrument's book carries no arrears column and no
+    default column, and three questions were being DELIVERED against it:
+
+        "Show arrears evolution over time."          £16.1m
+        "Show default balance evolution over time."  £16.1m
+        "Show funded balance over time."             £16.1m
+
+    One series, three questions — the funded balance answering all of them,
+    because the old producer computed from the metric KEY and
+    `resolve_metric_key` returns `funded_balance` for any measure it does not
+    recognise. That is the measure substitution the "drill" note above records
+    the estate refusing elsewhere, and it is not coverage. The executor is asked
+    for `arrears_balance`, cannot find the column, and the question is refused
+    with its own reason: *"'arrears' is not available in this dataset ... no
+    value was fabricated."* Measured on the demonstration book, which DOES carry
+    the column, the same question moved from the whole book's £1.96bn to the
+    book's actual arrears of £0.
+
+    The other two leave the family without changing what a reader gets: both
+    were REFUSED before and are REFUSED now, under a different route identity.
+
+    Delivered coverage is therefore unchanged; what fell away is three answers
+    that were never about what they said they were about.
     """
     import migration_phase0.route_ownership_evolution as roe
 
     rows = _quiet(roe.run)
     assert len(rows) == 882
     owned = [r for r in rows if r.get("owned")]
-    assert len(owned) == 35
+    assert len(owned) == 30
     assert sum(1 for r in owned if r["grade"] == "REFUSED") > 0
     assert sum(1 for r in owned if r["grade"] == "DELIVERED") > 0
     assert not any("error" in r for r in rows)

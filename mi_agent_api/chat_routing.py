@@ -1585,6 +1585,39 @@ def _filter_summary(predicates) -> str:
     return "; ".join(p.describe() for p in (predicates or ()))
 
 
+def _executed_measure_label(spec, semantics: Dict[str, Any], metric_key: str,
+                            label: str) -> str:
+    """The name of the measure that WAS EXECUTED, not of the one it fell back to.
+
+    `temporal_compare.resolve_metric_key` maps the governed series metrics it
+    knows and returns `funded_balance` for everything else — a fallback that was
+    harmless while the series producer computed from the metric KEY, because the
+    label and the figure then described the same (wrong) thing. The seam changed
+    that half: the executor runs `spec.metric`, so an arrears question now
+    returns the arrears sum. On the demonstration book, whose arrears are zero,
+    that came back as *"Funded balance ... £0"* — the right number under the
+    wrong name, which reads as a claim about the funded book.
+
+    Named from the governed registry entry for the measure the spec carries, so
+    the label follows the execution. Only where the key demonstrably fell back:
+    a recognised metric keeps the series vocabulary its consumers already read.
+    """
+    metric = getattr(spec, "metric", None)
+    if not metric or metric_key != "funded_balance":
+        return label
+    entry = (semantics.get("fields", {}) or {}).get(metric) or {}
+    canonical = entry.get("canonical_field") or metric
+    try:
+        from mi_agent.mi_query_executor import _BALANCE_HIERARCHY, _canonical_or_self
+
+        balances = {_canonical_or_self(key, semantics) for key in _BALANCE_HIERARCHY}
+    except Exception:  # noqa: BLE001 - no hierarchy, keep the series label
+        return label
+    if canonical in balances or metric in balances:
+        return label
+    return str(entry.get("label") or metric.replace("_", " ").title())
+
+
 def _dimension_label(field_key: str, semantics: Dict[str, Any]) -> str:
     """The governed label of a dimension, for a column heading."""
     entry = (semantics.get("fields", {}) or {}).get(field_key) or {}
@@ -1902,6 +1935,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
 
     # Funded / pipeline single-metric evolution.
     metric_key, label, fmt = compare_mod.resolve_metric_key(dataset, spec.metric, spec.aggregation)
+    label = _executed_measure_label(spec, semantics or {}, metric_key, label)
     grouping = None
     if dataset == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
