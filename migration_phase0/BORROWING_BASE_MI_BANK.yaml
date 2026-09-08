@@ -11,10 +11,13 @@
 #     route collisions ........... 0
 #
 # `mode` selects the facility register the question runs against:
-#     approved    approval date recorded, drawing stated as at the latest
+#     approved    approved eligibility rules, effective date 2026-01-31, drawing stated as at the latest
 #                 snapshot, two approved eligibility rules
-#     noapproval  the same facility with no governance.approved_at — the
-#                 prototype's situation — so history is not demonstrable
+#     prototype   the prototype's situation: no approved eligibility rules,
+#                 the disclosed prototype assumption — history is not a
+#                 contractual fact, so it refuses
+#     noeffective approved rules but no recorded facility effective date, so
+#                 the contractual window the terms cover is unrecorded
 #     nodrawn     no current_drawn_amount supplied
 #     nofacility  no facility configured for the client
 #
@@ -337,21 +340,28 @@ questions:
   - id: S11
     question: How has the borrowing base changed?
     family: safety
-    mode: noapproval
+    mode: prototype
     route: borrowing_base
     ok: false
-    refusal_contains: governed_configuration_applicability
+    refusal_contains: not been approved
   - id: S12
     question: Show me the borrowing-base bridge.
     family: safety
-    mode: noapproval
+    mode: prototype
     route: borrowing_base
     ok: false
-    refusal_contains: governed_configuration_applicability
+    refusal_contains: prototype assumption
   - id: S13
     question: What is the borrowing base?
     family: safety
-    mode: noapproval
+    mode: prototype
     route: borrowing_base
     ok: true                         # the CURRENT position is always applicable
     parity: [borrowing_base]
+  - id: S14
+    question: How has the borrowing base changed?
+    family: safety
+    mode: noeffective
+    route: borrowing_base
+    ok: false
+    refusal_contains: no effective date

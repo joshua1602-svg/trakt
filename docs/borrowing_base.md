@@ -283,16 +283,32 @@ partition. UNDETERMINED never enters it.
 ### What history can and cannot demonstrate
 
 The platform holds one facility configuration and one operator-supplied
-drawing. Nothing is inferred from `effective_date` (metadata no engine reads):
+drawing. Two facts decide whether a historical period is answerable, and they
+are never conflated:
 
-* a historical period is evaluated **only from the register's governed
-  `governance.approved_at` date**; with none recorded — the prototype's
-  situation — change, trend and bridge questions refuse and say why;
-* the drawing is valid for a snapshot **only when `current_drawn_amount_as_of`
-  is that snapshot's date**; otherwise drawn, headroom, deficiency and both
-  utilisations are `NOT_CALCULABLE` for that period (the calculator itself
-  reports it — the drawing is withheld, never overwritten). The current-position
-  answer keeps the dashboard's figure and discloses the as-of date.
+1. **Governed for use** — the facility carries an approved Eligible Mortgage
+   Loan definition (`eligibility.rules`, recorded by OCC after operator
+   approval) and is not on the prototype assumption. An assumed eligibility is
+   presented for the current position, with its banner, and no further.
+2. **Contractual window** — the agreement's own `effective_date` to
+   `maturity_date` (open when none is stated), as the operator recorded them
+   from the facility agreement. A period outside the window, or a record with
+   no effective date, is not demonstrably covered.
+
+`governance.approved_at` is the audit timestamp of the Trakt record and is
+read for neither fact. The register holds one configuration version and no
+amendment history, so the recorded terms are taken as constant across the
+window they state — disclosed on every historical answer.
+
+The drawing is valid for a snapshot **only when `current_drawn_amount_as_of`
+is that snapshot's date**; otherwise drawn, headroom, deficiency and both
+utilisations are `NOT_CALCULABLE` for that period (the calculator itself
+reports it — the drawing is withheld, never overwritten). The current-position
+answer keeps the dashboard's figure and discloses the as-of date.
+
+On the ERE prototype every change, trend and bridge question therefore refuses
+— because the eligibility definition is a disclosed assumption, not because of
+any approval timestamp.
 
 ### The bridge
 

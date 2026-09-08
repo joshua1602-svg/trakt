@@ -349,9 +349,7 @@ def read(question: str, spec: Any = None, *, view: str = "funded",
     except Exception:  # noqa: BLE001
         pass
 
-    if eligible and _REASON_RE.search(text) and not core:
-        reading.intent = _INTENT_REASONS
-    elif eligible and _REASON_RE.search(text) and not _BRIDGE_RE.search(text):
+    if eligible and _REASON_RE.search(text) and not (core and _BRIDGE_RE.search(text)):
         reading.intent = _INTENT_REASONS
     elif core and _BRIDGE_RE.search(text):
         reading.intent = _INTENT_BRIDGE
@@ -921,45 +919,53 @@ def _resolve_pair(request: RouteRequest, reading: Reading,
 
 
 def _history(request: RouteRequest, reading: Reading
-             ) -> Tuple[Optional[List[analysis.PeriodPosition]], Optional[Dict[str, Any]]]:
+             ) -> Tuple[Any, List[analysis.PeriodPosition], Optional[Dict[str, Any]]]:
+    """``(facility, positions, refusal)`` — the governed periods, or why not."""
     facility = _facility(request)
     if facility is None:
-        return None, _refuse(request, "No funding facility is configured for "
-                                      "this portfolio.", reading=reading)
+        return None, [], _refuse(request, "No funding facility is configured for "
+                                          "this portfolio.", reading=reading)
     try:
         positions = _positions(request, facility)
     except Exception as exc:  # noqa: BLE001
-        return None, _refuse(request, "The governed historical periods could not "
-                                      f"be resolved: {exc}", reading=reading)
+        return facility, [], _refuse(request, "The governed historical periods "
+                                              f"could not be resolved: {exc}",
+                                     reading=reading)
     if len(positions) < 2:
-        return None, _refuse(request, (
+        return facility, positions, _refuse(request, (
             "A period change needs two governed reporting periods and this book "
             f"has {len(positions)}."), reading=reading)
-    return positions, None
+    return facility, positions, None
 
 
 def _applicability_note(facility) -> str:
-    applicable_from = analysis.configuration_applicable_from(facility)
-    if applicable_from:
-        return (f"Historical periods are evaluated under the facility configuration "
-                f"approved on {applicable_from}; earlier periods are not calculable.")
-    return ("The facility configuration carries no governed approval date, so it "
-            "is demonstrably applicable to the current position only; historical "
-            "borrowing-base measures are not calculable. Recording the approval "
-            "date in the facility register (governance.approved_at) is what "
-            "makes history answerable.")
+    """The two facts history turns on, as this facility's record states them."""
+    ungoverned = analysis.terms_governed_for_history(facility)
+    effective, maturity = analysis.contractual_window(facility)
+    if ungoverned:
+        return (f"Historical borrowing-base measures are not calculable: "
+                f"{ungoverned}. An approved Eligible Mortgage Loan definition "
+                "(recorded through OCC) is what makes history answerable.")
+    if not effective:
+        return ("Historical borrowing-base measures are not calculable: the "
+                "facility record states no effective date, so the contractual "
+                "period the approved terms cover is not recorded.")
+    return (f"Historical periods are evaluated under the approved facility terms "
+            f"within their recorded contractual window ({effective} to "
+            f"{maturity or 'open'}); the register holds one configuration version "
+            "and no amendment history, so those terms are taken as constant "
+            "across it.")
 
 
 def _answer_change(request: RouteRequest, envelope: Dict[str, Any],
                    reading: Reading) -> Dict[str, Any]:
     from . import chat_routing as _routing
-    positions, refusal = _history(request, reading)
+    facility, positions, refusal = _history(request, reading)
     if refusal is not None:
         return refusal
     opening, closing, failure, notes = _resolve_pair(request, reading, positions)
     if failure:
         return _refuse(request, failure, reading=reading)
-    facility = _facility(request)
 
     changes = [analysis.change(opening, closing, m, unit=MEASURES[m].unit)
                for m in reading.measures]
@@ -1011,10 +1017,9 @@ def _answer_change(request: RouteRequest, envelope: Dict[str, Any],
 def _answer_trend(request: RouteRequest, envelope: Dict[str, Any],
                   reading: Reading) -> Dict[str, Any]:
     from . import chat_routing as _routing
-    positions, refusal = _history(request, reading)
+    facility, positions, refusal = _history(request, reading)
     if refusal is not None:
         return refusal
-    facility = _facility(request)
     artifacts: List[Dict[str, Any]] = []
     parts: List[str] = []
     all_series: Dict[str, List[Dict[str, Any]]] = {}
@@ -1076,13 +1081,12 @@ def _answer_trend(request: RouteRequest, envelope: Dict[str, Any],
 def _answer_bridge(request: RouteRequest, envelope: Dict[str, Any],
                    reading: Reading) -> Dict[str, Any]:
     from . import chat_routing as _routing
-    positions, refusal = _history(request, reading)
+    facility, positions, refusal = _history(request, reading)
     if refusal is not None:
         return refusal
     opening, closing, failure, notes = _resolve_pair(request, reading, positions)
     if failure:
         return _refuse(request, failure, reading=reading)
-    facility = _facility(request)
 
     if not opening.configuration_applicable or not closing.configuration_applicable:
         side = opening if not opening.configuration_applicable else closing

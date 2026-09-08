@@ -51,14 +51,28 @@ rate, one set of eligibility rules, one operator-supplied drawing with its
 under that current configuration. None of that is historical facility state,
 and none is invented here:
 
-* **Configuration applicability.** A configuration is demonstrably applicable
-  to a historical period only from a GOVERNED approval date —
-  ``governance.approved_at`` in the facility register. ``effective_date`` is
-  operator-entered metadata that no engine module reads and OCC does not
-  govern, so it is NOT used as a cutoff. A configuration with no approval date
-  (the prototype's situation) is applicable to the CURRENT position only —
-  the position the dashboard presents it against — and every historical
-  measure is NOT_CALCULABLE with the limitation named.
+* **Configuration applicability — two facts, kept apart.** Whether the
+  recorded terms are GOVERNED for use is one fact; over what CONTRACTUAL
+  period they apply is another, and neither may stand in for the other.
+
+  1. *Governed:* the facility carries an approved Eligible Mortgage Loan
+     definition — ``eligibility_rules`` recorded by OCC after operator
+     approval (``facility.eligibility_governed``) — and is not running on the
+     prototype assumption. Historical eligible collateral under an ASSUMED
+     eligibility is an assumption, not a contractual fact; the dashboard
+     presents it for the current position with its banner, and that is as far
+     as it travels.
+  2. *Contractual window:* the facility agreement's own dates as the operator
+     recorded them from it — ``effective_date`` to ``maturity_date`` (open
+     when the agreement states none). A period outside the window, or a
+     record with no effective date, is not demonstrably covered.
+
+  ``governance.approved_at`` is the audit timestamp of the Trakt record and
+  is read for NEITHER fact: the date an operator happened to approve a
+  configuration says nothing about when the terms applied. The register holds
+  one configuration version and no amendment history, so the recorded terms
+  are taken as the terms throughout the window they state — the record's own
+  claim, disclosed, not a history invented here.
 
 * **Drawings.** ``current_drawn_amount`` is time-varying. It is valid for a
   snapshot ONLY when its governed ``current_drawn_amount_as_of`` equals that
@@ -95,7 +109,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -107,16 +121,13 @@ from .calculator import (
     _balance_column,
     summarise_eligibility,
 )
-from .eligibility import eligibility_available, status_mask
+from .eligibility import _blank, eligibility_available, status_mask
 from .models import (
     FIELD_ELIGIBILITY_REASON,
     INELIGIBLE,
     NOT_CALCULABLE,
     FacilityConfiguration,
 )
-
-_BLANK_TOKENS = ("", "nan", "none", "nat", "<na>", "null")
-
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -229,11 +240,6 @@ def rule_descriptions(facility: FacilityConfiguration
         out[code] = {"rule_id": rule.rule_id,
                      "description": rule.reason or rule.description or code}
     return out
-
-
-def _blank(series: pd.Series) -> pd.Series:
-    text = series.astype(str).str.strip().str.lower()
-    return series.isna() | text.isin(_BLANK_TOKENS)
 
 
 def summarise_ineligibility_reasons(
@@ -374,18 +380,58 @@ def _date(value: Any) -> str:
     return str(value or "").strip()[:10]
 
 
-def configuration_applicable_from(facility: Optional[FacilityConfiguration]
-                                  ) -> Optional[str]:
-    """The governed date from which the configuration demonstrably applies.
+def terms_governed_for_history(facility: Optional[FacilityConfiguration]
+                               ) -> Optional[str]:
+    """Fact 1. ``None`` when the terms are governed for historical use, else why not.
 
-    Read from ``governance.approved_at`` — the operator approval recorded in
-    the facility register. ``effective_date`` is deliberately NOT consulted:
-    it is optional operator-entered metadata that no engine module reads.
-    ``None`` means no historical applicability is demonstrable.
+    The owner of "approved eligibility criteria exist" is the facility itself:
+    OCC records ``eligibility.rules`` only after operator approval.
     """
-    governance = getattr(facility, "governance", None) or {}
-    approved = _date(governance.get("approved_at"))
-    return approved or None
+    if facility is None:
+        return "no funding facility is configured"
+    if getattr(facility, "prototype_assumption_active", False):
+        return ("the Eligible Mortgage Loan definition has not been approved — "
+                "eligibility is a disclosed prototype assumption, presented for "
+                "the current position only")
+    if not getattr(facility, "eligibility_governed", False):
+        return ("the Eligible Mortgage Loan definition has not been approved "
+                "(no approved eligibility rules are recorded)")
+    return None
+
+
+def contractual_window(facility: Optional[FacilityConfiguration]
+                       ) -> Tuple[Optional[str], Optional[str]]:
+    """Fact 2. ``(effective_date, maturity_date)`` as recorded from the agreement."""
+    return (_date(getattr(facility, "effective_date", "")) or None,
+            _date(getattr(facility, "maturity_date", "")) or None)
+
+
+def historical_applicability(facility: Optional[FacilityConfiguration],
+                             reporting_date: Optional[str]) -> Optional[str]:
+    """Why the recorded terms do NOT demonstrably apply at ``reporting_date``.
+
+    ``None`` means they do: governed for historical use (fact 1) AND the
+    reporting date lies inside the contractual window the record states
+    (fact 2). Both facts are read from the facility record; nothing is
+    inferred from the record's approval timestamp.
+    """
+    ungoverned = terms_governed_for_history(facility)
+    if ungoverned:
+        return ungoverned
+    effective, maturity = contractual_window(facility)
+    if not effective:
+        return ("the facility record states no effective date, so the "
+                "contractual period the approved terms cover is not recorded")
+    date = _date(reporting_date)
+    if not date:
+        return "the period carries no reporting date to test against the facility window"
+    if date < effective:
+        return (f"{date} predates the facility's recorded effective date "
+                f"{effective}")
+    if maturity and date > maturity:
+        return (f"{date} is after the facility's recorded maturity date "
+                f"{maturity}")
+    return None
 
 
 def configuration_applies_at(facility: Optional[FacilityConfiguration],
@@ -394,15 +440,12 @@ def configuration_applies_at(facility: Optional[FacilityConfiguration],
     """Is the configuration demonstrably applicable to this period?
 
     The current position always: it is what the dashboard presents the
-    configuration against. A historical period only from the governed
-    approval date onward; with no approval date, never.
+    configuration against, prototype banner and all. A historical period only
+    when :func:`historical_applicability` finds nothing against it.
     """
     if is_current:
         return True
-    applicable_from = configuration_applicable_from(facility)
-    if not applicable_from or not reporting_date:
-        return False
-    return _date(reporting_date) >= applicable_from
+    return historical_applicability(facility, reporting_date) is None
 
 
 def drawn_valid_at(facility: Optional[FacilityConfiguration],
@@ -440,6 +483,8 @@ class PeriodPosition:
     envelope: Mapping[str, Any]
     is_current: bool = False
     configuration_applicable: bool = True
+    #: Why the configuration is not demonstrably applicable here, or None.
+    inapplicable_because: Optional[str] = None
     drawn_basis: str = DRAWN_BASIS_NOT_SUPPLIED
     notes: List[str] = field(default_factory=list)
 
@@ -450,10 +495,6 @@ class PeriodPosition:
     @property
     def available(self) -> bool:
         return bool(self.envelope.get("available")) and self.configuration_applicable
-
-    @property
-    def reconciles(self) -> bool:
-        return self.envelope.get("reconciles") is not False
 
     @property
     def drawn_valid(self) -> bool:
@@ -474,9 +515,7 @@ class PeriodPosition:
         if _is_number(self.measure(measure_id)):
             return None
         if not self.configuration_applicable:
-            return ("the facility configuration carries no governed approval "
-                    "date demonstrating it applied at "
-                    f"{self.reporting_date or self.run_id} (missing input: "
+            return (f"{self.inapplicable_because} (missing input: "
                     f"{MISSING_CONFIGURATION_APPLICABILITY})")
         if not self.envelope.get("available"):
             return str(self.envelope.get("reason")
@@ -499,9 +538,9 @@ class PeriodPosition:
             "period": self.period_label,
             "isCurrent": self.is_current,
             "configurationApplicable": self.configuration_applicable,
+            "inapplicableBecause": self.inapplicable_because,
             "drawnBasis": self.drawn_basis,
             "available": self.available,
-            "reconciles": self.reconciles,
             "notes": list(self.notes),
         }
 
@@ -511,15 +550,13 @@ def position_for(run_id: str, reporting_date: Optional[str],
                  facility: Optional[FacilityConfiguration],
                  is_current: bool) -> PeriodPosition:
     """Wrap one period's envelope with its governed validity."""
-    applicable = configuration_applies_at(facility, reporting_date,
-                                          is_current=is_current)
+    because = (None if is_current
+               else historical_applicability(facility, reporting_date))
     basis = drawn_valid_at(facility, reporting_date)
     notes: List[str] = []
-    if not applicable:
-        notes.append(
-            "The facility configuration carries no governed approval date "
-            f"demonstrating it applied at {reporting_date or run_id}; no "
-            "historical borrowing-base measure is calculable for that period.")
+    if because:
+        notes.append(f"No historical borrowing-base measure is calculable for "
+                     f"{reporting_date or run_id}: {because}.")
     if basis == DRAWN_BASIS_VALID:
         notes.append(f"Drawings are the operator-supplied amount stated as at "
                      f"{facility.current_drawn_amount_as_of}, the snapshot date.")
@@ -531,7 +568,8 @@ def position_for(run_id: str, reporting_date: Optional[str],
             "utilisation are not calculable for this period.")
     return PeriodPosition(run_id=str(run_id), reporting_date=reporting_date,
                           envelope=envelope, is_current=is_current,
-                          configuration_applicable=applicable,
+                          configuration_applicable=because is None,
+                          inapplicable_because=because,
                           drawn_basis=basis, notes=notes)
 
 
@@ -842,7 +880,8 @@ __all__ = [
     "ReasonRow", "rule_descriptions", "REASON_MISSING",
     # periods
     "PeriodPosition", "MeasureChange", "position_for", "change", "series",
-    "configuration_applicable_from", "configuration_applies_at",
+    "terms_governed_for_history", "contractual_window",
+    "historical_applicability", "configuration_applies_at",
     "drawn_valid_at", "facility_for_period", "DRAWN_BASIS_VALID",
     "DRAWN_BASIS_NOT_SUPPLIED", "DRAWN_BASIS_AS_OF_MISMATCH",
     "DRAWN_DEPENDENT_MEASURES", "MISSING_PERIOD_DRAWN",

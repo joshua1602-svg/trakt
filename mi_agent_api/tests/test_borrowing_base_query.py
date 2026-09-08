@@ -22,7 +22,6 @@ is NOT claimed by this route.
 
 from __future__ import annotations
 
-import os
 import re
 import sys
 from pathlib import Path
@@ -67,15 +66,18 @@ def _facility(mode: str) -> Dict[str, Any]:
         "facility_label": "Test Warehouse 01", "facility_type": "warehouse",
         "currency": "GBP", "commitment": 12_000_000, "advance_rate": 0.9,
         "concentration_denominator_floor": 5_000_000,
-        "environment": "production",
         "current_drawn_amount": 6_000_000 if drawn else None,
         "current_drawn_amount_as_of": AS_OF if drawn else "",
-        # Metadata only — never a cutoff. Set to a date AFTER the earliest run
-        # so a test that wrongly used it would visibly refuse April.
-        "effective_date": "2026-05-15",
-        "governance": {"approval_status": "approved",
-                       "approved_at": "2026-04-30" if mode == "approved" else ""},
-        "eligibility": {"rule_version": "r1", "rules": [
+        # The CONTRACTUAL window, as recorded from the agreement. Blank in the
+        # `noeffective` mode so the window is unrecorded.
+        "effective_date": "" if mode == "noeffective" else "2026-01-31",
+        "maturity_date": "",
+        # The Trakt record's audit trail. Read for nothing historical.
+        "governance": {"approval_status": "approved", "approved_at": "2026-09-01"},
+        "environment": "prototype" if mode == "prototype" else "production",
+        "eligibility": {"rule_version": "prototype-0", "rules": [],
+                        "prototype_assume_financing_portfolio_eligible": True}
+        if mode == "prototype" else {"rule_version": "r1", "rules": [
             {"rule_id": "max_current_ltv", "description": "Current LTV must not exceed 45%",
              "field": "current_loan_to_value", "operator": "max", "value": 45,
              "reason_code": "current_ltv_above_facility_limit",
@@ -372,27 +374,50 @@ def test_a_trend_is_one_governed_evaluation_per_period(book: Book):
 # --------------------------------------------------------------------------- #
 # 5. Governance — the amendments, at the route
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("book", ["noapproval"], indirect=True)
-def test_without_an_approval_date_history_refuses_but_the_current_position_answers(book: Book):
+@pytest.mark.parametrize("book", ["prototype"], indirect=True)
+def test_a_prototype_eligibility_answers_the_current_position_only(book: Book):
     now = book.ask("What is the borrowing base?")
     assert now["ok"] and now["metadata"]["borrowingBase"]["values"]["borrowing_base"] == \
         book.envelope()["availableBorrowingBase"]
+    assert any("Prototype assumption" in w for w in now["warnings"])
     for q in ("How has the borrowing base changed?", "Show me the borrowing-base bridge.",
               "How has ineligible balance changed?"):
         resp = book.ask(q)
         assert resp["ok"] is False and resp.get("controlledRefusal")
-        assert "governed_configuration_applicability" in resp["answer"]
-        assert "approved_at" in resp["answer"]
+        assert "not been approved" in resp["answer"] and "prototype assumption" in resp["answer"]
+        assert "approved_at" not in resp["answer"]
     trend = book.ask("Show the borrowing base over time.")
     assert trend["ok"] is False and "at least two" in trend["answer"]
 
 
-def test_effective_date_is_never_a_cutoff(book: Book):
-    # The register's effective_date (2026-05-15) postdates the April run. If
-    # it were a cutoff the April opening would refuse; approval is the gate.
-    resp = book.ask("Bridge the borrowing base from April to June.")
+@pytest.mark.parametrize("book", ["noeffective"], indirect=True)
+def test_approved_terms_with_no_recorded_window_answer_the_current_position_only(book: Book):
+    assert book.ask("What is the borrowing base?")["ok"]
+    resp = book.ask("How has the borrowing base changed?")
+    assert resp["ok"] is False and "no effective date" in resp["answer"]
+
+
+def test_the_contractual_window_is_the_facility_dates_not_the_approval_timestamp(
+        tmp_path_factory, monkeypatch):
+    # approved_at (2026-09-01) is AFTER every run; effective_date (2026-01-31)
+    # is before them all. April→June bridges because the WINDOW covers it.
+    root = tmp_path_factory.getbasetemp() / "bb_books"
+    b = Book(root, "approved", monkeypatch)
+    resp = b.ask("Bridge the borrowing base from April to June.")
     assert resp["ok"], resp.get("answer")
     assert resp["metadata"]["borrowingBase"]["opening"]["configurationApplicable"] is True
+    # Move the effective date AFTER April: April is outside the window and
+    # the bridge refuses by naming the date, whatever approved_at says.
+    late = Book(root / "late_effective", "approved", monkeypatch)
+    facility = _facility("approved")
+    facility["effective_date"] = "2026-05-15"
+    (late.root / "funding_facilities.yaml").write_text(
+        yaml.safe_dump({"facilities": [facility]}), encoding="utf-8")
+    resp = late.ask("Bridge the borrowing base from April to June.")
+    assert resp["ok"] is False and "predates" in resp["answer"]
+    assert "2026-05-15" in resp["answer"]
+    # May→June is inside the window and still bridges.
+    assert late.ask("Show me the borrowing-base bridge.")["ok"]
 
 
 def test_the_current_drawing_is_valid_for_its_own_snapshot_only(book: Book):
@@ -405,25 +430,13 @@ def test_the_current_drawing_is_valid_for_its_own_snapshot_only(book: Book):
         "current_drawn_amount_as_of_not_this_snapshot"
 
 
-def test_prototype_assumptions_are_disclosed_exactly_as_the_envelope_states_them(
-        tmp_path_factory, monkeypatch):
-    root = tmp_path_factory.getbasetemp() / "bb_books"
-    b = Book(root, "approved", monkeypatch)
-    register = b.root / "funding_facilities.yaml"
-    facility = _facility("approved")
-    facility["environment"] = "prototype"
-    facility["eligibility"] = {"rule_version": "prototype-0", "rules": [],
-                               "prototype_assume_financing_portfolio_eligible": True}
-    register.write_text(yaml.safe_dump({"facilities": [facility]}), encoding="utf-8")
-    # A fresh tape path, so the memoised prepared frame is not reused.
-    b2 = Book(root / "proto", "approved", monkeypatch)
-    (b2.root / "funding_facilities.yaml").write_text(
-        yaml.safe_dump({"facilities": [facility]}), encoding="utf-8")
-    resp = b2.ask("What is the borrowing base?")
+@pytest.mark.parametrize("book", ["prototype"], indirect=True)
+def test_prototype_assumptions_are_disclosed_exactly_as_the_envelope_states_them(book: Book):
+    resp = book.ask("What is the borrowing base?")
     assert resp["ok"]
-    notes = b2.envelope()["prototypeAssumptionsUsed"]
+    notes = book.envelope()["prototypeAssumptionsUsed"]
     assert notes and all(any(n in w for w in resp["warnings"]) for n in notes)
-    reasons = b2.ask("Why are loans ineligible?")
+    reasons = book.ask("Why are loans ineligible?")
     assert reasons["ok"] and "No loans are ineligible" in reasons["answer"]
 
 

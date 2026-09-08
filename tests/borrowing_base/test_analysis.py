@@ -13,9 +13,11 @@ Three things are proven here that the route tests then merely consume:
    fails closed. And an independent oracle written against the two governed
    columns alone agrees with it row for row.
 
-2. PERIOD VALIDITY IS GOVERNED, NOT INFERRED. Applicability comes from the
-   register's ``governance.approved_at`` and from nothing else — an
-   ``effective_date`` alone demonstrates nothing. A drawing is valid for a
+2. PERIOD VALIDITY IS GOVERNED, NOT INFERRED. Two facts, kept apart: the
+   terms are governed for historical use only with an APPROVED eligibility
+   definition (never the prototype assumption), and they apply only inside
+   the CONTRACTUAL window the record states (effective to maturity). The
+   record's approval timestamp is read for neither. A drawing is valid for a
    snapshot only when its ``current_drawn_amount_as_of`` IS that snapshot's
    date; being the latest frame is not evidence.
 
@@ -181,21 +183,43 @@ class TestTheReasonTable:
 # 2. Period validity
 # --------------------------------------------------------------------------- #
 class TestConfigurationApplicability:
-    def test_only_a_governed_approval_date_demonstrates_history(self):
-        approved = two_rule_facility(governance={"approved_at": "2026-04-30"})
-        assert analysis.configuration_applicable_from(approved) == "2026-04-30"
-        assert analysis.configuration_applies_at(approved, "2026-05-31", is_current=False)
-        assert not analysis.configuration_applies_at(approved, "2026-03-31", is_current=False)
+    """Fact 1 (governed) and fact 2 (contractual window), never conflated."""
 
-    def test_effective_date_alone_demonstrates_nothing(self):
-        metadata_only = two_rule_facility(effective_date="2025-11-30")
-        assert analysis.configuration_applicable_from(metadata_only) is None
-        assert not analysis.configuration_applies_at(metadata_only, "2026-05-31",
-                                                     is_current=False)
+    def test_approved_terms_apply_inside_their_recorded_contractual_window(self):
+        fac = two_rule_facility(effective_date="2026-01-31", maturity_date="2027-01-31")
+        assert analysis.historical_applicability(fac, "2026-05-31") is None
+        assert analysis.configuration_applies_at(fac, "2026-05-31", is_current=False)
+        assert "predates" in analysis.historical_applicability(fac, "2025-12-31")
+        assert "after" in analysis.historical_applicability(fac, "2027-02-28")
+        # An open-ended agreement: no maturity recorded means no upper bound.
+        open_ended = two_rule_facility(effective_date="2026-01-31")
+        assert analysis.historical_applicability(open_ended, "2030-01-31") is None
+
+    def test_the_approval_timestamp_is_read_for_neither_fact(self):
+        # approved_at AFTER the period, terms effective BEFORE it: applicable.
+        fac = two_rule_facility(effective_date="2026-01-31",
+                                governance={"approval_status": "approved",
+                                            "approved_at": "2026-09-01"})
+        assert analysis.historical_applicability(fac, "2026-05-31") is None
+        # approved_at BEFORE the period, no effective date: not demonstrable.
+        undated = two_rule_facility(governance={"approved_at": "2025-01-01"})
+        assert "no effective date" in analysis.historical_applicability(undated, "2026-05-31")
+
+    def test_a_prototype_assumption_is_not_a_governed_history(self):
+        proto = two_rule_facility(environment="prototype", eligibility_rules=[],
+                                  prototype_assume_financing_portfolio_eligible=True,
+                                  effective_date="2025-11-30")
+        why = analysis.historical_applicability(proto, "2026-05-31")
+        assert "prototype assumption" in why and "not been approved" in why
+        # …and so is a production facility with no approved rules at all.
+        bare = two_rule_facility(eligibility_rules=[], effective_date="2025-11-30")
+        assert "no approved eligibility rules" in analysis.historical_applicability(
+            bare, "2026-05-31")
 
     def test_the_current_position_is_always_applicable(self):
-        assert analysis.configuration_applies_at(two_rule_facility(), "2026-06-30",
-                                                 is_current=True)
+        proto = two_rule_facility(environment="prototype", eligibility_rules=[],
+                                  prototype_assume_financing_portfolio_eligible=True)
+        assert analysis.configuration_applies_at(proto, "2026-06-30", is_current=True)
         assert analysis.configuration_applies_at(None, None, is_current=True)
 
 
@@ -225,7 +249,7 @@ class TestDrawnValidity:
     def test_a_position_refuses_a_drawn_dependent_number_it_cannot_stand_behind(self):
         fac = two_rule_facility(current_drawn_amount=6_000_000.0,
                                 current_drawn_amount_as_of="2026-06-30",
-                                governance={"approved_at": "2026-04-30"})
+                                effective_date="2026-01-31")
         envelope = {"available": True, "reconciles": True,
                     "measures": {"borrowing_base": 90.0,
                                  "borrowing_base_headroom": 84.0}}
@@ -240,19 +264,19 @@ class TestDrawnValidity:
                                         facility=fac, is_current=True)
         assert current.measure("borrowing_base_headroom") == 84.0
 
-    def test_a_period_before_the_approval_date_is_not_calculable_at_all(self):
-        fac = two_rule_facility(governance={"approved_at": "2026-04-30"})
+    def test_a_period_before_the_effective_date_is_not_calculable_at_all(self):
+        fac = two_rule_facility(effective_date="2026-04-30")
         envelope = {"available": True, "measures": {"borrowing_base": 90.0}}
         early = analysis.position_for("r3", "2026-03-31", envelope,
                                       facility=fac, is_current=False)
         assert early.measure("borrowing_base") == NOT_CALCULABLE
-        assert "governed_configuration_applicability" in \
-            early.why_not_calculable("borrowing_base")
+        why = early.why_not_calculable("borrowing_base")
+        assert "governed_configuration_applicability" in why and "predates" in why
 
 
 class TestChange:
     def _positions(self):
-        fac = two_rule_facility(governance={"approved_at": "2026-04-30"})
+        fac = two_rule_facility(effective_date="2026-01-31")
         o = analysis.position_for("r5", "2026-05-31", {
             "available": True, "measures": {"borrowing_base": 10_000_000.0,
                                             "ineligible_loan_count": 11,
