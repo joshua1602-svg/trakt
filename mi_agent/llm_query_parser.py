@@ -3314,6 +3314,45 @@ def unknown_category_refusal(notes) -> Optional[str]:
             "figure in its place.")
 
 
+def _mask_time_axis(text: str) -> str:
+    """Blank the wording the TIME-AXIS OWNER has already claimed.
+
+    THE POPULATION READER MUST NOT RE-READ CLAIMED TEXT. "Show balance by
+    region over time" names its axis with the words "over time", and the
+    prepositional population reader — which has no way to know the phrase is
+    spoken for — captured `over <time>` and recorded ``unknown category:
+    'time'``. The note was inert while nothing acted on it; the routed guard
+    that now refuses on these notes turned it into *"No loans in this book match
+    that filter ('time')"* for a question about regions over time, and the same
+    sentence with a place in it produced ``'time for scotland'``.
+
+    `question_interpretation.lexical.time_axis_request` is the single owner of
+    time-axis wording — the same owner the series branch consults to decide it
+    IS a series — so the span it claims is blanked before the population reader
+    sees the sentence. Blanked rather than deleted, so every offset either side
+    of it is unmoved.
+
+    No vocabulary is added here and nothing is decided here: a sentence with no
+    time axis comes back unchanged.
+    """
+    try:
+        from question_interpretation.lexical import time_axis_request
+    except Exception:  # noqa: BLE001 - no owner, no claim, no masking
+        return text
+    out = text or ""
+    # A sentence names its axis once; the bound is a guard against a wording
+    # that could match its own replacement, never an expected iteration count.
+    for _ in range(4):
+        wording = time_axis_request(out)
+        if not wording:
+            break
+        idx = out.lower().find(str(wording).lower())
+        if idx < 0:
+            break
+        out = out[:idx] + " " * len(str(wording)) + out[idx + len(str(wording)):]
+    return out
+
+
 def _names_a_book(text: str) -> bool:
     """Delegation: `portfolio_lens` owns what counts as naming a book."""
     try:
@@ -5360,7 +5399,8 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         # executor filters `work` before _execute_line), so attach it — a
         # filtered trend is never silently returned unfiltered.
         line_filters, line_unavail = _grouped_value_filters(
-            q, semantics, available_columns, exclude_dims=[], available_values=available_values)
+            _mask_time_axis(q), semantics, available_columns, exclude_dims=[],
+            available_values=available_values)
         # If a FILTER-field keyword hijacked the metric (e.g. "balance trend where
         # LTV above 50%" -> metric=LTV, because the LTV filter term is also read as
         # a metric) but a balance measure is explicitly named, prefer balance so
