@@ -1,0 +1,367 @@
+# =========================================================================
+# BORROWING-BASE MI QUESTION BANK — small, focused, executed by
+# mi_agent_api/tests/test_borrowing_base_query.py against a synthetic
+# three-period book and a governed facility register.
+#
+# The target is not answer rate. It is:
+#     wrong numbers .............. 0
+#     silent substitutions ....... 0
+#     incorrect population ....... 0
+#     unreconciled reasons ....... 0
+#     route collisions ........... 0
+#
+# `mode` selects the facility register the question runs against:
+#     approved    approved eligibility rules, effective date 2026-01-31, drawing stated as at the latest
+#                 snapshot, two approved eligibility rules
+#     prototype   the prototype's situation: no approved eligibility rules,
+#                 the disclosed prototype assumption — history is not a
+#                 contractual fact, so it refuses
+#     noeffective approved rules but no recorded facility effective date, so
+#                 the contractual window the terms cover is unrecorded
+#     nodrawn     no current_drawn_amount supplied
+#     nofacility  no facility configured for the client
+#
+# `parity` names measures whose MI value must equal the governed envelope's
+# `measures` — the same block the dashboard renders and /mi/borrowing-base
+# returns. `not_calculable` names measures the answer must report as the
+# governed NOT_CALCULABLE state, never a zero.
+# =========================================================================
+version: 1
+portfolio: client_001/mi_2026_06
+as_of: "2026-06-30"
+
+questions:
+  # ---- CURRENT FACILITY POSITION ------------------------------------------
+  - id: C01
+    question: What is the borrowing base?
+    family: current
+    route: borrowing_base
+    ok: true
+    intent: current_position
+    measures: [borrowing_base]
+    parity: [borrowing_base]
+  - id: C02
+    question: What is our current borrowing base?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [borrowing_base]
+    parity: [borrowing_base]
+  - id: C03
+    question: What is the borrowing-base headroom?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [borrowing_base_headroom]
+    parity: [borrowing_base_headroom]
+  - id: C04
+    question: How much headroom do we have under the borrowing base?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [borrowing_base_headroom]
+    parity: [borrowing_base_headroom]
+  - id: C05
+    question: What is facility utilisation?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [facility_utilisation]
+    parity: [facility_utilisation]
+  - id: C06
+    question: What is borrowing-base utilisation?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [borrowing_base_utilisation]
+    parity: [borrowing_base_utilisation]
+  - id: C07
+    question: How much is drawn under the facility?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [facility_drawn]
+    parity: [facility_drawn]
+  - id: C08
+    question: What is the facility commitment?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [facility_commitment]
+    parity: [facility_commitment]
+  - id: C09
+    question: How much eligible collateral do we have?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [eligible_balance]
+    parity: [eligible_balance]
+
+  # ---- INELIGIBILITY ------------------------------------------------------
+  - id: I01
+    question: How many loans are ineligible?
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    measures: [ineligible_loan_count]
+    parity: [ineligible_loan_count]
+  - id: I02
+    question: What is the ineligible balance?
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    measures: [ineligible_balance]
+    parity: [ineligible_balance]
+  - id: I03
+    question: What share of loans are ineligible?
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    measures: [ineligible_loan_share]
+    parity: [ineligible_loan_share]
+  - id: I04
+    question: What share of the financing portfolio balance is ineligible?
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    measures: [ineligible_balance_share]
+    parity: [ineligible_balance_share]
+  - id: I05
+    question: How many loans are ineligible and what balance do they represent?
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    measures: [ineligible_loan_count, ineligible_balance]
+    parity: [ineligible_loan_count, ineligible_balance]
+    artifact: table
+  - id: I06
+    question: Give me the count, balance and share of ineligible loans.
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    measures: [ineligible_loan_count, ineligible_balance, ineligible_loan_share]
+    parity: [ineligible_loan_count, ineligible_balance, ineligible_loan_share]
+    artifact: table
+  - id: I07
+    question: Why are loans ineligible?
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    intent: ineligibility_reasons
+    artifact: table
+  - id: I08
+    question: Break down ineligible loans by reason.
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    intent: ineligibility_reasons
+    artifact: table
+  - id: I09
+    question: Show ineligible balance by reason.
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    intent: ineligibility_reasons
+    artifact: table
+  - id: I10
+    question: Show count, balance and share by ineligibility reason.
+    family: ineligibility
+    route: borrowing_base
+    ok: true
+    intent: ineligibility_reasons
+    artifact: table
+
+  # ---- MULTI-MEASURE ------------------------------------------------------
+  - id: M01
+    question: What are the borrowing base, headroom and facility utilisation?
+    family: current
+    route: borrowing_base
+    ok: true
+    measures: [borrowing_base, borrowing_base_headroom, facility_utilisation]
+    parity: [borrowing_base, borrowing_base_headroom, facility_utilisation]
+    artifact: table
+
+  # ---- TIME ---------------------------------------------------------------
+  - id: T01
+    question: How has the borrowing base changed?
+    family: time
+    route: borrowing_base
+    ok: true
+    intent: period_change
+    measures: [borrowing_base]
+    artifact: table
+  - id: T02
+    question: What was the change in borrowing base since last month?
+    family: time
+    route: borrowing_base
+    ok: true
+    intent: period_change
+    measures: [borrowing_base]
+  - id: T03
+    question: How has ineligible balance changed?
+    family: time
+    route: borrowing_base
+    ok: true
+    intent: period_change
+    measures: [ineligible_balance]
+  - id: T04
+    question: How has the number of ineligible loans changed?
+    family: time
+    route: borrowing_base
+    ok: true
+    intent: period_change
+    measures: [ineligible_loan_count]
+  - id: T05
+    question: How has the ineligible share changed?
+    family: time
+    route: borrowing_base
+    ok: true
+    intent: period_change
+    measures: [ineligible_loan_share, ineligible_balance_share]
+  - id: T06
+    question: How has headroom changed under the borrowing base?
+    family: time
+    route: borrowing_base
+    ok: false                       # governed NOT_CALCULABLE — no period-valid drawing at the opening period
+    intent: period_change
+    refusal_contains: period_valid_drawn_amount
+  - id: T07
+    question: How has facility utilisation changed?
+    family: time
+    route: borrowing_base
+    ok: false
+    intent: period_change
+    refusal_contains: period_valid_drawn_amount
+  - id: T08
+    question: Show the borrowing base over time.
+    family: time
+    route: borrowing_base
+    ok: true
+    intent: period_trend
+    artifact: chart:line
+
+  # ---- BRIDGE -------------------------------------------------------------
+  - id: B01
+    question: Show me the borrowing-base bridge.
+    family: bridge
+    route: borrowing_base
+    ok: true
+    intent: bridge
+    artifact: chart:waterfall
+  - id: B02
+    question: Bridge the borrowing base from April to June.
+    family: bridge
+    route: borrowing_base
+    ok: true
+    intent: bridge
+    artifact: chart:waterfall
+    bridge_periods: ["2026-04", "2026-06"]
+  - id: B03
+    question: Why did the borrowing base change?
+    family: bridge
+    route: borrowing_base
+    ok: true
+    intent: bridge
+    artifact: chart:waterfall
+  - id: B04
+    question: Show the borrowing-base movement as a waterfall.
+    family: bridge
+    route: borrowing_base
+    ok: true
+    intent: bridge
+    artifact: chart:waterfall
+  - id: B05
+    question: Show the borrowing-base bridge as a table.
+    family: bridge
+    route: borrowing_base
+    ok: true
+    intent: bridge
+    artifact: table
+
+  # ---- SAFETY -------------------------------------------------------------
+  - id: S01
+    question: What is the borrowing base?
+    family: safety
+    mode: nofacility
+    route: borrowing_base
+    ok: false
+    refusal_contains: No funding facility is configured
+  - id: S02
+    question: What is the borrowing-base headroom?
+    family: safety
+    mode: nodrawn
+    route: borrowing_base
+    ok: true
+    not_calculable: [borrowing_base_headroom]
+  - id: S03
+    question: What are the borrowing base, headroom and facility utilisation?
+    family: safety
+    mode: nodrawn
+    route: borrowing_base
+    ok: true
+    parity: [borrowing_base]
+    not_calculable: [borrowing_base_headroom, facility_utilisation]
+  - id: S04
+    question: What is the borrowing base haircut?
+    family: safety
+    route: borrowing_base
+    ok: false
+    refusal_contains: haircut
+  - id: S05
+    question: What is the headroom?
+    family: safety
+    route: risk_limits               # the existing owner keeps generic headroom
+  - id: S06
+    question: Show risk limit headroom.
+    family: safety
+    route: risk_limits
+  - id: S07
+    question: What is utilisation?
+    family: safety
+    route: null                      # unchanged: no governed route claims it
+  - id: S08
+    question: What is the borrowing base by region?
+    family: safety
+    route: borrowing_base
+    ok: false
+    refusal_contains: by region
+  - id: S09
+    question: What is the borrowing base for Scotland?
+    family: safety
+    route: borrowing_base
+    ok: false
+    refusal_contains: Scotland
+  - id: S10
+    question: Which loans are ineligible?
+    family: safety
+    route: borrowing_base
+    ok: false
+    refusal_contains: loan-level
+  - id: S11
+    question: How has the borrowing base changed?
+    family: safety
+    mode: prototype
+    route: borrowing_base
+    ok: false
+    refusal_contains: not been approved
+  - id: S12
+    question: Show me the borrowing-base bridge.
+    family: safety
+    mode: prototype
+    route: borrowing_base
+    ok: false
+    refusal_contains: prototype assumption
+  - id: S13
+    question: What is the borrowing base?
+    family: safety
+    mode: prototype
+    route: borrowing_base
+    ok: true                         # the CURRENT position is always applicable
+    parity: [borrowing_base]
+  - id: S14
+    question: How has the borrowing base changed?
+    family: safety
+    mode: noeffective
+    route: borrowing_base
+    ok: false
+    refusal_contains: no effective date

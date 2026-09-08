@@ -285,16 +285,23 @@ class TestTheReceipt:
         assert receipt["prototype_assumptions_used"] == []
 
 
-class TestTheMIQueryAgentIsUNTOUCHED:
-    """The seam is PREPARED, not wired.
+class TestTheMIQueryAgentReachesTheEngineThroughOneOwner:
+    """The MI sprint has happened. What the old guard protected still holds.
 
-    The MI Query Agent does not answer borrowing-base questions, and nothing in
-    this sprint gave it the ability to. These tests exist so that stays true by
-    accident of nobody wiring it, rather than being quietly half-done: the day
-    someone does the MI sprint, they will delete these and mean it.
+    The earlier version of this class asserted that no MI module referenced
+    the borrowing base at all, "until the MI sprint happens — they will delete
+    these and mean it". This is that sprint, and the property worth keeping is
+    not silence but SINGULARITY: the MI Query Agent reaches the engine through
+    one registered recogniser, one integration module and the same API seam
+    the dashboard uses. No parsing or routing module imports the calculator or
+    the eligibility derivation.
     """
 
-    MI_MODULES = (
+    CALCULATION_OWNERS = ("borrowing_base.calculator", "borrowing_base.eligibility",
+                          "borrowing_base import calculator",
+                          "borrowing_base import eligibility")
+
+    NEVER_CALCULATE = (
         "mi_agent/llm_query_parser.py",
         "mi_agent/mi_query_spec.py",
         "mi_agent/mi_query_executor.py",
@@ -306,18 +313,37 @@ class TestTheMIQueryAgentIsUNTOUCHED:
         "mi_agent/semantic_resolver.py",
         "mi_agent_api/chat_routing.py",
         "mi_agent_api/analytical_plan.py",
+        "mi_agent_api/borrowing_base_query.py",
+        "mi_agent_api/temporal_query.py",
+        "mi_agent_api/evolution.py",
     )
 
-    @pytest.mark.parametrize("path", MI_MODULES)
-    def test_no_MI_parsing_or_routing_module_reaches_the_engine(self, path):
+    @pytest.mark.parametrize("path", NEVER_CALCULATE)
+    def test_no_MI_parsing_or_routing_module_imports_the_calculation_owner(self, path):
         import pathlib
         module = pathlib.Path(path)
         if not module.exists():          # a module renamed upstream
             pytest.skip(f"{path} is not present in this tree")
-        assert "borrowing_base" not in module.read_text(encoding="utf-8"), (
-            f"{path} references the borrowing base — the MI Query Agent "
-            "integration is a LATER sprint, and a half-wired one would let "
-            "the platform imply a capability it has not been tested for.")
+        text = module.read_text(encoding="utf-8")
+        for owner in self.CALCULATION_OWNERS:
+            assert owner not in text, (
+                f"{path} reaches {owner} directly. The MI Query Agent must "
+                "consume the governed borrowingBase envelope through "
+                "borrowing_base_api, never calculate for itself.")
+
+    def test_the_MI_route_is_registered_through_the_recogniser_registry(self):
+        from mi_agent_api.chat_routing import REGISTRY
+        assert "borrowing_base" in REGISTRY
+        # ONE registration, from the integration module, not a hand-ordered branch.
+        import pathlib
+        routing = pathlib.Path("mi_agent_api/chat_routing.py").read_text(encoding="utf-8")
+        assert routing.count("_borrowing_base.recogniser()") == 1
+
+    def test_the_parser_carries_only_the_owner_nouns_not_any_calculation(self):
+        import pathlib
+        parser = pathlib.Path("mi_agent/llm_query_parser.py").read_text(encoding="utf-8")
+        assert "_BORROWING_BASE_NOUNS" in parser
+        assert "advance_rate" not in parser and "borrowingBase" not in parser
 
     def test_the_measures_are_available_to_register_when_that_sprint_happens(self):
         # The seam itself: named, unit-carrying, definition-carrying measures

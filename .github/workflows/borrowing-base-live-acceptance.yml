@@ -1,0 +1,89 @@
+name: Borrowing base live acceptance
+
+# READ-ONLY against production. Deploys nothing, changes nothing, and modifies
+# no Azure setting: it drives the borrowing-base acceptance through the EXISTING
+# certification transport (`certify_mi_api._live_asker`) and the EXISTING
+# provenance check (`certify_mi_api.preflight`).
+#
+# UNLIKE the TIME x DIMENSION collector, this one ADJUDICATES: the harness
+# derives what every MI answer must say from the dashboard's own
+# `GET /mi/borrowing-base` envelope and exits non-zero on any violation, so the
+# release step "stop if anything unexpected moves" has a gate rather than a
+# transcript. `expect_commit` pins the DEPLOYED build being accepted, and a
+# mismatch is NOT EXECUTABLE rather than a pass.
+#
+# `ref` exists so the harness can be taken from a branch while `expect_commit`
+# names the build under acceptance. The two are deliberately separate: the code
+# under acceptance is whatever is deployed, not whatever this workflow was
+# checked out from.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      path:
+        default: /mi/query
+        required: true
+      portfolio_id:
+        default: ERE/2026-06-30
+        required: true
+      expect_commit:
+        description: The deployed SHA this acceptance is certifying.
+        required: true
+      ref:
+        description: Repo ref to take the harness from.
+        default: main
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: certify-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refuse to run without a token
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"
+            exit 1
+          fi
+          echo "MI_BEARER is present (${#MI_BEARER} characters)."
+
+      - name: Run the borrowing-base live acceptance
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          python -m due_diligence.evidence.mi_api_certification.borrowing_base_acceptance \
+            --base-url "${{ inputs.base_url }}" \
+            --path "${{ inputs.path }}" \
+            --portfolio-id "${{ inputs.portfolio_id }}" \
+            --expect-commit "${{ inputs.expect_commit }}" \
+            --json-out borrowing-base-acceptance.json
+
+      - name: Keep the evidence whatever the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: borrowing-base-live-acceptance
+          path: borrowing-base-acceptance.json
+          if-no-files-found: warn

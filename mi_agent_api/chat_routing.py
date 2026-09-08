@@ -47,6 +47,7 @@ from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
 from . import pipeline_movement_summary as _pipeline_movement_summary
 from . import stage_movement_query as _stage_movement
+from . import borrowing_base_query as _borrowing_base
 from . import temporal_query as _temporal
 from . import workspace as _workspace
 from .recogniser_registry import (
@@ -4398,6 +4399,21 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 pipeline_root=r.pipeline_root,
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 interpretation=r.resolve_interpretation())),
+
+        # 9b. FACILITY BORROWING BASE — the governed engine's MI consumer.
+        #
+        #     Answers from the SAME borrowingBase envelope the Eligibility &
+        #     Concentrations dashboard renders (`borrowing_base_api`), through
+        #     one analysis helper (`mi_agent.borrowing_base.analysis`); it
+        #     calculates nothing. Registered at a confidence ABOVE the
+        #     analytical layer because its recognition is a closed, explicit
+        #     vocabulary — "borrowing base", "facility utilisation / drawn /
+        #     commitment", "eligible collateral", "ineligible" — and a question
+        #     that names the borrowing base is not a composite of other
+        #     capabilities. A bare "headroom" or "utilisation" is NOT claimed:
+        #     `risk_limits` below keeps every concentration-headroom question
+        #     it already owns, measured on the frozen corpus.
+        _borrowing_base.recogniser(),
 
         # 10. Contractual risk limits — CURRENT STATE ONLY.
         #
