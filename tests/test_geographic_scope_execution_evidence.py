@@ -109,7 +109,23 @@ def _env(tmp_path, monkeypatch):
     # the four data-dependent cases answered over someone else's portfolio.
     # Cleared rather than assumed, so the fixture states its own book
     # completely and the file's result does not depend on collection order.
-    for leaked in ("MI_AGENT_PLATFORM_URI", "TRAKT_LOCAL_BLOB_ROOT",
+    # EVERY WAY THE READ PATH CAN BE POINTED AT A BOOK, not the handful this
+    # file happens to set. `MI_AGENT_CENTRAL_TAPE` is the one that caught it:
+    # `test_funded_realistic_and_pipeline` writes it into `os.environ` directly
+    # — a unittest, so no monkeypatch and no teardown — and it names a single
+    # tape file, which OUTRANKS the onboarding output root this file does set.
+    # Three cases then answered over that book: "balance by region" came back
+    # as UKK / UKJ / UKI, and "Scotland" was not a place the book carried, so
+    # the geographic questions refused. The refusal was correct; the book was
+    # not the one under test.
+    #
+    # Cleared as a CLASS — every source selector `data_source` reads — so the
+    # next neighbour to leave one of the others behind cannot reproduce this.
+    for leaked in ("MI_AGENT_CENTRAL_TAPE", "MI_AGENT_DATA_CSV",
+                   "MI_AGENT_ANALYTICS_DATASET", "MI_AGENT_PLATFORM_CANONICAL",
+                   "MI_AGENT_PLATFORM_DIR", "MI_AGENT_PLATFORM_URI",
+                   "MI_AGENT_SCRATCH", "MI_AGENT_SEMANTICS",
+                   "MI_AGENT_DISABLE_PREP", "TRAKT_LOCAL_BLOB_ROOT",
                    "TRAKT_STORAGE_BACKEND", "TRAKT_PORTFOLIO_REGISTRY",
                    "MI_AGENT_CLIENT_ID", "MI_AGENT_REPORTING_DATE",
                    "MI_AGENT_LLM_ENABLED"):
