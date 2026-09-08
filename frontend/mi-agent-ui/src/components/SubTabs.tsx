@@ -1,8 +1,9 @@
 import { cn } from "@/lib/utils";
 
 /** A lightweight sub-tab bar used inside a top-level dashboard workspace
- * (Funded / Pipeline / Forecast) to switch between its sub-views. Visually
- * subordinate to the top-level ViewToggle. */
+ * (Funded / Pipeline / Forecast) to switch between its sub-views. Tier 2 of
+ * three: visually subordinate to the ViewToggle rail above it and dominant
+ * over any unit switch inside a panel. */
 export function SubTabs<T extends string>({
   tabs, active, onChange, ariaLabel, testId,
 }: {
@@ -17,7 +18,7 @@ export function SubTabs<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       data-testid={testId}
-      className="inline-flex flex-wrap items-center gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 ring-1 ring-inset ring-white/5"
+      className="nav-secondary"
     >
       {tabs.map((t) => (
         <button
@@ -26,12 +27,11 @@ export function SubTabs<T extends string>({
           role="tab"
           aria-selected={active === t.id}
           onClick={() => onChange(t.id)}
-          className={cn(
-            "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
-            active === t.id
-              ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
-              : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
-          )}
+          // `nav-secondary-item` carries the tier-2 treatment: a recessed
+          // well with the selected view raised out of it as a solid thumb.
+          // A contained control, deliberately a different MECHANISM from the
+          // tier-1 rail above it, so rank is legible without reading labels.
+          className={cn("nav-secondary-item", active !== t.id && "cursor-pointer")}
         >
           {t.label}
         </button>

@@ -842,6 +842,7 @@ def map_extracted_test(ext: ExtractedTest, ctx: _MappingContext) -> TestProposal
                           MATCH_AMBIGUOUS: 0.5, MATCH_UNSUPPORTED: 0.0}[outcome]
 
     proposal = TestProposal(
+        population=detect_population(ext.interpretation_text),
         onboarding_run_id=ctx.onboarding_run_id,
         client_id=ctx.client_id,
         portfolio_id=ctx.portfolio_id,
@@ -874,6 +875,25 @@ def map_extracted_test(ext: ExtractedTest, ctx: _MappingContext) -> TestProposal
             "suggested_category": metric.category if metric else "unknown",
         }
     return proposal
+
+
+#: A facility schedule that says "Eligible Mortgage Loans" is not describing
+#: the whole book: the test is measured over the loans that qualify for the
+#: facility. Reading that from the clause is extraction, not inference — the
+#: words are in the document. What an Eligible Mortgage Loan IS remains
+#: unknown until the facility agreement supplies the definition; this only
+#: records WHICH POPULATION the clause names.
+_ELIGIBLE_POPULATION_RE = re.compile(
+    r"\beligible\s+(?:mortgage\s+)?loans?\b", re.IGNORECASE)
+
+POPULATION_ELIGIBLE_MORTGAGE_LOANS = "eligible_mortgage_loans"
+
+
+def detect_population(text: str) -> str:
+    """The population a clause names, or "" for the whole funded book."""
+    if text and _ELIGIBLE_POPULATION_RE.search(str(text)):
+        return POPULATION_ELIGIBLE_MORTGAGE_LOANS
+    return ""
 
 
 def _flag_duplicates(proposals: List[TestProposal]) -> None:

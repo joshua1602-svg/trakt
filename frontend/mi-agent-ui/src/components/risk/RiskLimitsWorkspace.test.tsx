@@ -1,5 +1,5 @@
 /**
- * Funded → Risk Limits workspace: renders the governed evaluation verbatim —
+ * Eligibility & Concentrations workspace: renders the governed evaluation verbatim —
  * summary, filters, accessible statuses, detail panel with provenance and
  * drill-through, period change, and the honest unavailable / legacy / empty
  * states. No number is computed here; everything asserts against the mock
@@ -14,6 +14,7 @@ import {
   mockConcentrationDrivers,
   mockConcentrationHistory,
   mockConcentrationTests,
+  mockEligibilityLoans,
 } from "@/data/mockConcentrationTests";
 import { RiskLimitsWorkspace } from "./RiskLimitsWorkspace";
 
@@ -79,11 +80,17 @@ describe("RiskLimitsWorkspace", () => {
     expect(screen.getByText(/prior 2025-10-31/)).toBeInTheDocument();
   });
 
-  it("discloses the approved configuration source (version + operator)", async () => {
+  // CHANGED DELIBERATELY. This asserted a standing "Approved configuration
+  // v2 · activated by Demo Operator" banner. That provenance line is not
+  // rendered for an approved-configuration source any more — an operator does
+  // not need it repeated on every visit to this tab; it stays in the audit
+  // trail instead. The legacy-extracted governance warning (the numbers are
+  // NOT operator-approved) is a different, load-bearing disclosure and is
+  // still asserted below, unchanged.
+  it("renders no standing configuration-provenance banner for an approved source", async () => {
     render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
-    const banner = await screen.findByTestId("concentration-source-banner");
-    expect(banner).toHaveTextContent("Approved configuration v2");
-    expect(banner).toHaveTextContent("Demo Operator");
+    await screen.findByTestId("concentration-summary");
+    expect(screen.queryByTestId("concentration-source-banner")).toBeNull();
   });
 
   it("conveys status by label and glyph, not colour alone", async () => {
@@ -113,6 +120,18 @@ describe("RiskLimitsWorkspace", () => {
     expect(row).toHaveTextContent("52.10%"); // Full Pipeline (stress)
     expect(row).toHaveTextContent("+1.30pp"); // Move F→E
     expect(row).toHaveTextContent("LOW HEADROOM"); // service risk classification
+  });
+
+  it("orders the tab tiles, then the table, then emerging risks", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const tiles = await screen.findByTestId("concentration-summary");
+    const table = await screen.findByTestId("concentration-table");
+    const risks = await screen.findByTestId("emerging-risks");
+    // DOCUMENT_POSITION_FOLLOWING (4): the first node precedes the second.
+    expect(tiles.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    expect(table.compareDocumentPosition(risks) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
   });
 
   it("renders the service-ranked emerging risks verbatim", async () => {
@@ -145,16 +164,19 @@ describe("RiskLimitsWorkspace", () => {
     for (const row of rows) expect(row).not.toHaveTextContent("Net WAC");
   });
 
-  it("discloses the forecast methodology from the governed payload", async () => {
+  // CHANGED DELIBERATELY. This asserted a standing "Expected Forecast:
+  // completion-trend model · window ..." banner with a "View methodology"
+  // toggle. That description now lives only on the Forecast tab, which
+  // already covers it — showing it twice was the duplication the operator
+  // asked to remove. The sufficiency-floor caveat is a genuine warning (a
+  // stage's forecast falls back to a configured assumption) rather than
+  // decorative methodology, and is still asserted.
+  it("still warns when a stage falls back to a configured assumption", async () => {
     render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
     const banner = await screen.findByTestId("forecast-provenance-banner");
-    expect(banner).toHaveTextContent("2025-10-27 → 2025-11-24");
     expect(banner).toHaveTextContent("sufficiency floor"); // KFI fallback caveat
-    fireEvent.click(within(banner).getByRole("button", { name: "View methodology" }));
-    const block = await screen.findByTestId("methodology-block");
-    expect(block).toHaveTextContent("No machine learning");
-    expect(block).toHaveTextContent("maximum-exposure stress, not a prediction");
-    expect(block).toHaveTextContent("≥ 12 observed cases");
+    expect(banner).not.toHaveTextContent("completion-trend model");
+    expect(screen.queryByRole("button", { name: "View methodology" })).toBeNull();
   });
 
   it("drills through to pipeline drivers that reconcile", async () => {
@@ -305,5 +327,130 @@ describe("RiskLimitsWorkspace", () => {
     expect(await screen.findByTestId("concentration-error")).toHaveTextContent(
       "nothing is estimated",
     );
+  });
+});
+
+// --------------------------------------------------------------------------
+// The borrowing base sits ON this tab, above the concentrations. These tests
+// exist to prove the tab still does everything it did BEFORE the borrowing
+// base arrived, and that the two halves come from one request.
+// --------------------------------------------------------------------------
+describe("Eligibility & Concentrations — the borrowing base on the same tab", () => {
+  it("renders the borrowing base above the concentration table", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    await screen.findByTestId("concentration-table");
+    expect(screen.getByTestId("borrowing-base-panel")).toBeInTheDocument();
+    const panel = screen.getByTestId("risk-limits-panel");
+    const nodes = Array.from(panel.querySelectorAll("[data-testid]"));
+    const bb = nodes.findIndex((n) => n.getAttribute("data-testid") === "borrowing-base-panel");
+    const table = nodes.findIndex((n) => n.getAttribute("data-testid") === "concentration-table");
+    expect(bb).toBeGreaterThanOrEqual(0);
+    expect(bb).toBeLessThan(table);
+  });
+
+  it("takes both halves from ONE concentration-tests request", async () => {
+    const spy = vi.fn(async () => mockConcentrationTests("client_001"));
+    render(
+      <RiskLimitsWorkspace client={client({ getConcentrationTests: spy })} portfolioId="p" />,
+    );
+    await screen.findByTestId("borrowing-base-panel");
+    await screen.findByTestId("concentration-table");
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("still shows the borrowing base when no concentration test is active", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, available: false, tests: [], source: "none" as const,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    await screen.findByTestId("concentration-empty");
+    expect(screen.getByTestId("borrowing-base-panel")).toBeInTheDocument();
+  });
+
+  it("opens the eligibility drill-down through the existing client", async () => {
+    const spy = vi.fn(async () =>
+      mockEligibilityLoans("client_001", "UNDETERMINED"));
+    render(
+      <RiskLimitsWorkspace
+        client={client({ getEligibilityLoans: spy })}
+        portfolioId="p"
+      />,
+    );
+    await screen.findByTestId("borrowing-base-panel");
+    fireEvent.click(screen.getByText("Show undetermined loans"));
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    const panel = await screen.findByTestId("eligibility-loans-panel");
+    expect(panel).toHaveTextContent("Undetermined loans");
+    expect(panel).toHaveTextContent("borrowing base eligibility reason");
+  });
+
+  it("keeps the concentration table's own plumbing working unchanged", async () => {
+    render(<RiskLimitsWorkspace client={client()} portfolioId="p" />);
+    const table = await screen.findByTestId("concentration-table");
+    // Search, category filter and the detail panel are the pre-existing
+    // controls; the borrowing base must not have disturbed any of them.
+    expect(within(table).getAllByRole("button").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Search tests"), {
+      target: { value: "no such test" },
+    });
+    expect(await screen.findByTestId("concentration-no-match")).toBeInTheDocument();
+  });
+});
+
+describe("contractual limits that cannot be calculated", () => {
+  it("says so on the tab, not only in the proposal queue", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, openProposals: 1, unsupportedProposals: 0,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    const banner = await screen.findByTestId("uncalculable-limits-banner");
+    expect(banner).toHaveTextContent("1 further contractual limit not calculable");
+    expect(banner).toHaveTextContent("not being reported as passing");
+  });
+
+  it("counts unsupported limits alongside the ones awaiting confirmation", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, openProposals: 2, unsupportedProposals: 1,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    expect(await screen.findByTestId("uncalculable-limits-banner"))
+      .toHaveTextContent("3 further contractual limits not calculable");
+  });
+
+  it("stays out of the way when every contractual limit is active", async () => {
+    const snapshot = mockConcentrationTests("p");
+    render(
+      <RiskLimitsWorkspace
+        client={client({
+          getConcentrationTests: vi.fn(async () => ({
+            ...snapshot, openProposals: 0, unsupportedProposals: 0,
+          })),
+        })}
+        portfolioId="p"
+      />,
+    );
+    await screen.findByTestId("concentration-table");
+    expect(screen.queryByTestId("uncalculable-limits-banner")).toBeNull();
   });
 });

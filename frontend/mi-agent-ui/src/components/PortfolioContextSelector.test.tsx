@@ -104,7 +104,7 @@ describe("ViewToggle — capability gating", () => {
 
   it("leaves every view enabled when the backend gates nothing", () => {
     render(<ViewToggle active="funded" onChange={vi.fn()} />);
-    for (const name of [/Funded/, /Pipeline/, /Forecast/, /Risk Limits/]) {
+    for (const name of [/Funded/, /Pipeline/, /Forecast/, /Eligibility & Concentrations/]) {
       expect(screen.getByRole("tab", { name })).not.toBeDisabled();
     }
   });

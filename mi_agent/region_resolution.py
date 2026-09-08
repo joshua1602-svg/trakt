@@ -75,6 +75,28 @@ _ALIASES: Dict[str, str] = {
     "the humber": "yorkshire and the humber",
     "ni": "northern ireland",
     "ulster": "northern ireland",
+    # ADJECTIVAL FORMS OF THE THREE ITL1 NATIONS.
+    #
+    # The table above is entirely NOMINAL — "greater london", "east anglia",
+    # "ulster" — so a reader who wrote the adjective reached nothing:
+    # `codes_for("scotland")` gave 18 codes and `codes_for("scottish")` gave 0.
+    #
+    # THE BOUNDARY COMES FROM THE TAXONOMY, NOT FROM ENGLISH. The governed ITL1
+    # level has twelve values, and exactly three of them are nations with an
+    # unambiguous adjectival form. "English" is deliberately absent: England is
+    # not one governed value — it spans nine ITL1 regions, North East through
+    # South West — so the adjective has no single referent and resolving it
+    # would invent a region the taxonomy does not have. "British", "UK" and the
+    # rest are absent for the same reason. An alias may be added where the
+    # taxonomy already makes the referent unambiguous; the taxonomy is never
+    # widened to accommodate the language.
+    #
+    # "northern irish" is one governed phrase. `codes_for` normalises the whole
+    # term before this lookup, so a key matches a complete phrase and never a
+    # word inside one.
+    "scottish": "scotland",
+    "welsh": "wales",
+    "northern irish": "northern ireland",
 }
 
 
@@ -186,6 +208,44 @@ def _names_for(code: str) -> Set[str]:
     return out
 
 
+def _canonical_matches(term: str, present: List) -> Set:
+    """The present values that mean the SAME GOVERNED REGION as ``term``.
+
+    Delegated to `engine.region_taxonomy`, which is the estate's answer to "are
+    these the same region": it cleans punctuation, separators and `&`/`and`, and
+    applies the client's approved synonym table. Re-implementing that here is
+    what left `Yorkshire & Humberside` selecting five of sixty-five loans while
+    the taxonomy resolved all three spellings to one region.
+
+    Empty when no taxonomy is configured, when the term resolves to nothing
+    governed, or when the owner cannot be reached — in every one of which the
+    caller keeps exactly the behaviour it had before this existed.
+    """
+    try:
+        from engine.region_taxonomy import METHOD_UNRESOLVED, resolve_taxonomy
+
+        taxonomy = resolve_taxonomy(None)
+        if taxonomy is None:
+            return set()
+        wanted, method = taxonomy.resolve_detail(term)
+        if not wanted or method == METHOD_UNRESOLVED:
+            return set()
+        # Resolved once per DISTINCT spelling: a tape has thousands of rows and
+        # a handful of regions.
+        same = set()
+        seen = {}
+        for value in present:
+            key = str(value)
+            if key not in seen:
+                got, _ = taxonomy.resolve_detail(key)
+                seen[key] = got
+            if seen[key] and seen[key] == wanted:
+                same.add(value)
+        return same
+    except Exception:  # noqa: BLE001 - no owner reachable, no canonical rule
+        return set()
+
+
 def resolve(term: str, present_values: Iterable) -> List:
     """The values IN THIS COLUMN that ``term`` denotes.
 
@@ -206,8 +266,12 @@ def resolve(term: str, present_values: Iterable) -> List:
     # 1. Exact match on the stored representation, whatever it is.
     key_forms = _variants(key) | _variants(_ALIASES.get(key, key))
     exact = [v for v in present if _variants(v) & key_forms]
-    if exact:
-        return sorted(set(exact), key=lambda v: str(v))
+    # THE GOVERNED CANONICAL SET, unioned rather than consulted only on a miss.
+    # A PARTIAL exact match is exactly the case that must not short-circuit
+    # this: one spelling of a region matching is not the region.
+    canonical = _canonical_matches(term, present)
+    if exact or canonical:
+        return sorted(set(exact) | canonical, key=lambda v: str(v))
 
     codes = codes_for(term)
     if not codes:

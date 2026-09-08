@@ -28,10 +28,20 @@ export function ForecastView({
   const bridge = forecast?.forecastBridge ?? null;
   const breakdowns = forecast?.forecastBreakdowns;
 
-  // A forecast bar is drawn as its PARTS where the payload carries them: the
-  // funded exposure that exists today, and the weighted pipeline expected to
-  // arrive. Those are facts of different certainty and a funder is buying one
-  // of them. Both come from the engine — nothing is derived here.
+  // Forecast is a probability-weighted BALANCE composition (funded exposure +
+  // amount x completion-probability for pipeline; see
+  // mi_agent_api/workspace.py forecast_dimension_breakdown), not a loan-level
+  // model — a pipeline case contributes a fraction of itself, so "how many
+  // cases" has no meaning here the way it does for Funded/Pipeline's own
+  // stratifications. The backend's caseCount on this payload is a stub 0
+  // (cap_breakdown's shared "Other" aggregation needs SOME numeric value),
+  // never a real count, so it is never offered as a measure or shown as a
+  // suffix — a displayed "0" would read as "no cases", not "not counted".
+  //
+  // The bar is drawn as its PARTS where the payload carries them: the funded
+  // exposure that exists today, and the weighted pipeline expected to arrive.
+  // Those are facts of different certainty and a funder is buying one of them.
+  // Both come from the engine — nothing is derived here.
   const stacked = (r: DimensionBucket): BarDatum => {
     const funded = r.fundedAmount;
     const expected = r.weightedExpectedFundedAmount ?? 0;
@@ -39,7 +49,7 @@ export function ForecastView({
       label: r.key,
       value: r.pipelineAmount,
       parts: funded == null ? undefined : [
-        { label: "Current funded", value: funded, className: "bg-peri-400/70" },
+        { label: "Current funded", value: funded, className: "bg-cyan-500" },
         { label: "Expected additions", value: expected, className: "bg-mint-400/80" },
       ],
     };
@@ -58,19 +68,21 @@ export function ForecastView({
       <LineagePanel lineage={forecast?.lineage} />
       {(byRegion.length > 0 || byLtv.length > 0 || byMonth.length > 0) && (
         <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/40 p-5">
-          <h3 className="text-sm font-semibold text-ink-100">Forecast funded balance breakdowns</h3>
-          <p className="mt-0.5 text-[11px] text-ink-400">
-            Funded actual exposure + probability-weighted pipeline (derived).
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-ink-400">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-3 rounded-sm bg-peri-400/70" />
-              Current funded
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-3 rounded-sm bg-mint-400/80" />
-              Expected additions
-            </span>
+          <div>
+            <h3 className="text-sm font-semibold text-ink-100">Forecast funded balance breakdowns</h3>
+            <p className="mt-0.5 text-[11px] text-ink-400">
+              Funded actual exposure + probability-weighted pipeline (derived).
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-4 text-[10px] text-ink-400">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-3 rounded-sm bg-cyan-500" />
+                Current funded
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-3 rounded-sm bg-mint-400/80" />
+                Expected additions
+              </span>
+            </div>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             {byRegion.length > 0 && (

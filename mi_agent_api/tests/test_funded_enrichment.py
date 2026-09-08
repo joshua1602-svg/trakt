@@ -152,6 +152,13 @@ class TestFullEnrichmentReachesDimensions(unittest.TestCase):
                     "ticket_bucket", "time_on_book_bucket", "vintage_year",
                     "geographic_region_obligor", "origination_channel"):
             self.assertIn(dim, avail, dim)
+        # 2026-09-07: `collateral_geography` joined the core dimensions when the
+        # two geographies stopped being one. A book carries a borrower region and
+        # a collateral region, they are different facts, and a book is now
+        # reported as carrying each of them separately. This fixture supplies
+        # both, so nothing is missing — and a book supplying only one would say
+        # so, which is what tells a reader it cannot answer on the other basis.
+        self.assertIn("collateral_geography", avail)
         self.assertEqual(self.report["missing_dimensions"], [])
 
     def test_borrower_type_is_derived_from_second_applicant_presence(self):

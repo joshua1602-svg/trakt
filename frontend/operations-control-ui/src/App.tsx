@@ -14,6 +14,7 @@ import { HomeScreen } from "@/screens/Home";
 import { NewWorkflowScreen } from "@/screens/NewWorkflow";
 import { ReviewDetailScreen } from "@/screens/ReviewDetail";
 import { ReviewsScreen } from "@/screens/Reviews";
+import { MiQueriesScreen } from "@/screens/MiQueries";
 import { RulesScreen } from "@/screens/Rules";
 import { WorkflowDetailScreen } from "@/screens/WorkflowDetail";
 import { WorkflowsScreen } from "@/screens/Workflows";
@@ -78,6 +79,7 @@ export default function App() {
                 <Route path="/reviews" element={<ReviewsScreen />} />
                 <Route path="/reviews/:id" element={<ReviewDetailScreen />} />
                 <Route path="/rules" element={<RulesScreen />} />
+                <Route path="/mi-queries" element={<MiQueriesScreen />} />
                 <Route path="/history" element={<HistoryScreen />} />
                 {/* Client Onboarding — standing configuration. It sits beside
                     Operations: Operations processes deliveries, Onboarding

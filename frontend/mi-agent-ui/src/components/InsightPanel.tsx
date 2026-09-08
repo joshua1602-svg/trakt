@@ -1,11 +1,13 @@
 import { useMemo } from "react";
 import { Activity, Eye, Info, Lightbulb, Sparkles } from "lucide-react";
 import type { Artifact } from "@/domain";
+import type { SuggestedAction } from "@/domain";
 import { computeInsights, hasInsights, type Observation, type Severity } from "@/lib/insights";
+import { buildSuggestedActions } from "@/lib/suggestedActions";
 
 const SEVERITY_META: Record<Severity, { icon: typeof Info; tone: string; label: string }> = {
   info: { icon: Info, tone: "text-ink-500", label: "Info" },
-  watch: { icon: Eye, tone: "text-peri-300", label: "Watch" },
+  watch: { icon: Eye, tone: "text-cyan-300", label: "Watch" },
   significant: { icon: Activity, tone: "text-amber-300", label: "Significant" },
 };
 
@@ -13,7 +15,34 @@ const SEVERITY_META: Record<Severity, { icon: typeof Info; tone: string; label: 
  * Key Observations — the additive Insight Engine surface under a chart/table.
  * Everything is computed locally from the artifact rows; if computation throws
  * or yields nothing, the panel renders null and the result is unaffected.
+ *
+ * THE ONE SUGGESTION SURFACE. Follow-ups used to be built by two engines and
+ * shown in two places: `buildInvestigations` here, and `buildSuggestedActions`
+ * as a chip row in the chat rail. Neither knew the other existed, so one chart
+ * could put six offers on screen in two visual languages. Both engines now feed
+ * this panel, beside the result they refer to rather than in a rail that has
+ * already scrolled: the insight-derived investigations lead, because they are
+ * grounded in what this result actually shows, and the spec-derived actions
+ * follow. Deduplicated by question, capped, and each one still routed through
+ * the normal MI Agent flow.
  */
+const MAX_SUGGESTIONS = 5;
+
+function mergeSuggestions(
+  investigations: SuggestedAction[],
+  actions: SuggestedAction[],
+): SuggestedAction[] {
+  const out: SuggestedAction[] = [];
+  const seen = new Set<string>();
+  for (const s of [...investigations, ...actions]) {
+    const key = s.question.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+    if (out.length === MAX_SUGGESTIONS) break;
+  }
+  return out;
+}
 export function InsightPanel({
   artifact,
   onAsk,
@@ -29,12 +58,24 @@ export function InsightPanel({
     }
   }, [artifact]);
 
+  // The spec-derived actions ("Split by broker", "Show current LTV", "Drill
+  // into 40-50%") that the chat rail used to carry.
+  const suggestions = useMemo(() => {
+    if (!summary) return [];
+    try {
+      return mergeSuggestions(summary.suggestions,
+                              buildSuggestedActions(artifact.source.spec, artifact));
+    } catch {
+      return summary.suggestions; // a suggestion must never break a result
+    }
+  }, [summary, artifact]);
+
   if (!hasInsights(summary)) return null;
 
   return (
     <div className="mt-3 rounded-lg border border-[var(--color-line-soft)] bg-navy-900/30 p-3">
       <div className="flex items-center gap-1.5">
-        <Sparkles size={13} className="text-peri-300" />
+        <Sparkles size={13} className="text-cyan-300" />
         <span className="text-[11px] font-medium uppercase tracking-wider text-ink-400">Key observations</span>
       </div>
 
@@ -44,23 +85,23 @@ export function InsightPanel({
         ))}
       </ul>
 
-      {summary.suggestions.length > 0 && (
+      {suggestions.length > 0 && (
         <div className="mt-3 border-t border-[var(--color-line-soft)] pt-2.5">
           <div className="mb-1.5 flex items-center gap-1.5">
             <Lightbulb size={12} className="text-ink-500" />
             <span className="text-[10px] font-medium uppercase tracking-wider text-ink-500">
-              Suggested investigations
+              Investigate next
             </span>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {summary.suggestions.map((s) => (
+            {suggestions.map((s) => (
               <button
                 key={`${s.kind}:${s.question}`}
                 type="button"
                 onClick={() => onAsk?.(s.question)}
                 title={s.question}
                 disabled={!onAsk}
-                className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 text-[11px] text-ink-300 transition-colors enabled:hover:border-peri-400/40 enabled:hover:text-ink-100 disabled:opacity-60"
+                className="inline-flex items-center rounded-full border border-[var(--color-line)] bg-navy-800/50 px-2.5 py-1 text-[11px] text-ink-300 transition-colors enabled:hover:border-cyan-400/40 enabled:hover:text-ink-100 disabled:opacity-60"
               >
                 {s.label}
               </button>

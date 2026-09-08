@@ -648,6 +648,10 @@ export interface AgentMeta {
   enabled: boolean;
   flag: string;
   runtime_mode: string;
+  /** Whether this environment can open a REAL onboarding at all. False in
+   *  every rehearsal deployment, so the tab does not offer a choice that
+   *  would only be refused later. */
+  live_available?: boolean;
   policy: SyntheticPolicy;
   lifecycle: LifecycleState[];
   /** The wizard's own reference data, so the tab never restates the catalogue. */

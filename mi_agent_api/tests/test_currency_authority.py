@@ -42,12 +42,34 @@ def _config(tmp_path: Path, body: str) -> str:
 # The governed configuration is the authority
 # --------------------------------------------------------------------------- #
 def test_client_1_gbp_comes_from_the_governed_client_configuration():
-    """The shipped client configuration declares it; nothing infers it."""
+    """The shipped client configuration declares it; nothing infers it.
+
+    CHANGED DELIBERATELY (twice, and this is the end of it). It first resolved
+    through ``client_id="ERE"`` via a fallback to the incumbent lender's config
+    for ANY identified client; main removed that fallback, because it meant a
+    second client silently reported under ERE Funding's configured currency, and
+    the assertion moved to ``ERM_UK`` — the name the file then carried. But
+    ``ERM_UK`` was never the client: ERM is the ASSET (equity release, whose
+    configuration is `config/asset/product_defaults_ERM.yaml`) and ERE is the
+    client, which is why the live portfolio ``ERE/2026-06-30`` looked its
+    configuration up under ``ERE`` and found nothing. The file is now named for
+    the client it configures, so the lookup that always should have worked does.
+    The governed fact under test has never changed: the shipped configuration
+    declares GBP, and it answers for the client it is named for.
+    """
     location = currency_mod.client_config_path("ERE")
-    assert location and location.endswith(".yaml")
+    assert location and location.endswith("config_client_ERE.yaml")
     doc = currency_mod._load_client_config(location)
     assert doc.get("portfolio", {}).get("base_currency") == "GBP"
     assert currency_mod.governed_currency_code("ERE") == "GBP"
+
+
+def test_a_client_with_no_configuration_of_its_own_inherits_nothing():
+    """The removed fallback, pinned as removed: an identified client with no
+    governed configuration gets no governed currency, rather than the incumbent
+    lender's. It falls through to the tape and the platform default."""
+    assert currency_mod.client_config_path("some_other_lender") is None
+    assert currency_mod.governed_currency_code("some_other_lender") is None
 
 
 def test_governed_configuration_outranks_the_tape(tmp_path, monkeypatch):

@@ -90,34 +90,53 @@ describe("chat routing artifacts render via the existing union", () => {
 });
 
 describe("compact chat behaviour", () => {
-  it("shows key numbers + an open-in-workspace link, not a full inline chart", () => {
+  // CHANGED DELIBERATELY. These asserted that the chat carried key-number chips
+  // ("Groups:", "Coverage:") and open-in-workspace links. Both were printings
+  // of something already on screen: the figures are in the answer's execution
+  // receipt and the artifact's reconciliation footer, and the workspace opens,
+  // scrolls to and highlights a new artifact by itself. The chat states; the
+  // workspace shows.
+  const present = new Set([compareBarChart.id, milestoneTable.id]);
+
+  it("adds nothing to a result already in the workspace", () => {
+    const { container } = render(
+      <ChatResult
+        artifacts={[compareBarChart, milestoneTable]}
+        onTogglePin={() => {}}
+        onOpenArtifact={vi.fn()}
+        workspaceArtifactIds={present}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("repeats neither the group count nor the coverage figure", () => {
+    render(
+      <ChatResult artifacts={[compareBarChart]} onTogglePin={() => {}}
+        onOpenArtifact={vi.fn()} workspaceArtifactIds={present} />,
+    );
+    expect(screen.queryByText("Groups:")).toBeNull();
+    expect(screen.queryByText("Coverage:")).toBeNull();
+  });
+
+  it("states it once when the result has been cleared", () => {
     render(
       <ChatResult
         artifacts={[compareBarChart, milestoneTable]}
         onTogglePin={() => {}}
         onOpenArtifact={vi.fn()}
+        workspaceArtifactIds={new Set<string>()}
       />,
     );
-    expect(screen.getByTestId("chat-result-compact")).toBeInTheDocument();
-    expect(screen.getByText(/Open chart in workspace/)).toBeInTheDocument();
-    expect(screen.getByText(/Open table in workspace/)).toBeInTheDocument();
-    // A key-number chip is surfaced compactly (not the full chart inline).
-    expect(screen.getByText("Groups:")).toBeInTheDocument();
-    // No inline-expand: outputs render in the workspace, not duplicated in chat.
-    expect(screen.queryByText("Show here")).toBeNull();
-  });
-
-  it("surfaces reconciliation coverage as a compact key number", () => {
-    // A chart-only result reads coverage from the reconciliation footer.
-    render(
-      <ChatResult artifacts={[compareBarChart]} onTogglePin={() => {}} onOpenArtifact={vi.fn()} />,
-    );
-    expect(screen.getByText("Coverage:")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-result-cleared").textContent)
+      .toMatch(/no longer in the workspace/i);
+    expect(screen.queryByText(/Open chart in workspace/)).toBeNull();
   });
 
   it("renders nothing inline for a controlled insufficient-data response (no artifacts)", () => {
     const { container } = render(
-      <ChatResult artifacts={[]} onTogglePin={() => {}} onOpenArtifact={vi.fn()} />,
+      <ChatResult artifacts={[]} onTogglePin={() => {}} onOpenArtifact={vi.fn()}
+        workspaceArtifactIds={new Set<string>()} />,
     );
     // The narrative answer is shown by ChatMessage; ChatResult itself is empty.
     expect(container).toBeEmptyDOMElement();

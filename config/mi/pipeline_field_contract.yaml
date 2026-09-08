@@ -41,6 +41,40 @@ source:
     - "*KFI*Pipeline*"
 
 # -------------------------------------------------------------------------
+# Source-portfolio provenance.
+#
+# The weekly pipeline extract carries no per-case source-portfolio column, so
+# provenance cannot be READ from the data the way the funded tape's
+# `source_portfolio_id` is. Where it is a fact about the BUSINESS rather than a
+# column, it is DECLARED here — once, revocably, and in the open — instead of
+# being hard-coded into a route where nobody would find it again.
+#
+# Everything below is a no-op when `declared: false`. Answers then keep the
+# existing behaviour: whole-platform, disclosed as not narrowed to any book.
+# That is the safe default, and it is what ships if this block is deleted.
+#
+# ---- READ THIS BEFORE CHANGING THE BUSINESS ----
+# `declared: true` makes the estate ASSERT that a pipeline figure is a `book`
+# figure. If the lender ever originates outside this book, or acquires cases
+# that are still in flight, that assertion becomes silently wrong: answers stay
+# confident and stop being true. Set `declared: false` the same day, and the
+# estate returns to claiming nothing.
+# -------------------------------------------------------------------------
+source_provenance:
+  declared: true
+  book: direct
+  # Stated by the lender, 2026-09-03: "Pipeline will never be bought - it will
+  # always be a direct pipeline where completions feed into Direct Funded only."
+  # Acquired portfolios arrive already funded, so they are never in the
+  # pipeline; there is no acquired pipeline to narrow to.
+  rationale: >-
+    The pipeline is direct origination only. Acquired portfolios arrive already
+    funded and are never in the pipeline, so every pipeline case completes into
+    the Direct funded book.
+  declared_by: lender
+  declared_on: "2026-09-03"
+
+# -------------------------------------------------------------------------
 # A. Funded-correlated economic fields.
 #    Stored under the funded MI canonical name so funded + pipeline correlate
 #    directly. `funded_correlation` lists the funded field(s) each compares to.

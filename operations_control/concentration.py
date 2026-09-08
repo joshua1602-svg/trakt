@@ -373,6 +373,10 @@ class ConcentrationGovernanceService:
                 approval=approval,
                 severity=p.severity or "high",
                 definition_notes=self._definition_notes(p),
+                # The population the CONTRACT named, carried through approval
+                # into the immutable version. It is part of what the operator
+                # approved, not something the evaluator decides at read time.
+                population=getattr(p, "population", "") or "",
             ))
         config = ActiveConfiguration(
             client_id=client_id, tests=tests, activated_by=actor,

@@ -2408,8 +2408,8 @@ class DeckBuilder:
 
     _STAGE_PRETTY = {"KFI": "KFI", "APPLICATION": "Application", "OFFER": "Offer",
                      "COMPLETED": "Completed", "WITHDRAWN": "Withdrawn"}
-    _STAGE_COLOR = {"APPLICATION": "#7c9cf0", "OFFER": "#5ec6b8",
-                    "COMPLETED": "#e0a458", "WITHDRAWN": "#eb6f6f"}
+    _STAGE_COLOR = {"APPLICATION": THEME.categorical[0], "OFFER": THEME.categorical[1],
+                    "COMPLETED": THEME.categorical[2], "WITHDRAWN": THEME.categorical[7]}
 
     def slide_pipeline_evolution(self, spec):
         """Pipeline Evolution — *how is origination changing?*
@@ -2485,116 +2485,168 @@ class DeckBuilder:
         self._footer(s)
         self._record("pipeline_evolution", spec.get("title"), "", placeholder=single)
 
-    def slide_pipeline_movement(self, spec):
-        """Pipeline Stage Movement — *what happened to cases between periods?*
+    def slide_stage_transitions(self, spec):
+        """Pipeline Stage Movement — *what happened to cases between snapshots?*
 
-        For each live stage, on counts AND amounts::
+        The GROSS answer, which a net stage-stock view cannot give: an OFFER
+        stock falling three to one is a net -2 whether three left and one
+        arrived or two left and none did. Every number here is read from the
+        governed ``PIPELINE_STAGE_TRANSITION`` payload
+        (``movement_detail.resolve_stage_transition_detail``); this method
+        formats and orders, and computes no transition, arrival, departure or
+        reconciliation of its own.
 
-            opening live + arrivals - departures +/- amount change on stayers
-                = closing live
+        Four populations are kept visually apart on purpose, because merging any
+        two of them would restate a different metric:
 
-        Two aligned reads, because a funder asks both: a stage table carrying
-        the identity in cases and money, and — where cases left a stage — where
-        they actually went. "Left the stage" and "left the pipeline" are
-        different events, and a completion is not attrition.
-
-        Nothing is computed here. The reconciliation is
-        ``evolution.pipeline_stage_movement``, which ``/mi/evolution/pipeline-
-        movement`` serves to the dashboard, so both surfaces read one result.
+        * TRUE STAGE TRANSITIONS — a case in both snapshots at different stages;
+        * NEW ARRIVALS — no prior stage at all, never drawn as if they moved
+          from one;
+        * STAYERS — same stage in both, carrying any amount amendment;
+        * DEPARTURES — gone from the latest extract, labelled with the governed
+          outcome only where the data evidences one.
         """
         from .metric_resolver import compact_currency, compact_number
 
+        d = self.d.stage_transitions or {}
         s = self._slide()
-        mv = self.d.pipeline_movement or {}
-        stages = [st for st in (mv.get("stages") or ())
-                  if st.get("openingCaseCount") or st.get("closingCaseCount")]
-        window = ""
-        if mv.get("openingWeek") and mv.get("closingWeek"):
-            window = f"{mv['openingWeek']} to {mv['closingWeek']}"
-        self._header(s, spec.get("title", "Pipeline Stage Movement"),
-                     (f"Case and balance movement by stage, {window}" if window
-                      else "Case and balance movement by stage"),
+        window = (f"Gross case movement, {_pretty_date(d.get('comparison_date'))} "
+                  f"to {_pretty_date(d.get('as_of_date'))}"
+                  if d.get("comparison_date") and d.get("as_of_date")
+                  else "Gross case movement between the two latest extracts")
+        self._header(s, spec.get("title", "Pipeline Stage Movement"), window,
                      accent=self.theme.peri)
-        if not stages:
-            self._placeholder_body(
-                s, mv.get("reason") or "No governed stage movement for this book.")
-            self._footer(s)
-            return self._record("pipeline_movement", spec.get("title"), "",
-                                placeholder=True)
 
-        # -- the identity, stage by stage ------------------------------------
-        cols = ["Stage", "Opening", "Arrived", "Departed", "On stayers", "Closing"]
-        rows = []
-        for st in stages:
-            def _leg(count, amount, sign):
-                # A zero leg is a dash. "−0  £0" reads as a rendering fault.
-                if not count and not amount:
-                    return "—"
-                return (f"{sign}{compact_number(count)}  "
-                        f"{compact_currency(amount)}")
+        pretty = self._STAGE_PRETTY
+        def _st(stage):
+            return pretty.get(str(stage or "").upper(), str(stage or "").title())
 
-            rows.append([
-                self._STAGE_PRETTY.get(st["stage"], st["stage"]),
-                f"{compact_number(st['openingCaseCount'])}  "
-                f"{compact_currency(st['openingAmount'])}",
-                _leg(st["arrivalCaseCount"], st["arrivalAmount"], "+"),
-                _leg(st["departureCaseCount"], st["departureAmount"], "−"),
-                self._signed_currency(st.get("amountChangeOnPersisting")),
-                f"{compact_number(st['closingCaseCount'])}  "
-                f"{compact_currency(st['closingAmount'])}",
-            ])
-        # -- where the departures went ---------------------------------------
-        destinations: Dict[str, Dict[str, Any]] = {}
-        for st in stages:
-            for dest in st.get("departuresByDestination") or ():
-                bucket = destinations.setdefault(
-                    str(dest.get("stage", "")).upper(),
-                    {"cases": 0, "amount": 0.0})
-                bucket["cases"] += int(dest.get("caseCount") or 0)
-                bucket["amount"] += float(dest.get("amount") or 0.0)
-        bars = [{"label": ("Left the extract" if key == "ABSENT"
-                           else self._STAGE_PRETTY.get(key, key.title())),
-                 "balance": info["amount"], "count": info["cases"]}
-                for key, info in destinations.items() if info["amount"]]
-        bars.sort(key=lambda b: -b["balance"])
-
-        # THE TABLE TAKES THE PAGE WHEN NOTHING DEPARTED. Reserving a second
-        # panel for "no case left a stage" spends half the slide saying nothing
-        # happened; the sentence carries that, and the table gets the room.
-        table_h = 2.78 if bars else 3.92
-        il, it, iw, ih = self._card(
-            s, Inches(self.CONTENT_L), Inches(1.62),
-            Inches(self.CONTENT_R - self.CONTENT_L), Inches(table_h),
-            "Live stock by stage")
-        path = self.work / "pipe_move_table.png"
-        R.draw_table(path, cols, rows, iw, ih, theme=self.theme)
-        self._place(s, path, il, it, iw, ih)
-
-        if bars:
-            self._barlist_card(
-                s, (Inches(self.CONTENT_L), Inches(4.58),
-                    Inches(self.CONTENT_R - self.CONTENT_L), Inches(1.94)),
-                "Where departing cases went", bars, "balance",
-                cid="pipe_move_dest")
+        # -- Top left: true stage-to-stage transitions ----------------------
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(1.62), Inches(6.02),
+                                    Inches(2.52), "Cases that moved stage")
+        moves = list(d.get("transitions") or [])
+        rows = [[f"{_st(m.get('source_stage'))} → {_st(m.get('destination_stage'))}",
+                 compact_number(m.get("case_count")),
+                 compact_currency(m.get("prior_amount")),
+                 compact_currency(m.get("latest_amount")),
+                 # Explicit, because a GBP10K amendment is invisible when both
+                 # sides round to the same compact figure.
+                 self._signed_currency(m.get("amount_change") or 0)
+                 if m.get("amount_change") else "—"]
+                for m in moves[:7]]
+        p1 = self.work / "stx_moves.png"
+        if rows:
+            R.draw_table(p1, ["Movement", "Cases", "Prior", "Latest", "Change"],
+                         rows, iw, ih, theme=self.theme)
         else:
-            self._text(s, Inches(self.CONTENT_L), Inches(5.76),
-                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.32),
-                       "No case left a live stage between these two extracts.",
-                       size=11, color=self.theme.ink_400, italic=True)
+            render_placeholder_png(p1, "", "No case changed stage between these "
+                                   "two extracts", theme=self.theme,
+                                   width_in=iw, height_in=ih)
+        self._place(s, p1, il, it, iw, ih)
 
-        note = mv.get("lineage", {}).get("identity") or ""
-        if note:
-            self._text(s, Inches(self.CONTENT_L), Inches(6.60),
-                       Inches(self.CONTENT_R - self.CONTENT_L), Inches(0.30),
-                       ("Reconciled on the governed case identifier "
-                        f"({mv.get('identifierField')}): {note}. An amount "
-                        "amendment is a movement on the same case, not an exit "
-                        "and an arrival."),
-                       size=8.5, color=self.theme.ink_500, italic=True)
+        # -- Top right: everything that is NOT a stage-to-stage move --------
+        # Deliberately a separate card. A new arrival has no source stage and a
+        # departure has no destination stage; putting either in the movement
+        # table above would invent one.
+        il, it, iw, ih = self._card(s, Inches(6.78), Inches(1.62), Inches(6.02),
+                                    Inches(2.52), "Arrivals, stayers and departures")
+        other: List[List[str]] = []
+        for a in (d.get("new_arrivals") or []):
+            other.append([f"New arrival into {_st(a.get('destination_stage'))}",
+                          compact_number(a.get("case_count")),
+                          compact_currency(a.get("latest_amount"))])
+        for st in (d.get("stayers") or []):
+            change = st.get("amount_change") or 0
+            other.append([f"Stayed at {_st(st.get('stage'))}",
+                          compact_number(st.get("case_count")),
+                          self._signed_currency(change) if change else "no change"])
+        for dep in (d.get("departures") or []):
+            other.append([self._departure_label(dep, _st),
+                          compact_number(dep.get("case_count")),
+                          compact_currency(dep.get("prior_amount"))])
+        p2 = self.work / "stx_other.png"
+        if other:
+            R.draw_table(p2, ["Event", "Cases", "Value"], other[:9], iw, ih,
+                         theme=self.theme)
+        else:
+            render_placeholder_png(p2, "", "No arrivals, departures or amendments",
+                                   theme=self.theme, width_in=iw, height_in=ih)
+        self._place(s, p2, il, it, iw, ih)
+
+        recon = (d.get("reconciliation") or {}).get("by_stage") or []
+
+        # -- Bottom left: the case-count identity, stage by stage -----------
+        il, it, iw, ih = self._card(s, Inches(0.55), Inches(4.30), Inches(6.02),
+                                    Inches(2.12), "Case reconciliation by stage")
+        crows = [[_st(r.get("stage")),
+                  compact_number(r.get("opening_case_count")),
+                  compact_number(r.get("new_arrivals")),
+                  compact_number(r.get("transitions_in")),
+                  compact_number(r.get("transitions_out")),
+                  compact_number(r.get("departures")),
+                  compact_number(r.get("closing_case_count"))]
+                 for r in recon]
+        p3 = self.work / "stx_recon_n.png"
+        if crows:
+            R.draw_table(p3, ["Stage", "Open", "New", "In", "Out", "Left", "Close"],
+                         crows, iw, ih, theme=self.theme)
+        else:
+            render_placeholder_png(p3, "", "No governed stage population",
+                                   theme=self.theme, width_in=iw, height_in=ih)
+        self._place(s, p3, il, it, iw, ih)
+
+        # -- Bottom right: the same identity in value ------------------------
+        il, it, iw, ih = self._card(s, Inches(6.78), Inches(4.30), Inches(6.02),
+                                    Inches(2.12), "Stage value — opening vs closing")
+        vrows = [[_st(r.get("stage")),
+                  compact_currency(r.get("opening_amount")),
+                  compact_currency(r.get("closing_amount"))]
+                 for r in recon]
+        p4 = self.work / "stx_recon_v.png"
+        if vrows:
+            R.draw_table(p4, ["Stage", "Opening", "Closing"],
+                         vrows, iw, ih, theme=self.theme)
+        else:
+            render_placeholder_png(p4, "", "No governed stage population",
+                                   theme=self.theme, width_in=iw, height_in=ih)
+        self._place(s, p4, il, it, iw, ih)
+
+        self._text(s, Inches(0.55), Inches(6.52), Inches(12.25), Inches(0.34),
+                   self._transition_footnote(d), size=9,
+                   color=self.theme.ink_400)
         self._footer(s)
-        self._record("pipeline_movement", spec.get("title"),
-                     f"{len(stages)} live stage(s); "
-                     f"{'reconciles' if mv.get('reconciles') else 'residual outside tolerance'}.")
+        self._record(spec.get("id", "stage_transitions"), spec.get("title"),
+                     "Governed gross stage transitions between two weekly "
+                     "pipeline extracts.")
+
+    @staticmethod
+    def _departure_label(dep: Dict[str, Any], pretty) -> str:
+        """A departure named by the evidence, never by assumption.
+
+        Where the prior extract recorded a governed terminal stage, the outcome
+        IS that stage — and for those the engine's source and outcome are the
+        same value, so naming it once is enough. Where it recorded nothing, the
+        reader is told that, not given a withdrawal the data never showed.
+        """
+        outcome = str(dep.get("governed_outcome") or "")
+        source = pretty(dep.get("source_stage"))
+        if not outcome or outcome == "unclassified_departure":
+            return f"Left from {source} — unclassified"
+        return f"Left after {pretty(outcome)}"
+
+    @staticmethod
+    def _transition_footnote(d: Dict[str, Any]) -> str:
+        """Identifier, population and residuals — disclosed, never implied."""
+        recon = d.get("reconciliation") or {}
+        counts = d.get("counts") or {}
+        c_res = recon.get("count_reconciliation_residual")
+        a_res = recon.get("amount_reconciliation_residual")
+        return (
+            f"Cases matched on {d.get('identifier') or 'the governed case identifier'} "
+            f"({counts.get('comparison', 0)} prior, {counts.get('current', 0)} latest). "
+            f"Every case is classified once: arrival, stayer, stage transition or "
+            f"departure. Reconciliation residual {c_res} cases / "
+            f"{a_res} by value. An amount amendment does not change case identity.")
 
     def slide_origination_flow(self, spec):
         """KFI and Completion weekly-flow panels (bars) with a cumulative line —
@@ -2965,10 +3017,13 @@ class DeckBuilder:
         band_note = ""
         if proj:
             x = [str(p.get("month")) for p in proj]
+            # Downside/base/upside carries polarity (bad/neutral/good), not bare
+            # series identity, so it wears the semantic scale rather than a
+            # categorical slot.
             series = [
-                {"name": "Downside", "values": [p.get("downside") for p in proj], "color": "#eb6f6f"},
-                {"name": "Base", "values": [p.get("base") for p in proj], "color": "#7c9cf0"},
-                {"name": "Upside", "values": [p.get("upside") for p in proj], "color": "#5ec6b8"},
+                {"name": "Downside", "values": [p.get("downside") for p in proj], "color": self.theme.negative},
+                {"name": "Base", "values": [p.get("base") for p in proj], "color": self.theme.peri},
+                {"name": "Upside", "values": [p.get("upside") for p in proj], "color": self.theme.mint},
             ]
             # INDISTINGUISHABLE SCENARIOS. Three lines that sit on top of each
             # other read as a rendering fault, and invite a reader to look for a
@@ -3066,14 +3121,19 @@ class DeckBuilder:
         charts = [
             {"id": "fvar", "title": "Actual funded vs the prior run's forecast",
              "series": [
-                 {"name": "Prior-run forecast", "key": "prior_forecast", "color": "#e0a458"},
-                 {"name": "Actual funded", "key": "funded_balance", "color": "#7c9cf0"}],
+                 {"name": "Prior-run forecast", "key": "prior_forecast",
+                  "color": THEME.categorical[1]},
+                 {"name": "Actual funded", "key": "funded_balance",
+                  "color": THEME.categorical[0]}],
              "currency": True},
             {"id": "fevo", "title": "Forecast funded balance by run",
              "series": [
-                 {"name": "Funded actual", "key": "funded_balance", "color": "#7c9cf0"},
-                 {"name": "Weighted pipeline", "key": "weighted_expected_pipeline", "color": "#5ec6b8"},
-                 {"name": "Forecast", "key": "forecast_funded_balance", "color": "#e0a458"}],
+                 {"name": "Funded actual", "key": "funded_balance",
+                  "color": THEME.categorical[0]},
+                 {"name": "Weighted pipeline", "key": "weighted_expected_pipeline",
+                  "color": THEME.categorical[2]},
+                 {"name": "Forecast", "key": "forecast_funded_balance",
+                  "color": THEME.categorical[1]}],
              "currency": True}]
         ph = self._evolution_lines(s, spec, self.d.forecast_evolution, charts,
                                    height=3.72)
@@ -3903,8 +3963,8 @@ class DeckBuilder:
         "funded_evolution": "slide_funded_evolution", "cohorts": "slide_cohorts",
         "cohort_progression": "slide_cohort_progression",
         "pipeline_summary": "slide_pipeline", "pipeline_evolution": "slide_pipeline_evolution",
+        "stage_transitions": "slide_stage_transitions",
         "funnel": "slide_funnel", "origination_flow": "slide_origination_flow",
-        "pipeline_movement": "slide_pipeline_movement",
         "forecast_bridge": "slide_forecast_bridge",
         "forecast_projection": "slide_forecast_projection",
         "forecast_evolution": "slide_forecast_evolution", "risk": "slide_risk",

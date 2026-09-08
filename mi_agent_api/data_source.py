@@ -27,6 +27,7 @@ pipeline rows.
 from __future__ import annotations
 
 import os
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -296,6 +297,23 @@ def _cache_ttl() -> float:
 #: run is picked up on the next request without an API restart.
 _ACTIVE_CACHE: Dict[str, Any] = {"sig": None, "value": None, "checked_at": 0.0}
 
+#: ONE loader at a time, per process. Resolving the active dataset downloads and
+#: prepares the governed tape, and two callers arriving together used to run that
+#: whole cost twice — a real condition now that the startup warm runs on its own
+#: thread alongside the first request rather than ahead of it. The lock makes the
+#: second caller WAIT for the first result instead of fetching its own copy.
+_ACTIVE_LOCK = threading.Lock()
+
+
+def is_loaded() -> bool:
+    """Is the active dataset already in this process's cache?
+
+    Never loads, never does I/O — a caller that must not pay the cold cost (a
+    liveness probe, a status line) can ask without becoming the thing that
+    triggers it.
+    """
+    return _ACTIVE_CACHE.get("value") is not None
+
 
 def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Return the active ``(df, info)``, reloading when the source changed.
@@ -310,13 +328,24 @@ def _active() -> Tuple[pd.DataFrame, Dict[str, Any]]:
     cached = _ACTIVE_CACHE.get("value")
     if cached is not None and (now - _ACTIVE_CACHE["checked_at"]) < _cache_ttl():
         return cached
-    sig = _source_signature()
-    if cached is not None and sig == _ACTIVE_CACHE.get("sig"):
-        _ACTIVE_CACHE["checked_at"] = now
-        return cached
-    value = _load_active()
-    _ACTIVE_CACHE.update(sig=sig, value=value, checked_at=now)
-    return value
+    # Everything past here can do I/O — a signature check, or a full load — so
+    # it runs under the lock. The fast path above stays lock-free, which is the
+    # path every warm request takes.
+    with _ACTIVE_LOCK:
+        # Re-checked INSIDE the lock: whoever we queued behind may have loaded
+        # the dataset while we waited, and repeating their work would be the
+        # duplicate download this lock exists to prevent.
+        now = time.monotonic()
+        cached = _ACTIVE_CACHE.get("value")
+        if cached is not None and (now - _ACTIVE_CACHE["checked_at"]) < _cache_ttl():
+            return cached
+        sig = _source_signature()
+        if cached is not None and sig == _ACTIVE_CACHE.get("sig"):
+            _ACTIVE_CACHE["checked_at"] = now
+            return cached
+        value = _load_active()
+        _ACTIVE_CACHE.update(sig=sig, value=value, checked_at=now)
+        return value
 
 
 def _load_active() -> Tuple[pd.DataFrame, Dict[str, Any]]:

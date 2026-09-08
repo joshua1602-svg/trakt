@@ -1,0 +1,69 @@
+# =========================================================================
+# PRIMARY MI GEOGRAPHY BASIS — governed per asset class.
+# =========================================================================
+#
+# WHAT THIS SETTLES
+# -----------------
+# A loan book carries more than one geography, and they are DIFFERENT FACTS:
+#
+#   borrower / obligor geography   where the obligor is
+#   collateral / property geography where the security is
+#
+# For a lifetime mortgage they usually coincide; for an auto loan they do not
+# coincide at all, and for a buy-to-let they routinely disagree. So "balance by
+# region", asked with no qualifier, has no answer until somebody has decided
+# WHICH geography this book reports on. That decision is a property of the
+# ASSET, established once at onboarding — not something a query should infer,
+# and emphatically not something to settle by taking whichever geography column
+# happened to be populated first.
+#
+# This file is the governed default for that decision, keyed by the asset class
+# onboarding established. A portfolio may override it in the governed portfolio
+# registry (`mi_geography: primary_basis:` on the portfolio entry), which is how
+# a book whose asset class default does not fit is represented without a second
+# mechanism.
+#
+# WHAT THIS IS NOT
+# ----------------
+# * It is NOT a geography mapping. No place name, postcode, ITL or NUTS code
+#   appears here. `mi_agent.region_resolution` remains the only resolver of a
+#   region TERM onto a region VALUE, and `engine.region_taxonomy` remains the
+#   only harmoniser of region vocabularies. This file names a BASIS, nothing
+#   more.
+# * It is NOT regulatory. Annex 2 / Annex 12 geography fields are projected from
+#   their own regulatory sources under their own contract, and an ND code in a
+#   regulatory geography field is a declaration ("not collected"), never an
+#   absence for MI to fill. Nothing in the regime pipeline reads this file.
+# * It does NOT invent defaults. An asset class absent from the table below has
+#   NO governed default: MI then has no primary basis, generic region language
+#   is unresolved rather than guessed, and onboarding raises it for operator
+#   review like any other unestablished asset fact.
+#
+# Recognised bases: `borrower` (a.k.a. obligor) and `collateral` (a.k.a.
+# property / asset / security). See `mi_agent.mi_geography`.
+
+version: 1
+
+primary_basis_by_asset_class:
+
+  # --- Secured on real property: the SECURITY is what the book is about. A
+  # lifetime mortgage's regional concentration is a concentration of houses.
+  #
+  # `equity_release` / `lifetime_mortgage` are deliberately ABSENT: that class
+  # has an asset pack of its own (`config/asset/product_defaults_ERM.yaml`) and
+  # declares its basis there, where the rest of ERM's behaviour is declared. A
+  # class named in both files would be two sources able to drift.
+  residential_mortgage: collateral
+  residential_real_estate: collateral
+  commercial_real_estate: collateral
+
+  # --- Secured on a movable asset, or unsecured: the OBLIGOR is what the book
+  # is about. A car is where it is driven; the credit exposure is where the
+  # borrower is.
+  auto_finance: borrower
+  auto_loan: borrower
+  equipment_leasing: borrower
+  leasing: borrower
+
+  # Nothing else. An asset class not listed here has no governed default and
+  # must be configured per portfolio or established at onboarding.

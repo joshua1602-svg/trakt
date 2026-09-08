@@ -216,3 +216,36 @@ export function formatValue(
       return value.toLocaleString("en-GB");
   }
 }
+
+/**
+ * Single source of truth for chart AXIS tick labels (and the tooltips beside
+ * them) — every chart renderer must call this rather than hand-rolling its
+ * own `£${v}` or `${v}%`. Chart data reaches the frontend under two different
+ * conventions and this is the one place that reconciles them: the live API
+ * sends a raw absolute value (4_000_000) with no unit, which this compacts
+ * (formatGBP's own default); the demo dataset instead pre-scales rows to
+ * millions and tags them with an explicit `unit` ("MM"), which is already
+ * exactly what should appear on the axis and is left alone. Without this
+ * distinction, a raw absolute value renders as "£4000000" (the reported
+ * defect) or a pre-scaled demo value gets compacted a second time.
+ */
+export function formatAxisValue(
+  value: number,
+  format?: "gbp" | "pct" | "number" | "decimal" | "text" | "date",
+  opts?: { unit?: string; scale?: PercentScale },
+): string {
+  if (typeof value !== "number") return String(value);
+  switch (format) {
+    case "gbp":
+      return opts?.unit ? `£${value}${opts.unit}` : formatGBP(value, { compact: true });
+    case "pct":
+      return opts?.scale === "percent_fraction" || opts?.scale === "percent_points"
+        ? `${toPercentPoints(value, opts.scale).toFixed(1)}%`
+        : formatPercent(value, 1);
+    case "decimal":
+      return value.toFixed(2);
+    case "number":
+    default:
+      return value.toLocaleString("en-GB");
+  }
+}

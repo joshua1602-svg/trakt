@@ -64,8 +64,14 @@ describe("CohortsPanel", () => {
     renderPanel();
     const table = await screen.findByTestId("formation-table");
     // 0.417 is a fraction on the wire; 41.7% on screen — not 0.4%, not 4170%.
-    expect(within(table).getByText("41.7%")).toBeInTheDocument();
-    expect(within(table).getByText("37.0%")).toBeInTheDocument();
+    // The table now carries BOTH an origination LTV and an entry LTV, so the
+    // fixture's equal values appear twice; assert on the count rather than
+    // loosening the contract this test exists to hold.
+    expect(within(table).getAllByText("41.7%").length).toBeGreaterThan(0);
+    expect(within(table).getAllByText("37.0%").length).toBeGreaterThan(0);
+    // Nothing renders the fraction unscaled or scaled twice.
+    expect(within(table).queryByText("0.4%")).toBeNull();
+    expect(within(table).queryByText("4170.0%")).toBeNull();
   });
 
   it("says the cohort basis is the origination date", async () => {

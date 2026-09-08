@@ -160,7 +160,7 @@ class TestValuesBelongToTheirLayers(unittest.TestCase):
 
     def test_client_facts_are_client_scoped(self):
         from operations_control.annex2.nd_treatments import client_regulatory_values
-        cfg = _yaml(_REPO / "config" / "client" / "config_client_ERM_UK.yaml")
+        cfg = _yaml(_REPO / "config" / "client" / "config_client_ERE.yaml")
         values = client_regulatory_values(cfg.get("defaults") or {})
         self.assertIn("originator_name", values)
         self.assertIn("originator_legal_entity_identifier", values)

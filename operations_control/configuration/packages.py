@@ -74,10 +74,19 @@ LAYER_FILES: Dict[str, List[str]] = {
 #: Asset and regime are RELATED entities — an asset SUPPORTS regimes; it never
 #: "is" one. Seeded from repository reality; extensible without code change
 #: via the system package metadata in a later pass.
+#:
+#: ``pack`` names the asset configuration the class is CONFIGURED BY. The
+#: resolver used to reach for `product_defaults_ERM.yaml` by name whatever asset
+#: it had been asked to resolve — harmless while equity release was the only
+#: class configured, and wrong the moment a second one existed, because it would
+#: have composed one product's defaults under another product's client. The
+#: class-to-pack mapping lives here, beside the class, so a client declares its
+#: asset ONCE (``portfolio.asset_class``) and this says what that selects.
 ASSET_MODEL: Dict[str, Dict[str, Any]] = {
     "equity_release": {
         "label": "Equity Release",
         "supports_regimes": ["ESMA_Annex2"],
+        "pack": "config/asset/product_defaults_ERM.yaml",
     },
 }
 

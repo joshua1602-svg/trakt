@@ -1,0 +1,189 @@
+# =========================================================================
+# Pipeline stage-movement question bank — FROZEN before execution.
+# =========================================================================
+#
+# SAME FORMAT AS `CFO_ACCEPTANCE_BANK.yaml`, graded by the SAME oracle
+# (`pack_grader.grade_cfo`). No new schema, no new grader, no new keys:
+#   q / family / expect / must / must_not / rows
+#
+# `expect` is written from the QUESTION and the GOVERNED DATA, independently
+# of what the agent answers:
+#   DELIVER  the analysis is supported by a governed capability that exists
+#            today, and the data is present
+#   REFUSE   the governed capability set genuinely cannot produce the answer,
+#            and the only safe outcome is to say so
+#
+# WHAT THE GOVERNED LAYER ACTUALLY HAS, established by inspecting the
+# production payloads (see docs/reports/mi_query_stage_movement_question_bank.md
+# section 8), NOT by inspecting slide wording:
+#
+#   AVAILABLE   per-stage STOCK (case count and balance) per weekly extract
+#               — `evolution.pipeline_funnel_evolution.series`
+#   AVAILABLE   per-stage NET weekly FLOW (the week-on-week change in that
+#               stock) — `.flowSeries`
+#   AVAILABLE   cumulative cohort progression / conversion, case-tracked
+#               — `pipeline_history.build_historical_completion_model`
+#   AVAILABLE   whole-pipeline opening->closing decomposition into
+#               new / removed / progressed_out / increased / decreased /
+#               unchanged — `movement_detail.movement_components`
+#   ABSENT      the source->destination transition matrix
+#   ABSENT      gross arrivals and gross departures (only their NET is held)
+#   ABSENT      departures broken down by destination
+#   ABSENT      persisting-case ("stayer") counts per stage
+#   ABSENT      amount amendment on persisting cases
+#
+# A net stage flow is NOT an arrival count. OFFER moved 3 -> 1 between the
+# 2026-05-15 and 2026-05-22 extracts, a net of -2, while the gross movement
+# was two departures to COMPLETED and zero arrivals. Answering an arrivals
+# question from the net would be a silent semantic error, so the questions
+# that require the gross figure expect a refusal.
+#
+# The fixture (`tests/fixtures/pipeline_history_5w`) holds each case's loan
+# amount CONSTANT across all five extracts. There is therefore no amendment
+# on any persisting case to measure, and family F cannot be given a numeric
+# target here even in principle. Recorded, not worked around.
+version: 1
+questions:
+
+# ---- A. source -> destination, CASE COUNT --------------------------------- #
+# Requires a per-case join across two extracts keyed on
+# pipeline_case_identifier, grouped by (prior stage, current stage). No
+# governed payload holds it.
+- {q: "How many cases moved from KFI to Application?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many KFI cases progressed to Application?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many cases went from Application to Offer?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many applications became offers?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many offers moved to Completion?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many cases progressed from Offer to Completion?", family: A_source_dest_count, expect: REFUSE}
+- {q: "What number of cases moved KFI to Application?", family: A_source_dest_count, expect: REFUSE}
+- {q: "Show case movement from Application into Offer.", family: A_source_dest_count, expect: REFUSE}
+- {q: "Cases progressing from KFI to Application this period?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many pipeline cases advanced from Offer to Completion?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many deals transitioned out of KFI into Application?", family: A_source_dest_count, expect: REFUSE}
+- {q: "How many cases flowed from Application to Offer between the last two extracts?", family: A_source_dest_count, expect: REFUSE}
+
+# ---- B. source -> destination, AMOUNT ------------------------------------- #
+# The same absent join, measured in money. Also tests whether balance /
+# amount / value / exposure are governed Query vocabulary at all.
+- {q: "How much balance moved from KFI to Application?", family: B_source_dest_amount, expect: REFUSE}
+- {q: "What value progressed from Application to Offer?", family: B_source_dest_amount, expect: REFUSE}
+- {q: "How much pipeline moved from Offer to Completion?", family: B_source_dest_amount, expect: REFUSE}
+- {q: "What was the balance of cases moving from Application into Offer?", family: B_source_dest_amount, expect: REFUSE}
+- {q: "How much exposure transitioned from KFI to Application?", family: B_source_dest_amount, expect: REFUSE}
+- {q: "What amount moved from Offer to Completion?", family: B_source_dest_amount, expect: REFUSE}
+- {q: "Show balance transferred from Application to Offer.", family: B_source_dest_amount, expect: REFUSE}
+- {q: "What exposure went from Offer to Completion this period?", family: B_source_dest_amount, expect: REFUSE}
+
+# ---- C. DEPARTURES -------------------------------------------------------- #
+# Departures by destination is the field the brief assumes exists. It does
+# not: no payload carries a departing case's next stage.
+- {q: "Where did Offer-stage departures go?", family: C_departures, expect: REFUSE}
+- {q: "Where did cases leaving Application move to?", family: C_departures, expect: REFUSE}
+- {q: "What happened to cases that left KFI?", family: C_departures, expect: REFUSE}
+- {q: "Break down departures from Offer by destination.", family: C_departures, expect: REFUSE}
+- {q: "How many cases left Application and where did they go?", family: C_departures, expect: REFUSE}
+- {q: "What balance exited KFI by destination?", family: C_departures, expect: REFUSE}
+- {q: "Show destination mix for cases departing Offer.", family: C_departures, expect: REFUSE}
+
+# ---- D. ARRIVALS ---------------------------------------------------------- #
+# GROSS arrivals are absent; only the NET change in stage stock is governed.
+# Origin breakdown for arrivals is absent for the same reason as C.
+- {q: "How many cases arrived in Application?", family: D_arrivals, expect: REFUSE}
+- {q: "Where did new Offer cases come from?", family: D_arrivals, expect: REFUSE}
+- {q: "What balance moved into Offer?", family: D_arrivals, expect: REFUSE}
+- {q: "Show arrivals into Completion by prior stage.", family: D_arrivals, expect: REFUSE}
+- {q: "How much entered Application during the period?", family: D_arrivals, expect: REFUSE}
+- {q: "Which stages contributed cases into Offer?", family: D_arrivals, expect: REFUSE}
+
+# ---- E. STAYERS / PERSISTING CASES ---------------------------------------- #
+# A stayer is a case present at the SAME stage in both extracts. The join
+# that identifies one is not performed anywhere in the pipeline path.
+- {q: "How many cases stayed in Application?", family: E_stayers, expect: REFUSE}
+- {q: "How much balance remained in Offer?", family: E_stayers, expect: REFUSE}
+- {q: "What happened to cases that stayed at KFI?", family: E_stayers, expect: REFUSE}
+- {q: "Show persisting Application cases.", family: E_stayers, expect: REFUSE}
+- {q: "How many Offer cases remained at Offer?", family: E_stayers, expect: REFUSE}
+- {q: "What was the balance of cases staying in Application?", family: E_stayers, expect: REFUSE}
+
+# ---- F. AMENDMENTS ON PERSISTING CASES ------------------------------------ #
+# Absent capability AND no fixture variation: every case holds a constant
+# loan amount across all five extracts, so there is no amendment to measure.
+- {q: "What was the amount amendment on cases that stayed in Application?", family: F_amendments, expect: REFUSE}
+- {q: "How much did persisting Offer cases change in value?", family: F_amendments, expect: REFUSE}
+- {q: "What balance change occurred on cases remaining at KFI?", family: F_amendments, expect: REFUSE}
+- {q: "Did Application-stage cases increase or decrease in amount?", family: F_amendments, expect: REFUSE}
+- {q: "Show amount movement on cases that stayed in Offer.", family: F_amendments, expect: REFUSE}
+- {q: "What was the net balance amendment for KFI stayers?", family: F_amendments, expect: REFUSE}
+
+# ---- G. COMPLETIONS ------------------------------------------------------- #
+# The pipeline/funded ambiguity lives here. The COMPLETED-stage STOCK is
+# governed; the funnel also holds a NET weekly flow at COMPLETED. A bare
+# "how many cases completed" does not say whether it means funded loans
+# added or pipeline cases reaching the COMPLETED stage, and acceptance
+# criterion 12 is that an ambiguous question refuses rather than guesses.
+- {q: "How many cases completed?", family: G_completions, expect: REFUSE}
+- {q: "How much balance completed?", family: G_completions, expect: REFUSE}
+- {q: "How many pipeline cases are at the Completion stage?", family: G_completions, expect: DELIVER}
+- {q: "What is the balance at the Completion stage of the pipeline?", family: G_completions, expect: DELIVER}
+- {q: "How many pipeline cases reached Completion?", family: G_completions, expect: REFUSE}
+- {q: "What value completed this period?", family: G_completions, expect: REFUSE}
+- {q: "What was completion flow by count?", family: G_completions, expect: REFUSE}
+- {q: "What was completion flow by balance?", family: G_completions, expect: REFUSE}
+- {q: "How many Offer cases completed?", family: G_completions, expect: REFUSE}
+
+# ---- H. WITHDRAWALS / TERMINAL EXITS -------------------------------------- #
+# WITHDRAWN is a governed stage, so its STOCK is answerable. Which stage a
+# withdrawn case left FROM is a transition, and is not.
+- {q: "How many pipeline cases are withdrawn?", family: H_terminal, expect: DELIVER}
+- {q: "What is the withdrawn balance in the pipeline?", family: H_terminal, expect: DELIVER}
+- {q: "How many cases were withdrawn?", family: H_terminal, expect: REFUSE}
+- {q: "How much pipeline was withdrawn?", family: H_terminal, expect: REFUSE}
+- {q: "Where did pipeline drop out?", family: H_terminal, expect: REFUSE}
+- {q: "What stage had the most withdrawals?", family: H_terminal, expect: REFUSE}
+- {q: "How many Offer cases were withdrawn?", family: H_terminal, expect: REFUSE}
+- {q: "What balance left the pipeline without completing?", family: H_terminal, expect: REFUSE}
+- {q: "Where was the greatest pipeline attrition?", family: H_terminal, expect: REFUSE}
+
+# ---- I. STAGE RECONCILIATION ---------------------------------------------- #
+# Opening and closing stock are governed; arrivals and departures are not, so
+# the bridge between them cannot be built and must not be implied.
+- {q: "Reconcile Application stage this period.", family: I_reconciliation, expect: REFUSE}
+- {q: "Explain the movement in Offer-stage cases.", family: I_reconciliation, expect: REFUSE}
+- {q: "Why did KFI cases change from opening to closing?", family: I_reconciliation, expect: REFUSE}
+- {q: "Show opening, arrivals, departures and closing for Application.", family: I_reconciliation, expect: REFUSE}
+- {q: "Reconcile Offer balance between the two extracts.", family: I_reconciliation, expect: REFUSE}
+- {q: "What drove the change in Application-stage balance?", family: I_reconciliation, expect: REFUSE}
+- {q: "Reconcile Application cases from opening to closing.", family: I_reconciliation, expect: REFUSE}
+
+# ---- J. LARGEST / MOST MATERIAL MOVEMENT ---------------------------------- #
+# Ranking a transition presupposes the transition matrix. "Which stage had
+# the most movement" is additionally ambiguous between the largest net stage
+# change (governed) and the largest transition (absent).
+- {q: "Which stage had the most movement?", family: J_largest, expect: REFUSE}
+- {q: "What was the largest stage transition?", family: J_largest, expect: REFUSE}
+- {q: "Where did the most cases progress?", family: J_largest, expect: REFUSE}
+- {q: "Which transition moved the most balance?", family: J_largest, expect: REFUSE}
+- {q: "Where was pipeline attrition greatest?", family: J_largest, expect: REFUSE}
+- {q: "What was the biggest departure destination?", family: J_largest, expect: REFUSE}
+
+# ---- K. PERIOD COMPARISON ------------------------------------------------- #
+# Comparing stage movement across periods cannot be more available than the
+# stage movement being compared.
+- {q: "Compare stage movement with the prior period.", family: K_period_comparison, expect: REFUSE}
+- {q: "Did more cases move from Application to Offer this period?", family: K_period_comparison, expect: REFUSE}
+- {q: "How has KFI-to-Application movement changed?", family: K_period_comparison, expect: REFUSE}
+- {q: "Was completion flow higher than last period?", family: K_period_comparison, expect: REFUSE}
+- {q: "Compare Offer departures with the previous reporting period.", family: K_period_comparison, expect: REFUSE}
+- {q: "Has pipeline progression improved month on month?", family: K_period_comparison, expect: REFUSE}
+
+# ---- L. BROAD STAGE-MOVEMENT SUMMARY -------------------------------------- #
+# Deliberately overlapping with pipeline evolution, the funnel and cohort
+# conversion. A question that names STAGE MOVEMENT asks for the absent
+# capability; one that asks for progression or the funnel is asking for a
+# route that exists and should keep it.
+- {q: "Summarise pipeline stage movement this period.", family: L_summary, expect: REFUSE}
+- {q: "Give me the stage movement summary.", family: L_summary, expect: REFUSE}
+- {q: "What changed in pipeline stages?", family: L_summary, expect: REFUSE}
+- {q: "What happened in the pipeline between the last two extracts?", family: L_summary, expect: REFUSE}
+- {q: "Show pipeline progression.", family: L_summary, expect: DELIVER}
+- {q: "How did cases move through the funnel?", family: L_summary, expect: DELIVER}

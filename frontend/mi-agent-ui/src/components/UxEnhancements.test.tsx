@@ -95,24 +95,32 @@ describe("AgentChatPanel — collapse / stop / suggestions", () => {
   });
 });
 
-describe("ChatResult — stale workspace links", () => {
-  it("marks a link stale when its artifact is no longer in the workspace", () => {
+// CHANGED DELIBERATELY. These pinned a disabled "(cleared)" BUTTON and a live
+// one beside it. There is no longer a button in either state: the workspace
+// reveals a new artifact itself, so the live link had nowhere to take anyone,
+// and the cleared case is something to say rather than something to click. What
+// the pair was really protecting — that a reader is never left clicking at an
+// artifact that is gone — is what these now assert.
+describe("ChatResult — a result cleared from the workspace", () => {
+  it("says so, in words, and offers nothing to click", () => {
     const onOpenArtifact = vi.fn();
     render(<ChatResult artifacts={[chart()]} onOpenArtifact={onOpenArtifact}
       workspaceArtifactIds={new Set(["something-else"])} />);
-    const btn = screen.getByRole("button", { name: /open chart in workspace/i });
-    expect(btn).toBeDisabled();
-    expect(btn.textContent).toMatch(/cleared/i);
-    fireEvent.click(btn);
+    expect(screen.getByTestId("chat-result-cleared").textContent)
+      .toMatch(/no longer in the workspace — ask again to regenerate it/i);
+    expect(screen.queryByRole("button")).toBeNull();
     expect(onOpenArtifact).not.toHaveBeenCalled();
   });
 
-  it("keeps the link live while the artifact is present", () => {
-    const onOpenArtifact = vi.fn();
-    render(<ChatResult artifacts={[chart()]} onOpenArtifact={onOpenArtifact}
+  it("stays silent while the artifact is present", () => {
+    const { container } = render(<ChatResult artifacts={[chart()]} onOpenArtifact={vi.fn()}
       workspaceArtifactIds={new Set(["c1"])} />);
-    fireEvent.click(screen.getByRole("button", { name: /open chart in workspace/i }));
-    expect(onOpenArtifact).toHaveBeenCalledWith("c1");
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("stays silent when it cannot know — no workspace ids supplied", () => {
+    const { container } = render(<ChatResult artifacts={[chart()]} onOpenArtifact={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
   });
 });
 

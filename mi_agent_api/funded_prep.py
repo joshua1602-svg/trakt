@@ -39,6 +39,7 @@ from analytics_lib.numeric import coerce_numeric
 from trakt_core import perf as _perf
 
 from engine import region_taxonomy as _region
+from mi_agent import mi_geography as _geo
 from mi_agent import seasoning as _seasoning
 
 logger = logging.getLogger("mi_agent_api.funded_prep")
@@ -47,12 +48,23 @@ logger = logging.getLogger("mi_agent_api.funded_prep")
 # an LTV column whose median exceeds this is treated as a percentage (÷100).
 _PERCENT_MEDIAN = 1.5
 
+#: The governed borrowing-base eligibility columns, named by the module that
+#: produces them so the two never drift apart.
+_BORROWING_BASE_FIELDS: Tuple[str, ...] = (
+    "borrowing_base_eligible", "borrowing_base_eligibility_status",
+    "borrowing_base_eligibility_reason", "borrowing_base_facility_id")
+
 # Core funded stratification dimensions and how each is sourced.
 #   kind: bucket_ltv | bucket | bucket_derived | derived | group
 # A ``group`` dimension is satisfied by ANY of several interchangeable source
 # fields (region may arrive as obligor / collateral / collateral_geography;
 # channel as origination_channel / broker_channel). The first present is aliased
 # onto the catalogue ``primary`` so MI queries resolve regardless of which arrived.
+#: The interchangeable region column groups, from the module that owns the
+#: geography bases. Read once so the spec below states a name, not a theory
+#: about which geographies substitute for which.
+_GEO_GROUPS: Dict[str, Tuple[str, ...]] = dict(_geo.interchangeable_field_groups())
+
 _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "ltv_bucket": {"kind": "bucket_ltv", "target": "current_loan_to_value"},
     "original_ltv_bucket": {"kind": "bucket_ltv", "target": "original_loan_to_value"},
@@ -62,15 +74,46 @@ _DIM_SPEC: Dict[str, Dict[str, Any]] = {
     "time_on_book_bucket": {"kind": "bucket_derived", "source": "months_on_book"},
     "vintage_year": {"kind": "derived", "source": "vintage_year"},
     "borrower_type": {"kind": "derived", "source": "borrower_type"},
+    # REGION — ONE GROUP PER (BASIS, GRANULARITY), never one group across both
+    # bases.
+    #
+    # These columns used to form a single group whose primary was the BORROWER
+    # column and whose sources included the COLLATERAL columns, so a row that
+    # never collected an obligor region had it gap-filled from the property's.
+    # "Balance by borrower region" then answered with where the houses are,
+    # labelled as where the borrowers are. Where the obligor column held an ESMA
+    # no-data code the error was worse still: ND1 means "not collected", a
+    # declaration, and filling it fabricates a fact.
+    #
+    # Coalescing WITHIN one basis at ONE granularity is still right — a book
+    # delivering its collateral region as `collateral_geography` and another
+    # delivering it as `property_region` describe the same thing — so each
+    # (basis, tier) keeps its own group. The membership is read from the one
+    # place that owns it, `mi_agent.mi_geography`, rather than restated here, so
+    # preparation and the query layer cannot disagree about which region columns
+    # are the same fact.
+    "collateral_geography": {
+        "kind": "group", "primary": "collateral_geography",
+        "sources": list(_GEO_GROUPS["collateral_geography"])},
+    # The collateral CODE tier coalesces within itself, but is not a dimension
+    # every book is expected to carry: it is the granularity `collateral_geography`
+    # falls back to on a book that only ever delivered codes, and reporting it
+    # "missing" on every book that carries readable names instead would be noise.
+    "geographic_region_collateral": {
+        "kind": "group", "primary": "geographic_region_collateral", "core": False,
+        "sources": list(_GEO_GROUPS["geographic_region_collateral"])},
     "geographic_region_obligor": {
         "kind": "group", "primary": "geographic_region_obligor",
-        "sources": ["geographic_region_obligor", "geographic_region_collateral",
-                    "collateral_geography"]},
+        "sources": list(_GEO_GROUPS["geographic_region_obligor"])},
     "origination_channel": {
         "kind": "group", "primary": "origination_channel",
         "sources": ["origination_channel", "broker_channel"]},
 }
-CORE_FUNDED_DIMENSIONS = list(_DIM_SPEC.keys())
+#: The dimensions a funded book is EXPECTED to carry, reported as available or
+#: missing on every prepared frame. A spec may opt out with ``core: False`` where
+#: it exists to coalesce a granularity rather than to name a stratification.
+CORE_FUNDED_DIMENSIONS = [d for d, spec in _DIM_SPEC.items()
+                          if spec.get("core", True)]
 
 # LTV (target -> (balance/numerator field, valuation/denominator field)).
 _LTV_INPUTS = {
@@ -112,12 +155,53 @@ def _normalise_numeric_columns(out: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def _to_ratio(s: pd.Series) -> pd.Series:
-    """Normalise an LTV series to a 0..1 ratio (percent inputs ÷100, col-level)."""
+#: The band an LTV ratio can plausibly occupy. Used only to tell a scale
+#: MIXTURE apart from one convention's own tail: dividing a points cluster by
+#: 100 lands inside this band, dividing a genuinely rolled-up ratio (1.7 == 170%)
+#: does not.
+_LTV_RATIO_MIN = 0.02
+_LTV_RATIO_MAX = 1.5
+
+
+def _to_ratio(s: pd.Series) -> Tuple[pd.Series, Optional[str]]:
+    """Normalise an LTV series to a 0..1 ratio, returning ``(values, note)``.
+
+    A column normally carries ONE convention and the median decides it. But a
+    frame assembled from more than one book need not: an acquired portfolio
+    stored in points (25.0) alongside originations already stored as ratios
+    (0.418) makes the column median follow whichever book is larger, and the
+    single column-level division then makes the OTHER book a hundred times too
+    small. That is how a vintage reading 41.8% alone came to read 0.4% once a
+    seasoned book joined the same reporting period.
+
+    So the column decision is kept wherever the column is coherent — which is
+    every single-source tape, unchanged — and a genuine mixture is normalised
+    row-wise and reported. A mixture is only claimed when the high group,
+    divided by 100, lands in the plausible LTV band; one convention's own
+    rolled-up tail (1.7 == 170% LTV) does not, and is left alone.
+    """
     valid = s.dropna()
-    if not valid.empty and float(valid.median()) > _PERCENT_MEDIAN:
-        return s / 100.0
-    return s
+    if valid.empty:
+        return s, None
+
+    high = valid[valid > _PERCENT_MEDIAN]
+    low = valid[valid <= _PERCENT_MEDIAN]
+    if len(high) and len(low):
+        looks_like_points = (_LTV_RATIO_MIN
+                             <= float(high.median()) / 100.0
+                             <= _LTV_RATIO_MAX)
+        looks_like_ratios = float(low.median()) >= _LTV_RATIO_MIN
+        if looks_like_points and looks_like_ratios:
+            out = s.where(~(s > _PERCENT_MEDIAN), s / 100.0)
+            return out, (
+                f"mixed LTV storage scales in one frame: {len(high)} row(s) in "
+                f"percentage points and {len(low)} already a ratio. Normalised "
+                "per row rather than per column, which would have divided the "
+                "ratios by 100 as well.")
+
+    if float(valid.median()) > _PERCENT_MEDIAN:
+        return s / 100.0, None
+    return s, None
 
 
 def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
@@ -133,10 +217,12 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
     if target in cols:
         s = _to_num(out[target])
         if (s.notna() & (s > 0)).any():
-            out[target] = _to_ratio(s)
+            out[target], note = _to_ratio(s)
             basis.update(method="source_field", source_fields=[target],
                          numerator=None, denominator=None, confidence=1.0,
                          valid_rows=int((s.notna() & (s > 0)).sum()))
+            if note:
+                basis["scaleNote"] = note
             return basis
 
     # 2. derive numerator / denominator (divide-by-zero / non-numeric safe).
@@ -145,10 +231,12 @@ def _derive_ltv(out: pd.DataFrame, target: str) -> Dict[str, Any]:
         den = _to_num(out[den_field])
         ratio = num / den.where(den > 0)
         if ratio.notna().any():
-            out[target] = _to_ratio(ratio)
+            out[target], note = _to_ratio(ratio)
             basis.update(method="derived_ratio", source_fields=[num_field, den_field],
                          numerator=num_field, denominator=den_field, confidence=0.9,
                          valid_rows=int(ratio.notna().sum()))
+            if note:
+                basis["scaleNote"] = note
             return basis
 
     # 3. inputs missing -> do NOT fabricate an LTV.
@@ -311,8 +399,8 @@ def _coalesce_group_dimensions(out: pd.DataFrame) -> List[str]:
     return notes
 
 
-def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None
-                           ) -> Dict[str, Any]:
+def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None,
+                           geography: Any = None) -> Dict[str, Any]:
     """Stamp the governed region detail / reporting columns onto a prepared frame.
 
     Harmonisation happens HERE, in the canonical preparation layer, so every
@@ -322,8 +410,26 @@ def _apply_region_taxonomy(out: pd.DataFrame, client_id: Optional[str] = None
     configured gets a no-op and behaves exactly as before.
     """
     try:
-        taxonomy = _region.resolve_taxonomy(client_id or _client_hint(out))
-        return _region.apply(out, taxonomy)
+        client = client_id or _client_hint(out)
+        if geography is None:
+            # THE BOOK'S OWN BASIS, resolved here when the caller did not supply
+            # one. Without this the harmonisation would read the collateral
+            # columns first on a borrower book, so the harmonised column and
+            # every MI answer about the same book would be measured on two
+            # different geographies — the exact divergence this work closed.
+            try:
+                geography = _geo.contract_for_scope(client_id=client, frame=out)
+            except Exception as exc:  # noqa: BLE001 - never block preparation
+                logger.info("geography contract unavailable for prep: %s", exc)
+        taxonomy = _region.resolve_taxonomy(client)
+        # WHICH COLUMNS FEED THE HARMONISATION, stated by MI rather than taken
+        # from the projector's default order. That order leads with the obligor
+        # column; on the live platform book it holds ITL3 codes, so every one of
+        # 11,035 rows came back `region_mapping_method: unresolved` while the
+        # readable collateral names sat in the column behind it. See
+        # `mi_agent.mi_geography.taxonomy_source_fields`.
+        return _region.apply(out, taxonomy, source_fields=_geo.taxonomy_source_fields(
+            geography, extra=_region.SOURCE_FIELDS))
     except Exception as exc:  # noqa: BLE001 - harmonisation must never break prep
         logger.warning("region harmonisation skipped: %s", exc)
         return {}
@@ -375,6 +481,47 @@ def _derive_borrower_type(out: pd.DataFrame, derived: List[str]) -> None:
         derived.append("borrower_type")
 
 
+def _derive_borrowing_base_eligibility(out: pd.DataFrame,
+                                      client_id: Optional[str] = None
+                                      ) -> Dict[str, Any]:
+    """Stamp the governed borrowing-base eligibility columns onto the frame.
+
+    Eligibility is a property of a LOAN against a FACILITY, so it belongs in
+    the canonical preparation layer beside the region harmonisation, not in a
+    dashboard: the Risk Limits workspace, MI Query, Teams, the PPTX pack and
+    any future funding or regulatory component then read one already-resolved
+    determination instead of each applying its own.
+
+    A client with no configured funding facility gets a no-op and behaves
+    exactly as before — the four columns are simply absent, and every consumer
+    already treats their absence as "no facility". Failure is a no-op too:
+    eligibility is additive and must never break preparation for a book that
+    has nothing to do with a warehouse.
+    """
+    try:
+        from mi_agent.borrowing_base.config import load_facility
+        from mi_agent.borrowing_base.eligibility import derive_eligibility
+        client = client_id or _client_hint(out)
+        if not client:
+            return {"applied": False, "reason": "client_not_identified"}
+        facility = load_facility(client)
+        if facility is None:
+            return {"applied": False, "reason": "no_facility_configured"}
+        problems = facility.validate()
+        blocking = [p for p in problems if not p.endswith("It will NOT be honoured.")]
+        if blocking:
+            logger.warning("facility configuration unusable for %s: %s",
+                           client, "; ".join(blocking))
+            return {"applied": False, "reason": "facility_configuration_invalid",
+                    "problems": problems}
+        receipt = derive_eligibility(out, facility)
+        receipt["configuration_warnings"] = problems
+        return receipt
+    except Exception as exc:  # noqa: BLE001 - additive layer, never fatal
+        logger.warning("borrowing-base eligibility derivation skipped: %s", exc)
+        return {"applied": False, "reason": "derivation_error", "detail": str(exc)}
+
+
 def _dedupe_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict[str, Any]]]:
     """Collapse duplicate-named columns into one, coalescing values row-wise.
 
@@ -399,7 +546,8 @@ def _dedupe_columns(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[Dict[str, Any]
     return pd.DataFrame(new, index=df.index), collapsed
 
 
-def augment_platform_canonical_dimensions(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
+def augment_platform_canonical_dimensions(df: pd.DataFrame, *, geography: Any = None
+                                          ) -> Tuple[pd.DataFrame, List[str]]:
     """Additively derive the MI dimensions the platform assembler does NOT emit —
     ``borrower_type`` (single vs joint) and ``youngest_borrower_age`` (NNEG) — onto
     an already-typed platform canonical, WITHOUT the full funded-tape prep (no LTV
@@ -429,8 +577,15 @@ def augment_platform_canonical_dimensions(df: pd.DataFrame) -> Tuple[pd.DataFram
     # Governed region harmonisation: one shared vocabulary across books, with the
     # source granularity retained alongside it. Deterministic and persisted — no
     # LLM is consulted on this path.
-    if _apply_region_taxonomy(out).get("applied"):
+    if _apply_region_taxonomy(out, geography=geography).get("applied"):
         for f in (_region.FIELD_DETAIL, _region.FIELD_REPORTING):
+            if f not in derived:
+                derived.append(f)
+    # Governed borrowing-base eligibility, on the same read-time principle as
+    # the derivations above: a facility determination reaches the platform
+    # canonical without an onboarding re-run.
+    if _derive_borrowing_base_eligibility(out).get("applied"):
+        for f in _BORROWING_BASE_FIELDS:
             if f not in derived:
                 derived.append(f)
     return out, derived
@@ -461,6 +616,16 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
     """Return ``(analytics_ready_df, report)`` for a funded central lender tape."""
     out, derived, ltv_basis, dedup = _derive_source_fields(df)
 
+    # Governed borrowing-base eligibility. Runs BEFORE bucketing so a later
+    # dimension can stratify on it, and produces the four canonical columns the
+    # Schedule 8 view, the borrowing-base engine and MI all read. A book with
+    # no configured facility is untouched.
+    eligibility = _derive_borrowing_base_eligibility(out)
+    if eligibility.get("applied"):
+        for f in _BORROWING_BASE_FIELDS:
+            if f not in derived:
+                derived.append(f)
+
     applied: Dict[str, Any] = {}
     issues: List[Dict[str, Any]] = []
     try:
@@ -489,6 +654,8 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
             out[col].astype(str).str.strip() != "").any()
 
     for dim, spec in _DIM_SPEC.items():
+        if not spec.get("core", True):
+            continue
         if _has_values(dim):
             available.append(dim)
             continue
@@ -534,6 +701,11 @@ def prepare_funded_mi_dataset(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str,
         "buckets_applied": {k: v for k, v in applied.items() if v},
         "group_aliases": group_aliases,
         "duplicate_columns_collapsed": dedup,
+        # Provenance for the eligibility determination: which facility, which
+        # rule version, what each rule could read, and every prototype
+        # assumption in play. A derived status can never be mistaken for a
+        # supplied one.
+        "borrowing_base_eligibility": eligibility,
         "dimensions_available": sorted(available),
         "missing_dimensions": missing,
         "bucket_errors": [i for i in (issues or []) if i.get("severity") == "error"][:20],

@@ -19,6 +19,7 @@ forecast/data-quality questions are completely unaffected.
 
 from __future__ import annotations
 
+import dataclasses
 import logging as _logging
 
 import re
@@ -44,6 +45,9 @@ from . import period_change_route as _period_change
 from . import analytical_plan as _plan
 from . import risk_limits as risk_mod
 from . import scenario as scenario_mod
+from . import pipeline_movement_summary as _pipeline_movement_summary
+from . import stage_movement_query as _stage_movement
+from . import temporal_query as _temporal
 from . import workspace as _workspace
 from .recogniser_registry import (
     REGISTRY,
@@ -67,7 +71,13 @@ from trakt_core.portfolio import (
     CAP_RISK,
 )
 
-_PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
+# SLATE & CYAN — mirrors adapters.py's _PALETTE (same rationale for the
+# independent copy: see the comment there) and, by value, lib/theme.ts /
+# mi_agent_pptx/pptx_theme.py. Indices are load-bearing at specific call
+# sites below (index 0 = primary/base series everywhere; index 1 = mint,
+# used for "Upside"; index 3 = rose, used for "Downside" — preserve those
+# roles if this list is ever reordered).
+_PALETTE = ["#22d3ee", "#36c2a8", "#e0a93b", "#e0607a", "#9085e9", "#008300"]
 
 # Per evolution-metric display: (answer_style, chart valueFormat, chart scale).
 _METRIC_DISPLAY: Dict[str, Tuple[str, str, Optional[str]]] = {
@@ -383,6 +393,201 @@ def _is_portfolio_summary(question: str, spec=None) -> bool:
     if any(m in q for m in _PRIOR_PERIOD_MARKERS):
         return False
     return not _names_something_else(question, spec)
+
+
+#: Pipeline-shaped ways of asking for the book's overall position, on top of
+#: `_SUMMARY_INTENT`. Held SEPARATELY and never merged into that list: every
+#: word here is gated behind "the question names the pipeline dataset", so
+#: nothing funded can be reached by adding to it. Merging them would make
+#: "what does the book look like" a summary on the funded side too, which is a
+#: change to a question that already answers.
+_PIPELINE_SUMMARY_INTENT = (
+    "look like", "looks like", "progression", "shape of", "state of",
+    "where is the pipeline", "how is the pipeline",
+)
+
+
+def _is_pipeline_summary(question: str, spec=None) -> bool:
+    """A summary request about the PIPELINE, which the funded summary declines.
+
+    `portfolio_summary` answers from `output_root` and has no pipeline frame, so
+    `_names_another_dataset` makes it decline every pipeline question — correctly,
+    and measured: "Summarise the current pipeline." was once answered *"the
+    portfolio holds 640 loans with a funded balance of [figure]"*, from the funded
+    book. What that guard has never had is a sibling to hand the question TO, so
+    a pipeline summary fell through to the generic executor and, for "What does
+    the current pipeline look like?", was declined as unmappable.
+
+    The set claimed here is exactly the set the funded summary refuses for naming
+    the pipeline. It takes nothing from the funded side by construction: the
+    dataset owner has to say PIPELINE before any word below is even consulted.
+    """
+    try:
+        from . import workspace as _ws
+
+        if _ws.resolve_dataset(question) != "pipeline":
+            return False
+    except Exception as exc:  # noqa: BLE001 - eligibility never breaks a query
+        _logger.info("dataset-intent read unavailable for %r: %s", question, exc)
+        return False
+    q = f" {question.lower().strip()} "
+    if not any(m in q for m in _SUMMARY_INTENT + _PIPELINE_SUMMARY_INTENT):
+        return False
+    # The same three exclusions the funded summary applies, for the same
+    # reasons: a stratification, a movement question and a prior-period
+    # comparison are each owned elsewhere and are not summaries.
+    if " by " in q or any(m in q for m in _MOVEMENT_MARKERS):
+        return False
+    if any(m in q for m in _PRIOR_PERIOD_MARKERS):
+        return False
+    return True
+
+
+def _route_pipeline_summary(question, spec_dict, *, client_id, run_id,
+                            source_lens=None) -> Optional[Dict[str, Any]]:
+    """The pipeline's governed headline position — the funded summary's sibling.
+
+    IT COMPUTES NOTHING. Every figure is a key on the payload
+    `pipeline_contract.compute_pipeline_snapshot` already produces for
+    `/mi/pipeline/snapshot`, which is what the dashboard's pipeline tiles render.
+    A second arithmetic here would be a second source for numbers the estate
+    already has one owner for, and the two would drift.
+
+    SCOPE IS DECLARED, NEVER ASSUMED. The governed weekly extract carries no
+    per-case source-portfolio column, so scope cannot be READ from the data.
+    Where it is a fact about the business instead, the lender declares it in
+    `config/mi/pipeline_field_contract.yaml` under `source_provenance`, and
+    `_pipeline_scope_disclosure` turns that into both the wording and
+    `lens_applied`. With nothing declared the route claims nothing and says the
+    same sentence every other pipeline-sourced route says.
+
+    Returns ``None`` where the snapshot is unavailable, which defers to the
+    existing path rather than inventing an answer or an error.
+    """
+    try:
+        from . import datasets as ds_mod
+        from . import pipeline_contract as pipeline_mod
+        from .datasets import load_mi_semantics, semantics_path
+    except Exception as exc:  # noqa: BLE001 - a route never breaks the chat
+        _logger.info("pipeline summary unavailable: %s", exc)
+        return None
+
+    try:
+        source = ds_mod._resolve_pipeline_source(client_id, run_id)
+        if source is None:
+            return None
+        history = ds_mod._pipeline_history(source.get("client_id", client_id))
+        df, report = pipeline_mod.load_prepared_pipeline(
+            source, historical_model=history)
+        snapshot = pipeline_mod.compute_pipeline_snapshot(
+            df, report, load_mi_semantics(semantics_path()),
+            client_id=source.get("client_id", client_id),
+            run_id=run_id or source.get("run_id", ""), source=source)
+    except Exception as exc:  # noqa: BLE001 - defer, never fail the request
+        _logger.info("pipeline summary could not be built: %s", exc)
+        return None
+
+    cases = snapshot.get("pipelineRowCount")
+    if not cases:
+        return None
+    as_of = _date_label(snapshot.get("pipelineAsOfDate"))
+    parts = [f"At the weekly extract of {as_of} the pipeline holds "
+             f"{_count(cases)} cases with a total pipeline amount of "
+             f"{_gbp(snapshot.get('pipelineAmount'))}."]
+
+    stages = [b for b in (snapshot.get("stageBreakdown") or []) if b]
+    if stages:
+        # `caseCount`, NOT `count`. `pipeline_contract._stage_breakdown` builds
+        # its rows through `_dimension_breakdown(..., key_name="stage")`, whose
+        # count key is `caseCount` (see `cap_breakdown`, which reads the same
+        # field). Reading `count` returned None for every stage and the live
+        # answer read "By stage: APPLICATION —, COMPLETED —, KFI —" — every
+        # figure an em-dash, in an answer that was otherwise correct.
+        named = ", ".join(
+            f"{b.get('stage')} {_count(b.get('caseCount'))}" for b in stages[:6])
+        parts.append(f"By stage: {named}.")
+    weighted = snapshot.get("weightedExpectedFundedAmount")
+    if weighted:
+        parts.append(f"Weighted expected funded amount is {_gbp(weighted)}.")
+
+    _lens_applied, _disclosure = _pipeline_scope_disclosure(question, source_lens)
+
+    artifacts = []
+    if stages:
+        artifacts.append({"type": "table", "title": "Pipeline by stage",
+                          "rows": [dict(b) for b in stages]})
+    return _envelope(
+        ok=True, question=question, spec=spec_dict, artifacts=artifacts,
+        answer=" ".join(parts), route="pipeline_summary",
+        lens_applied=_lens_applied,
+        # WHAT IT READ, DERIVED FROM THE ROOT IT READ IT FROM. Without this the
+        # envelope carried no reconciliation at all, so `completeness.
+        # _carried` saw an empty `reconciliation.dataset` against a stated
+        # `dataset: pipeline` concept, reported it UNACCOUNTED, and
+        # `_enforce_semantic_coverage` replaced a correct answer with "I could
+        # not confirm it was applied to this calculation". The answer HAD read
+        # the pipeline; it simply never said so, and the guard is right not to
+        # take a route's word for it. Declared through `datasets_read` rather
+        # than as the literal ["pipeline"] for the reason that function's own
+        # docstring gives: three routes once wrote the constant and were wrong
+        # about themselves in a way nothing could detect.
+        reconciliation=_workspace.reconciliation_for(
+            _workspace.datasets_read(pipeline_root=source),
+            reporting_date=snapshot.get("pipelineAsOfDate")),
+        warnings=[_disclosure])
+
+
+def _pipeline_scope_disclosure(question: str, source_lens) -> tuple:
+    """``(lens_applied, disclosure)`` for a pipeline-sourced answer.
+
+    THE WORDING FOLLOWS THE DECLARATION, never a string typed here. Before this
+    existed the route said, of every pipeline answer:
+
+        "...so this position is the whole platform pipeline and is NOT narrowed
+         to a selected book."
+
+    That sentence was true of the DATA — the weekly extract has no per-case
+    source-portfolio column — and false about the BUSINESS, once the lender
+    stated that the pipeline is direct origination only. A reader was being
+    told, in the confident voice the estate reserves for governance
+    disclosures, the opposite of the truth about the figure above it.
+
+    CONSERVATIVE IN EVERY OTHER DIRECTION. `lens_applied` becomes True only
+    where the declared book actually satisfies what was asked: Total (which
+    whole-pipeline already is) or a lens naming that same book. A lens naming
+    a DIFFERENT book keeps the previous behaviour untouched, because there the
+    old sentence is still true — the pipeline is not that book's, and claiming
+    the lens applied would be the misattribution this route exists to avoid.
+    Undeclared keeps the previous behaviour too, so deleting the config block
+    restores exactly what shipped.
+    """
+    from . import pipeline_prep as _pp
+
+    was = ("Scope not narrowed: the governed weekly pipeline extract carries "
+           "no source-portfolio provenance, so this position is the whole "
+           "platform pipeline and is NOT narrowed to a selected book.")
+    try:
+        declared = _pp.declared_source_provenance()
+    except Exception:  # noqa: BLE001 - a disclosure never breaks an answer
+        return False, was
+    if not declared:
+        return False, was
+
+    book = declared["book"]
+    try:
+        lens = _resolve_lens(question, source_lens)
+    except Exception:  # noqa: BLE001
+        return False, was
+
+    label = str(getattr(lens, "label", "") or "")
+    satisfied = (not lens.filters) or label.strip().lower() == book.strip().lower()
+    if not satisfied:
+        return False, was
+
+    shown = label if (lens.filters and label) else book.title()
+    rationale = declared.get("rationale") or ""
+    return True, (f"Scope: the whole pipeline IS the {shown} pipeline. "
+                  + (rationale or f"The pipeline is {book} origination only."))
 
 
 def _is_period_movement(question: str) -> bool:
@@ -983,9 +1188,15 @@ def _route_compare(question, spec_dict, *, client_id, run_id, output_root,
     notes = [{"field": "source_periods",
               "note": f"Period A: {out.get('sourcePeriods', [None, None])[0]}; "
                       f"Period B: {out.get('sourcePeriods', [None, None])[1]}"}]
-    return _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                     artifacts=[chart, table], reconciliation=recon, source_notes=notes,
-                     route="temporal_compare")
+    out_env = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                        artifacts=[chart, table], reconciliation=recon,
+                        source_notes=notes, route="temporal_compare")
+    # DECLARE THE GRAIN. This route compares month-end funded snapshots AND
+    # weekly pipeline extracts, so the receipt's static `temporal_compare:
+    # month` fallback is wrong half the time — and it refused "how many cases
+    # moved into Offer in the last week?" as monthly when the comparison it ran
+    # was weekly.
+    return _declare_grain(out_env, out.get("seriesGrain") or "month")
 
 
 # --------------------------------------------------------------------------- #
@@ -1130,6 +1341,13 @@ def _filtered_funded_evo(output_root, client_id, run_id, predicates, semantics,
 
     Raises on a predicate that cannot be applied, so the caller defers to the
     controlled point-in-time validation path exactly as before.
+
+    NO LONGER ON THE MI QUERY ROUTE. `_route_evolution` now runs every funded
+    temporal answer — filtered or not — through `_funded_temporal`, so the
+    figures come from `mi_query_executor` rather than from `evolution.py`'s
+    arithmetic. This is kept because the predicate-parity evidence is measured
+    against it and because it states, in executable form, the fail-closed
+    contract the seam inherited.
     """
     frames = evolution_mod.funded_frames(output_root, client_id, run_id)
     periods: List[Dict[str, Any]] = []
@@ -1158,6 +1376,210 @@ def _filtered_funded_evo(output_root, client_id, run_id, predicates, semantics,
     return {"periods": periods, "sourceFiles": sources}
 
 
+# --------------------------------------------------------------------------- #
+# THE MI QUERY ROUTE'S ONE TEMPORAL SEAM
+#
+# Everything below feeds `temporal_query.execute_temporal`, which runs the
+# ORDINARY governed executor once per prepared period frame. Nothing here does
+# arithmetic on a book: it resolves what the reader asked for, hands the
+# executor one spec, and states the executor's own figures in the unit the
+# series declares them in.
+# --------------------------------------------------------------------------- #
+def _temporal_grouping(question: str, semantics: Dict[str, Any],
+                       frame) -> Optional[str]:
+    """The governed dimension a temporal question asked to be broken down by.
+
+    THE SAME OWNER THE CONTRACT USED. `_build_interpretation` resolves the
+    named dimensions of every routed question through
+    `execution_receipt.requested_dimension_terms`, with the frame's real
+    columns and no geography argument; this asks that owner the same question
+    with the same arguments, so the route and the contract cannot resolve
+    "region" to two different fields. Resolving it here a second way — a
+    substring read, a column guess, a geography basis of our own — is precisely
+    the second-owner defect the geography work removed.
+
+    Returns ``None`` when the question named no dimension, which is the ordinary
+    TIME x MEASURE case.
+
+    A DIMENSION NAMED IS NOT A DIMENSION AVAILABLE, and this does not check: the
+    executor owns availability, refuses a dimension the book cannot express, and
+    the caller defers to the point-in-time path so the reader gets the
+    executor's own reason rather than a silently ungrouped series.
+    """
+    from mi_agent import execution_receipt as _receipt
+
+    cols = getattr(frame, "columns", None)
+    columns = list(cols) if cols is not None else None
+    try:
+        terms = _receipt.requested_dimension_terms(question, semantics, columns)
+    except Exception as exc:  # noqa: BLE001 - no terms, no grouping
+        _logger.info("temporal grouping unavailable: %s", exc)
+        return None
+    for field_key, _term, _alts in terms or ():
+        # THE TIME AXIS ALREADY OWNS THE DATE. "by month" resolves to a date
+        # field, and grouping a period series by a date inside each period is a
+        # different question from the one asked. Every other governed dimension
+        # is the reader's breakdown.
+        entry = (semantics.get("fields", {}) or {}).get(field_key) or {}
+        if entry.get("role") == "date":
+            continue
+        return str(field_key)
+    return None
+
+
+def _temporal_wire_value(value, metric_key: str, semantics: Dict[str, Any],
+                         spec, frame):
+    """State ONE value the executor already calculated in the series' own unit.
+
+    PRESENTATION, NOT CALCULATION. Nothing is re-derived from any row: the
+    figure arrives from `execute_mi_query` and leaves with the same meaning. Two
+    things are applied, and both are declarations this module already owns:
+
+    * `_METRIC_DISPLAY` says whether a metric is carried on the wire as a
+      FRACTION (0.0656) or in percentage points (6.56). The chart's ``pct``
+      formatter multiplies by 100, so a series that publishes points renders
+      655.9%. The executor returns the TAPE's unit, because a calculation has no
+      business having a display convention; this states the declared one.
+    * The storage unit is read by `mi_dataset_profile.percent_storage_scale` —
+      the single place that decision is made — from the WHOLE period frame, not
+      from whatever subset a filter left. A subset able to re-decide the unit is
+      what once put a 100x discontinuity inside one series.
+
+    Rounding matches the unit: the percent and decimal series have always
+    published four decimal places, and the money and count series none.
+    """
+    if value is None:
+        return None
+    style, _fmt, scale = _METRIC_DISPLAY.get(metric_key,
+                                             ("decimal", "decimal", None))
+    if style not in ("pct_fraction", "pct_points", "decimal"):
+        return value
+    try:
+        out = round(float(value), 4)
+    except (TypeError, ValueError):
+        return value
+    if scale != "percent_fraction":
+        return out
+    from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
+
+    column = None
+    if getattr(spec, "metric", None):
+        column = ((semantics.get("fields", {}) or {}).get(spec.metric)
+                  or {}).get("canonical_field")
+    if column and column in getattr(frame, "columns", ()):
+        if percent_storage_scale(frame[column]) == PERCENT_POINTS:
+            return round(out / 100.0, 6)
+    return out
+
+
+def _funded_temporal(output_root, client_id, run_id, question, spec, semantics,
+                     metric_key: str, filtered: bool):
+    """``(evo, grouping)`` for the funded MI temporal route, or ``None``.
+
+    ``evo`` carries the SAME shape the evolution series published before —
+    ``{"periods": [{period, reporting_date, metrics, ...}], "sourceFiles": [...]}``
+    for an ungrouped series, so no presentation below this changed — but every
+    figure in it now comes from `mi_query_executor`, the same owner that answers
+    the question without a time axis. That is what makes the latest period of a
+    trend and the ordinary current-period answer the same call on the same
+    frame.
+
+    ``grouping`` is the governed dimension when the reader asked for one, and
+    the periods then carry the executor's own grouped ``rows`` instead of a
+    single metric.
+
+    Returns ``None`` when the spec cannot be executed against the history —
+    a population or a dimension the book cannot express — so the caller defers
+    to the point-in-time path, which refuses with the executor's own reason.
+    This is the fail-closed behaviour `_filtered_funded_evo` already had.
+    """
+    frames = evolution_mod.funded_frames(output_root, client_id, run_id)
+    if not frames:
+        return {"periods": [], "sourceFiles": []}, None
+    latest = frames[-1].get("df")
+    grouping = _temporal_grouping(question, semantics, latest)
+    run_spec = spec
+    if grouping:
+        # THE GROUPING GOES ON THE SPEC, not into the temporal layer. The seam
+        # then compiles ONE ordinary grouped spec and runs it per period, so a
+        # breakdown over time and a breakdown today are the same execution.
+        run_spec = dataclasses.replace(spec, dimension=grouping,
+                                       dimensions=[grouping])
+    # THE MISSING-DIMENSION POLICY IS THE QUESTION'S, NOT THE ROUTE'S. Asked of
+    # the same owner the current-period path asks, so the latest period of a
+    # trend and the ordinary grouped answer bucket or exclude identically — a
+    # difference here would put an "Unknown / Missing" group in one and not the
+    # other, with no cause in the book.
+    from mi_agent.mi_agent_workflow import missing_dimension_policy_for
+
+    try:
+        executed = _temporal.execute_temporal(
+            frames, run_spec, semantics,
+            missing_dimension_policy=missing_dimension_policy_for(question))
+    except MIQueryExecutionError as exc:
+        _logger.info("temporal seam deferred to the point-in-time path: %s", exc)
+        return None
+    except Exception as exc:  # noqa: BLE001 - never answer from a broken series
+        _logger.info("temporal seam unavailable: %s", exc)
+        return None
+
+    count_metric = metric_key in ("loan_count", "pipeline_case_count")
+    periods: List[Dict[str, Any]] = []
+    for frame, executed_period in zip(frames, executed["periods"]):
+        # IDENTITY, RESTORED ONTO THE EXECUTOR'S FOOTER. Every figure in the
+        # reconciliation is the executor's and richer than the series producer's
+        # was, but the executor takes `dataset` and `run_id` from the SPEC — and
+        # one spec runs against every period here, so it can carry neither. The
+        # period's own run is stamped from the frame it was measured on, because
+        # a reconciliation footer that cannot say which governed run it
+        # reconciles is not one a reader can check.
+        recon = dict(executed_period.get("reconciliation") or {})
+        if recon:
+            recon["dataset"] = recon.get("dataset") or "funded"
+            recon["run_id"] = recon.get("run_id") or executed_period.get("run_id")
+        entry: Dict[str, Any] = {
+            "run_id": executed_period.get("run_id"),
+            "reporting_date": executed_period.get("reporting_date"),
+            "period": executed_period.get("period"),
+            "reconciliation": recon or None,
+            "appliedPredicates": executed_period.get("appliedPredicates") or [],
+            "source_file": frame.get("source"),
+        }
+        rows = executed_period.get("rows") or []
+        value_key = _temporal.measure_key(
+            rows, executed_period.get("groupKeys") or (),
+            count_metric=count_metric)
+        if grouping:
+            # The SAME wire convention the ungrouped series publishes, applied
+            # cell by cell. A percent metric broken down by region is still that
+            # metric, and a breakdown that published points under a chart
+            # declaring fractions would render every category 100x high.
+            if value_key:
+                for row in rows:
+                    row[value_key] = _temporal_wire_value(
+                        row.get(value_key), metric_key, semantics, spec,
+                        frame.get("df"))
+            entry["rows"] = rows
+            entry["valueKey"] = value_key
+            entry["groupKey"] = grouping
+            entry["filteredRows"] = sum(int(r.get("loan_count") or 0) for r in rows)
+        else:
+            raw = rows[0].get(value_key) if (rows and value_key) else None
+            entry["metrics"] = {metric_key: _temporal_wire_value(
+                raw, metric_key, semantics, spec, frame.get("df"))}
+            if filtered:
+                entry["filteredRows"] = int((rows[0].get("loan_count") or 0)
+                                            if rows else 0)
+        periods.append(entry)
+    return {"periods": periods,
+            "sourceFiles": executed.get("sourceFiles") or [],
+            # The predicates the executor ran IDENTICALLY on every period. A
+            # series is narrowed to a population only if that population was the
+            # one measured in every point it publishes.
+            "executedPredicates": _temporal.predicates_applied_in_every_period(
+                executed["periods"])}, grouping
+
+
 def _filter_summary(predicates) -> str:
     """A short human description of the applied population, for answer and notes.
 
@@ -1167,6 +1589,175 @@ def _filter_summary(predicates) -> str:
     say three different things about one narrowing.
     """
     return "; ".join(p.describe() for p in (predicates or ()))
+
+
+def _executed_measure_label(spec, semantics: Dict[str, Any], metric_key: str,
+                            label: str) -> str:
+    """The name of the measure that WAS EXECUTED, not of the one it fell back to.
+
+    `temporal_compare.resolve_metric_key` maps the governed series metrics it
+    knows and returns `funded_balance` for everything else — a fallback that was
+    harmless while the series producer computed from the metric KEY, because the
+    label and the figure then described the same (wrong) thing. The seam changed
+    that half: the executor runs `spec.metric`, so an arrears question now
+    returns the arrears sum. On the demonstration book, whose arrears are zero,
+    that came back as *"Funded balance ... £0"* — the right number under the
+    wrong name, which reads as a claim about the funded book.
+
+    Named from the governed registry entry for the measure the spec carries, so
+    the label follows the execution. Only where the key demonstrably fell back:
+    a recognised metric keeps the series vocabulary its consumers already read.
+    """
+    metric = getattr(spec, "metric", None)
+    if not metric or metric_key != "funded_balance":
+        return label
+    entry = (semantics.get("fields", {}) or {}).get(metric) or {}
+    canonical = entry.get("canonical_field") or metric
+    try:
+        from mi_agent.mi_query_executor import _BALANCE_HIERARCHY, _canonical_or_self
+
+        balances = {_canonical_or_self(key, semantics) for key in _BALANCE_HIERARCHY}
+    except Exception:  # noqa: BLE001 - no hierarchy, keep the series label
+        return label
+    if canonical in balances or metric in balances:
+        return label
+    return str(entry.get("label") or metric.replace("_", " ").title())
+
+
+def _dimension_label(field_key: str, semantics: Dict[str, Any]) -> str:
+    """The governed label of a dimension, for a column heading."""
+    entry = (semantics.get("fields", {}) or {}).get(field_key) or {}
+    return str(entry.get("label") or field_key.replace("_", " "))
+
+
+def _grouped_evolution_answer(*, question, spec_dict, periods, grain_key,
+                              grouping, label, metric_key, predicates, filtered,
+                              interpretation, evo, portfolio_id, as_of,
+                              semantics) -> Dict[str, Any]:
+    """PERIOD x DIMENSION, composed from results the executor already produced.
+
+    Composition only. Every figure in every cell came out of `execute_mi_query`
+    run against one prepared period frame, and this arranges them: one series
+    per governed category, one point per governed period.
+
+    A CATEGORY WITH NO OBSERVATIONS IN A PERIOD IS `None`, NOT ZERO. "The book
+    held nothing in Wales that month" and "no Wales row was produced" are
+    different claims and only one of them is evidenced, so the gap is published
+    as a gap. `series_by_category` owns that rule.
+
+    NO LABEL IS TOUCHED. The categories are the canonical values the executor
+    returned. If a book carries the same place under two spellings, that is an
+    upstream canonicalisation defect and folding them here would hide it behind
+    a temporal view — the one place a reader would never look for it.
+    """
+    value_key = next((p.get("valueKey") for p in periods if p.get("valueKey")), None)
+    series_map = _temporal.series_by_category(periods, grouping, value_key or "")
+    if not series_map:
+        return _undeliverable(
+            question=question, spec=spec_dict, route="evolution_grouped",
+            answer=f"No {_dimension_label(grouping, semantics)} breakdown could be "
+                   f"produced for {label.lower()} across the governed periods.",
+            warnings=["insufficient-data: no grouped rows in any period."])
+
+    categories = list(series_map)
+    period_labels = [p.get(grain_key) for p in periods]
+    disp = _METRIC_DISPLAY.get(metric_key, ("decimal", "decimal", None))
+    dim_label = _dimension_label(grouping, semantics)
+    filter_txt = _filter_summary(predicates) if filtered else ""
+    scope_suffix = f" — {filter_txt}" if filter_txt else ""
+
+    chart_rows = [{"period": per,
+                   **{cat: series_map[cat][i] for cat in categories}}
+                  for i, per in enumerate(period_labels)]
+    chart = _chart_artifact(
+        f"{label} by {dim_label} over time{scope_suffix}", chart_type="line",
+        x_key="period", rows=chart_rows,
+        series=[{"key": cat, "label": cat, "color": _PALETTE[i % len(_PALETTE)]}
+                for i, cat in enumerate(categories)],
+        value_format=disp[1], spec=spec_dict, portfolio_id=portfolio_id,
+        as_of=as_of,
+        display_hints={cat: {"format": disp[1], "scale": disp[2]}
+                       for cat in categories})
+    # THE GOVERNED FIELD NAMES ITS OWN COLUMN. The current-period grouped table
+    # publishes `collateral_geography`, so a temporal one publishing `category`
+    # would describe the same breakdown by a name the registry does not know —
+    # and a reader (or a receipt) could no longer tell WHICH axis was cut from
+    # the artifact alone. Same key, same meaning, both paths.
+    table_rows = [{"period": per, grouping: cat, "value": series_map[cat][i]}
+                  for i, per in enumerate(period_labels) for cat in categories]
+    table = _table_artifact(
+        f"{label} by {dim_label} trend{scope_suffix}", columns=[
+            {"key": "period", "label": "Period", "align": "left", "format": "text"},
+            {"key": grouping, "label": dim_label.title(), "align": "left",
+             "format": "text"},
+            {"key": "value", "label": label, "align": "right",
+             "format": disp[1], "scale": disp[2]},
+        ], rows=table_rows, spec=spec_dict, portfolio_id=portfolio_id, as_of=as_of)
+
+    latest = {cat: series_map[cat][-1] for cat in categories
+              if series_map[cat] and series_map[cat][-1] is not None}
+    leader = max(latest, key=latest.get) if latest else None
+    scope_answer = f" (scoped to {filter_txt})" if filter_txt else ""
+    answer = (f"{label} by {dim_label} across {len(periods)} period(s)"
+              f"{scope_answer}: {len(categories)} {dim_label} group(s)")
+    if leader is not None:
+        answer += (f"; largest at {period_labels[-1]} is {leader} "
+                   f"({_disp(latest[leader], metric_key)})")
+    answer += "."
+
+    src_files = evo.get("sourceFiles") or []
+    notes = [{"field": "source_periods",
+              "note": f"{len(periods)} governed period(s); source: "
+                      f"{src_files[-1] if src_files else 'governed runs'}"}]
+    warnings: List[str] = []
+    if len(periods) <= 1:
+        warnings.append("Only one reporting period is available — showing the "
+                        "single point; an evolution view reads best with two or "
+                        "more periods.")
+    missing = [cat for cat in categories if any(v is None for v in series_map[cat])]
+    if missing:
+        notes.append({"field": _dimension_label(grouping, semantics),
+                      "note": ("No observations in every period for: "
+                               + ", ".join(missing) + ". Shown as gaps, not zeros.")})
+    if filtered:
+        kept = [p.get("filteredRows") for p in periods
+                if p.get("filteredRows") is not None]
+        notes.append({"field": "filter",
+                      "note": (f"Filter applied within each period: {filter_txt}. "
+                               f"Rows per period after filter: "
+                               f"{', '.join(str(k) for k in kept) or 'n/a'}.")})
+
+    last_recon = (periods[-1].get("reconciliation") if periods else None) or {
+        "dataset": "funded", "coverage_by_balance_pct": 100.0}
+    # THE TABLE LEADS. One row per period per category, each naming its own
+    # axis — the reconcilable statement of the result, and the form in which a
+    # reader or an instrument can check that the breakdown sums back to the
+    # ungrouped series period by period. The chart renders the same figures
+    # wide, one series per category, because that is what the line renderer
+    # reads; it cannot carry the axis as a column and so cannot stand as the
+    # evidence.
+    out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
+                    artifacts=[table, chart], reconciliation=last_recon,
+                    source_notes=notes, warnings=warnings,
+                    route="evolution_grouped")
+    _declare_grain(out, compare_mod.series_grain(periods))
+    _declare_lens_scope(out, interpretation,
+                        label=getattr(getattr(interpretation, "source_scope", None),
+                                      "label", None) or "scope")
+    # THE AXIS THIS ROUTE ACTUALLY SPLIT BY, declared from the EXECUTED series —
+    # the same evidence rule the pipeline stage-axis branch follows. The
+    # completeness ledger accepts nothing else, and it is what stops a route
+    # from claiming a breakdown it did not perform.
+    out.setdefault("metadata", {})["groupedBy"] = [grouping]
+    if filtered:
+        last = next((p.get("filteredRows") for p in reversed(periods)
+                     if p.get("filteredRows") is not None), None)
+        out["metadata"]["populationApplied"] = {
+            "applied": [f"{p.field} (applied within each period)" for p in predicates],
+            "unavailable": [], "rowsBefore": None, "rowsAfter": last,
+            "executed": evo.get("executedPredicates") or [],
+        }
+    return out
 
 
 def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_root,
@@ -1350,18 +1941,25 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
 
     # Funded / pipeline single-metric evolution.
     metric_key, label, fmt = compare_mod.resolve_metric_key(dataset, spec.metric, spec.aggregation)
+    label = _executed_measure_label(spec, semantics or {}, metric_key, label)
+    grouping = None
     if dataset == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, run_id)
-    elif filtered:
-        # Filtered funded series: apply the filter within each period. On an invalid
-        # filter, defer to the controlled point-in-time validation path.
-        try:
-            evo = _filtered_funded_evo(output_root, client_id, run_id, predicates,
-                                       semantics or {}, metric_key)
-        except Exception:  # noqa: BLE001 - invalid filter -> point-in-time path
-            return None
     else:
-        evo = evolution_mod.funded_evolution(output_root, client_id, run_id)
+        # THE ONE MI TEMPORAL SEAM. Filtered or not, broken down or not, every
+        # funded figure below is `mi_query_executor`'s — the same owner that
+        # answers the same sentence without "over time". The two producers this
+        # replaced (`evolution.funded_evolution` for the whole book,
+        # `_filtered_funded_evo` for a narrowed one) were a second owner of SUM,
+        # COUNT and the averages, kept equal only by discipline. A population or
+        # a dimension the book cannot express returns None here, exactly as an
+        # invalid filter did, and the point-in-time path refuses with the
+        # executor's own reason.
+        seam = _funded_temporal(output_root, client_id, run_id, question, spec,
+                                semantics or {}, metric_key, filtered)
+        if seam is None:
+            return None
+        evo, grouping = seam
     periods = evo.get("periods", [])
     if not periods:
         return _undeliverable(question=question,
@@ -1376,7 +1974,16 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     # data disagreed, and the label was right. Read from what the producer returns
     # rather than from the dataset name, so a series is keyed by the grain it
     # actually carries.
-    period_field = "week" if any("week" in p for p in periods) else "period"
+    # The grain rule now lives in `temporal_compare.series_grain`, so this
+    # route and the period comparison cannot disagree about the same series.
+    period_field = "week" if compare_mod.series_grain(periods) == "week" else "period"
+    if grouping:
+        return _grouped_evolution_answer(
+            question=question, spec_dict=spec_dict, periods=periods,
+            grain_key=period_field, grouping=grouping, label=label,
+            metric_key=metric_key, predicates=predicates, filtered=filtered,
+            interpretation=interpretation, evo=evo,
+            portfolio_id=portfolio_id, as_of=as_of, semantics=semantics or {})
     rows = [{"period": p.get(period_field), "value": (p.get("metrics") or {}).get(metric_key)}
             for p in periods]
     filter_txt = _filter_summary(predicates) if filtered else ""
@@ -1421,7 +2028,7 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
     out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
                     artifacts=[chart, table], reconciliation=last_recon,
                     source_notes=notes, warnings=warnings, route="evolution")
-    _declare_grain(out, "week" if period_field == "week" else "month")
+    _declare_grain(out, compare_mod.series_grain(periods))
     # The lens this route narrowed each period by, declared through the same
     # primitive the movement routes use. Metadata only.
     _declare_lens_scope(out, interpretation,
@@ -1441,6 +2048,13 @@ def _route_evolution(question, spec, spec_dict, *, client_id, run_id, output_roo
             "applied": [f"{p.field} (applied within each period)"
                         for p in predicates],
             "unavailable": [], "rowsBefore": before, "rowsAfter": last,
+            # STRUCTURAL EXECUTION EVIDENCE, beside the prose. `applied` is
+            # field-named by a contract with two existing readers and is left
+            # exactly as it was; this says the same thing completely — which
+            # field, which operator, which values the executor actually
+            # compared — so a facet whose identity is a VALUE has something to
+            # be proven against. See `mi_query_executor.predicate_evidence`.
+            "executed": evo.get("executedPredicates") or [],
         }
     return out
 
@@ -2098,7 +2712,23 @@ _BRIDGE_DEFAULT_DIMS = ("geographic_region_obligor", "collateral_geography",
 
 # The region family — any of these columns may carry the geography depending on
 # the tape; the bridge resolves whichever is actually present.
-_REGION_FAMILY = ("collateral_geography", "geographic_region_collateral",
+#
+# THE HARMONISED PAIR LEADS, and belongs here for the reason the family exists.
+# `_preferred_region` is data-aware, so once the canonical columns were
+# registered it began naming `canonical_region_reporting` wherever
+# harmonisation had run — correctly. But a concept OUTSIDE this family resolves
+# to a single column, and the bridge reads its own governed snapshot frames,
+# which need not carry it. "Show movement by region." answered before that
+# registration and refused after it: "the requested attribution dimension is
+# not available in the funded data".
+#
+# The defect was never that MI preferred the harmonised column. It was that
+# this route kept a second idea of what "region" spells as, and a new governed
+# region field left it behind. Inside the family the concept resolves to every
+# candidate and the bridge uses whichever its frames actually hold — which is
+# what the docstring below already promised.
+_REGION_FAMILY = ("canonical_region_reporting", "canonical_region_detail",
+                  "collateral_geography", "geographic_region_collateral",
                   "geographic_region_obligor")
 
 
@@ -3382,7 +4012,8 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     if meta.get("lensApplied") is None:
         meta["lensApplied"] = route in _lens_aware_routes()
     if meta["lensApplied"]:
-        return envelope
+        return _disclose_wording_widened_the_scope(envelope, question,
+                                                   source_lens, meta)
     try:
         lens = _resolve_lens(question, source_lens)
     except Exception:  # noqa: BLE001 - disclosure must never break an answer
@@ -3390,16 +4021,70 @@ def _disclose_lens_scope(envelope: Optional[Dict[str, Any]], question: str,
     if not lens.filters:          # Total was requested; whole-book IS the scope.
         meta["lensApplied"] = True
         return envelope
-    noun = _ROUTE_NOUN.get(route, "routed")
-    disclosure = (
-        f"Scope not narrowed: this {noun} answer is computed across the whole "
-        f"platform book. It is sourced from a governed run artefact that carries "
-        f"no source-portfolio provenance, so it could not be scoped to "
-        f"'{lens.label}' — these figures are NOT {lens.label}-only.")
     warnings = envelope.setdefault("warnings", [])
-    if isinstance(warnings, list) and disclosure not in warnings:
-        warnings.append(disclosure)
+    # A route that already disclosed its own scope gap — pipeline_summary's
+    # DECLARED-provenance wording, for instance — said the same fact more
+    # accurately than this generic fallback can. Appending a second "Scope not
+    # narrowed" sentence beside it repeated one gap in two different sentences,
+    # in the same warnings box. This generic disclosure exists for routes that
+    # have NOT already said so; it stands down once one already has.
+    already_disclosed = isinstance(warnings, list) and any(
+        isinstance(w, str) and w.startswith("Scope not narrowed:") for w in warnings)
+    if not already_disclosed:
+        noun = _ROUTE_NOUN.get(route, "routed")
+        disclosure = (
+            f"Scope not narrowed: this {noun} answer is computed across the whole "
+            f"platform book. It is sourced from a governed run artefact that carries "
+            f"no source-portfolio provenance, so it could not be scoped to "
+            f"'{lens.label}' — these figures are NOT {lens.label}-only.")
+        if isinstance(warnings, list) and disclosure not in warnings:
+            warnings.append(disclosure)
     meta["lensRequested"] = lens.label
+    return envelope
+
+
+def _disclose_wording_widened_the_scope(envelope, question, source_lens, meta):
+    """A question whose own words widened the caller's lens must say so.
+
+    A lens-aware route APPLIES the lens it resolved, so `lensApplied` is true
+    and the disclosure below never runs. That is right when the resolved lens is
+    the requested one, and silent when it is not: the question's own words
+    override the caller's selection by design, and widening to Total is the one
+    override that hands back a bigger population than the reader chose.
+
+    Measured on the live book with 'Direct' selected, three of the accepted
+    questions answered over the whole platform with nothing to say so —
+    "Give me a concise overview of the funded portfolio" among them, while the
+    same question in two other phrasings answered Direct-only. Same reader,
+    same selection, two populations, no warning; the envelope stamped Total
+    honestly, and nobody reads the envelope.
+
+    Only WIDENING is disclosed here. A question naming another book
+    ("balance in the acquired book") re-points rather than widens, and already
+    says so through the scope owner's own warning — repeating it would be noise.
+    """
+    try:
+        from mi_agent import portfolio_lens as plens
+
+        if source_lens is None:
+            return envelope
+        requested = plens.lens_from_selection(source_lens)
+        if not requested.filters:      # Total was chosen; nothing to widen from.
+            return envelope
+        resolved = _resolve_lens(question, source_lens)
+        if resolved.filters:           # Still narrowed — to this book or another.
+            return envelope
+        disclosure = (
+            f"Scope widened by the question: '{requested.label}' was selected, "
+            f"but the wording of this question asks about the whole book, so "
+            f"these figures cover every portfolio — they are NOT "
+            f"{requested.label}-only. Name the book in the question to keep it.")
+        warnings = envelope.setdefault("warnings", [])
+        if isinstance(warnings, list) and disclosure not in warnings:
+            warnings.append(disclosure)
+        meta["lensRequested"] = requested.label
+    except Exception:  # noqa: BLE001 - disclosure must never break an answer
+        pass
     return envelope
 
 
@@ -3636,6 +4321,23 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 source_lens=r.source_lens,
                 interpretation=r.resolve_interpretation())),
 
+        # 8a-bis. THE PIPELINE'S headline position — the funded summary's
+        #     sibling. `portfolio_summary` above declines every pipeline
+        #     question because it reads `output_root` and has no pipeline
+        #     frame; until now nothing caught what it dropped, so a pipeline
+        #     summary fell through to the generic executor. This claims exactly
+        #     that set: the dataset owner must say PIPELINE before its
+        #     vocabulary is even consulted, so it can take nothing from the
+        #     funded side. Priority sits beside the funded summary, not above
+        #     it — the two recognise disjoint sets and cannot both fire.
+        Recogniser(
+            name="pipeline_summary", priority=81, lens_aware=False,
+            description="Current governed headline position of the pipeline.",
+            recognise=lambda r: _is_pipeline_summary(r.question, r.spec),
+            handle=lambda r: _route_pipeline_summary(
+                r.question, r.spec_dict, client_id=r.client_id,
+                run_id=r.run_id, source_lens=r.source_lens)),
+
         # 8b. Governed Period Change Analysis — the first workflow layer built on
         #     the Business Semantics Registry. It sits AFTER the two composite
         #     routes above (which keep every question they already answer) and
@@ -3665,10 +4367,28 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 interpretation=r.resolve_interpretation())),
 
         # 9. Cross-period comparison.
+        #
+        #    IT YIELDS A STAGE IN MOTION. This route compares a WHOLE-POPULATION
+        #    metric across two reporting periods; it cannot narrow to a pipeline
+        #    stage, and its receipt says so — "stage — this answer covers the
+        #    whole population". A relative time expression ("in the last month",
+        #    "in the last week") sets `temporal_mode = "compare"`, which was
+        #    enough to claim the question at priority 90, ahead of the stage
+        #    route registered last at 120. Measured: "moved into Offer in the
+        #    last reporting period" ANSWERED, and "moved into Offer stage in the
+        #    last month" — the same analytic — was refused here.
+        #
+        #    The period word was outranking the stage recogniser, so the fix is
+        #    which route claims the question, not what this one can do: nothing
+        #    below learned to narrow, and a question that merely NAMES a stage
+        #    without putting it in motion still arrives here and is still
+        #    refused rather than answered narrowly.
         Recogniser(
             name="temporal_compare", priority=90,
             description="Governed comparison of two reporting periods.",
-            recognise=lambda r: getattr(r.spec, "temporal_mode", None) == "compare",
+            recognise=lambda r: (
+                getattr(r.spec, "temporal_mode", None) == "compare"
+                and not _stage_movement.names_a_stage_movement(r.question)),
             # NO `view=`. The dataset is the question's, and the route asks
             # `workspace.resolve_dataset` for it. Leaving the parameter here
             # would be a live wire back to the tab.
@@ -3729,6 +4449,26 @@ def _register_default_recognisers(registry: RecogniserRegistry) -> RecogniserReg
                 portfolio_id=r.portfolio_id, as_of=r.as_of,
                 semantics=r.semantics,
                 interpretation=r.resolve_interpretation())),
+
+        # 12. Pipeline stage MOVEMENT — the governed stage-transition capability
+        #     as a chat consumer. LAST, and on DEFAULT_CONFIDENCE, so every
+        #     recogniser above keeps every question it already owns; a stage
+        #     question only reaches here because nothing else claimed it.
+        #
+        #     It answers ONE thing nothing above can: a GROSS case-level
+        #     movement between the two latest governed weekly extracts. Measured
+        #     at the starting SHA, "How many cases went from KFI into
+        #     Application?" was answered with the CURRENT KFI STOCK — three
+        #     loans, for a question whose governed answer is two transitions.
+        #     Stock standing in for a transition is the substitution this entry
+        #     removes; it computes none of the analysis itself.
+        _stage_movement.recogniser(),
+        # At 79, ahead of `pipeline_summary` (81), which claimed "Give me
+        # the stage movement summary" on the word "summary" and then refused
+        # for a comparison period and a stage it cannot honour. It still cannot
+        # take work from `pipeline_stage_movement` (120): its own `read` asks
+        # `names_a_stage_movement` and yields to it explicitly.
+        _pipeline_movement_summary.recogniser(),
     ])
     return registry
 

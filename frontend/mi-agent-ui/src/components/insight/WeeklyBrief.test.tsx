@@ -10,7 +10,7 @@
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { WeeklyBriefPanel } from "@/components/insight/WeeklyBriefPanel";
 import { weeklyBriefEnabled } from "@/lib/featureFlags";
@@ -301,5 +301,71 @@ describe("navigation and requests", () => {
     rerender(<WeeklyBriefPanel {...PROPS} enabled client={c}
       portfolioContext="acquired_001" />);
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe("marking the brief read", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("shows a Read control once the brief has loaded", async () => {
+    render(<WeeklyBriefPanel {...PROPS} enabled client={client(vi.fn().mockResolvedValue(brief()))} />);
+    await screen.findByTestId("weekly-brief");
+    expect(screen.getByTestId("weekly-brief-mark-read")).toBeInTheDocument();
+  });
+
+  it("disappears immediately once marked read", async () => {
+    render(<WeeklyBriefPanel {...PROPS} enabled client={client(vi.fn().mockResolvedValue(brief()))} />);
+    await screen.findByTestId("weekly-brief");
+    fireEvent.click(screen.getByTestId("weekly-brief-mark-read"));
+    expect(screen.queryByTestId("weekly-brief")).toBeNull();
+  });
+
+  it("stays hidden on a later visit to the SAME brief", async () => {
+    const spy = vi.fn().mockResolvedValue(brief());
+    const { unmount } = render(<WeeklyBriefPanel {...PROPS} enabled client={client(spy)} />);
+    await screen.findByTestId("weekly-brief");
+    fireEvent.click(screen.getByTestId("weekly-brief-mark-read"));
+    unmount();
+
+    // A fresh mount — as a page reload would produce — reads the same
+    // persisted dismissal rather than showing the brief again.
+    render(<WeeklyBriefPanel {...PROPS} enabled client={client(spy)} />);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(screen.queryByTestId("weekly-brief")).toBeNull();
+  });
+
+  it("shows again once a NEW data upload changes the brief's dates", async () => {
+    const spy = vi.fn().mockResolvedValue(brief());
+    const { unmount } = render(<WeeklyBriefPanel {...PROPS} enabled client={client(spy)} />);
+    await screen.findByTestId("weekly-brief");
+    fireEvent.click(screen.getByTestId("weekly-brief-mark-read"));
+    unmount();
+
+    // Next week's upload: new as_of / comparison / funded dates.
+    const nextWeek = client(vi.fn().mockResolvedValue(brief({
+      as_of_date: "2026-08-14", comparison_date: "2026-08-07",
+      source_dates: { funded_as_of: "2026-08-07" },
+    })));
+    render(<WeeklyBriefPanel {...PROPS} enabled client={nextWeek} />);
+    await screen.findByTestId("weekly-brief");
+    expect(screen.getByText(/Pipeline increased 4.8%/)).toBeInTheDocument();
+  });
+
+  it("does not break the panel when storage throws", async () => {
+    const original = window.localStorage.setItem;
+    window.localStorage.setItem = () => {
+      throw new Error("storage blocked");
+    };
+    try {
+      render(<WeeklyBriefPanel {...PROPS} enabled client={client(vi.fn().mockResolvedValue(brief()))} />);
+      await screen.findByTestId("weekly-brief");
+      // The click must not throw even though persistence silently fails.
+      expect(() => fireEvent.click(screen.getByTestId("weekly-brief-mark-read")))
+        .not.toThrow();
+    } finally {
+      window.localStorage.setItem = original;
+    }
   });
 });

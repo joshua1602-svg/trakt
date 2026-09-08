@@ -337,6 +337,65 @@ class IntakeService:
                     "replaced_previous": replaced})
         return batch
 
+    def restage_missing_files(self, batch: Dict[str, Any]) -> Dict[str, Any]:
+        """Put back any registered file whose staged copy has gone.
+
+        The staging root is scratch — ``/tmp`` on the deployed App Service — so a
+        worker recycle takes the delivery's files with it while the governed run
+        record, its decisions and its rules all survive in durable storage. The
+        raw file also survives, at the governed blob location recorded on the
+        file when it was registered, so a rerun can put it back rather than
+        failing on an empty directory.
+
+        Nothing is re-registered and no new pack version is opened: the same
+        bytes are restored to the same path, and the recorded SHA-256 must match
+        or the file is left missing. A file with no ``source_uri`` (a hand
+        upload from before the location was recorded) cannot be restored.
+
+        Returns ``{"restored": [...], "missing": [...]}``; both empty is the
+        normal case where nothing was lost.
+        """
+        report: Dict[str, Any] = {"restored": [], "missing": []}
+        dest = self.batch_dir(batch)
+        for f in self._current_files(batch):
+            ref = str(f.get("storage_reference") or "")
+            if ref and Path(ref).exists():
+                continue
+            name = str(f.get("original_filename") or "")
+            uri = str(f.get("source_uri") or "")
+            if not uri:
+                report["missing"].append(
+                    {"filename": name, "reason": "no governed source location "
+                                                 "was recorded for this file"})
+                continue
+            try:
+                dest.mkdir(parents=True, exist_ok=True)
+                target = dest / name
+                self.store.storage.download_file(uri, target)
+                digest = "sha256:" + hashlib.sha256(
+                    target.read_bytes()).hexdigest()
+                if f.get("sha256") and digest != f["sha256"]:
+                    target.unlink(missing_ok=True)
+                    report["missing"].append(
+                        {"filename": name,
+                         "reason": "the file at the governed location is no "
+                                   "longer the one that was received"})
+                    continue
+                f["storage_reference"] = str(target)
+                report["restored"].append({"filename": name, "source_uri": uri})
+            except Exception as exc:  # noqa: BLE001
+                report["missing"].append({"filename": name,
+                                          "reason": f"{type(exc).__name__}"})
+        if report["restored"]:
+            self.save_batch(batch)
+            self.store.append_audit(
+                batch["client_id"], "delivery_files_restaged", actor="system",
+                detail={"batch_id": batch["batch_id"],
+                        "restored": [r["filename"] for r in report["restored"]],
+                        "note": "staged copies were missing and were restored "
+                                "from the governed source location"})
+        return report
+
     # -- recognition --------------------------------------------------------- #
     def _current_files(self, batch: Dict[str, Any]) -> List[Dict[str, Any]]:
         return [f for f in batch["files"]

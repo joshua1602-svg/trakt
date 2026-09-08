@@ -173,7 +173,45 @@ def test_site3_reports_the_denominator_it_examined():
         fot.main()
     text = buf.getvalue()
     assert "corpus questions examined             : 882" in text
-    assert "corpus questions carrying spec.filters: 119" in text
+    # 119 until the place-resolver fallback stopped inventing a geography for
+    # any phrase it was handed with no value catalogue. The four it loses are
+    # `collateral_geography` = 'Equity Release Supermarket Limited' (twice, a
+    # BROKER), 'October' (a MONTH) and 'Weighting' (an analytic noun). None of
+    # the four is a place, none reached a reader — this trace parses without a
+    # frame, and serving always has one — and each is now recorded as an
+    # unresolved narrowing instead of a filter on a field nobody named.
+    #
+    # 115 -> 116 when the postfix comparators stopped carrying their own number
+    # grammar. The ONE question that moved, across all 882:
+    #
+    #     "Drill into the 50%+ LTV bucket."
+    #         {}  ->  {current_loan_to_value: {op: ge, value: 50.0}}
+    #
+    # `50%+` is a bound the prefix grammar would have read and the postfix
+    # patterns could not, because theirs had no `%`. This census is the
+    # measurement that says the change reached one corpus question and no
+    # others — which is why the number is asserted rather than computed.
+    #
+    # 116 -> 115, and it is THE SAME QUESTION MOVING BACK. Measured across all
+    # 882, exactly one differs from the reading above:
+    #
+    #     "Drill into the 50%+ LTV bucket."
+    #         {current_loan_to_value: {op: ge, value: 50.0}}  ->  {}
+    #
+    # The bound is still parsed — `_parse_filters` returns it unchanged — but the
+    # question no longer produces a spec that can carry it, because "drill"
+    # resolves no governed measure and the estate stopped SUBSTITUTING one. That
+    # is this programme's oldest accepted invariant ("the unicorn ratio by
+    # region" answering as balance by region is the failure mode it exists to
+    # prevent), so the question is now refused rather than answered on a measure
+    # nobody named: "'drill' is not a governed measure in this dataset; no
+    # substitute was used."
+    #
+    # A filter that reaches no reader is not a filter this census should count.
+    # The direction of the movement is the point: the population is not applied
+    # to a broader answer, it is not applied at all, and the question fails
+    # closed.
+    assert "corpus questions carrying spec.filters: 115" in text
 
 
 # --------------------------------------------------------------------------- #
@@ -192,14 +230,48 @@ def test_site4_a_routing_fault_fails_loudly(monkeypatch):
 
 
 def test_site4_a_refused_answer_is_a_legitimate_reading():
-    """A REFUSED grade is a measurement, not a failure — 16 of the 34 owned
-    questions refuse, and they must keep counting toward the denominator."""
+    """A REFUSED grade is a measurement, not a failure — the owned questions
+    that refuse must keep counting toward the denominator.
+
+    The owned COUNT is a measurement of today's routing, not an invariant, and
+    it moves when a question changes hands. It went 34 -> 35 when the
+    filtered-summary branch stopped claiming questions that name a breakdown:
+    "Show monthly loan count evolution by broker." had been claimed by that
+    branch and graded unmapped, and now reaches the evolution route this file
+    measures. The assertion is kept exact rather than loosened to ">=" so that a
+    silent drift in the other direction still fails here.
+
+    It went 35 -> 30 when the MI temporal route began executing the measure the
+    question NAMES. This instrument's book carries no arrears column and no
+    default column, and three questions were being DELIVERED against it:
+
+        "Show arrears evolution over time."          £16.1m
+        "Show default balance evolution over time."  £16.1m
+        "Show funded balance over time."             £16.1m
+
+    One series, three questions — the funded balance answering all of them,
+    because the old producer computed from the metric KEY and
+    `resolve_metric_key` returns `funded_balance` for any measure it does not
+    recognise. That is the measure substitution the "drill" note above records
+    the estate refusing elsewhere, and it is not coverage. The executor is asked
+    for `arrears_balance`, cannot find the column, and the question is refused
+    with its own reason: *"'arrears' is not available in this dataset ... no
+    value was fabricated."* Measured on the demonstration book, which DOES carry
+    the column, the same question moved from the whole book's £1.96bn to the
+    book's actual arrears of £0.
+
+    The other two leave the family without changing what a reader gets: both
+    were REFUSED before and are REFUSED now, under a different route identity.
+
+    Delivered coverage is therefore unchanged; what fell away is three answers
+    that were never about what they said they were about.
+    """
     import migration_phase0.route_ownership_evolution as roe
 
     rows = _quiet(roe.run)
     assert len(rows) == 882
     owned = [r for r in rows if r.get("owned")]
-    assert len(owned) == 34
+    assert len(owned) == 30
     assert sum(1 for r in owned if r["grade"] == "REFUSED") > 0
     assert sum(1 for r in owned if r["grade"] == "DELIVERED") > 0
     assert not any("error" in r for r in rows)

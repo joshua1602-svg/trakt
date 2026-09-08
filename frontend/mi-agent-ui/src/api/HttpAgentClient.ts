@@ -20,17 +20,21 @@ import type {
   MIQuerySpec,
   MovementDetail,
   MovementDetailType,
+  StageTransitionDetail,
   WeeklyBrief,
   PipelineEvolution,
   PipelineMovement,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
+  EligibilityLoans,
   ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
   RiskLimitsSnapshot,
   SnapshotIndex,
 } from "@/domain";
+// A value, not a type: the detail type this route is called with.
+import { DETAIL_STAGE_TRANSITION } from "@/domain";
 import { isArtifact } from "@/domain";
 import { AgentError, type AgentClient } from "./AgentClient";
 import { authorizationHeaders } from "@/auth/tokenProvider";
@@ -251,6 +255,16 @@ export class HttpAgentClient implements AgentClient {
         { detailType, asOf })}`, signal);
   }
 
+  /** The SAME route as `getMovementDetail`, under the transition detail type.
+   * The response is the engine payload verbatim — nothing is reshaped here. */
+  getStageTransitionDetail(portfolioId: string, asOf?: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<StageTransitionDetail> {
+    return this.getJson<StageTransitionDetail>(
+      `/mi/insight/movement-detail?${this.scoped(portfolioId, portfolioContext,
+        { detailType: DETAIL_STAGE_TRANSITION, asOf })}`, signal);
+  }
+
   getWeeklyBrief(portfolioId: string, portfolioContext?: string, asOf?: string,
                 signal?: AbortSignal): Promise<WeeklyBrief> {
     return this.getJson<WeeklyBrief>(
@@ -288,6 +302,15 @@ export class HttpAgentClient implements AgentClient {
                                signal?: AbortSignal): Promise<ConcentrationDrillthrough> {
     return this.getJson<ConcentrationDrillthrough>(
       `/mi/concentration-tests/drillthrough?${this.scoped(portfolioId, portfolioContext, { testId })}`,
+      signal);
+  }
+
+  getEligibilityLoans(portfolioId: string,
+                      status: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED",
+                      portfolioContext?: string,
+                      signal?: AbortSignal): Promise<EligibilityLoans> {
+    return this.getJson<EligibilityLoans>(
+      `/mi/borrowing-base/loans?${this.scoped(portfolioId, portfolioContext, { status })}`,
       signal);
   }
 

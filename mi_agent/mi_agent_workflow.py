@@ -231,14 +231,20 @@ def describe_spec(spec: MIQuerySpec, semantics: dict,
 # concepts but the field's column is absent from the data, the agent returns a
 # CONTROLLED unsupported response (never a hallucinated/fallback answer). When the
 # field IS present (a future client pack), the query is processed normally.
+#: THE ONE PLACE THIS ESTATE SAYS WHAT "NNEG" LOOKS LIKE IN A QUESTION.
+#: Named and exported because the parser's risk-limit recogniser has to read it
+#: too: `headroom` is a limit word AND an NNEG word, and the two owners have to
+#: agree about which sentences are which. A second copy over there is precisely
+#: the defect this fixes.
+NNEG_RE = re.compile(r"\bnneg\b|\bnegative equity\b|\bno[- ]negative[- ]equity\b")
+
 _UNSUPPORTED_CONCEPTS = [
     (r"\bdays?\s+in\s+arrears\b|\bin\s+arrears\b|\barrears\b", "arrears",
      ["arrears_balance", "days_in_arrears"]),
     (r"\bdefault(ed|s)?\b", "default", ["default_amount"]),
     (r"\brecover(y|ies)\b", "recoveries", ["recoveries_in_period"]),
     (r"\b(losses|loss amount|allocated loss)\b", "losses", ["allocated_losses"]),
-    (r"\bnneg\b|\bnegative equity\b|\bno[- ]negative[- ]equity\b", "NNEG",
-     ["nneg_flag"]),
+    (NNEG_RE.pattern, "NNEG", ["negative_equity_guarantee"]),
     (r"\bindexed\s+(ltv|value|valuation|loan to value)\b", "indexed valuation",
      ["indexed_loan_to_value", "indexed_valuation_amount"]),
     (r"\bcredit score\b", "credit score", ["credit_score"]),
@@ -476,6 +482,31 @@ def _contribution_answer(spec, qres, semantics: dict) -> Optional[str]:
         return None
 
 
+#: Phrases by which a reader opts OUT of the reconciling default.
+_EXCLUDE_MISSING_PHRASES = ("exclude missing", "excluding missing",
+                            "without missing", "drop missing", "ignore missing")
+
+
+def missing_dimension_policy_for(question: Optional[str]) -> str:
+    """How a grouped answer treats rows whose grouping value is missing.
+
+    Missing grouping values are bucketed under "Unknown / Missing" by default so
+    results reconcile to the funded book; the operator opts out by asking to
+    exclude missing data.
+
+    ONE OWNER, because the answer must not depend on which path ran. A grouped
+    question and the SAME grouped question with a time axis are executed by the
+    same executor over the same frame, so if the two callers chose this policy
+    separately the latest period of a trend could carry an "Unknown / Missing"
+    group the current-period answer did not, or the reverse — a difference with
+    no cause in the book. Extracted from `run_mi_agent_query`, unchanged, so the
+    temporal route can ask rather than decide.
+    """
+    lowered = (question or "").lower()
+    return ("exclude" if any(p in lowered for p in _EXCLUDE_MISSING_PHRASES)
+            else "bucket")
+
+
 def run_mi_agent_query(
     question: str,
     data,
@@ -588,7 +619,8 @@ def run_mi_agent_query(
         result["missing_fields"] = unsupported["missing_fields"]
         result["error"] = unsupported["message"]
         result["answer"] = unsupported["message"]
-        result["warnings"] = [unsupported["message"]]
+        # NOT also appended to warnings — see the "unmapped_question" guard
+        # below for why a refusal states its own reason exactly once.
         return result
 
     # ---- parse (ONCE per request) -----------------------------------------
@@ -656,9 +688,11 @@ def run_mi_agent_query(
             "errors": [f"unresolved_metric: {spec.explanation}"],
             "warnings": [], "resolved_fields": {},
         }
-        result["warnings"] = [
-            "requested measure is not available in this dataset; no substitute "
-            "measure was used."]
+        # NOT also appended to `warnings` — `error`/`answer` already carry
+        # this refusal's reason (`msg`, above), which is what the chat's red
+        # bubble renders. A second, differently-worded copy in `warnings`
+        # restated the same one fact rather than adding a new one — the same
+        # class of duplication `_disclose_lens_scope` was fixed for.
         return result
 
     # AN UNRESOLVED CATEGORY IS NOT AN UNMAPPED QUESTION. Where the reader
@@ -703,8 +737,12 @@ def run_mi_agent_query(
                        "intent was recognised in the question"],
             "warnings": [], "resolved_fields": {},
         }
-        result["warnings"] = ["question not understood: no governed metric, "
-                              "dimension or intent was recognised."]
+        # NOT also appended to `warnings` — `error`/`answer` (`msg`, above)
+        # already say this refusal's reason; a second, differently-worded
+        # "question not understood" line in `warnings` restated it rather
+        # than adding a new fact. Reported as two stacked-looking messages in
+        # the chat: the red refusal bubble followed by an amber box saying
+        # the same thing again.
         return result
     # ---- source-portfolio lens (Total / Direct / Acquired / cohort) -------
     # Deterministic: a portfolio scope named in the question ("acquired book",
@@ -901,15 +939,7 @@ def run_mi_agent_query(
     result["interpreted"]["Validation"] = "Passed"
 
     # ---- execute ----------------------------------------------------------
-    # Missing grouping values are bucketed under "Unknown / Missing" by default so
-    # results reconcile to the funded book; the operator can opt out by asking to
-    # exclude missing data.
-    q_lower = (question or "").lower()
-    missing_policy = ("exclude"
-                      if any(p in q_lower for p in ("exclude missing", "excluding missing",
-                                                    "without missing", "drop missing",
-                                                    "ignore missing"))
-                      else "bucket")
+    missing_policy = missing_dimension_policy_for(question)
     try:
         qres: MIQueryResult = execute_mi_query(
             spec, df, semantics, validate=False,
@@ -1148,7 +1178,11 @@ def run_mi_agent_query(
             spec=spec, query_result=qres, semantics=semantics, facets=_facets,
             parser_confidence=(parse_meta or {}).get("parser_confidence"),
             dataset=dataset,
-            period=_reporting_date_label(df))
+            period=_reporting_date_label(df),
+            # The prepared frame, so the receipt can state which region the
+            # figure was measured on and how much of the book resolved there.
+            # Read only — nothing about the figure is recomputed from it.
+            frame=df)
         verdict, message = _receipt_mod.assess(
             receipt, substitution=_substitution, semantics=semantics)
         result["execution_receipt"] = receipt.to_dict()

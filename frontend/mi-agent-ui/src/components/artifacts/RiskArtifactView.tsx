@@ -79,7 +79,7 @@ function MigrationMatrix({ artifact }: { artifact: RiskArtifact }) {
                     ? THEME.negative
                     : c.movement === "improved"
                       ? THEME.positive
-                      : THEME.peri
+                      : THEME.cyan
                   : "transparent";
                 return (
                   <td key={to} className="p-0.5">
@@ -103,7 +103,7 @@ function MigrationMatrix({ artifact }: { artifact: RiskArtifact }) {
       </table>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-ink-400">
         <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.positive }} />Improved</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.peri }} />Unchanged</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.cyan }} />Unchanged</span>
         <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: THEME.negative }} />Deteriorated</span>
         <span className="ml-auto text-ink-500">% of balance</span>
       </div>

@@ -1,5 +1,13 @@
 /**
- * Funded → Risk Limits — three-state concentration workspace.
+ * Eligibility & Concentrations — the facility position and the three-state
+ * concentration workspace, in one tab.
+ *
+ * The tab leads with the BORROWING BASE (eligible collateral, the borrowing
+ * base, drawings, headroom, utilisation) and the eligible / ineligible /
+ * undetermined split of the Financing Portfolio, then the Schedule 8
+ * concentration limits measured over Eligible Mortgage Loans. Both come from
+ * ONE request and ONE governed evaluation of ONE frame, so the two halves of
+ * the tab cannot disagree with each other.
  *
  * One governed evaluation (`/mi/concentration-tests`) supplies everything:
  * the contractual **Funded** position, the **Expected Forecast** (existing
@@ -22,8 +30,9 @@ import type {
   ConcentrationTestsSnapshot,
 } from "@/domain";
 import { Badge, Card } from "@/components/ui";
+import { BorrowingBasePanel } from "./BorrowingBasePanel";
+import { EligibilityLoansPanel } from "./EligibilityLoansPanel";
 import { ConcentrationDetailPanel } from "./ConcentrationDetailPanel";
-import { MethodologyBlock } from "./MethodologyBlock";
 import {
   RISK_CHIP,
   STATUS_GLYPH,
@@ -35,6 +44,7 @@ import {
   formatValue,
   operatorGlyph,
   riskCategoryByTest,
+  riskStatementByTest,
   riskSortKey,
   statePhrase,
 } from "./concentrationShared";
@@ -85,27 +95,10 @@ function SummaryTile({
 }
 
 function SourceBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
-  if (snapshot.source === "approved_configuration") {
-    return (
-      <p
-        role="note"
-        data-testid="concentration-source-banner"
-        className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[11px] text-ink-400"
-      >
-        Approved configuration v{snapshot.configurationVersion}
-        {snapshot.activatedBy && <> · activated by {snapshot.activatedBy}</>}
-        {snapshot.activatedAt && <> on {formatDate(snapshot.activatedAt)}</>} · evaluated
-        against the governed funded snapshot
-        {snapshot.reportingDate && <> at {formatDate(snapshot.reportingDate)}</>}.
-        {snapshot.openProposals ? (
-          <span className="ml-1 text-amber-300/90">
-            {snapshot.openProposals} proposal(s) from onboarding still await review or
-            approval.
-          </span>
-        ) : null}
-      </p>
-    );
-  }
+  // Configuration-version / activation provenance is not rendered here — an
+  // operator does not need to be told which config version evaluated their
+  // own book on every visit to this tab. It stays in the audit trail; it is
+  // not withheld, only no longer a standing banner.
   if (snapshot.source === "legacy_extracted") {
     return (
       <p
@@ -122,8 +115,41 @@ function SourceBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
   return null;
 }
 
+/**
+ * A contractual limit the facility imposes that is NOT in the active
+ * configuration is invisible in the table below — it has no row, because it
+ * was never activated. On a tab whose job is to say what the facility requires
+ * and whether the book meets it, "we cannot calculate this one" has to be on
+ * the screen, not only in the proposal queue.
+ */
+function UncalculableLimitsBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
+  const open = snapshot.openProposals ?? 0;
+  const unsupported = snapshot.unsupportedProposals ?? 0;
+  const outstanding = open + unsupported;
+  if (snapshot.source !== "approved_configuration" || outstanding === 0) return null;
+  return (
+    <p
+      role="note"
+      data-testid="uncalculable-limits-banner"
+      className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[11px] text-ink-400"
+    >
+      <span className="font-semibold text-ink-300">
+        {outstanding} further contractual limit{outstanding === 1 ? "" : "s"} not
+        calculable.
+      </span>{" "}
+      {outstanding === 1 ? "It is" : "They are"} stated in the facility
+      documentation but{" "}
+      {outstanding === 1 ? "does" : "do"} not appear below, because{" "}
+      {outstanding === 1 ? "an input it needs is" : "inputs they need are"} not
+      available — the definition is unresolved or the data is not supplied.{" "}
+      {outstanding === 1 ? "It is" : "They are"} awaiting confirmation in the OCC
+      concentration-test workflow and{" "}
+      {outstanding === 1 ? "is" : "are"} not being reported as passing.
+    </p>
+  );
+}
+
 function ForecastBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) {
-  const [open, setOpen] = useState(false);
   const forecast = snapshot.forecast;
   const statesAvailable = Boolean(snapshot.states?.available);
   if (snapshot.source !== "approved_configuration") return null;
@@ -140,38 +166,22 @@ function ForecastBanner({ snapshot }: { snapshot: ConcentrationTestsSnapshot }) 
       </p>
     );
   }
+  // The methodology description ("completion-trend model · window ...") and
+  // its "View methodology" detail are not rendered here — this tab reads the
+  // Expected Forecast's numbers, and the model behind them belongs on the
+  // Forecast tab, where it is described once rather than a second time here.
+  // A stage genuinely falling back to a configured assumption still says so —
+  // that changes what the forecast column means, not merely how it is sourced.
+  if ((forecast?.stagesUsingConfigFallback?.length ?? 0) === 0) return null;
   return (
-    <div
+    <p
+      role="note"
       data-testid="forecast-provenance-banner"
-      className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[11px] text-ink-400"
+      className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[11px] text-amber-300/90"
     >
-      <p role="note">
-        Expected Forecast: completion-trend model · window{" "}
-        {formatDate(forecast?.observationWindowStart)} →{" "}
-        {formatDate(forecast?.observationWindowEnd)} ({forecast?.weeklyExtractsUsed}{" "}
-        weekly extracts, {forecast?.trackedCaseCount} cases,{" "}
-        {forecast?.observedCompletionCount} completions) ·{" "}
-        <button
-          type="button"
-          className="text-peri-200 underline-offset-2 hover:underline"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? "Hide methodology" : "View methodology"}
-        </button>
-      </p>
-      {(forecast?.stagesUsingConfigFallback?.length ?? 0) > 0 && (
-        <p className="mt-1 text-amber-300/90">
-          Stage(s) {forecast?.stagesUsingConfigFallback?.join(", ")} fall back to
-          configured assumptions — the observed sample is below the sufficiency floor.
-        </p>
-      )}
-      {open && forecast && (
-        <div className="mt-2">
-          <MethodologyBlock forecast={forecast} />
-        </div>
-      )}
-    </div>
+      Stage(s) {forecast?.stagesUsingConfigFallback?.join(", ")} fall back to configured
+      assumptions — the observed sample is below the sufficiency floor.
+    </p>
   );
 }
 
@@ -201,7 +211,7 @@ function EmergingRisks({
                 {r.testId && (
                   <button
                     type="button"
-                    className="ml-2 text-[11px] text-peri-200 underline-offset-2 hover:underline"
+                    className="ml-2 text-[11px] text-cyan-200 underline-offset-2 hover:underline"
                     onClick={() => onOpen(r.testId!)}
                   >
                     Open test
@@ -215,6 +225,21 @@ function EmergingRisks({
     </Card>
   );
 }
+
+/**
+ * The concentration table's column tracks, shared by the header row and every
+ * body row.
+ *
+ * The last track is PINNED rather than `auto`. Each row is its own grid, so an
+ * `auto` risk column sized itself to that row's own chip — a row carrying
+ * "EXPECTED BREACH" left ~80px less for its six other columns than a row
+ * carrying "OK", and every row (and the header) resolved its columns to a
+ * different x. The figures were right-aligned inside cells that were not in
+ * the same place, so nothing lined up down the table. 10.5rem clears the
+ * widest label in RISK_CHIP with room to spare.
+ */
+const CONCENTRATION_GRID =
+  "grid-cols-[1.7fr_repeat(4,minmax(76px,1fr))_minmax(64px,0.8fr)_10.5rem]";
 
 export function RiskLimitsWorkspace({
   client,
@@ -236,6 +261,9 @@ export function RiskLimitsWorkspace({
   const [stressOnly, setStressOnly] = useState(false);
   const [showPrior, setShowPrior] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [eligibilityStatus, setEligibilityStatus] = useState<
+    "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED" | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +289,10 @@ export function RiskLimitsWorkspace({
   const statesAvailable = Boolean(snapshot?.states?.available);
   const categoryByTest = useMemo(
     () => riskCategoryByTest(snapshot?.emergingRisks),
+    [snapshot],
+  );
+  const statementByTest = useMemo(
+    () => riskStatementByTest(snapshot?.emergingRisks),
     [snapshot],
   );
   const categories = useMemo(
@@ -326,8 +358,9 @@ export function RiskLimitsWorkspace({
           className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[12px] text-amber-300/90"
           data-testid="concentration-error"
         >
-          The Risk Limits service could not be reached. The last governed results will
-          reappear when it recovers — nothing is estimated in the meantime.
+          The Eligibility &amp; Concentrations service could not be reached. The last
+          governed results will reappear when it recovers — nothing is estimated in the
+          meantime.
         </p>
       </Card>
     );
@@ -335,9 +368,28 @@ export function RiskLimitsWorkspace({
   if (!snapshot) return null;
 
   if (!snapshot.available || tests.length === 0) {
+    // No approved concentration tests does NOT mean no facility position: the
+    // borrowing base has its own inputs and is shown either way.
     return (
-      <Card className="p-4 space-y-2" testId="risk-limits-panel">
-        <h2 className="text-[14px] font-semibold text-ink-100">Risk Limits</h2>
+      <div className="space-y-3" data-testid="risk-limits-panel">
+        <h2 className="text-[14px] font-semibold text-ink-100">
+          Eligibility &amp; Concentrations
+        </h2>
+        <BorrowingBasePanel
+          snapshot={snapshot.borrowingBase}
+          population={snapshot.eligiblePopulation}
+          onShowLoans={setEligibilityStatus}
+        />
+        {eligibilityStatus && (
+          <EligibilityLoansPanel
+            client={client}
+            portfolioId={portfolioId}
+            portfolioContext={portfolioContext}
+            status={eligibilityStatus}
+            onClose={() => setEligibilityStatus(null)}
+          />
+        )}
+        <Card className="p-4">
         <p
           className="rounded-lg border border-[var(--color-line-soft)] bg-navy-900/50 px-3 py-2 text-[12px] text-ink-400"
           data-testid="concentration-empty"
@@ -354,7 +406,8 @@ export function RiskLimitsWorkspace({
             <span className="block text-ink-500">{String(snapshot.lineage.note)}</span>
           ) : null}
         </p>
-      </Card>
+        </Card>
+      </div>
     );
   }
 
@@ -363,7 +416,9 @@ export function RiskLimitsWorkspace({
   return (
     <div className="space-y-3" data-testid="risk-limits-panel">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-[14px] font-semibold text-ink-100">Risk Limits</h2>
+        <h2 className="text-[14px] font-semibold text-ink-100">
+          Eligibility &amp; Concentrations
+        </h2>
         <p className="text-[11px] text-ink-500">
           Reporting date {formatDate(snapshot.reportingDate)}
           {s.priorAvailable && <> · prior {formatDate(s.priorReportingDate)}</>}
@@ -376,6 +431,28 @@ export function RiskLimitsWorkspace({
 
       <SourceBanner snapshot={snapshot} />
       <ForecastBanner snapshot={snapshot} />
+
+      {/* The facility position leads the tab: what collateral is eligible,
+          what it supports, and how much of that is drawn. */}
+      <BorrowingBasePanel
+        snapshot={snapshot.borrowingBase}
+        population={snapshot.eligiblePopulation}
+        onShowLoans={setEligibilityStatus}
+      />
+      {eligibilityStatus && (
+        <EligibilityLoansPanel
+          client={client}
+          portfolioId={portfolioId}
+          portfolioContext={portfolioContext}
+          status={eligibilityStatus}
+          onClose={() => setEligibilityStatus(null)}
+        />
+      )}
+
+      <h3 className="pt-1 text-[12px] font-semibold text-ink-100">
+        Schedule 8 concentrations
+      </h3>
+      <UncalculableLimitsBanner snapshot={snapshot} />
 
       {/* Portfolio summary — grouped by state, left → right. */}
       <div
@@ -431,8 +508,6 @@ export function RiskLimitsWorkspace({
           never as passing.
         </p>
       )}
-
-      <EmergingRisks snapshot={snapshot} onOpen={setSelectedId} />
 
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
@@ -498,7 +573,7 @@ export function RiskLimitsWorkspace({
               onClick={() => setExpectedOnly((v) => !v)}
               className={`rounded-md border px-2 py-1 text-[11px] ${
                 expectedOnly
-                  ? "border-peri-400/40 bg-navy-800 text-peri-200"
+                  ? "border-cyan-400/40 bg-navy-800 text-cyan-200"
                   : "border-[var(--color-line)] text-ink-400 hover:bg-navy-800"
               }`}
             >
@@ -510,7 +585,7 @@ export function RiskLimitsWorkspace({
               onClick={() => setStressOnly((v) => !v)}
               className={`rounded-md border px-2 py-1 text-[11px] ${
                 stressOnly
-                  ? "border-peri-400/40 bg-navy-800 text-peri-200"
+                  ? "border-cyan-400/40 bg-navy-800 text-cyan-200"
                   : "border-[var(--color-line)] text-ink-400 hover:bg-navy-800"
               }`}
             >
@@ -525,7 +600,7 @@ export function RiskLimitsWorkspace({
             onClick={() => setShowPrior((v) => !v)}
             className={`rounded-md border px-2 py-1 text-[11px] ${
               showPrior
-                ? "border-peri-400/40 bg-navy-800 text-peri-200"
+                ? "border-cyan-400/40 bg-navy-800 text-cyan-200"
                 : "border-[var(--color-line)] text-ink-400 hover:bg-navy-800"
             }`}
           >
@@ -537,7 +612,7 @@ export function RiskLimitsWorkspace({
       {/* Three-state comparison table */}
       <Card className="p-3" testId="concentration-table">
         <div
-          className="grid grid-cols-[1.7fr_repeat(4,minmax(76px,1fr))_minmax(64px,0.8fr)_auto] items-end gap-2 border-b border-[var(--color-line-soft)] px-1 pb-2 text-[10px] uppercase tracking-wider text-ink-500"
+          className={`grid ${CONCENTRATION_GRID} items-end gap-2 border-b border-[var(--color-line-soft)] px-1 pb-2 text-[10px] uppercase tracking-wider text-ink-500`}
           role="row"
         >
           <span>Test</span>
@@ -582,7 +657,7 @@ export function RiskLimitsWorkspace({
                 t.expectedBreach ? ", breach expected" : ""
               }${t.fullPipelineBreach && !t.expectedBreach && t.status !== "breach"
                 ? ", stress-only breach" : ""}`}
-              className={`grid w-full grid-cols-[1.7fr_repeat(4,minmax(76px,1fr))_minmax(64px,0.8fr)_auto] items-center gap-2 border-b border-[var(--color-line-soft)] px-1 py-2 text-left text-[12px] last:border-0 hover:bg-navy-800/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-peri-400 ${
+              className={`grid w-full ${CONCENTRATION_GRID} items-center gap-2 border-b border-[var(--color-line-soft)] px-1 py-2 text-left text-[12px] last:border-0 hover:bg-navy-800/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-cyan-400 ${
                 selectedId === t.testId ? "bg-navy-800/60" : ""
               }`}
             >
@@ -654,13 +729,24 @@ export function RiskLimitsWorkspace({
               >
                 {formatChange(move, t.unit)}
               </span>
-              <span>
+              <span
+                title={t.testId ? statementByTest.get(t.testId) : undefined}
+              >
+                {/* The badge and "Move F->E" sit in the same row, but a
+                    DETERIORATION badge is measured since the prior REPORTING
+                    period — a different, usually longer span than the F->E
+                    column beside it. Without this, a comfortably small F->E
+                    move next to DETERIORATION reads as contradictory; the
+                    title attribute states the real basis in the service's own
+                    words. */}
                 <Badge tone={chip.tone}>{chip.label}</Badge>
               </span>
             </button>
           );
         })}
       </Card>
+
+      <EmergingRisks snapshot={snapshot} onOpen={setSelectedId} />
 
       {selected && (
         <ConcentrationDetailPanel

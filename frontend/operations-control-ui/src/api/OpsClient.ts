@@ -53,6 +53,10 @@ import type {
   StartWorkflowInput,
   Workflow,
   WorkflowRow,
+  MiQueryDetail,
+  MiQueryFilters,
+  MiQueryRow,
+  MiQuerySummary,
 } from "./types";
 
 /** An error carrying a plain-English message safe to show to the operator. */
@@ -105,6 +109,16 @@ export interface OpsClient {
   getReview(decisionId: string): Promise<Review>;
   submitDecision(decisionId: string, input: DecisionInput): Promise<DecisionResult>;
   getRules(params?: RulesQuery): Promise<Rule[]>;
+  // MI Query live telemetry (Day-1 calibration surface).
+  getMiQuerySummary(filters?: MiQueryFilters): Promise<MiQuerySummary>;
+  getMiQueries(filters?: MiQueryFilters): Promise<MiQueryRow[]>;
+  getMiQuery(queryId: string, client?: string): Promise<MiQueryDetail>;
+  reviewMiQuery(
+    queryId: string,
+    classification: string,
+    note?: string,
+    client?: string,
+  ): Promise<void>;
   getRuleHistory(ruleId: string): Promise<Rule[]>;
   getHistory(client?: string): Promise<Publication[]>;
 
@@ -175,7 +189,9 @@ export interface OpsClient {
   // convenience, not the control.
   getAgentMeta(): Promise<AgentMeta>;
   listAgentCases(state?: string): Promise<CaseSummary[]>;
-  createAgentCase(instruction: string, fixtureId?: string): Promise<AgentStatus>;
+  /** `live` opens a REAL onboarding rather than a rehearsal. Defaults to a
+   *  rehearsal; the backend refuses live where it is not switched on. */
+  createAgentCase(instruction: string, fixtureId?: string, live?: boolean): Promise<AgentStatus>;
   getAgentCase(caseRef: string): Promise<AgentStatus>;
   instructAgent(caseRef: string, text: string, confirm?: boolean): Promise<AgentTurn>;
   answerAgentDecision(

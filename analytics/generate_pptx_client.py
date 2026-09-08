@@ -79,9 +79,9 @@ import yaml as _yaml
 def _load_client_config() -> dict:
     """Load client YAML config, searching common locations."""
     candidates = [
-        Path(__file__).resolve().parent.parent / "config" / "client" / "config_client_ERM_UK.yaml",
-        Path.cwd() / "config" / "client" / "config_client_ERM_UK.yaml",
-        Path("config_client_ERM_UK.yaml"),
+        Path(__file__).resolve().parent.parent / "config" / "client" / "config_client_ERE.yaml",
+        Path.cwd() / "config" / "client" / "config_client_ERE.yaml",
+        Path("config_client_ERE.yaml"),
     ]
     for p in candidates:
         if p.exists():

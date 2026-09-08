@@ -137,6 +137,21 @@ KIND_GRANULARITY = "granularity"
 #: nothing for one across twenty-four time-series probes.
 KIND_SERIES_AXIS = "series_axis"
 
+#: The TIME grain an answer is reported at, as distinct from the SPATIAL grain
+#: `KIND_GRANULARITY` carries. The two look alike and are adjudicated by the
+#: same comparison, but they do not deserve the same verdict:
+#:
+#:   * a spatial mismatch is a SUBSTITUTION — "by postcode" answered at ITL3
+#:     area level is a different number for a different question, and blocks;
+#:   * a temporal mismatch is a LIMIT OF THE SERIES — the pipeline is published
+#:     weekly and there is no monthly one to have answered from instead. The
+#:     figure is the real weekly movement, correctly computed, and the reader
+#:     is owed the grain rather than a refusal.
+#:
+#: Decided 2026-09-03 after "Has pipeline progression improved month on month?"
+#: was refused outright while the weekly answer sat computed behind the guard.
+KIND_TIME_GRAIN = "time_grain"
+
 #: A requested facet reached execution and demonstrably shaped the result.
 APPLIED = "applied"
 #: The dataset does not carry the field the facet needs. Disclosable.
@@ -277,8 +292,20 @@ _THRESHOLD_PATTERNS: Tuple[Tuple[str, str], ...] = (
 
 #: "a 75% LTV cap", "eligible for a 75% LTV ..." — a percentage bound stated
 #: directly against a percent measure, without a comparator word.
+#: "a 75% LTV cap" — a bound written without a comparator. NOT a bucket name.
+#:
+#: Two marks in the question say the number is a bucket edge rather than a cap,
+#: and both are the reader's own words rather than an inference:
+#:   * a range dash immediately before it — the "70" of "60-70%" is the top of
+#:     a labelled band, and `buckets.yaml` declares those very labels;
+#:   * a bucket word immediately after it — bucket, band, bracket, range.
+#: Detecting a cap there raised a requirement nothing could satisfy: the engine
+#: narrows a band with an equality on `ltv_bucket`, never with a comparison, so
+#: a correct answer was refused for not applying a threshold nobody asked for.
 _PCT_BOUND_RE = re.compile(
-    r"(\d[\d\.]*)\s*%\s*(?:current\s+)?(ltv|loan[- ]to[- ]value)\b", re.I)
+    r"(?<![-\u2010-\u2015\d.])(\d[\d\.]*)\s*%\s*(?:current\s+)?"
+    r"(ltv|loan[- ]to[- ]value)\b"
+    r"(?!\s*(?:bucket|band|bracket|banding|range)s?\b)", re.I)
 
 #: Hypothetical / scenario markers. Require a directional verb so a forecast
 #: ("if origination continues") is not mistaken for a stress.
@@ -336,6 +363,17 @@ TEMPORAL_ROUTES = frozenset({
     # capability, which disables working governed analytics rather than
     # preventing a substitution.
     "period_movement",
+    # ``pipeline_movement_summary`` composes the SAME two-snapshot payload the
+    # stage route reads, for every governed stage at once. It compares two
+    # governed extracts by construction — an interval is what it reports — so a
+    # comparison-period facet it did not honour would be a contradiction.
+    "pipeline_movement_summary",
+    # ``pipeline_stage_movement`` classifies every governed pipeline case across
+    # the two latest weekly extracts and reports the movement between them. It
+    # is a two-snapshot capability by construction — without a prior snapshot it
+    # returns the governed "no comparison" refusal rather than an answer — so a
+    # comparison-period facet on one of its questions is honoured, not lost.
+    "pipeline_stage_movement",
 })
 
 #: Routes that genuinely rank a dimension.
@@ -598,6 +636,22 @@ def _value_owner(token: str, keys: Set[str], fields: Mapping[str, Any]
     harmless on a book with one direct cohort, an undeclared empty intersection
     on a book with two. One declaration, one reader; the other defers.
 
+    ALIASES OF ONE CONCEPT ARE NOT A COLLISION. Several fields may declare the
+    same ``value_domain``; the region family all declare ``uk_region``. A value
+    they all carry is not two claims about different things, it is the SAME claim
+    written down more than once, and dropping it as ambiguous refuses a question
+    the book can answer. Measured when the harmonised region columns started
+    resolving: `london` went from one claimant to three, left this map, and
+    "For the London book, give me balance, number of loans, weighted-average LTV
+    and average borrower age" — a governed CFO question in this estate's own
+    golden bank — was refused as naming a portfolio nobody onboarded, while its
+    spec carried the correct `collateral_geography = London` filter all along.
+
+    The tie is broken by the order the GROUPING owner already walks
+    (`llm_query_parser.domain_field_preference`), which is the same order
+    `categorical_spans.preferred_field` uses to bind the filter. One declaration,
+    one order: this map and the binder cannot name different fields.
+
     Between fields of EQUAL standing the value stays ambiguous and is dropped, so
     a collision this rule cannot decide is still not decided by iteration order.
     """
@@ -608,6 +662,13 @@ def _value_owner(token: str, keys: Set[str], fields: Mapping[str, Any]
                                               .get("source_criteria") or ())}
     if len(segmentation) == 1:
         return next(iter(segmentation))
+    domains = {str((fields.get(k) or {}).get("value_domain") or "") for k in keys}
+    if len(domains) == 1 and next(iter(domains)):
+        from .llm_query_parser import domain_field_preference
+
+        for candidate in domain_field_preference(next(iter(domains))):
+            if candidate in keys:
+                return candidate
     return None
 
 
@@ -1068,6 +1129,31 @@ def named_measure_concepts(question: str) -> List[str]:
                 seen.add(concept)
                 found.append((match.start(), concept))
             break
+    # A COUNT IS A REQUESTED MEASURE, and this was the one place that did not
+    # think so. `executed_measure_concepts` already emits "count" for
+    # `loan_count`, so the two halves of the completeness check were reading
+    # different vocabularies and the requested side systematically under-counted:
+    #
+    #     "Give me the loan count and balance."               spec 2  guard 1
+    #     "How many pipeline cases are there and what is
+    #      the total pipeline amount?"                        spec 2  guard 0
+    #
+    # The guard raises its multi-measure facet on `len(concepts) > 1`, so for
+    # the commonest composed shape in the estate it never fired at all — a
+    # request for two outputs that returned one could not be detected by the
+    # machinery built to detect exactly that.
+    #
+    # Read from the one count owner rather than a seventh phrase list.
+    # `amount`, from the same owner and for the same reason as the count above.
+    if "balance" not in seen and _lexical.names_defaulted_measure(q):
+        match = _lexical.DEFAULTED_MEASURE_RE.search(q)
+        if match and not _is_filter_subject(q, match.start(), match.end()):
+            seen.add("balance")
+            found.append((match.start(), "balance"))
+    if "count" not in seen:
+        spans = _lexical.count_request_spans(q)
+        if spans and not _is_filter_subject(q, spans[0][0], spans[0][1]):
+            found.append((spans[0][0], "count"))
     return [c for _, c in sorted(found)]
 
 
@@ -1105,7 +1191,8 @@ def executed_measure_concepts(query_result: Any) -> Set[str]:
 
 
 def requested_dimension_terms(question: str, semantics: dict,
-                              available_columns: Optional[Iterable[str]] = None
+                              available_columns: Optional[Iterable[str]] = None,
+                              geography: Any = None
                               ) -> List[Tuple[str, str, Tuple[str, ...]]]:
     """``[(field_key, matched_term, alt_keys)]`` the user explicitly named.
 
@@ -1148,13 +1235,15 @@ def requested_dimension_terms(question: str, semantics: dict,
     # the grouping is what makes the question answerable.
     _population = resolve_population_predicate(question, available_columns)
     _suppress = set(_population or ())
-    keys, terms, _ = _explicit_dimensions(q, semantics, available_columns=None)
+    keys, terms, _ = _explicit_dimensions(q, semantics, available_columns=None,
+                                          geography=geography)
     by_term: Dict[str, List[str]] = {}
     for key, term in zip(keys, terms):
         by_term.setdefault(term, []).append(key)
     if available_columns is not None:
         a_keys, a_terms, _ = _explicit_dimensions(
-            q, semantics, available_columns=set(available_columns))
+            q, semantics, available_columns=set(available_columns),
+            geography=geography)
         for key, term in zip(a_keys, a_terms):
             by_term.setdefault(term, []).append(key)
     out: List[Tuple[str, str, Tuple[str, ...]]] = []
@@ -1169,7 +1258,8 @@ def requested_dimension_terms(question: str, semantics: dict,
     singular = re.sub(r"\b(\w{4,})s\b", r"\1", q)
     if singular != q:
         s_keys, s_terms, _ = _explicit_dimensions(singular, semantics,
-                                                  available_columns=None)
+                                                  available_columns=None,
+                                                  geography=geography)
         for key, term in zip(s_keys, s_terms):
             if key in seen or key in _suppress:
                 continue
@@ -1482,6 +1572,13 @@ class ExecutionReceipt:
     #: "entire funded portfolio" default, which would misdescribe (say) a
     #: two-book comparison as a whole-book aggregate.
     routed: bool = False
+    #: WHICH REGION the figure was measured on — the governed field, which of
+    #: the three granularities it belongs to, and how much of the frame carried
+    #: a governed value there. Three field families wear the word "Region" and
+    #: they cover different populations, so an answer that names only "Region"
+    #: cannot be reconciled with a limit evaluated on another of them. None when
+    #: the query never touched geography. See `mi_agent/region_basis.py`.
+    region_basis: Optional[Any] = None
     #: WHICH GOVERNED DATASET the figure came from. The unfiltered-population
     #: phrase used to be the literal "entire funded portfolio" whatever had been
     #: computed, so "what is the pipeline balance?" returned the right number —
@@ -1544,6 +1641,13 @@ class ExecutionReceipt:
         if not parts:
             return ""
         line = "Calculated: " + " · ".join(parts) + "."
+        # A partially covered geography is disclosed on the line that presents
+        # the figure. Full coverage says nothing — a caveat printed on every
+        # answer is a caveat nobody reads.
+        _region = getattr(self.region_basis, "disclosure", None)
+        _said = _region() if callable(_region) else None
+        if _said:
+            line += " " + _said + "."
         # Surface low parser confidence only when the question actually carried a
         # material facet — i.e. when there was something scope-related to get
         # wrong. The confidence heuristic scores plain KPI questions ("what is
@@ -1584,6 +1688,8 @@ class ExecutionReceipt:
             "ranking": self.ranking,
             "parserConfidence": self.parser_confidence,
             "facets": [f.to_dict() for f in self.facets],
+            "regionBasis": (self.region_basis.to_dict()
+                            if self.region_basis is not None else None),
             "notApplied": [f.disclosure() for f in self.not_applied()],
             "receipt": self.render(),
         }
@@ -1596,6 +1702,35 @@ def _join(items: Sequence[str]) -> str:
     if len(items) == 1:
         return items[0]
     return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def _speech_list(facets) -> str:
+    """The concepts as the READER stated them, each said once.
+
+    Two facets can describe one phrase from different angles — "which region
+    added the most" registers a RANKING ("ranking by region") and the dimension
+    it ranks ("region") — and both legitimately block for different reasons.
+    Naming both in the opening clause produced, on the live book:
+
+        "I understood that you asked for ranking by region and region, ..."
+
+    which reads like a defect in the sentence rather than a fact about the
+    answer, and was measured on ten of the accepted questions. Where one
+    facet's speech CONTAINS another's, the containing phrase is the one the
+    reader recognises, so the shorter is dropped from this list only. Every
+    facet keeps its own entry in the detail that follows: the redundancy is in
+    how the request is echoed, never in what could not be applied.
+    """
+    said = []
+    for text in (f.speech for f in facets):
+        if not text:
+            continue
+        if any(text != other and text in other for other in said):
+            continue
+        said = [k for k in said if not (k != text and k in text)]
+        if text not in said:
+            said.append(text)
+    return _join(said)
 
 
 def _business_name(key: Optional[str], semantics: dict) -> Optional[str]:
@@ -1654,6 +1789,25 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # disclosure is not honouring. A coverage LIMIT is a different thing and is
     # not this kind — see `assess`.
     KIND_GRANULARITY,
+    # TIME GRAIN, material since 2026-09-04 and disclosable before it.
+    #
+    # The rule this now follows: an answer may stay PARTIAL only where the
+    # omitted element cannot change the population, the measure, the comparison
+    # basis, the period or the economic interpretation. A grain changes two of
+    # them. "Month on month" and "week on week" compare different spans across
+    # different boundaries, and a monthly improvement is not a weekly one.
+    #
+    # What it replaces, recorded because it was a real trade and not an
+    # oversight: this kind sat in `SHAPE_FACETS` on the reasoning that refusing
+    # would deny "a correct weekly movement for want of a monthly series that
+    # does not exist" — the reader gets nothing where they could have had the
+    # real figure and a sentence saying what period it covers. Measured against
+    # that, the live bank answered "Has pipeline progression improved month on
+    # month?" from a weekly series, verdict `partial`, with the correction
+    # printed UNDERNEATH the figure. The disclosure was real; the number still
+    # answered a question nobody asked. A weekly question asking for weekly is
+    # unaffected — its facet is APPLIED and never reaches `_blocks`.
+    KIND_TIME_GRAIN,
     # Dropping the population changes WHICH ROWS were counted, so it changes
     # every number in the answer. It can never be a partial disclosure.
     KIND_POPULATION,
@@ -1672,8 +1826,15 @@ NUMBER_OR_SUBJECT_FACETS = frozenset({
     # 11,035 loans.
     KIND_LOST_NARROWING,
 })
-#: Facets that change the SHAPE of a still-valid answer. A partial answer is
-#: acceptable provided the unhonoured facet is named.
+#: Facets that change the SHAPE of a still-valid answer, and nothing a reader
+#: would call the answer. A partial answer is acceptable provided the unhonoured
+#: facet is named.
+#:
+#: THE ADMISSION TEST, settled 2026-09-04: a facet may live here only if its
+#: absence cannot change the population, the measure, the comparison basis, the
+#: period or the economic interpretation. `KIND_TIME_GRAIN` was admitted before
+#: that test existed and fails it — see `NUMBER_OR_SUBJECT_FACETS`, which now
+#: holds it.
 SHAPE_FACETS = frozenset({KIND_GROUPING})
 
 #: Verdicts from :func:`assess`.
@@ -1934,14 +2095,36 @@ def _applied_filter_phrases(spec, semantics: dict, narrowed: bool) -> List[str]:
     return [describe_filter(k, v, semantics) for k, v in filters.items()]
 
 
+#: Operators whose operand is a value the answer WAS narrowed TO. `not_in` and
+#: `ne` are deliberately absent: their operands are what the answer excludes,
+#: and reporting those as the scope applied would tell a reader the figure
+#: covers exactly the population it leaves out.
+_INCLUSIVE_OPS = frozenset({"", "eq", "equals", "equal_to", "is", "in", "one_of"})
+
+
 def _filter_values(spec) -> List[str]:
     """Lowercased scalar values of every applied filter, for scope matching."""
     out: List[str] = []
-    for value in (getattr(spec, "filters", None) or {}).values():
+
+    def _add(value: Any) -> None:
         if isinstance(value, str):
             out.append(value.strip().lower())
         elif isinstance(value, (list, tuple, set)):
             out.extend(str(v).strip().lower() for v in value)
+
+    for value in (getattr(spec, "filters", None) or {}).values():
+        # A CONDITION IS A SHAPE THIS HAS TO READ, not only a bare value.
+        # "in Wales and Scotland" binds `{"op": "in", "value": [...]}` — the
+        # same shape the drill-through has always used — and reading only the
+        # bare forms left the geographic-scope facet unable to see a narrowing
+        # the executor had performed and the receipt had already described as
+        # "Region in Wales, Scotland". The answer was refused for losing a
+        # scope it was applying.
+        if isinstance(value, dict):
+            if str(value.get("op", "")).strip().lower() in _INCLUSIVE_OPS:
+                _add(value.get("value"))
+            continue
+        _add(value)
     return out
 
 
@@ -2324,6 +2507,15 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
     fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
     values = _filter_values(spec)
     comparison_ops = _comparison_ops_applied(spec)
+    #: How many of the spec's COMPARISON filters the executor recorded applying.
+    #: Evidence, not inference — see the threshold branch below.
+    _applied_fields = set(meta.get("applied_filter_fields") or ())
+    executed_comparisons = len([
+        key for key, value in (getattr(spec, "filters", None) or {}).items()
+        if isinstance(value, dict)
+        and str(value.get("op", "")).strip().lower()
+        not in ("", "eq", "equals", "in", "one_of")
+        and key in _applied_fields])
     thresholds_seen = 0
 
     ran = executed_statistics(query_result)
@@ -2359,8 +2551,23 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                     + " instead, and no substitute has been presented as the answer")
             continue
         if facet.kind == KIND_GEOGRAPHIC_SCOPE:
-            if narrowed and any(facet.label.lower() in v or v in facet.label.lower()
-                                for v in values):
+            # EVIDENCE, NOT A ROW COUNT. `narrowed` is `rows_after < rows_before`,
+            # and that inference is wrong whenever a population happens to be the
+            # whole book. On a book whose loans are all in Scotland, "what is the
+            # total balance in Scotland?" was refused for a filter the executor
+            # had recorded applying — and a single-region book is an ordinary
+            # thing: a regional subsidiary, a drilled view, a small portfolio.
+            #
+            # The threshold and narrowing branches were converted to read
+            # `applied_filter_fields` when this class was found before. This is
+            # the owner that still inferred. Whether a narrowing ran is a fact
+            # the executor reports; it is never deduced from how many rows
+            # survived it. The VALUE check below is unchanged, so a filter on the
+            # right field carrying the wrong value is still lost.
+            _geo_applied = bool(facet.field_key) and facet.field_key in _applied_fields
+            if (narrowed or _geo_applied) and any(
+                    facet.label.lower() in v or v in facet.label.lower()
+                    for v in values):
                 facet.status, facet.reason = APPLIED, ""
             elif facet.field_key and columns and \
                     (fields.get(facet.field_key, {}) or {}).get(
@@ -2394,7 +2601,29 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
 
         elif facet.kind == KIND_THRESHOLD:
             thresholds_seen += 1
-            if narrowed and comparison_ops >= thresholds_seen:
+            # A FILTER THAT MATCHED EVERYTHING IS NOT A FILTER THAT NEVER RAN.
+            #
+            # This asked whether the POPULATION SHRANK, and row count is a side
+            # effect of applying a predicate rather than evidence of it. A bound
+            # every row satisfies is arithmetically identical to one that was
+            # dropped, so a correct answer was refused:
+            #
+            #   executor  filter pipeline_case_age_days gt 30.0 kept 10/10 rows
+            #   guard     "you asked for over 30, but that could not be applied"
+            #
+            # It survived because nearly every threshold in the standing banks
+            # removes rows. It is wrong exactly where a bound sits at or outside
+            # the range the book holds — a concentrated portfolio, a young
+            # pipeline — which is where an operator most needs to trust it.
+            #
+            # The evidence already existed. The executor publishes the fields it
+            # filtered on, and the POPULATION facet one branch above already
+            # reads it through `population_applied`. Only this branch guessed.
+            # The row-count heuristic stays as the fallback for a route that
+            # publishes no record, where it can only add APPLIED verdicts.
+            if executed_comparisons >= thresholds_seen:
+                facet.status, facet.reason = APPLIED, ""
+            elif narrowed and comparison_ops >= thresholds_seen:
                 facet.status, facet.reason = APPLIED, ""
             else:
                 facet.status = LOST
@@ -2525,7 +2754,7 @@ def reconcile_facets(facets: Sequence[RequestedFacet], *, spec, query_result,
                 facet.reason = ("a single aggregate was calculated, which cannot "
                                 "express one measure relative to another")
 
-        elif facet.kind == KIND_GRANULARITY:
+        elif facet.kind in (KIND_GRANULARITY, KIND_TIME_GRAIN):
             # Stamped from what the route REPORTS, not from what was asked.
             # `concepts` carries (asked, reported); a grain the answer expresses
             # is APPLIED, and one it cannot is UNSUPPORTED with the level it did
@@ -2666,7 +2895,8 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
                   period: Optional[str] = None,
                   comparison_period: Optional[str] = None,
                   dataset: Optional[str] = None,
-                  scenario: Optional[str] = None) -> ExecutionReceipt:
+                  scenario: Optional[str] = None,
+                  frame=None) -> ExecutionReceipt:
     """The receipt for one executed point-in-time query."""
     meta = getattr(query_result, "metadata", None) or {}
     recon = meta.get("reconciliation") or {}
@@ -2684,6 +2914,19 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         group_count = getattr(query_result, "row_count", None)
 
     executed = meta.get("measures_executed") or []
+    # The region the figure was measured on, read from the fields execution
+    # actually used — grouping axis first, then the filters. Never raises: a
+    # disclosure must not cost an answer that would otherwise stand.
+    try:
+        from . import region_basis as _region_basis
+
+        region = _region_basis.basis_for(
+            list(meta.get("group_field_keys") or [])
+            + [getattr(spec, "dimension", None), getattr(spec, "x", None)]
+            + list(getattr(spec, "filters", None) or ()),
+            frame=frame)
+    except Exception:                                        # noqa: BLE001
+        region = None
     return ExecutionReceipt(
         measure=(_measure_set_phrase(executed)
                  or _business_name(getattr(spec, "metric", None), semantics)),
@@ -2703,6 +2946,7 @@ def build_receipt(*, spec, query_result, semantics: dict, facets: Sequence[Reque
         scenario=scenario,
         parser_confidence=parser_confidence,
         facets=list(facets),
+        region_basis=region,
     )
 
 
@@ -2773,7 +3017,7 @@ def assess(receipt: ExecutionReceipt, *, substitution: Optional[str] = None,
     if blocking:
         detail = "; ".join(f.disclosure(semantics) for f in blocking)
         return VERDICT_REFUSE, (
-            f"I understood that you asked for {_join([f.speech for f in blocking])}, "
+            f"I understood that you asked for {_speech_list(blocking)}, "
             f"but that could not be applied to the calculation ({detail}). "
             "I have not substituted a broader figure.")
 
@@ -2851,6 +3095,7 @@ _ROUTE_LABELS = {
     "forecast_extrapolation": "Run-rate extrapolation",
     "portfolio_risk_comparison": "Portfolio comparison",
     "scenario": "Scenario projection",
+    "pipeline_stage_movement": "Governed pipeline stage movement",
     "cohort_progression": "Cohort progression",
     "cohort_conversion": "Cohort conversion",
     "analytical_composition": "Composed governed capabilities",
@@ -3216,6 +3461,88 @@ def declared_population_fields(ledger: Optional[Mapping[str, Any]]) -> Set[str]:
             if str(a).strip()}
 
 
+def executed_predicates(ledger: Optional[Mapping[str, Any]]) -> Tuple[Dict[str, Any], ...]:
+    """The STRUCTURAL predicate evidence a route's ledger carries, or ``()``.
+
+    The companion to `declared_population_fields`, and the reason there are two.
+    That reader parses field-named PROSE, because that is the ledger contract
+    every existing writer honours and every existing reader depends on. This one
+    reads the structure the executor now publishes beside it —
+    ``{field, canonical_field, op, kind, values}`` per predicate — which is what
+    a facet identified by a VALUE needs and prose cannot supply.
+
+    A route that publishes no structure returns ``()`` and every facet that
+    needs one stays unproven, which is the same fail-closed posture the ledger
+    has always had: absence of evidence is never evidence.
+    """
+    executed = (ledger or {}).get("executed")
+    if not isinstance(executed, (list, tuple)):
+        return ()
+    return tuple(e for e in executed if isinstance(e, Mapping))
+
+
+def _facet_field_keys(facet: RequestedFacet,
+                      fields: Optional[Mapping[str, Any]] = None) -> Set[str]:
+    """Every field name that would legitimately satisfy THIS request.
+
+    The facet's own resolution and nothing else: `field_key` as the geography
+    owner resolved it, whatever `satisfied_by()` declares, and the canonical
+    column each maps to. No basis is added here and none is widened — an
+    explicit borrower-geography request resolves to the borrower field, so
+    collateral evidence simply is not in this set, which is what stops
+    "both are region" from satisfying a basis the reader named.
+    """
+    keys = {str(k) for k in (facet.satisfied_by() or ())}
+    if getattr(facet, "field_key", None):
+        keys.add(str(facet.field_key))
+    registry = fields or {}
+    keys |= {str((registry.get(k, {}) or {}).get("canonical_field", k))
+             for k in list(keys)}
+    return {k for k in keys if k}
+
+
+def geographic_scope_executed(facet: RequestedFacet,
+                              ledger: Optional[Mapping[str, Any]],
+                              fields: Optional[Mapping[str, Any]] = None) -> bool:
+    """Did execution run THIS place, on a field legitimate for THIS request?
+
+    BOTH HALVES, OR NOTHING. The failure this closes is not "no evidence was
+    found" but "the wrong evidence would have been accepted": a receipt that
+    proves only that a geography field was filtered would stamp APPLIED for a
+    reader who asked about Scotland and an executor that ran Wales. So the
+    executed FIELD must be one this facet resolves to, and the executed VALUE
+    must be the place asked for.
+
+    ROW COUNTS ARE NOT CONSULTED, deliberately and by instruction. A predicate
+    that ran correctly can leave the count unmoved — every loan in a single-
+    region book is in that region — and can equally leave nothing. Both were
+    applied. `reconcile_facets` was corrected for exactly this inference once
+    already ("EVIDENCE, NOT A ROW COUNT"); it is not reintroduced here. The
+    executor resolving the field, building the mask and returning IS the
+    evidence.
+
+    NO SECOND GEOGRAPHY TAXONOMY. Comparison is exact, case-insensitively, on
+    the value the executor recorded comparing. Where a book needs "Scotland" and
+    a stored spelling to be recognised as one place, that equivalence belongs to
+    the governed region owner that already holds the ITL ladder — not to a
+    synonym list grown here, one production incident at a time.
+    """
+    label = str(getattr(facet, "label", "") or "").strip().lower()
+    if not label:
+        return False
+    keys = _facet_field_keys(facet, fields)
+    for entry in executed_predicates(ledger):
+        executed_keys = {str(entry.get("field") or ""),
+                         str(entry.get("canonical_field") or "")}
+        if not (executed_keys & keys):
+            continue
+        values = {str(v).strip().lower() for v in (entry.get("values") or ())
+                  if v is not None}
+        if label in values:
+            return True
+    return False
+
+
 def drill_population_facets(extra_filters: Optional[Mapping[str, Any]],
                             semantics: Optional[dict] = None
                             ) -> List[RequestedFacet]:
@@ -3444,7 +3771,7 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                 facet.reason = ("this answer does not state what proportion of "
                                 "the book the figure represents")
 
-        elif facet.kind == KIND_GRANULARITY:
+        elif facet.kind in (KIND_GRANULARITY, KIND_TIME_GRAIN):
             # Stamped from what the route REPORTS, not from what was asked.
             # `concepts` carries (asked, reported); a grain the answer expresses
             # is APPLIED, and one it cannot is UNSUPPORTED with the level it did
@@ -3485,7 +3812,18 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                     "whole book rather than only %s" % facet.label)
 
         elif facet.kind == KIND_GEOGRAPHIC_SCOPE:
-            if analytical:
+            # EXECUTION EVIDENCE FIRST, and it is the only arm that can prove a
+            # routed geographic scope at all. The three arms below read the
+            # analytical plan, the listing shape and nothing — so a route that
+            # applied the narrowing per period, and said so, was refused for
+            # want of a reader. `geographic_scope_executed` requires the
+            # executed FIELD to be one this facet resolves to and the executed
+            # VALUE to be the place asked for; a route publishing no structural
+            # evidence falls through to exactly the behaviour it had before.
+            if geographic_scope_executed(facet, population_ledger(envelope),
+                                         fields):
+                facet.status, facet.reason = APPLIED, ""
+            elif analytical:
                 # A composite plan may answer a two-place question by measuring
                 # BOTH places as governed populations. Proven from the row
                 # predicates it declares it narrowed to, with their row counts —
@@ -3657,6 +3995,30 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             # proves nothing — the bar `reconcile_population` holds two branches
             # above, now held here too.
             if grouping_proven(facet, declared_axes, fields):
+                facet.status, facet.reason = APPLIED, ""
+            elif (facet.kind == KIND_GROUPING
+                  and grouping_proven(facet, declared_population_fields(
+                      population_ledger(envelope)), fields)):
+                # NARROWED TO IS NOT LOST. The negative this branch falls
+                # through to says the answer "covers the whole population" —
+                # and where the route DECLARED, through the population ledger,
+                # that it narrowed on this very field, that sentence is false.
+                #
+                # The facet's own note above records why: the kind is GROUPING
+                # but the term is often a population, so "Reconcile Application
+                # stage" raises a grouping facet on `pipeline_stage` for an
+                # answer that is about exactly one governed stage.
+                #
+                # No new evidence channel and no route name. This reads the
+                # SAME ledger `reconcile_population` two branches above already
+                # reads, through the same primitive — and it is the reading
+                # `question_interpretation.completeness._carried` has always
+                # applied to this same facet kind (`field in applied`, where
+                # `applied` includes `declared_population_fields`). The two
+                # readers of one piece of evidence disagreed; they no longer do.
+                #
+                # RANKING is deliberately excluded: a ranking needs an axis to
+                # order, and narrowing to one value of a field is not one.
                 facet.status, facet.reason = APPLIED, ""
             elif ranked and facet.kind == KIND_RANKING:
                 facet.status = LOST
@@ -3862,7 +4224,7 @@ def time_axis_disclosure(unit: Optional[str], route: Optional[str],
     grain = declared_series_grain(envelope) or route_time_grain(route)
     if not grain:
         return None
-    return RequestedFacet(kind=KIND_GRANULARITY, label=unit,
+    return RequestedFacet(kind=KIND_TIME_GRAIN, label=unit,
                           concepts=(unit, grain))
 
 

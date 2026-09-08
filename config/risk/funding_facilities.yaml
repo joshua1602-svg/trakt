@@ -1,0 +1,121 @@
+# =========================================================================
+# Governed funding-facility configuration.
+# =========================================================================
+#
+# The contractual terms of a secured funding facility (warehouse, borrowing
+# base, repo) that Trakt monitors a client's book against. Everything the
+# borrowing-base engine and the Schedule 8 concentration view need that is a
+# property of the FACILITY rather than of the loans.
+#
+# WHY THIS FILE EXISTS: facility terms are client configuration, not code. A
+# commitment, an advance rate or a denominator floor written in Python is not
+# versioned against a document, not approvable and not attributable. Every
+# value here is a term an operator has read off a facility agreement (or an
+# approved amendment) and recorded, with the document named in `governance`.
+#
+# PRECEDENCE. A `funding_facility:` block in the client's own configuration
+# (config/client/config_client_<CLIENT>.yaml, written by OCC onboarding from
+# the operator-approved answers) WINS over an entry here for the same client.
+# This file is the platform-level fallback and the prototype's home; it is not
+# a second source of truth. See mi_agent/borrowing_base/config.py.
+#
+# FAIL CLOSED. `environment: production` with no approved `eligibility.rules`
+# yields UNDETERMINED for every loan — never ELIGIBLE. The prototype
+# assumption below is honoured ONLY under `environment: prototype`, and every
+# result it produces is stamped as an assumption in the receipt and the UI.
+
+schema_version: "1.0.0"
+config_version: "2026.09.07-1"
+owner: Trakt Risk Engineering
+
+facilities:
+
+  # -----------------------------------------------------------------------
+  # ERE Funding — warehouse facility. PROTOTYPE.
+  #
+  # Terms supplied by the operator for the borrowing-base prototype and
+  # recorded verbatim. The 103% advance rate and the £33m Concentration Limit
+  # Denominator floor are the operator's figures; nothing here is inferred.
+  # -----------------------------------------------------------------------
+  - client_id: ere_funding_uk
+    facility_id: ERE_WAREHOUSE_01
+    facility_label: ERE Warehouse Facility 01
+    facility_type: warehouse
+    currency: GBP
+
+    # Contractual economics.
+    commitment: 250000000
+    # Ratio, not a percentage: 1.03 == 103%. Stated as a ratio so the
+    # calculation never has to guess a scale.
+    advance_rate: 1.03
+    concentration_denominator_floor: 33000000
+
+    # Current drawings under the facility. NOT SUPPLIED for the prototype:
+    # Trakt receives no facility statement or borrowing-base certificate for
+    # this book. Left null deliberately — headroom, utilisation and deficiency
+    # then report NOT_CALCULABLE with `current_drawn_amount` named as the
+    # missing input. A number invented here would be indistinguishable from a
+    # real drawing in every downstream surface.
+    current_drawn_amount: null
+    current_drawn_amount_as_of: ""
+
+    effective_date: "2025-11-30"
+    maturity_date: ""
+
+    # prototype | production. Governs whether the eligibility assumption below
+    # may be honoured at all.
+    environment: prototype
+
+    governance:
+      approval_status: prototype_operator_supplied
+      approved_by: ""
+      approved_at: ""
+      # Facility agreement / schedules / amendments this configuration was
+      # read from. Empty until OCC receives them.
+      source_documents:
+        - reference: "Warehouse Facility Schedule 8"
+          locator: "Schedule 8 — Concentration Limits"
+          received: true
+          note: >-
+            Supplied as text and extracted deterministically into
+            concentration-test proposals. It defines the concentration limits
+            and the Concentration Limit Denominator; it does NOT contain the
+            contractual definition of an Eligible Mortgage Loan.
+        - reference: "Facility agreement (full)"
+          received: false
+          note: >-
+            Not supplied. The Eligible Mortgage Loan definition, the drawn
+            balance and the contractual consequence of a concentration breach
+            all live here.
+
+    # Which loans are in the Financing Portfolio. Empty selectors mean the
+    # whole governed canonical population for this client — the ERE shape.
+    financing_portfolio:
+      source_portfolio_ids: []
+      source_portfolio_types: []
+
+    eligibility:
+      # Bumped whenever the rules below change. Carried in every receipt.
+      rule_version: "prototype-0"
+      # THE CONTRACTUAL ELIGIBLE MORTGAGE LOAN CRITERIA. Empty: the facility
+      # agreement that defines them has not been supplied. They are NOT
+      # inferred from the concentration limits — passing a concentration test
+      # is a portfolio property, not a loan's eligibility.
+      rules: []
+      # DEMONSTRATION ONLY. Honoured only when `environment: prototype`.
+      # Treats every loan in the Financing Portfolio as ELIGIBLE so the
+      # borrowing base can be exercised end to end before the definition
+      # arrives. Every figure it produces is stamped
+      # `prototype_assumptions_used` in the receipt and labelled in the UI.
+      prototype_assume_financing_portfolio_eligible: true
+
+    concentration:
+      # The Schedule 8 numerators and the Concentration Limit Denominator are
+      # measured over Eligible Mortgage Loans only.
+      population: eligible_mortgage_loans
+      # THE CONTRACTUAL CONSEQUENCE OF A BREACH IS NOT KNOWN. Schedule 8 sets
+      # the tests; it does not say what a breach does to the borrowing base.
+      # `monitor_only` deducts nothing. `exclude_excess` exists in the engine
+      # for the day an approved facility rule says so — it is not selected
+      # here and must not be selected without the contractual wording.
+      borrowing_base_treatment: monitor_only

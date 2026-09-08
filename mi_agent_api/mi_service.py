@@ -60,6 +60,8 @@ from trakt_core.errors import ErrorCategory, ErrorCode, TraktError
 from trakt_core.policy import evaluate_source_approval
 from trakt_core.tenancy import AuthorisedPortfolio, authorise_portfolio_access
 
+from mi_agent import llm_query_parser as _parser_mod
+
 from . import chat_routing as chat_routing_mod
 from . import currency as currency_mod
 from . import workspace as workspace_mod
@@ -137,7 +139,7 @@ def split_portfolio(portfolio_id: Optional[str],
 def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
                       client_id: str, run_id: Optional[str], view: str,
                       run_required: bool, semantics: Optional[Dict[str, Any]] = None,
-                      frame: Any = None) -> Dict[str, Any]:
+                      frame: Any = None, geography: Any = None) -> Dict[str, Any]:
     """Stamp the channel-neutral analytical metadata onto the envelope.
 
     Additive only — every pre-existing React key is left exactly as the adapter
@@ -155,6 +157,18 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     # point-in-time question against the active governed dataset has none.
     meta["selectedRun"] = run_id if run_required else None
     meta["runRequired"] = bool(run_required)
+    # WHICH GEOGRAPHY THIS BOOK REPORTS ON, and how that was decided. Published
+    # on every answer, not only the regional ones: a reader comparing two
+    # answers needs to know they were measured on the same basis, and the answer
+    # that did not mention geography is exactly the one where that is easy to
+    # get wrong. Absent rather than guessed when nothing established it.
+    if geography is not None:
+        try:
+            # The EFFECTIVE basis for this request: a question that names one is
+            # measured on it, and the configured contract is published beside it.
+            meta["geographyBasis"] = geography.effective_for(req.question)
+        except Exception:  # noqa: BLE001 - provenance must never fail a query
+            pass
     try:
         meta["dataSourceKind"] = data_source_kind()
         meta["dataSourceLabel"] = data_source_label()
@@ -167,13 +181,14 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     envelope.setdefault("diagnostics", [])
     envelope.setdefault("sourceNotes", [])
     _stamp_semantic_coverage(envelope, question=req.question,
-                             semantics=semantics, frame=frame)
+                             semantics=semantics, frame=frame,
+                             geography=geography)
     return _enforce_model_availability(_enforce_semantic_coverage(envelope))
 
 
 def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
                              semantics: Optional[Dict[str, Any]],
-                             frame: Any) -> None:
+                             frame: Any, geography: Any = None) -> None:
     """Record which governed concepts the question stated, and their disposition.
 
     THE ONE SEAM. Both return paths — routed and point-in-time — pass through
@@ -197,7 +212,10 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
             question, envelope, semantics,
             available_values=_book_values(frame, semantics) if frame is not None else None,
             available_columns=set(frame.columns) if frame is not None else None,
-            frame=frame)
+            frame=frame,
+            # The SAME contract the parse ran under, so the ledger and the spec
+            # cannot disagree about which column "region" meant.
+            geography=geography)
     except Exception as exc:  # noqa: BLE001 - coverage must never cost an answer
         logger.info("semantic coverage unavailable: %s: %s", type(exc).__name__, exc)
 
@@ -239,11 +257,33 @@ def _enforce_semantic_coverage(envelope: Dict[str, Any]) -> Dict[str, Any]:
     named = sorted({str(m.get("term") or m.get("value") or m.get("field"))
                     for m in missing})
     message = _COVERAGE_REFUSAL % _join_terms(named)
+    # THIS IS A DECLINE, NOT A BREAKAGE, AND THE RECORD HAS TO SAY SO.
+    #
+    # Without this marker `_classify_analytical_failure` finds nothing it
+    # recognises and falls through to CALCULATION_FAILED, which
+    # `mi_query_telemetry._ERROR_CODES` counts as an ERROR. So every time the
+    # coverage gate did its job — refused rather than answered over a concept
+    # it could not account for — the operator's record said the system had
+    # broken.
+    #
+    # Measured 2026-09-03 over 954 live questions: 289 ERRORs, 30.3%. That
+    # figure is a mixture of genuine unhandled exceptions and this gate working
+    # correctly, and nothing in the record separates them, so the one number an
+    # operator would act on cannot be read at all.
+    #
+    # UNSUPPORTED_QUESTION is the existing CAPABILITY code for "I will not
+    # answer that", and it carries the same HTTP 200 CALCULATION_FAILED already
+    # did — so what changes is the label on the record, not what any caller
+    # receives.
+    envelope.setdefault("metadata", {})["semanticCoverageRefused"] = True
     envelope["ok"] = False
     envelope["error"] = message
     envelope["answer"] = message
     envelope["artifacts"] = []
-    envelope.setdefault("warnings", []).append(message)
+    # NOT also appended to warnings. `answer`/`error` already carry it — that
+    # is what the chat renders as the refusal itself — and appending the same
+    # sentence to `warnings` printed it a second time, under the refusal it was
+    # restating, in the same conversation turn.
     return envelope
 
 
@@ -305,6 +345,9 @@ def _enforce_model_availability(envelope: Dict[str, Any]) -> Dict[str, Any]:
     envelope["answer"] = _AVAILABILITY_REFUSAL
     envelope["artifacts"] = []
     envelope["controlledRefusal"] = True
+    # The marker `_classify_analytical_failure` reads. Set here, by the gate
+    # that made the decision, exactly as the coverage gate marks its own.
+    envelope.setdefault("metadata", {})["modelUnavailableRefused"] = True
     envelope.setdefault("warnings", []).append(_AVAILABILITY_REFUSAL)
     return envelope
 
@@ -338,6 +381,35 @@ def _snapshot_ref(descriptor: Any, approval_state: Optional[str]) -> SnapshotRef
         approval_state=approval_state,
         source_portfolios=tuple(getattr(descriptor, "source_portfolios", ()) or ()),
     )
+
+
+def _finish(result: GovernedResult[Dict[str, Any]],
+            request: MiQueryRequest) -> GovernedResult[Dict[str, Any]]:
+    """The single exit for every governed MI query.
+
+    Emits the existing metadata-only audit line (unchanged), and records the
+    governed telemetry document an operator reviews in OCC. Both are
+    non-raising by construction: neither may turn an answered query into a
+    failed one, and neither changes the result that is returned.
+
+    The OCC imports are deliberately local to this function. The record is an
+    OCC document written into the OCC store, so this module is the writer and
+    ``operations_control`` is the owner — a one-way dependency, declared in
+    deploy/trakt-mi-api/package_contents.txt so the App Service actually ships
+    it. Kept function-local so importing the MI service does not pull the
+    control plane in at module scope.
+    """
+    emit_audit_event(result)
+    try:
+        from operations_control import mi_query_telemetry
+        from operations_control.stores import OpsStore
+        mi_query_telemetry.record(
+            OpsStore.from_env(), result, question=request.question,
+            requested_portfolio=request.effective_portfolio_id())
+    except Exception:  # noqa: BLE001 — telemetry must never fail a query
+        logger.warning("mi query telemetry unavailable for request_id=%s",
+                       result.request_id, exc_info=True)
+    return result
 
 
 def _audit(context: ExecutionContext, *, outcome: str, started_at: str,
@@ -411,7 +483,16 @@ def execute_governed_mi_query(
     # "the balance by seasoning segment excluding pipeline cases", served from
     # the pipeline on the pipeline tab. The tab still selects what the UI
     # DISPLAYS; it no longer decides what a question MEANS.
-    view = workspace_mod.resolve_dataset(request.question)
+    try:
+        view = workspace_mod.resolve_dataset(request.question)
+    except Exception:  # noqa: BLE001 - a reading of the sentence is not a 500
+        # This runs before governance and therefore outside every net below it.
+        # The default view is where a question with nothing to say about its
+        # dataset already lands, so falling back to it answers the question that
+        # was asked rather than failing the request over a classification.
+        logger.exception("dataset resolution failed for question=%r",
+                         request.question)
+        view = workspace_mod.DEFAULT_VIEW
     policy = PolicyState(runtime_mode=deps.runtime_mode)
     requested_portfolio = request.effective_portfolio_id()
 
@@ -436,8 +517,33 @@ def execute_governed_mi_query(
         result = _failure(context, err, started_at=started_at, t0=t0,
                           portfolio_id=requested_portfolio, view=view, req=request,
                           policy=policy)
-        emit_audit_event(result)
-        return result
+        return _finish(result, request)
+    except Exception as exc:  # noqa: BLE001 - governance failing is not a raw 500
+        # THE ASYMMETRY THIS CLOSES. The block below (source approval) already
+        # caught every exception; this one caught only the typed refusal, so a
+        # tenant registry that raised a KeyError left the request with no
+        # governed envelope, no audit event and no request id — it escaped as an
+        # unhandled 500. Measured: `authorise_portfolio_access` raising KeyError
+        # produced HTTP 500 where the same call raising TraktError produced 403.
+        #
+        # Entitlement that cannot be ESTABLISHED still refuses; it is never
+        # answered around. What changes is that the refusal is typed, audited
+        # and carries a request id the operator can trace.
+        logger.exception("governance failed for tenant=%s portfolio=%r",
+                         context.tenant_id, requested_portfolio)
+        err = TraktError(ErrorCode.INTERNAL_ERROR,
+                         "The MI Agent could not establish authorisation for "
+                         "this request.",
+                         request_id=context.request_id, cause=exc)
+        result = _failure(context, err, started_at=started_at, t0=t0,
+                          portfolio_id=requested_portfolio, view=view, req=request,
+                          policy=policy)
+        # THROUGH `_finish`, not around it. `main` made this the single exit for
+        # every governed query — the audit line AND the OCC telemetry document an
+        # operator reviews. A new refusal path that returned directly would be
+        # invisible in exactly the surface built to show what the agent did, and
+        # a governance fault is the last thing that should go unrecorded.
+        return _finish(result, request)
 
     # ---- 2. governance: is this dataset allowed to answer? --------------- #
     try:
@@ -453,8 +559,7 @@ def execute_governed_mi_query(
         result = _failure(context, err, started_at=started_at, t0=t0,
                           portfolio_id=authorised.portfolio_id, view=view,
                           req=request, policy=policy)
-        emit_audit_event(result)
-        return result
+        return _finish(result, request)
 
     snapshot = _snapshot_ref(descriptor, approval.state)
     if not approval.approved:
@@ -467,8 +572,7 @@ def execute_governed_mi_query(
                                capability_allowed=True, data_approved=False,
                                notes=(approval.reason,)),
             snapshot=snapshot)
-        emit_audit_event(result)
-        return result
+        return _finish(result, request)
 
     policy = PolicyState(
         runtime_mode=deps.runtime_mode, tenant_authorised=True,
@@ -476,7 +580,45 @@ def execute_governed_mi_query(
         notes=(approval.reason,) if approval.fixture else ())
 
     # ---- 3. the analytical execution (unchanged) ------------------------- #
-    payload = _run_analysis(request, authorised, view, deps)
+    #
+    # NEVER RAISES INTO A REQUEST. This function's own docstring promises a
+    # controlled GovernedResult for an analytical fault, and that promise used to
+    # rest entirely on `_run_analysis` never raising. It does raise: the
+    # post-routing guards (`_stamp_routed_scope`, `_guard_routed_answer`,
+    # `_guard_temporal_honouring`, `_guard_unresolved_scope`,
+    # `_guard_unknown_category`, `_governed_context`) run OUTSIDE the routing
+    # try/except whose comment reads "routing must never break the chat", and a
+    # fault in any of the six was measured producing HTTP 500 rather than a
+    # refusal — a dead endpoint where the contract says `ok: false`.
+    #
+    # CALCULATION_FAILED is a CAPABILITY-category code and maps to HTTP 200, so
+    # the reader gets the governed "I could not answer this" envelope every
+    # channel already renders, and the cause is logged rather than published.
+    try:
+        # ONE GEOGRAPHY CONTRACT FOR THE WHOLE REQUEST.
+        #
+        # A dozen readers ask "which column does 'region' mean" between here and
+        # the receipt — the dimension binder, the categorical filter, the
+        # population resolver, the facet detector, the coverage ledger — and if
+        # any two answer differently, a correct answer is refused for having
+        # lost a concept it applied, or a wrong one is published as right. The
+        # slot is opened here, empty, because the contract depends on the frame
+        # and the frame is not resolved until inside; `_run_analysis` binds into
+        # it as soon as the book is in hand, and this `with` tears it down.
+        with _parser_mod.geography_context(None):
+            payload = _run_analysis(request, authorised, view, deps)
+    except Exception as exc:  # noqa: BLE001 - surface a refusal, never a 500
+        logger.exception("MI analysis failed for question=%r portfolio=%r",
+                         request.question, authorised.portfolio_id)
+        err = TraktError(ErrorCode.CALCULATION_FAILED,
+                         "The MI Agent could not complete this query.",
+                         request_id=context.request_id, cause=exc)
+        result = _failure(context, err, started_at=started_at, t0=t0,
+                          portfolio_id=authorised.portfolio_id, view=view,
+                          req=request, policy=policy, snapshot=snapshot)
+        # Same single exit as every other outcome: an analytical fault is a
+        # governed event, and the operator's telemetry has to show it.
+        return _finish(result, request)
 
     ok = bool(payload.get("ok"))
     status = STATUS_SUCCESS if ok else STATUS_ERROR
@@ -502,8 +644,7 @@ def execute_governed_mi_query(
                      portfolio_id=authorised.portfolio_id,
                      snapshot_id=snapshot.snapshot_id,
                      error_code=error.code if error else None))
-    emit_audit_event(result)
-    return result
+    return _finish(result, request)
 
 
 def _scope_ref(payload: Dict[str, Any]) -> Optional[ScopeRef]:
@@ -567,6 +708,58 @@ def _stamp_routed_scope(routed: Dict[str, Any], req: MiQueryRequest) -> None:
         logger.info("routed scope stamping skipped: %s", exc)
 
 
+#: An arm status that means the model was ASKED. `proposal_unavailable` means it
+#: was not — the call failed, or never left. A replayed proposal is a recorded
+#: one, so it costs nothing and is not a fresh call.
+_ARM_RAN = ("applied", "no_change")
+
+
+def _model_usage(parser_llm, concept_merge) -> Dict[str, Any]:
+    """Every model that touched this answer, in ONE place.
+
+    `metadata.llm` counts the free-form parser's own repair loop and nothing
+    else, and the concept-merge arm reports separately. A reader had to know
+    both existed and add them: the live London response said `llm.calls = 0`
+    while claude-opus-5 was writing a filter onto the spec that made the answer
+    refuse. Neither block is renamed or removed; this states the whole picture
+    so the question "did a model change this answer" has one place to look.
+    """
+    parser = dict(parser_llm or {})
+    arm = dict(concept_merge or {})
+    parser_calls = int(parser.get("calls") or 0)
+
+    arm_ran = (str(arm.get("status") or "") in _ARM_RAN
+               and str(arm.get("source") or "") != "replayed")
+    arm_calls = 1 if arm_ran else 0
+
+    usage = dict(arm.get("usage") or {}) if arm_ran else {}
+    cost = dict(arm.get("cost") or {}) if arm_ran else {}
+
+    models = []
+    for name in (parser.get("model") if parser_calls else None,
+                 arm.get("model") if arm_ran else None):
+        if name and name not in models:
+            models.append(str(name))
+
+    return {
+        "free_form_parser_calls": parser_calls,
+        "concept_merge_calls": arm_calls,
+        "total_model_calls": parser_calls + arm_calls,
+        "models": models,
+        "input_tokens": int(parser.get("input_tokens") or 0)
+                        + int(usage.get("input_tokens") or 0),
+        "output_tokens": int(parser.get("output_tokens") or 0)
+                         + int(usage.get("output_tokens") or 0),
+        "cache_read_tokens": int(parser.get("cache_read_tokens") or 0)
+                             + int(usage.get("cache_read_input_tokens") or 0),
+        "cache_write_tokens": int(parser.get("cache_write_tokens") or 0)
+                              + int(usage.get("cache_creation_input_tokens") or 0),
+        "estimated_total_cost": round(
+            float(parser.get("estimated_total_cost") or 0.0)
+            + float(cost.get("estimated_total_cost") or 0.0), 6),
+    }
+
+
 def _book_values(frame, semantics):
     """The book's governed category values, or ``None`` if they cannot be read.
 
@@ -597,6 +790,56 @@ def _owned_question(question: Optional[str], available_values) -> str:
         return question
 
 
+#: How an unavailable proposal FAILED, from the arm's own recorded detail. The
+#: detail is a raw provider string — it is classified here and never forwarded,
+#: because a stack trace or an api key in an upstream message must not travel
+#: into telemetry a probe writes to disk.
+_FAILURE_CLASSES = (
+    ("authentication", ("authenticationerror", "permissionerror", "x-api-key",
+                        "invalid api key")),
+    ("overloaded", ("overloaded", "rate_limit", "ratelimit", "429",
+                    "too many requests")),
+    ("timeout", ("timeout", "timed out", "deadline")),
+    ("malformed", ("jsondecode", "expecting value", "malformed",
+                   "could not parse", "validationerror")),
+)
+
+
+def _failure_class(detail: Any) -> Optional[str]:
+    text = str(detail or "").lower()
+    if not text:
+        return None
+    for name, markers in _FAILURE_CLASSES:
+        if any(m in text for m in markers):
+            return name
+    return "unknown"
+
+
+def _model_availability(concept_merge: Any) -> Dict[str, Any]:
+    """WHETHER THE MODEL ANSWERED, carried separately from what it cost.
+
+    `modelUsage` reports a call that SUCCEEDED — tokens, models, price. The one
+    row whose outcome the model decided is the row where there is no usage to
+    report, so the event that caused the refusal was the event the evidence
+    could not show. This says what happened whatever happened.
+    """
+    from . import concept_merge_arm as _arm
+
+    evidence = concept_merge if isinstance(concept_merge, dict) else None
+    if evidence is None:
+        return {"concept_merge_attempted": False,
+                "concept_merge_status": None,
+                "failure_class": None, "retryable": False}
+    status = str(evidence.get("status") or "") or None
+    unavailable = status == _arm.PROPOSAL_UNAVAILABLE
+    return {
+        "concept_merge_attempted": True,
+        "concept_merge_status": status,
+        "failure_class": _failure_class(evidence.get("detail")) if unavailable else None,
+        "retryable": bool(unavailable),
+    }
+
+
 def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     """Map an engine-reported failure onto a stable code.
 
@@ -605,6 +848,24 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     previous free-text ``error`` string could not express.
     """
     meta = payload.get("metadata") or {}
+    # THE MODEL NEVER RAN, so nothing downstream of it can be the reason. Read
+    # before every capability code: an unavailable dependency is not a decision
+    # the estate took about the question, and marking it `CALCULATION_FAILED,
+    # retryable false` told an operator a calculation had broken while the
+    # sentence the reader saw said "please try again".
+    if meta.get("modelUnavailableRefused"):
+        return ErrorCode.SEMANTIC_MODEL_UNAVAILABLE
+    # The SEMANTIC GUARD's own refusal — a facet the answer could not honour.
+    # The same shape the coverage gate already had, and for the same reason: a
+    # governed "I will not answer that on this basis" is not a broken sum.
+    if meta.get("semanticGuardRefused"):
+        return ErrorCode.UNSUPPORTED_QUESTION
+    # The coverage gate's own decline, marked by `_enforce_semantic_coverage`.
+    # Read FIRST and by its own marker rather than by reusing
+    # `controlledUnsupported`, whose meaning belongs to the estate's declared
+    # capability boundary and not to this gate.
+    if meta.get("semanticCoverageRefused"):
+        return ErrorCode.UNSUPPORTED_QUESTION
     if meta.get("controlledUnsupported"):
         return ErrorCode.UNSUPPORTED_QUESTION
     if meta.get("unmappedQuestion"):
@@ -616,6 +877,32 @@ def _classify_analytical_failure(payload: Dict[str, Any]) -> str:
     if "no rows" in joined or "no matching" in joined:
         return ErrorCode.NO_MATCHING_RECORDS
     return ErrorCode.CALCULATION_FAILED
+
+
+def _resolve_geography(client_id: Optional[str], portfolio_id: Optional[str],
+                       frame) -> Any:
+    """The geography contract for this request, or an empty one.
+
+    ``portfolio_id`` narrows the registry where it names a book the registry
+    knows. It usually does not — the analytical layer carries a ``client/run``
+    selector, not a source portfolio id — and the contract is then resolved over
+    every portfolio the client has, which is the same reading of an unqualified
+    scope the rest of this service uses. Portfolios that report on DIFFERENT
+    bases yield no primary basis rather than an arbitrary one.
+
+    Never raises and never blocks: a book with no governed geography basis still
+    answers every question that does not depend on one, and answers generic
+    region language as unresolved rather than guessing a basis.
+    """
+    from mi_agent import mi_geography
+
+    try:
+        return mi_geography.contract_for_scope(
+            client_id=client_id,
+            portfolio_ids=(portfolio_id,) if portfolio_id else (), frame=frame)
+    except Exception as exc:  # noqa: BLE001 - metadata must never fail a query
+        logger.info("geography contract resolution skipped: %s", exc)
+        return mi_geography.GeographyContract()
 
 
 def _resolve_frame(ds, view: str, portfolio_id: Optional[str]):
@@ -679,6 +966,31 @@ def _parser_provenance(workflow: Dict[str, Any]) -> Dict[str, Any]:
     return {"parser_used": used, "llm_failure": failure,
             "parser_mode_detail": detail or None,
             "specialist_intent_carried": parse_meta.get("specialist_intent_carried") or []}
+
+
+def _route_stated_reason(envelope: Dict[str, Any]) -> Optional[str]:
+    """The refusal a ROUTE authored for itself, if it authored one.
+
+    A route that declines writes its own sentence and marks the envelope
+    `controlledRefusal` / `controlledUnsupported`. That sentence names the
+    actual obstacle — a dimension the book does not govern, a scope with no
+    declared asset class, a comparison where no category moved — and the facet
+    guard downstream cannot know any of it.
+
+    Read from the envelope rather than re-derived: the marks and the message are
+    both set by the route, so this asks the route what it did rather than
+    guessing from the words it used.
+    """
+    if not isinstance(envelope, dict) or envelope.get("ok"):
+        return None
+    meta = envelope.get("metadata") or {}
+    marked = (envelope.get("controlledRefusal")
+              or (meta.get("controlledRefusal") if isinstance(meta, dict) else None)
+              or (meta.get("controlledUnsupported") if isinstance(meta, dict) else None))
+    if not marked:
+        return None
+    reason = envelope.get("error") or envelope.get("answer")
+    return str(reason).strip() or None if reason else None
 
 
 def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
@@ -874,10 +1186,32 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
         if verdict in (receipt_mod.VERDICT_REFUSE,
                        receipt_mod.VERDICT_CLARIFY):
             routed["ok"] = False
-            routed["error"] = message
-            routed["answer"] = message
+            # A ROUTE THAT ALREADY REFUSED KEEPS ITS OWN REASON. This guard
+            # exists to stop a DELIVERED answer standing when a facet it was
+            # asked for never reached the calculation. Where the route has
+            # already declined and written why, replacing that sentence swaps a
+            # specific cause for a general one — measured on the live book,
+            #
+            #   route:   "I could not rank movement by region: no category
+            #             moved that way."
+            #   reader:  "I understood that you asked for ranking by region and
+            #             region, but that could not be applied..."
+            #
+            # and the useful half survived only as `ranking unavailable:
+            # no_category_moved_that_way` in the warnings, which is a code, in a
+            # field no channel renders. The facet message is kept as a warning
+            # so nothing is lost; only which sentence leads changes, and the
+            # verdict — already a refusal — does not change at all.
+            _own = _route_stated_reason(routed)
+            if not _own:
+                routed["error"] = message
+                routed["answer"] = message
             routed["artifacts"] = []
             routed["controlledRefusal"] = True
+            # A GOVERNED SEMANTIC REFUSAL, not a broken calculation. The same
+            # marker shape `_enforce_semantic_coverage` already uses, so both
+            # gates classify alike.
+            routed.setdefault("metadata", {})["semanticGuardRefused"] = True
             routed["clarificationRequested"] = (
                 verdict == receipt_mod.VERDICT_CLARIFY)
             routed.setdefault("warnings", []).append(message)
@@ -1081,6 +1415,93 @@ def _is_controlled_non_delivery(envelope: Dict[str, Any]) -> bool:
     return bool(meta.get("controlledUnsupported")) and not meta.get("executionFailure")
 
 
+#: The sentence for a basis this book does not carry. No implementation
+#: vocabulary reaches the reader: "basis", "column" and "contract" are ours.
+_BASIS_REFUSAL = (
+    "You asked about the %s's geography. This book does not record one, so I "
+    "have not answered on that basis%s.")
+
+#: The same fact, for a question that named no basis and was measured on the
+#: book's configured one. The reader did not say "collateral", so the sentence
+#: does not pretend they did.
+_CONFIGURED_BASIS_REFUSAL = (
+    "This book reports regions on the %s's geography, and it does not record "
+    "one, so there is no regional breakdown to give%s.")
+
+
+def _measured_on_a_region(envelope: Dict[str, Any]) -> bool:
+    """Did this answer group or filter on a geography at all?
+
+    Only an answer that USED a region is refused for the book not having one. A
+    total balance is still a total balance on a book with no geography, and
+    refusing it would punish every question for a fact about one dimension.
+    """
+    from mi_agent import mi_geography
+
+    spec = envelope.get("spec") or {}
+    candidates = [spec.get("dimension")]
+    candidates.extend(spec.get("dimensions") or [])
+    candidates.extend((spec.get("filters") or {}).keys())
+    return any(mi_geography.basis_of_field(str(c)) for c in candidates if c)
+
+
+def _guard_stated_geography_basis(envelope: Dict[str, Any], *, question: str,
+                                  geography: Any) -> Dict[str, Any]:
+    """A geography the question NAMED and this book does not carry.
+
+    A loan has a borrower's region and a property's region, and they are
+    different facts. When a reader says which one they mean, the only two honest
+    answers are that geography or none — and the tempting third, quietly
+    measuring the other one and labelling it with the word they used, is the
+    worst outcome available, because nothing in the answer tells them.
+
+    So a stated basis the book cannot support REFUSES, and says which basis it
+    does hold rather than silently using it. A question that states no basis is
+    untouched: it is measured on the book's configured primary and the answer
+    discloses which that was.
+    """
+    if not isinstance(envelope, dict) or not envelope.get("ok"):
+        return envelope
+    if geography is None:
+        return envelope
+    from mi_agent import mi_geography
+
+    # THE BASIS THIS ANSWER WAS MEASURED ON, however it was chosen.
+    #
+    # This used to fire only for a basis the QUESTION named, and that left the
+    # two halves of one contract disagreeing: an unqualified "balance by region"
+    # was answered on the configured basis without ever asking whether the book
+    # supports it, while "balance by property region" — the same basis, named
+    # out loud — was refused. Production showed exactly that, reporting
+    # `supportedBases: []` beside a regional breakdown it had just produced.
+    #
+    # Stated wording still decides WHICH basis is measured. It no longer decides
+    # whether availability is checked at all.
+    stated = mi_geography.stated_basis(question)
+    basis = stated or getattr(geography, "primary_basis", None)
+    if not basis or geography.supports(basis):
+        return envelope
+    if not stated and not _measured_on_a_region(envelope):
+        # An answer that never touched geography is not refused for lacking one.
+        return envelope
+    other = mi_geography.other_basis(basis)
+    alternative = (f"; it records the {other}'s geography, which is a different "
+                   "thing and not what you asked for"
+                   if other and geography.supports(other) else "")
+    template = _BASIS_REFUSAL if stated else _CONFIGURED_BASIS_REFUSAL
+    message = template % (basis, alternative)
+    envelope["ok"] = False
+    envelope["error"] = message
+    envelope["answer"] = message
+    envelope["artifacts"] = []
+    envelope["controlledRefusal"] = True
+    meta = envelope.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        meta["refusalClass"] = "DATA_UNAVAILABLE"
+    envelope.setdefault("warnings", []).append(message)
+    return envelope
+
+
 def _guard_unknown_category(envelope: Dict[str, Any]) -> Dict[str, Any]:
     """A category the question NAMED and no governed field carries.
 
@@ -1259,10 +1680,26 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                             view, owned_view)
                 view, df, frame_error = owned_view, base_df, base_error
 
+    # WHICH GEOGRAPHY THIS BOOK REPORTS ON, resolved once, before the parse.
+    #
+    # A book carries a borrower geography and a collateral geography and they are
+    # different facts, so "balance by region" has no answer until somebody has
+    # decided which one this book is about. That decision is a property of the
+    # ASSET — established at onboarding, carried in the governed portfolio
+    # registry — not something to infer from which column happened to be
+    # populated. See mi_agent.mi_geography.
+    with _perf.stage("mi_query.geography"):
+        geography = _parser_mod.bind_geography(
+            _resolve_geography(client_id, portfolio_id, df))
+
     try:
         with _perf.stage("mi_query.parse"):
             parsed = ParsedQuestion.parse(
                 req.question, semantics,
+                # The contract in force for the whole parse, so the dimension
+                # binder, the categorical filter and the population resolver
+                # cannot bind "region" to three different columns.
+                geography=geography,
                 available_columns=set(df.columns) if df is not None else None,
                 # THE BOOK'S OWN CATEGORY VALUES. Without them the parser has
                 # no way to tell which governed field a named category belongs
@@ -1370,6 +1807,13 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                     {"metadata": {"parse_metadata": dict(getattr(parsed, "meta", {}) or {})}}))
                 if _concept_merge is not None:
                     rmeta["conceptMerge"] = _concept_merge
+                # BOTH BLOCKS ON BOTH PATHS. `modelUsage` was stamped only where
+                # the point-in-time envelope is assembled, so a ROUTED question
+                # carried no model telemetry at all — and the one row whose
+                # outcome the model decided was routed.
+                rmeta["modelUsage"] = _model_usage(rmeta.get("llm"),
+                                                   _concept_merge)
+                rmeta["modelAvailability"] = _model_availability(_concept_merge)
         _stamp_routed_scope(routed, req)
         routed = _guard_routed_answer(routed, question=req.question, route=route,
                                       semantics=semantics, frame=df,
@@ -1382,7 +1826,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                                          semantics=semantics, frame=df)
         # SITE 1 OF 2 — a named category this book does not carry.
         routed = _guard_unknown_category(routed)
+        # SITE 1 OF 2 — a named GEOGRAPHY this book does not carry.
+        routed = _guard_stated_geography_basis(
+            routed, question=req.question, geography=geography)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
+                                 geography=geography,
                                  view=view, run_required=_route_requires_run(route),
                                  semantics=semantics, frame=df)
 
@@ -1432,6 +1880,11 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         meta.setdefault("parserProvenance", _parser_provenance(workflow))
         if _concept_merge is not None:
             meta["conceptMerge"] = _concept_merge
+        # BOTH ARMS, TOTALLED. Neither block above is changed; this is the one
+        # place that answers "did a model touch this answer, and what did it
+        # cost" without the reader having to know there are two.
+        meta["modelUsage"] = _model_usage(meta.get("llm"), _concept_merge)
+        meta["modelAvailability"] = _model_availability(_concept_merge)
         if workflow.get("portfolio_lens"):
             meta["portfolioLens"] = workflow["portfolio_lens"]
     # Governed portfolio scope + coverage. The BACKEND states which portfolios
@@ -1456,10 +1909,14 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
                                        semantics=semantics, frame=df)
     # PHASE 1E SITE 2 OF 2 — an unresolved portfolio scope, on the same terms.
     result = _guard_unknown_category(result)
+    # SITE 2 OF 2 — a named GEOGRAPHY this book does not carry.
+    result = _guard_stated_geography_basis(
+        result, question=req.question, geography=geography)
     result = _guard_unresolved_scope(result, question=req.question,
                                      semantics=semantics, frame=df)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
+                             geography=geography,
                              semantics=semantics, frame=df,
                              view=view, run_required=bool(run_id))
 

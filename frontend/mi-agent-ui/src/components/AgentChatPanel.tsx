@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import type { AnalysisContext } from "@/lib/analysisContext";
-import { contextSummary } from "@/lib/analysisContext";
+import { contextSummary, looksLikeFollowUp } from "@/lib/analysisContext";
 import type { ChatMessage as ChatMessageType } from "@/domain";
 import { ChatMessage } from "@/components/ChatMessage";
 import { PromptSuggestions } from "@/components/PromptSuggestions";
@@ -63,6 +63,12 @@ export function AgentChatPanel({
   }, [collapsed]);
   // Re-open the suggested questions after the conversation has started.
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // The context bar answers one question — "what will a follow-up attach to?"
+  // — so it appears when that question is live: the composer has focus, or what
+  // has been typed already reads as a follow-up. Permanently on, it was a third
+  // printing of the measure and dimensions the answer's execution receipt and
+  // the artifact's own title already carry.
+  const [composerFocused, setComposerFocused] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Follow the conversation only while the reader is at (or near) the bottom;
   // never yank the viewport away from someone re-reading history.
@@ -89,7 +95,7 @@ export function AgentChatPanel({
     return (
       <aside
         data-surface="ai-chat"
-        className="flex h-full w-12 shrink-0 flex-col items-center border-r border-teal-800/30 bg-gradient-to-b from-teal-950/40 to-navy-950/60 py-3"
+        className="flex h-full w-12 shrink-0 flex-col items-center border-r border-cyan-800/30 bg-[var(--surface-chat)] py-3"
       >
         <button
           type="button"
@@ -97,18 +103,18 @@ export function AgentChatPanel({
           aria-label="Expand chat"
           aria-expanded={false}
           title="Expand the MI Agent chat"
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40 transition-opacity hover:opacity-90"
+          className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-900/40 transition-opacity hover:opacity-90"
         >
           <Sparkles size={18} />
         </button>
         <span
-          className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-teal-200/70"
+          className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-cyan-200/70"
           style={{ writingMode: "vertical-rl" }}
         >
           MI Agent
         </span>
         {isWorking && (
-          <span className="mt-3 h-1.5 w-1.5 animate-pulse rounded-full bg-teal-300" title="Working…" />
+          <span className="mt-3 h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" title="Working…" />
         )}
       </aside>
     );
@@ -117,13 +123,31 @@ export function AgentChatPanel({
   return (
     <aside
       data-surface="ai-chat"
-      className="flex h-full w-[380px] shrink-0 flex-col border-r border-teal-800/30 bg-gradient-to-b from-teal-950/40 to-navy-950/60 xl:w-[460px]"
+      className="flex h-full w-[380px] shrink-0 flex-col border-r border-cyan-800/30 bg-[var(--surface-chat)] xl:w-[460px]"
     >
-      <header className="flex items-center gap-2.5 border-b border-teal-800/30 bg-teal-950/30 px-5 py-3.5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm shadow-teal-900/40">
+      {/* One flat fill for the whole window (the base colour requested),
+          matching how Core Dashboard and Artifact Workspace hold a single
+          surface colour with a border-only header — not a separate header
+          tint on top of a gradient. */}
+      <header className="flex items-center gap-2.5 border-b border-cyan-800/30 px-5 py-3.5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-sm shadow-cyan-900/40">
           <Sparkles size={18} />
         </div>
-        <h1 className="text-base font-semibold text-teal-50">MI Agent</h1>
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-base font-semibold uppercase tracking-wide leading-none text-cyan-50">MI Agent</h1>
+          {/* Dark-navy tile fill (the same surface the dashboard's own KPI
+              tiles sit on) so it reads as a distinct chip against the chat
+              header's translucent teal, rather than blending into it.
+              `leading-none` on both this and the title above removes the
+              line-height padding that put them off-centre against each
+              other in a plain `items-center` row. */}
+          <span
+            className="inline-flex items-center self-center rounded-full border border-[var(--color-line-strong)] bg-navy-800 px-1.5 py-0.5 text-[9px] font-semibold uppercase leading-none tracking-wider text-cyan-300"
+            title="In active development — behaviour and answers may still change"
+          >
+            Beta
+          </span>
+        </div>
         <span
           className={cn(
             "ml-auto inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
@@ -141,7 +165,7 @@ export function AgentChatPanel({
             onClick={onClearChat}
             aria-label="Clear chat"
             title="Clear the conversation (loaded MI data is untouched)"
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-teal-200/70 hover:text-rose-300"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-cyan-200/70 hover:text-rose-300"
           >
             <Eraser size={13} /> Clear
           </button>
@@ -152,7 +176,7 @@ export function AgentChatPanel({
           aria-label="Collapse chat"
           aria-expanded={true}
           title="Collapse the chat to a slim rail"
-          className="inline-flex items-center rounded-md px-1.5 py-1 text-teal-200/70 hover:text-teal-100"
+          className="inline-flex items-center rounded-md px-1.5 py-1 text-cyan-200/70 hover:text-cyan-100"
         >
           <PanelLeftClose size={15} />
         </button>
@@ -172,31 +196,28 @@ export function AgentChatPanel({
             message={m}
             onOpenArtifact={onOpenArtifact}
             onRetry={onRetry}
-            onAsk={onSubmit}
             onTogglePin={onTogglePin}
             workspaceArtifactIds={workspaceArtifactIds}
           />
         ))}
 
-        {messages.length <= 1 && (
-          <div className="pt-1">
-            <PromptSuggestions onPick={onSubmit} />
-          </div>
-        )}
       </div>
 
-      {contextSummary(context) && (
-        <div className="flex items-center gap-1.5 border-t border-teal-800/30 bg-teal-950/30 px-3 py-1.5">
-          <History size={12} className="shrink-0 text-teal-300" />
-          <span className="truncate text-[11px] text-teal-100/80">
-            <span className="text-teal-300/70">Context:</span> {contextSummary(context)}
+      {contextSummary(context) && (composerFocused || looksLikeFollowUp(input, context)) && (
+        <div
+          data-testid="chat-context-bar"
+          className="flex items-center gap-1.5 border-t border-cyan-800/30 bg-cyan-950/30 px-3 py-1.5"
+        >
+          <History size={12} className="shrink-0 text-cyan-300" />
+          <span className="truncate text-[11px] text-cyan-100/80">
+            <span className="text-cyan-300/70">Context:</span> {contextSummary(context)}
           </span>
           {onClearContext && (
             <button
               type="button"
               onClick={onClearContext}
               aria-label="Clear context"
-              className="ml-auto inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-teal-200/70 transition-colors hover:text-teal-100"
+              className="ml-auto inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-cyan-200/70 transition-colors hover:text-cyan-100"
             >
               <X size={11} /> Clear
             </button>
@@ -207,7 +228,7 @@ export function AgentChatPanel({
       {/* Suggested questions stay reachable mid-conversation, not only on the
           empty state. */}
       {showSuggestions && messages.length > 1 && (
-        <div className="max-h-56 overflow-y-auto border-t border-teal-800/30 bg-teal-950/20 px-3 py-2.5">
+        <div className="max-h-56 overflow-y-auto border-t border-cyan-800/30 bg-cyan-950/20 px-3 py-2.5">
           <PromptSuggestions
             onPick={(q) => {
               setShowSuggestions(false);
@@ -217,11 +238,21 @@ export function AgentChatPanel({
         </div>
       )}
 
-      <div className="border-t border-teal-800/30 bg-teal-950/20 p-3">
-        <div className="rounded-xl border border-teal-800/40 bg-navy-950/60 focus-within:border-teal-400/60">
+      <div className="border-t border-cyan-800/30 bg-cyan-950/20 p-3">
+        <div className="rounded-xl border border-cyan-800/40 bg-navy-950/60 focus-within:border-cyan-400/60">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onFocus={() => setComposerFocused(true)}
+            // Keep the bar up while the Clear-context button is being clicked;
+            // it sits inside the panel, so a bare blur would remove the control
+            // from under the pointer.
+            onBlur={(e) => {
+              const next = e.relatedTarget as Node | null;
+              if (!next || !e.currentTarget.closest("aside")?.contains(next)) {
+                setComposerFocused(false);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -229,7 +260,7 @@ export function AgentChatPanel({
               }
             }}
             rows={2}
-            placeholder="Ask about balances, concentration, pipeline, static pools or validation…"
+            placeholder="Ask me about your portfolio…"
             className="w-full resize-none bg-transparent px-3.5 py-2.5 text-[13px] text-ink-100 placeholder:text-ink-500 focus:outline-none"
           />
           <div className="flex items-center justify-between px-3 pb-2.5">
@@ -244,8 +275,8 @@ export function AgentChatPanel({
                   className={cn(
                     "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors",
                     showSuggestions
-                      ? "text-teal-200"
-                      : "text-ink-500 hover:text-teal-200",
+                      ? "text-cyan-200"
+                      : "text-ink-500 hover:text-cyan-200",
                   )}
                 >
                   <Lightbulb size={12} /> Suggestions
@@ -272,7 +303,7 @@ export function AgentChatPanel({
                 type="button"
                 onClick={submit}
                 disabled={!input.trim() || isWorking}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-teal-900/30 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-cyan-900/30 transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Send
                 <CornerDownLeft size={13} />

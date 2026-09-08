@@ -18,6 +18,7 @@ import type {
   PipelineMovement,
   PipelineFunnelEvolution,
   ConcentrationDrillthrough,
+  EligibilityLoans,
   ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
@@ -25,8 +26,10 @@ import type {
   SnapshotIndex,
   MovementDetail,
   MovementDetailType,
+  StageTransitionDetail,
   WeeklyBrief,
 } from "@/domain";
+import { DETAIL_STAGE_TRANSITION } from "@/domain";
 import { buildAgentResponse } from "@/data/mockResponses";
 import { MOCK_SNAPSHOT_INDEX, mockSnapshot } from "@/data/mockSnapshots";
 import { mockForecastSnapshot } from "@/data/mockForecast";
@@ -41,6 +44,7 @@ import { mockGeoExposure } from "@/data/mockGeoExposure";
 import { mockRiskLimits } from "@/data/mockRiskLimits";
 import {
   mockConcentrationDrillthrough,
+  mockEligibilityLoans,
   mockConcentrationDrivers,
   mockConcentrationHistory,
   mockConcentrationTests,
@@ -170,6 +174,29 @@ export class MockAgentClient implements AgentClient {
     });
   }
 
+  /** No governed weekly pair in the demo dataset, so the capability reports
+   * itself unavailable through the engine's OWN typed reason code rather than
+   * an empty matrix, which would read as "nothing moved". */
+  getStageTransitionDetail(portfolioId: string): Promise<StageTransitionDetail> {
+    return Promise.resolve({
+      detail_type: DETAIL_STAGE_TRANSITION,
+      portfolio_id: portfolioId,
+      scope: "total",
+      as_of_date: null,
+      comparison_date: null,
+      available: false,
+      reason: "Stage transitions are not available in the demo dataset.",
+      reason_code: "no_prior_snapshot",
+      counts: null,
+      transitions: [],
+      new_arrivals: [],
+      stayers: [],
+      departures: [],
+      event_totals: null,
+      reconciliation: null,
+    });
+  }
+
   /** The demo dataset has no governed weekly comparison, so the brief reports
    * itself unavailable rather than inventing insights that would be
    * indistinguishable from real ones. */
@@ -202,6 +229,12 @@ export class MockAgentClient implements AgentClient {
   getConcentrationDrillthrough(portfolioId: string, testId: string):
       Promise<ConcentrationDrillthrough> {
     return Promise.resolve(mockConcentrationDrillthrough(portfolioId, testId));
+  }
+
+  getEligibilityLoans(portfolioId: string,
+                      status: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED"):
+      Promise<EligibilityLoans> {
+    return Promise.resolve(mockEligibilityLoans(portfolioId, status));
   }
 
   getConcentrationHistory(portfolioId: string, testId?: string):

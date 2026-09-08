@@ -77,6 +77,12 @@ STEPS: Tuple[Dict[str, Any], ...] = (
              "monitored against. Share whatever you have — a facility "
              "schedule, covenant workbook or a completed limits table.",
      "sections": ("risk_limits",)},
+    {"key": "funding", "label": "How the book is funded",
+     "help": "If this portfolio is financed through a warehouse, "
+             "borrowing-base or other secured facility, the agreement decides "
+             "what Trakt can report about eligible collateral, the borrowing "
+             "base and facility headroom. Skip it if there is no facility.",
+     "sections": ("funding_facility",)},
     {"key": "access", "label": "Who needs access",
      "help": "People at your end who need Trakt, or who receive reports.",
      "sections": ("access",)},

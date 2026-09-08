@@ -1106,7 +1106,7 @@ examples:
              "the global alias files at Gate 1 (the client's approved onboarding "
              "contract). Repeatable; later directories win.",
     )
-    ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERM_UK.yaml"))
+    ap.add_argument("--master-config", default=str(CONFIG_ROOT / "client" / "config_client_ERE.yaml"))
     ap.add_argument(
         "--product-defaults", dest="product_defaults", default=None,
         help="Asset-pack YAML (Layer 2) merged UNDER the client config at Gate 4. "

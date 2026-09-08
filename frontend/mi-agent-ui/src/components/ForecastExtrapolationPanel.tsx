@@ -8,6 +8,7 @@ import type { AgentClient } from "@/api";
 import type { ForecastExtrapolation } from "@/domain";
 import { Card } from "@/components/ui";
 import { formatGBP } from "@/lib/utils";
+import { THEME } from "@/lib/theme";
 
 function gbpC(v: number): string {
   return formatGBP(v, { compact: true });
@@ -63,7 +64,7 @@ export function ForecastExtrapolationPanel({
   return (
     <section className="space-y-4" data-testid="forecast-extrapolation-panel">
       <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-        <TrendingUp size={16} className="text-peri-300" /> Scale-up run-rate — when does the book reach scale?
+        <TrendingUp size={16} className="text-cyan-300" /> Scale-up run-rate — when does the book reach scale?
       </div>
       <p className="-mt-2 text-[11px] text-ink-500">
         Forward projection from the recent completion run-rate (net funded growth). The point-in-time
@@ -90,19 +91,22 @@ export function ForecastExtrapolationPanel({
             <div style={{ width: "100%", height: 240 }}>
               <ResponsiveContainer>
                 <LineChart data={curve} margin={{ top: 6, right: 16, bottom: 4, left: 6 }}>
-                  <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tick={{ fill: "#8a97ad", fontSize: 10 }} minTickGap={24} />
-                  <YAxis tickFormatter={gbpC} tick={{ fill: "#8a97ad", fontSize: 10 }} width={60} />
+                  <CartesianGrid stroke="#262a31" strokeDasharray="3 3" />
+                  <XAxis dataKey="month" tick={{ fill: "#767d87", fontSize: 10 }} minTickGap={24} />
+                  <YAxis tickFormatter={gbpC} tick={{ fill: "#767d87", fontSize: 10 }} width={60} />
                   <Tooltip formatter={(v: number) => gbpC(Number(v))}
-                    contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }} />
+                    contentStyle={{ background: "#0a0b0d", border: "1px solid #262a31", fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   {data.thresholds.map((thr) => (
-                    <ReferenceLine key={thr} y={thr} stroke="#3a4a66" strokeDasharray="2 4"
-                      label={{ value: `£${thr / 1_000_000}m`, fill: "#6b7890", fontSize: 9, position: "right" }} />
+                    <ReferenceLine key={thr} y={thr} stroke="#3a3f48" strokeDasharray="2 4"
+                      label={{ value: `£${thr / 1_000_000}m`, fill: "#656b74", fontSize: 9, position: "right" }} />
                   ))}
-                  <Line type="monotone" dataKey="downside" name="Downside" stroke="#eb6f6f" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="base" name="Base" stroke="#7c9cf0" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="upside" name="Upside" stroke="#5ec6b8" strokeWidth={2} dot={false} />
+                  {/* Downside/base/upside carries polarity (bad/neutral/good), not
+                      bare series identity — same semantic-scale treatment as the
+                      matching Downside/Base/Upside slide in mi_agent_pptx/deck.py. */}
+                  <Line type="monotone" dataKey="downside" name="Downside" stroke={THEME.negative} strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="base" name="Base" stroke={THEME.cyan} strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="upside" name="Upside" stroke={THEME.mint} strokeWidth={2} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

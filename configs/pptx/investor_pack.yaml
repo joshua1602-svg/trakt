@@ -261,17 +261,23 @@ slides:
     question: "How is origination changing week to week?"
     when: "has_pipeline_history"
 
-  # HOW CASES ARE PROGRESSING. The funnel above measures conversion as weekly
-  # FLOW; this is the case-level reconciliation between two extracts, on counts
-  # and on money, with departures split by where the case actually went. It
-  # needs a stable case identifier in both extracts and says so when it has
-  # none — there is deliberately no fallback.
-  - id: pipeline_movement
-    type: pipeline_movement
+  # 14b ------------------------------------------- Pipeline Stage Movement
+  # The GROSS companion to Pipeline Evolution's stock view: which cases actually
+  # moved between stages, which arrived, which stayed and which left. Rendered
+  # from the governed PIPELINE_STAGE_TRANSITION payload; the deck computes none
+  # of it. Omitted (with the engine's own typed reason) when the governed pair
+  # of extracts cannot be compared.
+  # `when` is the coarse gate only. Whether a transition ANSWER exists is the
+  # engine's own typed decision, and it is applied by the composition guard so
+  # the omission carries the engine's reason ("duplicate case identifiers…")
+  # rather than a generic unmet-condition message.
+  - id: stage_transitions
+    type: stage_transitions
     title: "Pipeline Stage Movement"
-    question: "What happened to pipeline cases between reporting periods?"
-    when: "has_pipeline_movement"
+    question: "What happened to pipeline cases since the last extract?"
+    when: "has_pipeline"
 
+  # 15 -------------------------------------------------- Origination Funnel
   - id: funnel
     type: funnel
     title: "Origination Funnel"
@@ -287,14 +293,14 @@ slides:
     # extract the handler falls back to cases-by-stage, which is the stage
     # ladder already on Pipeline Overview in a different unit — the duplication
     # a starter pack exists to avoid.
-    when: "has_pipeline and has_funnel and has_pipeline_history and pipeline_share >= 0.05 and not has_pipeline_movement"
-    # Pipeline Stage Movement answers "how are cases progressing" with a
-    # reconciled case-level identity, on counts AND money, with departures split
-    # by destination. This page answers the same question from weekly flow, and
-    # on a book where the KFI-to-completion lag is not estimable it can only
-    # offer unlagged ratios. Where the reconciliation exists it is the better
-    # page, and running both spends two slides on one question.
-    superseded_by: pipeline_movement
+    when: "has_pipeline and has_funnel and has_pipeline_history and pipeline_share >= 0.05 and not has_stage_transitions"
+    # Pipeline Stage Movement answers "how are cases progressing" from the
+    # governed stage-transition payload — which cases moved, arrived, stayed and
+    # left. This page answers the same question from weekly flow, and on a book
+    # where the KFI-to-completion lag is not estimable it can only offer
+    # unlagged ratios. Where the transition answer exists it is the better page,
+    # and running both spends two slides on one question.
+    superseded_by: stage_transitions
 
   # Origination Flow (KFI / completion weekly bars with a cumulative line) is
   # NOT in the starter pack. The Pipeline Evolution quadrant is gated on the

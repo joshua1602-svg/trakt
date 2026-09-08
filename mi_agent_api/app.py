@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 import re
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -30,9 +31,11 @@ from . import react_auth
 from mi_agent.mi_agent_config import get_llm_config
 from mi_agent.mi_agent_workflow import run_mi_agent_query
 from mi_agent.mi_query_validator import load_mi_semantics
+from mi_agent_api.build_info import build_info as _build_info
 
 from .adapters import adapt_workflow_result
 from .catalogue import build_catalogue
+from . import data_source
 from .data_source import (
     KIND_PLATFORM_CANONICAL,
     data_source_info,
@@ -287,9 +290,36 @@ def _warm_caches() -> None:
         logger.info("startup shared-preparation warm skipped: %s", exc)
 
 
+def _start_warm() -> None:
+    """Warm the caches WITHOUT holding up startup.
+
+    THE WARM IS AN OPTIMISATION. It exists so the first question of the day is
+    not cold; it may never decide whether the app serves at all. Run inline it
+    did exactly that, because the platform gives a container a fixed window to
+    come up and this work is a governed-tape download plus a prepare — unbounded
+    by anything the app controls.
+
+    Measured on trakt-mi-api, 2026-09-02: three consecutive boots reached
+    "Waiting for application startup" and none reached "complete". Azure killed
+    each container on the 230s startup probe, and the next boot began the same
+    download from the beginning — the scratch copy does not survive the restart,
+    so the loop could not converge. The API served nothing for fourteen minutes
+    and every request to it was a 500.
+
+    The old `try/except` guarded the warm against FAILING. Nothing guarded it
+    against being SLOW, and slow is the mode that took the site down. A daemon
+    thread cannot: startup completes at once, the port answers, and the first
+    request either finds the frame ready or waits for the same load it would
+    have triggered itself — `data_source._ACTIVE_LOCK` makes that one load
+    rather than two.
+    """
+    threading.Thread(target=_warm_caches, name="mi-cache-warm",
+                     daemon=True).start()
+
+
 @asynccontextmanager
 async def _lifespan(_app: "FastAPI"):
-    _warm_caches()
+    _start_warm()
     yield
 
 
@@ -402,10 +432,29 @@ class QueryRequest(BaseModel):
 
 @app.get("/")
 def root() -> Dict[str, Any]:
-    """Friendly index so the bare URL isn't a confusing 404."""
+    """Friendly index, and THE LIVENESS PROBE — point the platform health check here.
+
+    The distinction matters and is not cosmetic. This route touches no data: it
+    answers as soon as the process is up. `/health` is a READINESS and diagnostic
+    route — it reports the resolved data source, which means it RESOLVES the data
+    source, which on a cold process is a governed-tape download. Pointing a
+    liveness check at `/health` therefore makes the probe wait for the very work
+    that a restart just discarded, and an instance can be recycled for being slow
+    to answer a question about whether it is slow.
+
+    `warm` says whether the active dataset is already cached, WITHOUT loading it,
+    so an operator can watch a cold start progress without becoming the thing
+    that triggers the load.
+    """
     return {
         "service": "mi_agent_api",
         "version": app.version,
+        # WHICH COMMIT, not which version string. `version` is hand-written and
+        # was identical across every deploy this year, so it could not tell one
+        # build from another — see `build_info` for why that made the live
+        # certification's provenance line worthless.
+        "build": _build_info(),
+        "warm": data_source.is_loaded(),
         "endpoints": ["/health", "/mi/catalogue", "/mi/snapshots", "/mi/snapshot",
                       "/mi/pipeline/snapshots", "/mi/pipeline/snapshot",
                       "/mi/forecast/snapshot", "/mi/workspace/view", "/mi/query"],
@@ -421,6 +470,7 @@ def health() -> Dict[str, Any]:
         "ok": True,
         "service": "mi_agent_api",
         "version": app.version,
+        "build": _build_info(),
         "dataSource": csv,
         "dataSourceKind": info.get("kind"),
         "preparationApplied": info.get("preparation_applied", False),
@@ -1199,36 +1249,67 @@ def movement_detail(detailType: str,
     from . import movement_detail as detail_mod
     if not detail_mod.enhanced_hovers_enabled():
         raise HTTPException(status_code=404, detail="movement detail is not enabled")
-    if detailType not in (detail_mod.DETAIL_PIPELINE, detail_mod.DETAIL_COMPLETIONS):
+    # PIPELINE_STAGE_TRANSITION is the governed GROSS decomposition of the same
+    # two snapshots the two NET detail types describe. It is served here rather
+    # than from a route of its own because this route already IS the movement
+    # owner, parameterised by detail type — the extension point the capability
+    # was built with. No new route, no second client, one contract.
+    if detailType not in (detail_mod.DETAIL_PIPELINE, detail_mod.DETAIL_COMPLETIONS,
+                          detail_mod.DETAIL_STAGE_TRANSITION):
         raise HTTPException(status_code=400,
                             detail=f"unknown detailType {detailType!r}")
+    transitions = detailType == detail_mod.DETAIL_STAGE_TRANSITION
+
+    def _no_detail(reason: str, reason_code: str) -> Dict[str, Any]:
+        """The right controlled envelope for this detail type — never a partial.
+
+        The transition capability carries its own typed availability contract
+        (``reason_code``), so it must not be refused through the movement
+        envelope, whose shape a transition consumer does not read.
+        """
+        scope_id = resolved.scope.context_id if resolved else None
+        if transitions:
+            return detail_mod.stage_transition_unavailable(
+                cid, scope=scope_id, as_of=asOf,
+                reason_code=reason_code, reason=reason)
+        return detail_mod.unavailable(detailType, cid, as_of=asOf,
+                                      scope=scope_id, reason=reason)
 
     cid, _funded_trid = _evo_ids(portfolioId, client_id, None, None)
     # Weekly pipeline data, so the FUNDED reporting date must not truncate it —
     # the same rule the pipeline evolution and funnel routes follow.
     resolved, refusal = _pipeline_scope_gate(
         portfolioContext, cid, "movement_detail", portfolioId=cid,
-        detailType=detailType, available=False, contributors={})
+        detailType=detailType, available=False,
+        # Each detail type is refused in the shape its own consumer reads.
+        **({"transitions": [], "new_arrivals": [], "stayers": [],
+            "departures": [], "reconciliation": None} if transitions
+           else {"contributors": {}}))
     if refusal is not None:
         return refusal
     root = _pipeline_discovery_root()
     if not root:
-        return detail_mod.unavailable(
-            detailType, cid, as_of=asOf,
-            scope=(resolved.scope.context_id if resolved else None),
-            reason="No governed pipeline root is configured.")
+        return _no_detail("No governed pipeline root is configured.",
+                          detail_mod.REASON_NO_COMPARISON)
     etag = http_cache.begin(
         request, route="mi.insight.movement-detail",
         scope=f"{portfolioContext or 'total'}|{detailType}|{asOf or 'latest'}",
         identity=http_cache.dataset_identity(cid, _funded_trid,
                                              include_pipeline=True))
     try:
-        result = detail_mod.resolve_movement_detail(
-            root, cid, detailType, as_of=asOf,
-            # Shares the frames the chart already prepared instead of preparing
-            # every extract again under a different key (the Phase 1B-1 defect).
-            historical_model=_pipeline_history(cid),
-            scope=(resolved.scope.context_id if resolved else None))
+        # Both resolvers read the SAME governed extracts through the SAME
+        # `select_pair` neighbour rule and the SAME prepared, cached frames.
+        # Shares the frames the chart already prepared instead of preparing
+        # every extract again under a different key (the Phase 1B-1 defect).
+        scope_id = resolved.scope.context_id if resolved else None
+        if transitions:
+            result = detail_mod.resolve_stage_transition_detail(
+                root, cid, as_of=asOf,
+                historical_model=_pipeline_history(cid), scope=scope_id)
+        else:
+            result = detail_mod.resolve_movement_detail(
+                root, cid, detailType, as_of=asOf,
+                historical_model=_pipeline_history(cid), scope=scope_id)
         if resolved is not None:
             result["portfolioScope"] = resolved.scope.to_dict()
         return http_cache.finish(response, etag, result)
@@ -1236,10 +1317,9 @@ def movement_detail(detailType: str,
         raise
     except Exception as exc:  # noqa: BLE001 - an optional hover must never 500
         logger.warning("movement detail failed: %s", exc)
-        return detail_mod.unavailable(
-            detailType, cid, as_of=asOf,
-            scope=(resolved.scope.context_id if resolved else None),
-            reason="Movement detail could not be produced for this point.")
+        return _no_detail(
+            "Movement detail could not be produced for this point.",
+            detail_mod.REASON_NO_COMPARISON)
 
 
 @app.get("/mi/insights/weekly-brief")
@@ -1910,6 +1990,84 @@ def concentration_tests(portfolioId: Optional[str] = None,
                             "unavailable": 0, "deteriorations": 0,
                             "closestToLimit": None, "priorAvailable": False},
                 "error": str(exc)}
+
+
+@app.get("/mi/borrowing-base")
+def borrowing_base(portfolioId: Optional[str] = None,
+                   client_id: Optional[str] = None,
+                   toRunId: Optional[str] = None,
+                   to_run_id: Optional[str] = None,
+                   portfolioContext: Optional[str] = None,
+                   request: Request = None, response: Response = None
+                   ) -> Dict[str, Any]:
+    """Governed facility borrowing base for the funded book.
+
+    Eligible collateral, the Concentration Limit Denominator, the gross and
+    available borrowing base, drawings, headroom, deficiency and utilisation —
+    each either a number or NOT_CALCULABLE with the missing input named, never
+    a zero standing in for an absent fact. The figures are the SAME block the
+    Eligibility & Concentrations tab renders, taken from one evaluation of one
+    frame. Never 500s."""
+    from . import borrowing_base_api as bb_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    etag = http_cache.begin(
+        request, route="mi.borrowing-base", scope=portfolioContext,
+        identity=http_cache.dataset_identity(cid, trid, include_pipeline=True))
+    try:
+        def _compute():
+            resolved = _resolve_portfolio_context(portfolioContext, cid)
+            result = bb_mod.compute_borrowing_base(
+                root, cid, trid, scope=resolved.scope if resolved else None)
+            if resolved is not None:
+                result["portfolioScope"] = resolved.scope.to_dict()
+            return result
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
+    except Exception as exc:  # noqa: BLE001 - the monitor must never 500
+        logger.warning("borrowing-base failed: %s", exc)
+        return {"portfolioId": cid, "toRunId": trid, "available": False,
+                "reason": "The borrowing-base service could not be reached.",
+                "measures": {}, "error": str(exc)}
+
+
+@app.get("/mi/borrowing-base/loans")
+def borrowing_base_loans(status: str,
+                         portfolioId: Optional[str] = None,
+                         client_id: Optional[str] = None,
+                         toRunId: Optional[str] = None,
+                         to_run_id: Optional[str] = None,
+                         portfolioContext: Optional[str] = None,
+                         request: Request = None, response: Response = None
+                         ) -> Dict[str, Any]:
+    """The loans carrying one governed eligibility status (ELIGIBLE /
+    INELIGIBLE / UNDETERMINED), with the reason each was classified that way.
+
+    Discloses the same governed field roles the concentration drill-through
+    does — no wider view of the tape — plus the eligibility determination
+    itself. Never 500s."""
+    from . import borrowing_base_api as bb_mod
+    cid, trid = _evo_ids(portfolioId, client_id, toRunId, to_run_id)
+    root = _onboarding_output_root()
+    etag = http_cache.begin(
+        request, route="mi.borrowing-base.loans", scope=portfolioContext,
+        # The status is part of the cache identity: two statuses are two
+        # different answers. `dataset_identity` is None when the dataset cannot
+        # be identified, and stays None here rather than becoming the string
+        # "None|ELIGIBLE", which would look like a real identity.
+        identity=(f"{http_cache.dataset_identity(cid, trid)}|{status}"
+                  if http_cache.dataset_identity(cid, trid) else None))
+    try:
+        def _compute():
+            resolved = _resolve_portfolio_context(portfolioContext, cid)
+            return bb_mod.compute_eligibility_loans(
+                root, cid, trid, status,
+                scope=resolved.scope if resolved else None)
+        return http_cache.finish(response, etag, http_cache.cached(etag, _compute))
+    except Exception as exc:  # noqa: BLE001 - never 500
+        logger.warning("borrowing-base loans failed: %s", exc)
+        return {"available": False,
+                "reason": "The eligibility drill-down could not be reached.",
+                "rows": [], "columns": [], "error": str(exc)}
 
 
 @app.get("/mi/concentration-tests/drillthrough")

@@ -520,26 +520,45 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
     # the window. Reading `intent.requested_concepts` is this route's own
     # pre-claim reading, already computed above; it is not a second look at the
     # sentence.
+    #
+    # 2026-09-03 — DEFAULT AND DISCLOSE, the estate's own rule for a missing
+    # element that an analysis cannot exist without. The measure half of this
+    # same ruling already works that way: "a series must plot something, so the
+    # parser substitutes the governed balance when no measure is named. The
+    # defect was that it left no trace." The trace is `metric_defaulted`, and
+    # the route refuses the BARE case alone.
+    #
+    # The period half now reads the same. A RANKED DIMENSION IS A NAMED
+    # SUBJECT — the same standing a grouping dimension has under the measure
+    # rule — so "Which region grew the most?" is answered over the governed
+    # default pair and SAYS SO, rather than refused. This is a deliberate
+    # change to what this route answers, decided on 2026-09-03; the comment
+    # above records what the rule was before it, and the protection it exists
+    # for is unchanged: a window nobody asked for can still never arrive
+    # undisclosed. "What changed?" names no subject at all and still refuses,
+    # because there is nothing there to analyse over any window.
     _named_subject = bool(getattr(spec, "metric", None)
                           or intent.requested_concepts
-                          or intent.requested_fields)
-    if interpretation is not None and (rank_intent.requested
-                                       or not _named_subject):
-        _time = getattr(interpretation, "time", None)
-        _named = bool(getattr(_time, "comparison_periods", None)
-                      or getattr(_time, "window_periods", None))
-        if not _named:
-            message = (
-                (f"I can rank {rank_intent.term} by movement, but this question "
-                 if rank_intent.requested else
-                 "I can report what changed, but this question ")
-                + f"names no period to compare over, and I have not chosen one "
-                f"for you. Tell me the window — for example “since last month”, "
-                f"“over the last 3 months”, or two named months.")
-            return chat_routing._envelope(
-                ok=False, question=question, spec=spec_dict, artifacts=[],
-                answer=message, error=message, route="period_change",
-                warnings=[message])
+                          or intent.requested_fields
+                          or (rank_intent.requested and rank_intent.term))
+    _time = (getattr(interpretation, "time", None)
+             if interpretation is not None else None)
+    _period_named = bool(getattr(_time, "comparison_periods", None)
+                         or getattr(_time, "window_periods", None))
+    #: The reader named no window. Carried to the success envelope, where the
+    #: two dates that WERE used are known and can be stated.
+    period_defaulted = interpretation is not None and not _period_named
+    if period_defaulted and not _named_subject:
+        message = (
+            "I can report what changed, but this question names neither a "
+            "subject to analyse nor a period to compare over, and I have not "
+            "chosen either for you. Name what to look at — a measure, a "
+            "dimension or an analysis — and, if you have one in mind, the "
+            "window: for example “how has balance moved since last month”.")
+        return chat_routing._envelope(
+            ok=False, question=question, spec=spec_dict, artifacts=[],
+            answer=message, error=message, route="period_change",
+            warnings=[message])
 
     mode, requested_fields = intent.mode, intent.requested_fields
     if rank_intent.requested:
@@ -634,7 +653,7 @@ def route_period_change(question: str, spec: Any, spec_dict: Dict[str, Any], *,
                                     pop_evidence=_pop_evidence)
                if ranking.applied else None)
     out = _render(result, question, spec_dict, portfolio_id, as_of,
-                  receipt=receipt)
+                  receipt=receipt, period_defaulted=period_defaulted)
     if _scope_evidence:
         # THE ROUTE DECLARES WHAT SCOPE IT APPLIED, on the same rule the
         # population ledger follows: execution evidence only, and a silent
@@ -1096,6 +1115,52 @@ def build_rank_answer(receipt: Any) -> str:
     return " ".join(parts)
 
 
+def _period_date(reference: Any) -> Optional[str]:
+    """The reporting date off a snapshot reference, or None.
+
+    `PeriodResolution.to_dict` records the two ends as `resolved_start_snapshot`
+    / `resolved_end_snapshot`, each a full provenance reference. There is no
+    flat `start_reporting_date`; reading one gave an empty disclosure that still
+    read as a sentence, which is worse than no disclosure at all.
+    """
+    if isinstance(reference, dict):
+        value = reference.get("reporting_date")
+        return str(value)[:10] if value else None
+    return None
+
+
+def _defaulted_period_sentence(resolution: Dict[str, Any]) -> str:
+    """What the reader is told when they named no window.
+
+    Names both dates. "The latest period" is not a disclosure — a reader
+    cannot check a window they cannot see, and this route's whole output is a
+    delta between two dates.
+    """
+    start = _period_date(resolution.get("resolved_start_snapshot")) \
+        or "the earlier period"
+    end = _period_date(resolution.get("resolved_end_snapshot")) \
+        or "the latest period"
+    return (f"You did not name a period, so this compares {start} with {end} "
+            f"— the two most recent governed reporting periods. Say a window "
+            f"(for example “since last month”) to compare different ones.")
+
+
+def _disclose_defaulted_period(answer: Optional[str],
+                               resolution: Dict[str, Any]) -> str:
+    """The disclosure travels WITH the answer, never only beside it.
+
+    Appended rather than prepended: the reader asked a question and the first
+    thing they should read is its answer. Appended rather than left to the
+    warnings list, because a channel that renders only the answer would then
+    show a comparison with no window on it at all.
+    """
+    sentence = _defaulted_period_sentence(resolution)
+    text = (answer or "").rstrip()
+    if not text:
+        return sentence
+    return f"{text}\n\n{sentence}"
+
+
 def _failure_envelope(question: str, spec_dict: Dict[str, Any],
                       failure: PeriodChangeFailure) -> Dict[str, Any]:
     """A controlled refusal. Explicit, never a fabricated or substituted answer."""
@@ -1345,7 +1410,7 @@ def build_answer(result: PeriodChangeResult) -> str:
 
 def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any],
             portfolio_id: Optional[str], as_of: Optional[str],
-            receipt: Any = None) -> Dict[str, Any]:
+            receipt: Any = None, period_defaulted: bool = False) -> Dict[str, Any]:
     """Render the governed answer.
 
     THE RANKING OUTCOME IS NOT A PARAMETER. It used to be, and every ranked
@@ -1445,6 +1510,23 @@ def _render(result: PeriodChangeResult, question: str, spec_dict: Dict[str, Any]
     meta = envelope["metadata"]
     meta["workflowId"] = WORKFLOW_ID
     meta["periodResolution"] = payload["period_resolution"]["resolution_method"]
+    # DEFAULT AND DISCLOSE. `periodResolution` above has always named HOW the
+    # window was chosen; what it could not say is whether the READER chose it.
+    # Both facts are needed: `latest_available_pair` is the right method for a
+    # question that asked for it and for one that asked for nothing, and only
+    # the second is a substitution. Stated on the envelope for a guard to read
+    # and in the prose for a person, because a disclosure only the machine can
+    # see is the trace the measure half was faulted for not leaving.
+    if period_defaulted:
+        _res = payload["period_resolution"]
+        meta["periodDefaulted"] = {
+            "method": _res["resolution_method"],
+            "start": _period_date(_res.get("resolved_start_snapshot")),
+            "end": _period_date(_res.get("resolved_end_snapshot"))}
+        envelope["answer"] = _disclose_defaulted_period(
+            envelope.get("answer"), _res)
+        envelope.setdefault("assumptions", []).append(
+            _defaulted_period_sentence(_res))
     meta["periodChangeMode"] = payload["request_interpretation"]["mode"]
     if ranked:
         # The EVIDENCE the P0 guard verifies against. It states what was ranked,

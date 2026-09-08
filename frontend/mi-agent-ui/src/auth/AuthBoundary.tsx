@@ -69,7 +69,7 @@ function SignInGate({ config, signInError }: { config: AuthConfig; signInError?:
         type="button"
         data-testid="sign-in"
         onClick={() => void signIn(instance, config)}
-        className="w-full rounded-lg bg-[var(--color-accent,#919dd1)] px-4 py-2 text-sm font-medium text-navy-950"
+        className="w-full rounded-lg bg-cyan-400 px-4 py-2 text-sm font-medium text-navy-950"
       >
         Sign in with Microsoft
       </button>

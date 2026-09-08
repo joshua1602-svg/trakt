@@ -29,10 +29,13 @@ import { InsightStageCard } from "@/components/insight/InsightStageCard";
 import { enhancedHoversEnabled } from "@/lib/featureFlags";
 import { DETAIL_COMPLETIONS, DETAIL_PIPELINE } from "@/domain";
 import { cn, formatGBP, formatValue } from "@/lib/utils";
+import { THEME } from "@/lib/theme";
 
 type EvoView = "funded" | "pipeline" | "forecast" | "origination" | "cohorts";
 
-const PALETTE = ["#7c9cf0", "#5ec6b8", "#e0a458", "#c98bdb", "#6fcf97", "#eb6f6f"];
+// One categorical system app-wide — see lib/theme.ts for how this set was
+// validated (dataviz skill, six checks against this dashboard's own surface).
+const PALETTE = THEME.categorical;
 
 // Explicit funnel process order. WITHDRAWN sits after the main funnel; UNKNOWN
 // last. Synonyms (COMPLETION/COMPLETED) and case are normalised first.
@@ -108,20 +111,24 @@ export function pipelineXValue(
   return p.week ?? p.extract_date ?? p.period;
 }
 
-/** A single labelled line chart over periods, with a source/coverage footer.
+/** A single labelled line chart over periods.
  *
  * `memo`'d: Recharts re-measures and re-renders the whole SVG on every parent
  * render, and the evolution views render several of these at once. With stable
  * props (the series are `useMemo`'d by the caller) a parent re-render caused by
  * an unrelated toggle no longer redraws every chart. */
 export const EvoLineChart = memo(function EvoLineChart({
-  title, data, lines, valueFormat = "gbp", source, asOf,
+  title, data, lines, valueFormat = "gbp",
   tooltipContent, onActivePoint, onPointClick,
 }: {
   title: string;
   data: Array<Record<string, number | string | null>>;
   lines: { key: string; label: string }[];
   valueFormat?: "gbp" | "count" | "pct" | "pct_points";
+  /** Kept for callers built against the source/as-of/coverage footer this
+   * card used to render. It was removed as clutter — every chart's data
+   * governance is one click away in the workspace, not printed under every
+   * chart on every screen — so these are accepted and ignored. */
   source?: string | null;
   asOf?: string | null;
   /** OPTIONAL (Phase 2A): replaces the tooltip BODY only. Absent on every
@@ -164,12 +171,12 @@ export const EvoLineChart = memo(function EvoLineChart({
                   if (onPointClick && s?.activeLabel != null) onPointClick(String(s.activeLabel));
                 },
               } : {})}>
-              <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
-              <XAxis dataKey="period" tick={{ fill: "#8a97ad", fontSize: 11 }} />
-              <YAxis tickFormatter={fmt} tick={{ fill: "#8a97ad", fontSize: 11 }} width={64} />
+              <CartesianGrid stroke="#262a31" strokeDasharray="3 3" />
+              <XAxis dataKey="period" tick={{ fill: "#767d87", fontSize: 11 }} />
+              <YAxis tickFormatter={fmt} tick={{ fill: "#767d87", fontSize: 11 }} width={64} />
               <Tooltip
                 formatter={(v: number) => fmt(Number(v))}
-                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }}
+                contentStyle={{ background: "#0a0b0d", border: "1px solid #262a31", fontSize: 12 }}
                 {...(tooltipContent ? { content: tooltipContent } : {})}
               />
               {lines.length > 1 && <Legend wrapperStyle={{ fontSize: 11 }} />}
@@ -181,11 +188,6 @@ export const EvoLineChart = memo(function EvoLineChart({
           </ResponsiveContainer>
         </div>
       )}
-      <div className="mt-2 flex flex-wrap gap-x-4 text-[10px] text-ink-500">
-        {source && <span>Source: {source}</span>}
-        {asOf && <span>As of: {asOf}</span>}
-        <span>Coverage: 100% (per-period reconciliation)</span>
-      </div>
     </div>
   );
 });
@@ -339,8 +341,10 @@ function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWe
 }
 
 /** One origination-funnel stage: weekly-FLOW bars (default) with an optional
- * stock line, a 5-week trailing average of the WEEKLY FLOW, the Δ vs prior week
- * (flow − prior flow), and a collapsed conversion-vs-KFI disclosure. Renders
+ * stock line, a 5-week trailing average of the WEEKLY FLOW, the flow's own
+ * acceleration (this week's flow minus last week's — NOT the flow itself,
+ * which is already a week-on-week change), and a collapsed conversion-vs-KFI
+ * disclosure. Renders
  * compact in the 2×2 grid and larger inside the focus modal (``large``). */
 export function FunnelStageCard({
   stage, label, points, flowPoints, summary, conversion, cohortPct, showCumulative, large, onExpand,
@@ -430,27 +434,27 @@ export function FunnelStageCard({
                   if (onPointClick && st?.activeLabel != null) onPointClick(String(st.activeLabel));
                 },
               } : {})}>
-              <CartesianGrid stroke="#23304d" strokeDasharray="3 3" />
-              <XAxis dataKey="week" tick={{ fill: "#8a97ad", fontSize: large ? 11 : 10 }} />
+              <CartesianGrid stroke="#262a31" strokeDasharray="3 3" />
+              <XAxis dataKey="week" tick={{ fill: "#767d87", fontSize: large ? 11 : 10 }} />
               <YAxis yAxisId="flow" tickFormatter={gbpCompact}
-                tick={{ fill: "#8a97ad", fontSize: large ? 11 : 10 }} width={56} />
+                tick={{ fill: "#767d87", fontSize: large ? 11 : 10 }} width={56} />
               {showCumulative && (
                 <YAxis yAxisId="stock" orientation="right" tickFormatter={gbpCompact}
-                  tick={{ fill: "#6f7b91", fontSize: large ? 11 : 10 }} width={56} />
+                  tick={{ fill: "#656b74", fontSize: large ? 11 : 10 }} width={56} />
               )}
               <Tooltip
                 formatter={(v: number, name: string) => [gbpCompact(Number(v)), name]}
-                contentStyle={{ background: "#0f1626", border: "1px solid #23304d", fontSize: 12 }}
+                contentStyle={{ background: "#0a0b0d", border: "1px solid #262a31", fontSize: 12 }}
                 {...(tooltipContent ? { content: tooltipContent } : {})} />
               {avgFlow != null && (
                 <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeDasharray="4 3"
                   label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
               )}
               <Bar yAxisId="flow" dataKey="flow" name="Weekly flow (£)"
-                fill="#7c9cf0" radius={[2, 2, 0, 0]} />
+                fill={THEME.cyan} radius={[2, 2, 0, 0]} />
               {showCumulative && (
                 <Line yAxisId="stock" type="monotone" dataKey="stock" name="Stock (£)"
-                  stroke="#5ec6b8" strokeWidth={2} dot={false} />
+                  stroke={THEME.mint} strokeWidth={2} dot={false} />
               )}
             </ComposedChart>
           </ResponsiveContainer>
@@ -481,8 +485,11 @@ export function FunnelStageCard({
             </div>
           </div>
           <div>
-            <div className="text-ink-500" title="Latest weekly flow minus prior weekly flow">
-              Δ vs prior wk
+            <div
+              className="text-ink-500"
+              title="Change in the weekly flow itself: this week's flow minus last week's. The flow is already the week-on-week movement, so this is whether that movement is speeding up or slowing down."
+            >
+              Flow acceleration
             </div>
             <div className="text-ink-200">
               {summary.deltaFlowValue != null ? gbpCompact(summary.deltaFlowValue) : "—"}
@@ -594,7 +601,7 @@ function CohortSelect({ label, value, onChange, options, testId }: {
         data-testid={testId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-[var(--color-line)] bg-navy-900 px-2 py-1 text-[11px] text-ink-100 focus:border-peri-400/50 focus:outline-none"
+        className="rounded-md border border-[var(--color-line)] bg-navy-900 px-2 py-1 text-[11px] text-ink-100 focus:border-cyan-400/50 focus:outline-none"
       >
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
@@ -798,7 +805,7 @@ function CohortView({ client, portfolioId, portfolioContext }: {
 /**
  * Evolution view — funded / pipeline / forecast metrics over time. Reads the
  * governed monthly funded runs and weekly pipeline extracts via the evolution
- * endpoints; every chart carries source lineage + per-period reconciliation.
+ * endpoints.
  */
 const ALL_EVO_TABS: EvoView[] = ["funded", "pipeline", "origination", "cohorts", "forecast"];
 
@@ -942,7 +949,7 @@ export function EvolutionPanel({
         <div className="flex items-center justify-between">
           {heading && (
             <div className="flex items-center gap-2 text-sm font-semibold text-ink-100">
-              <Activity size={16} className="text-peri-300" /> Evolution
+              <Activity size={16} className="text-cyan-300" /> Evolution
             </div>
           )}
           {allowed.length > 1 && (
@@ -954,7 +961,7 @@ export function EvolutionPanel({
                   className={cn(
                     "rounded-md px-3 py-1 text-[12px] font-medium transition-all",
                     view === v
-                      ? "bg-peri-400/20 text-ink-100 ring-1 ring-inset ring-peri-400/50"
+                      ? "bg-cyan-400/20 text-ink-100 ring-1 ring-inset ring-cyan-400/50"
                       : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100",
                   )}>
                   {EVO_TAB_LABEL[v]}

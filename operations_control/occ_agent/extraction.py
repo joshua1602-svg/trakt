@@ -119,6 +119,10 @@ _DATE = f"(?:{_ISO_DATE}|{_LONG_DATE}|{_MONTH_YEAR})"
 _COLOUR = r"#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})"
 _NAME_RUN = r"[A-Z][\w&'’-]*(?:\s+[A-Z0-9][\w&'’-]*){0,4}"
 _COUNTRY_CODE = r"[A-Z]{2}"
+#: A money or rate amount as an operator types it — "250,000,000", "£250m" is
+#: NOT accepted (an abbreviation is ambiguous about its magnitude), but a
+#: currency symbol and thousands separators are.
+_AMOUNT = r"[£$€]?\s?-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|[£$€]?\s?-?\d+(?:\.\d+)?"
 
 #: Patterns that match almost any word. Fine when the operator named the field
 #: outright; never used to guess a neighbouring one.
@@ -221,6 +225,7 @@ def _value_pattern(f: Field) -> Optional[str]:
         "date_or_nd": f"(?:{_DATE}|ND[A-Z]*)",
         "yes_no": r"(?:yes|no|y|n)",
         "boolean": r"(?:yes|no|true|false)",
+        "number": _AMOUNT,
     }.get(rule)
 
 

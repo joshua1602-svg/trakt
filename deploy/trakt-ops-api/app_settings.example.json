@@ -63,6 +63,9 @@
   { "_comment": "The OCC Agent tab itself. The mail adapter is only ever reached through it, so with this unset no route exists and nothing can be sent.",
     "name": "OCC_AGENT_SYNTHETIC_ENABLED", "value": "true" },
 
+  { "_comment": "Whether the OCC Agent may onboard a REAL client, as opposed to rehearsing. Fails closed: unset or unrecognised is OFF, and off means every case is a rehearsal that is refused at activation. Turning it on grants nothing by itself — it is one of eleven preconditions the activation gate checks, and the operator must additionally choose 'Real onboarding' and type the confirmation word when opening the case. What it DOES enable is the one governed crossing: on confirmation the approved answers are promoted into this container, where onboarding builds the client's live configuration. Leave unset in any environment that should only ever practise.",
+    "name": "OCC_AGENT_LIVE_ENABLED", "value": "true" },
+
   { "_comment": "Governed runtime mode. Leave UNSET in production: trakt_core defaults to 'production', which is what refuses fixture/synthetic source data. Listed here only so nobody adds it by accident.",
     "_do_not_set": "TRAKT_RUNTIME_MODE" }
 ]

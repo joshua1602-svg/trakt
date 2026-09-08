@@ -1,0 +1,1538 @@
+{
+ "schema": "trakt.mi.broad_certification/1",
+ "purpose": "Question strings and EXPECTATIONS only. No production answer payload, no monetary total and no row from any book is recorded here. Every expectation is either a safety class the product must honour on any governed book, or an identity between two live responses that stays true when the portfolio changes. A book that lacks a field must be free to refuse: refusal for a DATA reason is reported, never failed.",
+ "expectation_types": {
+  "MUST_ANSWER": "any governed book can answer this; a semantic refusal is a failure",
+  "MUST_REFUSE": "names something no governed vocabulary claims, in a position where a restriction goes; a figure here is a silent wrong answer",
+  "MAY_REFUSE_FOR_DATA": "needs a field not every book carries; scored fully if answered, reported as data if refused",
+  "EQUAL_TO": "same population AND same measure fingerprint",
+  "SAME_RESULT_AS": "same population, same measure fingerprint, same group keys and per-group values",
+  "SAME_POPULATION_AS": "same population size; the measures may legitimately differ",
+  "SUBSET_OF": "the narrowed population never exceeds the population it narrows",
+  "ATOMIC_EQUIVALENCE": "a composed restriction equals the same restrictions composed in another order",
+  "OUTPUT_COMPLETENESS": "every output the question asked for is present in the response",
+  "GROUPING_RECONCILIATION": "the parts of a partition sum to the whole, computed from this run only"
+ },
+ "singles": [
+  {
+   "id": "A01",
+   "cls": "A_basic_measure",
+   "q": "What is the total balance?",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "A02",
+   "cls": "A_basic_measure",
+   "q": "How many loans are there?",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "A03",
+   "cls": "A_basic_measure",
+   "q": "What is the average loan size?",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "A04",
+   "cls": "A_basic_measure",
+   "q": "Total balance",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "A05",
+   "cls": "A_basic_measure",
+   "q": "Loan count",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "A06",
+   "cls": "A_basic_measure",
+   "q": "What is the total current outstanding balance?",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "A07",
+   "cls": "A_basic_measure",
+   "q": "What is the average balance per loan?",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "A08",
+   "cls": "A_basic_measure",
+   "q": "What is the weighted average LTV?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "current LTV"
+  },
+  {
+   "id": "A09",
+   "cls": "A_basic_measure",
+   "q": "WA LTV",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "current LTV"
+  },
+  {
+   "id": "A10",
+   "cls": "A_basic_measure",
+   "q": "What is the average LTV?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "current LTV"
+  },
+  {
+   "id": "A11",
+   "cls": "A_basic_measure",
+   "q": "What is the largest loan balance?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a max aggregation"
+  },
+  {
+   "id": "A12",
+   "cls": "A_basic_measure",
+   "q": "What is the smallest loan balance?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a min aggregation"
+  },
+  {
+   "id": "A13",
+   "cls": "A_basic_measure",
+   "q": "What is the median loan size?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a median aggregation"
+  },
+  {
+   "id": "A14",
+   "cls": "A_basic_measure",
+   "q": "What is the average borrower age?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "borrower age"
+  },
+  {
+   "id": "B01",
+   "cls": "B_single_filter",
+   "q": "What is the total balance in Scotland?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a region field"
+  },
+  {
+   "id": "B02",
+   "cls": "B_single_filter",
+   "q": "What is the Scottish balance?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a region field"
+  },
+  {
+   "id": "B03",
+   "cls": "B_single_filter",
+   "q": "What is the total balance in Wales?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a region field"
+  },
+  {
+   "id": "B04",
+   "cls": "B_single_filter",
+   "q": "What is the Welsh balance?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a region field"
+  },
+  {
+   "id": "B05",
+   "cls": "B_single_filter",
+   "q": "What is the total balance in London?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a region field"
+  },
+  {
+   "id": "B06",
+   "cls": "B_single_filter",
+   "q": "How many loans are there in Scotland?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a region field"
+  },
+  {
+   "id": "B07",
+   "cls": "B_single_filter",
+   "q": "How many Yorkshire loans are there?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a region field",
+   "note": "Yorkshire is a GOVERNED ITL1 alias. It must never be treated as unknown material language."
+  },
+  {
+   "id": "B08",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for loans with LTV over 50%?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "current LTV"
+  },
+  {
+   "id": "B09",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for loans with LTV under 30%?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "current LTV"
+  },
+  {
+   "id": "B10",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for lump sum loans?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a product type field"
+  },
+  {
+   "id": "B11",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for drawdown loans?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a product type field"
+  },
+  {
+   "id": "B12",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for joint borrowers?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a borrower type field"
+  },
+  {
+   "id": "B13",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for single borrowers?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a borrower type field"
+  },
+  {
+   "id": "B14",
+   "cls": "B_single_filter",
+   "q": "How many loans have a balance over 200000?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a numeric balance predicate"
+  },
+  {
+   "id": "B15",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for borrowers over 75?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "borrower age"
+  },
+  {
+   "id": "B16",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for flats?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a property type field"
+  },
+  {
+   "id": "B17",
+   "cls": "B_single_filter",
+   "q": "What is the total balance for houses?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a property type field"
+  },
+  {
+   "id": "B18",
+   "cls": "B_single_filter",
+   "q": "What is the total balance excluding Scotland?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a negated region predicate"
+  },
+  {
+   "id": "C01",
+   "cls": "C_multiple_filters",
+   "q": "What is the total balance for lump sum loans in Scotland?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type and region"
+  },
+  {
+   "id": "C02",
+   "cls": "C_multiple_filters",
+   "q": "How many Scottish lump sum loans are there?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type and region"
+  },
+  {
+   "id": "C03",
+   "cls": "C_multiple_filters",
+   "q": "What is the total balance for joint borrowers in London?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "borrower type and region"
+  },
+  {
+   "id": "C04",
+   "cls": "C_multiple_filters",
+   "q": "What is the total balance for joint borrowers with LTV over 50%?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "borrower type and current LTV"
+  },
+  {
+   "id": "C05",
+   "cls": "C_multiple_filters",
+   "q": "What is the total balance in Wales for loans with LTV under 40%?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "region and current LTV"
+  },
+  {
+   "id": "C06",
+   "cls": "C_multiple_filters",
+   "q": "How many lump sum loans in London have LTV over 30%?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type, region and current LTV"
+  },
+  {
+   "id": "C07",
+   "cls": "C_multiple_filters",
+   "q": "What is the total balance for joint borrowers over 75 in Scotland?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "borrower type, age and region"
+  },
+  {
+   "id": "C08",
+   "cls": "C_multiple_filters",
+   "q": "What is the total balance for flats in London with LTV over 40%?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "property type, region and current LTV"
+  },
+  {
+   "id": "C09",
+   "cls": "C_multiple_filters",
+   "q": "What is the average loan size for lump sum loans in Wales?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type and region"
+  },
+  {
+   "id": "C10",
+   "cls": "C_multiple_filters",
+   "q": "How many drawdown loans are there in the North West?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type and region"
+  },
+  {
+   "id": "D01",
+   "cls": "D_grouping_1d",
+   "q": "Total balance by region",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "D02",
+   "cls": "D_grouping_1d",
+   "q": "Loan count by region",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "D03",
+   "cls": "D_grouping_1d",
+   "q": "Chart balance by region",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "D04",
+   "cls": "D_grouping_1d",
+   "q": "Show me balance by region",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "D05",
+   "cls": "D_grouping_1d",
+   "q": "Break down the balance by region",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "D06",
+   "cls": "D_grouping_1d",
+   "q": "Total balance by LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an LTV bucket"
+  },
+  {
+   "id": "D07",
+   "cls": "D_grouping_1d",
+   "q": "Total balance by product type",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a product type field"
+  },
+  {
+   "id": "D08",
+   "cls": "D_grouping_1d",
+   "q": "Total balance by borrower age band",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an age band"
+  },
+  {
+   "id": "D09",
+   "cls": "D_grouping_1d",
+   "q": "Loan count by LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an LTV bucket"
+  },
+  {
+   "id": "D10",
+   "cls": "D_grouping_1d",
+   "q": "Average loan size by region",
+   "expect": "MUST_ANSWER"
+  },
+  {
+   "id": "D11",
+   "cls": "D_grouping_1d",
+   "q": "Total balance by property type",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a property type field"
+  },
+  {
+   "id": "D12",
+   "cls": "D_grouping_1d",
+   "q": "Total balance by borrower type",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a borrower type field"
+  },
+  {
+   "id": "E01",
+   "cls": "E_grouping_2d",
+   "q": "Chart balance by region by LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an LTV bucket"
+  },
+  {
+   "id": "E02",
+   "cls": "E_grouping_2d",
+   "q": "Total balance by region and LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an LTV bucket"
+  },
+  {
+   "id": "E03",
+   "cls": "E_grouping_2d",
+   "q": "Total balance by LTV band by region",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an LTV bucket"
+  },
+  {
+   "id": "E04",
+   "cls": "E_grouping_2d",
+   "q": "Chart balance by region by product type",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a product type field"
+  },
+  {
+   "id": "E05",
+   "cls": "E_grouping_2d",
+   "q": "Loan count by region and product type",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a product type field"
+  },
+  {
+   "id": "E06",
+   "cls": "E_grouping_2d",
+   "q": "Total balance by product type and LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type and an LTV bucket"
+  },
+  {
+   "id": "E07",
+   "cls": "E_grouping_2d",
+   "q": "Chart balance by borrower age band by LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an age band and an LTV bucket"
+  },
+  {
+   "id": "E08",
+   "cls": "E_grouping_2d",
+   "q": "Total balance by region and borrower type",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a borrower type field"
+  },
+  {
+   "id": "F01",
+   "cls": "F_filtered_grouping",
+   "q": "Total balance by region for lump sum loans",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a product type field"
+  },
+  {
+   "id": "F02",
+   "cls": "F_filtered_grouping",
+   "q": "Total balance by LTV band in Scotland",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an LTV bucket and a region field"
+  },
+  {
+   "id": "F03",
+   "cls": "F_filtered_grouping",
+   "q": "Loan count by region for joint borrowers",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a borrower type field"
+  },
+  {
+   "id": "F04",
+   "cls": "F_filtered_grouping",
+   "q": "Total balance by product type in Wales",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type and a region field"
+  },
+  {
+   "id": "F05",
+   "cls": "F_filtered_grouping",
+   "q": "Total balance by region for loans with LTV over 50%",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "current LTV"
+  },
+  {
+   "id": "F06",
+   "cls": "F_filtered_grouping",
+   "q": "Chart balance by LTV band for lump sum loans",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "product type and an LTV bucket"
+  },
+  {
+   "id": "F07",
+   "cls": "F_filtered_grouping",
+   "q": "Total balance by region for joint borrowers with LTV over 50%",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "borrower type and current LTV"
+  },
+  {
+   "id": "F08",
+   "cls": "F_filtered_grouping",
+   "q": "Average loan size by region for lump sum loans",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a product type field"
+  },
+  {
+   "id": "F09",
+   "cls": "F_filtered_grouping",
+   "q": "Loan count by LTV band for borrowers over 75",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "borrower age and an LTV bucket"
+  },
+  {
+   "id": "F10",
+   "cls": "F_filtered_grouping",
+   "q": "Total balance by borrower age band in London",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an age band and a region field"
+  },
+  {
+   "id": "I01",
+   "cls": "I_temporal_specialist",
+   "q": "Compare balance over time",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a reporting date"
+  },
+  {
+   "id": "I02",
+   "cls": "I_temporal_specialist",
+   "q": "Show balance over time",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a reporting date"
+  },
+  {
+   "id": "I03",
+   "cls": "I_temporal_specialist",
+   "q": "How has the balance moved since last quarter?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a reporting date"
+  },
+  {
+   "id": "I04",
+   "cls": "I_temporal_specialist",
+   "q": "Total balance by month",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a reporting date"
+  },
+  {
+   "id": "I05",
+   "cls": "I_temporal_specialist",
+   "q": "What is the balance trend by region?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a reporting date"
+  },
+  {
+   "id": "I06",
+   "cls": "I_temporal_specialist",
+   "q": "What will the balance be next year?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a forecast capability"
+  },
+  {
+   "id": "I07",
+   "cls": "I_temporal_specialist",
+   "q": "Run a stress test on the portfolio",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a stress capability"
+  },
+  {
+   "id": "I08",
+   "cls": "I_temporal_specialist",
+   "q": "What is the NNEG exposure?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "an NNEG capability"
+  },
+  {
+   "id": "I09",
+   "cls": "I_temporal_specialist",
+   "q": "Show me the redemption rate",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "redemption data"
+  },
+  {
+   "id": "I10",
+   "cls": "I_temporal_specialist",
+   "q": "What is the balance as at 31 December 2024?",
+   "expect": "MAY_REFUSE_FOR_DATA",
+   "needs": "a reporting date"
+  },
+  {
+   "id": "J01",
+   "cls": "J_adversarial",
+   "q": "What is the platinum balance?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J02",
+   "cls": "J_adversarial",
+   "q": "How many platinum loans do we have?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J03",
+   "cls": "J_adversarial",
+   "q": "What is the platinum balance by region?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J04",
+   "cls": "J_adversarial",
+   "q": "Total balance by region for platinum loans",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J05",
+   "cls": "J_adversarial",
+   "q": "What is the Cornish balance?",
+   "expect": "MUST_REFUSE",
+   "note": "Cornwall sits inside South West (England); no ITL1 value bears its name."
+  },
+  {
+   "id": "J06",
+   "cls": "J_adversarial",
+   "q": "How many loans are there in Cornwall?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J07",
+   "cls": "J_adversarial",
+   "q": "Show me the premium loans",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J08",
+   "cls": "J_adversarial",
+   "q": "What is the distressed balance?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J09",
+   "cls": "J_adversarial",
+   "q": "What is the unicorn ratio by region?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J10",
+   "cls": "J_adversarial",
+   "q": "Show me the gold tier loans",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J11",
+   "cls": "J_adversarial",
+   "q": "What is the zephyr balance?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J12",
+   "cls": "J_adversarial",
+   "q": "How many obsidian loans are there?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J13",
+   "cls": "J_adversarial",
+   "q": "Total balance for chartreuse borrowers",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J14",
+   "cls": "J_adversarial",
+   "q": "What is the total balance for velvet products?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J15",
+   "cls": "J_adversarial",
+   "q": "Loan count by region for titanium loans",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J16",
+   "cls": "J_adversarial",
+   "q": "What is the balance in Ruritania?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J17",
+   "cls": "J_adversarial",
+   "q": "What is the average loan size for marquee borrowers?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J18",
+   "cls": "J_adversarial",
+   "q": "Chart the balance by sparkle band",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J19",
+   "cls": "J_adversarial",
+   "q": "What is the total balance for loans in the bronze cohort?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "J20",
+   "cls": "J_adversarial",
+   "q": "How many loans are in the twilight segment?",
+   "expect": "MUST_REFUSE"
+  }
+ ],
+ "outputs": [
+  {
+   "id": "G01",
+   "cls": "G_multi_output",
+   "q": "Show total balance and loan count by region",
+   "expect_outputs": [
+    "balance",
+    "loan count"
+   ]
+  },
+  {
+   "id": "G02",
+   "cls": "G_multi_output",
+   "q": "Show balance and average loan size by region",
+   "expect_outputs": [
+    "balance",
+    "average loan size"
+   ]
+  },
+  {
+   "id": "G03",
+   "cls": "G_multi_output",
+   "q": "Total balance and loan count by LTV band",
+   "expect_outputs": [
+    "balance",
+    "loan count"
+   ],
+   "needs": "an LTV bucket"
+  },
+  {
+   "id": "G04",
+   "cls": "G_multi_output",
+   "q": "Give me loan count and total balance by product type",
+   "expect_outputs": [
+    "loan count",
+    "balance"
+   ],
+   "needs": "a product type field"
+  },
+  {
+   "id": "G05",
+   "cls": "G_multi_output",
+   "q": "Show balance, loan count and average loan size by region",
+   "expect_outputs": [
+    "balance",
+    "loan count",
+    "average loan size"
+   ]
+  },
+  {
+   "id": "G06",
+   "cls": "G_multi_output",
+   "q": "Total balance and WA LTV by region",
+   "expect_outputs": [
+    "balance",
+    "LTV"
+   ],
+   "needs": "current LTV"
+  },
+  {
+   "id": "G07",
+   "cls": "G_multi_output",
+   "q": "Show me balance and loan count by region for lump sum loans",
+   "expect_outputs": [
+    "balance",
+    "loan count"
+   ],
+   "needs": "a product type field"
+  },
+  {
+   "id": "G08",
+   "cls": "G_multi_output",
+   "q": "Loan count and balance by region and LTV band",
+   "expect_outputs": [
+    "loan count",
+    "balance"
+   ],
+   "needs": "an LTV bucket"
+  }
+ ],
+ "output_local": [
+  {
+   "id": "H01",
+   "cls": "H_output_local",
+   "broad": "Total balance by region",
+   "narrowed": "Total balance by region for lump sum loans",
+   "needs": "a product type field"
+  },
+  {
+   "id": "H02",
+   "cls": "H_output_local",
+   "broad": "Loan count by region",
+   "narrowed": "Loan count by region for joint borrowers",
+   "needs": "a borrower type field"
+  },
+  {
+   "id": "H03",
+   "cls": "H_output_local",
+   "broad": "Total balance by LTV band",
+   "narrowed": "Total balance by LTV band in Scotland",
+   "needs": "an LTV bucket and a region field"
+  },
+  {
+   "id": "H04",
+   "cls": "H_output_local",
+   "broad": "Total balance by region",
+   "narrowed": "Total balance by region for loans with LTV over 50%",
+   "needs": "current LTV"
+  },
+  {
+   "id": "H05",
+   "cls": "H_output_local",
+   "broad": "Average loan size by region",
+   "narrowed": "Average loan size by region for lump sum loans",
+   "needs": "a product type field"
+  },
+  {
+   "id": "H06",
+   "cls": "H_output_local",
+   "broad": "Total balance by product type",
+   "narrowed": "Total balance by product type in Wales",
+   "needs": "product type and a region field"
+  }
+ ],
+ "equivalence_groups": [
+  {
+   "id": "EQ01",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "questions": [
+    "What is the total balance?",
+    "Total balance",
+    "What's the total balance?"
+   ]
+  },
+  {
+   "id": "EQ02",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "questions": [
+    "How many loans are there?",
+    "Loan count",
+    "How many loans do we have?"
+   ]
+  },
+  {
+   "id": "EQ03",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "a region field",
+   "questions": [
+    "What is the total balance in Scotland?",
+    "What is the Scottish balance?",
+    "What is the total balance for Scottish loans?"
+   ]
+  },
+  {
+   "id": "EQ04",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "a region field",
+   "questions": [
+    "What is the total balance in Wales?",
+    "What is the Welsh balance?"
+   ]
+  },
+  {
+   "id": "EQ05",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "questions": [
+    "Total balance by region",
+    "Chart balance by region",
+    "Show me balance by region"
+   ]
+  },
+  {
+   "id": "EQ06",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "questions": [
+    "Break down the balance by region",
+    "Total balance broken down by region"
+   ]
+  },
+  {
+   "id": "EQ07",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "questions": [
+    "What is the average loan size?",
+    "What is the average balance per loan?"
+   ]
+  },
+  {
+   "id": "EQ08",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "a region field",
+   "questions": [
+    "How many loans are there in Scotland?",
+    "How many Scottish loans are there?"
+   ]
+  },
+  {
+   "id": "EQ09",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "a product type field",
+   "questions": [
+    "What is the total balance for lump sum loans?",
+    "What is the total balance for Lump Sum products?"
+   ]
+  },
+  {
+   "id": "EQ10",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "a borrower type field",
+   "questions": [
+    "What is the total balance for joint borrowers?",
+    "What is the total balance for joint borrower loans?"
+   ]
+  },
+  {
+   "id": "EQ11",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "current LTV",
+   "questions": [
+    "What is the total balance for loans with LTV over 50%?",
+    "What is the total balance for loans with LTV above 50%?",
+    "What is the total balance for loans with LTV greater than 50%?"
+   ]
+  },
+  {
+   "id": "EQ12",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "needs": "an LTV bucket",
+   "questions": [
+    "Total balance by region and LTV band",
+    "Total balance by region by LTV band"
+   ]
+  },
+  {
+   "id": "EQ13",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "current LTV",
+   "questions": [
+    "WA LTV",
+    "What is the weighted average LTV?"
+   ]
+  },
+  {
+   "id": "EQ14",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "a region field",
+   "questions": [
+    "What is the total balance in London?",
+    "What is the total balance for London loans?"
+   ]
+  },
+  {
+   "id": "EQ15",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "questions": [
+    "Show total balance and loan count by region",
+    "Show loan count and total balance by region"
+   ]
+  },
+  {
+   "id": "EQ16",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "questions": [
+    "Loan count by region",
+    "Number of loans by region"
+   ]
+  },
+  {
+   "id": "EQ17",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "needs": "a product type field",
+   "questions": [
+    "Total balance by region for lump sum loans",
+    "For lump sum loans, total balance by region"
+   ]
+  },
+  {
+   "id": "EQ18",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "a region field",
+   "questions": [
+    "How many Yorkshire loans are there?",
+    "How many loans are there in Yorkshire?"
+   ],
+   "note": "Yorkshire is a governed ITL1 alias; both wordings must bind the same population."
+  },
+  {
+   "id": "EQ19",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "questions": [
+    "Average loan size by region",
+    "Average balance per loan by region"
+   ]
+  },
+  {
+   "id": "EQ20",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "product type and a region field",
+   "questions": [
+    "What is the total balance for lump sum loans in Scotland?",
+    "How many Scottish lump sum loans are there?"
+   ],
+   "population_only": true,
+   "note": "Different measures, one population: scored as SAME_POPULATION_AS."
+  },
+  {
+   "id": "EQ21",
+   "cls": "F_equivalence",
+   "relation": "SAME_RESULT_AS",
+   "needs": "a product type field",
+   "questions": [
+    "Total balance by product type",
+    "Total balance by product"
+   ]
+  },
+  {
+   "id": "EQ22",
+   "cls": "F_equivalence",
+   "relation": "EQUAL_TO",
+   "needs": "current LTV",
+   "questions": [
+    "What is the total balance for loans with LTV under 30%?",
+    "What is the total balance for loans with LTV below 30%?"
+   ]
+  }
+ ],
+ "subset_pairs": [
+  {
+   "id": "SB01",
+   "cls": "G_subset",
+   "whole": "What is the total balance?",
+   "part": "What is the total balance in Scotland?",
+   "needs": "a region field"
+  },
+  {
+   "id": "SB02",
+   "cls": "G_subset",
+   "whole": "How many loans are there?",
+   "part": "How many loans are there in Scotland?",
+   "needs": "a region field"
+  },
+  {
+   "id": "SB03",
+   "cls": "G_subset",
+   "whole": "What is the total balance?",
+   "part": "What is the total balance for joint borrowers?",
+   "needs": "a borrower type field"
+  },
+  {
+   "id": "SB04",
+   "cls": "G_subset",
+   "whole": "What is the total balance?",
+   "part": "What is the total balance for lump sum loans?",
+   "needs": "a product type field"
+  },
+  {
+   "id": "SB05",
+   "cls": "G_subset",
+   "whole": "What is the total balance?",
+   "part": "What is the total balance for loans with LTV over 50%?",
+   "needs": "current LTV"
+  },
+  {
+   "id": "SB06",
+   "cls": "G_subset",
+   "whole": "What is the total balance in Scotland?",
+   "part": "What is the total balance for lump sum loans in Scotland?",
+   "needs": "product type and a region field"
+  },
+  {
+   "id": "SB07",
+   "cls": "G_subset",
+   "whole": "What is the total balance for lump sum loans?",
+   "part": "What is the total balance for lump sum loans in Scotland?",
+   "needs": "product type and a region field"
+  },
+  {
+   "id": "SB08",
+   "cls": "G_subset",
+   "whole": "What is the total balance for joint borrowers?",
+   "part": "What is the total balance for joint borrowers with LTV over 50%?",
+   "needs": "borrower type and current LTV"
+  },
+  {
+   "id": "SB09",
+   "cls": "G_subset",
+   "whole": "What is the total balance in London?",
+   "part": "What is the total balance for flats in London with LTV over 40%?",
+   "needs": "property type, region and current LTV"
+  },
+  {
+   "id": "SB10",
+   "cls": "G_subset",
+   "whole": "How many loans are there?",
+   "part": "How many loans are there in Scotland?",
+   "needs": "a region field"
+  }
+ ],
+ "algebra": [
+  {
+   "id": "AL01",
+   "cls": "H_filter_algebra",
+   "property": "filter commutativity",
+   "relation": "ATOMIC_EQUIVALENCE",
+   "needs": "product type and a region field",
+   "questions": [
+    "What is the total balance for lump sum loans in Scotland?",
+    "What is the total balance in Scotland for lump sum loans?"
+   ]
+  },
+  {
+   "id": "AL02",
+   "cls": "H_filter_algebra",
+   "property": "filter commutativity",
+   "relation": "ATOMIC_EQUIVALENCE",
+   "needs": "borrower type and current LTV",
+   "questions": [
+    "What is the total balance for joint borrowers with LTV over 50%?",
+    "What is the total balance for loans with LTV over 50% for joint borrowers?"
+   ]
+  },
+  {
+   "id": "AL03",
+   "cls": "H_filter_algebra",
+   "property": "dimension order does not change the cells",
+   "relation": "SAME_CELLS_AS",
+   "needs": "an LTV bucket",
+   "questions": [
+    "Total balance by region and LTV band",
+    "Total balance by LTV band and region"
+   ]
+  },
+  {
+   "id": "AL04",
+   "cls": "H_filter_algebra",
+   "property": "dimension order does not change the cells",
+   "relation": "SAME_CELLS_AS",
+   "needs": "a product type field",
+   "questions": [
+    "Total balance by region and product type",
+    "Total balance by product type and region"
+   ]
+  },
+  {
+   "id": "AL05",
+   "cls": "H_filter_algebra",
+   "property": "an additional filter never widens",
+   "relation": "SUBSET_OF",
+   "needs": "product type and a region field",
+   "whole": "What is the total balance in Scotland?",
+   "part": "What is the total balance for lump sum loans in Scotland?"
+  },
+  {
+   "id": "AL06",
+   "cls": "H_filter_algebra",
+   "property": "an additional filter never widens",
+   "relation": "SUBSET_OF",
+   "needs": "borrower type and a region field",
+   "whole": "What is the total balance for joint borrowers?",
+   "part": "What is the total balance for joint borrowers in London?"
+  },
+  {
+   "id": "AL07",
+   "cls": "H_filter_algebra",
+   "property": "a composed restriction is inside each atom",
+   "relation": "SUBSET_OF_BOTH",
+   "needs": "borrower type and current LTV",
+   "part": "What is the total balance for joint borrowers with LTV over 50%?",
+   "atoms": [
+    "What is the total balance for joint borrowers?",
+    "What is the total balance for loans with LTV over 50%?"
+   ]
+  },
+  {
+   "id": "AL08",
+   "cls": "H_filter_algebra",
+   "property": "grouping does not change the population",
+   "relation": "SAME_POPULATION_AS",
+   "questions": [
+    "What is the total balance?",
+    "Total balance by region"
+   ]
+  },
+  {
+   "id": "AL09",
+   "cls": "H_filter_algebra",
+   "property": "grouping does not change the population under a filter",
+   "relation": "SAME_POPULATION_AS",
+   "needs": "an LTV bucket and a region field",
+   "questions": [
+    "What is the total balance in Scotland?",
+    "Total balance by LTV band in Scotland"
+   ]
+  },
+  {
+   "id": "AL10",
+   "cls": "H_filter_algebra",
+   "property": "a second dimension does not change the population",
+   "relation": "SAME_POPULATION_AS",
+   "needs": "an LTV bucket",
+   "questions": [
+    "Total balance by region",
+    "Total balance by region and LTV band"
+   ]
+  }
+ ],
+ "reconciliations": [
+  {
+   "id": "RC01",
+   "cls": "I_numeric_identity",
+   "total": "What is the total balance?",
+   "grouped": "Total balance by region"
+  },
+  {
+   "id": "RC02",
+   "cls": "I_numeric_identity",
+   "total": "How many loans are there?",
+   "grouped": "Loan count by region"
+  },
+  {
+   "id": "RC03",
+   "cls": "I_numeric_identity",
+   "total": "What is the total balance?",
+   "grouped": "Total balance by LTV band",
+   "needs": "an LTV bucket"
+  },
+  {
+   "id": "RC04",
+   "cls": "I_numeric_identity",
+   "total": "What is the total balance?",
+   "grouped": "Total balance by product type",
+   "needs": "a product type field"
+  },
+  {
+   "id": "RC05",
+   "cls": "I_numeric_identity",
+   "total": "What is the total balance in Scotland?",
+   "grouped": "Total balance by LTV band in Scotland",
+   "needs": "an LTV bucket and a region field"
+  },
+  {
+   "id": "RC06",
+   "cls": "I_numeric_identity",
+   "total": "What is the total balance?",
+   "grouped": "Total balance by region and LTV band",
+   "needs": "an LTV bucket"
+  }
+ ],
+ "arithmetic": [
+  {
+   "id": "AR01",
+   "cls": "I_numeric_identity",
+   "identity": "mean x population == total",
+   "mean": "What is the average loan size?",
+   "count": "How many loans are there?",
+   "total": "What is the total balance?"
+  },
+  {
+   "id": "AR02",
+   "cls": "I_numeric_identity",
+   "identity": "mean x population == total, under a filter",
+   "mean": "What is the average loan size in Scotland?",
+   "count": "How many loans are there in Scotland?",
+   "total": "What is the total balance in Scotland?",
+   "needs": "a region field"
+  },
+  {
+   "id": "AR03",
+   "cls": "I_numeric_identity",
+   "identity": "group shares sum to the whole",
+   "grouped": "Total balance by region"
+  }
+ ],
+ "holdout": [
+  {
+   "id": "K01",
+   "cls": "holdout",
+   "q": "What proportion of the book is in Scotland?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K02",
+   "cls": "holdout",
+   "q": "Which region has the largest balance?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K03",
+   "cls": "holdout",
+   "q": "Show me the top 3 regions by balance",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K04",
+   "cls": "holdout",
+   "q": "What share of the balance sits above 50% LTV?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K05",
+   "cls": "holdout",
+   "q": "How concentrated is the book by region?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K06",
+   "cls": "holdout",
+   "q": "What is the total balance for properties in the South East?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K07",
+   "cls": "holdout",
+   "q": "Give me a breakdown of loans by region",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K08",
+   "cls": "holdout",
+   "q": "How much is lent in Northern Ireland?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K09",
+   "cls": "holdout",
+   "q": "What is the Northern Irish balance?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K10",
+   "cls": "holdout",
+   "q": "Total balance by region, largest first",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K11",
+   "cls": "holdout",
+   "q": "How many loans sit in each LTV band?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K12",
+   "cls": "holdout",
+   "q": "What is the average loan size in London?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K13",
+   "cls": "holdout",
+   "q": "Balance by region for borrowers under 70",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K14",
+   "cls": "holdout",
+   "q": "What is the total balance for interest roll-up loans?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K15",
+   "cls": "holdout",
+   "q": "Which product type has the most loans?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "K16",
+   "cls": "holdout",
+   "q": "What is the total balance for the emerald tranche?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "K17",
+   "cls": "holdout",
+   "q": "How many loans are in the aurora band?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "K18",
+   "cls": "holdout",
+   "q": "Show me balance by lustre grade",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "K19",
+   "cls": "holdout",
+   "q": "What is the balance for borrowers in Atlantis?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "K20",
+   "cls": "holdout",
+   "q": "Total balance for filigree products",
+   "expect": "MUST_REFUSE"
+  }
+ ],
+ "fresh_holdout": [
+  {
+   "id": "P01",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for cinnabar products?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P02",
+   "cls": "fresh_holdout",
+   "q": "Show me the balance by pergola band",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P03",
+   "cls": "fresh_holdout",
+   "q": "How many loans are in the thimble cohort?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P04",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for alabaster borrowers?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P05",
+   "cls": "fresh_holdout",
+   "q": "Total balance by region for sextant loans",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P06",
+   "cls": "fresh_holdout",
+   "q": "What is the balance for borrowers in Mulberry Vale?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P07",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for loans in the nutmeg segment?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P08",
+   "cls": "fresh_holdout",
+   "q": "Chart loan count by wicker type",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P09",
+   "cls": "fresh_holdout",
+   "q": "What is the marzipan balance?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P10",
+   "cls": "fresh_holdout",
+   "q": "How many loans have a quillon rating?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P11",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for loans of the lantern vintage?",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P12",
+   "cls": "fresh_holdout",
+   "q": "Show balance by region for borrowers in Sableford",
+   "expect": "MUST_REFUSE"
+  },
+  {
+   "id": "P13",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance by ticket size?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P14",
+   "cls": "fresh_holdout",
+   "q": "Loan count by tenure",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P15",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for loans in Scotland and Wales?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P16",
+   "cls": "fresh_holdout",
+   "q": "Chart balance by original LTV band",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P17",
+   "cls": "fresh_holdout",
+   "q": "What is the total balance for borrowers in the North West?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P18",
+   "cls": "fresh_holdout",
+   "q": "How many loans are in each region?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P19",
+   "cls": "fresh_holdout",
+   "q": "What is the weighted average LTV by region?",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  },
+  {
+   "id": "P20",
+   "cls": "fresh_holdout",
+   "q": "Total balance for loans with a balance over 100000",
+   "expect": "MAY_REFUSE_FOR_DATA"
+  }
+ ]
+}

@@ -288,15 +288,15 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
         )
     vals = coerce_numeric(df[value_col])
     if aggregation == "sum":
-        return float(vals.sum())
+        return _scalar(vals.sum(), aggregation, len(vals))
     if aggregation == "avg":
-        return float(vals.mean())
+        return _scalar(vals.mean(), aggregation, len(vals))
     if aggregation == "median":
-        return float(vals.median())
+        return _scalar(vals.median(), aggregation, len(vals))
     if aggregation == "min":
-        return float(vals.min())
+        return _scalar(vals.min(), aggregation, len(vals))
     if aggregation == "max":
-        return float(vals.max())
+        return _scalar(vals.max(), aggregation, len(vals))
     if aggregation == "weighted_avg":
         if not weight_col:
             raise MIQueryExecutionError("weighted_avg requires a weight field")
@@ -307,6 +307,47 @@ def aggregate_series(df: pd.DataFrame, value_col: Optional[str], aggregation: st
             return float("nan")
         return float((vals[mask] * w[mask]).sum() / denom)
     raise MIQueryExecutionError(f"Unsupported aggregation: {aggregation!r}")
+
+
+def _scalar(value: Any, aggregation: str, rows: int) -> float:
+    """A pandas aggregate as a float, or a typed refusal when it is not one.
+
+    WHY THIS EXISTS. `coerce_numeric` returns a pandas NULLABLE dtype, and a
+    nullable series that is empty — or all-null — aggregates to `pd.NA`, not to
+    `nan`. `float(pd.NA)` raises `TypeError`, which is not an
+    `MIQueryExecutionError`, so it escaped the executor's own error handling
+    entirely and reached the request as an unexplained fault:
+
+        TypeError: float() argument must be a string or a real number,
+                   not 'NAType'
+        -> "The MI Agent could not complete this query."
+
+    Measured on the live book: "how much outstanding balance do we have where
+    borrower age exceeds 75 and LTV is over 40%?" — a question whose filter
+    matches no rows in the Direct portfolio, which is a FACT about that book and
+    not a fault. Its near-identical sibling refused properly, naming the filter,
+    because it happened to route somewhere that checked first.
+
+    The message says "no rows" deliberately: `mi_service._error_code_for` reads
+    that phrase out of the validation errors and classifies the outcome
+    NO_MATCHING_RECORDS, which is what actually happened, rather than
+    CALCULATION_FAILED, which is what a crash looks like.
+
+    ONE OWNER for every scalar aggregation. `sum` is included even though an
+    empty sum is 0 rather than NA — a guard that covers four of five sites is
+    the shape this defect had in the first place.
+    """
+    if value is None or value is pd.NA or (
+            isinstance(value, float) and value != value and rows == 0):
+        raise MIQueryExecutionError(
+            "no rows to aggregate: %s over %d row(s) is undefined, so no "
+            "figure was produced" % (aggregation, rows))
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise MIQueryExecutionError(
+            "no rows to aggregate: %s produced a non-numeric result over "
+            "%d row(s)" % (aggregation, rows)) from None
 
 
 def _metric_col_name(value_col: Optional[str], aggregation: str,
@@ -566,22 +607,40 @@ def governed_predicate_mask(work: pd.DataFrame, field_key: str, op: Any, value: 
     #    spec used to say so.
     if resolved_op in ("eq", "ne") and isinstance(value, str):
         target = value.strip().casefold()
-        same = col.astype(str).str.strip().str.casefold() == target
-        if not same.any():
-            # VALUE RESOLUTION. The exact match reached nothing, which is not
-            # the same as there being nothing to reach: "London" matches no row
-            # on a book whose region column holds TLI43. The executor does not
-            # know what a region is; it asks the semantics what domain the
-            # field's values are drawn from, and the domain resolves the term.
-            resolved = _resolve_domain_value(entry.get("value_domain"), value, col)
-            if resolved:
-                wanted = {str(v).strip().casefold() for v in resolved}
-                same = col.astype(str).str.strip().str.casefold().isin(wanted)
-                if warnings is not None:
-                    warnings.append(
-                        f"filter {field_key}: "
-                        + _describe_domain_value(entry.get("value_domain"),
-                                                 value, resolved))
+        folded = col.astype(str).str.strip().str.casefold()
+        same = folded == target
+        # VALUE RESOLUTION, ASKED ON EVERY CATEGORICAL FILTER — not only when
+        # the exact match reached nothing. Two cases need it and only one of
+        # them is empty:
+        #
+        #   nothing matched   "London" reaches no row on a book whose region
+        #                     column holds TLI43.
+        #   SOMETHING matched but not everything. A tape carrying the direct
+        #                     and acquired books' own spellings holds
+        #                     "YORKSHIRE AND HUMBERSIDE", "Yorkshire and
+        #                     humberside" and "Yorkshire & Humberside" as three
+        #                     categories. Asking only on empty returned FIVE of
+        #                     sixty-five loans and called it the answer.
+        #
+        # The executor still does not know what a region is: it asks the
+        # semantics which domain the field's values are drawn from, and the
+        # domain says which present values the term denotes. The result is
+        # UNIONED, so a resolution can only ever add rows the term genuinely
+        # names — never drop one the exact match found.
+        resolved = _resolve_domain_value(entry.get("value_domain"), value, col)
+        if resolved:
+            wanted = {str(v).strip().casefold() for v in resolved}
+            widened = folded.isin(wanted)
+            added = bool((widened & ~same).any())
+            same = same | widened
+            # Disclosed only where it CHANGED the population: a resolution the
+            # reader cannot see is a substitution, and one that added nothing is
+            # noise on every regional answer in the book.
+            if added and warnings is not None:
+                warnings.append(
+                    f"filter {field_key}: "
+                    + _describe_domain_value(entry.get("value_domain"),
+                                             value, resolved))
         mask = ~same if resolved_op == "ne" else same
         return PredicateExecution(mask.fillna(False), value, applied_keys,
                                   PREDICATE_CATEGORICAL, resolved_op)
@@ -665,9 +724,47 @@ def _describe_domain_value(domain: Optional[str], value: str, resolved: List) ->
     return f"{value} → {resolved!r}"
 
 
+def predicate_evidence(field_key: str, execution: "PredicateExecution",
+                       semantics: dict, rows_before: int, rows_after: int
+                       ) -> Dict[str, Any]:
+    """ONE executed predicate, as a structure a proof layer can reason about.
+
+    WHAT WAS EXECUTED, not what was asked for. `applied_filter_fields` — the
+    evidence this estate has carried since P1K — records that a FIELD narrowed
+    and nothing else, which is enough for a facet whose identity is a field and
+    not enough for one whose identity is a VALUE. A requested geographic scope
+    is the second kind: "Scotland" is the request, so proving that
+    `collateral_geography` was filtered proves nothing about whether the answer
+    is about Scotland or about Wales. The value was computed here, quoted into a
+    warning string, and then discarded; this keeps it.
+
+    ROW COUNTS ARE AUDIT CONTEXT, NEVER THE CRITERION. A predicate that ran
+    correctly can leave the row count unmoved — every loan in a single-region
+    book is in that region — and can equally leave zero rows. Both executed. The
+    EVIDENCE that a predicate was applied is that
+    :func:`governed_predicate_mask` resolved the field, built a mask and
+    returned; `rows_before`/`rows_after` are carried so an auditor can see what
+    it did, and a reader that treats them as the test reintroduces the exact
+    inference `reconcile_facets` was corrected for.
+    """
+    entry = (semantics.get("fields", {}) or {}).get(field_key) or {}
+    raw = execution.normalised_value
+    values = list(raw) if isinstance(raw, (list, tuple, set)) else [raw]
+    return {
+        "field": str(field_key),
+        "canonical_field": str(entry.get("canonical_field") or field_key),
+        "op": str(execution.resolved_op),
+        "kind": str(execution.kind),
+        "values": [None if v is None else str(v) for v in values],
+        "rows_before": int(rows_before),
+        "rows_after": int(rows_after),
+    }
+
+
 def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
                    warnings: List[str],
-                   applied: Optional[List[str]] = None) -> pd.DataFrame:
+                   applied: Optional[List[str]] = None,
+                   executed: Optional[List[Dict[str, Any]]] = None) -> pd.DataFrame:
     """Narrow the frame, and record WHICH fields actually narrowed it.
 
     ``applied`` collects the semantic field key of every filter this function
@@ -676,6 +773,11 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
     mask has been applied. `reconcile_facets` reads it to stamp a population
     facet on the point-in-time path, which before this had no evidence source at
     all and therefore refused every population that reached it.
+
+    ``executed`` collects the same executions as STRUCTURES — field, operator
+    and the values actually compared — through `predicate_evidence`. Same
+    evidence, said completely: see that function for why a field alone cannot
+    prove a facet whose identity is a value.
     """
     if not spec.filters:
         return work
@@ -691,6 +793,9 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
         if applied is not None:
             applied.extend(execution.applied_keys)
         work = work[execution.mask]
+        if executed is not None:
+            executed.append(predicate_evidence(field_key, execution, semantics,
+                                               before, int(len(work))))
         raw = execution.normalised_value
         if execution.kind == PREDICATE_MEMBERSHIP:
             warnings.append(f"filter {field_key} {execution.resolved_op} {list(raw)!r}"
@@ -1550,7 +1655,9 @@ def execute_mi_query(
     # (crashing numeric coercion). Fail fast with a controlled, explained error.
     _guard_duplicate_columns(spec, work, semantics)
     applied_filter_fields: List[str] = []
-    work = _apply_filters(work, spec, semantics, warnings, applied_filter_fields)
+    applied_predicates: List[Dict[str, Any]] = []
+    work = _apply_filters(work, spec, semantics, warnings, applied_filter_fields,
+                          applied_predicates)
 
     balance_col = resolve_default_balance_field(semantics, work.columns)
     scale, scale_median = _detect_percent_scale(df, semantics)
@@ -1753,6 +1860,12 @@ def execute_mi_query(
     # EVIDENCE, distinct from `reconciliation.filters`, which echoes the spec.
     # These are the fields a predicate actually ran against, in this book.
     metadata["applied_filter_fields"] = list(dict.fromkeys(applied_filter_fields))
+    # THE SAME EVIDENCE, SAID COMPLETELY. `applied_filter_fields` answers "which
+    # fields narrowed"; this answers "which field, which operator, which values"
+    # — the question a facet identified by a VALUE has to ask. See
+    # `predicate_evidence`, including why the row counts here are context and
+    # never the test.
+    metadata["applied_predicates"] = applied_predicates
 
     # Surface the governed derived-metric definition (e.g. "average loan balance"
     # = sum(current_outstanding_balance)/count(loans)) so the computed figure is

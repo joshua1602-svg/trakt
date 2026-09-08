@@ -134,8 +134,15 @@ def mount_occ_agent(application: FastAPI) -> bool:
         from ..occ_agent import api as occ_agent_api
         from ..occ_agent.service import OccAgentService
         storage = open_storage()
+        # The engine is what turns a confirmed activation into a real delivery.
+        # Without it the Agent can only ever rehearse, whatever the live flag
+        # says — `_default_adapter` requires BOTH. Passing it here is half of
+        # switching live execution on; the other half is the governed
+        # onboarding service the Agent promotes into, which it builds itself
+        # from the same flag.
         occ_agent_api.configure(
-            OccAgentService(storage, communication=_outbound_mail(storage)))
+            OccAgentService(storage, communication=_outbound_mail(storage),
+                            engine=get_engine()))
         application.include_router(occ_agent_api.router)
         logger.info("OCC Agent (synthetic) routes mounted")
         return True
@@ -1130,3 +1137,13 @@ def audit(client: str, workflow_id: Optional[str] = None,
         rows = [r for r in rows if r.get("workflow_id") == workflow_id]
     return {"ok": True, "audit": rows,
             "chain_intact": eng.store.verify_audit_chain(client)}
+
+
+# MI Query live telemetry — the Day-1 calibration surface. Registered last so it
+# can read `app` and `get_engine` above. Deliberately a separate module: it is
+# one governed record type and its review, not part of the wider operations
+# console, and the future system dashboard should link to it rather than absorb
+# it.
+from . import mi_query_routes  # noqa: E402
+
+mi_query_routes.register(app, get_engine)

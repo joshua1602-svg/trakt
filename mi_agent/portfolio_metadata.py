@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 logger = logging.getLogger("mi_agent.portfolio_metadata")
 
@@ -51,6 +51,12 @@ _ALLOWED_KEYS = frozenset({
     # rather than on the tape because it is a fact about the BOOK, not about any
     # individual loan, and because onboarding — not the extract — decides it.
     "asset_class",
+    # The PRIMARY MI GEOGRAPHY BASIS — borrower or collateral — which decides
+    # what generic region language means for this book. Like the asset class it
+    # is a fact about the BOOK, established once (onboarding seeds it from the
+    # asset class; an operator may override it here), and read by MI from here.
+    # It names a basis and never a place: see mi_agent.mi_geography.
+    "mi_geography",
 })
 
 #: Asset-class synonyms, mapped onto the Business Semantics Registry vocabulary.
@@ -185,6 +191,109 @@ def load_portfolio_metadata(client_id: Optional[str] = None,
                 allowed.pop("asset_class")
         out[pid.lower()] = allowed
     return out
+
+
+# --------------------------------------------------------------------------- #
+# The CLIENT layer of the governed configuration hierarchy
+# --------------------------------------------------------------------------- #
+#: Governed keys carrying the client's asset class, in precedence order.
+#: ``portfolio.asset_class`` is the standing OCC field — the same
+#: ``portfolio.*`` block ``mi_agent_api.currency`` already reads
+#: ``base_currency`` from — and the flat form is what a hand-authored config
+#: uses.
+_CLIENT_ASSET_CLASS_PATHS = (
+    ("portfolio", "asset_class"),
+    ("asset_class",),
+)
+
+#: An explicit client-level geography decision, which is an EXCEPTION to the
+#: asset default rather than a restatement of it. Absent from every config that
+#: is happy with its asset's default, which is almost all of them.
+_CLIENT_GEOGRAPHY_PATHS = (
+    ("portfolio", "mi_geography", "primary_basis"),
+    ("mi_geography", "primary_basis"),
+)
+
+
+def _client_config(client_id: Optional[str]) -> Dict[str, Any]:
+    """The governed client configuration in force, parsed, or ``{}``.
+
+    THE LOCATION IS NOT DECIDED HERE. ``mi_agent_api.currency`` already owns
+    where a client's governed configuration lives for this runtime —
+    ``TRAKT_MI_CLIENT_CONFIG``, else ``config/client/config_client_<id>.yaml``,
+    which is the same path ``operations_control.onboarding.artefacts``
+    writes and ``operations_control.configuration.resolver`` treats as the
+    client layer. Asking it, rather than re-deriving the convention, is what
+    keeps one locator in the estate.
+
+    Never raises: a client with no governed configuration has no governed
+    answer, and the caller says so rather than guessing.
+    """
+    if not client_id:
+        return {}
+    try:
+        from mi_agent_api.currency import client_config_path
+
+        location = client_config_path(client_id)
+    except Exception as exc:  # noqa: BLE001 - config must never break MI
+        logger.info("client configuration locator unavailable: %s", exc)
+        return {}
+    if not location:
+        return {}
+    raw = _read_text(location)
+    if not raw or not raw.strip():
+        return {}
+    try:
+        import yaml
+        doc = yaml.safe_load(raw) or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("client configuration parse failed (%s): %s", location, exc)
+        return {}
+    return dict(doc) if isinstance(doc, Mapping) else {}
+
+
+def _dig(doc: Mapping[str, Any], path: Sequence[str]) -> Any:
+    node: Any = doc
+    for key in path:
+        if not isinstance(node, Mapping):
+            return None
+        node = node.get(key)
+    return node
+
+
+def client_asset_class(client_id: Optional[str] = None, *,
+                       document: Optional[Mapping[str, Any]] = None
+                       ) -> Optional[str]:
+    """The asset class the CLIENT layer declares, normalised, or ``None``.
+
+    This is the layer the portfolio registry sits above, not a replacement for
+    it: a registry entry that names an asset class for a particular book still
+    wins, because it is the more specific statement. What this adds is the
+    ordinary case — a client whose whole book is one asset class, declared once
+    in its configuration, needing no per-portfolio entry at all.
+    """
+    doc = document if document is not None else _client_config(client_id)
+    for path in _CLIENT_ASSET_CLASS_PATHS:
+        value = _dig(doc, path)
+        if value:
+            return normalise_asset_class(value)
+    return None
+
+
+def client_geography_basis(client_id: Optional[str] = None, *,
+                           document: Optional[Mapping[str, Any]] = None) -> Any:
+    """An explicit client-level MI geography decision, or ``None``.
+
+    Returned raw; :mod:`mi_agent.mi_geography` owns the basis vocabulary and
+    normalises it. Kept here because this module owns where governed client
+    configuration is read from, not what its values mean.
+    """
+    doc = document if document is not None else _client_config(client_id)
+    for path in _CLIENT_GEOGRAPHY_PATHS:
+        value = _dig(doc, path)
+        if value:
+            return value
+    return None
 
 
 # --------------------------------------------------------------------------- #

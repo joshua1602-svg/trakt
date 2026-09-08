@@ -57,6 +57,17 @@ _STAGE_CANON = {
     "funds released": "COMPLETED", "funded": "COMPLETED", "drawn": "COMPLETED",
     "drawdown": "COMPLETED", "live": "COMPLETED",
     "withdrawn": "WITHDRAWN", "declined": "WITHDRAWN", "rejected": "WITHDRAWN",
+    # THE NOUN, beside the participle. A tape cell reading "withdrawals"
+    # normalises to WITHDRAWN for the same reason "declined" does, and the
+    # question-side vocabulary is DERIVED from this map — asserted by
+    # `test_the_vocabulary_is_derived_from_the_one_governed_map` — so the reader
+    # who asks "what stage had the most withdrawals?" gets it here or not at
+    # all. Measured: that question refused with `withdrawals` reported as a
+    # measure this dataset does not carry.
+    # (The singular is a PREFIX of the plural for the same stage, so the
+    # question vocabulary's fragment rule drops it — the same rule that stops
+    # `complete` becoming a COMPLETED stage. It still normalises a tape cell.)
+    "withdrawal": "WITHDRAWN", "withdrawals": "WITHDRAWN",
     "cancelled": "WITHDRAWN", "lapsed": "WITHDRAWN", "abandoned": "WITHDRAWN",
 }
 # Coarse funnel grouping for pipeline_stage_bucket.
@@ -82,6 +93,32 @@ def load_pipeline_contract() -> Dict[str, Any]:
     if not _CONTRACT_PATH.exists():
         return {}
     return yaml.safe_load(_CONTRACT_PATH.read_text(encoding="utf-8")) or {}
+
+
+def declared_source_provenance() -> Dict[str, Any]:
+    """The source-portfolio book the pipeline is DECLARED to be, or ``{}``.
+
+    THE ONE READER of `source_provenance` in the governed pipeline contract.
+    The weekly extract has no per-case source-portfolio column, so this is a
+    fact about the business rather than about the data — which is exactly why
+    it is declared in config and read here, instead of being written into a
+    route as a string nobody could find or revoke.
+
+    Returns ``{}`` unless the contract says `declared: true` AND names a book.
+    An absent, malformed or switched-off declaration is INDISTINGUISHABLE from
+    no declaration, so the estate falls back to claiming nothing — which is the
+    behaviour that shipped before this existed, and the behaviour the day the
+    lender's model changes and someone sets `declared: false`.
+    """
+    raw = (load_pipeline_contract().get("source_provenance") or {})
+    if not isinstance(raw, dict) or raw.get("declared") is not True:
+        return {}
+    book = str(raw.get("book") or "").strip()
+    if not book:
+        return {}
+    return {"book": book, "rationale": str(raw.get("rationale") or "").strip(),
+            "declared_by": str(raw.get("declared_by") or "").strip(),
+            "declared_on": str(raw.get("declared_on") or "").strip()}
 
 
 @lru_cache(maxsize=1)
@@ -384,6 +421,22 @@ def canonical_stage(value: Any) -> str:
     """Normalise a raw stage/status value to the canonical funnel token
     (KFI / APPLICATION / OFFER / COMPLETED / WITHDRAWN / UNKNOWN)."""
     return _STAGE_CANON.get(_norm(value), "UNKNOWN")
+
+
+#: Funnel position of each bucket, so the canonical stage order is DERIVED from
+#: the one governed bucket map rather than restated as a second list.
+_BUCKET_ORDER = {"early": 0, "mid": 1, "late": 2, "completed": 3, "withdrawn": 4}
+
+
+def canonical_stage_order() -> Tuple[str, ...]:
+    """The governed stage set in funnel order, terminal states last.
+
+    Derived from ``_STAGE_BUCKET`` — the same single map ``canonical_stage``
+    normalises onto — so a product that adds a stage gets the ordering without
+    any caller declaring a second stage vocabulary.
+    """
+    return tuple(sorted(_STAGE_BUCKET,
+                        key=lambda s: (_BUCKET_ORDER.get(_STAGE_BUCKET[s], 9), s)))
 
 
 #: Stages that are open and forecast-relevant. A case at one of these is LIVE

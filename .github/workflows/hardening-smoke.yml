@@ -28,12 +28,32 @@ on:
       - 'engine/gate_4b_delivery/**'
       - 'engine/gate_5_delivery/**'
       - 'config/regime/**'
+      # The CONFIGURATION OWNERS. `config/asset/**` is the asset layer (the ERM
+      # pack declares `mi_geography.primary_basis`); `config/client/**` is the
+      # client layer (ERE declares `portfolio.asset_class`, which selects the
+      # pack). A change to either moves which geography a book reports on, and
+      # that is precisely what this workflow now protects.
       - 'config/asset/**'
+      - 'config/client/**'
       - 'config/system/enum_mapping.yaml'
+      # The modules that OWN the resolution, and nothing broader: a change
+      # anywhere else in mi_agent has no bearing on which basis is in force.
+      - 'mi_agent/mi_geography.py'
+      - 'mi_agent/portfolio_metadata.py'
+      - 'mi_agent/region_basis.py'
+      - 'mi_agent_api/mi_service.py'
+      - 'mi_agent_api/currency.py'
+      - 'operations_control/configuration/**'
+      # The release evidence harness itself. A gate that stops protecting the
+      # thing it gates is worse than no gate, because it still reports green.
+      - 'due_diligence/evidence/mi_api_certification/**'
       - 'tests/test_simulation_*.py'
       - 'tests/test_annex2_*.py'
+      - 'tests/test_mi_geography_precedence.py'
+      - 'tests/test_geography_release_acceptance.py'
       - 'tests/fixtures/simulation/**'
       - '.github/workflows/hardening-smoke.yml'
+      - '.github/workflows/certify-mi-api.yml'
   pull_request:
     paths:
       - 'simulation/**'
@@ -41,20 +61,74 @@ on:
       - 'engine/gate_4b_delivery/**'
       - 'engine/gate_5_delivery/**'
       - 'config/regime/**'
+      # The CONFIGURATION OWNERS. `config/asset/**` is the asset layer (the ERM
+      # pack declares `mi_geography.primary_basis`); `config/client/**` is the
+      # client layer (ERE declares `portfolio.asset_class`, which selects the
+      # pack). A change to either moves which geography a book reports on, and
+      # that is precisely what this workflow now protects.
       - 'config/asset/**'
+      - 'config/client/**'
       - 'config/system/enum_mapping.yaml'
+      # The modules that OWN the resolution, and nothing broader: a change
+      # anywhere else in mi_agent has no bearing on which basis is in force.
+      - 'mi_agent/mi_geography.py'
+      - 'mi_agent/portfolio_metadata.py'
+      - 'mi_agent/region_basis.py'
+      - 'mi_agent_api/mi_service.py'
+      - 'mi_agent_api/currency.py'
+      - 'operations_control/configuration/**'
+      # The release evidence harness itself. A gate that stops protecting the
+      # thing it gates is worse than no gate, because it still reports green.
+      - 'due_diligence/evidence/mi_api_certification/**'
       - 'tests/test_simulation_*.py'
       - 'tests/test_annex2_*.py'
+      - 'tests/test_mi_geography_precedence.py'
+      - 'tests/test_geography_release_acceptance.py'
       - 'tests/fixtures/simulation/**'
       - '.github/workflows/hardening-smoke.yml'
+      - '.github/workflows/certify-mi-api.yml'
   workflow_dispatch:
+    inputs:
+      live_geography_acceptance:
+        description: >-
+          Run the LIVE geography release acceptance against production after
+          the deterministic hardening passes. Off by default, and deliberately:
+          ordinary pushes and pull requests must never depend on production
+          being up, on a bearer token, or on the state of a live book.
+        type: boolean
+        default: false
+        required: false
+      portfolio_id:
+        description: portfolioId as {client_id}/{run_id}
+        type: string
+        default: ERE/2026-06-30
+        required: false
+      expect_commit:
+        description: >-
+          The Git SHA the deployment is supposed to be serving. Blank means the
+          SHA of the checked-out ref. The acceptance FAILS as NOT EXECUTABLE if
+          the deployed commit cannot be established or differs — scoring
+          semantics against an unknown build certifies nothing.
+        type: string
+        default: ''
+        required: false
+      base_url:
+        description: Public API base URL
+        type: string
+        default: https://app.traktinfra.io/api
+        required: false
 
 concurrency:
   group: hardening-smoke-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # DELIBERATELY STILL CALLED `smoke`. The display name says what it is; the id
+  # stays because a branch-protection rule that requires a check by name stops
+  # requiring it the moment the name changes, and a required check that quietly
+  # became optional is exactly the kind of failure this workflow exists to stop.
   smoke:
+    name: Deterministic hardening
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -109,3 +183,48 @@ jobs:
         # A dimension that previously reported "unavailable" must not start
         # measuring — and moving a client's RAG state is not a silent change.
         run: python -m pytest tests/test_concentration_dimension_fallback.py -q
+
+      - name: Geography configuration ownership
+        # WHICH GEOGRAPHY A BOOK REPORTS ON, and who decides. The precedence
+        # contract (explicit query > portfolio registry > client override >
+        # asset class default > unconfigured), the ban on one asset class
+        # declaring its basis in two files, and the release scorer's own
+        # falsification suite — which proves the live gate goes red when a
+        # borrower-region question is answered on the collateral column.
+        #
+        # None of this touches production: the scorer is driven with frozen
+        # response envelopes.
+        run: |
+          python -m pytest \
+            tests/test_mi_geography_precedence.py \
+            tests/test_geography_release_acceptance.py \
+            -q
+
+  # ------------------------------------------------------------------------ #
+  # LIVE RELEASE ACCEPTANCE — manual only, and gated on the deterministic job.
+  # ------------------------------------------------------------------------ #
+  # This is the second half of the release flow:
+  #
+  #     deterministic hardening -> already-deployed SHA -> live geography
+  #     acceptance -> TIME_X_DIMENSION_READY
+  #
+  # It CALLS `certify-mi-api.yml` rather than reimplementing it, so the live
+  # transport, the MI_BEARER convention, the reachability/auth classifier and
+  # the deployed-SHA provenance check each keep exactly one owner. There is no
+  # hardening-specific HTTP or auth code anywhere in this file, and there must
+  # not be.
+  live-geography-acceptance:
+    name: Live geography acceptance
+    needs: smoke
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      && inputs.live_geography_acceptance
+    uses: ./.github/workflows/certify-mi-api.yml
+    with:
+      suite: geography
+      base_url: ${{ inputs.base_url }}
+      portfolio_id: ${{ inputs.portfolio_id }}
+      expect_commit: ${{ inputs.expect_commit }}
+    # `inherit` passes MI_BEARER without naming it here. The token is never
+    # printed, never an argv value, and never read by this file.
+    secrets: inherit

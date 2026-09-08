@@ -52,7 +52,12 @@ FIXTURE = _REPO / "tests" / "fixtures" / "pipeline_history_5w"
 FUNDED_RUNS = (("mi_2026_04", "2026-04-30", 60, 1.0),
                ("mi_2026_05", "2026-05-31", 70, 1.15))
 
-EVOLUTION_ROUTES = ("evolution", "evolution_funnel", "evolution_pipeline_stage")
+#: `evolution_grouped` is the same `_route_evolution` function answering a
+#: question that named a breakdown as well as a time axis. Without it here the
+#: family appeared to LOSE nine questions the moment period x dimension began
+#: delivering them — a route identity added, read as ownership given up.
+EVOLUTION_ROUTES = ("evolution", "evolution_funnel", "evolution_pipeline_stage",
+                    "evolution_grouped")
 
 
 def _questions() -> List[str]:

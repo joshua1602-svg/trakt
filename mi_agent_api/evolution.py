@@ -28,9 +28,17 @@ from . import pipeline_contract as pipeline_mod
 
 _BALANCE = "current_outstanding_balance"
 # Funded breakdown dimensions exposed over time (kept small + governed).
+#: THE DASHBOARD'S BREAKDOWN COLUMNS.
+#:
+#: "region" is deliberately absent: it is not a fixed column here any more than
+#: it is in an MI query. A book carries a borrower geography and a collateral
+#: geography, and which one "region over time" means is a property of the ASSET
+#: (`mi_agent.mi_geography`), not a constant. This map used to name
+#: `geographic_region_obligor` — the BORROWER column — for every book, so the
+#: dashboard's regional series and the MI Agent's regional answer about the same
+#: book could be measured on two different geographies and no surface said so.
 _FUNDED_BREAKDOWN_DIMS = {
     "broker": ("broker_channel",),
-    "region": ("geographic_region_obligor",),
     "ltv_bucket": ("ltv_bucket",),
     # The CONSTITUENT BOOK. The prepared frames have always carried provenance —
     # scoping filters on it — but no breakdown ever asked for it, so the one
@@ -38,6 +46,30 @@ _FUNDED_BREAKDOWN_DIMS = {
     # could not be cut by. Governed display label first, id as the fallback.
     "portfolio": ("source_portfolio_label", "source_portfolio_id"),
 }
+
+
+def _region_breakdown_column(df, geography=None) -> Optional[str]:
+    """The column "region over time" is measured on, for THIS book.
+
+    The configured primary basis, resolved against what the period's frame
+    actually carries. Falls back to the parser's own last-resort order when no
+    contract is in force, so the two surfaces still agree with each other.
+    """
+    from mi_agent import mi_geography as _geo
+    from mi_agent.llm_query_parser import active_geography
+
+    basis = getattr(geography if geography is not None else active_geography(),
+                    "primary_basis", None)
+    if basis:
+        chosen = _geo.field_for_basis(basis, frame=df)
+        if chosen:
+            return chosen
+    from mi_agent.llm_query_parser import _REGION_PREFERENCE
+
+    for column in _REGION_PREFERENCE:
+        if column in getattr(df, "columns", ()):
+            return column
+    return None
 MISSING_BUCKET = "Unknown / Missing"
 
 
@@ -90,13 +122,21 @@ def _reconciliation(df: pd.DataFrame, dataset: str, run_id: str,
     }
 
 
-def _resolve_breakdown_dim(df: pd.DataFrame, key: str) -> Optional[str]:
+def _resolve_breakdown_dim(df: pd.DataFrame, key: str,
+                           geography=None) -> Optional[str]:
     """The first candidate column a breakdown dimension actually has data in.
 
     Candidates, not a fixed column, so a dimension whose canonical name differs
     between tapes still resolves — the same data-aware resolution
     ``funded_bridge`` performs for its attribution dimension.
+
+    REGION IS NOT RESOLVED HERE. Which column a book reports region on is a
+    governed decision — the configured primary basis, resolved against the
+    frame — and ``_region_breakdown_column`` owns it. A candidate list here
+    would be a second, disagreeing answer to the same question.
     """
+    if key == "region":
+        return _region_breakdown_column(df, geography)
     for col in _FUNDED_BREAKDOWN_DIMS.get(key, ()):
         if col in getattr(df, "columns", []) and df[col].notna().any():
             return col
@@ -134,8 +174,8 @@ def _runs_up_to(output_root: str | os.PathLike, client_id: str,
 def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
                               to_run_id: Optional[str] = None,
                               breakdowns: Optional[List[str]] = None,
-                              *, lineage: Optional[Dict[str, Any]] = None
-                              ) -> Dict[str, Any]:
+                              *, lineage: Optional[Dict[str, Any]] = None,
+                              geography: Any = None) -> Dict[str, Any]:
     """Build the funded evolution series from an ordered list of prepared run
     frames — ``[{run_id, reporting_date, df, source}]`` (oldest → newest).
 
@@ -187,7 +227,7 @@ def assemble_funded_evolution(frames: List[Dict[str, Any]], client_id: str,
             "source_file": source,
         })
         for b in want_breakdowns:
-            dim_col = _resolve_breakdown_dim(df, b)
+            dim_col = _resolve_breakdown_dim(df, b, geography)
             if dim_col:
                 for row in _breakdown(df, dim_col):
                     bd_series[b].append({"period": (rdate or run_id)[:7], **row})

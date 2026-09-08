@@ -63,14 +63,72 @@ def test_run_rate_projection_and_milestones():
 
 
 def test_run_rate_insufficient_history_caveat():
-    out = fx.run_rate_model(10_000_000.0, [2_000_000], reporting_period="2025-11")
+    """Thin history still gets indicative 75%/125% bands — on a run-rate that
+    legitimately exists. Three proxy observations is the minimum from which a
+    trend can be told apart from a one-off portfolio arrival.
+
+    CHANGED DELIBERATELY: this previously asserted that a SINGLE month-on-month
+    balance-growth observation published a run-rate. It does not any more (see
+    test_a_single_proxy_observation_publishes_no_run_rate) — one observation
+    cannot distinguish organic lending from a book arriving in one step, and
+    the resulting figure was reported to a client as an annualised growth rate.
+    """
+    out = fx.run_rate_model(10_000_000.0, [2_000_000, 2_200_000, 1_900_000],
+                            reporting_period="2025-11")
     assert out["available"] is True
-    assert out["status"] == "limited_history"
-    # 75%/125% fallback bands.
+    assert out["status"] == "ok"
     sc = out["scenarioMonthlyRunRate"]
-    assert sc["downside"] == round(sc["base"] * 0.75, 2)
-    assert sc["upside"] == round(sc["base"] * 1.25, 2)
-    assert any("indicative" in c for c in out["caveats"])
+    assert sc["downside"] <= sc["base"] <= sc["upside"]
+
+
+def test_a_single_proxy_observation_publishes_no_run_rate():
+    """One balance delta is a step or a month; nothing can tell which."""
+    out = fx.run_rate_model(10_000_000.0, [2_000_000], reporting_period="2025-11")
+    assert out["available"] is False
+    assert out["status"] == "insufficient_data"
+    assert "baseMonthlyRunRate" not in out
+    assert "portfolio onboarded" in out["caveat"]
+
+
+def test_two_proxy_observations_publish_no_run_rate():
+    """The reported defect: two observations, one of them a £155m book landing,
+    produced a £77m/month base and a £929m annualised rate."""
+    out = fx.run_rate_model(155_000_000.0, [2_000_000, 152_000_000],
+                            reporting_period="2026-06")
+    assert out["available"] is False
+    assert out["observedMonths"] == 2
+    assert "annualisedRunRate" not in out
+
+
+def test_observed_completion_flow_is_preferred_over_balance_growth():
+    """When the pipeline reports what actually completed, that is the signal —
+    balance growth (which carries roll-up and onboarding) is only a proxy."""
+    out = fx.run_rate_model(155_000_000.0, [2_000_000, 152_000_000],
+                            reporting_period="2026-06",
+                            observed_monthly_completions=5_200_000.0)
+    assert out["available"] is True
+    assert out["baseMonthlyRunRate"] == 5_200_000.0
+    assert out["annualisedRunRate"] == round(5_200_000.0 * 12, 2)
+    assert "COMPLETED" in out["assumptions"]["completionSignal"]
+
+
+def test_a_step_change_is_excluded_and_disclosed():
+    """With enough history the step is dropped, not smoothed into the average."""
+    out = fx.run_rate_model(200_000_000.0,
+                            [2_000_000, 2_100_000, 150_000_000, 1_900_000],
+                            reporting_period="2026-06")
+    assert out["available"] is True
+    assert out["excludedObservations"] == [2]
+    # The base reflects the months of lending, not the book that arrived.
+    assert out["baseMonthlyRunRate"] < 5_000_000
+    assert any("portfolio arriving" in c for c in out["caveats"])
+
+
+def test_all_thresholds_reached_is_disclosed():
+    out = fx.run_rate_model(500_000_000.0, [2_000_000, 2_100_000, 1_900_000],
+                            reporting_period="2026-06")
+    assert all(m["reached"] for m in out["milestones"])
+    assert any("already exceeds every configured" in c for c in out["caveats"])
 
 
 def test_run_rate_no_history():

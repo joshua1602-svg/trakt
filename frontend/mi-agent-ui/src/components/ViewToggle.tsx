@@ -4,13 +4,20 @@ import type { WorkspaceView } from "@/domain";
 import { cn } from "@/lib/utils";
 
 // Top-level tabs follow the book lifecycle: Funded → Pipeline → Forecast, plus
-// the cross-cutting Risk Limits monitor. Each of Funded/Pipeline/Forecast hosts
-// its own sub-tabs (stratifications / geography / evolution / cohorts / …).
+// the cross-cutting Eligibility & Concentrations monitor. Each of
+// Funded/Pipeline/Forecast hosts its own sub-tabs (stratifications / geography
+// / evolution / cohorts / …).
+//
+// The `risk_limits` VIEW ID is unchanged and stays unchanged: it is in shared
+// links, saved navigation state and the governed capability contract. Only the
+// LABEL moved — the tab now carries the facility borrowing base and the loan
+// eligibility split alongside the Schedule 8 concentrations, and "Risk Limits"
+// no longer described what an operator finds there.
 const VIEWS: { id: WorkspaceView; label: string; icon: typeof Landmark }[] = [
   { id: "funded", label: "Funded", icon: Landmark },
   { id: "pipeline", label: "Pipeline", icon: GitBranch },
   { id: "forecast", label: "Forecast", icon: TrendingUp },
-  { id: "risk_limits", label: "Risk Limits", icon: ShieldAlert },
+  { id: "risk_limits", label: "Eligibility & Concentrations", icon: ShieldAlert },
 ];
 
 const VIEW_LABEL: Record<string, string> = Object.fromEntries(
@@ -57,7 +64,7 @@ export function ViewToggle({
       <div
         role="tablist"
         aria-label="MI workspace view"
-        className="flex w-full items-stretch gap-1 rounded-lg border border-navy-600 bg-navy-950/80 p-1 shadow-inner ring-1 ring-inset ring-white/5"
+        className="nav-primary w-full"
       >
         {VIEWS.map(({ id, label, icon: Icon }) => {
           const selected = active === id;
@@ -86,17 +93,17 @@ export function ViewToggle({
                 onFocus={!isDisabled && onPrefetch ? () => onPrefetch(id) : undefined}
                 className={cn(
                   // Each tab flexes to share the row evenly across the full width.
-                  "inline-flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium transition-all",
-                  isDisabled
-                    ? "cursor-not-allowed text-ink-600 opacity-40"
-                    : selected
-                      ? "bg-peri-400/20 text-ink-100 shadow-sm ring-1 ring-inset ring-peri-400/50"
-                      // Inactive: visibly a clickable chip (subtle fill + border) that
-                      // lifts on hover, not near-invisible plain text.
-                      : "cursor-pointer bg-navy-800/70 text-ink-300 ring-1 ring-inset ring-white/5 hover:bg-navy-700 hover:text-ink-100 hover:ring-white/10",
+                  // `nav-primary-item` carries the whole tier-1 treatment: the
+                  // accent underline that marks selection, the hover lift and
+                  // the disabled ink — see index.css. Selection is read off
+                  // aria-selected, so the visual state cannot drift from the
+                  // accessible one.
+                  "nav-primary-item w-full",
+                  isDisabled ? "cursor-not-allowed" : "cursor-pointer",
                 )}
               >
-                <Icon size={14} className={selected && !isDisabled ? "text-peri-200" : "text-ink-400"} />
+                <Icon size={15} strokeWidth={selected && !isDisabled ? 2.25 : 1.75}
+                  className={selected && !isDisabled ? "text-cyan-200" : "text-current opacity-70"} />
                 {label}
               </button>
             </span>
@@ -108,18 +115,18 @@ export function ViewToggle({
         <div
           role="note"
           data-testid="disabled-view-reason"
-          className="mt-1.5 flex items-start gap-2 rounded-md border border-[var(--color-line-soft)] bg-navy-900/60 px-2.5 py-1.5 text-[11px] leading-relaxed text-ink-300"
+          className="mt-[var(--gap-tight)] flex items-start gap-2 rounded-md border-l-2 border-l-amber-400/50 bg-navy-850/70 px-3 py-2 text-[var(--fs-label)] leading-relaxed text-ink-300"
         >
-          <Info size={13} className="mt-0.5 shrink-0 text-peri-300" />
+          <Info size={13} className="mt-0.5 shrink-0 text-amber-400" />
           <span className="min-w-0 flex-1">
-            <span className="font-medium text-ink-200">{VIEW_LABEL[revealed]} unavailable · </span>
+            <span className="font-semibold text-ink-100">{VIEW_LABEL[revealed]} unavailable · </span>
             {disabledReasons[revealed] ?? "Not applicable for the selected portfolio scope."}
           </span>
           <button
             type="button"
             aria-label="Dismiss"
             onClick={() => setRevealedReason(null)}
-            className="shrink-0 rounded p-0.5 text-ink-500 hover:text-ink-200"
+            className="shrink-0 rounded p-0.5 text-ink-500 transition-colors hover:text-ink-100"
           >
             <X size={12} />
           </button>

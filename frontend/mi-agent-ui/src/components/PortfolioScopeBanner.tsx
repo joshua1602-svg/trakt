@@ -56,7 +56,7 @@ export function PortfolioScopeBanner({
           : "border-[var(--color-line)] bg-navy-900/50 text-ink-300",
       ].join(" ")}
     >
-      <Icon size={14} className={blocked ? "mt-0.5 shrink-0 text-amber-300" : "mt-0.5 shrink-0 text-peri-300"} />
+      <Icon size={14} className={blocked ? "mt-0.5 shrink-0 text-amber-300" : "mt-0.5 shrink-0 text-cyan-300"} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
           {context && (

@@ -55,6 +55,34 @@ portfolios:
     # equity_release | residential_mortgage | sme. Onboarding's longer dialect
     # ("equity_release_mortgage") is normalised on the way in.
     asset_class: equity_release
+    # THE PRIMARY MI GEOGRAPHY BASIS — `borrower` or `collateral`.
+    #
+    # A loan has a borrower's region and a property's region, and they are
+    # different facts: they disagree on any buy-to-let, and they have almost
+    # nothing to do with each other on an auto loan. So "balance by region",
+    # asked with no qualifier, has no answer until somebody has decided which
+    # geography this book reports on.
+    #
+    # OPTIONAL, and an EXCEPTION rather than the normal path. The ordinary
+    # default comes from the governed configuration hierarchy without any entry
+    # here at all: the client configuration declares `portfolio.asset_class`
+    # and `config/asset/mi_geography.yaml` says what region means for that
+    # class. Set this key only where THIS BOOK differs from its asset default.
+    #
+    # ONBOARDING SEEDS THIS from the asset class above
+    # (config/asset/mi_geography.yaml holds the governed default per class:
+    # property-secured books report on the collateral, movable and unsecured
+    # books on the borrower). It is written here so the decision is visible and
+    # overridable, and a value you set is never overwritten by a re-run.
+    #
+    # Override it where the class default does not fit — a buy-to-let book run as
+    # a credit-risk exposure rather than a property portfolio, say. A basis the
+    # book cannot support is REFUSED, never quietly swapped for the other one.
+    #
+    # Explicit language in a question always wins: "borrower region" reads the
+    # borrower whatever this says, and "property region" reads the collateral.
+    mi_geography:
+      primary_basis: collateral
     # Does this book write new business? Drives Pipeline + origination forecast.
     originates: true
     # Is governed pipeline (pre-funded) data actually supplied for it? The

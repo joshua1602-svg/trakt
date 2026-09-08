@@ -338,3 +338,77 @@ export interface RulesQuery {
   kind?: string;
   scope?: string;
 }
+
+// --- MI Query live telemetry ------------------------------------------------
+// The Day-1 calibration surface: what real users asked, what Trakt understood,
+// which capability ran, what they saw, and — after review — whether it was good.
+
+export interface MiQueryRow {
+  query_id: string;
+  asked_at: string;
+  client_id: string;
+  portfolio_id: string | null;
+  user_id: string | null;
+  channel: string | null;
+  question: string;
+  outcome: "ANSWERED" | "REFUSED" | "ERROR";
+  route: string | null;
+  refusal_reason: string | null;
+  error_code: string | null;
+  duration_ms: number | null;
+  review: string;
+}
+
+export interface MiQueryDetail extends MiQueryRow {
+  answer: string;
+  interpretation: Record<string, unknown>;
+  parser: Record<string, unknown>;
+  capability: string | null;
+  execution_mode: string | null;
+  result_type: string | null;
+  row_count: number | null;
+  snapshot_id: string | null;
+  content_hash: string | null;
+  data_source_kind: string | null;
+  data_source_label: string | null;
+  reporting_period: string | null;
+  dataset_view: string | null;
+  message: string | null;
+  warnings: string[];
+  review_detail?: {
+    classification: string;
+    reviewer: string | null;
+    reviewed_at: string | null;
+    note: string | null;
+  };
+}
+
+export interface MiQuerySummary {
+  total_questions: number;
+  unique_users: number;
+  answered: number;
+  refused: number;
+  errors: number;
+  answered_pct: number | null;
+  refused_pct: number | null;
+  error_pct: number | null;
+  unreviewed: number;
+  reviewed: number;
+  reviewed_correct: number;
+  reviewed_problematic: number;
+  /** Over the REVIEWED subset only — never presented without its denominator. */
+  reviewed_correctness_pct: number | null;
+  review_breakdown: Record<string, number>;
+  median_latency_ms: number | null;
+  p95_latency_ms: number | null;
+}
+
+export interface MiQueryFilters {
+  window?: string;
+  client?: string;
+  outcome?: string;
+  user?: string;
+  portfolio?: string;
+  review?: string;
+  q?: string;
+}

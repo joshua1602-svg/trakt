@@ -415,6 +415,52 @@ CURATION: Dict[str, dict] = {
         "synonyms": ["region", "geography", "area", "property region",
                      "location", "collateral geography"],
     },
+    # THE HARMONISED REGION, and the reason MI reads it in preference to the raw
+    # source column. `engine.region_taxonomy` resolves each book's own spelling
+    # to one governed vocabulary and persists these two columns; until they were
+    # registered there was no governed field for them, so a region question
+    # bound to the raw column instead. The acquired book carries both "LONDON"
+    # and "London" there, so one region came back as two rows in every
+    # breakdown — while the taxonomy had already resolved both, invisibly.
+    #
+    # NEITHER CLAIMS A GENERIC REGION TERM. "region", "geography" and their
+    # forms route through `_preferred_region`, which is data-aware and picks
+    # the first field whose column is actually present. Putting the generic
+    # vocabulary here as well would make the term ambiguous, and
+    # `_registry_dimension_terms` DROPS an ambiguous synonym — deleting the
+    # word and refusing every region question.
+    #
+    # Rows whose raw value has no governed mapping keep a NULL canonical value
+    # and are excluded and disclosed, never assigned to a nearby region. That
+    # is the intended behaviour and it is why the vocabulary gaps the audit
+    # names are worth closing before this becomes the reporting axis.
+    "canonical_region_reporting": {
+        "tier": "core", "derived": True,
+        "derived_from": "collateral_geography",
+        "business_name": "Region",
+        "value_domain": "uk_region",
+        "business_description": "Governed region, harmonised across books to "
+                                "the client's approved reporting taxonomy. "
+                                "Equal to the detail value unless a "
+                                "consolidation is declared.",
+        "synonyms": ["harmonised region", "harmonized region",
+                     "governed region", "reporting region",
+                     "canonical region"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
+    "canonical_region_detail": {
+        "tier": "core", "derived": True,
+        "derived_from": "collateral_geography",
+        "business_name": "Region Detail",
+        "value_domain": "uk_region",
+        "business_description": "Governed region at the most granular value "
+                                "the source supports, retained beside the "
+                                "reporting value so any consolidation is "
+                                "reversible.",
+        "synonyms": ["region detail", "detailed region",
+                     "granular region", "unconsolidated region"],
+        "overrides": dict(_BUCKET_OVERRIDES),
+    },
     # Granular UK ITL3 codes (FCA/UK reporting + MI drilldown). Derived analytics
     # fields preserved in canonical output; never used as the readable MI Region
     # (that is collateral_geography) and never collapsed to the ESMA GBZZZ default.
@@ -1106,9 +1152,49 @@ CURATION: Dict[str, dict] = {
         # no governed dimension at all, and the question was refused as
         # unmapped on a tape that carries the column and five values. No other
         # governed field claims the bare word.
+        # "funnel" ALONE, for the same reason "stage" alone was added: a reader
+        # asking "how did cases move through the funnel" names this dimension
+        # and no other. The funded book has no funnel, and no governed field
+        # claims the bare word.
         "synonyms": ["stage", "stages", "pipeline stage", "pipeline stages",
-                     "funnel stage", "application stage", "pipeline status"],
+                     "funnel", "funnel stage", "application stage",
+                     "pipeline status"],
         "overrides": {"role": "dimension", "format": "string"},
+    },
+    "pipeline_case_age_days": {
+        "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],
+        "business_name": "Pipeline Case Age",
+        "business_description": "How long a pipeline case has been open, in days "
+                               "(reporting as-of date minus the case's KFI date). "
+                               "A property of the CASE, not of the borrower on "
+                               "it — see the synonyms.",
+        # THE FIELD EXISTED AND HAD NO NAME. `prepare_pipeline_mi_dataset` has
+        # populated this column on every row since the pipeline contract was
+        # written, and `forecast_bridge` reads it — but it was absent from this
+        # registry, which is the parser's only vocabulary. So "what is the
+        # average pipeline case age in days?" found no governed concept for the
+        # words, and `youngest_borrower_age` (which carries the bare synonym
+        # `age`) was the closest thing in the registry: the question was
+        # answered *"Average Borrower Age: 74"* — a plausible figure for a
+        # lifetime book, about the wrong subject. P048 in the atomic-perimeter
+        # bank.
+        #
+        # An absent concept does not refuse. It gets claimed by whichever
+        # neighbour owns the word. That is why the fix is a name of its own and
+        # NOT a narrowing of the borrower-age vocabulary, which stays exactly as
+        # it is — the age theme scored 20/20 on it.
+        #
+        # Every synonym is a PHRASE, never the bare word "age". Both resolvers
+        # (`_detect_metric` and `_measure_hits`) try registry multi-word phrases
+        # first, longest first, before the curated single tokens, so these beat
+        # `age` without competing with it.
+        "synonyms": ["pipeline case age", "case age", "days in pipeline",
+                     "pipeline age", "case age in days", "age of the case",
+                     "days in the pipeline"],
+        "overrides": {"role": "metric", "format": "integer",
+                      "allowed_aggregations": ["avg", "median", "min", "max",
+                                               "distribution"],
+                      "default_aggregation": "avg"},
     },
     "pipeline_snapshot_date": {
         "tier": "core", "virtual": True, "source_criteria": ["pipeline_state"],

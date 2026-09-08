@@ -56,8 +56,18 @@ def split_warnings(warnings: List[str]) -> Tuple[List[str], List[str]]:
         (diagnostics if _is_technical_warning(str(w)) else business).append(w)
     return business, diagnostics
 
-# Brand palette (mirrors mi_chart_factory.DEFAULT_THEME / charts_plotly.py).
-_PALETTE = ["#919dd1", "#232d55", "#3d4a82", "#36c2a8", "#e0a93b", "#c46b8f"]
+# Brand palette for ad hoc MI Agent chart series (Recharts, via
+# ChartArtifactView.tsx) — SLATE & CYAN, mirroring the values in
+# frontend/mi-agent-ui/src/lib/theme.ts and mi_agent_pptx/pptx_theme.py by
+# VALUE, not import (mi_agent_pptx already imports from mi_agent_api in
+# several places — mi_api.py, movement.py, watchlist.py, insights.py — so
+# the reverse import here would risk a circular one). This is a THIRD
+# independent copy for exactly that reason; keep it in step with the other
+# two by hand when the palette changes. NOT mi_chart_factory.DEFAULT_THEME —
+# that is a separate, deliberately isolated WHITE-background Plotly theme
+# for a different rendering path (its own comment: "recreated here, not
+# imported"), unrelated to what this file's charts render as.
+_PALETTE = ["#22d3ee", "#d95926", "#199e70", "#36c2a8", "#e0a93b", "#e0607a"]
 
 _FORMAT_MAP = {
     "currency": "gbp",
@@ -920,9 +930,21 @@ def adapt_workflow_result(
         if source_notes and art.get("type") in ("chart", "table", "kpi"):
             art["sourceNotes"] = source_notes
 
-    val_artifact = _validation_artifact(validation, spec, ctx)
-    if val_artifact:
-        artifacts.append(val_artifact)
+    # A REFUSAL SHIPS NO ARTIFACT. The chart, table and KPI are already gated on
+    # ``refused`` above; the validation artifact was not, so a declined answer
+    # that also tripped validation opened a workspace card titled "Query
+    # Validation" restating the refusal as a blocker — the same sentence the
+    # chat had just shown, in a second place.
+    #
+    # Worse, it made the refusal LOOK ANSWERED: the browser flags an error
+    # message with ``!ok && artifacts.length === 0``, so one artifact was enough
+    # to render a declined answer in the ordinary answer styling. A declined
+    # answer states itself once, in the reply, and puts nothing in the
+    # workspace. Validation issues on a SUCCESSFUL answer are unchanged.
+    if not refused:
+        val_artifact = _validation_artifact(validation, spec, ctx)
+        if val_artifact:
+            artifacts.append(val_artifact)
 
     raw_warnings = list(workflow.get("warnings", []))
     # Only warn about degraded fidelity when we could not emit a chart at all

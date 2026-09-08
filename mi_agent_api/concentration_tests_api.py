@@ -38,6 +38,12 @@ from mi_agent.concentration_tests.models import (
     PROPOSAL_UNSUPPORTED,
 )
 from mi_agent.concentration_tests.store import ConcentrationStore
+from mi_agent.borrowing_base.config import load_facility
+from mi_agent.borrowing_base.eligibility import (
+    eligibility_available,
+    eligible_mask,
+)
+from mi_agent.borrowing_base.models import POPULATION_ELIGIBLE
 
 from . import snapshots as snap
 from trakt_core import perf as _perf
@@ -247,6 +253,91 @@ def _active_configuration(client_id: str
         return None, f"The concentration-test store is unreachable: {exc}"
 
 
+#: How the Eligible Mortgage Loan population reaching the evaluator was
+#: arrived at. Carried onto every affected test row, because a contractual
+#: population that is really a stand-in must say so.
+BASIS_GOVERNED = "governed_eligibility"
+BASIS_NO_FACILITY = "whole_book_no_facility_configured"
+BASIS_NOT_DERIVED = "whole_book_eligibility_not_derived"
+
+
+def _eligible_populations(df: Optional[pd.DataFrame],
+                          prior_df: Optional[pd.DataFrame],
+                          facility) -> Tuple[Dict[str, Any], Dict[str, Any],
+                                             Dict[str, Any]]:
+    """``(populations, prior_populations, disclosure)`` for one evaluation.
+
+    A Schedule 8 clause that says "Eligible Mortgage Loans" is measured over
+    exactly those loans when the governed derivation has run. When it has not —
+    the client has no configured funding facility, or the frame predates the
+    derivation — the whole funded book stands in and the substitution is
+    DISCLOSED on every affected test and in the envelope. It is never silent,
+    and it never becomes the contractual answer.
+    """
+    def _narrow(frame: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+        if frame is None or getattr(frame, "empty", True):
+            return frame
+        return frame[eligible_mask(frame, facility)]
+
+    if facility is not None and eligibility_available(df):
+        eligible = _narrow(df)
+        prior_eligible = (_narrow(prior_df)
+                          if eligibility_available(prior_df) else prior_df)
+        return (
+            {POPULATION_ELIGIBLE: eligible},
+            {POPULATION_ELIGIBLE: prior_eligible},
+            {
+                "basis": BASIS_GOVERNED,
+                "facilityId": facility.facility_id,
+                "eligibilityGoverned": facility.eligibility_governed,
+                "prototypeAssumptionActive": facility.prototype_assumption_active,
+                "eligibleLoanCount": (0 if eligible is None else int(len(eligible))),
+                "fundedLoanCount": (0 if df is None else int(len(df))),
+                "priorBasis": (BASIS_GOVERNED if eligibility_available(prior_df)
+                               else BASIS_NOT_DERIVED),
+                "note": (
+                    "Schedule 8 numerators and the Concentration Limit "
+                    "Denominator are measured over Eligible Mortgage Loans, as "
+                    "determined by the governed borrowing-base eligibility "
+                    "derivation."
+                    + (" Eligibility currently rests on a PROTOTYPE ASSUMPTION: "
+                       "every loan in the Financing Portfolio is treated as "
+                       "eligible pending the contractual definition."
+                       if facility.prototype_assumption_active else "")),
+            },
+        )
+
+    basis = BASIS_NO_FACILITY if facility is None else BASIS_NOT_DERIVED
+    return (
+        {POPULATION_ELIGIBLE: df},
+        {POPULATION_ELIGIBLE: prior_df},
+        {
+            "basis": basis,
+            "facilityId": getattr(facility, "facility_id", None),
+            "eligibilityGoverned": False,
+            "prototypeAssumptionActive": False,
+            "eligibleLoanCount": None,
+            "fundedLoanCount": (0 if df is None else int(len(df))),
+            "priorBasis": basis,
+            "note": (
+                "No governed eligibility determination exists for this book, "
+                "so tests written over Eligible Mortgage Loans are measured "
+                "over the whole funded portfolio. That is a STAND-IN, not the "
+                "contractual population: record an approved funding facility "
+                "to govern it."),
+        },
+    )
+
+
+def _facility_for(client_id: str):
+    try:
+        return load_facility(client_id)
+    except Exception as exc:  # noqa: BLE001 - never 500 a dashboard request
+        logger.warning("facility configuration unavailable for %s: %s",
+                       client_id, exc)
+        return None
+
+
 def _pending_counts(client_id: str) -> Dict[str, int]:
     try:
         store = ConcentrationStore()
@@ -340,7 +431,46 @@ def _adapt_legacy(legacy: Dict[str, Any]) -> Dict[str, Any]:
 def compute_concentration_tests(output_root, client_id: str,
                                 to_run_id: Optional[str], *,
                                 scope=None) -> Dict[str, Any]:
-    """Full concentration-test envelope for a client/run. Never raises."""
+    """Full concentration-test envelope for a client/run. Never raises.
+
+    Carries the facility BORROWING BASE alongside the Schedule 8 results, from
+    the SAME frame and the SAME evaluation, so the Eligibility & Concentrations
+    tab renders one consistent position from one request. A portfolio with no
+    configured facility gets the borrowing-base block's explicit empty state,
+    and everything else is exactly as it was.
+    """
+    envelope = _concentration_envelope(output_root, client_id, to_run_id,
+                                       scope=scope)
+    try:
+        from . import borrowing_base_api as bb_mod
+        envelope["borrowingBase"] = bb_mod.compute_from_frames(
+            envelope.pop("_fundedFrame", None),
+            client_id=client_id,
+            reporting_date=envelope.get("reportingDate"),
+            run_id=envelope.get("toRunId"),
+            scope=scope,
+            concentration=envelope)
+    except Exception as exc:  # noqa: BLE001 - concentrations stand alone
+        logger.warning("borrowing base unavailable for %s: %s", client_id, exc)
+        envelope.pop("_fundedFrame", None)
+        envelope["borrowingBase"] = {
+            "available": False,
+            "reason": f"The borrowing base could not be calculated: {exc}",
+            "measures": {},
+        }
+    return envelope
+
+
+def _concentration_envelope(output_root, client_id: str,
+                            to_run_id: Optional[str], *,
+                            scope=None) -> Dict[str, Any]:
+    """The concentration-test envelope itself, unchanged.
+
+    Carries the resolved funded frame back under ``_fundedFrame`` so the
+    borrowing base is calculated on the very frame the tests were evaluated
+    over rather than resolving the run a second time. The key is private and
+    removed before the envelope is returned to any caller.
+    """
     config, config_note = _active_configuration(client_id)
     df, prior_df, reporting_date, prior_reporting_date, run_id = \
         _resolve_frames(output_root, client_id, to_run_id, scope=scope)
@@ -357,14 +487,24 @@ def compute_concentration_tests(output_root, client_id: str,
         "proposalCounts": pending,
         "openProposals": open_proposals,
         "unsupportedProposals": pending.get(PROPOSAL_UNSUPPORTED, 0),
+        "_fundedFrame": df,
     }
+
+    facility = _facility_for(client_id)
+    populations, prior_populations, population_disclosure = \
+        _eligible_populations(df, prior_df, facility)
+    base["eligiblePopulation"] = population_disclosure
+    base["facility"] = facility.summary() if facility else None
 
     if config is not None:
         lib = load_library()
         evaluated = evaluate_active_tests(
             df, prior_df, config, lib,
             reporting_date=reporting_date or "",
-            prior_reporting_date=prior_reporting_date or "")
+            prior_reporting_date=prior_reporting_date or "",
+            populations=populations, prior_populations=prior_populations,
+            population_basis={POPULATION_ELIGIBLE:
+                              population_disclosure["basis"]})
         # Forward-looking states: Expected Forecast (existing completion-trend
         # model) and Full Pipeline (maximum-exposure stress). Additive — the
         # funded fields above are never touched; absence is explicit.
@@ -372,9 +512,22 @@ def compute_concentration_tests(output_root, client_id: str,
                                                        scope=scope)
         if pipeline_df is not None:
             from mi_agent.concentration_tests import forward as forward_mod
+            # The forward states start from the SAME funded population the
+            # contractual tests were measured over, so Funded -> Expected is a
+            # movement in one book rather than a change of population. Pipeline
+            # cases carry no eligibility determination — they are not funded
+            # yet — and are included at face value; the states block says so.
+            funded_for_forward = populations.get(POPULATION_ELIGIBLE, df)
             evaluated = forward_mod.extend_with_forward_states(
-                evaluated, config, lib, df, pipeline_df,
+                evaluated, config, lib, funded_for_forward, pipeline_df,
                 forecast_meta=forecast_meta)
+            states = evaluated.get("states")
+            if isinstance(states, dict) and states.get("available"):
+                states["fundedPopulationBasis"] = population_disclosure["basis"]
+                states["pipelineEligibilityNote"] = (
+                    "Pipeline cases are not yet funded and carry no "
+                    "eligibility determination; the forward states include "
+                    "them at face value.")
         else:
             evaluated["states"] = {"available": False,
                                    "reason": forecast_meta.get("reason")}
@@ -397,6 +550,10 @@ def compute_concentration_tests(output_root, client_id: str,
                 "activatedAt": config.activated_at,
                 "libraryVersion": config.library_version,
                 "dataSource": "governed funded canonical frames",
+                "population": population_disclosure,
+                "facilityId": (facility.facility_id if facility else None),
+                "facilityConfigVersion": (facility.config_version
+                                          if facility else None),
                 "reportingDate": reporting_date,
                 "priorReportingDate": prior_reporting_date,
             },
@@ -484,9 +641,17 @@ def compute_drillthrough(output_root, client_id: str, to_run_id: Optional[str],
     df, _prior, reporting_date, _pdate, _run = _resolve_frames(
         output_root, client_id, to_run_id, scope=scope)
     lib = load_library()
-    out = _drillthrough(df, lib, test, max_rows=max_rows)
+    # Drill-through reads the SAME population the test was evaluated over, so a
+    # contractual "Eligible Mortgage Loans" test never lists ineligible loans.
+    populations, _prior_pops, population_disclosure = _eligible_populations(
+        df, None, _facility_for(client_id))
+    out = _drillthrough(df, lib, test, max_rows=max_rows,
+                        populations=populations)
     out["reportingDate"] = reporting_date
     out["configurationVersion"] = config.version
+    out["population"] = str(getattr(test, "population", "") or "") or None
+    out["populationBasis"] = (population_disclosure["basis"]
+                              if getattr(test, "population", "") else None)
     return out
 
 
@@ -510,8 +675,11 @@ def compute_pipeline_drivers(output_root, client_id: str,
                 "reason": forecast_meta.get("reason", "No governed pipeline."),
                 "drivers": []}
     lib = load_library()
+    populations, _prior_pops, _disclosure = _eligible_populations(
+        df, None, _facility_for(client_id))
     evaluated = evaluate_active_tests(df, None, config, lib,
-                                      reporting_date=reporting_date or "")
+                                      reporting_date=reporting_date or "",
+                                      populations=populations)
     row = next((t for t in evaluated["tests"] if t["testId"] == test_id), None)
     if row is None:
         return {"available": False,
@@ -646,15 +814,22 @@ def compute_history(output_root, client_id: str, to_run_id: Optional[str],
                 "reason": "That test is not in the active configuration.",
                 "series": []}
     series: List[Dict[str, Any]] = []
+    facility = _facility_for(client_id)
     for t in tests:
         points = []
         for frame in frames:
             single = ActiveConfiguration(client_id=config.client_id,
                                          version=config.version, tests=[t],
                                          library_version=config.library_version)
+            # Each historical period is narrowed by ITS OWN eligibility
+            # determination, so a trend line compares like with like rather
+            # than today's eligible book against last quarter's whole one.
+            populations, _p, _d = _eligible_populations(
+                frame.get("df"), None, facility)
             evaluated = evaluate_active_tests(
                 frame.get("df"), None, single, lib,
-                reporting_date=str(frame.get("reporting_date") or ""))
+                reporting_date=str(frame.get("reporting_date") or ""),
+                populations=populations)
             row = evaluated["tests"][0]
             points.append({
                 "runId": frame.get("run_id"),

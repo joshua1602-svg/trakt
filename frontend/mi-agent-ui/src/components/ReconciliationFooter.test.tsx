@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { TableArtifact } from "@/domain";
 import { ReconciliationFooter } from "./ReconciliationFooter";
 
@@ -34,8 +34,19 @@ describe("ReconciliationFooter", () => {
         })}
       />,
     );
-    expect(screen.getByText("Reconciliation & coverage")).toBeInTheDocument();
+    // CHANGED DELIBERATELY. A result that ties out completely used to spend six
+    // fields and a heading saying so, under every chart, on every answer. That
+    // reading is one line; the grid is one click away for anyone auditing.
+    expect(screen.queryByText("Reconciliation & coverage")).toBeNull();
+    const summary = screen.getByRole("button", { name: /Reconciles: 100 of 100 records/ });
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(summary.textContent).toMatch(/100% coverage/);
+    expect(screen.queryByText(/Coverage by balance: 100%/)).toBeNull();
+    // The detail is still there, on request, unchanged.
+    fireEvent.click(summary);
+    expect(summary).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText(/Coverage by balance: 100%/)).toBeInTheDocument();
+    expect(screen.getByText(/Missing policy: bucket/)).toBeInTheDocument();
   });
 
   it("states the excluded balance when coverage is partial", () => {

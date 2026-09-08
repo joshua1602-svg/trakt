@@ -155,7 +155,20 @@ def resolve_tape_path(output_root: str | os.PathLike, client_id: str, run_id: st
 # Discovery
 # --------------------------------------------------------------------------- #
 def _portfolio_label(client_id: str) -> str:
-    return str(client_id).upper()
+    """The client's governed name where one is declared, else the identifier.
+
+    See :mod:`mi_agent_api.client_identity` — the name is read only from
+    governed per-client sources, never derived from the tape.
+    """
+    from . import client_identity
+    return client_identity.portfolio_label(client_id)
+
+
+def _governed_client_name(client_id: str) -> Optional[str]:
+    """The governed name alone, or ``None`` — so a surface can tell a NAME from
+    an identifier without re-deriving one."""
+    from . import client_identity
+    return client_identity.governed_client_name(client_id)
 
 
 def discover_snapshots(output_root: str | os.PathLike) -> Dict[str, Any]:
@@ -186,7 +199,9 @@ def discover_snapshots(output_root: str | os.PathLike) -> Dict[str, Any]:
             "current_outstanding_balance": round(_balance_sum(df), 2),
         }
         pf = portfolios.setdefault(
-            client_id, {"client_id": client_id, "label": _portfolio_label(client_id), "runs": {}}
+            client_id,
+            {"client_id": client_id, "label": _portfolio_label(client_id),
+             "client_name": _governed_client_name(client_id), "runs": {}},
         )
         pf["runs"][run_id] = run
 
@@ -196,7 +211,8 @@ def discover_snapshots(output_root: str | os.PathLike) -> Dict[str, Any]:
             pf["runs"].values(),
             key=lambda r: (r["reporting_date"] or "", r["run_id"]),
         )
-        out.append({"client_id": pf["client_id"], "label": pf["label"], "runs": runs})
+        out.append({"client_id": pf["client_id"], "label": pf["label"],
+                    "client_name": pf["client_name"], "runs": runs})
     out.sort(key=lambda p: p["client_id"])
     return {"portfolios": out}
 
@@ -1192,7 +1208,20 @@ def _prepared_run_key(path: Path) -> Optional[str]:
         st = path.stat()
     except OSError:
         return None
-    return f"{path}:{st.st_mtime_ns}:{st.st_size}"
+    # Preparation now stamps a governed borrowing-base eligibility
+    # determination onto the frame, and that determination is a function of the
+    # FACILITY CONFIGURATION as well as of the tape. Without the configuration
+    # generation in the key, an approved change to a facility's terms would not
+    # reach a served frame until the tape itself changed.
+    return f"{path}:{st.st_mtime_ns}:{st.st_size}:{_facility_generation()}"
+
+
+def _facility_generation() -> str:
+    try:
+        from mi_agent.borrowing_base.config import configuration_generation
+        return configuration_generation()
+    except Exception:  # noqa: BLE001 - a cache key must never break a read
+        return "unknown"
 
 
 @_perf.stage_fn("load_prepared_run")

@@ -28,10 +28,12 @@ import type {
   GeoExposure,
   MovementDetail,
   MovementDetailType,
+  StageTransitionDetail,
   WeeklyBrief,
   PipelineEvolution,
   PipelineMovement,
   ConcentrationDrillthrough,
+  EligibilityLoans,
   ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTestsSnapshot,
@@ -126,6 +128,23 @@ export interface AgentClient {
                    signal?: AbortSignal): Promise<MovementDetail>;
 
   /**
+   * OPTIONAL governed GROSS stage transitions for one weekly point.
+   *
+   * The SAME endpoint as `getMovementDetail`, under the detail type
+   * `PIPELINE_STAGE_TRANSITION` — no second route and no second client. It is a
+   * separate method purely because the payload is a different SHAPE (a
+   * transition matrix, not a ranked contributor list), so one signature cannot
+   * type both without forcing every existing caller to narrow.
+   *
+   * Optional for the same reason as `getMovementDetail`: the endpoint does not
+   * exist on a deployment that has not enabled the layer, and a rejection means
+   * "no detail", never an error worth surfacing.
+   */
+  getStageTransitionDetail?(portfolioId: string, asOf?: string,
+                          portfolioContext?: string,
+                          signal?: AbortSignal): Promise<StageTransitionDetail>;
+
+  /**
    * OPTIONAL Weekly Portfolio Brief (Phase 3A).
    *
    * Optional on the interface for the same reason as `getMovementDetail`: a
@@ -149,6 +168,16 @@ export interface AgentClient {
   getConcentrationDrillthrough(portfolioId: string, testId: string,
                                portfolioContext?: string,
                                signal?: AbortSignal): Promise<ConcentrationDrillthrough>;
+
+  /** Loans carrying one governed borrowing-base eligibility status, with the
+   *  reason each was classified that way. Optional, on the same convention as
+   *  the other capability-gated methods: a client that cannot serve it says so
+   *  and the panel shows the reason, rather than every test double having to
+   *  stub it. */
+  getEligibilityLoans?(portfolioId: string,
+                       status: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED",
+                       portfolioContext?: string,
+                       signal?: AbortSignal): Promise<EligibilityLoans>;
 
   /** Metric history across real governed snapshots (never fabricated). */
   getConcentrationHistory(portfolioId: string, testId?: string,

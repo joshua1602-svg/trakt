@@ -98,7 +98,7 @@ def _vocabulary(semantics, available_values, available_columns):
     return _VOCAB_CACHE[key]
 
 
-def _apply_to_spec(spec, filled) -> List[Dict[str, Any]]:
+def _apply_to_spec(spec, filled, semantics=None) -> List[Dict[str, Any]]:
     """Put the model's fills on the spec. Additive only, by construction.
 
     A threshold arrives with an operator and becomes `{"op": ..., "value": ...}`
@@ -112,16 +112,29 @@ def _apply_to_spec(spec, filled) -> List[Dict[str, Any]]:
     filters = dict(getattr(spec, "filters", None) or {})
     dimensions = list(getattr(spec, "dimensions", None) or [])
 
+    def _already_claimed(key, keys) -> bool:
+        """True when ``key`` is another governed spelling of a concept ``keys``
+        already carries. The merge decides this too; asserted again here because
+        writing two physical filters for one concept selects their INTERSECTION,
+        and on a frame carrying only one of them it refuses outright."""
+        try:
+            from mi_agent.categorical_spans import alias_fields
+
+            return bool(set(alias_fields(key, semantics)) & set(keys))
+        except Exception:  # noqa: BLE001 - no owner reachable, no alias rule
+            return False
+
     for slot in filled:
         if slot.slot == CM.SLOT_ROW_PREDICATES and slot.key:
-            if slot.key in filters:
+            if slot.key in filters or _already_claimed(slot.key, filters):
                 continue        # never overwrite; the merge already said so
             filters[slot.key] = ({"op": slot.operator, "value": slot.value}
                                  if slot.operator else slot.value)
             applied.append({"kind": "filter", "field": slot.key,
                             "operator": slot.operator, "value": slot.value})
         elif slot.slot == CM.SLOT_DIMENSIONS and slot.key:
-            if slot.key in dimensions or getattr(spec, "dimension", None) == slot.key:
+            axes = set(dimensions) | {getattr(spec, "dimension", None)}
+            if slot.key in axes or _already_claimed(slot.key, axes):
                 continue
             dimensions.append(slot.key)
             applied.append({"kind": "dimension", "field": slot.key})
@@ -205,8 +218,12 @@ def apply(question: str, spec: Any, semantics: Dict[str, Any], *,
     # check a proposed role rather than trust it. Built from `spec` before any
     # fill touches it — a profile read after the merge would be circular.
     result = CM.merge(CM.deterministic_slots(interpretation), bound, rejected,
-                      profile=CM.operation_profile(spec))
-    applied = _apply_to_spec(spec, result.filled_by_model)
+                      profile=CM.operation_profile(spec),
+                      # So a keyed slot is addressed by CONCEPT: a field the
+                      # deterministic side already claimed under another of its
+                      # governed spellings is not an empty slot.
+                      semantics=semantics)
+    applied = _apply_to_spec(spec, result.filled_by_model, semantics)
 
     return {
         "status": "applied" if applied else "no_change",

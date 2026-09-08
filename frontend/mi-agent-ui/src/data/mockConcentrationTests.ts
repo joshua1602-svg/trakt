@@ -6,14 +6,18 @@
  */
 
 import type {
+  BorrowingBaseSnapshot,
   ConcentrationDrillthrough,
   ConcentrationDrivers,
   ConcentrationHistory,
   ConcentrationTest,
   ConcentrationTestsSnapshot,
+  EligibilityLoans,
   EmergingRisk,
+  FacilitySummary,
   ForecastMethodology,
 } from "@/domain";
+import { NOT_CALCULABLE } from "@/domain";
 
 const APPROVAL = {
   approvedBy: "Demo Operator",
@@ -249,6 +253,145 @@ const TESTS: ConcentrationTest[] = [
   }),
 ];
 
+/** The prototype ERE warehouse facility, as the governed configuration states it. */
+const MOCK_FACILITY: FacilitySummary = {
+  clientId: "ere_funding_uk",
+  facilityId: "ERE_WAREHOUSE_01",
+  facilityLabel: "ERE Warehouse Facility 01",
+  facilityType: "warehouse",
+  currency: "GBP",
+  commitment: 250_000_000,
+  advanceRate: 1.03,
+  advanceRatePct: 103,
+  concentrationDenominatorFloor: 33_000_000,
+  currentDrawnAmount: null,
+  currentDrawnAmountAsOf: null,
+  effectiveDate: "2025-11-30",
+  maturityDate: null,
+  environment: "prototype",
+  eligibilityRuleVersion: "prototype-0",
+  eligibilityRuleCount: 0,
+  eligibilityGoverned: false,
+  prototypeAssumptionActive: true,
+  concentrationPopulation: "eligible_mortgage_loans",
+  borrowingBaseTreatment: "monitor_only",
+  configSource: "platform_register:funding_facilities.yaml",
+  configVersion: "2026.09.07-1",
+  configHash: "demo",
+};
+
+/**
+ * The demo facility position. Note what it deliberately does NOT show: the
+ * drawn balance is absent, so headroom, deficiency and both utilisations are
+ * NOT_CALCULABLE rather than zero. That is the real shape of this prototype —
+ * Trakt has the collateral but no facility statement — and the mock exists to
+ * exercise it, not to hide it behind a plausible number.
+ */
+const MOCK_BORROWING_BASE: BorrowingBaseSnapshot = {
+  available: true,
+  facility: MOCK_FACILITY,
+  facilityId: "ERE_WAREHOUSE_01",
+  currency: "GBP",
+  eligibilityDerived: true,
+  financingPortfolioLoanCount: 1_240,
+  financingPortfolioBalance: 148_200_000,
+  eligibleLoanCount: 1_180,
+  eligibleCurrentBalance: 141_050_000,
+  eligibleShareOfFinancingPortfolioPct: 95.17,
+  ineligibleLoanCount: 0,
+  ineligibleCurrentBalance: 0,
+  ineligibleShareOfFinancingPortfolioPct: 0,
+  undeterminedLoanCount: 60,
+  undeterminedCurrentBalance: 7_150_000,
+  undeterminedShareOfFinancingPortfolioPct: 4.83,
+  balanceColumn: "current_outstanding_balance",
+  invariants: [],
+  reconciles: true,
+  concentrationLimitDenominator: 141_050_000,
+  concentrationLimitDenominatorFloor: 33_000_000,
+  concentrationDenominatorFloorBinding: false,
+  advanceRate: 1.03,
+  advanceRatePct: 103,
+  grossBorrowingBase: 145_281_500,
+  facilityCommitment: 250_000_000,
+  availableBorrowingBase: 145_281_500,
+  facilityCapBinding: false,
+  currentDrawnAmount: NOT_CALCULABLE,
+  borrowingBaseHeadroom: NOT_CALCULABLE,
+  borrowingBaseDeficiency: NOT_CALCULABLE,
+  borrowingBaseUtilisationPct: NOT_CALCULABLE,
+  facilityUtilisationPct: NOT_CALCULABLE,
+  concentrationAdjustment: {
+    treatment: "monitor_only",
+    amount: 0,
+    breachedTestCount: 1,
+    excessMeasuredPct: 1.8,
+    note:
+      "Concentration breaches are monitored. Schedule 8 as supplied " +
+      "establishes the tests but not the contractual consequence of a breach " +
+      "for the borrowing base, so nothing is deducted.",
+  },
+  nearestConcentrationLimit: "Regional exposure — East of England",
+  nearestConcentrationLimitTestId: "ct_east_anglia",
+  nearestConcentrationHeadroomPct: -1.8,
+  nearestConcentrationHeadroomAmount: null,
+  nearestConcentrationUtilisationPct: 107.2,
+  nearestConcentrationStatus: "breach",
+  breachedConcentrationCount: 1,
+  breachedConcentrations: [],
+  missingInputs: ["current_drawn_amount"],
+  prototypeAssumptionsUsed: [
+    "prototype_assume_financing_portfolio_eligible: every loan in the " +
+      "configured Financing Portfolio is treated as an Eligible Mortgage " +
+      "Loan. This is a PROTOTYPE ASSUMPTION, not a contractual eligibility " +
+      "determination.",
+  ],
+  notes: [
+    "The current drawn amount under the facility has not been supplied, so " +
+      "headroom, utilisation and any deficiency cannot be calculated. The " +
+      "borrowing base itself is unaffected.",
+  ],
+  measures: {},
+};
+
+/** Loans behind one governed eligibility status, in the demo book. */
+export function mockEligibilityLoans(
+  _portfolioId: string,
+  status: "ELIGIBLE" | "INELIGIBLE" | "UNDETERMINED",
+): EligibilityLoans {
+  const counts = { ELIGIBLE: 1_180, INELIGIBLE: 0, UNDETERMINED: 60 };
+  const reason =
+    status === "ELIGIBLE"
+      ? "prototype_financing_portfolio_assumption"
+      : "no_approved_eligibility_rules";
+  const rowCount = counts[status];
+  const rows = Array.from({ length: Math.min(rowCount, 25) }, (_, i) => ({
+    loan_id: `L${2000 + i}`,
+    collateral_geography: "East Anglia",
+    current_outstanding_balance: 118_000 + i * 900,
+    borrowing_base_eligibility_status: status,
+    borrowing_base_eligibility_reason: reason,
+  }));
+  return {
+    available: true,
+    status,
+    facilityId: "ERE_WAREHOUSE_01",
+    columns: [
+      "loan_id",
+      "collateral_geography",
+      "current_outstanding_balance",
+      "borrowing_base_eligibility_status",
+      "borrowing_base_eligibility_reason",
+    ],
+    rows,
+    rowCount,
+    truncated: rowCount > rows.length,
+    reportingDate: "2025-11-30",
+    toRunId: "mi_2025_11",
+  };
+}
+
+
 export function mockConcentrationTests(portfolioId: string): ConcentrationTestsSnapshot {
   return {
     portfolioId,
@@ -270,6 +413,21 @@ export function mockConcentrationTests(portfolioId: string): ConcentrationTestsS
     openProposals: 1,
     unsupportedProposals: 1,
     tests: TESTS,
+    facility: MOCK_FACILITY,
+    eligiblePopulation: {
+      basis: "governed_eligibility",
+      facilityId: "ERE_WAREHOUSE_01",
+      eligibilityGoverned: false,
+      prototypeAssumptionActive: true,
+      eligibleLoanCount: 1_180,
+      fundedLoanCount: 1_240,
+      priorBasis: "governed_eligibility",
+      note:
+        "Schedule 8 numerators and the Concentration Limit Denominator are " +
+        "measured over Eligible Mortgage Loans. Eligibility currently rests " +
+        "on a PROTOTYPE ASSUMPTION.",
+    },
+    borrowingBase: MOCK_BORROWING_BASE,
     summary: {
       overallStatus: "breach",
       activeTests: TESTS.length,

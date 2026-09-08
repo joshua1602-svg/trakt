@@ -4,23 +4,29 @@
  * Plotly is only used as a last-resort fallback (see ArtifactRenderer). When it
  * is, the backend figure carries the chart factory's light theme; this adapter
  * re-skins it to match the dark Trakt dashboard: transparent background, Inter
- * typography, navy/periwinkle palette, soft gridlines, and dark hover styling.
+ * typography, Slate & Cyan palette, soft gridlines, and dark hover styling.
+ *
+ * These are literal hex mirrors of index.css's tokens — a Plotly figure is
+ * plain JSON handed to a chart library, not DOM the CSS cascade reaches, so
+ * the values have to be duplicated by hand. Keep them in step with
+ * --color-line-soft / --color-line / --color-ink-100/300/400 /
+ * --color-navy-950 whenever those change.
  */
 import { THEME } from "./theme";
 
 const FONT = 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-const GRID = "#1c2440"; // line-soft
-const LINE = "#232b48"; // line
-const INK_100 = "#eef1f8";
-const INK_300 = "#b8c0d6";
-const INK_400 = "#8c95b0";
-const NAVY_950 = "#0c1024";
+const GRID = "#1a1c20"; // --color-line-soft
+const LINE = "#262a31"; // --color-line
+const INK_100 = "#eef1f2";
+const INK_300 = "#9da4ab";
+const INK_400 = "#767d87";
+const NAVY_950 = "#0a0b0d";
 
-/** Dark sequential colourscale for heatmap-style traces (navy → periwinkle). */
+/** Dark sequential colourscale for heatmap-style traces (slate → cyan). */
 export const TRAKT_SEQUENTIAL: Array<[number, string]> = [
-  [0, "#11162e"],
-  [0.5, "#3d4a82"],
-  [1, THEME.peri],
+  [0, "#101318"],
+  [0.5, THEME.navy],
+  [1, THEME.cyan],
 ];
 
 type AnyObj = Record<string, unknown>;

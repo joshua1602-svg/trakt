@@ -28,6 +28,7 @@ canonical (etag change) is picked up automatically.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from collections import OrderedDict
@@ -36,6 +37,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from trakt_core import perf as _perf
+
+logger = logging.getLogger(__name__)
 
 _PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
 #: A DATED platform canonical under a blob:// platform root. ``latest/`` is
@@ -151,7 +154,7 @@ def build_index(root: str, storage, *, label_fn=None, balance_fn,
     dated = list_dated_platform_canonicals(root, storage)
     if not dated:
         return None
-    client_id = default_client_id or "platform"
+    client_id = default_client_id or _served_client_id()
     runs: List[Dict[str, Any]] = []
     for d in dated:
         df = _read(d["uri"], storage)
@@ -163,10 +166,33 @@ def build_index(root: str, storage, *, label_fn=None, balance_fn,
     if not runs:
         return None
     runs.sort(key=lambda r: (r["reporting_date"] or "", r["run_id"]))
+    from . import client_identity
     return {"portfolios": [{"client_id": client_id,
-                            "label": str(client_id).upper(),
+                            "label": client_identity.portfolio_label(client_id),
+                            "client_name": client_identity.governed_client_name(client_id),
                             "runs": runs}],
             "source": root}
+
+
+def _served_client_id() -> str:
+    """The tenant this deployment serves, for a blob root that names none.
+
+    This was the literal string ``"platform"``, which is why the dashboard
+    header read "Platform" on a blob-triggered run: the index took the raw
+    ``MI_AGENT_CLIENT_ID`` and, with it unset, fell through to a placeholder,
+    while every other surface resolved a real client via
+    ``dependencies.default_tenant_id`` (the env var, else the client embedded in
+    ``MI_AGENT_PLATFORM_URI``, else the historical default). One resolver now,
+    so discovery and the rest of the API agree on who the client is.
+    """
+    try:
+        from .dependencies import default_tenant_id
+        resolved = (default_tenant_id() or "").strip()
+        if resolved:
+            return resolved
+    except Exception as exc:  # noqa: BLE001 - discovery must never 500
+        logger.warning("blob platform index: tenant unresolved: %s", exc)
+    return "platform"
 
 
 _TOTAL_SCOPES = {"total", "all", "client_001", "platform", ""}

@@ -242,17 +242,54 @@ def test_f3b_the_fallthrough_answer_is_identical_to_the_baseline(client):
 # --------------------------------------------------------------------------- #
 # F4 — a governed refusal is not an execution failure
 # --------------------------------------------------------------------------- #
-def test_f4_a_governed_refusal_is_unchanged(client):
-    """The no-implicit-period ruling. A refusal must stay a refusal."""
+def test_f4_a_defaulted_period_is_disclosed_not_hidden(client):
+    """The no-implicit-period ruling, as amended on 2026-09-03.
+
+    WHAT CHANGED AND WHY. The ruling was that a question naming no window is
+    refused. It is now the estate's other rule for a missing element the
+    analysis cannot exist without — the one the MEASURE half already follows:
+    substitute the governed default, and leave a trace. A ranked dimension is a
+    named subject, so this question is answered over the latest governed pair
+    and says so.
+
+    WHAT THE RULING STILL PROTECTS is unchanged and is what this pins: a window
+    the reader did not choose can never arrive undisclosed. Both dates are
+    named — "the latest period" is not a disclosure, because a reader cannot
+    check a window they cannot see.
+    """
     response = _ask(client, "Which region grew the most?")
-    assert response["ok"] is False
+    assert response["ok"] is True
     meta = response["metadata"]
-    assert meta.get("executionFailure") is None, \
-        "a governed refusal was converted into an internal execution failure"
+    assert meta.get("executionFailure") is None
     assert meta.get("claimBoundaryCrossed") is None
-    assert "names no period to compare over" in (response.get("answer") or "")
-    assert "I have not chosen one for you" in (response.get("answer") or "")
-    assert meta.get("route") == "period_change"
+    # `period_change` is the name the REFUSAL carries; a delivered analysis
+    # names itself `period_change_analysis`. Asserting the refusal's name here
+    # would pass only while this question kept refusing.
+    assert meta.get("route") == "period_change_analysis"
+
+    defaulted = meta.get("periodDefaulted")
+    assert defaulted, "a window nobody asked for arrived with no declaration"
+    assert defaulted["start"] and defaulted["end"], \
+        "the declaration must name both ends, not just the method"
+
+    answer = response.get("answer") or ""
+    assert "did not name a period" in answer, \
+        "the disclosure reached the metadata but not the reader"
+    for end in (defaulted["start"], defaulted["end"]):
+        assert end in answer, f"the answer does not name {end}"
+
+
+def test_f4b_a_question_naming_no_subject_at_all_still_refuses(client):
+    """The bare case, which the amendment does NOT touch.
+
+    "What changed?" names neither a subject nor a window. There is nothing to
+    analyse over any period, so defaulting the period would not rescue it — and
+    `migration_phase0/must_refuse_both_arms.py` still fails the estate if this
+    starts answering.
+    """
+    response = _ask(client, "What changed?")
+    assert response["ok"] is False
+    assert "have not chosen either for you" in (response.get("answer") or "")
     assert response.get("artifacts") == []
 
 

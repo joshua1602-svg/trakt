@@ -155,10 +155,13 @@ class RiskMonitor:
         mask = vals < threshold
         return self._percent_of_balance(mask)
 
-    def calc_high_value_property_pct(self, threshold: float = 1_000_000.0) -> float:
+    def calc_high_value_property_pct(self, threshold: float = 1_500_000.0) -> float:
         """
         % of portfolio where original property valuation exceeds threshold.
-        Schedule 8: >£1m cap as % of portfolio.
+        Schedule 8: > £1,500,000 cap as % of the Concentration Limit
+        Denominator. The caller normally passes the configured
+        ``threshold_amount``; this default matches the schedule so a caller
+        that does not still measures the right population.
         """
         col = "original_valuation_amount"
         if col not in self.df.columns or self._required_field_missing(col):
@@ -255,7 +258,18 @@ class RiskMonitor:
     # ------------------------------------------------------------------
 
     def calculate_metric(self, limit_id: str) -> float:
-        """Route limit_id to appropriate calculator."""
+        """Route limit_id to appropriate calculator.
+
+        A metric that compares against a contractual AMOUNT (the property-value
+        buckets) reads that amount from the limit configuration's
+        ``threshold_amount``, not from a Python default. Schedule 8 sets those
+        figures, so they belong beside the limit they qualify — a default of
+        £1m sitting in a function signature while the schedule says £1.5m is
+        exactly how a monitor comes to measure the wrong population.
+        """
+        config = (self.limits.get(limit_id) or {})
+        amount = config.get("threshold_amount")
+
         calculators = {
 
             # Schedule 8 – Regional
@@ -273,9 +287,13 @@ class RiskMonitor:
             "max_region_ukn_pct": self.calc_region_ukn,
             "max_region_uki_ukj_combined": self.calc_region_uki_ukj_combined,
 
-            # Schedule 8 – Property value buckets
-            "max_low_value_property_pct": self.calc_low_value_property_pct,
-            "max_high_value_property_pct": self.calc_high_value_property_pct,
+            # Schedule 8 – Property value buckets (threshold from config)
+            "max_low_value_property_pct": (
+                (lambda: self.calc_low_value_property_pct(float(amount)))
+                if amount is not None else self.calc_low_value_property_pct),
+            "max_high_value_property_pct": (
+                (lambda: self.calc_high_value_property_pct(float(amount)))
+                if amount is not None else self.calc_high_value_property_pct),
 
             # Schedule 8 – Borrower concentration
             "max_single_borrower_balance_pct": self.calc_max_single_borrower_balance_pct,
