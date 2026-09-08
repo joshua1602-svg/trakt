@@ -317,8 +317,15 @@ body {
    *                underline on a structural baseline
    *   2  VIEW      contained segmented track, selection marked by a
    *                raised thumb inside a recessed well
-   *   3  UNIT      hairline-divided micro switch, uppercase, entirely
+   *   3  UNIT      hairline-divided micro switch, entirely
    *                monochrome — no accent at all
+   *
+   * All three now share ONE additional cue — uppercase — plus the
+   * region headings above them (MI Agent / Core Dashboard / Artifact
+   * Workspace) that this navigation sits under, so a reader tells "this
+   * is structure" from "this is content" at a glance, before parsing
+   * which tier they're looking at. The kind-of-treatment distinctions
+   * above still carry the tier itself.
    * ================================================================ */
 
   /* ---- Tier 1: section rail -------------------------------------- */
@@ -336,6 +343,8 @@ body {
     padding: 0.6875rem 1rem 0.625rem;
     font-size: var(--fs-body);
     font-weight: 500;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
     color: var(--color-ink-400);
     background: transparent;
     transition:
@@ -401,6 +410,8 @@ body {
     padding: 0.3125rem 0.75rem;
     font-size: var(--fs-meta);
     font-weight: 500;
+    letter-spacing: var(--tracking-caps);
+    text-transform: uppercase;
     color: var(--color-ink-400);
     background: transparent;
     transition:

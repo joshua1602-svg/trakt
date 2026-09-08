@@ -71,7 +71,13 @@ from trakt_core.portfolio import (
     CAP_RISK,
 )
 
-_PALETTE = ["#919dd1", "#36c2a8", "#e0a93b", "#c46b8f", "#3d4a82", "#6fcf97"]
+# SLATE & CYAN — mirrors adapters.py's _PALETTE (same rationale for the
+# independent copy: see the comment there) and, by value, lib/theme.ts /
+# mi_agent_pptx/pptx_theme.py. Indices are load-bearing at specific call
+# sites below (index 0 = primary/base series everywhere; index 1 = mint,
+# used for "Upside"; index 3 = rose, used for "Downside" — preserve those
+# roles if this list is ever reordered).
+_PALETTE = ["#22d3ee", "#36c2a8", "#e0a93b", "#e0607a", "#9085e9", "#008300"]
 
 # Per evolution-metric display: (answer_style, chart valueFormat, chart scale).
 _METRIC_DISPLAY: Dict[str, Tuple[str, str, Optional[str]]] = {

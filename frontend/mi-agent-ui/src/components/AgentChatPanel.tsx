@@ -134,7 +134,7 @@ export function AgentChatPanel({
           <Sparkles size={18} />
         </div>
         <div className="flex items-center gap-1.5">
-          <h1 className="text-base font-semibold leading-none text-cyan-50">MI Agent</h1>
+          <h1 className="text-base font-semibold uppercase tracking-wide leading-none text-cyan-50">MI Agent</h1>
           {/* Dark-navy tile fill (the same surface the dashboard's own KPI
               tiles sit on) so it reads as a distinct chip against the chat
               header's translucent teal, rather than blending into it.
