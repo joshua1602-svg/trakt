@@ -1639,12 +1639,17 @@ def _grouped_evolution_answer(*, question, spec_dict, periods, grain_key,
         as_of=as_of,
         display_hints={cat: {"format": disp[1], "scale": disp[2]}
                        for cat in categories})
-    table_rows = [{"period": per, "category": cat, "value": series_map[cat][i]}
+    # THE GOVERNED FIELD NAMES ITS OWN COLUMN. The current-period grouped table
+    # publishes `collateral_geography`, so a temporal one publishing `category`
+    # would describe the same breakdown by a name the registry does not know —
+    # and a reader (or a receipt) could no longer tell WHICH axis was cut from
+    # the artifact alone. Same key, same meaning, both paths.
+    table_rows = [{"period": per, grouping: cat, "value": series_map[cat][i]}
                   for i, per in enumerate(period_labels) for cat in categories]
     table = _table_artifact(
         f"{label} by {dim_label} trend{scope_suffix}", columns=[
             {"key": "period", "label": "Period", "align": "left", "format": "text"},
-            {"key": "category", "label": dim_label.title(), "align": "left",
+            {"key": grouping, "label": dim_label.title(), "align": "left",
              "format": "text"},
             {"key": "value", "label": label, "align": "right",
              "format": disp[1], "scale": disp[2]},
@@ -1685,8 +1690,15 @@ def _grouped_evolution_answer(*, question, spec_dict, periods, grain_key,
 
     last_recon = (periods[-1].get("reconciliation") if periods else None) or {
         "dataset": "funded", "coverage_by_balance_pct": 100.0}
+    # THE TABLE LEADS. One row per period per category, each naming its own
+    # axis — the reconcilable statement of the result, and the form in which a
+    # reader or an instrument can check that the breakdown sums back to the
+    # ungrouped series period by period. The chart renders the same figures
+    # wide, one series per category, because that is what the line renderer
+    # reads; it cannot carry the axis as a column and so cannot stand as the
+    # evidence.
     out = _envelope(ok=True, question=question, answer=answer, spec=spec_dict,
-                    artifacts=[chart, table], reconciliation=last_recon,
+                    artifacts=[table, chart], reconciliation=last_recon,
                     source_notes=notes, warnings=warnings,
                     route="evolution_grouped")
     _declare_grain(out, compare_mod.series_grain(periods))

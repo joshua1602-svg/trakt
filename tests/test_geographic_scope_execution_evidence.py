@@ -396,3 +396,49 @@ def test_claiming_a_word_only_ever_suppresses_a_note():
     assert _claimed_by_an_owner("platinum", {}, None, None, axis) is False
     # Unscoped, the same word is claimed by nobody.
     assert _claimed_by_an_owner("time", {}, None, None, ()) is False
+
+
+def test_a_breakdown_over_time_sums_back_to_the_ungrouped_series():
+    """Period by period, the parts are the whole.
+
+    The strongest statement available about a period x dimension answer that
+    does not require a second calculation: whatever the breakdown says, adding
+    its categories up in each period must give the series the SAME question
+    without a breakdown publishes. Both come from one executor over one frame,
+    so a discrepancy would mean the grouping changed the population — which is
+    the failure a temporal breakdown is most likely to hide, because each point
+    looks plausible on its own.
+    """
+    from collections import defaultdict
+
+    grouped = _ask("Show balance by region over time")
+    plain = _ask("Show funded balance over time")
+    assert grouped["ok"] is True and plain["ok"] is True
+
+    table = next(a for a in grouped["artifacts"] if a["type"] == "table")
+    composed = defaultdict(float)
+    for row in table["rows"]:
+        if row.get("value") is not None:
+            composed[str(row["period"])] += float(row["value"])
+
+    chart = next(a for a in plain["artifacts"] if a["type"] == "chart")
+    shipped = {str(r["period"]): float(r["value"]) for r in chart["rows"]}
+
+    assert set(composed) == set(shipped), set(composed) ^ set(shipped)
+    for period, total in shipped.items():
+        assert abs(composed[period] - total) < 0.011, (
+            period, composed[period], total)
+
+
+def test_the_breakdown_table_names_its_own_axis():
+    """A reader must be able to tell WHICH axis was cut from the artifact alone.
+
+    The column is the governed field key — the same one the current-period
+    grouped table publishes — not a generic "category", so the temporal and the
+    ordinary breakdown describe the same cut by the same name.
+    """
+    grouped = _ask("Show balance by region over time")
+    table = next(a for a in grouped["artifacts"] if a["type"] == "table")
+    keys = [c["key"] for c in table["columns"]]
+    assert "collateral_geography" in keys, keys
+    assert "category" not in keys, keys
