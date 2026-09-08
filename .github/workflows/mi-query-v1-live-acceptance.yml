@@ -1,0 +1,143 @@
+name: MI Query Agent V1 live acceptance
+
+# READ-ONLY against production. Deploys nothing, changes no Azure setting, and
+# asks nothing twice: it drives the FROZEN 135-question bank through the
+# EXISTING certification transport (`certify_mi_api._live_asker`) and the
+# EXISTING deployed-commit provenance check (`certify_mi_api.preflight`), and
+# takes its truth from the dashboard's own GET endpoints.
+#
+# `expect_commit` names the DEPLOYED build under acceptance and is REQUIRED. A
+# service serving anything else exits 2 — NOT EXECUTABLE — rather than being
+# scored, because an acceptance of a build nobody identified is not evidence.
+#
+# `ref` exists so the harness can be taken from a branch while `expect_commit`
+# pins the build being accepted. The two are deliberately separate: the code
+# under acceptance is whatever is deployed, not whatever this workflow was
+# checked out from, and the deployed SHA is NOT expected to be the repository's
+# current main.
+#
+# NO DEPENDENCIES ARE INSTALLED. The harness is stdlib-only by design: a gate
+# that reaches production, authenticates, confirms the build and then dies on
+# ModuleNotFoundError has certified nothing. That has happened here before.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Public API base URL
+        default: https://app.traktinfra.io/api
+        required: true
+      path:
+        description: MI endpoint path appended to the base URL
+        default: /mi/query
+        required: true
+      portfolio_id:
+        description: portfolioId as {client_id}/{run_id}
+        default: ERE/2026-06-30
+        required: true
+      expect_commit:
+        description: The deployed SHA this acceptance is accepting.
+        required: true
+      ref:
+        description: Repo ref to take the harness and the frozen bank from.
+        default: main
+        required: true
+
+permissions:
+  contents: read
+
+# One live client against this service at a time, sharing the certification
+# group so an acceptance and a certification cannot interleave requests.
+concurrency:
+  group: certify-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refuse to run without a token
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set — the live"
+            echo "::error::acceptance cannot authenticate."
+            exit 1
+          fi
+          echo "MI_BEARER is present (${#MI_BEARER} characters)."
+
+      - name: The bank must be frozen before it is run
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib, sys
+          bank = json.loads(pathlib.Path(
+              "due_diligence/evidence/mi_api_certification/mi_query_v1_bank.json"
+          ).read_text(encoding="utf-8"))
+          if not bank.get("frozen") or bank.get("question_count") != 135:
+              print("::error::the bank on this ref is not the frozen 135-question bank")
+              sys.exit(1)
+          print(f"{bank['bank_version']}: {bank['question_count']} questions, "
+                f"{bank['canonical_case_count']} canonical cases")
+          PY
+          # The bank must have been committed BEFORE this run, not written by it.
+          git log -1 --format='bank last committed %H %cI %s' -- \
+            due_diligence/evidence/mi_api_certification/mi_query_v1_bank.json
+
+      - name: The harness must pass its own offline tests first
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet pytest
+          python -m pytest -q \
+            due_diligence/evidence/mi_api_certification/test_mi_query_v1_acceptance.py
+
+      - name: Run the live acceptance
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          # `set -e` would abort on the harness's non-zero verdict before the
+          # reports are uploaded, and a gate that fails without saying why is a
+          # gate nobody can act on.
+          set +e
+          python -m due_diligence.evidence.mi_api_certification.mi_query_v1_acceptance \
+            --base-url "${{ inputs.base_url }}" \
+            --path "${{ inputs.path }}" \
+            --portfolio-id "${{ inputs.portfolio_id }}" \
+            --expect-commit "${{ inputs.expect_commit }}" \
+            --json-out mi-query-v1-acceptance.json \
+            --csv-out mi-query-v1-acceptance.csv \
+            --html-out mi-query-v1-acceptance.html \
+            | tee acceptance-console.txt
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo '## MI Query Agent V1 — live acceptance'
+            echo '```'
+            tail -n 60 acceptance-console.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
+
+      - name: Keep the evidence whatever the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-query-v1-live-acceptance
+          path: |
+            mi-query-v1-acceptance.json
+            mi-query-v1-acceptance.csv
+            mi-query-v1-acceptance.html
+            acceptance-console.txt
+          if-no-files-found: warn

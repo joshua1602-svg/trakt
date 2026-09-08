@@ -1,0 +1,489 @@
+"""Independent truth for the MI Query Agent V1 live acceptance.
+
+WHERE TRUTH COMES FROM, AND WHY NOT FROM /mi/query.
+
+The live book does not exist in this repository. It cannot: the certification
+snapshot beside this file records what happened the last time figures were
+written into a fixture and called production truth — the gate failed the
+deployed service for not matching a book it does not hold.
+
+So truth is taken at run time from the DASHBOARD's own GET endpoints: a
+different URL, a different handler, a different response contract, and the
+surface a human actually reads. Asking /mi/query twice and calling the
+agreement independent is not done here and would not be evidence if it were.
+
+Where even that is unavailable, the harness RECOMPUTES the value arithmetically
+from independently fetched components — a share from its part and its whole, a
+delta from two levels, a total from its cells. A service cannot satisfy those
+by repeating itself.
+
+WHAT THIS DOES NOT CLAIM. Below the handlers, the GET endpoints and /mi/query
+read the same governed engines. This is an independent SURFACE, not an
+independent IMPLEMENTATION: a defect inside a shared engine moves both sides
+together and is invisible to a cross-surface check. The report says, per case,
+which method carried the check, so nobody reads more into a pass than it holds.
+
+TRANSPORT. `MI_BEARER` from the environment, the same convention as
+`certify_mi_api._live_asker` and `migration_phase0/replay_probe.py`. It is
+never placed on a command line. Only the verb differs — the certification
+client POSTs questions; truth is READ — so this file adds a GET, not a second
+credential.
+
+STDLIB ONLY. The certification workflows install no dependencies, and a gate
+that dies on `ModuleNotFoundError` after authenticating has certified nothing.
+"""
+from __future__ import annotations
+
+import json
+import os
+import urllib.error
+import urllib.request
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+#: Returned when a truth value could not be established. It is NOT a value and
+#: never compares equal to one: a case whose truth is UNAVAILABLE is reported as
+#: unverified, never as passed.
+UNAVAILABLE = "__UNAVAILABLE__"
+
+#: Returned by an availability rule that could not be resolved either way.
+UNRESOLVED = "__UNRESOLVED__"
+
+SCOTLAND_TOKENS = ("scotland", "scottish")
+
+
+def reader(base_url: str, portfolio_id: Optional[str]
+           ) -> Callable[[str, Optional[Dict[str, str]]], Dict[str, Any]]:
+    """A GET reader for the dashboard surface, bearing the same credential."""
+    bearer = os.environ.get("MI_BEARER", "").strip()
+    root = base_url.rstrip("/")
+
+    def get(path: str, params: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        query = dict(params or {})
+        if portfolio_id and "portfolioId" not in query:
+            query["portfolioId"] = portfolio_id
+        url = root + path
+        if query:
+            from urllib.parse import urlencode
+            url += "?" + urlencode(query)
+        request = urllib.request.Request(url, method="GET")
+        if bearer:
+            request.add_header(
+                "Authorization", "Bearer " + bearer.removeprefix("Bearer ").strip())
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                body = response.read().decode("utf-8") or "{}"
+            return json.loads(body)
+        except urllib.error.HTTPError as exc:
+            return {"__error__": f"HTTP {exc.code}", "__status__": exc.code}
+        except Exception as exc:  # noqa: BLE001
+            return {"__error__": str(exc), "__status__": None}
+
+    return get
+
+
+def _ok(doc: Any) -> bool:
+    """Usable, not merely delivered.
+
+    These endpoints never 500: they answer HTTP 200 carrying ``ok: false`` and
+    a reason. Treating that as a successful read is how a truth collector ends
+    up reporting that the book has no regions, no LTV and no prior period —
+    and how a service that answered all three correctly gets failed for it. A
+    document that says it failed is not truth."""
+    if not isinstance(doc, dict) or "__error__" in doc:
+        return False
+    return doc.get("ok") is not False
+
+
+def _status(doc: Any) -> str:
+    if not isinstance(doc, dict):
+        return "unreadable"
+    if "__error__" in doc:
+        return str(doc["__error__"])
+    if doc.get("ok") is False:
+        return f"answered ok=false: {doc.get('error') or 'no reason given'}"
+    return "ok"
+
+
+def _kpi(snapshot: Dict[str, Any], kpi_id: str) -> Any:
+    for k in (snapshot.get("kpis") or []):
+        if isinstance(k, dict) and k.get("id") == kpi_id:
+            if not k.get("available", True):
+                return UNAVAILABLE
+            raw = k.get("raw")
+            return UNAVAILABLE if raw is None else float(raw)
+    return UNAVAILABLE
+
+
+def _strat_state(snapshot: Dict[str, Any], key: str) -> Any:
+    """Whether this book supports one stratification: True, False, or
+    UNRESOLVED when the snapshot itself could not be read.
+
+    The three are kept apart deliberately. "The tape does not carry product"
+    is a fact about the book and makes a refusal CORRECT; "I could not read
+    the snapshot" is a fact about this harness and must never be scored as
+    either."""
+    entries = snapshot.get("stratifications")
+    if not isinstance(entries, list) or not entries:
+        return UNRESOLVED
+    for entry in entries:
+        if isinstance(entry, dict) and entry.get("key") == key:
+            return bool(entry.get("bars"))
+    return False
+
+
+def _strat(snapshot: Dict[str, Any], key: str) -> Any:
+    """``[{label, balance, count, sharePct}]`` for one stratification, or
+    UNAVAILABLE when the book does not support it. A dimension the service
+    reported as unavailable is UNAVAILABLE here too — that is a fact about the
+    book, and the acceptance must not read it as a defect."""
+    for entry in (snapshot.get("stratifications") or []):
+        if isinstance(entry, dict) and entry.get("key") == key:
+            bars = entry.get("bars") or []
+            if not bars:
+                return UNAVAILABLE
+            return [{"label": str(b.get("label")),
+                     "balance": b.get("balance"),
+                     "count": b.get("count"),
+                     "sharePct": b.get("sharePct")} for b in bars]
+    return UNAVAILABLE
+
+
+def _scotland_row(rows: Any) -> Any:
+    if not isinstance(rows, list):
+        return UNAVAILABLE
+    for row in rows:
+        label = str(row.get("label") or "").strip().lower()
+        if any(token in label for token in SCOTLAND_TOKENS):
+            return row
+    return UNAVAILABLE
+
+
+def _series(evolution: Dict[str, Any], metric: str, scale: float = 1.0) -> Any:
+    periods = evolution.get("periods") or []
+    if not periods:
+        return UNAVAILABLE
+    out: List[Dict[str, Any]] = []
+    for p in periods:
+        metrics = (p or {}).get("metrics") or {}
+        value = metrics.get(metric)
+        out.append({"period": p.get("period"),
+                    "reporting_date": p.get("reporting_date"),
+                    "value": None if value is None else float(value) * scale})
+    if all(row["value"] is None for row in out):
+        return UNAVAILABLE
+    return out
+
+
+def _stage_rows(pipeline: Dict[str, Any]) -> Any:
+    rows = pipeline.get("stageBreakdown") or []
+    if not rows:
+        return UNAVAILABLE
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        out.append({"label": str(r.get("stage")),
+                    "count": r.get("caseCount"),
+                    "balance": r.get("pipelineAmount")})
+    return out or UNAVAILABLE
+
+
+def collect(base_url: str, portfolio_id: Optional[str]) -> Dict[str, Any]:
+    """Read every independent surface once, and derive the truth keys.
+
+    One read per endpoint, before any question is asked, so the book cannot
+    move underneath the comparison and every case is scored against the same
+    observation.
+    """
+    get = reader(base_url, portfolio_id)
+
+    endpoints: Dict[str, Dict[str, Any]] = {
+        "snapshot": get("/mi/snapshot"),
+        "geo": get("/mi/geo/exposure"),
+        "pipeline": get("/mi/pipeline/snapshot"),
+        "evolution": get("/mi/evolution/funded"),
+        "risk_limits": get("/mi/risk-limits"),
+        "borrowing_base": get("/mi/borrowing-base"),
+        "forecast": get("/mi/forecast/extrapolation"),
+        "cohort_progression": get("/mi/cohorts/progression"),
+        "source_portfolios": get("/mi/source-portfolios"),
+        "pipeline_snapshots": get("/mi/pipeline/snapshots"),
+    }
+
+    snap = endpoints["snapshot"] if _ok(endpoints["snapshot"]) else {}
+    geo = endpoints["geo"] if _ok(endpoints["geo"]) else {}
+    pipe = endpoints["pipeline"] if _ok(endpoints["pipeline"]) else {}
+    evo = endpoints["evolution"] if _ok(endpoints["evolution"]) else {}
+    risk = endpoints["risk_limits"] if _ok(endpoints["risk_limits"]) else {}
+    bbase = endpoints["borrowing_base"] if _ok(endpoints["borrowing_base"]) else {}
+    fcast = endpoints["forecast"] if _ok(endpoints["forecast"]) else {}
+    cohort = endpoints["cohort_progression"] if _ok(endpoints["cohort_progression"]) else {}
+    sources = endpoints["source_portfolios"] if _ok(endpoints["source_portfolios"]) else {}
+    pipe_snaps = endpoints["pipeline_snapshots"] if _ok(endpoints["pipeline_snapshots"]) else {}
+
+    total_balance = snap.get("current_outstanding_balance")
+    loan_count = snap.get("loan_count")
+    total_balance = float(total_balance) if isinstance(total_balance, (int, float)) else UNAVAILABLE
+    loan_count = int(loan_count) if isinstance(loan_count, (int, float)) else UNAVAILABLE
+
+    avg_balance = UNAVAILABLE
+    if total_balance is not UNAVAILABLE and loan_count is not UNAVAILABLE and loan_count:
+        # RECOMPUTED HERE, not read from the tile: the identity is the check.
+        avg_balance = total_balance / loan_count
+
+    strat_region = _strat(snap, "region")
+    strat_ltv = _strat(snap, "ltv")
+    strat_product = _strat(snap, "product")
+
+    region_top = UNAVAILABLE
+    region_top_share = UNAVAILABLE
+    if isinstance(strat_region, list):
+        ranked = sorted((r for r in strat_region if isinstance(r.get("balance"), (int, float))),
+                        key=lambda r: r["balance"], reverse=True)
+        if ranked:
+            region_top = ranked[0]["label"]
+            if total_balance is not UNAVAILABLE and total_balance:
+                region_top_share = ranked[0]["balance"] / total_balance * 100.0
+
+    scotland = _scotland_row(strat_region)
+    scotland_balance = (scotland["balance"] if isinstance(scotland, dict)
+                        and isinstance(scotland.get("balance"), (int, float))
+                        else UNAVAILABLE)
+
+    monthly = snap.get("monthly_change") or {}
+    mom_balance_change = (float(monthly["balance_change"])
+                          if isinstance(monthly.get("balance_change"), (int, float))
+                          else UNAVAILABLE)
+    mom_new = monthly.get("new_loans")
+    mom_exited = monthly.get("exited_loans")
+    mom_new_exited = ({"new_loans": mom_new, "exited_loans": mom_exited}
+                      if isinstance(mom_new, int) and isinstance(mom_exited, int)
+                      else UNAVAILABLE)
+
+    balance_series = _series(evo, "funded_balance")
+    count_series = _series(evo, "loan_count")
+    # The evolution surface stores weighted-average LTV as a FRACTION while the
+    # snapshot tile states percentage POINTS. Normalised here, in the open,
+    # rather than by widening a tolerance until both conventions pass.
+    wa_ltv_series = _series(evo, "wa_ltv", scale=100.0)
+
+    prior_period_balance = UNAVAILABLE
+    last_two = UNAVAILABLE
+    if isinstance(balance_series, list) and len(balance_series) >= 2:
+        prior_period_balance = balance_series[-2]["value"]
+        last_two = {"prior": balance_series[-2], "current": balance_series[-1]}
+
+    region_breakdown = evo.get("breakdowns", {}).get("region") if isinstance(
+        evo.get("breakdowns"), dict) else None
+    region_breakdown = region_breakdown if region_breakdown else UNAVAILABLE
+
+    scotland_series = UNAVAILABLE
+    if isinstance(region_breakdown, list):
+        rows = [r for r in region_breakdown
+                if any(t in str(r.get("key") or r.get("label") or "").lower()
+                       for t in SCOTLAND_TOKENS)]
+        if rows:
+            by_period: Dict[str, float] = {}
+            for r in rows:
+                value = r.get("balance")
+                if isinstance(value, (int, float)):
+                    by_period[str(r.get("period"))] = by_period.get(
+                        str(r.get("period")), 0.0) + float(value)
+            if by_period:
+                scotland_series = [{"period": k, "value": v}
+                                   for k, v in sorted(by_period.items())]
+
+    stage_rows = _stage_rows(pipe)
+    kfi_stock = UNAVAILABLE
+    if isinstance(stage_rows, list):
+        for row in stage_rows:
+            if "kfi" in str(row.get("label") or "").lower():
+                kfi_stock = row.get("count")
+                break
+
+    pipeline_count = pipe.get("pipelineRowCount")
+    pipeline_count = (int(pipeline_count)
+                      if isinstance(pipeline_count, (int, float)) and pipe.get("ok") is not False
+                      else UNAVAILABLE)
+
+    risk_summary = risk.get("summary") if isinstance(risk.get("summary"), dict) else {}
+    risk_summary_truth = UNAVAILABLE
+    if risk.get("available") and risk_summary:
+        risk_summary_truth = {"testsPassed": risk_summary.get("testsPassed"),
+                              "breaches": risk_summary.get("breaches"),
+                              "total": risk_summary.get("total")}
+    closest = risk_summary.get("closestHeadroom")
+    closest_name = UNAVAILABLE
+    if isinstance(closest, dict):
+        closest_name = closest.get("name") or closest.get("test") or closest.get("label")
+    closest_name = closest_name or UNAVAILABLE
+
+    cohort_counts = UNAVAILABLE
+    if cohort.get("available") and isinstance(cohort.get("periods"), list):
+        cohort_counts = [p.get("survivingLoanCount") for p in cohort["periods"]]
+
+    source_count = UNAVAILABLE
+    for key in ("portfolios", "sourcePortfolios", "items"):
+        if isinstance(sources.get(key), list):
+            source_count = len(sources[key])
+            break
+
+    geo_supported = UNAVAILABLE
+    for key in ("supportedBases", "availableBases", "bases"):
+        if isinstance(geo.get(key), list):
+            geo_supported = [str(b) for b in geo[key]]
+            break
+
+    truths: Dict[str, Any] = {
+        "funded_total_balance": total_balance,
+        "funded_loan_count": loan_count,
+        "funded_avg_balance": avg_balance,
+        "funded_wa_current_ltv": _kpi(snap, "wa_current_ltv"),
+        "funded_wa_rate": _kpi(snap, "wa_rate"),
+        "strat_region": strat_region,
+        "strat_ltv": strat_ltv,
+        "strat_product": strat_product,
+        "strat_region_top": region_top,
+        "region_scotland_balance": scotland_balance,
+        "region_top_share": region_top_share,
+        "geo_total": geo.get("total") if geo.get("available") else UNAVAILABLE,
+        "geo_areas": geo.get("areas") if geo.get("available") else UNAVAILABLE,
+        "geo_basis": geo.get("basis") if geo.get("available") else UNAVAILABLE,
+        "geo_supported_bases": geo_supported,
+        "pipeline_case_count": pipeline_count,
+        "pipeline_stage_breakdown": stage_rows,
+        "pipeline_kfi_stock": kfi_stock if kfi_stock is not None else UNAVAILABLE,
+        "source_portfolio_count": source_count,
+        "evolution_balance_series": balance_series,
+        "evolution_count_series": count_series,
+        "evolution_wa_ltv_series": wa_ltv_series,
+        "evolution_region_breakdown": region_breakdown,
+        "evolution_scotland_series": scotland_series,
+        "prior_period_balance": (prior_period_balance if prior_period_balance is not None
+                                 else UNAVAILABLE),
+        "last_two_period_balances": last_two,
+        "mom_balance_change": mom_balance_change,
+        "mom_new_and_exited": mom_new_exited,
+        "forecast_current_balance": (float(fcast["currentFundedBalance"])
+                                     if isinstance(fcast.get("currentFundedBalance"), (int, float))
+                                     and fcast.get("currentFundedBalance")
+                                     else UNAVAILABLE),
+        "cohort_progression_counts": cohort_counts,
+        "risk_limits_summary": risk_summary_truth,
+        "risk_limits_closest": closest_name,
+        "borrowing_base_envelope": {
+            "available": bbase.get("available"),
+            "reason": bbase.get("reason") or bbase.get("unavailableReason"),
+            "measures": bbase.get("measures"),
+        } if bbase else UNAVAILABLE,
+    }
+
+    truths["funded_total_balance+funded_loan_count"] = [
+        truths["funded_total_balance"], truths["funded_loan_count"]]
+    truths["funded_total_balance+funded_loan_count+funded_avg_balance"] = [
+        truths["funded_total_balance"], truths["funded_loan_count"],
+        truths["funded_avg_balance"]]
+    truths["funded_wa_current_ltv+funded_wa_rate"] = [
+        truths["funded_wa_current_ltv"], truths["funded_wa_rate"]]
+
+    availability = _availability(truths, snap, geo, pipe, evo, risk, bbase,
+                                 fcast, cohort, pipe_snaps)
+
+    return {
+        "truths": truths,
+        "availability": availability,
+        "endpoint_status": {name: _status(doc) for name, doc in endpoints.items()},
+    }
+
+
+def _geo_state(geo: Dict[str, Any]) -> Any:
+    """A geography surface that refused for a MISSING PARAMETER is telling us
+    about the request, not about the book."""
+    if not geo:
+        return UNRESOLVED
+    if geo.get("available"):
+        return True
+    reason = str(geo.get("reason") or "").lower()
+    if "required" in reason or "portfolioid" in reason:
+        return UNRESOLVED
+    return False
+
+
+def _availability(t: Dict[str, Any], snap: Dict[str, Any], geo: Dict[str, Any],
+                  pipe: Dict[str, Any], evo: Dict[str, Any], risk: Dict[str, Any],
+                  bbase: Dict[str, Any], fcast: Dict[str, Any],
+                  cohort: Dict[str, Any], pipe_snaps: Dict[str, Any]
+                  ) -> Dict[str, Any]:
+    """Resolve every frozen answerability rule from the independent surfaces.
+
+    A rule that cannot be resolved returns UNRESOLVED, and its cases are
+    reported as unscoreable rather than defaulted to a pass.
+    """
+    def present(value: Any) -> Any:
+        return UNRESOLVED if value is UNAVAILABLE else value is not UNAVAILABLE
+
+    periods = t["evolution_balance_series"]
+    period_count = len(periods) if isinstance(periods, list) else UNRESOLVED
+    multi = (period_count >= 2) if isinstance(period_count, int) else UNRESOLVED
+
+    ltv_series = t["evolution_wa_ltv_series"]
+    region_bd = t["evolution_region_breakdown"]
+
+    pipeline_dates = None
+    for key in ("extractDates", "availableExtractDates", "dates", "reportingDates"):
+        if isinstance(pipe_snaps.get(key), list):
+            pipeline_dates = pipe_snaps[key]
+            break
+
+    return {
+        "kpi_wa_current_ltv_available": (
+            UNRESOLVED if not snap else t["funded_wa_current_ltv"] is not UNAVAILABLE),
+        "kpi_wa_ltv_and_rate_available": (
+            UNRESOLVED if not snap
+            else (t["funded_wa_current_ltv"] is not UNAVAILABLE
+                  and t["funded_wa_rate"] is not UNAVAILABLE)),
+        "strat_region_available": _strat_state(snap, "region"),
+        "strat_ltv_available": _strat_state(snap, "ltv"),
+        "strat_product_available": _strat_state(snap, "product"),
+        "region_scotland_present": (
+            UNRESOLVED if _strat_state(snap, "region") is UNRESOLVED
+            else t["region_scotland_balance"] is not UNAVAILABLE),
+        "geo_available": _geo_state(geo),
+        "geo_obligor_basis_supported": (
+            any("obligor" in str(b).lower() for b in t["geo_supported_bases"])
+            if isinstance(t["geo_supported_bases"], list)
+            else ("obligor" in str(t["geo_basis"]).lower()
+                  if t["geo_basis"] is not UNAVAILABLE else UNRESOLVED)),
+        "pipeline_available": (
+            UNRESOLVED if not pipe else bool(pipe.get("ok") is not False
+                                             and t["pipeline_case_count"] is not UNAVAILABLE)),
+        "pipeline_history_available": (
+            (len(pipeline_dates) >= 2) if isinstance(pipeline_dates, list) else UNRESOLVED),
+        "two_governed_scopes": (
+            (t["source_portfolio_count"] >= 2)
+            if isinstance(t["source_portfolio_count"], int) else UNRESOLVED),
+        "multi_period": multi,
+        "multi_period_ltv": (
+            UNRESOLVED if multi is UNRESOLVED
+            else bool(multi and isinstance(ltv_series, list))),
+        "multi_period_region": (
+            UNRESOLVED if multi is UNRESOLVED
+            else bool(multi and isinstance(region_bd, list))),
+        "multi_period_scotland": (
+            UNRESOLVED if multi is UNRESOLVED
+            else bool(multi and isinstance(t["evolution_scotland_series"], list))),
+        "prior_period_available": (
+            UNRESOLVED if not snap
+            else bool(snap.get("prior")) or (multi is True)),
+        "loan_movement_identifiable": (
+            bool((snap.get("monthly_change") or {}).get("loans_identifiable"))
+            if snap.get("monthly_change") else UNRESOLVED),
+        "forecast_available": (
+            UNRESOLVED if not fcast else t["forecast_current_balance"] is not UNAVAILABLE),
+        "cohort_progression_available": (
+            bool(cohort.get("available")) if cohort else UNRESOLVED),
+        "risk_limits_available": (
+            bool(risk.get("available")) if risk else UNRESOLVED),
+        "borrowing_base_available": (
+            bool(bbase.get("available")) if bbase else UNRESOLVED),
+    }
