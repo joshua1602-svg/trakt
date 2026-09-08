@@ -102,6 +102,18 @@ def _env(tmp_path, monkeypatch):
     # here means the two paths disagreed about the SAME frame.
     monkeypatch.setenv("MI_AGENT_RUN_ID", "mi_2025_12")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    # THIS BOOK, AND NO OTHER. The MI read path can be pointed at a platform
+    # blob root instead of an onboarding output root, and a module-scoped
+    # fixture elsewhere in the suite that selects a different book by setting
+    # these leaves them set. Run alone the file passed; run after such a test
+    # the four data-dependent cases answered over someone else's portfolio.
+    # Cleared rather than assumed, so the fixture states its own book
+    # completely and the file's result does not depend on collection order.
+    for leaked in ("MI_AGENT_PLATFORM_URI", "TRAKT_LOCAL_BLOB_ROOT",
+                   "TRAKT_STORAGE_BACKEND", "TRAKT_PORTFOLIO_REGISTRY",
+                   "MI_AGENT_CLIENT_ID", "MI_AGENT_REPORTING_DATE",
+                   "MI_AGENT_LLM_ENABLED"):
+        monkeypatch.delenv(leaked, raising=False)
     yield
 
 
