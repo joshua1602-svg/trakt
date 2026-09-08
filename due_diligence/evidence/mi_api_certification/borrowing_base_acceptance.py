@@ -177,12 +177,22 @@ def main() -> int:
         # tenant/audience settings, and a configured bearer mode means the
         # token itself (audience, tenant, scope or expiry) is the problem.
         # Configuration STATES only — never a token, a key or a claim.
-        dashboard_auth = health.get("dashboardAuth") or {}
+        # NESTED UNDER `governance`, and read from there. The first cut of this
+        # read it at the top level, got {} because the key lives one level
+        # down, and fell through to the "the token is the problem" branch — an
+        # ABSENT field presented as a positive finding, which is the one thing
+        # a diagnostic must never do. Absence is now reported as absence.
+        governance = health.get("governance") or {}
+        dashboard_auth = governance.get("dashboardAuth") or {}
         print(f"dashboardAuth: {json.dumps(dashboard_auth, sort_keys=True)}")
-        print(f"tenantId     : {health.get('tenantId')}")
-        print(f"platformAuth : {json.dumps(health.get('platformAuth'), sort_keys=True, default=str)}")
+        print(f"tenantId     : {governance.get('tenantId')}")
+        print(f"platformAuth : {json.dumps(governance.get('platformAuth'), sort_keys=True, default=str)}")
         mode = str(dashboard_auth.get("mode") or "")
-        if mode and mode not in ("bearer", "both"):
+        if not dashboard_auth:
+            print("DIAGNOSIS: UNAVAILABLE — /health carried no governance."
+                  "dashboardAuth block, so this run cannot say whether the "
+                  "deployment accepts bearer tokens. Not evidence either way.")
+        elif mode and mode not in ("bearer", "both"):
             print(f"DIAGNOSIS: this deployment's dashboard auth mode is "
                   f"{mode!r} — a bearer token is NOT read on this surface, so "
                   "no token value can authenticate. Rotating the secret cannot "
