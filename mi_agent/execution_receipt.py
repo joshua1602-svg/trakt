@@ -3461,6 +3461,88 @@ def declared_population_fields(ledger: Optional[Mapping[str, Any]]) -> Set[str]:
             if str(a).strip()}
 
 
+def executed_predicates(ledger: Optional[Mapping[str, Any]]) -> Tuple[Dict[str, Any], ...]:
+    """The STRUCTURAL predicate evidence a route's ledger carries, or ``()``.
+
+    The companion to `declared_population_fields`, and the reason there are two.
+    That reader parses field-named PROSE, because that is the ledger contract
+    every existing writer honours and every existing reader depends on. This one
+    reads the structure the executor now publishes beside it —
+    ``{field, canonical_field, op, kind, values}`` per predicate — which is what
+    a facet identified by a VALUE needs and prose cannot supply.
+
+    A route that publishes no structure returns ``()`` and every facet that
+    needs one stays unproven, which is the same fail-closed posture the ledger
+    has always had: absence of evidence is never evidence.
+    """
+    executed = (ledger or {}).get("executed")
+    if not isinstance(executed, (list, tuple)):
+        return ()
+    return tuple(e for e in executed if isinstance(e, Mapping))
+
+
+def _facet_field_keys(facet: RequestedFacet,
+                      fields: Optional[Mapping[str, Any]] = None) -> Set[str]:
+    """Every field name that would legitimately satisfy THIS request.
+
+    The facet's own resolution and nothing else: `field_key` as the geography
+    owner resolved it, whatever `satisfied_by()` declares, and the canonical
+    column each maps to. No basis is added here and none is widened — an
+    explicit borrower-geography request resolves to the borrower field, so
+    collateral evidence simply is not in this set, which is what stops
+    "both are region" from satisfying a basis the reader named.
+    """
+    keys = {str(k) for k in (facet.satisfied_by() or ())}
+    if getattr(facet, "field_key", None):
+        keys.add(str(facet.field_key))
+    registry = fields or {}
+    keys |= {str((registry.get(k, {}) or {}).get("canonical_field", k))
+             for k in list(keys)}
+    return {k for k in keys if k}
+
+
+def geographic_scope_executed(facet: RequestedFacet,
+                              ledger: Optional[Mapping[str, Any]],
+                              fields: Optional[Mapping[str, Any]] = None) -> bool:
+    """Did execution run THIS place, on a field legitimate for THIS request?
+
+    BOTH HALVES, OR NOTHING. The failure this closes is not "no evidence was
+    found" but "the wrong evidence would have been accepted": a receipt that
+    proves only that a geography field was filtered would stamp APPLIED for a
+    reader who asked about Scotland and an executor that ran Wales. So the
+    executed FIELD must be one this facet resolves to, and the executed VALUE
+    must be the place asked for.
+
+    ROW COUNTS ARE NOT CONSULTED, deliberately and by instruction. A predicate
+    that ran correctly can leave the count unmoved — every loan in a single-
+    region book is in that region — and can equally leave nothing. Both were
+    applied. `reconcile_facets` was corrected for exactly this inference once
+    already ("EVIDENCE, NOT A ROW COUNT"); it is not reintroduced here. The
+    executor resolving the field, building the mask and returning IS the
+    evidence.
+
+    NO SECOND GEOGRAPHY TAXONOMY. Comparison is exact, case-insensitively, on
+    the value the executor recorded comparing. Where a book needs "Scotland" and
+    a stored spelling to be recognised as one place, that equivalence belongs to
+    the governed region owner that already holds the ITL ladder — not to a
+    synonym list grown here, one production incident at a time.
+    """
+    label = str(getattr(facet, "label", "") or "").strip().lower()
+    if not label:
+        return False
+    keys = _facet_field_keys(facet, fields)
+    for entry in executed_predicates(ledger):
+        executed_keys = {str(entry.get("field") or ""),
+                         str(entry.get("canonical_field") or "")}
+        if not (executed_keys & keys):
+            continue
+        values = {str(v).strip().lower() for v in (entry.get("values") or ())
+                  if v is not None}
+        if label in values:
+            return True
+    return False
+
+
 def drill_population_facets(extra_filters: Optional[Mapping[str, Any]],
                             semantics: Optional[dict] = None
                             ) -> List[RequestedFacet]:
@@ -3730,7 +3812,18 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
                     "whole book rather than only %s" % facet.label)
 
         elif facet.kind == KIND_GEOGRAPHIC_SCOPE:
-            if analytical:
+            # EXECUTION EVIDENCE FIRST, and it is the only arm that can prove a
+            # routed geographic scope at all. The three arms below read the
+            # analytical plan, the listing shape and nothing — so a route that
+            # applied the narrowing per period, and said so, was refused for
+            # want of a reader. `geographic_scope_executed` requires the
+            # executed FIELD to be one this facet resolves to and the executed
+            # VALUE to be the place asked for; a route publishing no structural
+            # evidence falls through to exactly the behaviour it had before.
+            if geographic_scope_executed(facet, population_ledger(envelope),
+                                         fields):
+                facet.status, facet.reason = APPLIED, ""
+            elif analytical:
                 # A composite plan may answer a two-place question by measuring
                 # BOTH places as governed populations. Proven from the row
                 # predicates it declares it narrowed to, with their row counts —

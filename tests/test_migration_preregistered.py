@@ -78,9 +78,21 @@ def _distinct(rows, predicate):
 
 
 class TestT3Acceptance:
-    """The bar the `evolution` conversion must clear. Not authorisation to build it."""
+    """The bar the `evolution` conversion must clear. Not authorisation to build it.
 
-    @pytest.mark.xfail(strict=True, reason="T3 is refused today; Phase 5 bar")
+    CLEARED. These three were written as strict xfails — the bar for a
+    capability that did not exist, so that building it could not be declared
+    done on anything softer. "balance over time by region" was refused; it now
+    runs the ordinary governed executor once per prepared period frame through
+    `mi_agent_api.temporal_query`, and all three limbs hold: the artifact
+    carries both axes, the breakdown reconciles to the shipped ungrouped series
+    period by period, and the route declares the dimension it grouped by.
+
+    The markers are removed rather than left to XPASS, because a strict xfail
+    that passes reports as a FAILURE and would hide the next real regression
+    here behind a green expectation of red.
+    """
+
     def test_t3_artifact_carries_both_a_period_axis_and_a_region_breakdown(self):
         result = _ask("balance over time by region")
         assert result.get("ok") is True, result.get("answer")
@@ -92,7 +104,6 @@ class TestT3Acceptance:
         assert len(periods) > 1, f"no time axis: {periods}"
         assert len(regions) > 1, f"no region breakdown: {regions}"
 
-    @pytest.mark.xfail(strict=True, reason="T3 is refused today; Phase 5 bar")
     def test_t3_reconciles_to_the_shipped_t1_series_period_by_period(self):
         """The migration bar is byte-identical economics, not a plausible shape."""
         from collections import defaultdict
@@ -122,7 +133,6 @@ class TestT3Acceptance:
             assert abs(composed[period] - total) < 0.005, (
                 f"{period}: composed {composed[period]:,.2f} != shipped {total:,.2f}")
 
-    @pytest.mark.xfail(strict=True, reason="T3 is refused today; Phase 5 bar")
     def test_t3_declares_the_dimension_it_grouped_by(self):
         """A route that declares nothing proves nothing — `grouping_proven`'s bar."""
         from mi_agent import execution_receipt as receipt

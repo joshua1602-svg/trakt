@@ -724,9 +724,47 @@ def _describe_domain_value(domain: Optional[str], value: str, resolved: List) ->
     return f"{value} → {resolved!r}"
 
 
+def predicate_evidence(field_key: str, execution: "PredicateExecution",
+                       semantics: dict, rows_before: int, rows_after: int
+                       ) -> Dict[str, Any]:
+    """ONE executed predicate, as a structure a proof layer can reason about.
+
+    WHAT WAS EXECUTED, not what was asked for. `applied_filter_fields` — the
+    evidence this estate has carried since P1K — records that a FIELD narrowed
+    and nothing else, which is enough for a facet whose identity is a field and
+    not enough for one whose identity is a VALUE. A requested geographic scope
+    is the second kind: "Scotland" is the request, so proving that
+    `collateral_geography` was filtered proves nothing about whether the answer
+    is about Scotland or about Wales. The value was computed here, quoted into a
+    warning string, and then discarded; this keeps it.
+
+    ROW COUNTS ARE AUDIT CONTEXT, NEVER THE CRITERION. A predicate that ran
+    correctly can leave the row count unmoved — every loan in a single-region
+    book is in that region — and can equally leave zero rows. Both executed. The
+    EVIDENCE that a predicate was applied is that
+    :func:`governed_predicate_mask` resolved the field, built a mask and
+    returned; `rows_before`/`rows_after` are carried so an auditor can see what
+    it did, and a reader that treats them as the test reintroduces the exact
+    inference `reconcile_facets` was corrected for.
+    """
+    entry = (semantics.get("fields", {}) or {}).get(field_key) or {}
+    raw = execution.normalised_value
+    values = list(raw) if isinstance(raw, (list, tuple, set)) else [raw]
+    return {
+        "field": str(field_key),
+        "canonical_field": str(entry.get("canonical_field") or field_key),
+        "op": str(execution.resolved_op),
+        "kind": str(execution.kind),
+        "values": [None if v is None else str(v) for v in values],
+        "rows_before": int(rows_before),
+        "rows_after": int(rows_after),
+    }
+
+
 def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
                    warnings: List[str],
-                   applied: Optional[List[str]] = None) -> pd.DataFrame:
+                   applied: Optional[List[str]] = None,
+                   executed: Optional[List[Dict[str, Any]]] = None) -> pd.DataFrame:
     """Narrow the frame, and record WHICH fields actually narrowed it.
 
     ``applied`` collects the semantic field key of every filter this function
@@ -735,6 +773,11 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
     mask has been applied. `reconcile_facets` reads it to stamp a population
     facet on the point-in-time path, which before this had no evidence source at
     all and therefore refused every population that reached it.
+
+    ``executed`` collects the same executions as STRUCTURES — field, operator
+    and the values actually compared — through `predicate_evidence`. Same
+    evidence, said completely: see that function for why a field alone cannot
+    prove a facet whose identity is a value.
     """
     if not spec.filters:
         return work
@@ -750,6 +793,9 @@ def _apply_filters(work: pd.DataFrame, spec: MIQuerySpec, semantics: dict,
         if applied is not None:
             applied.extend(execution.applied_keys)
         work = work[execution.mask]
+        if executed is not None:
+            executed.append(predicate_evidence(field_key, execution, semantics,
+                                               before, int(len(work))))
         raw = execution.normalised_value
         if execution.kind == PREDICATE_MEMBERSHIP:
             warnings.append(f"filter {field_key} {execution.resolved_op} {list(raw)!r}"
@@ -1609,7 +1655,9 @@ def execute_mi_query(
     # (crashing numeric coercion). Fail fast with a controlled, explained error.
     _guard_duplicate_columns(spec, work, semantics)
     applied_filter_fields: List[str] = []
-    work = _apply_filters(work, spec, semantics, warnings, applied_filter_fields)
+    applied_predicates: List[Dict[str, Any]] = []
+    work = _apply_filters(work, spec, semantics, warnings, applied_filter_fields,
+                          applied_predicates)
 
     balance_col = resolve_default_balance_field(semantics, work.columns)
     scale, scale_median = _detect_percent_scale(df, semantics)
@@ -1812,6 +1860,12 @@ def execute_mi_query(
     # EVIDENCE, distinct from `reconciliation.filters`, which echoes the spec.
     # These are the fields a predicate actually ran against, in this book.
     metadata["applied_filter_fields"] = list(dict.fromkeys(applied_filter_fields))
+    # THE SAME EVIDENCE, SAID COMPLETELY. `applied_filter_fields` answers "which
+    # fields narrowed"; this answers "which field, which operator, which values"
+    # — the question a facet identified by a VALUE has to ask. See
+    # `predicate_evidence`, including why the row counts here are context and
+    # never the test.
+    metadata["applied_predicates"] = applied_predicates
 
     # Surface the governed derived-metric definition (e.g. "average loan balance"
     # = sum(current_outstanding_balance)/count(loans)) so the computed figure is
