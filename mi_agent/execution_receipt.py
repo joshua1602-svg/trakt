@@ -356,6 +356,12 @@ TEMPORAL_ROUTES = frozenset({
     "period_change_analysis", "temporal_compare", "evolution", "evolution_funnel",
     "evolution_pipeline_stage", "funded_bridge", "cohort_progression",
     "cohort_conversion", "forecast_extrapolation", "scenario",
+    # ``borrowing_base`` answers a change, trend or bridge question from one
+    # governed borrowing-base envelope PER PERIOD and composes the difference
+    # (mi_agent.borrowing_base.analysis). Its reader consults the SAME
+    # `_detect_comparison_period` this receipt raises the facet from, so a
+    # comparison-worded question never reaches its current-position answer.
+    "borrowing_base",
     # ``period_movement`` reads the current AND prior governed reporting periods
     # and reports the delta between them (mi_agent.movement.period_movement).
     # Its absence here refused "what changed since last month?" as a
@@ -3080,6 +3086,11 @@ LISTING_ROUTES = frozenset({
 #: appears in a spec the route never used.
 SHARE_BEARING_ROUTES = frozenset({
     "concentration_analysis", "geo_exposure", "risk_limits",
+    # "13 loans are ineligible (19.12% of Financing Portfolio loans, 18.59% of
+    # its balance)": the count share and the balance share are two governed
+    # measures the borrowing-base service publishes, both stated as a
+    # proportion in the answer's own terms.
+    "borrowing_base",
 })
 
 #: Human labels for the governed capability that answered.
@@ -3099,6 +3110,7 @@ _ROUTE_LABELS = {
     "cohort_progression": "Cohort progression",
     "cohort_conversion": "Cohort conversion",
     "analytical_composition": "Composed governed capabilities",
+    "borrowing_base": "Governed facility borrowing base",
 }
 
 
@@ -3117,6 +3129,28 @@ def ranking_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     if not declared.get("canonicalField"):
         return {}
     return declared
+
+
+def measure_set_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """The measure SET a routed capability DECLARES it delivered.
+
+    ``metadata.measureSet = {"concepts": [...], "slots": [...]}`` — the measure
+    concepts (in `named_measure_concepts`' own vocabulary: "count", "balance",
+    "share", …) the route returned, and the coordinated-list SLOTS
+    (`unresolved_measure_slots`' own phrases) its vocabulary resolved. Evidence
+    the route publishes about what it did, read here exactly as the
+    point-in-time executor's `measures_executed` is read by
+    `executed_measure_concepts` — never route identity, never prose. Returns
+    ``{}`` unless the route declared one.
+    """
+    if not isinstance(envelope, dict):
+        return {}
+    declared = (envelope.get("metadata") or {}).get("measureSet")
+    if not isinstance(declared, dict):
+        return {}
+    return {"concepts": {str(c).lower() for c in (declared.get("concepts") or ())},
+            "slots": {" ".join(str(x).lower().split()).strip(" ,")
+                      for x in (declared.get("slots") or ())}}
 
 
 def comparison_evidence(envelope: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -3733,6 +3767,7 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
     ranked = ranking_evidence(envelope)
     compared = comparison_evidence(envelope)
     analytical = analytical_evidence(envelope)
+    measure_set = measure_set_evidence(envelope)
     fields = semantics.get("fields", {}) if isinstance(semantics, dict) else {}
     listing = route in LISTING_ROUTES
     declared_axes = declared_group_fields(envelope, route)
@@ -3959,6 +3994,27 @@ def reconcile_routed_facets(facets: Sequence[RequestedFacet], *, route: Optional
             facet.reason = ("this governed capability does not decompose a "
                             "weighted average across groups")
 
+        elif facet.kind == KIND_MULTI_MEASURE and measure_set:
+            # A routed capability that DECLARES the measure set it returned is
+            # reconciled the way the point-in-time executor is: every concept
+            # the question named must be among the concepts delivered.
+            requested = {str(c).lower() for c in (facet.concepts or ())}
+            missing = sorted(requested - set(measure_set.get("concepts") or ()))
+            if requested and not missing:
+                facet.status, facet.reason = APPLIED, ""
+            else:
+                facet.status = UNAVAILABLE
+                facet.reason = ("not returned by this capability: "
+                                + _join(missing or sorted(requested)))
+
+        elif facet.kind == KIND_UNRESOLVED_MEASURE and measure_set:
+            # LOST at construction because the PARSER resolved no measure for
+            # the slot. A route whose own governed vocabulary resolved that
+            # exact slot phrase — and says so — has answered it.
+            slot = " ".join(str(facet.label).lower().split()).strip(" ,")
+            if slot and slot in (measure_set.get("slots") or ()):
+                facet.status, facet.reason = APPLIED, ""
+
         elif facet.kind == KIND_MULTI_MEASURE and compared.get("measuresCompared"):
             # P1E: a governed comparison may carry several measures. Reconciled
             # against what the route declares it compared, measure by measure.
@@ -4174,6 +4230,7 @@ _ROUTE_TIME_GRAIN = {
     "cohort_conversion": "month",
     "forecast_extrapolation": "month",
     "funded_bridge": "month",
+    "borrowing_base": "month",
 }
 
 

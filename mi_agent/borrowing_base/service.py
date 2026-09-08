@@ -56,6 +56,17 @@ def _nearest(key: str) -> Callable[[BorrowingBaseResult], Any]:
     return lambda r: (r.nearest or {}).get(key, NOT_CALCULABLE)
 
 
+def _count_share(part: int, whole: int) -> Any:
+    """``part / whole`` as a percentage, to the calculator's percent precision.
+
+    An empty Financing Portfolio has no share: NOT_CALCULABLE, never 0.0,
+    exactly as the balance share on ``EligibilitySummary`` returns None.
+    """
+    if not whole:
+        return NOT_CALCULABLE
+    return round(float(part) / float(whole) * 100.0, 4)
+
+
 #: THE REGISTRY. Ordered, stable identifiers — a later MI sprint binds to these
 #: names, so renaming one is a breaking change, not a tidy-up.
 MEASURES: Dict[str, MeasureDefinition] = {
@@ -156,6 +167,35 @@ MEASURES: Dict[str, MeasureDefinition] = {
             "breached_concentration_count", "Breached concentrations", "count",
             "How many Schedule 8 concentration limits are currently breached.",
             _nearest("breached_concentration_count")),
+        # ---- MI Query additions. ADDITIVE: appended after the identifiers a
+        # consumer may already bind to, never inserted among them. Each one is
+        # read off the SAME governed EligibilitySummary the envelope already
+        # carries, so the MI answer and the dashboard's eligibility split are
+        # one partition rather than two agreeing ones.
+        MeasureDefinition(
+            "financing_portfolio_loan_count", "Financing Portfolio loans",
+            "count",
+            "Number of loans in the facility's Financing Portfolio, whatever "
+            "their eligibility status.",
+            lambda r: r.eligibility.financing_portfolio_loan_count),
+        MeasureDefinition(
+            "ineligible_loan_count", "Ineligible loans", "count",
+            "Number of loans whose governed eligibility status is INELIGIBLE. "
+            "UNDETERMINED loans are never counted here.",
+            lambda r: r.eligibility.ineligible_loan_count),
+        MeasureDefinition(
+            "ineligible_loan_share", "Ineligible share of loans", "percent",
+            "INELIGIBLE loan count as a percentage of the Financing Portfolio "
+            "loan count. A COUNT share: not the balance share.",
+            lambda r: _count_share(r.eligibility.ineligible_loan_count,
+                                   r.eligibility.financing_portfolio_loan_count)),
+        MeasureDefinition(
+            "ineligible_balance_share", "Ineligible share of balance",
+            "percent",
+            "INELIGIBLE current balance as a percentage of the Financing "
+            "Portfolio balance. A BALANCE share: not the count share.",
+            lambda r: r.eligibility.share_of_financing_portfolio(
+                r.eligibility.ineligible_current_balance)),
     )
 }
 

@@ -235,3 +235,88 @@ be calculated and why. Two receipts for the same inputs carry the same
 | Schedule 8 population | `mi_agent/concentration_tests/{matching,models,evaluation}.py` |
 | OCC onboarding | `config/onboarding/field_catalogue.yaml` → `funding_facility` |
 | UI | `frontend/mi-agent-ui/src/components/risk/BorrowingBasePanel.tsx` |
+
+---
+
+## MI Query — straightforward borrowing-base questions
+
+The MI Query Agent answers borrowing-base questions from the **same governed
+`borrowingBase` envelope** the Eligibility & Concentrations tab renders and
+`GET /mi/borrowing-base` returns. It calculates nothing:
+
+```
+/mi/query
+  → mi_agent_api.borrowing_base_query      one registered recogniser, one handler
+      current position   → borrowing_base_api.compute_borrowing_base   (the dashboard's block)
+      change / trend /   → evolution.funded_frames                      (governed periods)
+      bridge               + borrowing_base_api.compute_from_frames    (one evaluation per period)
+      reasons            → the prepared frame's governed eligibility columns
+  → mi_agent.borrowing_base.analysis        reason summary · period validity · bridge composition
+  → the existing Artifact Workspace contract (table · line · waterfall)
+```
+
+Recognition is a closed vocabulary — *borrowing base*, *facility utilisation /
+drawn / commitment*, *eligible collateral*, *ineligible*, *ineligibility reason*.
+A bare *headroom* or *utilisation* stays with its existing owner. The parser
+claims the owner's nouns (`_BORROWING_BASE_NOUNS`) so "eligible collateral" is
+never recorded as a category the book lacks; the receipt guard lists the route
+among the temporal and share-bearing routes and reads its declared measure set.
+
+### What v1 answers
+
+| Family | Examples | Owner of the number |
+|---|---|---|
+| Current position | borrowing base · headroom · facility / borrowing-base utilisation · drawn · commitment · eligible collateral | `compute_borrowing_base` → `measures` |
+| Ineligibility | count · balance · **count share** · **balance share** (never synonyms) | four additive measures in `service.MEASURES` |
+| Reasons | "why are loans ineligible?", by-reason breakdown | `analysis.summarise_ineligibility_reasons` |
+| Change / trend | "how has the borrowing base changed?", "over time" | `analysis.change` / `analysis.series` over per-period envelopes |
+| Bridge | "why did the borrowing base change?", "as a waterfall", "as a table" | `analysis.bridge` |
+
+### The reason table is a PRIMARY-reason table
+
+The derivation stamps the **first failing approved rule** on an INELIGIBLE loan.
+A loan failing two rules is counted once, under the first configured one. The
+table does not enumerate every rule a loan failed, says so in its `basis`, and
+refuses unless Σ counts and Σ balances reconcile to the calculator's own
+partition. UNDETERMINED never enters it.
+
+### What history can and cannot demonstrate
+
+The platform holds one facility configuration and one operator-supplied
+drawing. Nothing is inferred from `effective_date` (metadata no engine reads):
+
+* a historical period is evaluated **only from the register's governed
+  `governance.approved_at` date**; with none recorded — the prototype's
+  situation — change, trend and bridge questions refuse and say why;
+* the drawing is valid for a snapshot **only when `current_drawn_amount_as_of`
+  is that snapshot's date**; otherwise drawn, headroom, deficiency and both
+  utilisations are `NOT_CALCULABLE` for that period (the calculator itself
+  reports it — the drawing is withheld, never overwritten). The current-position
+  answer keeps the dashboard's figure and discloses the as-of date.
+
+### The bridge
+
+Exact by construction, in a fixed order, from two governed envelopes:
+
+```
+opening borrowing base
++ eligible collateral effect  = (E_closing − E_opening) × advance_rate_opening
++ advance-rate effect         = E_closing × (advance_rate_closing − advance_rate_opening)
++ facility cap effect         = (B − G)_closing − (B − G)_opening
+= closing borrowing base                       (tolerance 5p — penny rounding only)
+```
+
+No haircut, reserve, concentration or overcollateralisation line exists because
+the v1 calculator applies none. A headroom bridge (`opening headroom + Δ base −
+Δ drawn = closing headroom`) needs a period-valid drawing at both ends.
+
+### Refusals are governed, never silent
+
+Once borrowing-base intent is claimed, a facet v1 cannot honour — "by region",
+"for Scotland", a portfolio lens, a loan-level listing, a forecast, a haircut,
+a concentration deduction — is refused by name. No facility → refusal. An
+unreconciled eligibility population → refusal. A missing drawing →
+`NOT_CALCULABLE` with `current_drawn_amount` named, never a zero.
+
+The question bank lives in `migration_phase0/BORROWING_BASE_MI_BANK.yaml` and
+runs in `mi_agent_api/tests/test_borrowing_base_query.py`.

@@ -2067,6 +2067,21 @@ _RISK_LIMIT_NOUNS = frozenset({
     "limit", "limits", "headroom", "breach", "schedule",
 })
 
+#: THE BORROWING-BASE OWNER, on its own nouns — the same gap, one owner along.
+#: `mi_agent_api.borrowing_base_query` recognises PHRASES ("eligible
+#: collateral", "ineligible balance", "facility commitment"), so it cannot
+#: answer a question about one word, and its nouns were the route by which
+#: "How much eligible collateral do we have?" was recorded as
+#: `unknown category: 'eligible'` and refused before the owner was consulted.
+#: Every word here is a literal of that owner's recognition vocabulary, asserted
+#: by `test_borrowing_base_query.py::test_the_owner_claims_its_own_nouns`.
+#: "base" and "headroom" are deliberately absent: "base" is ordinary English
+#: ("base rate") and "headroom" is the limit owner's.
+_BORROWING_BASE_NOUNS = frozenset({
+    "borrowing", "eligible", "ineligible", "ineligibility", "collateral",
+    "facility", "drawn", "drawings", "commitment",
+})
+
 
 #: THE SAME GAP, FOR THE OTHER PHRASE-READING RECOGNISERS. `_RISK_LIMIT_NOUNS`
 #: exists because a recogniser that reads PHRASES cannot answer a question about
@@ -3170,6 +3185,8 @@ def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
     # and its nouns were the gap through which an analytic phrase was recorded
     # as a category the book does not carry.
     if token in _RISK_LIMIT_NOUNS or token in _ANALYTIC_CAPABILITY_WORDS:
+        return True
+    if token in _BORROWING_BASE_NOUNS:
         return True
     if _categorical_value_field(token, available_values, semantics):
         return True

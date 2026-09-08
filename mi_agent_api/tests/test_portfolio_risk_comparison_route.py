@@ -101,7 +101,16 @@ class TestRegistration:
                                      # change how the chain answers anything;
                                      # its placement has its own test in
                                      # `test_pipeline_summary_route.py`.
-                                     "pipeline_summary"}
+                                     "pipeline_summary",
+                                     # The facility borrowing base, added at
+                                     # 95 between temporal_compare and
+                                     # risk_limits. A closed explicit
+                                     # vocabulary, measured on the frozen
+                                     # corpus to claim none of its 882
+                                     # questions; its placement and
+                                     # arbitration have their own test in
+                                     # `test_borrowing_base_query.py`.
+                                     "borrowing_base"}
         names = [n for n in REGISTRY.names()
                  if n not in added_since_the_migration]
         assert names == [
