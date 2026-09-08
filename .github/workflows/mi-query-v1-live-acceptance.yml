@@ -125,7 +125,7 @@ jobs:
           {
             echo '## MI Query Agent V1 — live acceptance'
             echo '```'
-            tail -n 60 acceptance-console.txt
+            tail -n 220 acceptance-console.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit $status

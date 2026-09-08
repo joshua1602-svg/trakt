@@ -1583,6 +1583,86 @@ def print_summary(payload: Dict[str, Any]) -> None:
           f"{verdict['MI_QUERY_AGENT_V1_RELEASE_CLOSED']}")
 
 
+def print_findings(payload: Dict[str, Any], exemplars: int = 3) -> None:
+    """The classification, printed where it can be read.
+
+    The JSON, CSV and HTML carry everything. This exists because the evidence
+    has to travel back through a log to be classified at all, and a verdict of
+    NO that nobody can take apart into WHICH answers were wrong and WHY is a
+    verdict nobody can act on.
+
+    It prints what the run already computed. It changes no expectation, no
+    score and no question."""
+    rows = payload["questions"]
+    failing = [r for r in rows if r["outcome"] in (WRONG, INCORRECT_REFUSAL, ERROR)]
+    print("\n" + "=" * 72)
+    print(f"FINDINGS — {len(failing)} of {len(rows)} questions did not pass")
+    print("=" * 72)
+
+    by_reason: Dict[str, List[Dict[str, Any]]] = {}
+    for row in failing:
+        for reason in (row.get("failure_reasons") or []):
+            if reason == R_ROUTE:
+                continue  # reported separately; not on its own a semantic fault
+            by_reason.setdefault(reason, []).append(row)
+
+    for reason, group in sorted(by_reason.items(), key=lambda kv: -len(kv[1])):
+        cases = sorted({r["canonical_case_id"] for r in group})
+        print(f"\n--- {reason}: {len(group)} questions across {len(cases)} cases")
+        print(f"    cases: {' '.join(cases)}")
+        for row in group[:exemplars]:
+            print(f"    {row['question_id']} {row['canonical_case_id']}"
+                  f"{row['variant_id']} [{row['outcome']}] route={row['observed_route']}")
+            print(f"      Q: {row['question'][:150]}")
+            answer = (row.get("answer") or row.get("error") or "").replace("\n", " ")
+            print(f"      A: {answer[:220]}")
+            for chk in (row.get("checks") or []):
+                if chk["verdict"] == FAIL:
+                    print(f"      ! {chk['check']}: {chk['detail'][:220]}")
+
+    print("\n" + "-" * 72)
+    print("PARAPHRASE INVARIANCE — cases whose phrasings disagreed")
+    print("-" * 72)
+    for gate in payload["paraphrase_gate"]:
+        if gate["invariant"]:
+            continue
+        variants = " | ".join(f"{v['variant_id']}={v['outcome']}/{v['answerability']}"
+                              for v in gate["variants"])
+        print(f"  {gate['canonical_case_id']} {gate['capability_family']}: "
+              f"{','.join(gate['failure_modes'])}")
+        print(f"    {variants}")
+        if gate["detail"]:
+            print(f"    {gate['detail'][:200]}")
+
+    unscoreable = [r for r in rows if r["outcome"] == UNSCOREABLE]
+    if unscoreable:
+        print("\n" + "-" * 72)
+        print("UNSCOREABLE — the book could not be asked whether this is right")
+        print("-" * 72)
+        for case_id in sorted({r["canonical_case_id"] for r in unscoreable}):
+            row = next(r for r in unscoreable if r["canonical_case_id"] == case_id)
+            print(f"  {case_id}: {row.get('answerability_basis')}")
+
+    outside = payload["adjudication"]["route_conformance"]["outside_expected"]
+    if outside:
+        print("\n" + "-" * 72)
+        print("ROUTE OUTSIDE EXPECTED — recorded, not on its own a semantic fault")
+        print("-" * 72)
+        for entry in outside:
+            print(f"  {entry['question_id']} {entry['case']}: observed "
+                  f"{entry['observed']}, expected one of {entry['expected']}")
+
+    print("\n" + "-" * 72)
+    print("INDEPENDENT SURFACES, AS READ")
+    print("-" * 72)
+    for name, status in (payload.get("endpoint_status") or {}).items():
+        print(f"  {name:20s} {status}")
+    for key, value in sorted((payload.get("independent_truth_observed") or {}).items()):
+        print(f"  truth {key:34s} {value}")
+    for key, value in sorted((payload.get("availability_rules_resolved") or {}).items()):
+        print(f"  rule  {key:34s} {value}")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)
@@ -1611,6 +1691,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         write_csv(payload["questions"], Path(args.csv_out))
         write_html(payload, Path(args.html_out))
     print_summary(payload)
+    if payload["questions"]:
+        print_findings(payload)
+        # The verdict is repeated LAST because the evidence has to travel back
+        # through a log tail, and a reader who can see the findings must not
+        # have to lose the counts to do it.
+        verdict = payload["adjudication"]
+        counts = verdict["outcome_counts"]
+        print("\n" + "=" * 72)
+        print("  ".join(f"{name}={counts.get(name, 0)}" for name in
+                        (CORRECT, CORRECT_REFUSAL, WRONG, INCORRECT_REFUSAL,
+                         ERROR, UNSCOREABLE)))
+        inv = verdict["paraphrase_invariance"]
+        print(f"paraphrase invariant {inv['invariant']}/{inv['canonical_cases']}  "
+              f"independent truth {verdict['independent_truth']['carried_cases']} cases"
+              f"/{verdict['independent_truth']['carried_variants']} variants  "
+              f"commit verified "
+              f"{'YES' if payload['provenance'].get('commit_verified') else 'NO'}")
+        print(f"MI_QUERY_AGENT_V1_LIVE_READY     = "
+              f"{verdict['MI_QUERY_AGENT_V1_LIVE_READY']}")
+        print(f"MI_QUERY_AGENT_V1_RELEASE_CLOSED = "
+              f"{verdict['MI_QUERY_AGENT_V1_RELEASE_CLOSED']}")
     return status
 
 
