@@ -3126,8 +3126,30 @@ _GROUPING_MARKERS = frozenset({"by", "per", "across", "between", "split",
                                "versus", "vs", "against"})
 
 
+def _time_axis_words(text: str) -> frozenset:
+    """The words by which THIS text named a time axis, or an empty set.
+
+    Asked of `question_interpretation.lexical.time_axis_request` — the owner of
+    time-axis wording, the same one the series branch consults to decide the
+    sentence IS a series — and scoped to the wording it actually matched HERE.
+    Scoped, rather than a set of every word every series wording is built from:
+    that wider set contains `to`, `the`, `between` and `by`, and claiming those
+    everywhere would silence unknown-category notes about phrases like "offer to
+    completion" that have nothing to do with time.
+    """
+    try:
+        from question_interpretation.lexical import time_axis_request
+    except Exception:  # noqa: BLE001 - no owner, no claim
+        return frozenset()
+    wording = time_axis_request(text or "")
+    if not wording:
+        return frozenset()
+    return frozenset(w for w in re.split(r"[\s-]+", str(wording).lower()) if w)
+
+
 def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
-                         available_values) -> bool:
+                         available_values,
+                         axis_words: Iterable[str] = ()) -> bool:
     """Does ANY existing owner claim this word? Ask them; never guess.
 
     The one test both unknown-category paths use, so the attributive and the
@@ -3167,6 +3189,29 @@ def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
     # — inert until a routed guard began acting on these notes, at which point
     # it would have refused a working question.
     if _detect_periods(token):
+        return True
+    # THE TIME-AXIS OWNER, on the words its own wordings are made of. "Show
+    # balance by region over time" names an AXIS with the word `time`, and an
+    # axis is not a category the book fails to carry — but the prepositional
+    # reader captured `over <time>` as a value, nobody claimed the word, and
+    # the note became *"No loans in this book match that filter ('time')"* for
+    # a question about regions over time. Exactly the PERIOD OWNER gap above,
+    # one owner along.
+    #
+    # ASKED OF THE OWNER AND SCOPED TO THIS CLAUSE: `axis_words` are the words
+    # of the wording `time_axis_request` matched in the text this value came
+    # from, so `time` is claimed in "balance by region over time" and claimed
+    # nowhere else. Claiming a word only ever suppresses a NOTE — the test is
+    # `all()` over the captured value's words, so "platinum over time" still
+    # records `platinum` — and nothing here changes what any reader SEES.
+    #
+    # An earlier attempt blanked the axis phrase out of the sentence before the
+    # population reader saw it. Deleting text a neighbouring owner was still
+    # reading turned "Which region added the most loans month-on-month?" into
+    # `unknown category: 'added the most'` and refused nine ranked-movement
+    # questions that had always answered. Ownership is the narrow fix; masking
+    # was not, and the measured blast radius is why.
+    if token in {str(w).strip().lower() for w in (axis_words or ())}:
         return True
     return False
 
@@ -3312,45 +3357,6 @@ def unknown_category_refusal(notes) -> Optional[str]:
     return (f"No loans in this book match that filter ({', '.join(named)}), so "
             "there is nothing to calculate. I have not returned a whole-book "
             "figure in its place.")
-
-
-def _mask_time_axis(text: str) -> str:
-    """Blank the wording the TIME-AXIS OWNER has already claimed.
-
-    THE POPULATION READER MUST NOT RE-READ CLAIMED TEXT. "Show balance by
-    region over time" names its axis with the words "over time", and the
-    prepositional population reader — which has no way to know the phrase is
-    spoken for — captured `over <time>` and recorded ``unknown category:
-    'time'``. The note was inert while nothing acted on it; the routed guard
-    that now refuses on these notes turned it into *"No loans in this book match
-    that filter ('time')"* for a question about regions over time, and the same
-    sentence with a place in it produced ``'time for scotland'``.
-
-    `question_interpretation.lexical.time_axis_request` is the single owner of
-    time-axis wording — the same owner the series branch consults to decide it
-    IS a series — so the span it claims is blanked before the population reader
-    sees the sentence. Blanked rather than deleted, so every offset either side
-    of it is unmoved.
-
-    No vocabulary is added here and nothing is decided here: a sentence with no
-    time axis comes back unchanged.
-    """
-    try:
-        from question_interpretation.lexical import time_axis_request
-    except Exception:  # noqa: BLE001 - no owner, no claim, no masking
-        return text
-    out = text or ""
-    # A sentence names its axis once; the bound is a guard against a wording
-    # that could match its own replacement, never an expected iteration count.
-    for _ in range(4):
-        wording = time_axis_request(out)
-        if not wording:
-            break
-        idx = out.lower().find(str(wording).lower())
-        if idx < 0:
-            break
-        out = out[:idx] + " " * len(str(wording)) + out[idx + len(str(wording)):]
-    return out
 
 
 def _names_a_book(text: str) -> bool:
@@ -3575,7 +3581,8 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
         # paths now agree about what counts as an unrecognised category.
         if (unresolved is not None and not _names_a_book(clause)
                 and not all(_claimed_by_an_owner(w, semantics, available_columns,
-                                                 available_values)
+                                                 available_values,
+                                                 _time_axis_words(clause))
                             for w in str(value).split())):
             unresolved.append(f"{UNKNOWN_CATEGORY_PREFIX}'{value}'")
         return None
@@ -3618,7 +3625,8 @@ def _parse_categorical_filter(clause: str, semantics: dict, available_columns=No
     if not governed_place:
         if (unresolved is not None and not _names_a_book(clause)
                 and not all(_claimed_by_an_owner(w, semantics, available_columns,
-                                                 available_values)
+                                                 available_values,
+                                                 _time_axis_words(clause))
                             for w in str(value).split())):
             note = f"{UNKNOWN_CATEGORY_PREFIX}'{value}'"
             if note not in unresolved:
@@ -5399,7 +5407,7 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         # executor filters `work` before _execute_line), so attach it — a
         # filtered trend is never silently returned unfiltered.
         line_filters, line_unavail = _grouped_value_filters(
-            _mask_time_axis(q), semantics, available_columns, exclude_dims=[],
+            q, semantics, available_columns, exclude_dims=[],
             available_values=available_values)
         # If a FILTER-field keyword hijacked the metric (e.g. "balance trend where
         # LTV above 50%" -> metric=LTV, because the LTV filter term is also read as

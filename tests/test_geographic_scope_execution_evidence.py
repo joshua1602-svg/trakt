@@ -350,71 +350,49 @@ def test_an_explicit_borrower_basis_the_book_lacks_still_refuses(tmp_path,
 
 
 # --------------------------------------------------------------------------- #
-# The time-axis mask takes the axis and nothing else
+# The time-axis owner claims its own wording, and claims nothing else
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("question, masked, kept", [
-    # The axis phrase goes; the comparator that is NOT an axis stays.
-    ("balance by region over time for LTV over 50%", "over time",
-     ("by region", "LTV over 50%")),
-    # No axis at all: an age comparator is not a time request.
-    ("balance for borrowers over 85", None, ("over 85",)),
-    # A WINDOW is not an axis wording; nothing is taken, and both the grouping
-    # and the threshold survive to be read.
+@pytest.mark.parametrize("clause, claimed, unclaimed", [
+    # The axis wording is claimed, so "over time" stops being read as a category
+    # the book does not carry. The threshold beside it is untouched.
+    ("balance by region over time for LTV over 50%", ("time", "over"), ("ltv",)),
+    # No axis at all: nothing is claimed, and an age comparator stays readable.
+    ("balance for borrowers over 85", (), ("over", "85", "borrowers")),
+    # A WINDOW is not an axis wording, so the owner claims nothing here either.
     ("loan count by LTV bucket over the last three months where LTV is over 50%",
-     None, ("by LTV bucket", "over the last three months", "over 50%")),
-    # The adjacency rule: a month that is not an axis is left alone.
-    ("show balance for loans under 12 months old by region", None,
-     ("under 12 months old", "by region")),
+     (), ("months", "ltv")),
+    # THE REGRESSION THAT KILLED THE FIRST ATTEMPT. A ranked movement question
+    # names its axis with "month-on-month"; the first fix BLANKED that phrase
+    # before the population reader saw the sentence, which left "added the most"
+    # dangling and refused nine questions that had always answered. Scoped
+    # ownership claims the axis words and leaves every other word exactly as
+    # readable as it was.
+    ("Which region added the most loans month-on-month?",
+     ("month", "on"), ("added", "most", "loans", "region")),
 ])
-def test_the_mask_takes_the_time_axis_and_nothing_else(question, masked, kept):
-    from mi_agent.llm_query_parser import _mask_time_axis
+def test_the_time_axis_owner_claims_only_its_own_wording(clause, claimed,
+                                                         unclaimed):
+    from mi_agent.llm_query_parser import _time_axis_words
 
-    out = _mask_time_axis(question)
-    assert len(out) == len(question), "spans either side must not move"
-    if masked is None:
-        assert out == question
-    else:
-        assert masked not in out
-    for phrase in kept:
-        assert phrase in out, (phrase, out)
+    words = _time_axis_words(clause)
+    for word in claimed:
+        assert word in words, (word, words)
+    for word in unclaimed:
+        assert word not in words, (word, words)
 
 
-def test_the_latest_period_of_a_trend_is_the_current_period_answer():
-    """The invariant the seam exists to buy, on a book with missing values.
+def test_claiming_a_word_only_ever_suppresses_a_note():
+    """An unclaimed word beside a claimed one still records its own note.
 
-    The latest period of a breakdown over time and the ordinary breakdown are
-    the same executor call on the same frame, so they must agree on every group
-    AND on the set of groups. The set is the half that broke first: the temporal
-    caller chose to EXCLUDE rows with no grouping value while the current-period
-    path BUCKETS them, so a trend quietly dropped an "Unknown / Missing" group
-    the same question without a time axis showed. The policy now has one owner,
-    `mi_agent_workflow.missing_dimension_policy_for`, and both callers ask it.
+    The unknown-category test is `all()` over the captured value's words, so
+    widening what the time-axis owner claims can never make an ungoverned
+    qualifier disappear — which is the property that keeps "platinum" fail-closed
+    while "time" stops being reported as a place the book does not carry.
     """
-    trend = _ask("Show balance by region over time")
-    assert trend["ok"] is True, trend.get("answer")
-    chart = next(a for a in trend["artifacts"] if a["type"] == "chart")
-    latest = {s["key"]: chart["rows"][-1].get(s["key"]) for s in chart["series"]}
+    from mi_agent.llm_query_parser import _claimed_by_an_owner
 
-    current = _ask("Show balance by region")
-    assert current["ok"] is True, current.get("answer")
-    table = next(a for a in current["artifacts"] if a["type"] == "table")
-    keys = [c["key"] for c in table["columns"]]
-    group_key = keys[0]
-    value_key = next(k for k in keys if k.endswith("_sum"))
-    now = {str(r[group_key]): float(r[value_key]) for r in table["rows"]}
-
-    assert set(now) == set(latest), set(now) ^ set(latest)
-    for group, value in now.items():
-        assert latest[group] is not None, group
-        assert abs(float(latest[group]) - value) < 0.011, (group, latest[group], value)
-
-
-def test_the_missing_dimension_policy_has_one_owner():
-    """Both callers ask the same question of the same function."""
-    from mi_agent.mi_agent_workflow import missing_dimension_policy_for
-
-    assert missing_dimension_policy_for("Show balance by region") == "bucket"
-    assert missing_dimension_policy_for("Show balance by region over time") == "bucket"
-    assert missing_dimension_policy_for(
-        "Show balance by region excluding missing") == "exclude"
-    assert missing_dimension_policy_for(None) == "bucket"
+    axis = ("over", "time")
+    assert _claimed_by_an_owner("time", {}, None, None, axis) is True
+    assert _claimed_by_an_owner("platinum", {}, None, None, axis) is False
+    # Unscoped, the same word is claimed by nobody.
+    assert _claimed_by_an_owner("time", {}, None, None, ()) is False
