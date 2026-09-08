@@ -144,6 +144,46 @@ def matches(cands: List[Dict[str, Any]], target: float) -> Optional[Dict[str, An
     return None
 
 
+def _shown_with_tolerance(cands: List[Dict[str, Any]], limit: int = 8) -> str:
+    """Each figure the answer stated, with the tolerance it was compared at.
+
+    A disagreement cannot be classified without this: `£159.1MM` is compared at
+    +/- 50,000 because that is what one decimal place of a million asserts,
+    while `159,097,304.07` is compared at +/- 0.005. Printing the figure alone
+    leaves a reader unable to tell a wrong number from a coarse one."""
+    out = []
+    for c in cands[:limit]:
+        out.append(f"{c['shown']} (={c['value']:,.2f} +/-{c['tolerance']:,.2f}, "
+                   f"{c['source']})")
+    if len(cands) > limit:
+        out.append(f"... {len(cands) - limit} more")
+    return "; ".join(out) or "no figure at all"
+
+
+def service_population(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """WHAT THE SERVICE SAYS IT MEASURED — its own reconciliation block.
+
+    The service publishes the dataset, the row count and the balance it
+    actually included. That is the other half of a numeric disagreement: two
+    correct figures over different populations disagree, and without this the
+    comparison cannot say which kind of disagreement it found."""
+    trace = envelope.get("queryTrace") or {}
+    rec = trace.get("reconciliation") if isinstance(trace.get("reconciliation"), dict) else {}
+    meta = envelope.get("metadata") or {}
+    return {
+        "dataset": rec.get("dataset") or meta.get("datasetContext"),
+        "records_included": rec.get("records_included", rec.get("total_records")),
+        "balance_included": rec.get("balance_included", rec.get("total_balance")),
+        "filters_applied": rec.get("filters_applied"),
+        "filters": rec.get("filters"),
+        "as_of": meta.get("asOfDate"),
+        "metric": trace.get("metric"),
+        "aggregation": trace.get("aggregation"),
+        "result_type": trace.get("resultType") or meta.get("resultType"),
+        "grouped_by": trace.get("executedGroupFieldKeys") or trace.get("applied_dimensions"),
+    }
+
+
 def primary_value(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """THE FIGURE THE ANSWER LEADS WITH — the one a reader takes away.
 
@@ -298,8 +338,9 @@ def _c_numeric_matches_truth(c: Ctx) -> Tuple[str, str, Optional[str]]:
     hit = matches(c.cands, float(target))
     if hit:
         return PASS, f"states {hit['shown']} (independent: {target:,.2f})", None
-    return FAIL, (f"independent truth {target:,.2f} appears nowhere in the answer; "
-                  f"figures stated: {[x['shown'] for x in c.cands[:8]]}"), R_NUMBER
+    return FAIL, (f"asserted |stated - {float(target):,.2f}| <= tolerance for some "
+                  f"stated figure, and no stated figure satisfied it. "
+                  f"Stated: {_shown_with_tolerance(c.cands)}"), R_NUMBER
 
 
 def _flatten_targets(node: Any) -> List[Any]:
@@ -335,8 +376,10 @@ def _c_numeric_matches_truth_all(c: Ctx) -> Tuple[str, str, Optional[str]]:
         return INDET, "no independent values", R_TRUTH_UNAVAILABLE
     missing = [t for t in usable if not matches(c.cands, float(t))]
     if missing:
-        return FAIL, (f"{len(missing)} of {len(usable)} independent values are absent "
-                      f"from the answer: {[f'{m:,.2f}' for m in missing]}"), R_NUMBER
+        return FAIL, (f"asserted every one of {len(usable)} independent values appears "
+                      f"in the answer; {len(missing)} did not: "
+                      f"{[f'{m:,.2f}' for m in missing]}. "
+                      f"Stated: {_shown_with_tolerance(c.cands)}"), R_NUMBER
     detail = f"all {len(usable)} independent values are stated"
     if len(usable) < len(targets):
         detail += f" ({len(targets) - len(usable)} had no independent source)"
@@ -904,6 +947,8 @@ def score(question: Dict[str, Any], envelope: Dict[str, Any],
         "artifact_count": len(envelope.get("artifacts") or []),
         "controlled_refusal": meta.get("controlledRefusal"),
         "model_lineage": model_lineage(envelope),
+        "service_population": service_population(envelope),
+        "truth_description": truth_mod.describe(question.get("truth_key")),
         "latency_seconds": envelope.get("__latency__"),
     }
 
@@ -1651,6 +1696,43 @@ def print_findings(payload: Dict[str, Any], exemplars: int = 3) -> None:
         for entry in outside:
             print(f"  {entry['question_id']} {entry['case']}: observed "
                   f"{entry['observed']}, expected one of {entry['expected']}")
+
+    numeric = [r for r in rows
+               if R_NUMBER in (r.get("failure_reasons") or [])]
+    if numeric:
+        print("\n" + "=" * 72)
+        print(f"EVERY NUMERIC DISAGREEMENT IN FULL — {len(numeric)} questions")
+        print("A disagreement is not classifiable from two numbers. Each row "
+              "below carries what the")
+        print("service says it measured, what the independent surface says it "
+              "measured, the units on")
+        print("both sides, the tolerance the assertion used, and the assertion "
+              "itself.")
+        print("=" * 72)
+        for r in numeric:
+            desc = r.get("truth_description") or {}
+            pop = r.get("service_population") or {}
+            print(f"\n[{r['question_id']} {r['canonical_case_id']}"
+                  f"{r['variant_id']}] {r['outcome']}  route={r['observed_route']}"
+                  f"  family={r['capability_family']}")
+            print(f"  question   : {r['question']}")
+            answer = (r.get("answer") or r.get("error") or "").replace("\n", " ")
+            print(f"  answer     : {answer[:300]}")
+            print(f"  service pop: dataset={pop.get('dataset')} "
+                  f"records={pop.get('records_included')} "
+                  f"balance={pop.get('balance_included')} "
+                  f"as_of={pop.get('as_of')} filters={pop.get('filters_applied')}")
+            print(f"               metric={pop.get('metric')} "
+                  f"agg={pop.get('aggregation')} "
+                  f"result={pop.get('result_type')} "
+                  f"grouped_by={pop.get('grouped_by')}")
+            print(f"  truth key  : {r.get('truth_key')} ({r.get('truth_method')})")
+            print(f"  truth pop  : {desc.get('population')}")
+            print(f"  truth units: {desc.get('unit')}")
+            print(f"  truth src  : {desc.get('source')}")
+            for chk in (r.get("checks") or []):
+                if chk["verdict"] == FAIL and chk["reason"] == R_NUMBER:
+                    print(f"  assertion  : {chk['check']} — {chk['detail']}")
 
     print("\n" + "-" * 72)
     print("INDEPENDENT SURFACES, AS READ")

@@ -487,3 +487,120 @@ def _availability(t: Dict[str, Any], snap: Dict[str, Any], geo: Dict[str, Any],
         "borrowing_base_available": (
             bool(bbase.get("available")) if bbase else UNRESOLVED),
     }
+
+
+#: WHAT EACH TRUTH VALUE IS, IN WORDS. A number compared against another number
+#: is not evidence until both sides say what they are measuring, over which
+#: population, in which units. Two correct figures on different populations
+#: disagree; so do two figures of the same population in different units. This
+#: table is what lets a disagreement be classified instead of merely counted.
+TRUTH_DESCRIPTIONS: Dict[str, Dict[str, str]] = {
+    "funded_total_balance": {
+        "unit": "GBP", "population": "every funded loan at the run's reporting date",
+        "source": "GET /mi/snapshot .current_outstanding_balance"},
+    "funded_loan_count": {
+        "unit": "count of loans", "population": "every funded loan at the reporting date",
+        "source": "GET /mi/snapshot .loan_count"},
+    "funded_avg_balance": {
+        "unit": "GBP per loan", "population": "every funded loan at the reporting date",
+        "source": "recomputed here: .current_outstanding_balance / .loan_count"},
+    "funded_wa_current_ltv": {
+        "unit": "percentage points", "population": "balance-weighted over funded loans",
+        "source": "GET /mi/snapshot kpi wa_current_ltv .raw"},
+    "funded_wa_rate": {
+        "unit": "percentage points", "population": "balance-weighted over funded loans",
+        "source": "GET /mi/snapshot kpi wa_rate .raw"},
+    "strat_region": {
+        "unit": "GBP per region", "population": "funded loans grouped by the snapshot's region dimension",
+        "source": "GET /mi/snapshot .stratifications[key=region].bars"},
+    "strat_ltv": {
+        "unit": "GBP per band", "population": "funded loans grouped into governed LTV bands",
+        "source": "GET /mi/snapshot .stratifications[key=ltv].bars"},
+    "strat_product": {
+        "unit": "count per product", "population": "funded loans grouped by product",
+        "source": "GET /mi/snapshot .stratifications[key=product].bars"},
+    "strat_region_top": {
+        "unit": "region name", "population": "the largest region by balance",
+        "source": "GET /mi/snapshot .stratifications[key=region] ordered"},
+    "region_scotland_balance": {
+        "unit": "GBP", "population": "funded loans whose snapshot region is Scotland",
+        "source": "GET /mi/snapshot .stratifications[key=region] Scotland row"},
+    "region_top_share": {
+        "unit": "per cent of funded balance", "population": "largest region over the whole book",
+        "source": "recomputed here: largest region balance / total balance x 100"},
+    "geo_total": {
+        "unit": "GBP", "population": "ONLY funded loans whose ITL3 area resolved",
+        "source": "GET /mi/geo/exposure .total"},
+    "geo_basis": {
+        "unit": "basis name", "population": "the geography basis the configuration resolved",
+        "source": "GET /mi/geo/exposure .basis"},
+    "pipeline_case_count": {
+        "unit": "count of cases", "population": "the latest governed weekly pipeline extract",
+        "source": "GET /mi/pipeline/snapshot .pipelineRowCount"},
+    "pipeline_stage_breakdown": {
+        "unit": "count per stage", "population": "the latest weekly extract grouped by stage",
+        "source": "GET /mi/pipeline/snapshot .stageBreakdown"},
+    "pipeline_kfi_stock": {
+        "unit": "count of cases", "population": "cases standing at KFI in the latest extract",
+        "source": "GET /mi/pipeline/snapshot .stageBreakdown KFI row"},
+    "evolution_balance_series": {
+        "unit": "GBP per period", "population": "the funded book at each governed reporting period",
+        "source": "GET /mi/evolution/funded .periods[].metrics.funded_balance"},
+    "evolution_count_series": {
+        "unit": "count per period", "population": "the funded book at each governed reporting period",
+        "source": "GET /mi/evolution/funded .periods[].metrics.loan_count"},
+    "evolution_wa_ltv_series": {
+        "unit": "percentage points (surface stores a fraction; scaled x100 here)",
+        "population": "balance-weighted over the funded book each period",
+        "source": "GET /mi/evolution/funded .periods[].metrics.wa_ltv"},
+    "evolution_region_breakdown": {
+        "unit": "GBP per region per period", "population": "funded book per region per period",
+        "source": "GET /mi/evolution/funded .breakdowns.region"},
+    "evolution_scotland_series": {
+        "unit": "GBP per period", "population": "Scottish rows of the region breakdown",
+        "source": "GET /mi/evolution/funded .breakdowns.region Scotland rows"},
+    "prior_period_balance": {
+        "unit": "GBP", "population": "the funded book at the SECOND-TO-LAST governed period",
+        "source": "GET /mi/evolution/funded .periods[-2]"},
+    "last_two_period_balances": {
+        "unit": "GBP", "population": "the funded book at the last two governed periods",
+        "source": "GET /mi/evolution/funded .periods[-2:]"},
+    "mom_balance_change": {
+        "unit": "GBP, signed", "population": "current run minus the snapshot's own prior run",
+        "source": "GET /mi/snapshot .monthly_change.balance_change"},
+    "mom_new_and_exited": {
+        "unit": "counts of loans", "population": "loan ids present in one run and not the other",
+        "source": "GET /mi/snapshot .monthly_change.new_loans / .exited_loans"},
+    "forecast_current_balance": {
+        "unit": "GBP", "population": "the funded balance the forecast extrapolates from",
+        "source": "GET /mi/forecast/extrapolation .currentFundedBalance"},
+    "cohort_progression_counts": {
+        "unit": "count per period", "population": "a static pool fixed at formation",
+        "source": "GET /mi/cohorts/progression .periods[].survivingLoanCount"},
+    "risk_limits_summary": {
+        "unit": "counts of tests", "population": "the approved concentration tests",
+        "source": "GET /mi/risk-limits .summary"},
+    "risk_limits_closest": {
+        "unit": "test name", "population": "the approved test with least headroom",
+        "source": "GET /mi/risk-limits .summary.closestHeadroom"},
+    "source_portfolio_count": {
+        "unit": "count of scopes", "population": "governed portfolio scopes for this client",
+        "source": "GET /mi/source-portfolios"},
+    "borrowing_base_envelope": {
+        "unit": "GBP / state", "population": "the configured funding facility, if any",
+        "source": "GET /mi/borrowing-base"},
+}
+
+
+def describe(key: Optional[str]) -> Dict[str, str]:
+    if not key:
+        return {"unit": "n/a", "population": "n/a", "source": "n/a"}
+    if key in TRUTH_DESCRIPTIONS:
+        return TRUTH_DESCRIPTIONS[key]
+    parts = [TRUTH_DESCRIPTIONS[k] for k in key.split("+") if k in TRUTH_DESCRIPTIONS]
+    if parts:
+        return {"unit": " + ".join(p["unit"] for p in parts),
+                "population": " + ".join(p["population"] for p in parts),
+                "source": " + ".join(p["source"] for p in parts)}
+    return {"unit": "not described", "population": "not described",
+            "source": "not described"}
