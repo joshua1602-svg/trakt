@@ -372,6 +372,20 @@ def counts_rows(text: str) -> bool:
     return bool(COUNT_REQUEST_RE.search(text or ""))
 
 
+_ROW_NOUN_RE = re.compile(r"\b(?:" + "|".join(ROW_NOUNS) + r")\b", re.I)
+
+
+def names_row_noun(text: str) -> bool:
+    """Does the sentence name a governed ROW NOUN at all ("cases", "loans")?
+
+    With `counts_rows`, the two ways a reader ASKS for a count: "how many
+    loans" and "show weekly pipeline cases". A count the parser fell back to
+    for a sentence naming neither ("how big is the book?") is not something
+    the reader asked for, and the contract must not record it as if it were.
+    """
+    return bool(_ROW_NOUN_RE.search(text or ""))
+
+
 def count_request_spans(text: str) -> Tuple[Tuple[int, int], ...]:
     """Every span in which a count of rows is requested.
 

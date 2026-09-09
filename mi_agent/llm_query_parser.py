@@ -1346,6 +1346,16 @@ def _grouping_regions(text: str) -> List[Tuple[int, int]]:
     return regions
 
 
+def default_aggregation_for(key: str, semantics: dict) -> str:
+    """The governed default aggregation of a registry measure — THE one rule:
+    the registry's own `default_aggregation`, else weighted average for a
+    percent-format field, else sum. Read by the measure set and by the
+    concept-merge arm when it fills a subject, so the two cannot differ."""
+    entry = _fields(semantics).get(key, {}) or {}
+    return (entry.get("default_aggregation")
+            or ("weighted_avg" if entry.get("format") == "percent" else "sum"))
+
+
 def _measure_hits(text: str, semantics: dict, available_columns=None
                   ) -> List[Tuple[int, int, str, str]]:
     """Non-overlapping ``(start, end, semantic_key, default_aggregation)`` hits.
@@ -1389,9 +1399,7 @@ def _measure_hits(text: str, semantics: dict, available_columns=None
     for term in sorted((t for t in reg_terms if " " in t), key=len, reverse=True):
         for match in re.finditer(r"\b" + re.escape(term) + r"\b", text):
             key = reg_terms[term]
-            entry = fields.get(key, {})
-            _record(match, key, entry.get("default_aggregation")
-                    or ("weighted_avg" if entry.get("format") == "percent" else "sum"))
+            _record(match, key, default_aggregation_for(key, semantics))
     # 2) The curated grammar — the core measures.
     for term, token in _METRIC_TERMS:
         for match in re.finditer(r"\b" + re.escape(term) + r"\b", text):

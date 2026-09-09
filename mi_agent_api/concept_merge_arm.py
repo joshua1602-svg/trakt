@@ -139,8 +139,28 @@ def _apply_to_spec(spec, filled, semantics=None) -> List[Dict[str, Any]]:
             dimensions.append(slot.key)
             applied.append({"kind": "dimension", "field": slot.key})
         elif slot.slot == CM.SLOT_SUBJECT and not getattr(spec, "metric", None):
+            # G7-LITE — THE OPERATION FOLLOWS THE MEASURE. The merge only fills
+            # a subject the contract left EMPTY, and an empty subject beside
+            # `aggregation="count"` is the parser's placeholder for "no
+            # measure was recognised" — so a balance filled here must not be
+            # COUNTED. The measure's governed default aggregation is the
+            # measure owner's rule (`default_aggregation_for`), and the fill
+            # is recorded on the spec as model-inferred so the contract's
+            # subject carries that provenance rather than re-deriving a
+            # deterministic one from a spec the model changed.
+            from mi_agent import llm_query_parser as _LQ
+            from question_interpretation.schema import PROV_MODEL_INFERRED
+
             spec.metric = slot.value
-            applied.append({"kind": "measure", "field": slot.value})
+            aggregation = None
+            if str(getattr(spec, "aggregation", "") or "") in ("count", "count_distinct", ""):
+                aggregation = _LQ.default_aggregation_for(str(slot.value), semantics or {})
+                spec.aggregation = aggregation
+            spec.metric_defaulted = False
+            spec.metric_source = PROV_MODEL_INFERRED
+            applied.append({"kind": "measure", "field": slot.value,
+                            "aggregation": aggregation,
+                            "provenance": PROV_MODEL_INFERRED})
         elif slot.slot == CM.SLOT_SOURCE_SCOPE and slot.value:
             # A SCOPE THE MERGE FILLED AND NOTHING CARRIED. This branch did not
             # exist, so `source_book` was the one proposal kind that could be

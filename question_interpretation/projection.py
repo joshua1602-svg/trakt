@@ -38,7 +38,7 @@ from .schema import (
     BASE_ACQUIRED, BASE_DIRECT, BASE_FUNDED, BOUND, COUNT,
     EMPTY, FIELD, FILLED, FILTER, FORWARD,
     GRAINS, GROUPING, MOVEMENT, NEUTRAL,
-    PROV_CALLER_CONTEXT, PROV_DEFAULT, PROV_EXPLICIT_USER, PROV_UNRESOLVED,
+    PROV_CALLER_CONTEXT, PROV_DEFAULT, PROV_EXPLICIT_USER, PROV_MODEL_INFERRED, PROV_UNRESOLVED,
     RANKING, ROLE_UNATTRIBUTED,
     SCOPE_ACQUIRED, SCOPE_COHORT, SCOPE_DIRECT, SCOPE_TOTAL, SOURCE_SCOPES,
     STATED,
@@ -312,21 +312,41 @@ def _subject(qi, spec) -> None:
     span = Span(start, end) if end > start else None
     raw = qi.question[start:end].strip() or None
 
+    from .lexical import counts_rows, names_row_noun
+
     metric = getattr(spec, "metric", None)
     if metric:
-        # THE PARSER SAYS WHETHER IT CHOSE THE MEASURE OR THE READER DID. The
-        # contract carries that answer rather than re-deriving it, so nothing
+        # THE PARSER SAYS WHETHER IT CHOSE THE MEASURE OR THE READER DID — or
+        # whether the model did (G7-lite: `metric_source`). The contract
+        # carries that answer rather than re-deriving it, so nothing
         # downstream has to look at the sentence to find out.
+        source = getattr(spec, "metric_source", None)
         qi.subject = SubjectClaim(
             state=FILLED, candidate_concept=metric, raw_text=raw, span=span,
-            source="parser.metric",
-            provenance=(PROV_DEFAULT if getattr(spec, "metric_defaulted", False)
+            source="parser.metric" if not source else "concept_merge.%s" % source,
+            provenance=(PROV_MODEL_INFERRED if source == PROV_MODEL_INFERRED
+                        else PROV_DEFAULT if getattr(spec, "metric_defaulted", False)
                         else PROV_EXPLICIT_USER))
         return
     if getattr(spec, "aggregation", None) in ("count", "count_distinct"):
-        qi.subject = SubjectClaim(state=FILLED, candidate_concept="loan_count",
-                                  raw_text=raw, span=span,
-                                  source="parser.aggregation=count")
+        # A COUNT THE READER ASKED FOR IS A CLAIM; A COUNT THE PARSER FELL BACK
+        # TO IS NOT. "how many loans" and "show weekly pipeline cases" name the
+        # rows they count; "how big is the book?" names nothing, and the
+        # parser's placeholder count was being recorded as a FILLED subject
+        # with no provenance — so the fill-only merge could never fill the one
+        # slot the model exists to fill, and declined every proposal for it
+        # as "slot provenance was never recorded". An unasked count leaves the
+        # subject EMPTY, which is what it is.
+        if counts_rows(qi.question) or names_row_noun(qi.question):
+            qi.subject = SubjectClaim(state=FILLED, candidate_concept="loan_count",
+                                      raw_text=raw, span=span,
+                                      source="parser.aggregation=count",
+                                      provenance=PROV_EXPLICIT_USER)
+            return
+        qi.subject = SubjectClaim(state=EMPTY, raw_text=raw, span=span,
+                                  source="lexical.subject_side_span")
+        qi.notes.append("subject: the parser's count is a fallback, not a "
+                        "measure the reader named; the slot is empty")
         return
     qi.subject = SubjectClaim(state=EMPTY, raw_text=raw, span=span,
                               source="lexical.subject_side_span")

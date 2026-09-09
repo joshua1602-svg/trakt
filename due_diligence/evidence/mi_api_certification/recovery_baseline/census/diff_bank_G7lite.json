@@ -1,0 +1,940 @@
+{
+ "compared": 135,
+ "moved": 62,
+ "by_kind": {
+  "measure_moved": 36,
+  "other:qi_subject_provenance": 26
+ },
+ "movements": [
+  {
+   "question_id": "Q002",
+   "case": "C01",
+   "question": "How much are we lending in total across the book right now?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much are we lending in total"
+   }
+  },
+  {
+   "question_id": "Q004",
+   "case": "C02",
+   "question": "How many loans are in the funded book?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q005",
+   "case": "C02",
+   "question": "What's the total number of mortgages we currently hold?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q006",
+   "case": "C02",
+   "question": "Give me the loan count.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q008",
+   "case": "C03",
+   "question": "How large is a typical loan on this book?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q015",
+   "case": "C05",
+   "question": "Break the book down regionally by balance.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Break the book down regionally"
+   }
+  },
+  {
+   "question_id": "Q020",
+   "case": "C07",
+   "question": "What does our Scottish lending add up to?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What does our Scottish lending add up to?"
+   }
+  },
+  {
+   "question_id": "Q022",
+   "case": "C08",
+   "question": "Show the loan count by product.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q023",
+   "case": "C08",
+   "question": "How many loans do we hold in each product?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q024",
+   "case": "C08",
+   "question": "Break the number of loans down by product type.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q026",
+   "case": "C09",
+   "question": "Give me the size of the book and the number of loans on it.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q029",
+   "case": "C10",
+   "question": "How big is the book, how many loans, and what does that average out to per loan?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q039",
+   "case": "C13",
+   "question": "Regional split on an obligor basis.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Regional split on an obligor basis."
+   }
+  },
+  {
+   "question_id": "Q043",
+   "case": "C15",
+   "question": "Give me a summary of the portfolio.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Give me a summary of the portfolio."
+   }
+  },
+  {
+   "question_id": "Q044",
+   "case": "C15",
+   "question": "Where does the book stand at the moment \u2014 headline numbers, please.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Where does the book stand at the moment \u2014 headline numbers, please."
+   }
+  },
+  {
+   "question_id": "Q045",
+   "case": "C15",
+   "question": "Portfolio overview.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Portfolio overview."
+   }
+  },
+  {
+   "question_id": "Q046",
+   "case": "C16",
+   "question": "Give me a summary of the pipeline.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Give me a summary of the pipeline."
+   }
+  },
+  {
+   "question_id": "Q047",
+   "case": "C16",
+   "question": "What does the origination pipeline look like right now?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What does the origination pipeline look like right now?"
+   }
+  },
+  {
+   "question_id": "Q048",
+   "case": "C16",
+   "question": "Pipeline overview.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Pipeline overview."
+   }
+  },
+  {
+   "question_id": "Q049",
+   "case": "C17",
+   "question": "How many cases are in the pipeline?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q050",
+   "case": "C17",
+   "question": "What's the number of live applications we're working?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q051",
+   "case": "C17",
+   "question": "Pipeline case count.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q052",
+   "case": "C18",
+   "question": "Compare the funded book across source portfolios.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Compare the funded book"
+   }
+  },
+  {
+   "question_id": "Q053",
+   "case": "C18",
+   "question": "How do the underlying portfolios stack up against each other?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How do the underlying portfolios stack up against each other?"
+   }
+  },
+  {
+   "question_id": "Q054",
+   "case": "C18",
+   "question": "Portfolio-by-portfolio comparison, please.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Portfolio-"
+   }
+  },
+  {
+   "question_id": "Q057",
+   "case": "C19",
+   "question": "Rank source portfolios by weighted average LTV.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Rank source portfolios"
+   }
+  },
+  {
+   "question_id": "Q061",
+   "case": "C21",
+   "question": "Show the loan count over time.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q062",
+   "case": "C21",
+   "question": "How has the number of loans changed month by month?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q063",
+   "case": "C21",
+   "question": "Loan count trend across reporting periods.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q071",
+   "case": "C24",
+   "question": "How big was the book at the previous month end?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How big was the book at the previous month end?"
+   }
+  },
+  {
+   "question_id": "Q077",
+   "case": "C26",
+   "question": "Is the book up or down on last month, and by how much?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Is the book up or down on last month, and"
+   }
+  },
+  {
+   "question_id": "Q079",
+   "case": "C27",
+   "question": "How many loans came on and how many left since the prior reporting date?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q081",
+   "case": "C27",
+   "question": "New and exited loan counts month on month.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q085",
+   "case": "C29",
+   "question": "What was the movement between the last two reporting dates?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What was the movement between the last two reporting dates?"
+   }
+  },
+  {
+   "question_id": "Q087",
+   "case": "C29",
+   "question": "Period movement summary.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Period movement summary."
+   }
+  },
+  {
+   "question_id": "Q092",
+   "case": "C31",
+   "question": "If completions carry on at this pace, how long until the book hits two hundred million?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "If completions carry on at this pace, how long until the book hits two hundred million?"
+   }
+  },
+  {
+   "question_id": "Q098",
+   "case": "C33",
+   "question": "Of the cases that reach KFI, what proportion end up completing?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q101",
+   "case": "C34",
+   "question": "Track the loans by the year they were written and show how they've run off.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q102",
+   "case": "C34",
+   "question": "Static-pool progression by vintage.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Static-pool progression"
+   }
+  },
+  {
+   "question_id": "Q104",
+   "case": "C35",
+   "question": "Suppose completions ran a fifth faster; how much sooner do we hit two hundred million?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Suppose completions ran a fifth faster; how much sooner do we hit two hundred million?"
+   }
+  },
+  {
+   "question_id": "Q106",
+   "case": "C36",
+   "question": "Are we within our concentration limits?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Are we within our concentration limits?"
+   }
+  },
+  {
+   "question_id": "Q107",
+   "case": "C36",
+   "question": "Any covenant breaches on the concentration tests at the moment?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Any covenant breaches on the concentration tests at the moment?"
+   }
+  },
+  {
+   "question_id": "Q108",
+   "case": "C36",
+   "question": "Concentration limit status.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Concentration limit status."
+   }
+  },
+  {
+   "question_id": "Q109",
+   "case": "C37",
+   "question": "Which concentration test is closest to its limit?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which concentration test is closest to its limit?"
+   }
+  },
+  {
+   "question_id": "Q110",
+   "case": "C37",
+   "question": "Which limit are we nearest to tripping?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which limit are we nearest to tripping?"
+   }
+  },
+  {
+   "question_id": "Q111",
+   "case": "C37",
+   "question": "Rank the concentration tests by remaining headroom.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Rank the concentration tests"
+   }
+  },
+  {
+   "question_id": "Q115",
+   "case": "C39",
+   "question": "How many cases are at each pipeline stage?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q117",
+   "case": "C39",
+   "question": "Pipeline stage breakdown by case count.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q118",
+   "case": "C40",
+   "question": "How many cases moved from KFI into Application?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q119",
+   "case": "C40",
+   "question": "What flowed out of KFI and into Application between the last two extracts?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q120",
+   "case": "C40",
+   "question": "KFI to Application transitions, latest week.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q121",
+   "case": "C41",
+   "question": "What is the borrowing base?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What is the borrowing base?"
+   }
+  },
+  {
+   "question_id": "Q123",
+   "case": "C41",
+   "question": "Current borrowing base, please.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Current borrowing base, please."
+   }
+  },
+  {
+   "question_id": "Q124",
+   "case": "C42",
+   "question": "How much headroom do we have under the borrowing base?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much headroom do we have under the borrowing base?"
+   }
+  },
+  {
+   "question_id": "Q125",
+   "case": "C42",
+   "question": "Is there room left to draw against the facility?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Is there room left to draw against the facility?"
+   }
+  },
+  {
+   "question_id": "Q126",
+   "case": "C42",
+   "question": "Borrowing-base headroom.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Borrowing-base headroom."
+   }
+  },
+  {
+   "question_id": "Q127",
+   "case": "C43",
+   "question": "Why are loans ineligible?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q128",
+   "case": "C43",
+   "question": "What's making collateral fall outside the eligible pool?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What's making collateral fall outside the eligible pool?"
+   }
+  },
+  {
+   "question_id": "Q129",
+   "case": "C43",
+   "question": "Break ineligible loans down by reason.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q130",
+   "case": "C44",
+   "question": "What is the borrowing base for Scotland?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What is the borrowing base for Scotland?"
+   }
+  },
+  {
+   "question_id": "Q131",
+   "case": "C44",
+   "question": "Give me the Scottish slice of the borrowing base.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Give me the Scottish slice of the borrowing base."
+   }
+  },
+  {
+   "question_id": "Q132",
+   "case": "C44",
+   "question": "Borrowing base, region by region.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Borrowing base, region"
+   }
+  }
+ ]
+}

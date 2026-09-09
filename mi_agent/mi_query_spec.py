@@ -333,6 +333,12 @@ class MIQuerySpec:
     #: the trend" was answered as a funded-balance trend with the assumption
     #: neither stated nor recoverable.
     metric_defaulted: bool = False
+    #: WHERE THE MEASURE CAME FROM, when a source other than the reader's own
+    #: words supplied it: "model_inferred" after the concept-merge arm filled
+    #: an empty subject (G7-lite). Disclosure, like `metric_defaulted`: the
+    #: interpretation contract carries it as the subject's provenance so a
+    #: route, a receipt and a reader all see the same origin.
+    metric_source: Optional[str] = None
     dimension: Optional[str] = None
     x: Optional[str] = None
     y: Optional[str] = None

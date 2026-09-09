@@ -66,7 +66,7 @@ MODELLED_FIELDS = frozenset({
     #    difference here is not a semantic difference and must not block a lift.
     "intent", "chart_type", "output_format", "title", "explanation",
     # 3. Disclosure ABOUT the measure rather than a change to it.
-    "metric_defaulted",
+    "metric_defaulted", "metric_source",
 })
 
 #: `dimension` and `x` are the same axis in the spec's vocabulary; the plan
