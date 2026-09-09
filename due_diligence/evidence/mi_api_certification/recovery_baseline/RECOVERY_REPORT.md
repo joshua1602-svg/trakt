@@ -46,6 +46,12 @@ Seven invariants, written BEFORE any consolidation (commit `12ccff6`):
 
 ## D. Semantic census (Phase 6) — machine-checked
 
+**What "the corpus" is here.** The sprint names 882 questions. The estate's
+own corpus (`question_interpretation/stage2_corpus.json`) carries 939 rows,
+which contain **843 distinct questions** — the census runs the distinct set, so
+a question asked twice cannot count as two movements. The frozen bank's 135 are
+censused separately and never merged with it.
+
 `recovery_baseline/census/classify_movements.py` asserts that every question
 that moved between the baseline and HEAD moved in a NAMED step for a NAMED
 reason. It exits non-zero on any unexplained movement.
