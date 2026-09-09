@@ -525,3 +525,57 @@ def _is_cross_portfolio(question: str) -> bool:
         return len(resolve_comparison_lenses(question)) >= 2
     except Exception:  # noqa: BLE001 - recognition must never raise
         return False
+
+
+#: What the parser's comparison reader emits for "the latest period". Owned
+#: here beside the relative markers so the period-pair owner and the claimant
+#: read one vocabulary.
+LATEST_MARKERS: Tuple[str, ...] = ("latest", "current", "newest", "this month",
+                                   "current month", "current period", "now")
+
+
+#: Relative wordings that name the CURRENT period as a position, not a change.
+CURRENT_PERIOD_MARKERS: Tuple[str, ...] = ("this month", "this quarter",
+                                           "current month", "current period",
+                                           "latest", "current", "now")
+
+
+def relative_wording(question: Optional[str]) -> Optional[str]:
+    """The relative-period wording the sentence used, as the reader wrote it
+    ("prior period", "last month") — for a refusal that quotes the question
+    rather than a method name."""
+    text = _padded(question or "")
+    for marker, _mode in RELATIVE_MODE_MARKERS:
+        if marker in text:
+            return marker.strip()
+    return None
+
+
+def period_reference(question: Optional[str]) -> Optional[str]:
+    """"current" when every relative wording in the sentence names the current
+    period, "other" when any names an earlier one or a comparison, None when
+    none is named. The ledger reads this to tell "the balance this month"
+    (a level, now) from "the balance in the prior period" (a level, then)."""
+    text = _padded(question or "")
+    matched = [marker for marker, _mode in RELATIVE_MODE_MARKERS if marker in text]
+    if not matched:
+        return "current" if any(m in text.split() or f" {m} " in text
+                                for m in CURRENT_PERIOD_MARKERS) else None
+    return "current" if all(m in CURRENT_PERIOD_MARKERS for m in matched) else "other"
+
+
+def claims_word(token: Optional[str]) -> bool:
+    """Does this owner READ ``token``? — asked by the unknown-category claimant.
+
+    G3 — OWNER-AWARE CLAIMING. A word that is part of any relative-period
+    wording this module recognises ("prior", "previous", "period", "month",
+    "snapshot"...) is a period word, not a category the book fails to carry.
+    Derived from the markers themselves, so there is no second list to drift.
+    """
+    word = str(token or "").strip().lower()
+    if not word:
+        return False
+    for marker, _mode in RELATIVE_MODE_MARKERS:
+        if word in marker.split():
+            return True
+    return any(word in marker.split() for marker in LATEST_MARKERS)

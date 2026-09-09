@@ -795,3 +795,21 @@ def recogniser():
                          RECONCILIATION),
         },
         recognise=recognise, handle=handle)
+
+
+def movement_word(token: Optional[str]) -> bool:
+    """Does the stage-movement owner READ ``token``? — asked by the claimant.
+
+    G3 — OWNER-AWARE CLAIMING. "new" (of "new cases"), "exited", "stayed",
+    "moved" are this route's own vocabulary; a population reader that captures
+    one of them as a category must not record a category the book fails to
+    carry. Derived from the wordings above, so there is no second list.
+    """
+    word = str(token or "").strip().lower()
+    if not word:
+        return False
+    for vocab in (_ARRIVAL_WORDS, _DEPARTURE_WORDS, _STAYER_WORDS, _MOVED_VERBS,
+                  _RECONCILIATION_WORDS):
+        if any(word in phrase.split() for phrase in vocab):
+            return True
+    return False

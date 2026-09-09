@@ -1012,13 +1012,21 @@ def unmet_requirements(reading: AnalyticalIntent, *,
     ``grouping``          the dimension it grouped by, if any
     ``populations``       how many governed populations it measured separately
     """
+    return unmet_from_requirements(reading.requirements, evidence=evidence)
+
+
+def unmet_from_requirements(requirements: Sequence[str], *,
+                            evidence: Mapping[str, Any]) -> List[str]:
+    """The same test, on a bare requirement list — so the semantic claims
+    ledger (`mi_agent.semantic_claims`) checks this boundary's requirements
+    with this boundary's rule rather than a copy of it."""
     unmet: List[str] = []
     dataset = str(evidence.get("dataset") or "")
     periods = int(evidence.get("periods") or 0)
     grouping = str(evidence.get("grouping") or "")
     populations = int(evidence.get("populations") or 0)
 
-    for requirement in reading.requirements:
+    for requirement in requirements:
         if requirement == REQ_PIPELINE_DATASET and dataset != "pipeline":
             unmet.append(requirement)
         elif requirement == REQ_LIMIT_EVIDENCE and not evidence.get("limits"):

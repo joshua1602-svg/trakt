@@ -1807,3 +1807,21 @@ def prepositional_restriction_objects(text, is_row_noun=None):
             head, head_offset = obj[-1]
             out.append((head, obj[:-1], head_offset))
     return out
+
+
+def temporal_word(token: "Optional[str]") -> bool:
+    """Does the temporal-aspect owner READ ``token``? — asked by the claimant.
+
+    G3 — OWNER-AWARE CLAIMING. A change word, a word of a comparison-period
+    phrase, or a calendar token is temporal vocabulary this module owns; it is
+    never a category the book fails to carry. Derived from the vocabularies
+    above, so nothing here can drift from what `temporal_aspect` reads.
+    """
+    word = str(token or "").strip().lower()
+    if not word:
+        return False
+    if word in CHANGE_WORDS:
+        return True
+    if any(word in phrase.split() for phrase in COMPARISON_PERIOD_WORDS):
+        return True
+    return bool(_PERIOD_TOKEN_RE.fullmatch(word))

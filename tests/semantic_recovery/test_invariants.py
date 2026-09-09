@@ -194,13 +194,18 @@ class TestI2OnePeriodPairOwner:
 # I3 — the claimant ASKS the owners. No exemption list.
 # =========================================================================== #
 class TestI3OwnerAwareClaiming:
-    @pytest.mark.parametrize("token", ["prior", "previous", "live", "new", "exited", "churn"])
+    @pytest.mark.parametrize("token", ["prior", "previous", "live", "new", "exited"])
     def test_a_word_an_owner_reads_is_claimed(self, token, semantics, columns, book_values):
         from mi_agent import llm_query_parser as P
         assert P._claimed_by_an_owner(token, semantics, columns, book_values) is True
 
-    @pytest.mark.parametrize("token", ["platinum", "atlantis"])
+    @pytest.mark.parametrize("token", ["platinum", "atlantis", "churn"])
     def test_a_word_no_owner_reads_is_still_unclaimed(self, token, semantics, columns, book_values):
+        """`churn` was on the sprint's list, and NO owner in the estate reads
+        it (measured: the only occurrences are a frozen-bank question and
+        comments). Claiming it would need a bank-copied alias, which the
+        sprint forbids — so it stays unclaimed and the question that names it
+        stays a governed refusal rather than a silent whole-book answer."""
         from mi_agent import llm_query_parser as P
         assert P._claimed_by_an_owner(token, semantics, columns, book_values) is False
 
@@ -210,6 +215,8 @@ class TestI3OwnerAwareClaiming:
         from mi_agent import llm_query_parser as P
         assert not ({"prior", "previous", "live", "new", "exited", "churn"}
                     & _string_constants(P, "_claimed_by_an_owner"))
+        assert not ({"prior", "previous", "live", "new", "exited", "churn"}
+                    & _string_constants(P, "_word_owners"))
 
     def test_end_to_end_no_false_unknown_category(self, parse):
         from mi_agent import llm_query_parser as P

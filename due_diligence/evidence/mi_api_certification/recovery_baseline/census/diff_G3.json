@@ -1,0 +1,46 @@
+{
+ "compared": 843,
+ "moved": 2,
+ "by_kind": {
+  "unknown_category_moved": 2
+ },
+ "movements": [
+  {
+   "question_id": "Q0584",
+   "case": null,
+   "question": "Show loans with low remaining equity.",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'low'",
+     "unknown category: 'remaining'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": [
+     "unknown category: 'low'"
+    ]
+   }
+  },
+  {
+   "question_id": "Q0806",
+   "case": null,
+   "question": "Of the current offer pipeline, how much should convert and over what timeframe?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'offer'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  }
+ ]
+}

@@ -115,3 +115,18 @@ class StateResult:
 
     def issue_codes(self) -> List[str]:
         return [i["code"] for i in self.issues]
+
+
+def status_word(token: Any) -> bool:
+    """Does the funded/pipeline STATUS owner READ ``token``? — asked by the
+    unknown-category claimant (G3). "live", "active", "completed", "drawn" name
+    the funded state; "pending", "unfunded", "application" name the pipeline
+    one. Either is a governed status, never a category the book fails to
+    carry. Sentinel spellings ("f", "1", "yes") are not words and stay out."""
+    word = str(token or "").strip().lower().replace("-", " ")
+    if len(word) < 3 or not word.isalpha():
+        return False
+    for vocab in (FUNDED_STATUS_VALUES, FUNDED_STAGE_VALUES, PIPELINE_STATUS_VALUES):
+        if word in {str(v).replace("_", " ") for v in vocab}:
+            return True
+    return False

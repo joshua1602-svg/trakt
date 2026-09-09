@@ -1,0 +1,148 @@
+{
+ "compared": 135,
+ "moved": 8,
+ "by_kind": {
+  "unknown_category_moved": 8
+ },
+ "movements": [
+  {
+   "question_id": "Q050",
+   "case": "C17",
+   "question": "What's the number of live applications we're working?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'live'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  },
+  {
+   "question_id": "Q070",
+   "case": "C24",
+   "question": "What was the funded balance at the prior reporting date?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'prior'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  },
+  {
+   "question_id": "Q076",
+   "case": "C26",
+   "question": "How did the funded balance change since the prior reporting date?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'prior'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  },
+  {
+   "question_id": "Q079",
+   "case": "C27",
+   "question": "How many loans came on and how many left since the prior reporting date?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'prior'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  },
+  {
+   "question_id": "Q080",
+   "case": "C27",
+   "question": "What's the churn \u2014 new loans in, redemptions out \u2014 versus last month?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'new'",
+     "unknown category: 'churn'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": [
+     "unknown category: 'churn'"
+    ]
+   }
+  },
+  {
+   "question_id": "Q081",
+   "case": "C27",
+   "question": "New and exited loan counts month on month.",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'exited'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  },
+  {
+   "question_id": "Q116",
+   "case": "C39",
+   "question": "What's the spread of live applications across the stages?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'live'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  },
+  {
+   "question_id": "Q118",
+   "case": "C40",
+   "question": "How many cases moved from KFI into Application?",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'kfi into application'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": []
+   }
+  }
+ ]
+}

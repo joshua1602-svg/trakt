@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from question_interpretation import lexical as _lexical
 from question_interpretation.normalise import normalise_question
@@ -3187,6 +3187,32 @@ def _time_axis_words(text: str) -> frozenset:
     return frozenset(w for w in re.split(r"[\s-]+", str(wording).lower()) if w)
 
 
+def _word_owners() -> Tuple[Callable[[Any], bool], ...]:
+    """The owners a single word may belong to, each answering for itself."""
+    from question_interpretation.lexical import temporal_word
+
+    from .period_change.recognition import claims_word as period_word
+    from .seasoning import window_word
+    from .states.models import status_word
+
+    owners: List[Callable[[Any], bool]] = [period_word, temporal_word,
+                                          window_word, status_word]
+    try:
+        from mi_agent_api.stage_movement_query import movement_word
+
+        owners.append(movement_word)
+    except Exception:  # noqa: BLE001 - the route package may be absent
+        pass
+    return tuple(owners)
+
+
+def _owner_reads(owner: Callable[[Any], bool], token: str) -> bool:
+    try:
+        return bool(owner(token))
+    except Exception:  # noqa: BLE001 - an owner that cannot answer claims nothing
+        return False
+
+
 def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
                          available_values,
                          axis_words: Iterable[str] = ()) -> bool:
@@ -3231,6 +3257,15 @@ def _claimed_by_an_owner(token: str, semantics: dict, available_columns,
     # — inert until a routed guard began acting on these notes, at which point
     # it would have refused a working question.
     if _detect_periods(token):
+        return True
+    # THE OWNERS THAT READ WORDS, ASKED (G3). "prior", "previous", "live",
+    # "new", "exited" were each recorded as `unknown category` because the
+    # owner that reads them — the period recogniser, the temporal-aspect
+    # owner, the stage-movement route, the status vocabulary, the lending
+    # windows — was never consulted. Each owner answers from its OWN
+    # vocabulary; nothing here holds a list of exemptions, so a word no owner
+    # reads ("platinum", "churn") is still recorded and still refuses.
+    if any(_owner_reads(owner, token) for owner in _word_owners()):
         return True
     # THE TIME-AXIS OWNER, on the words its own wordings are made of. "Show
     # balance by region over time" names an AXIS with the word `time`, and an

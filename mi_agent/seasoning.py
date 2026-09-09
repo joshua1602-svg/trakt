@@ -534,3 +534,22 @@ def derive_seasoning(frame: pd.DataFrame,
         frame[SEASONING_SEGMENT_FIELD] = numeric.map(cfg.segment_for)
         added.append(SEASONING_SEGMENT_FIELD)
     return added
+
+
+def window_word(token: Optional[str]) -> bool:
+    """Does the lending-window owner READ ``token``? — asked by the claimant.
+
+    G3 — OWNER-AWARE CLAIMING. Every word of every lending-window and segment
+    phrase this module recognises ("new", "recent", "lending", "front",
+    "back", "legacy", "originated"...) is seasoning vocabulary, not a category
+    the book fails to carry. Derived from the phrase patterns themselves.
+    """
+    import re as _re
+
+    word = str(token or "").strip().lower()
+    if len(word) < 3:
+        return False
+    for pattern, _key in (*_LENDING_PHRASES, *_SEGMENT_PHRASES):
+        if word in _re.findall(r"[a-z]{3,}", pattern):
+            return True
+    return False

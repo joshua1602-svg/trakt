@@ -1300,19 +1300,22 @@ def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
         # the very figure the refusal says it will not substitute — a reader (or
         # a channel rendering the receipt) would find the number anyway.
         from mi_agent import execution_receipt as receipt_mod
+        from mi_workflows.analytical import intent as intent_mod
 
         result["executionSummary"] = None
         result["semanticGuard"] = {
             "verdict": receipt_mod.VERDICT_REFUSE, "message": message,
             "route": None,
             "facets": [{"kind": r, "status": receipt_mod.UNAVAILABLE,
-                        "label": intent_mod.REQUIREMENT_REASONS.get(r, r)}
+                        "label": (intent_mod.REQUIREMENT_REASONS.get(r)
+                                  or claims_mod.REASONS.get(r) or r)}
                        for r in unmet]}
         meta = result.setdefault("metadata", {})
         if isinstance(meta, dict):
-            block = reading.to_dict()
+            block = dict(ledger.intent or {})
             block["unmet"] = list(unmet)
             block["failClosed"] = True
+            block["semanticClaims"] = ledger.to_dict()
             meta["analyticalIntent"] = block
     except Exception:  # noqa: BLE001 - the boundary must never break an answer
         logger.exception("analytical fail-closed check failed for question=%r",
@@ -1903,7 +1906,9 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # confident current-position figure that answers something else.
     result = _fail_closed_analytical(result, question=req.question, view=view,
                                      available_values=_book_values(df, semantics)
-                                     if df is not None else None)
+                                     if df is not None else None,
+                                     claims=(getattr(parsed, "meta", None) or {}
+                                             ).get("semanticClaims"))
     # P0 SITE 2 OF 2 — temporal honouring, on the rendered point-in-time result.
     result = _guard_temporal_honouring(result, question=req.question,
                                        semantics=semantics, frame=df)
