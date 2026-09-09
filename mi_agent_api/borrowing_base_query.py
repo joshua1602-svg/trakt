@@ -200,7 +200,12 @@ _INTENT_BRIDGE = "bridge"
 
 
 def _normalise(question: str) -> str:
-    text = " ".join(str(question or "").lower().replace("-", " ").split())
+    """The one normaliser's text, single-spaced, with the route's own spelling
+    variant folded. The hyphen rule is NOT restated here — see
+    `question_interpretation.normalise`."""
+    from question_interpretation.normalise import normalise_question
+
+    text = " ".join(normalise_question(question).split())
     return text.replace("utilization", "utilisation")
 
 

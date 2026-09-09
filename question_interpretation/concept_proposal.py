@@ -121,7 +121,9 @@ def comparator_phrases() -> Dict[str, str]:
 
 def _norm(term: Any) -> str:
     """Comparison form: lower-cased, underscores and runs of space collapsed."""
-    return re.sub(r"[\s_]+", " ", str(term or "").strip().lower())
+    from .normalise import normalise_term
+
+    return re.sub(r"[\s_]+", " ", normalise_term(term).strip())
 
 
 @dataclass(frozen=True)

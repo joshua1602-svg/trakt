@@ -1,0 +1,56 @@
+{
+ "compared": 843,
+ "moved": 2,
+ "by_kind": {
+  "measure_moved": 1,
+  "unknown_category_moved": 1
+ },
+ "movements": [
+  {
+   "question_id": "Q0507",
+   "case": null,
+   "question": "Show the single largest loan against the large-loan limit.",
+   "kind": "measure_moved",
+   "moved": [
+    "metric",
+    "aggregation",
+    "intent",
+    "qi_subject",
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "metric": "current_outstanding_balance",
+    "aggregation": "loan_level",
+    "intent": "table",
+    "qi_subject": "current_outstanding_balance",
+    "qi_subject_provenance": "explicit_user"
+   },
+   "after": {
+    "metric": null,
+    "aggregation": "count",
+    "intent": "summary",
+    "qi_subject": "loan_count",
+    "qi_subject_provenance": null
+   }
+  },
+  {
+   "question_id": "Q0592",
+   "case": null,
+   "question": "Show roll-up interest exposure.",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'roll-up'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": [
+     "unknown category: 'roll'"
+    ]
+   }
+  }
+ ]
+}

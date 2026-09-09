@@ -482,8 +482,10 @@ def normalise(question: Optional[str]) -> str:
     padding lets a term be matched as a whole phrase, and neutralising
     punctuation stops a trailing question mark from hiding the last word.
     """
+    from question_interpretation.normalise import normalise_question
+
     text = "".join(c if (c.isalnum() or c in "&'-£%") else " "
-                   for c in str(question or "").lower())
+                   for c in normalise_question(question))
     return " " + " ".join(text.split()) + " "
 
 
@@ -503,6 +505,11 @@ def _matches(text: str, term: str) -> bool:
     over all fourteen vocabularies here and all 661 corpus questions, exactly
     one question/term pair stops signalling, and it is a constructed case.
     """
+    # The vocabulary meets a sentence the one normaliser has already seen, so
+    # a term spelled "month-on-month" is normalised by the same owner here.
+    from question_interpretation.normalise import normalise_term
+
+    term = normalise_term(term)
     at = text.find(term)
     while at != -1:
         # The vocabularies are space-padded, so the TERM starts one past the hit.

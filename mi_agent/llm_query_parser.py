@@ -30,6 +30,9 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from question_interpretation import lexical as _lexical
+from question_interpretation.normalise import normalise_question
+
+from .categorical_spans import _normalise as _value_comparison_form
 
 from .mi_query_spec import MAX_MEASURES, MIQuerySpec
 from .mi_query_validator import load_mi_semantics, validate_mi_query
@@ -1134,7 +1137,10 @@ def _metric_side_residue(metric_part: str, semantics: dict,
     # already resolved it.
     for _field, _values in (available_values or {}).items():
         for _v in (_values.keys() if hasattr(_values, "keys") else _values):
-            v = re.sub(r"[\s_]+", " ", str(_v or "").strip().lower())
+            # THE VALUE OWNER'S comparison form, not a private copy of it:
+            # the same normaliser that binds "Interest roll-up" as a filter
+            # is the one that removes it from the measure side here (G2).
+            v = _value_comparison_form(_v)
             if len(v) >= 2:
                 terms.add(v)
                 if not v.endswith("s"):
@@ -1681,7 +1687,8 @@ def _wants_count(q: str) -> bool:
 _DEFAULTED_MEASURE_RE = _lexical.DEFAULTED_MEASURE_RE
 
 
-def _counts_a_row_noun(q: str) -> bool:
+def _counts_a_row_noun(q: str, semantics: Optional[dict] = None,
+                       available_columns=None) -> bool:
     """True when the request's object is a governed ROW NOUN and no measure is
     named — "show pipeline cases over time", "weekly loans".
 
@@ -1689,10 +1696,25 @@ def _counts_a_row_noun(q: str) -> bool:
     carrying a money word is never a count: "the amount change on cases that
     stayed in Application" asks for money about cases, and `amount` is the
     reader's own governed default for the balance.
+
+    A ROW NOUN INSIDE A BOUND MEASURE IS NOT A ROW NOUN. Measured: "has the
+    book's loan-to-value drifted across reporting periods?" was answered as a
+    COUNT of loans, because `\bloan\b` matched inside the measure name once
+    the one normaliser had made "loan to value" of it. The measure owner has
+    already claimed that span, so it is masked before the row noun is looked
+    for — the same rule the governed analytical recognisers apply to a claimed
+    categorical value. When no semantics are supplied nothing is masked, which
+    is exactly the old behaviour.
     """
     if _DEFAULTED_MEASURE_RE.search(q):
         return False
-    return bool(_SHARE_COUNT_RE.search(q))
+    text = q
+    if semantics is not None:
+        for start, end, key, _agg in _measure_hits(q, semantics, available_columns):
+            if key == "loan_count":
+                continue        # a count of rows IS the row noun, asked for
+            text = text[:start] + (" " * (end - start)) + text[end:]
+    return bool(_SHARE_COUNT_RE.search(text))
 
 
 # Period tokens for cross-period comparison. Only FULL month names and a small
@@ -2153,7 +2175,10 @@ def risk_limit_category(question: Any) -> Optional[str]:
     opinion about what category a question names is how two phrasings of one
     question reach two different answers.
     """
-    return _risk_limit_category(str(question or "").strip().lower())
+    # THE ONE NORMALISER: callers outside the parse hand the RAW sentence in,
+    # and "large-loan limit" must scope to the same category as "large loan
+    # limit" does when the parser itself reads it (G2).
+    return _risk_limit_category(normalise_question(question).strip())
 
 
 # A funded-balance ATTRIBUTION bridge (waterfall): opening balance → per-category
@@ -3983,7 +4008,7 @@ def _restricts_the_axis(field: str, condition: Any, axis_text: str,
 
 
 def _normalise_value(value: Any) -> str:
-    return re.sub(r"[\s_]+", " ", str(value or "").strip().lower())
+    return _value_comparison_form(value)
 
 
 def _field_values(available_values, field: str) -> List[str]:
@@ -4820,7 +4845,10 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     unrelated dimension. An explicit term whose canonical column is missing is
     still returned (validation then fails cleanly) — it is never swapped out.
     """
-    q = question.lower().strip()
+    # THE ONE NORMALISER (G2). "loan-to-value" and "loan to value" are the same
+    # question to every reader from here on; the rule lives in
+    # `question_interpretation.normalise` and nowhere else on this path.
+    q = normalise_question(question).strip()
     title = question.strip()
     top_n = _detect_top_n(q)
 
@@ -5440,7 +5468,7 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         _defaulted = False
         if _wants_count(q) or agg == "count":
             metric, agg = None, "count"
-        elif metric is None and _counts_a_row_noun(q):
+        elif metric is None and _counts_a_row_noun(q, semantics, available_columns):
             # A TREND OF THINGS IS A COUNT OF THEM. "Show weekly pipeline
             # cases" named no measure and asked for cases, and this branch
             # answered with summed BALANCE — money for a question about how
@@ -5763,7 +5791,7 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
         # distinction; the bar path did not.
         if _wants_count(q):
             metric, agg = None, "count"
-        elif _counts_a_row_noun(q):
+        elif _counts_a_row_noun(q, semantics, available_columns):
             # A SUPERLATIVE OVER A ROW NOUN IS STILL A COUNT. "Which product
             # type has the MOST FUNDED LOANS?" and "which product type has the
             # LARGEST FUNDED BALANCE?" produced one identical plan — metric

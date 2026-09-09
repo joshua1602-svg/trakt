@@ -1,0 +1,119 @@
+{
+ "compared": 135,
+ "moved": 4,
+ "by_kind": {
+  "measure_moved": 4
+ },
+ "movements": [
+  {
+   "question_id": "Q017",
+   "case": "C06",
+   "question": "What does the loan-to-value distribution of the book look like by balance?",
+   "kind": "measure_moved",
+   "moved": [
+    "metric",
+    "aggregation",
+    "weight_field",
+    "chart_type",
+    "intent",
+    "qi_subject",
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "metric": null,
+    "aggregation": "count",
+    "weight_field": null,
+    "chart_type": "none",
+    "intent": "summary",
+    "qi_subject": "loan_count",
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "metric": "current_loan_to_value",
+    "aggregation": "weighted_avg",
+    "weight_field": "current_outstanding_balance",
+    "chart_type": "bar",
+    "intent": "chart",
+    "qi_subject": "current_loan_to_value",
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q033",
+   "case": "C11",
+   "question": "Weighted average loan-to-value and interest rate, please.",
+   "kind": "measure_moved",
+   "moved": [
+    "metric",
+    "weight_field",
+    "qi_subject"
+   ],
+   "before": {
+    "metric": "current_interest_rate",
+    "weight_field": "current_outstanding_balance",
+    "qi_subject": "current_interest_rate"
+   },
+   "after": {
+    "metric": "current_loan_to_value",
+    "weight_field": null,
+    "qi_subject": "current_loan_to_value"
+   }
+  },
+  {
+   "question_id": "Q056",
+   "case": "C19",
+   "question": "Of the portfolios we hold, which one is running the riskiest loan-to-value?",
+   "kind": "measure_moved",
+   "moved": [
+    "metric",
+    "aggregation",
+    "weight_field",
+    "unavailable_filters",
+    "qi_subject",
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "metric": null,
+    "aggregation": "count",
+    "weight_field": null,
+    "unavailable_filters": [],
+    "qi_subject": "loan_count",
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "metric": "current_loan_to_value",
+    "aggregation": "weighted_avg",
+    "weight_field": "current_outstanding_balance",
+    "unavailable_filters": [
+     "unknown category: 'riskiest'"
+    ],
+    "qi_subject": "current_loan_to_value",
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q065",
+   "case": "C22",
+   "question": "Has the book's loan-to-value drifted across reporting periods?",
+   "kind": "measure_moved",
+   "moved": [
+    "metric",
+    "aggregation",
+    "qi_subject",
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "metric": null,
+    "aggregation": "count",
+    "qi_subject": "loan_count",
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "metric": "current_loan_to_value",
+    "aggregation": "weighted_avg",
+    "qi_subject": "current_loan_to_value",
+    "qi_subject_provenance": "explicit_user"
+   }
+  }
+ ]
+}

@@ -95,13 +95,17 @@ def _norm(question: str) -> str:
     ends in a question mark, and without this "london" would fail to match the
     category the book actually carries.
     """
+    from question_interpretation.normalise import normalise_question
+
     text = "".join(c if (c.isalnum() or c in "&'-£%") else " "
-                   for c in str(question or "").lower())
+                   for c in normalise_question(question))
     return " " + " ".join(text.split()) + " "
 
 
 def _any(text: str, terms: Sequence[str]) -> bool:
-    return any(term in text for term in terms)
+    from question_interpretation.normalise import normalise_term
+
+    return any(normalise_term(term) in text for term in terms)
 
 
 def _is_comparative(text: str) -> bool:

@@ -66,8 +66,12 @@ __all__ = ["value_field", "preferred_field", "alias_fields", "value_spans",
 
 
 def _normalise(text: Any) -> str:
-    """Whitespace/underscore-normalised, lower-cased comparison form."""
-    return re.sub(r"[\s_]+", " ", str(text or "").strip().lower())
+    """Whitespace/underscore-normalised comparison form, on the ONE
+    normaliser's text — so "Interest roll-up" on the tape and "roll up" in a
+    sentence the parser has already normalised are the same value (G2)."""
+    from question_interpretation.normalise import normalise_term
+
+    return re.sub(r"[\s_]+", " ", normalise_term(text).strip())
 
 
 #: Closed-class English function words. A span made of exactly ONE of these is
@@ -308,10 +312,12 @@ def _span_pattern(claimable: Iterable[str]) -> Optional["re.Pattern"]:
     terms = sorted(claimable, key=len, reverse=True)
     if not terms:
         return None
-    # The normalised form collapses runs of whitespace and underscores, so the
-    # pattern has to match the RAW text the same way: each internal gap becomes
-    # "one or more whitespace/underscore characters".
-    alts = [r"[\s_]+".join(re.escape(part) for part in term.split(" "))
+    # The normalised form collapses runs of whitespace and underscores — and,
+    # per the one normaliser, a hyphen between letters — so the pattern has to
+    # match the RAW text the same way: each internal gap becomes "one or more
+    # whitespace/underscore/hyphen characters". The same value is then found
+    # in the raw sentence and in the parser's normalised one.
+    alts = [r"[\s_-]+".join(re.escape(part) for part in term.split(" "))
             for term in terms]
     return re.compile(r"\b(?:" + "|".join(alts) + r")\b", re.IGNORECASE)
 

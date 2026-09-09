@@ -33,6 +33,13 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
+# THE ONE NORMALISER (G2). This route read the sentence three times with three
+# private lower-casings and kept "loan-to-value" beside "loan to value" in its
+# own vocabulary; a hyphenated question therefore narrowed to a different limit
+# set from its spaced twin. Every read below now sees the text every other
+# reader sees.
+from question_interpretation.normalise import normalise_question
+
 _CATEGORY_WORDS = {
     "geography": ("region", "regional", "geographic", "geography", "postcode",
                   "county", "country"),
@@ -41,7 +48,7 @@ _CATEGORY_WORDS = {
                      "ticket"),
     "borrower": ("borrower", "joint", "age"),
     "rate_product": ("rate", "coupon", "wac", "product"),
-    "ltv": ("ltv", "loan to value", "loan-to-value"),
+    "ltv": ("ltv", "loan to value"),
     "performance": ("arrears", "default", "performance", "delinquen"),
     "composition": ("originator", "seller", "servicer", "vintage", "tenure",
                     "purpose"),
@@ -82,7 +89,7 @@ def _test_line(t: Dict[str, Any]) -> str:
 
 
 def detect_intent(question: str) -> str:
-    q = " ".join(str(question).lower().split())
+    q = " ".join(normalise_question(question).split())
     if re.search(r"\bwhich pipeline (loans|cases)\b|\bpipeline (loans|cases)? ?driv"
                  r"|\bdrives? the\b.*\b(increase|rise|movement)\b", q):
         return "get_concentration_pipeline_drivers"
@@ -137,7 +144,7 @@ def detect_intent(question: str) -> str:
 
 
 def _category_filter(question: str) -> Optional[str]:
-    q = str(question).lower()
+    q = normalise_question(question)
     for category, words in _CATEGORY_WORDS.items():
         if any(w in q for w in words):
             return category
@@ -149,7 +156,7 @@ def _find_test(question: str, tests: List[Dict[str, Any]]
     """The test whose display name best overlaps the question. Deterministic:
     token-overlap score, ties broken by the longer name then declaration
     order."""
-    q_tokens = set(re.findall(r"[a-z0-9]+", str(question).lower()))
+    q_tokens = set(re.findall(r"[a-z0-9]+", normalise_question(question)))
     best = None
     best_score = 0.0
     for t in tests:
