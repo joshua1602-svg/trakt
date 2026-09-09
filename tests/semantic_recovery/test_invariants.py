@@ -446,8 +446,14 @@ class TestI7OneGeographyFieldOwner:
         _key, cols, _label = CR._bridge_dimension("collateral_geography", semantics,
                                                   geography=contract)
         cols = [cols] if isinstance(cols, str) else list(cols)
-        assert cols == ["geographic_region_obligor"], \
-            "the bridge may not cross bases by offering the whole family"
+        from mi_agent import mi_geography as G
+        # The bridge may offer the HARMONISED spellings — they carry no basis,
+        # and a book that harmonised its regions must be measured on them —
+        # but never a field of the OTHER basis: that would cross bases, which
+        # is what offering "the whole family" used to do.
+        assert set(cols) - set(G.HARMONISED_FIELDS) == {"geographic_region_obligor"}
+        assert not set(cols) & set(G.axis_fields("collateral"))
+        assert cols.index("geographic_region_obligor") == len(G.HARMONISED_FIELDS)
 
     def test_itl3_exposure_is_measured_on_the_contracts_basis(self, two_basis_frame):
         from mi_agent_api import geo

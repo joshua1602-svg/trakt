@@ -46,16 +46,26 @@ class TestTheHarmonisedRegionIsInTheFamily(unittest.TestCase):
     def setUp(self):
         self.semantics = _semantics()
 
-    def test_the_harmonised_columns_are_family_members(self):
+    def test_the_harmonised_columns_are_region_concepts(self):
+        """G6 moved the family to `mi_geography`: `_REGION_FAMILY` — this
+        route's private list of what "region" spells as — is gone, and the
+        property it protected is now the owner's. The harmonised columns are
+        region concepts and are offered FIRST, so a book that harmonised its
+        regions is measured on the harmonised column."""
+        from mi_agent import mi_geography as G
         for key in (REPORTING, DETAIL):
-            self.assertIn(key, CR._REGION_FAMILY, key)
+            self.assertTrue(G.is_region_concept(key), key)
+            self.assertIn(key, G.HARMONISED_FIELDS, key)
+        self.assertEqual(G.region_candidates(None)[:2], (REPORTING, DETAIL))
 
-    def test_the_raw_columns_are_still_family_members(self):
+    def test_the_raw_columns_are_still_region_concepts(self):
         """Adding to the family must not remove anyone: a tape that never
         harmonised still bridges by its own geography column."""
+        from mi_agent import mi_geography as G
         for key in (RAW, "geographic_region_collateral",
                     "geographic_region_obligor"):
-            self.assertIn(key, CR._REGION_FAMILY, key)
+            self.assertTrue(G.is_region_concept(key), key)
+            self.assertIn(key, G.region_candidates(None), key)
 
     def test_the_harmonised_region_resolves_to_every_candidate_column(self):
         """THE REGRESSION ITSELF. Outside the family this returned one column

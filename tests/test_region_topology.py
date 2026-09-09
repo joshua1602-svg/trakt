@@ -165,18 +165,35 @@ class TestWhatEachSurfaceReads(unittest.TestCase):
         self.assertIn(geographic[0][2], NUTS3)
 
     def test_the_exposure_map_reads_only_itl3(self):
-        from mi_agent_api.geo import _ITL3_FIELDS
+        """G6 moved this list to the owner: `geo._ITL3_FIELDS` is gone, and the
+        exposure map asks `mi_geography.code_field` — which answers with an
+        ITL3 code column and nothing else."""
+        import pandas as pd
 
-        self.assertEqual(set(_ITL3_FIELDS), set(ITL3))
+        from mi_agent import mi_geography as G
 
-    def test_the_funded_bridge_keeps_its_own_region_family(self):
+        for basis, field in (("collateral", "geographic_region_collateral_itl3"),
+                             ("borrower", "geographic_region_obligor_itl3")):
+            self.assertIn(field, ITL3)
+            frame = pd.DataFrame({field: ["TLI43", "TLL11"]})
+            self.assertEqual(G.code_field_for_basis(basis, frame=frame), field)
+        self.assertTrue({G.code_field_for_basis(b, frame=None)
+                         for b in ("collateral", "borrower")} <= set(ITL3))
+
+    def test_the_funded_bridge_no_longer_keeps_its_own_region_family(self):
         """A second list, fixed on 2026-09-03 after the harmonised columns were
-        registered and it was not updated. Recorded because it is the shape of
-        defect this whole file exists to make loud."""
-        from mi_agent_api.chat_routing import _REGION_FAMILY
+        registered and it was not updated. G6 DELETED it rather than fixing it
+        again: the bridge asks `mi_geography.region_candidates`, so a newly
+        registered region field cannot be left behind by one surface. This is
+        the shape of defect this whole file exists to make loud, and the
+        assertion is now that the second list does not exist."""
+        from mi_agent import mi_geography as G
+        from mi_agent_api import chat_routing as CR
 
-        self.assertIn("canonical_region_reporting", _REGION_FAMILY)
-        self.assertTrue(set(_REGION_FAMILY) & set(REPORTING))
+        self.assertFalse(hasattr(CR, "_REGION_FAMILY"))
+        candidates = G.region_candidates(None)
+        self.assertIn("canonical_region_reporting", candidates)
+        self.assertTrue(set(candidates) & set(REPORTING))
 
 
 class TestTheReceiptCanNameTheLevel(unittest.TestCase):

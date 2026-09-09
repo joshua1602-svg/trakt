@@ -584,6 +584,17 @@ def _carries_geography(series) -> bool:
         return False
 
 
+def _populated(frame, field: str) -> bool:
+    """Does ``frame`` carry ``field`` with a geography in it? False when there
+    is no frame — a caller with only column names cannot answer this."""
+    if frame is None:
+        return False
+    try:
+        return field in frame.columns and bool(_carries_geography(frame[field]))
+    except Exception:  # noqa: BLE001 - an unreadable column carries nothing
+        return False
+
+
 def _carrying_columns(frame) -> Optional[frozenset]:
     """The basis columns of ``frame`` that carry a geography, or None when no
     frame was supplied."""
@@ -632,11 +643,20 @@ def field_for_basis(basis: Optional[str], *, available_columns=None,
 #: `_REGION_FAMILY`, `_REGION_PREFERENCE`, `_ITL3_FIELDS`); it lives here once.
 FALLBACK_BASIS_ORDER: Tuple[str, ...] = (BASIS_COLLATERAL, BASIS_BORROWER)
 
-#: Every field that MEANS "region" to the MI Agent — the governed basis fields
-#: plus the harmonised taxonomy spellings a tape may carry.
-REGION_CONCEPTS: Tuple[str, ...] = tuple(
-    f for _b, fields in BASIS_FIELDS.items() for f in fields) + (
-    "canonical_region_reporting", "canonical_region_detail")
+#: THE HARMONISED TAXONOMY SPELLINGS, most reportable first. A tape whose
+#: regions were harmonised carries these, and they are the columns a figure
+#: must be measured on: the raw column spells one region three ways ("South
+#: West", "south-west", "SOUTH WEST"), which is how a 75% concentration came
+#: to be tested as three 25% bars and reported COMPLIANT. They carry NO basis
+#: — the taxonomy step harmonises whichever basis the book reports on — so
+#: they stand ahead of the basis fields rather than inside one.
+HARMONISED_FIELDS: Tuple[str, ...] = ("canonical_region_reporting",
+                                      "canonical_region_detail")
+
+#: Every field that MEANS "region" to the MI Agent — the harmonised spellings
+#: and the governed basis fields.
+REGION_CONCEPTS: Tuple[str, ...] = HARMONISED_FIELDS + tuple(
+    f for _b, fields in BASIS_FIELDS.items() for f in fields)
 
 
 def is_region_concept(key: Optional[str]) -> bool:
@@ -663,8 +683,19 @@ def region_field(frame, *, geography: Any = None) -> Optional[str]:
     carries. Every surface that groups, bridges or attributes "by region" asks
     this, so a request cannot measure one basis here and another there.
     """
-    basis = _contract_basis(geography)
     carrying = _carrying_columns(frame)
+    # THE HARMONISED COLUMN WINS WHEN THE BOOK CARRIES ONE. It is what the
+    # taxonomy step produced for exactly this purpose, and choosing the raw
+    # column over it re-opens the three-spellings-of-one-region defect.
+    #
+    # Tested against the FRAME directly, not against `carrying`: that scan
+    # answers "which BASIS column carries a geography", and a harmonised
+    # column carries no basis — it would never appear there, which is how the
+    # first cut of this owner silently stopped choosing it.
+    for field in HARMONISED_FIELDS:
+        if _populated(frame, field):
+            return field
+    basis = _contract_basis(geography)
     if basis:
         return field_for_basis(basis, frame=frame, carrying=carrying)
     for candidate in FALLBACK_BASIS_ORDER:
@@ -692,10 +723,12 @@ def region_candidates(geography: Any = None) -> Tuple[str, ...]:
         for candidate, field in (getattr(geography, "fields", None) or ()):
             if candidate == basis:
                 resolved = field
-        if resolved:
-            return (resolved,)
-        return axis_fields(basis)
-    return tuple(f for b in FALLBACK_BASIS_ORDER for f in axis_fields(b))
+        # The harmonised spellings stand AHEAD of the basis field: a caller
+        # with no frame offers candidates, and the executor takes the first
+        # the tape actually carries. See HARMONISED_FIELDS.
+        return HARMONISED_FIELDS + ((resolved,) if resolved else axis_fields(basis))
+    return HARMONISED_FIELDS + tuple(
+        f for b in FALLBACK_BASIS_ORDER for f in axis_fields(b))
 
 
 def code_field_for_basis(basis: Optional[str], *, frame=None,

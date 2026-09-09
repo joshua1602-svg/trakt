@@ -28,6 +28,7 @@ import yaml
 
 from analytics_lib.concentration import group_shares, top_n_concentration
 from analytics_lib.numeric import coerce_numeric
+from mi_agent import mi_geography as _geo
 from mi_agent import region_basis as _region_basis
 from mi_agent.risk_monitor import schedule8_extractor as extractor
 from mi_agent.risk_monitor import risk_limits_contract as contract
@@ -228,17 +229,19 @@ def _normalise_ltv(series: pd.Series) -> pd.Series:
 #: limit reported COMPLIANT, while the MI Agent, asked in words, said 75%. A
 #: tape with no taxonomy configured has no harmonised column and falls through
 #: to exactly the order this list used to begin with.
-_REGION_COLUMNS = (_region_basis.REPORTING_FIELDS
-                   + ("geographic_region_collateral",
-                      "geographic_region_obligor"))
+#: THE CANDIDATES a geographic limit may be tested on — the ONE geography
+#: owner's list (G6), not a fifth copy of it. Byte-identical to the order this
+#: module used to declare for itself, and now it cannot drift from the order
+#: the MI Agent measures on: a limits monitor testing 75% on the collateral
+#: column while the Agent answers on the obligor column is two different
+#: answers about one book.
+_REGION_COLUMNS = _geo.region_candidates(None)
 
 
 def _region_column(df: pd.DataFrame) -> Optional[str]:
-    """The first region column present AND populated in the funded tape."""
-    for col in _REGION_COLUMNS:
-        if col in getattr(df, "columns", []) and df[col].notna().any():
-            return col
-    return None
+    """The region column this book's limits are tested on — the ONE geography
+    owner's answer for this frame, under the contract in force (G6)."""
+    return _geo.region_field(df)
 
 
 def _region_coverage_note(df: pd.DataFrame) -> str:
