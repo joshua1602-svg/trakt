@@ -686,7 +686,6 @@
   "measures": [],
   "metric": null,
   "unavailable": [
-   "unknown category: 'active'",
    "unknown category: 'weighting'"
   ]
  },
@@ -856,9 +855,7 @@
   "intent": "summary",
   "measures": [],
   "metric": null,
-  "unavailable": [
-   "unknown category: 'offer'"
-  ]
+  "unavailable": []
  },
  "Project funded balance over the next twelve months.": {
   "aggregation": "sum",
@@ -2417,8 +2414,7 @@
   "measures": [],
   "metric": "equity",
   "unavailable": [
-   "unknown category: 'low'",
-   "unknown category: 'remaining'"
+   "unknown category: 'low'"
   ]
  },
  "Show loss amount by vintage.": {
@@ -2793,7 +2789,7 @@
   "measures": [],
   "metric": "current_outstanding_balance",
   "unavailable": [
-   "unknown category: 'roll-up'"
+   "unknown category: 'roll'"
   ]
  },
  "Show source notes for this answer.": {
@@ -2869,12 +2865,12 @@
   "unavailable": []
  },
  "Show the single largest loan against the large-loan limit.": {
-  "aggregation": "loan_level",
+  "aggregation": "count",
   "dimensions": [],
   "filters": {},
-  "intent": "table",
+  "intent": "summary",
   "measures": [],
-  "metric": "current_outstanding_balance",
+  "metric": null,
   "unavailable": []
  },
  "Show vintage distribution.": {

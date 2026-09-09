@@ -46,11 +46,24 @@ Seven invariants, written BEFORE any consolidation (commit `12ccff6`):
 
 ## D. Semantic census (Phase 6) — machine-checked
 
-**What "the corpus" is here.** The sprint names 882 questions. The estate's
-own corpus (`question_interpretation/stage2_corpus.json`) carries 939 rows,
-which contain **843 distinct questions** — the census runs the distinct set, so
-a question asked twice cannot count as two movements. The frozen bank's 135 are
-censused separately and never merged with it.
+**What "the corpus" is here, and a process failure of mine.** The estate
+ALREADY HAD a semantic census — `mi_agent/tests/semantic_census.py`, over 882
+questions, guarded by `test_no_question_has_moved`, whose failure message says
+to read every movement, decide each is intended, and regenerate the artifact
+IN THE SAME COMMIT. I did not know it existed and built a second one. That is
+the duplicate-owner defect this sprint is about, committed by me, inside the
+sprint. Both now run:
+
+* **The estate's census (882 questions) is the GUARD.** It moved 5 questions,
+  every one in a class already classified below ('active', 'offer' and
+  'remaining' claimed by their owners under G3; the 'roll-up' refusal token and
+  the large-loan parse under G2). The artifact is regenerated in the commit
+  that reports this, as its own instructions require.
+* **The sprint's census (843 distinct questions, from the 939 rows of
+  `question_interpretation/stage2_corpus.json`) is the ATTRIBUTION.** It
+  records more fields, runs per commit, and covers the frozen bank separately
+  — which is what lets every movement be attributed to a named step rather
+  than only detected.
 
 `recovery_baseline/census/classify_movements.py` asserts that every question
 that moved between the baseline and HEAD moved in a NAMED step for a NAMED
