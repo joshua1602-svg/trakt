@@ -1,0 +1,33 @@
+{
+ "compared": 135,
+ "moved": 1,
+ "by_kind": {
+  "measure_moved": 1
+ },
+ "movements": [
+  {
+   "question_id": "Q011",
+   "case": "C04",
+   "question": "On a balance-weighted basis, what loan-to-value is the portfolio running at?",
+   "kind": "measure_moved",
+   "moved": [
+    "metric",
+    "aggregation",
+    "weight_field",
+    "qi_subject"
+   ],
+   "before": {
+    "metric": "current_outstanding_balance",
+    "aggregation": "sum",
+    "weight_field": null,
+    "qi_subject": "current_outstanding_balance"
+   },
+   "after": {
+    "metric": "current_loan_to_value",
+    "aggregation": "weighted_avg",
+    "weight_field": "current_outstanding_balance",
+    "qi_subject": "current_loan_to_value"
+   }
+  }
+ ]
+}

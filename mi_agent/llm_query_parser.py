@@ -1236,6 +1236,15 @@ def _detect_metric(text: str, semantics: dict) -> Tuple[Optional[str], str, List
     """
     matched: List[str] = []
     intent = _aggregation_intent(text)
+    # P0-E: the weighting qualifier is the statistic owner's span. Read the
+    # aggregation intent from the sentence as written, then bind measures on
+    # the sentence with those spans blanked, so "balance-weighted LTV" binds
+    # the LTV and not a balance. Guarded against recursion: the owner's test
+    # calls back into this function for ONE word, which carries no qualifier.
+    if " weighted" in text or "-weighted" in text:
+        text = _statistic.mask_statistic_phrases(
+            text, lambda w: bool(_detect_metric(str(w or ""), semantics)[0])
+            if " " not in str(w or "") else False)
     reg_terms = _registry_metric_terms(semantics)
 
     def _resolve_registry(term: str) -> Tuple[Optional[str], str]:
@@ -1346,6 +1355,22 @@ def _grouping_regions(text: str) -> List[Tuple[int, int]]:
     return regions
 
 
+def _weight_word_test(semantics: dict, available_columns=None):
+    """The MEASURE OWNER'S answer to "can this word name a weighting?".
+
+    P0-E asks it of `mi_agent.statistic`, which owns the weighting GRAMMAR
+    ("<word>-weighted", "weighted by <word>") and deliberately owns no measure
+    vocabulary. Without this the grammar had to guess from a list of words
+    that cannot be weights, and a list like that is never finished: "the
+    weighted expected amount", "balance plus weighted pipeline" and "show
+    weighted amount by month" each had to be added after a question had
+    already been read wrong.
+    """
+    def _is_weight(word: str) -> bool:
+        return bool(_detect_metric(str(word or ""), semantics)[0])
+    return _is_weight
+
+
 def default_aggregation_for(key: str, semantics: dict) -> str:
     """The governed default aggregation of a registry measure — THE one rule:
     the registry's own `default_aggregation`, else weighted average for a
@@ -1364,6 +1389,11 @@ def _measure_hits(text: str, semantics: dict, available_columns=None
     measure SET and the unresolved-slot guard read it, so the guard can never
     disagree with the parser about which words were understood as measures.
     """
+    # P0-E: weighting qualifiers are the statistic owner's spans, blanked
+    # before any measure is looked for (offsets preserved). The owner is told
+    # which words can name a weight — by the measure vocabulary, not a list.
+    text = _statistic.mask_statistic_phrases(
+        text, _weight_word_test(semantics, available_columns))
     reg_terms = _registry_metric_terms(semantics)
     fields = _fields(semantics)
     columns = set(available_columns) if available_columns is not None else None
@@ -1569,11 +1599,25 @@ def unresolved_measure_slots(text: str, semantics: dict,
         cursor = sep.end()
     bounds.append((cursor, stop))
 
+    # P1-B — PARALLEL STRUCTURE. "What LTV and what RATE is the book running
+    # at?" repeats the interrogative that opened the list; the second slot is
+    # a coordinated measure, not a second clause, and the finite verb after it
+    # belongs to the sentence, not the slot. Read only when the list itself
+    # opened with that interrogative, so "the largest exposure and what share
+    # of the book is it" — a genuine second clause — is untouched.
+    opener = re.search(r"\b(what|which)\s+\w*$", text[:start].lower())
+    opener_word = opener.group(1) if opener else None
+
     unresolved: List[str] = []
     for slot_start, slot_end in bounds:
         if any(slot_start < e and b < slot_end for b, e in spans):
             continue        # this slot named a measure
         piece = text[slot_start:slot_end]
+        if opener_word:
+            lead = re.match(r"\s*" + opener_word + r"\b\s*(.*)$", piece, re.I | re.S)
+            if lead:
+                piece = re.split(r"\b(?:is|are|was|were|do|does|did|has|have|had|"
+                                 r"can|could|will|would|should)\b", lead.group(1), 1)[0]
         if _SLOT_IS_A_CLAUSE_RE.search(piece):
             continue        # a second question, not a measure name
         if _slot_states_a_comparison(piece):
@@ -4894,6 +4938,30 @@ def _deterministic_parse(question: str, semantics: dict,
     if isinstance(parsed, tuple) and isinstance(parsed[1], dict):
         parsed[1]["capability_claims"] = [c.to_dict() for c in cap_claims]
     spec = parsed[0] if isinstance(parsed, tuple) else parsed
+    # P0-E: a weighting the reader STATED ("balance-weighted", "weighted by
+    # exposure") is the weight field, over the measure's default. The
+    # statistic owner says which word is the qualifier; the measure
+    # vocabulary resolves it; nothing is substituted when it cannot.
+    if spec is not None:
+        _stated = _statistic.weight_word_named(
+            normalise_question(question), _weight_word_test(semantics, available_columns))
+        if _stated:
+            _wkey = None
+            for _cand in (_stated, _stated.split()[-1]):
+                _wkey = _detect_metric(_cand, semantics)[0] or (
+                    _balance_metric(semantics) if _cand in ("exposure", "balance")
+                    else None)
+                if _wkey:
+                    break
+            if _wkey:
+                # A stated weighting IS a weighted statistic: the field is
+                # carried, and a plain average becomes the weighted one.
+                spec.weight_field = _wkey
+                if str(getattr(spec, "aggregation", "") or "") in ("avg", "avg_generic"):
+                    spec.aggregation = "weighted_avg"
+            for _m in (getattr(spec, "measures", None) or []):
+                if isinstance(_m, dict) and _wkey and str(_m.get("aggregation", "")).startswith("weighted"):
+                    _m["weight_field"] = _wkey
     if spec is not None and not _spec_shape_is_coherent(spec):
         logger.info("deterministic parse discarded an incoherent spec shape for "
                     "%r: intent=%r chart_type=%r", question,
@@ -4917,6 +4985,12 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     # `question_interpretation.normalise` and nowhere else on this path.
     q = normalise_question(question).strip()
     title = question.strip()
+    # P0-E: the weighting qualifier is the statistic owner's span. Blanked
+    # here, once, offsets preserved, so neither the measure reader nor the
+    # dimension reader ("weighted BY balance") can read it as its own. The
+    # stated weight is carried onto the spec by `_deterministic_parse`.
+    q = _statistic.mask_weighting_qualifiers(
+        q, _weight_word_test(semantics, available_columns))
     if capability_claims:
         # A CLAIMED SPAN BELONGS TO ITS CAPABILITY. Blanked, offsets preserved,
         # before any measure or category reader sees the sentence — the same
@@ -6729,7 +6803,9 @@ def resolve_statistic_role(spec: MIQuerySpec, question: str,
     grouped = bool(getattr(spec, "dimension", None)
                    or (getattr(spec, "dimensions", None) or [])
                    or (getattr(spec, "hierarchy", None) or []))
-    named = _statistic.statistic_named(question, grouped=grouped)
+    named = _statistic.statistic_named(
+        question, grouped=grouped,
+        is_weight=(_weight_word_test(semantics) if semantics is not None else None))
     if not named or spec is None:
         return None
     metric = getattr(spec, "metric", None)

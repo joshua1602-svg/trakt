@@ -3111,7 +3111,13 @@ def _is_a_generic_ranking(interpretation: Any) -> bool:
 def _is_geo_exposure(question: str, *, spec: Any = None,
                      view: str = "funded",
                      interpretation_provider: Any = None) -> bool:
-    q = f" {question.lower()} "
+    # P0-E: the statistic owner's spans are not this route's vocabulary —
+    # the "exposure" in "exposure-weighted borrower age" names a weighting,
+    # not an exposure map. Same normaliser, same mask, as the parser.
+    from mi_agent import statistic as _statistic
+    from question_interpretation.normalise import normalise_question
+
+    q = f" {_statistic.mask_statistic_phrases(normalise_question(question))} "
     if any(t in q for t in _RISK_LIMIT_TERMS):
         return False  # a limit/breach question is a risk-monitor question
     if "bridge" in q:

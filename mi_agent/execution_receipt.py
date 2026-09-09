@@ -1491,8 +1491,14 @@ def detect_requested_facets(question: str, semantics: dict, *, frame=None,
             kind=KIND_MULTI_MEASURE,
             label="more than one measure (" + _join(concepts) + ")",
             concepts=tuple(concepts)))
+    # THE MEASURE OWNER SAYS WHAT CAN NAME A WEIGHTING (P0-E). Without it the
+    # grammar falls back to a closed list of words that cannot be weights,
+    # which read "balance PLUS weighted pipeline" as a weighting by "balance".
+    from .llm_query_parser import _weight_word_test  # local: import cycle
+
     requested_statistic = _statistic.statistic_named(
-        question, grouped=bool(requested_dimensions))
+        question, grouped=bool(requested_dimensions),
+        is_weight=_weight_word_test(semantics) if semantics else None)
     if requested_statistic:
         facets.append(RequestedFacet(
             kind=KIND_STATISTIC,
