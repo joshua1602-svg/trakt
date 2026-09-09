@@ -356,21 +356,31 @@ def _group_balance(df, col: str) -> Dict[str, float]:
 
 def funded_bridge(output_root: str | os.PathLike, client_id: str,
                   dimension_col, *, start_period: Optional[str] = None,
-                  window_periods: Optional[int] = None,
+                  end_period: Optional[str] = None,
                   to_run_id: Optional[str] = None,
                   lens_filters: Optional[Dict[str, str]] = None,
-                  lens_label: str = "Total", top_n: int = 8) -> Dict[str, Any]:
+                  lens_label: str = "Total", top_n: int = 8,
+                  frames: Optional[List[Dict[str, Any]]] = None
+                  ) -> Dict[str, Any]:
     """Attribution bridge: opening funded balance (start period) → per-category
-    change over ``dimension_col`` → closing funded balance (the LATEST period, or
-    ``to_run_id``). The per-category deltas sum EXACTLY to (close − open), so the
-    waterfall reconciles to the book. ``lens_filters`` scopes the frames for a
-    consolidated (None) vs cohort/type view.
+    change over ``dimension_col`` → closing funded balance (``end_period``, else
+    the LATEST period). The per-category deltas sum EXACTLY to (close − open),
+    so the waterfall reconciles to the book. ``lens_filters`` scopes the frames
+    for a consolidated (None) vs cohort/type view.
+
+    THIS FUNCTION DECIDES NO PERIOD (G1). A caller names both ends, or names
+    neither and the period-pair owner (`analytical_plan.resolve_period_pair`)
+    resolves the documented default — the whole governed history — as a
+    governed method. A named period the frames do not carry is REFUSED, not
+    replaced by the earliest: the silent fall-through this function used to
+    make is the substitution the recovery sprint exists to remove.
 
     ``dimension_col`` may be a single column or an ordered list of candidate
     columns (e.g. the region family) — the first one actually present in the data
     is used, so attribution works regardless of which column the tape carries."""
     scoped: List[Dict[str, Any]] = []
-    for fr in funded_frames(output_root, client_id, to_run_id):
+    for fr in (frames if frames is not None
+               else funded_frames(output_root, client_id, to_run_id)):
         d = _scope_frame_lens(fr.get("df"), lens_filters)
         if d is not None and len(d):
             scoped.append({**fr, "df": d})
@@ -397,26 +407,40 @@ def funded_bridge(output_root: str | os.PathLike, client_id: str,
         return {"available": False, "lens": lens_label,
                 "reason": "no attribution dimension is available in the funded data"}
 
-    end = scoped[-1]                       # the latest period is always the close
-    start = None
-    if start_period:
-        sp = str(start_period)[:7]
-        start = next((f for f in scoped if _period_label(f) == sp), None)
-    if start is None and window_periods:
-        # A STATED WINDOW OPENS THE BRIDGE. "last month" names no start period
-        # but does say how far back it reaches, and the plan declares that as
-        # `window_periods`. Without this the bridge fell to the earliest
-        # snapshot below and reported five months of movement for a question
-        # about one. Clamped to the history that exists — a window reaching
-        # further back than the tape opens at the earliest period, which is the
-        # same governed behaviour as before for that case.
-        index = max(0, len(scoped) - 1 - int(window_periods))
-        start = scoped[index]
-    if start is None or _period_label(start) == _period_label(end):
-        start = scoped[0]                  # default: earliest available period
+    def _named(label: Optional[str]) -> Optional[Dict[str, Any]]:
+        wanted = str(label)[:7]
+        return next((f for f in scoped if _period_label(f) == wanted), None)
+
+    if start_period is None and end_period is None:
+        # NEITHER END NAMED: the documented default, resolved by the ONE
+        # owner as a governed method rather than by indexing this list.
+        from mi_agent.period_change.models import (METHOD_FULL_HISTORY,
+                                                   PeriodChangeFailure)
+        from .analytical_plan import resolve_period_pair
+
+        try:
+            start, end, _resolution = resolve_period_pair(
+                scoped, None, default=METHOD_FULL_HISTORY, max_gap_days=None)
+        except PeriodChangeFailure as exc:
+            return {"available": False, "lens": lens_label, "reason": exc.message,
+                    "periodFailure": exc.to_dict()}
+    else:
+        end = _named(end_period) if end_period else scoped[-1]
+        start = _named(start_period) if start_period else None
+        missing = [str(p) for p, f in ((start_period, start), (end_period, end))
+                   if p and f is None]
+        if missing:
+            return {"available": False, "lens": lens_label,
+                    "reason": ("the requested period(s) are not available in "
+                               "the funded data: " + ", ".join(missing)),
+                    "requestedPeriods": [p for p in (start_period, end_period) if p],
+                    "periodsAvailable": [_period_label(f) for f in scoped]}
+        if start is None:
+            return {"available": False, "lens": lens_label,
+                    "reason": "no opening period was resolved for the bridge"}
     if _period_label(start) == _period_label(end):
         return {"available": False, "lens": lens_label,
-                "reason": "the start and latest period resolve to the same period"}
+                "reason": "the start and end period resolve to the same period"}
 
     a = _group_balance(start["df"], col)
     b = _group_balance(end["df"], col)

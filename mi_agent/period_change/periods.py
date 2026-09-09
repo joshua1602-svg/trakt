@@ -36,7 +36,7 @@ from .models import (
     FAIL_PORTFOLIO_ABSENT_AT_PERIOD,
     FAIL_REVERSED_PERIOD_RANGE,
     METHOD_CURRENT_VS_PREVIOUS,
-    METHOD_EXPLICIT_DATES,
+    METHOD_EXPLICIT_DATES, METHOD_FULL_HISTORY,
     METHOD_LATEST_AVAILABLE_PAIR,
     METHOD_MONTH_ON_MONTH,
     METHOD_QUARTER_ON_QUARTER,
@@ -485,6 +485,10 @@ def _resolve_pair(ordered: Sequence[SnapshotFrame], request: PeriodRequest,
     if mode in (None, METHOD_CURRENT_VS_PREVIOUS, METHOD_LATEST_AVAILABLE_PAIR):
         method = mode or METHOD_LATEST_AVAILABLE_PAIR
         return ordered[-2], ordered[-1], method, False, False
+    # 2b. The whole history — earliest against latest. A governed method, so a
+    #     caller states it rather than reaching for `frames[0]`.
+    if mode == METHOD_FULL_HISTORY:
+        return ordered[0], ordered[-1], METHOD_FULL_HISTORY, False, False
 
     if mode == METHOD_YEAR_TO_DATE:
         return _resolve_ytd(ordered, latest_date, notes)

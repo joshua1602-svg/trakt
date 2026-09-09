@@ -526,6 +526,15 @@ def _time(qi, spec, PR) -> None:
         # display join back into structure. Same owner, same call, one read.
         qi.time.comparison_periods = periods
 
+    # THE RELATIVE PERIOD METHOD, from its one vocabulary owner. Carried on the
+    # contract so the period-pair owner never re-reads the sentence for it.
+    try:
+        from mi_agent.period_change.recognition import relative_mode as _rel
+
+        qi.time.relative_mode = _rel(qi.question)
+    except Exception:  # noqa: BLE001 - no owner reachable, no claim
+        qi.time.relative_mode = None
+
     grain_on_spec = getattr(spec, "trend_grain", None)
     if qi.time.grain and not grain_on_spec:
         qi.notes.append("time grain %r read by period_request, NOT carried on "

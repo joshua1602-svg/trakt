@@ -577,6 +577,17 @@ class TimeClaim:
     #: `comparison_period` is unchanged and still carries the wording, because
     #: it is what a reader is shown. This says which periods they are.
     comparison_periods: Tuple[str, ...] = ()
+    #: THE RELATIVE PERIOD METHOD the question names — one of the governed
+    #: `period_change.models.METHOD_*` constants ("month_on_month" for "last
+    #: month", "current_vs_previous" for "prior period", "year_to_date"...).
+    #:
+    #: G1 — ONE PERIOD-PAIR OWNER. Four readers used to decide what "last
+    #: month" meant: `period_request.requested_span` (a window of 1),
+    #: `period_change.recognition` (month-on-month), `lexical.temporal_aspect`
+    #: and the funded bridge's own index arithmetic (which fell to the EARLIEST
+    #: snapshot). The contract now carries the recogniser's reading, and the
+    #: single resolver reads it from here.
+    relative_mode: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.grain is not None and self.grain not in GRAINS:
@@ -594,7 +605,8 @@ class TimeClaim:
                 "grain": self.grain,
                 "window_periods": self.window_periods,
                 "window_governed": self.window_governed,
-                "comparison_periods": list(self.comparison_periods)}
+                "comparison_periods": list(self.comparison_periods),
+                "relative_mode": self.relative_mode}
 
 
 #: TARGET-STATE CLOSURE — which governed DATASET the answer is built from.

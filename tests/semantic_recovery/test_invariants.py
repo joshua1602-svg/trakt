@@ -112,7 +112,7 @@ class TestI2OnePeriodPairOwner:
         from mi_agent_api import analytical_plan as plan
         _, qi = interpret("Bridge the movement in the book from last month to this month.")
         frames = frames_for(["2025-06-30", "2025-07-31", "2025-09-30", "2025-12-31"])
-        start, end, res = plan.resolve_period_pair(frames, qi)
+        start, end, res = plan.resolve_period_pair(frames, qi, max_gap_days=None)
         assert end is frames[-1]
         assert start is frames[-2], "never the earliest, never a wider window"
         assert res.resolution_method == METHOD_MONTH_ON_MONTH
@@ -147,10 +147,12 @@ class TestI2OnePeriodPairOwner:
         frames = frames_for(["2025-06-30", "2025-07-31", "2025-09-30", "2025-12-31"])
         monkeypatch.setattr(evo, "funded_frames", lambda *a, **k: list(frames))
         _, qi = interpret("Bridge the movement in the book from last month to this month.")
+        # `max_gap_days=None` is the explicit "no ceiling"; the default asks
+        # the governed selection policy, which is exercised in the next call.
         out = plan.funded_bridge("/nonexistent", "client_001", interpretation=qi,
                                  dimension_columns=["collateral_geography"],
                                  dimension_key="collateral_geography",
-                                 dimension_label="Region")
+                                 dimension_label="Region", max_gap_days=None)
         assert out["available"] is True
         assert out["start"]["period"] == "2025-09"
         assert out["end"]["period"] == "2025-12"
@@ -163,9 +165,18 @@ class TestI2OnePeriodPairOwner:
         assert "2025-06" not in str(refused)
 
     def test_the_three_executors_all_ask_the_owner(self):
+        """Each composed executor reaches the owner — directly, or through the
+        one implementation it reuses (which direct callers reach too)."""
         from mi_agent_api import analytical_plan as plan
-        for name in ("funded_bridge", "period_movement", "temporal_compare"):
-            assert "resolve_period_pair" in _calls(plan, name), name
+        from mi_agent_api import movement_summary as MS
+        from mi_agent_api import temporal_compare as TC
+        chain = {"funded_bridge": (), "period_movement": ((MS, "period_movement"),),
+                 "temporal_compare": ((TC, "run_temporal_compare"),)}
+        for name, delegates in chain.items():
+            reached = _calls(plan, name)
+            for mod, fn in delegates:
+                reached |= _calls(mod, fn)
+            assert "resolve_period_pair" in reached, name
 
     def test_the_duplicate_owners_are_gone(self):
         from mi_agent_api import analytical_plan as plan

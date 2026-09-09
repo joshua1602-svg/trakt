@@ -30,9 +30,9 @@ _MONTHS = {
     "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
     "december": 12,
 }
-_RELATIVE_PRIOR = ("prior", "previous", "prior pipeline", "prior week", "last week",
-                   "prior month", "last month", "prior run", "prior period",
-                   "previous week", "previous month")
+# `_RELATIVE_PRIOR` — a private table of what "prior", "last month" and their
+# kin meant to THIS module — is DELETED (G1). The production path resolves the
+# pair through the one period-pair owner and hands this module two labels.
 
 
 def series_grain(periods: Any) -> str:
@@ -92,15 +92,27 @@ def _period_month(period: Dict[str, Any]) -> Optional[int]:
     return None
 
 
+def _series_id(period: Dict[str, Any]) -> str:
+    """The one label that names a period of a series uniquely: a weekly
+    series carries several extracts under one month `period`, so its
+    `week`/`extract_date` is the id; a monthly series' `period` is."""
+    return str(period.get("week") or period.get("extract_date")
+               or period.get("period") or period.get("run_id"))
+
+
 def _match_period(periods: List[Dict[str, Any]], token: str) -> Optional[Dict[str, Any]]:
     """Resolve a period token to a period dict, or None when unavailable."""
     if not periods:
         return None
     tok = (token or "").strip().lower()
+    # An EXACT label — what the period-pair owner hands this module: the
+    # `period` of a monthly series, the `week`/`extract_date` of a weekly one.
+    for p in periods:
+        if tok and tok in {str(p.get(k) or "").lower()
+                           for k in ("period", "week", "extract_date")}:
+            return p
     if tok in ("latest", "current", "this month", "current month", "newest"):
         return periods[-1]
-    if tok in _RELATIVE_PRIOR:
-        return periods[-2] if len(periods) >= 2 else None
     # Explicit YYYY-MM
     m = re.fullmatch(r"(\d{4})-(\d{2})", tok)
     if m:
@@ -171,17 +183,56 @@ def run_temporal_compare(output_root, pipeline_root, client_id: str,
                          to_run_id: Optional[str], *, dataset: str,
                          metric: Optional[str], aggregation: str,
                          period_a: str, period_b: str,
-                         scope=None) -> Dict[str, Any]:
+                         scope=None, interpretation: Any = None,
+                         max_gap_days: Any = None) -> Dict[str, Any]:
     """Build the relevant evolution series then compute the governed comparison,
-    over the governed portfolio ``scope``."""
+    over the governed portfolio ``scope``.
+
+    THE PAIR IS THE OWNER'S (G1). With an ``interpretation`` the two periods are
+    resolved by `analytical_plan.resolve_period_pair` from the contract's
+    period statement, against the series that exists, and handed to
+    `compare_periods` as exact labels; ``period_a``/``period_b`` are then the
+    DECLARED tokens, carried on the result for the reader. Without one (a
+    direct caller) the tokens are matched as before.
+    """
     metric_key, label, fmt = resolve_metric_key(dataset, metric, aggregation)
     if (dataset or "funded").lower() == "pipeline":
         evo = evolution_mod.pipeline_evolution(pipeline_root, client_id, to_run_id)
     else:
         evo = evolution_mod.funded_evolution(output_root, client_id, to_run_id,
                                              scope=scope)
-    out = compare_periods(evo.get("periods", []), metric_key=metric_key,
-                          period_a=period_a, period_b=period_b, label=label, fmt=fmt)
+    periods = evo.get("periods", []) or []
+    resolution = None
+    if interpretation is not None:
+        from mi_agent.period_change.models import PeriodChangeFailure
+        from . import analytical_plan as _plan
+
+        frames = [{"run_id": _series_id(p),
+                   "reporting_date": (p.get("reporting_date") or p.get("extract_date")
+                                      or p.get("week") or p.get("period")),
+                   "df": None, "period": p}
+                  for p in periods]
+        try:
+            start, end, resolution = _plan.resolve_period_pair(
+                frames, interpretation,
+                max_gap_days=(_plan.POLICY_GAP if max_gap_days is None
+                              else max_gap_days))
+        except PeriodChangeFailure as exc:
+            return {"metric": metric_key, "metricLabel": label, "format": fmt,
+                    "requestedPeriods": [period_a, period_b],
+                    "availablePeriods": [p.get("period") for p in periods],
+                    "available": False, "status": "insufficient_data",
+                    "reason": exc.message, "periodFailure": exc.to_dict(),
+                    "dataset": dataset, "portfolioId": client_id,
+                    "toRunId": to_run_id, "seriesGrain": series_grain(periods)}
+        label_a, label_b = start["run_id"], end["run_id"]
+    else:
+        label_a, label_b = period_a, period_b
+    out = compare_periods(periods, metric_key=metric_key,
+                          period_a=label_a, period_b=label_b, label=label, fmt=fmt)
+    out["requestedPeriods"] = [period_a, period_b]
+    if resolution is not None:
+        out["periodResolution"] = resolution.to_dict()
     # THE GRAIN THIS COMPARISON ACTUALLY RAN AT, from the series it read.
     # Without it the receipt falls back to a static route -> grain map that
     # says `temporal_compare: month`, and a pipeline comparison — which is

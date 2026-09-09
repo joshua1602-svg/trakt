@@ -304,6 +304,11 @@ METHOD_QUARTER_ON_QUARTER = "quarter_on_quarter"
 METHOD_YEAR_ON_YEAR = "year_on_year"
 METHOD_YEAR_TO_DATE = "year_to_date"
 METHOD_LATEST_AVAILABLE_PAIR = "latest_available_pair"
+#: The whole governed history: the earliest snapshot against the latest. The
+#: funded-balance bridge's documented reading of a question that names no
+#: period at all ("bridge the balance by region"), stated as a governed method
+#: so that ONE resolver owns it rather than an index into a list.
+METHOD_FULL_HISTORY = "full_history"
 
 ALL_RESOLUTION_METHODS: Tuple[str, ...] = (
     METHOD_EXPLICIT_DATES, METHOD_CURRENT_VS_PREVIOUS, METHOD_MONTH_ON_MONTH,

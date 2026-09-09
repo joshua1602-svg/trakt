@@ -85,6 +85,17 @@ RELATIVE_MODE_MARKERS: Tuple[Tuple[str, str], ...] = (
     ("last month", METHOD_MONTH_ON_MONTH),
     ("this month", METHOD_CURRENT_VS_PREVIOUS),
     ("this quarter", METHOD_QUARTER_ON_QUARTER),
+    # THE PARSER'S OWN RELATIVE TOKENS (`llm_query_parser._RELATIVE_PERIOD_TERMS`),
+    # so the one vocabulary covers every relative period the estate emits. A
+    # weekly extract's "last week" and a run's "prior run" both name the
+    # previous governed observation — which is what the temporal-compare route
+    # always read them as, in a private table this replaces (G1).
+    ("prior pipeline", METHOD_CURRENT_VS_PREVIOUS),
+    ("prior run", METHOD_CURRENT_VS_PREVIOUS),
+    ("previous run", METHOD_CURRENT_VS_PREVIOUS),
+    ("prior week", METHOD_CURRENT_VS_PREVIOUS),
+    ("previous week", METHOD_CURRENT_VS_PREVIOUS),
+    ("last week", METHOD_CURRENT_VS_PREVIOUS),
 )
 
 # -- decline vocabularies ---------------------------------------------------- #
@@ -369,12 +380,23 @@ def _explicit_periods(question: str, spec: Any) -> Tuple[Optional[str], Optional
     return None, None
 
 
-def _relative_mode(question: str) -> Optional[str]:
-    text = _padded(question)
+def relative_mode(question: Optional[str]) -> Optional[str]:
+    """The governed relative period method the sentence names, or None.
+
+    THE ONE VOCABULARY for "last month", "month on month", "year to date" and
+    their kin (`RELATIVE_MODE_MARKERS`). The interpretation contract carries
+    what this returns on `time.relative_mode`, and the period-pair owner
+    (`analytical_plan.resolve_period_pair`) reads it from there — so a route
+    never asks this module a second time.
+    """
+    text = _padded(question or "")
     for marker, mode in RELATIVE_MODE_MARKERS:
         if marker in text:
             return mode
     return None
+
+
+_relative_mode = relative_mode
 
 
 def _requested_concepts(question: str,

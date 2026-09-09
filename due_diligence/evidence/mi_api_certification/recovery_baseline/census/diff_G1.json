@@ -1,0 +1,24 @@
+{
+ "compared": 843,
+ "moved": 1,
+ "by_kind": {
+  "period_moved": 1
+ },
+ "movements": [
+  {
+   "question_id": "Q0452",
+   "case": null,
+   "question": "Compare latest pipeline with prior pipeline.",
+   "kind": "period_moved",
+   "moved": [
+    "relative_mode"
+   ],
+   "before": {
+    "relative_mode": null
+   },
+   "after": {
+    "relative_mode": "current_vs_previous"
+   }
+  }
+ ]
+}

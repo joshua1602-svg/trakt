@@ -499,7 +499,202 @@ def portfolio_summary(output_root, client_id: str, *, interpretation,
 #: The comparison window when the question names no span: one governed reporting
 #: period, i.e. month on month. The route's own long-standing default, carried
 #: here rather than restated at the call site.
-DEFAULT_SPAN_PERIODS = 1
+
+# --------------------------------------------------------------------------- #
+# G1 — THE ONE PERIOD-PAIR OWNER.
+#
+# Every route that compares two governed snapshots — the funded-balance bridge,
+# the period movement, the temporal comparison — used to decide the pair for
+# itself: the bridge by index arithmetic (`scoped[len - 1 - window]`, else the
+# EARLIEST snapshot), the movement by `periods[-1 - span]`, the comparison by
+# a private token table ("prior", "latest", month names). Four readers of one
+# sentence, and "from last month to this month" opened a five-month bridge.
+#
+# There is one governed resolver in the estate already —
+# `period_change.periods.resolve_periods` — with explicit dates, relative
+# methods, gap governance and disclosure. This is the ONE place a question's
+# period statement (as the contract carries it) becomes that resolver's
+# request, and the ONE place the resolver is asked.
+#
+# Explicit wins. A named period beats a window; a window beats a default.
+# "Last month" is the previous OBSERVATION under the gap ceiling — nearest,
+# adjusted and disclosed within it; refused beyond it — and never the earliest.
+# --------------------------------------------------------------------------- #
+
+#: Ask the governed selection policy for the gap ceiling. Distinct from
+#: ``None``, which means "no ceiling" and is a caller's explicit choice.
+POLICY_GAP = object()
+
+#: Tokens the parser's comparison reader emits for "the latest period".
+_LATEST_TOKENS = frozenset({"latest", "current", "newest", "this month",
+                            "current month", "current period", "now"})
+
+
+def _snapshots_of(frames):
+    from mi_agent.period_change.models import SnapshotFrame
+
+    out = []
+    for fr in frames:
+        df = fr.get("df")
+        out.append(SnapshotFrame(
+            snapshot_id=str(fr.get("run_id")),
+            reporting_date=fr.get("reporting_date"),
+            frame=df,
+            dataset_reference=str(fr.get("run_id")),
+            row_count=(int(len(df)) if df is not None else None)))
+    return tuple(out)
+
+
+def _relative_method(token: str) -> Optional[str]:
+    """The governed method a relative token names, per the ONE vocabulary."""
+    from mi_agent.period_change.recognition import relative_mode
+
+    return relative_mode(token)
+
+
+def _is_calendar(token: str, reference) -> bool:
+    from mi_agent.period_change.periods import parse_period_token
+
+    return parse_period_token(token, reference=reference)[0] is not None
+
+
+def period_request_for(interpretation, *, latest_date, earliest_date,
+                       default: str):
+    """The resolver's request, from the contract's period statement ALONE.
+
+    Precedence, stated once:
+      1. named periods (`time.comparison_periods`) — explicit dates;
+      2. a relative method the question named (`time.relative_mode`);
+      3. a stated window (`time.window_periods`) — an explicit start target
+         that many months before the latest snapshot;
+      4. the route's governed default.
+    """
+    from mi_agent.period_change.models import (FAIL_AMBIGUOUS_PERIOD_RANGE,
+                                               FAIL_INSUFFICIENT_SNAPSHOTS,
+                                               METHOD_MONTH_ON_MONTH,
+                                               PeriodChangeFailure)
+    from mi_agent.period_change.periods import PeriodRequest, shift_months
+
+    time = getattr(interpretation, "time", None)
+    tokens = [str(t).strip() for t in comparison_periods(interpretation) if str(t).strip()]
+    if tokens:
+        kinds = []
+        for tok in tokens:
+            low = tok.lower()
+            if low in _LATEST_TOKENS:
+                kinds.append(("latest", None))
+            elif _is_calendar(tok, latest_date):
+                kinds.append(("calendar", tok))
+            else:
+                method = _relative_method(tok)
+                if method is None:
+                    raise PeriodChangeFailure(
+                        FAIL_AMBIGUOUS_PERIOD_RANGE,
+                        f"The period {tok!r} is not a governed period statement.")
+                kinds.append(("relative", method))
+        first = kinds[0]
+        second = kinds[1] if len(kinds) > 1 else ("latest", None)
+        if first[0] == "calendar" and second[0] == "calendar":
+            return PeriodRequest(requested_start=first[1], requested_end=second[1])
+        if first[0] == "calendar" and second[0] == "latest":
+            return PeriodRequest(requested_start=first[1])
+        if first[0] == "relative" and second[0] == "latest":
+            return PeriodRequest(relative_mode=first[1])
+        if first[0] == "latest" and second[0] == "calendar":
+            return PeriodRequest(requested_end=second[1])
+        raise PeriodChangeFailure(
+            FAIL_AMBIGUOUS_PERIOD_RANGE,
+            "The two periods named do not form a governed pair: "
+            + " and ".join(repr(t) for t in tokens) + ".")
+
+    mode = getattr(time, "relative_mode", None)
+    if mode:
+        return PeriodRequest(relative_mode=mode)
+
+    window = getattr(time, "window_periods", None)
+    if window:
+        n = int(window)
+        if n == 1:
+            return PeriodRequest(relative_mode=METHOD_MONTH_ON_MONTH)
+        if latest_date is None:
+            raise PeriodChangeFailure(
+                FAIL_AMBIGUOUS_PERIOD_RANGE,
+                "The latest governed snapshot carries no reporting date, so a "
+                f"window of {n} months cannot be resolved.")
+        target = shift_months(latest_date, -n)
+        if earliest_date is not None and target < earliest_date:
+            raise PeriodChangeFailure(
+                FAIL_INSUFFICIENT_SNAPSHOTS,
+                f"the requested span of {n} reporting period(s) reaches further "
+                f"back than this book's governed history (earliest "
+                f"{earliest_date.isoformat()})",
+                detail={"span_requested": n})
+        return PeriodRequest(requested_start=target.isoformat())
+
+    return PeriodRequest(relative_mode=default)
+
+
+def resolve_period_pair(frames, interpretation, *, max_gap_days=POLICY_GAP,
+                        default: Optional[str] = None,
+                        context_id: Optional[str] = None):
+    """``(start_frame, end_frame, PeriodResolution)`` for the contract's period
+    statement, over ordered prepared frames ``[{run_id, reporting_date, df}]``.
+
+    Raises ``PeriodChangeFailure`` — a governed refusal — when the statement
+    cannot be honoured: an unresolvable token, a start beyond the history, a
+    resolution further from the request than the gap ceiling. It never widens
+    to the earliest period and never narrows to a shorter window in silence.
+    """
+    from mi_agent.period_change.models import (METHOD_CURRENT_VS_PREVIOUS,
+                                               PeriodChangeFailure,
+                                               FAIL_INSUFFICIENT_SNAPSHOTS)
+    from mi_agent.period_change.periods import (order_snapshots, parse_date,
+                                                resolve_periods)
+
+    frames = list(frames or [])
+    snapshots = order_snapshots(_snapshots_of(frames))
+    if len(snapshots) < 2:
+        raise PeriodChangeFailure(
+            FAIL_INSUFFICIENT_SNAPSHOTS,
+            detail={"available_snapshots": [s.snapshot_id for s in snapshots],
+                    "periods_available": len(snapshots)})
+    latest_date = parse_date(snapshots[-1].reporting_date)
+    earliest_date = parse_date(snapshots[0].reporting_date)
+    request = period_request_for(
+        interpretation, latest_date=latest_date, earliest_date=earliest_date,
+        default=default or METHOD_CURRENT_VS_PREVIOUS)
+    if max_gap_days is POLICY_GAP:
+        from mi_agent.period_change.selection import load_policy
+
+        max_gap_days = load_policy().max_snapshot_gap_days(context_id)
+    try:
+        resolution = resolve_periods(snapshots, request, max_gap_days=max_gap_days)
+    except PeriodChangeFailure as exc:
+        if exc.reason == FAIL_INSUFFICIENT_SNAPSHOTS:
+            exc.detail.setdefault("periods_available", len(snapshots))
+        raise
+    by_id = {str(fr.get("run_id")): fr for fr in frames}
+    return (by_id[resolution.start_snapshot.snapshot_id],
+            by_id[resolution.end_snapshot.snapshot_id], resolution)
+
+
+def period_failure(exc, *, lens_label: str = "Total") -> Dict[str, Any]:
+    """The ``available: False`` result a governed period refusal becomes."""
+    out = {"available": False, "lens": lens_label, "reason": exc.message,
+           "periodFailure": exc.to_dict()}
+    if "span_requested" in exc.detail:
+        out["spanRequested"] = exc.detail["span_requested"]
+        out["periodsAvailable"] = exc.detail.get("periods_available")
+    return out
+
+
+def period_statement(interpretation) -> Dict[str, Any]:
+    """What the contract says about the period, for a plan to DECLARE."""
+    time = getattr(interpretation, "time", None)
+    return {"comparison_periods": list(comparison_periods(interpretation)),
+            "relative_mode": getattr(time, "relative_mode", None),
+            "window_periods": getattr(time, "window_periods", None),
+            "governed_window": bool(getattr(time, "window_governed", False))}
 
 
 def build_period_movement_plan(interpretation, *, region_column: Optional[str],
@@ -510,20 +705,20 @@ def build_period_movement_plan(interpretation, *, region_column: Optional[str],
     a movement rather than a position: a second period stacked, and a `compare`
     across the pair.
 
-    THE WINDOW COMES FROM THE CONTRACT. `time.window_periods` carries what
-    `period_request.requested_span` read — the magnitude, not only the wording —
-    which the target-state closure added precisely because this route was asking
-    that owner a second time for it.
+    THE PERIOD STATEMENT COMES FROM THE CONTRACT, and the plan DECLARES it; the
+    pair itself is resolved by the one owner (`resolve_period_pair`) at
+    execution, against the snapshots that exist. A movement that names no
+    period compares the current governed snapshot with the previous one.
     """
-    time = getattr(interpretation, "time", None)
-    span = getattr(time, "window_periods", None) or DEFAULT_SPAN_PERIODS
+    statement = period_statement(interpretation)
     steps: List[Step] = [
         Step(STACK_PERIODS,
-             {"dataset": "funded", "take": "pair", "span_periods": span,
-              "governed_window": bool(getattr(time, "window_governed", False)),
-              "disclose": "periodsAvailable"},
-             because=(f"a movement compares the current governed snapshot with "
-                      f"the one {span} reporting period(s) before it")),
+             {"dataset": "funded", "take": "pair", "resolver": "resolve_period_pair",
+              "default": "current_vs_previous", **statement,
+              "disclose": "periodResolution"},
+             because=("a movement compares two governed snapshots; the pair is "
+                      "resolved once, by the period-pair owner, from the "
+                      "contract's period statement")),
         _population_step(getattr(interpretation, "source_scope", None)),
     ]
     for metric, aggregation in HEADLINE_MEASURES:
@@ -550,13 +745,6 @@ def build_period_movement_plan(interpretation, *, region_column: Optional[str],
                           because="the answer attributes the movement by source "
                                   "portfolio"))
     return Plan(tuple(steps), tuple(grouped_by))
-
-
-def span_periods(plan: Plan) -> int:
-    """The comparison window this plan stacks, from the plan alone."""
-    step = next((s for s in plan.steps if s.primitive == STACK_PERIODS), None)
-    return int((step.inputs.get("span_periods") if step else None)
-               or DEFAULT_SPAN_PERIODS)
 
 
 def period_movement(output_root, client_id: str, *, interpretation,
@@ -586,13 +774,15 @@ def period_movement(output_root, client_id: str, *, interpretation,
                 "planBlocked": [s.to_dict() for s in plan.blocked]}
 
     # EXISTING IMPLEMENTATION, reused. A2's fourth threshold is a NEW
-    # implementation of a primitive; the periods, deltas, regional bridge and
-    # cohort attribution all already exist there, and re-deriving them here
-    # would add a second owner of the same economics for no gain.
+    # implementation of a primitive; the deltas, regional bridge and cohort
+    # attribution all already exist there, and re-deriving them here would add
+    # a second owner of the same economics for no gain. The PAIR is the
+    # owner's: the executor hands the contract through and the summary asks
+    # `resolve_period_pair` for it.
     return summary_mod.period_movement(
         output_root, client_id, to_run_id=to_run_id,
         lens_filters=lens_filters(plan), lens_label=label,
-        span_periods=span_periods(plan))
+        interpretation=interpretation)
 
 
 # --------------------------------------------------------------------------- #
@@ -936,7 +1126,11 @@ def temporal_compare(output_root, pipeline_root, client_id: str,
         dataset=compare_dataset(plan),
         metric=metric_step.inputs.get("metric"),
         aggregation=metric_step.inputs.get("aggregation"),
-        period_a=period_a, period_b=period_b)
+        period_a=period_a, period_b=period_b,
+        # THE PAIR IS THE OWNER'S. The tokens above are what the plan
+        # declares; which two snapshots they name is decided once, by
+        # `resolve_period_pair`, against the series that exists.
+        interpretation=interpretation)
 
 
 # --------------------------------------------------------------------------- #
@@ -974,28 +1168,24 @@ def build_funded_bridge_plan(interpretation, *, dimension_key: Optional[str],
     # The fallback keeps a contract built by an older projection working.
     _periods = comparison_periods(interpretation)
     _from = _periods[0] if _periods else comparison_period(interpretation)
-    # A WINDOW IS A PERIOD STATEMENT TOO.
-    #
-    # A question can pin the opening period by NAMING it ("from October") or by
-    # stating how far back it reaches ("last month", "over the last 3 months").
-    # This plan read only the first, so "show the balance bridge for last month"
-    # arrived with `comparison_periods=[]`, `window_periods=1`, and opened at
-    # the EARLIEST snapshot instead: a bridge labelled for one month that showed
-    # five, +£59.2m where the month moved +£22.6m.
-    #
-    # `window_periods` is the contract's own magnitude — the same field
-    # Conversion 2 and C7 read for a span — so the window is declared here and
-    # the executor opens that many periods back. No wording is read anywhere.
-    _window = getattr(getattr(interpretation, "time", None), "window_periods", None)
+    # THE PERIOD STATEMENT IS DECLARED; THE PAIR IS THE OWNER'S. A question
+    # pins the opening period by naming it ("from October"), by a relative
+    # method ("last month"), or by a window ("over the last 3 months"); the
+    # plan declares whichever the contract carries and `resolve_period_pair`
+    # resolves it once, under gap governance. A bridge that names no period
+    # at all keeps its documented reading — the whole governed history —
+    # stated as a governed method rather than as an index into a list.
     _period_inputs = {"dataset": "funded", "take": "pair", "from": _from,
-                      "disclose": "periodsAvailable"}
-    if _from is None and _window:
-        _period_inputs["window_periods"] = int(_window)
+                      "resolver": "resolve_period_pair",
+                      "default": "full_history",
+                      **period_statement(interpretation),
+                      "disclose": "periodResolution"}
     steps: List[Step] = [
         Step(STACK_PERIODS, _period_inputs,
-             because=("a bridge opens at a named start period, else the period "
-                      "the stated window reaches back to, else the earliest "
-                      "governed period, and closes at the latest")),
+             because=("a bridge opens at the period the contract states — a "
+                      "named period, a relative method, or a window — else at "
+                      "the earliest governed period, and closes at the latest; "
+                      "the pair is resolved once by the period-pair owner")),
         _population_step(getattr(interpretation, "source_scope", None)),
         Step(RESOLVE_MEASURE, {"metric": "funded_balance", "aggregation": "sum"},
              because="the bridge attributes movement in the funded balance"),
@@ -1025,16 +1215,11 @@ def bridge_start_period(plan: Plan) -> Optional[str]:
     return (step.inputs.get("from") if step else None)
 
 
-def bridge_window_periods(plan: Plan) -> Optional[int]:
-    """How many governed periods back this plan opens, when it states a window."""
-    step = next((s for s in plan.steps if s.primitive == STACK_PERIODS), None)
-    return (step.inputs.get("window_periods") if step else None)
-
-
 def funded_bridge(output_root, client_id: str, *, interpretation,
                   dimension_columns, dimension_key: Optional[str],
                   dimension_label: str,
-                  to_run_id: Optional[str] = None) -> Dict[str, Any]:
+                  to_run_id: Optional[str] = None,
+                  max_gap_days=POLICY_GAP) -> Dict[str, Any]:
     """A governed funded-balance attribution bridge, COMPOSED.
 
     A drop-in for `evolution.funded_bridge` as this route called it: the
@@ -1056,17 +1241,37 @@ def funded_bridge(output_root, client_id: str, *, interpretation,
                 "reason": plan.blocked[0].blocked,
                 "planBlocked": [s.to_dict() for s in plan.blocked]}
 
-    # EXISTING IMPLEMENTATION, reused. The period pair, the per-category deltas,
-    # the "Other" residual and the missing-dimension refusal all already exist
-    # there — re-deriving them would add a second owner of the same economics,
-    # and the missing-dimension guard is the one that keeps a bridge on an
-    # absent column from reporting GBP0 for a book that moved.
+    # THE PAIR IS THE OWNER'S. Resolved once here, from the contract's period
+    # statement, against the scoped frames that exist — then handed to the
+    # bridge by name. The bridge no longer decides a period.
+    from mi_agent.period_change.models import (METHOD_FULL_HISTORY,
+                                               PeriodChangeFailure)
+
+    frames = [
+        {**fr, "df": scoped}
+        for fr in evolution_mod.funded_frames(output_root, client_id, to_run_id)
+        for scoped in (evolution_mod._scope_frame_lens(fr.get("df"),
+                                                       lens_filters(plan)),)
+        if scoped is not None and len(scoped)]
+    try:
+        start, end, resolution = resolve_period_pair(
+            frames, interpretation, default=METHOD_FULL_HISTORY,
+            max_gap_days=max_gap_days)
+    except PeriodChangeFailure as exc:
+        return period_failure(exc, lens_label=label)
+
+    # EXISTING IMPLEMENTATION, reused. The per-category deltas, the "Other"
+    # residual and the missing-dimension refusal all already exist there —
+    # re-deriving them would add a second owner of the same economics, and the
+    # missing-dimension guard is the one that keeps a bridge on an absent
+    # column from reporting GBP0 for a book that moved.
     out = evolution_mod.funded_bridge(
         output_root, client_id, dimension_columns,
-        start_period=bridge_start_period(plan), to_run_id=to_run_id,
-        window_periods=bridge_window_periods(plan),
-        lens_filters=lens_filters(plan), lens_label=label,
-        top_n=BRIDGE_TOP_N)
+        start_period=evolution_mod._period_label(start),
+        end_period=evolution_mod._period_label(end),
+        to_run_id=to_run_id, lens_filters=lens_filters(plan), lens_label=label,
+        top_n=BRIDGE_TOP_N, frames=frames)
+    out["periodResolution"] = resolution.to_dict()
     if out.get("available"):
         out["declaredGroupedBy"] = list(plan.declares_grouped_by)
     return out

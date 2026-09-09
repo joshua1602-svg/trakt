@@ -54,9 +54,12 @@ def test_compare_balance_october_november():
     assert out["reconciliation"]["periodA"]["coverage_by_balance_pct"] == 100.0
 
 
-def test_compare_loan_count_relative_tokens():
+def test_compare_loan_count_exact_labels():
+    """G1: the production path hands `compare_periods` the two labels the
+    period-pair owner resolved; the private relative-token table ("prior")
+    this module kept is gone, so the helper is exercised on labels."""
     out = tc.compare_periods(_periods(), metric_key="loan_count",
-                             period_a="prior", period_b="latest", fmt="count")
+                             period_a="2025-10", period_b="latest", fmt="count")
     assert out["valueA"] == 40 and out["valueB"] == 45
     assert out["absoluteDelta"] == 5.0
     assert out["direction"] == "up"
@@ -81,6 +84,6 @@ def test_compare_insufficient_data_missing_metric():
 def test_compare_single_period_history_is_insufficient():
     one = _periods()[:1]
     out = tc.compare_periods(one, metric_key="funded_balance",
-                             period_a="prior", period_b="latest")
-    # 'prior' cannot resolve against a single-period history.
+                             period_a="2025-10", period_b="2025-11")
+    # a second period cannot resolve against a single-period history.
     assert out["available"] is False and out["status"] == "insufficient_data"

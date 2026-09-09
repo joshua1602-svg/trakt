@@ -88,6 +88,9 @@ class TestThePlanCannotReadTheQuestion:
 
 class TestBothSemanticInputsComeFromTheContract:
     def test_the_window_comes_from_the_contract(self, book):
+        """G1: the plan DECLARES the contract's period statement — the window
+        magnitude among it — and the period-pair owner resolves the pair. The
+        plan no longer carries a span of its own (`span_periods` is gone)."""
         from mi_agent_api import analytical_plan as plan_mod
         for question, periods in (
                 ("What has changed since last month over the last 3 months", 3),
@@ -96,18 +99,22 @@ class TestBothSemanticInputsComeFromTheContract:
             qi = _project(question)
             plan = plan_mod.build_period_movement_plan(
                 qi, region_column="collateral_geography", has_portfolio_column=True)
-            assert plan_mod.span_periods(plan) == periods, question
+            step = next(s for s in plan.steps if s.primitive == plan_mod.STACK_PERIODS)
+            assert step.inputs["window_periods"] == periods, question
+            assert step.inputs["resolver"] == "resolve_period_pair"
 
     def test_a_question_naming_no_span_uses_the_routes_own_default(self, book):
-        """"since last period" names no countable span. The route has always
-        compared one period in that case, and the plan carries that default
-        rather than inventing one."""
+        """"since last period" names no countable span. The route compares the
+        current snapshot with the previous one in that case, and the plan
+        declares that governed default rather than inventing a span."""
         from mi_agent_api import analytical_plan as plan_mod
         qi = _project("How has the book changed since last period?")
         assert qi.time.window_periods is None
         plan = plan_mod.build_period_movement_plan(
             qi, region_column=None, has_portfolio_column=False)
-        assert plan_mod.span_periods(plan) == plan_mod.DEFAULT_SPAN_PERIODS == 1
+        step = next(s for s in plan.steps if s.primitive == plan_mod.STACK_PERIODS)
+        assert step.inputs["default"] == "current_vs_previous"
+        assert not hasattr(plan_mod, "DEFAULT_SPAN_PERIODS")
 
     def test_the_population_comes_from_governed_ids(self, book):
         from mi_agent_api import analytical_plan as plan_mod
