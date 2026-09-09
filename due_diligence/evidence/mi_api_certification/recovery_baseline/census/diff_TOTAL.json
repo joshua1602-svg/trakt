@@ -1,0 +1,3185 @@
+{
+ "compared": 843,
+ "moved": 210,
+ "by_kind": {
+  "other:qi_subject_provenance": 106,
+  "measure_moved": 101,
+  "period_moved": 1,
+  "unknown_category_moved": 2
+ },
+ "movements": [
+  {
+   "question_id": "Q0005",
+   "case": null,
+   "question": "how many loans are in the book",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0006",
+   "case": null,
+   "question": "number of loans",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0007",
+   "case": null,
+   "question": "loan count",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0008",
+   "case": null,
+   "question": "how many mortgages do we have",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0028",
+   "case": null,
+   "question": "portfolio summary",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "portfolio summary"
+   }
+  },
+  {
+   "question_id": "Q0029",
+   "case": null,
+   "question": "portfolio overview",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "portfolio overview"
+   }
+  },
+  {
+   "question_id": "Q0030",
+   "case": null,
+   "question": "book overview",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "book overview"
+   }
+  },
+  {
+   "question_id": "Q0031",
+   "case": null,
+   "question": "key metrics",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "key metrics"
+   }
+  },
+  {
+   "question_id": "Q0045",
+   "case": null,
+   "question": "loan count by region",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0046",
+   "case": null,
+   "question": "loan count by borrower type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0047",
+   "case": null,
+   "question": "loan count by product type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0048",
+   "case": null,
+   "question": "loan count by LTV bucket",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0049",
+   "case": null,
+   "question": "loan count by age bucket",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0050",
+   "case": null,
+   "question": "loan count by broker",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0051",
+   "case": null,
+   "question": "loan count by account status",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0052",
+   "case": null,
+   "question": "loan count by origination channel",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0053",
+   "case": null,
+   "question": "loan count by rate type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0054",
+   "case": null,
+   "question": "loan count by occupancy type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0055",
+   "case": null,
+   "question": "loan count by term bucket",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0056",
+   "case": null,
+   "question": "loan count by ticket size",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0109",
+   "case": null,
+   "question": "loan count by region and borrower type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0110",
+   "case": null,
+   "question": "count by age bucket and LTV bucket",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "count"
+   }
+  },
+  {
+   "question_id": "Q0111",
+   "case": null,
+   "question": "number of loans by broker and product type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0123",
+   "case": null,
+   "question": "how many loans have LTV above 50%",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0124",
+   "case": null,
+   "question": "how many loans have LTV above 40%",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0125",
+   "case": null,
+   "question": "how many borrowers are over 70",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0126",
+   "case": null,
+   "question": "how many loans have a balance above \u00a3250k",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0129",
+   "case": null,
+   "question": "how many joint borrowers are there",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0134",
+   "case": null,
+   "question": "count by borrower type where age is over 70",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0146",
+   "case": null,
+   "question": "how many loans have a balance above 200000",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0147",
+   "case": null,
+   "question": "how many loans have a balance above 300000",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0163",
+   "case": null,
+   "question": "regions with the most loans",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0181",
+   "case": null,
+   "question": "expected funded by stage",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "expected funded"
+   }
+  },
+  {
+   "question_id": "Q0185",
+   "case": null,
+   "question": "pipeline conversion by stage",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "pipeline conversion"
+   }
+  },
+  {
+   "question_id": "Q0187",
+   "case": null,
+   "question": "applications over the last four weeks",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0190",
+   "case": null,
+   "question": "how many cases are in the pipeline",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0194",
+   "case": null,
+   "question": "show projected completions",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "show projected completions"
+   }
+  },
+  {
+   "question_id": "Q0195",
+   "case": null,
+   "question": "forecast by completion month",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "forecast"
+   }
+  },
+  {
+   "question_id": "Q0199",
+   "case": null,
+   "question": "expected completions over the next three months",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "expected completions over the next three months"
+   }
+  },
+  {
+   "question_id": "Q0203",
+   "case": null,
+   "question": "how many loans are over 80 years old",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0208",
+   "case": null,
+   "question": "concentration by borrower type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0209",
+   "case": null,
+   "question": "concentration by account status",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0212",
+   "case": null,
+   "question": "how many loans are above 70% LTV",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0214",
+   "case": null,
+   "question": "how many loans are over 75 years old",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0216",
+   "case": null,
+   "question": "high age borrower exposure",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0218",
+   "case": null,
+   "question": "coverage by borrower type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0221",
+   "case": null,
+   "question": "missing region count",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "missing region count"
+   }
+  },
+  {
+   "question_id": "Q0222",
+   "case": null,
+   "question": "missing borrower age count",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0223",
+   "case": null,
+   "question": "missing LTV count",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "missing LTV count"
+   }
+  },
+  {
+   "question_id": "Q0224",
+   "case": null,
+   "question": "loans excluded from LTV analysis",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0225",
+   "case": null,
+   "question": "which fields are unavailable for this query",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "which fields are unavailable for this query"
+   }
+  },
+  {
+   "question_id": "Q0228",
+   "case": null,
+   "question": "show NNEG by region",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "show NNEG"
+   }
+  },
+  {
+   "question_id": "Q0236",
+   "case": null,
+   "question": "show risky loans",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0237",
+   "case": null,
+   "question": "show me the good loans",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0238",
+   "case": null,
+   "question": "which loans should I worry about",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0239",
+   "case": null,
+   "question": "loans above 500000",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0240",
+   "case": null,
+   "question": "show best brokers",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "show best brokers"
+   }
+  },
+  {
+   "question_id": "Q0241",
+   "case": null,
+   "question": "show bad regions",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "show bad regions"
+   }
+  },
+  {
+   "question_id": "Q0242",
+   "case": null,
+   "question": "show profitability by region",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "show profitability"
+   }
+  },
+  {
+   "question_id": "Q0243",
+   "case": null,
+   "question": "show me interesting regions",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "show me interesting regions"
+   }
+  },
+  {
+   "question_id": "Q0249",
+   "case": null,
+   "question": "How many funded loans are there?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0250",
+   "case": null,
+   "question": "How many loans are in the funded book?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0269",
+   "case": null,
+   "question": "Show loan count by region.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0275",
+   "case": null,
+   "question": "Show loan count by broker.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0280",
+   "case": null,
+   "question": "Show loan count by LTV bucket.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0283",
+   "case": null,
+   "question": "Show loan count by borrower age bucket.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0292",
+   "case": null,
+   "question": "Show loan count by age bucket and LTV bucket.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0299",
+   "case": null,
+   "question": "Show loan count by broker and LTV bucket.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0305",
+   "case": null,
+   "question": "How many borrowers are aged 70 or above?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0306",
+   "case": null,
+   "question": "How many borrowers are aged 75 or above?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0307",
+   "case": null,
+   "question": "How many borrowers are aged 80 or above?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0308",
+   "case": null,
+   "question": "How many loans have LTV above 30%?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0309",
+   "case": null,
+   "question": "How many loans have LTV above 40%?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0310",
+   "case": null,
+   "question": "How many loans have LTV above 50%?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0311",
+   "case": null,
+   "question": "How many loans have LTV above 60%?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0315",
+   "case": null,
+   "question": "How many loans have borrower age 70+ and LTV above 50%?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0319",
+   "case": null,
+   "question": "How many loans are in the South East?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0321",
+   "case": null,
+   "question": "How many South East loans have LTV above 50%?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0323",
+   "case": null,
+   "question": "How many joint borrowers are there?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0325",
+   "case": null,
+   "question": "What share of the book is joint borrowers?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0326",
+   "case": null,
+   "question": "How many single borrowers are there?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0336",
+   "case": null,
+   "question": "Which broker has the most loans?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0348",
+   "case": null,
+   "question": "What are the oldest borrowers?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0368",
+   "case": null,
+   "question": "Drill into the 50%+ LTV bucket.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Drill into the 50%+ LTV bucket."
+   }
+  },
+  {
+   "question_id": "Q0369",
+   "case": null,
+   "question": "Drill into borrowers aged 80+.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0372",
+   "case": null,
+   "question": "Show the loan-level records behind the high LTV bucket.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0377",
+   "case": null,
+   "question": "Show loan count by origination year.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0385",
+   "case": null,
+   "question": "Show 2025 vintage by broker.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show 2025 vintage"
+   }
+  },
+  {
+   "question_id": "Q0386",
+   "case": null,
+   "question": "Show 2025 vintage by region.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show 2025 vintage"
+   }
+  },
+  {
+   "question_id": "Q0387",
+   "case": null,
+   "question": "Show 2025 vintage by LTV bucket.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show 2025 vintage"
+   }
+  },
+  {
+   "question_id": "Q0389",
+   "case": null,
+   "question": "Show loan count by origination month.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0392",
+   "case": null,
+   "question": "Show 2024 vintage performance.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show 2024 vintage performance."
+   }
+  },
+  {
+   "question_id": "Q0394",
+   "case": null,
+   "question": "Show origination cohort by broker.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show origination cohort"
+   }
+  },
+  {
+   "question_id": "Q0395",
+   "case": null,
+   "question": "Show origination cohort by region.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show origination cohort"
+   }
+  },
+  {
+   "question_id": "Q0398",
+   "case": null,
+   "question": "Show loan count evolution by month.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0404",
+   "case": null,
+   "question": "Compare October and November loan count.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0409",
+   "case": null,
+   "question": "Show monthly loan count evolution by broker.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0417",
+   "case": null,
+   "question": "How many pipeline cases are there?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0421",
+   "case": null,
+   "question": "What is the pipeline case count by stage?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0427",
+   "case": null,
+   "question": "How much pipeline is expected to complete next month?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much pipeline is expected to complete next month?"
+   }
+  },
+  {
+   "question_id": "Q0428",
+   "case": null,
+   "question": "How much pipeline is overdue?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much pipeline is overdue?"
+   }
+  },
+  {
+   "question_id": "Q0429",
+   "case": null,
+   "question": "How much pipeline is current month?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much pipeline is current month?"
+   }
+  },
+  {
+   "question_id": "Q0430",
+   "case": null,
+   "question": "Show overdue pipeline cases.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0431",
+   "case": null,
+   "question": "Show pipeline by expected completion date.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show pipeline"
+   }
+  },
+  {
+   "question_id": "Q0433",
+   "case": null,
+   "question": "Show pipeline weighted expected amount by stage.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show pipeline weighted expected amount"
+   }
+  },
+  {
+   "question_id": "Q0434",
+   "case": null,
+   "question": "Show pipeline weighted expected amount by broker.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show pipeline weighted expected amount"
+   }
+  },
+  {
+   "question_id": "Q0439",
+   "case": null,
+   "question": "Show current month pipeline completions expected.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show current month pipeline completions expected."
+   }
+  },
+  {
+   "question_id": "Q0442",
+   "case": null,
+   "question": "Show pipeline case count evolution by week.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0443",
+   "case": null,
+   "question": "Show pipeline case count evolution by month.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0445",
+   "case": null,
+   "question": "Show pipeline cases by stage over time.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0452",
+   "case": null,
+   "question": "Compare latest pipeline with prior pipeline.",
+   "kind": "period_moved",
+   "moved": [
+    "relative_mode"
+   ],
+   "before": {
+    "relative_mode": null
+   },
+   "after": {
+    "relative_mode": "current_vs_previous"
+   }
+  },
+  {
+   "question_id": "Q0459",
+   "case": null,
+   "question": "What is the forecast loan count?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0464",
+   "case": null,
+   "question": "How much of the forecast comes from funded book?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much of the forecast comes from funded book?"
+   }
+  },
+  {
+   "question_id": "Q0465",
+   "case": null,
+   "question": "How much of the forecast comes from pipeline?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much of the forecast comes from pipeline?"
+   }
+  },
+  {
+   "question_id": "Q0468",
+   "case": null,
+   "question": "Show forecast completion basis.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show forecast completion basis."
+   }
+  },
+  {
+   "question_id": "Q0469",
+   "case": null,
+   "question": "Show historical conversion basis.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show historical conversion basis."
+   }
+  },
+  {
+   "question_id": "Q0470",
+   "case": null,
+   "question": "Which stages use historical rates?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which stages use historical rates?"
+   }
+  },
+  {
+   "question_id": "Q0471",
+   "case": null,
+   "question": "Which stages use config fallback rates?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which stages use config fallback rates?"
+   }
+  },
+  {
+   "question_id": "Q0472",
+   "case": null,
+   "question": "How much active pipeline is excluded from weighting?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much active pipeline is excluded from weighting?"
+   }
+  },
+  {
+   "question_id": "Q0473",
+   "case": null,
+   "question": "How much pipeline is excluded because of missing probability?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much pipeline is excluded because of missing probability?"
+   }
+  },
+  {
+   "question_id": "Q0474",
+   "case": null,
+   "question": "How much pipeline is excluded because of withdrawn status?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much pipeline is excluded because of withdrawn status?"
+   }
+  },
+  {
+   "question_id": "Q0499",
+   "case": null,
+   "question": "Are we within our concentration limits?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Are we within our concentration limits?"
+   }
+  },
+  {
+   "question_id": "Q0500",
+   "case": null,
+   "question": "Which limits are breached?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which limits are breached?"
+   }
+  },
+  {
+   "question_id": "Q0501",
+   "case": null,
+   "question": "Show risk limit headroom.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show risk limit headroom."
+   }
+  },
+  {
+   "question_id": "Q0502",
+   "case": null,
+   "question": "Show the Schedule 8 concentration tests.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show the Schedule 8 concentration tests."
+   }
+  },
+  {
+   "question_id": "Q0504",
+   "case": null,
+   "question": "Show geographic concentration against limits.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show geographic concentration against limits."
+   }
+  },
+  {
+   "question_id": "Q0505",
+   "case": null,
+   "question": "Show broker concentration against limits.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show broker concentration against limits."
+   }
+  },
+  {
+   "question_id": "Q0506",
+   "case": null,
+   "question": "Which concentration test is closest to breach?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which concentration test is closest to breach?"
+   }
+  },
+  {
+   "question_id": "Q0507",
+   "case": null,
+   "question": "Show the single largest loan against the large-loan limit.",
+   "kind": "measure_moved",
+   "moved": [
+    "metric",
+    "aggregation",
+    "intent",
+    "qi_subject"
+   ],
+   "before": {
+    "metric": "current_outstanding_balance",
+    "aggregation": "loan_level",
+    "intent": "table",
+    "qi_subject": "current_outstanding_balance"
+   },
+   "after": {
+    "metric": null,
+    "aggregation": "count",
+    "intent": "summary",
+    "qi_subject": "loan_count"
+   }
+  },
+  {
+   "question_id": "Q0508",
+   "case": null,
+   "question": "Are any regional limits breached?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Are any regional limits breached?"
+   }
+  },
+  {
+   "question_id": "Q0509",
+   "case": null,
+   "question": "Show limit utilisation by category.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show limit utilisation"
+   }
+  },
+  {
+   "question_id": "Q0510",
+   "case": null,
+   "question": "What is the headroom on the London concentration limit?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What is the headroom on the London concentration limit?"
+   }
+  },
+  {
+   "question_id": "Q0511",
+   "case": null,
+   "question": "Show concentration limit status.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show concentration limit status."
+   }
+  },
+  {
+   "question_id": "Q0512",
+   "case": null,
+   "question": "Which risk limits need review?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which risk limits need review?"
+   }
+  },
+  {
+   "question_id": "Q0513",
+   "case": null,
+   "question": "Show concentration breaches.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show concentration breaches."
+   }
+  },
+  {
+   "question_id": "Q0514",
+   "case": null,
+   "question": "Are we over any limit?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Are we over any limit?"
+   }
+  },
+  {
+   "question_id": "Q0515",
+   "case": null,
+   "question": "Show the risk limit pass/warn/fail summary.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show the risk limit pass/warn/fail summary."
+   }
+  },
+  {
+   "question_id": "Q0516",
+   "case": null,
+   "question": "What is the nearest limit breach?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What is the nearest limit breach?"
+   }
+  },
+  {
+   "question_id": "Q0517",
+   "case": null,
+   "question": "Which fields are missing?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which fields are missing?"
+   }
+  },
+  {
+   "question_id": "Q0518",
+   "case": null,
+   "question": "Which required MI fields are missing?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which required MI fields are missing?"
+   }
+  },
+  {
+   "question_id": "Q0522",
+   "case": null,
+   "question": "How complete is broker?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How complete is broker?"
+   }
+  },
+  {
+   "question_id": "Q0523",
+   "case": null,
+   "question": "How complete is region?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How complete is region?"
+   }
+  },
+  {
+   "question_id": "Q0528",
+   "case": null,
+   "question": "Why does this chart not reconcile?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Why does this chart not reconcile?"
+   }
+  },
+  {
+   "question_id": "Q0529",
+   "case": null,
+   "question": "What is excluded from this result?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What is excluded from this result?"
+   }
+  },
+  {
+   "question_id": "Q0530",
+   "case": null,
+   "question": "What records are in Unknown / Missing?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What records are in Unknown / Missing?"
+   }
+  },
+  {
+   "question_id": "Q0531",
+   "case": null,
+   "question": "Which fields are sourced from funded files?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which fields are sourced from funded files?"
+   }
+  },
+  {
+   "question_id": "Q0532",
+   "case": null,
+   "question": "Which fields are sourced from pipeline files?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which fields are sourced from pipeline files?"
+   }
+  },
+  {
+   "question_id": "Q0538",
+   "case": null,
+   "question": "Show data completeness by field.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show data completeness"
+   }
+  },
+  {
+   "question_id": "Q0539",
+   "case": null,
+   "question": "Show data completeness by balance.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show data completeness"
+   }
+  },
+  {
+   "question_id": "Q0540",
+   "case": null,
+   "question": "Show records missing required MI fields.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show records missing required MI fields."
+   }
+  },
+  {
+   "question_id": "Q0541",
+   "case": null,
+   "question": "Show source notes for this answer.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show source notes for this answer."
+   }
+  },
+  {
+   "question_id": "Q0542",
+   "case": null,
+   "question": "How many loans are in arrears?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0558",
+   "case": null,
+   "question": "Show defaulted loans.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0559",
+   "case": null,
+   "question": "How many loans are defaulted?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0563",
+   "case": null,
+   "question": "Show default rate by vintage.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show default rate"
+   }
+  },
+  {
+   "question_id": "Q0572",
+   "case": null,
+   "question": "What percentage of the book has NNEG?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What percentage of the book has NNEG?"
+   }
+  },
+  {
+   "question_id": "Q0584",
+   "case": null,
+   "question": "Show loans with low remaining equity.",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'low'",
+     "unknown category: 'remaining'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": [
+     "unknown category: 'low'"
+    ]
+   }
+  },
+  {
+   "question_id": "Q0587",
+   "case": null,
+   "question": "Show NNEG risk concentration by region.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show NNEG risk concentration"
+   }
+  },
+  {
+   "question_id": "Q0588",
+   "case": null,
+   "question": "Show NNEG risk concentration by broker.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show NNEG risk concentration"
+   }
+  },
+  {
+   "question_id": "Q0589",
+   "case": null,
+   "question": "Show NNEG risk by origination vintage.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show NNEG risk"
+   }
+  },
+  {
+   "question_id": "Q0592",
+   "case": null,
+   "question": "Show roll-up interest exposure.",
+   "kind": "unknown_category_moved",
+   "moved": [
+    "unavailable_filters"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'roll-up'"
+    ]
+   },
+   "after": {
+    "unavailable_filters": [
+     "unknown category: 'roll'"
+    ]
+   }
+  },
+  {
+   "question_id": "Q0593",
+   "case": null,
+   "question": "Show accrued interest by vintage.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show accrued interest"
+   }
+  },
+  {
+   "question_id": "Q0716",
+   "case": null,
+   "question": "how many loans have LTV above 30%",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0717",
+   "case": null,
+   "question": "how many loans have LTV above 60%",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0718",
+   "case": null,
+   "question": "how many loans have balance above 150000",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0719",
+   "case": null,
+   "question": "how many loans have balance above 200000",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0720",
+   "case": null,
+   "question": "how many loans have borrower age above 70",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0721",
+   "case": null,
+   "question": "how many loans have borrower age above 75",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0740",
+   "case": null,
+   "question": "how many loans have Risk Score above 700",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0781",
+   "case": null,
+   "question": "how many loans by Account Status",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0782",
+   "case": null,
+   "question": "how many loans by Age Bucket",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0783",
+   "case": null,
+   "question": "how many loans by Borrower Type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0784",
+   "case": null,
+   "question": "how many loans by Broker",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0785",
+   "case": null,
+   "question": "how many loans by Product Type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0786",
+   "case": null,
+   "question": "how many loans by Obligor Region (NUTS3)",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0787",
+   "case": null,
+   "question": "how many loans by Rate Type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0788",
+   "case": null,
+   "question": "how many loans by LTV Bucket",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0789",
+   "case": null,
+   "question": "how many loans by Occupancy Type",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0790",
+   "case": null,
+   "question": "how many loans by Origination Channel",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0791",
+   "case": null,
+   "question": "how many loans by Term Bucket",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0792",
+   "case": null,
+   "question": "how many loans by Ticket Size",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0796",
+   "case": null,
+   "question": "How has the profile of our new lending changed over the last few months?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How has the profile of our new lending changed over the last few months?"
+   }
+  },
+  {
+   "question_id": "Q0797",
+   "case": null,
+   "question": "Are we originating different types of loans now compared with a few months ago?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0798",
+   "case": null,
+   "question": "How does recent lending compare with what we were originating earlier in the year?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How does recent lending compare with what we were originating earlier in the year?"
+   }
+  },
+  {
+   "question_id": "Q0799",
+   "case": null,
+   "question": "Has the risk and borrower profile of new business changed recently?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0804",
+   "case": null,
+   "question": "How much do we currently have at offer and how much of it is likely to complete?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much do we currently have at offer and how much of it is likely to complete?"
+   }
+  },
+  {
+   "question_id": "Q0805",
+   "case": null,
+   "question": "What's the value of outstanding offers, and when do we expect them to fund?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What's the value of outstanding offers, and when do we expect them to fund?"
+   }
+  },
+  {
+   "question_id": "Q0806",
+   "case": null,
+   "question": "Of the current offer pipeline, how much should convert and over what timeframe?",
+   "kind": "measure_moved",
+   "moved": [
+    "unavailable_filters",
+    "qi_subject"
+   ],
+   "before": {
+    "unavailable_filters": [
+     "unknown category: 'offer'"
+    ],
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "unavailable_filters": [],
+    "qi_subject": "Of the current offer pipeline, how much should convert and over what timeframe?"
+   }
+  },
+  {
+   "question_id": "Q0807",
+   "case": null,
+   "question": "How much is sitting at offer today and what do we expect to complete from it and when?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How much is sitting at offer today and what do we expect to complete from it and when?"
+   }
+  },
+  {
+   "question_id": "Q0808",
+   "case": null,
+   "question": "What completion rate are we currently running at?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What completion rate are we currently running at?"
+   }
+  },
+  {
+   "question_id": "Q0809",
+   "case": null,
+   "question": "How many loans are we completing at the moment?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0811",
+   "case": null,
+   "question": "Based on the last few weeks, what level of completions are we currently achieving?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Based on the last few weeks, what level of completions are we currently achieving?"
+   }
+  },
+  {
+   "question_id": "Q0812",
+   "case": null,
+   "question": "Are any of our concentration limits likely to breach over the next three months?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Are any of our concentration limits likely to breach over the next three months?"
+   }
+  },
+  {
+   "question_id": "Q0813",
+   "case": null,
+   "question": "Do we expect to hit any concentration limits in the next quarter?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Do we expect to hit any concentration limits in the next quarter?"
+   }
+  },
+  {
+   "question_id": "Q0814",
+   "case": null,
+   "question": "Which concentration limits are at risk of being breached over the next three months?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which concentration limits are at risk of being breached over the next three months?"
+   }
+  },
+  {
+   "question_id": "Q0815",
+   "case": null,
+   "question": "Based on the forecast book, are any of our limits likely to come under pressure?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Based on the forecast book, are any of our limits likely to come under pressure?"
+   }
+  },
+  {
+   "question_id": "Q0816",
+   "case": null,
+   "question": "Which concentration limits have the least headroom?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Which concentration limits have the least headroom?"
+   }
+  },
+  {
+   "question_id": "Q0819",
+   "case": null,
+   "question": "Show me the concentration limits we're closest to hitting.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Show me the concentration limits we're closest to hitting."
+   }
+  },
+  {
+   "question_id": "Q0820",
+   "case": null,
+   "question": "How does the front book compare with our older lending from a risk perspective?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How does the front book compare with our older lending from a risk perspective?"
+   }
+  },
+  {
+   "question_id": "Q0821",
+   "case": null,
+   "question": "Are older loans riskier than the loans we've originated recently?",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0822",
+   "case": null,
+   "question": "How different is the risk profile of recent originations versus the back book?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How different is the risk profile of recent originations versus the back book?"
+   }
+  },
+  {
+   "question_id": "Q0823",
+   "case": null,
+   "question": "Compare the credit profile of the front book with our seasoned loans.",
+   "kind": "other:qi_subject_provenance",
+   "moved": [
+    "qi_subject_provenance"
+   ],
+   "before": {
+    "qi_subject_provenance": null
+   },
+   "after": {
+    "qi_subject_provenance": "explicit_user"
+   }
+  },
+  {
+   "question_id": "Q0827",
+   "case": null,
+   "question": "Compare how the direct and acquired books have changed over the last few months.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Compare how the direct and acquired books have changed over the last few months."
+   }
+  },
+  {
+   "question_id": "Q0828",
+   "case": null,
+   "question": "How has lending to the front book changed compared with the back book?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How has lending to the front book changed compared with the back book?"
+   }
+  },
+  {
+   "question_id": "Q0831",
+   "case": null,
+   "question": "Compare how the the front book and the back book books have changed over the last few months.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Compare how the the front book and the back book books have changed over the last few months."
+   }
+  },
+  {
+   "question_id": "Q0832",
+   "case": null,
+   "question": "How has lending to South East changed compared with London?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How has lending to South East changed compared with London?"
+   }
+  },
+  {
+   "question_id": "Q0835",
+   "case": null,
+   "question": "Compare how the South East and London books have changed over the last few months.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Compare how the South East and London books have changed over the last few months."
+   }
+  },
+  {
+   "question_id": "Q0836",
+   "case": null,
+   "question": "What do we expect the funded book to grow to based on the current pipeline?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "What do we expect the funded book to grow to based on the current pipeline?"
+   }
+  },
+  {
+   "question_id": "Q0840",
+   "case": null,
+   "question": "How has lending to North West changed compared with Scotland?",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "How has lending to North West changed compared with Scotland?"
+   }
+  },
+  {
+   "question_id": "Q0843",
+   "case": null,
+   "question": "Compare how the North West and Scotland books have changed over the last few months.",
+   "kind": "measure_moved",
+   "moved": [
+    "qi_subject"
+   ],
+   "before": {
+    "qi_subject": "loan_count"
+   },
+   "after": {
+    "qi_subject": "Compare how the North West and Scotland books have changed over the last few months."
+   }
+  }
+ ]
+}
