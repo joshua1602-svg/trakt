@@ -626,6 +626,108 @@ def field_for_basis(basis: Optional[str], *, available_columns=None,
     return None
 
 
+#: THE ORDER WHEN NOTHING IS KNOWN ABOUT THE BOOK — no contract in force. The
+#: readable collateral geography first, then the borrower's. Every chooser in
+#: the estate used to carry its own copy of this order (`REGION_COLUMNS`,
+#: `_REGION_FAMILY`, `_REGION_PREFERENCE`, `_ITL3_FIELDS`); it lives here once.
+FALLBACK_BASIS_ORDER: Tuple[str, ...] = (BASIS_COLLATERAL, BASIS_BORROWER)
+
+#: Every field that MEANS "region" to the MI Agent — the governed basis fields
+#: plus the harmonised taxonomy spellings a tape may carry.
+REGION_CONCEPTS: Tuple[str, ...] = tuple(
+    f for _b, fields in BASIS_FIELDS.items() for f in fields) + (
+    "canonical_region_reporting", "canonical_region_detail")
+
+
+def is_region_concept(key: Optional[str]) -> bool:
+    return bool(key) and str(key) in REGION_CONCEPTS
+
+
+def _contract_basis(geography: Any) -> Optional[str]:
+    """The primary basis of ``geography``, else of the contract in force."""
+    if geography is None:
+        try:
+            from .llm_query_parser import active_geography
+
+            geography = active_geography()
+        except Exception:  # noqa: BLE001 - no parser context, no contract
+            geography = None
+    return normalise_basis(getattr(geography, "primary_basis", None))
+
+
+def region_field(frame, *, geography: Any = None) -> Optional[str]:
+    """THE region column for ``frame`` — the ONE chooser (G6).
+
+    The contract's primary basis, resolved against what the frame carries; with
+    no contract in force, the first basis in `FALLBACK_BASIS_ORDER` the frame
+    carries. Every surface that groups, bridges or attributes "by region" asks
+    this, so a request cannot measure one basis here and another there.
+    """
+    basis = _contract_basis(geography)
+    carrying = _carrying_columns(frame)
+    if basis:
+        return field_for_basis(basis, frame=frame, carrying=carrying)
+    for candidate in FALLBACK_BASIS_ORDER:
+        field = field_for_basis(candidate, frame=frame, carrying=carrying)
+        if field:
+            return field
+    return None
+
+
+def region_candidates(geography: Any = None) -> Tuple[str, ...]:
+    """The column(s) a region axis may be spelled with, for a caller that has
+    no frame yet: the contract's resolved field when it has one, else the
+    contract basis's axis fields, else every basis's in fallback order. Never
+    a mix of bases when a contract names one."""
+    if geography is None:
+        try:
+            from .llm_query_parser import active_geography
+
+            geography = active_geography()
+        except Exception:  # noqa: BLE001
+            geography = None
+    basis = normalise_basis(getattr(geography, "primary_basis", None))
+    if basis:
+        resolved = None
+        for candidate, field in (getattr(geography, "fields", None) or ()):
+            if candidate == basis:
+                resolved = field
+        if resolved:
+            return (resolved,)
+        return axis_fields(basis)
+    return tuple(f for b in FALLBACK_BASIS_ORDER for f in axis_fields(b))
+
+
+def code_field_for_basis(basis: Optional[str], *, frame=None,
+                         available_columns=None) -> Optional[str]:
+    """The ITL3 CODE column this book carries ``basis`` in, or None."""
+    resolved = normalise_basis(basis)
+    tiers = dict(BASIS_FIELD_TIERS.get(str(resolved or ""), ()))
+    codes = tuple(f for f in tiers.get(TIER_CODE, ()) if f.endswith("_itl3"))
+    if not codes:
+        return None
+    carrying = _carrying_columns(frame)
+    if carrying is not None:
+        return next((f for f in codes if f in carrying), None)
+    if available_columns is not None:
+        columns = {str(c) for c in available_columns}
+        return next((f for f in codes if f in columns), None)
+    return codes[0]
+
+
+def code_field(frame, *, geography: Any = None) -> Optional[str]:
+    """THE ITL3 code column for ``frame`` — the contract's basis, else the
+    first basis in fallback order the frame carries a code for."""
+    basis = _contract_basis(geography)
+    if basis:
+        return code_field_for_basis(basis, frame=frame)
+    for candidate in FALLBACK_BASIS_ORDER:
+        field = code_field_for_basis(candidate, frame=frame)
+        if field:
+            return field
+    return None
+
+
 def resolved_basis_fields(*, available_columns=None, frame=None
                           ) -> Tuple[Tuple[str, Optional[str]], ...]:
     """``((basis, field | None), ...)`` — the availability decision, made ONCE.

@@ -44,27 +44,14 @@ _FUNDED_BREAKDOWN_DIMS = {
 
 
 def _region_breakdown_column(df, geography=None) -> Optional[str]:
-    """The column "region over time" is measured on, for THIS book.
-
-    The configured primary basis, resolved against what the period's frame
-    actually carries. Falls back to the parser's own last-resort order when no
-    contract is in force, so the two surfaces still agree with each other.
-    """
+    """The column "region over time" is measured on, for THIS book — the ONE
+    geography owner's answer for this frame under the contract in force (G6).
+    No private fallback order survives here."""
     from mi_agent import mi_geography as _geo
-    from mi_agent.llm_query_parser import active_geography
 
-    basis = getattr(geography if geography is not None else active_geography(),
-                    "primary_basis", None)
-    if basis:
-        chosen = _geo.field_for_basis(basis, frame=df)
-        if chosen:
-            return chosen
-    from mi_agent.llm_query_parser import _REGION_PREFERENCE
+    return _geo.region_field(df, geography=geography)
 
-    for column in _REGION_PREFERENCE:
-        if column in getattr(df, "columns", ()):
-            return column
-    return None
+
 MISSING_BUCKET = "Unknown / Missing"
 
 

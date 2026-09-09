@@ -28,7 +28,8 @@ _BALANCE = "current_outstanding_balance"
 _LTV = "current_loan_to_value"
 _AGE = "youngest_borrower_age"
 # Prefer collateral (property) location; fall back to obligor.
-_ITL3_FIELDS = ("geographic_region_collateral_itl3", "geographic_region_obligor_itl3")
+# `_ITL3_FIELDS` — this module's private order of ITL3 code columns — is
+# DELETED (G6). `mi_agent.mi_geography.code_field` is the one chooser.
 _POSTCODE_FIELDS = ("property_post_code", "postcode", "post_code")
 _LOOKUP_NAME = "uk_itl_master_lookup_v2.csv"
 
@@ -99,14 +100,20 @@ def _prefix_to_itl3(outward: str, by_prefix: Dict[str, Dict[str, str]]) -> Optio
     return None
 
 
-def exposure_by_itl3(df: pd.DataFrame) -> Dict[str, Any]:
-    """Exposure and loan count per ITL3 area, tape-driven. Never raises."""
+def exposure_by_itl3(df: pd.DataFrame, geography: Any = None) -> Dict[str, Any]:
+    """Exposure and loan count per ITL3 area, tape-driven. Never raises.
+
+    The ITL3 code column is the ONE geography owner's choice for this frame
+    under the contract in force (G6): a borrower-basis book is measured on the
+    obligor codes, a collateral-basis book on the collateral codes."""
+    from mi_agent import mi_geography as _geo
+
     lookup = _load_lookup()
     by_prefix = lookup["by_prefix"]
     name_by_code = lookup["name_by_code"]
     columns = list(getattr(df, "columns", []))
 
-    itl3_field = next((f for f in _ITL3_FIELDS if f in columns), None)
+    itl3_field = _geo.code_field(df, geography=geography)
     pc_field = next((f for f in _POSTCODE_FIELDS if f in columns), None)
     bal = coerce_numeric(df[_BALANCE]) if _BALANCE in columns else None
     if bal is None:
@@ -210,7 +217,7 @@ def exposure_by_itl3(df: pd.DataFrame) -> Dict[str, Any]:
         "resolvedFromItl3Field": resolved_from_itl3,
         "resolvedFromPostcode": resolved_from_postcode,
         "lookupAvailable": bool(by_prefix),
-        "basis": ("collateral" if itl3_field == _ITL3_FIELDS[0]
-                  else "obligor" if itl3_field == _ITL3_FIELDS[1]
-                  else "postcode_derived"),
+        "basis": ({"collateral": "collateral", "borrower": "obligor"}.get(
+                      str(_geo.basis_of_field(itl3_field) or ""), "postcode_derived")
+                  if itl3_field else "postcode_derived"),
     }

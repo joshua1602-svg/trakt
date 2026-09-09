@@ -52,9 +52,8 @@ from . import evolution as evolution_mod
 
 #: Region columns, in the same preference order the funded bridge uses: the
 #: readable analytics label first, then the regulatory code fields.
-REGION_COLUMNS: Tuple[str, ...] = (
-    "collateral_geography", "geographic_region_collateral", "geographic_region_obligor",
-)
+# `REGION_COLUMNS` — this module's private order of region columns — is
+# DELETED (G6). `mi_agent.mi_geography.region_field` is the one chooser.
 
 _BALANCE = "current_outstanding_balance"
 _ORIGINATION = "origination_date"
@@ -91,14 +90,15 @@ def _num(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce")
 
 
-def _region_column(df: Optional[pd.DataFrame]) -> Optional[str]:
-    """The first region column actually present and populated in ``df``."""
+def _region_column(df: Optional[pd.DataFrame], geography: Any = None
+                   ) -> Optional[str]:
+    """The region column this movement is attributed on — the ONE geography
+    owner's answer for this frame under the contract in force (G6)."""
     if df is None:
         return None
-    for col in REGION_COLUMNS:
-        if col in df.columns and df[col].notna().any():
-            return col
-    return None
+    from mi_agent import mi_geography as _geo
+
+    return _geo.region_field(df, geography=geography)
 
 
 def _ltv_to_points(value: Optional[float]) -> Optional[float]:
@@ -328,7 +328,7 @@ def period_movement(output_root, client_id: str, *,
     # -- Regional attribution: the existing bridge, prior -> current ------- #
     region_col = _region_column(cur_df)
     bridge = evolution_mod.funded_bridge(
-        output_root, client_id, list(REGION_COLUMNS),
+        output_root, client_id, [region_col] if region_col else [],
         start_period=pri_p.get("period"), end_period=cur_p.get("period"),
         to_run_id=to_run_id, frames=scoped,
         lens_filters=lens_filters, lens_label=lens_label, top_n=24)

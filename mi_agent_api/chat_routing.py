@@ -2728,13 +2728,14 @@ _BRIDGE_DEFAULT_DIMS = ("geographic_region_obligor", "collateral_geography",
 # region field left it behind. Inside the family the concept resolves to every
 # candidate and the bridge uses whichever its frames actually hold — which is
 # what the docstring below already promised.
-_REGION_FAMILY = ("canonical_region_reporting", "canonical_region_detail",
-                  "collateral_geography", "geographic_region_collateral",
-                  "geographic_region_obligor")
+# `_REGION_FAMILY` — this route's private list of what "region" spells as — is
+# DELETED (G6). `mi_agent.mi_geography` owns which fields mean region and
+# which of them THIS request's contract measures on.
 
 
 def _bridge_dimension(concept: Optional[str],
-                      semantics: Dict[str, Any]) -> Tuple[Optional[str], Any, str]:
+                      semantics: Dict[str, Any],
+                      geography: Any = None) -> Tuple[Optional[str], Any, str]:
     """(semantic_key, candidate_column(s), business_label) for the bridge
     attribution dimension — the governed CONCEPT the caller resolved, else a
     sensible default. Region resolves to the whole family so the bridge picks
@@ -2754,9 +2755,14 @@ def _bridge_dimension(concept: Optional[str],
         return None, None, ""
     entry = fields.get(key, {}) or {}
     label = entry.get("business_name") or entry.get("display_name") or key.replace("_", " ")
-    if key in _REGION_FAMILY:
+    from mi_agent import mi_geography as _geo
+
+    if _geo.is_region_concept(key):
+        # THE CONTRACT'S BASIS, never the whole family: offering every region
+        # column let a bridge attribute on whichever basis the tape happened
+        # to carry first, which is not what the request's contract measures.
         cols = [fields.get(k, {}).get("canonical_field", k)
-                for k in _REGION_FAMILY if k in fields]
+                for k in _geo.region_candidates(geography)]
         return key, (cols or [entry.get("canonical_field", key)]), label
     return key, entry.get("canonical_field", key), label
 
@@ -4698,8 +4704,38 @@ def try_route(question: str, *, portfolio_id: Optional[str], view: str,
         # not with a route.
         try:
             parsed.meta["conceptMerge"] = concept_merge_evidence
+            # G7-LITE — THE PARSE'S VERDICT FOLLOWS THE FILL. A subject the
+            # model supplied is a resolved measure; the parser's
+            # `unresolved_metric` note — and the refusal the workflow builds
+            # from it — described the contract BEFORE the merge.
+            if any(a.get("kind") == "measure"
+                   for a in (concept_merge_evidence.get("applied") or ())) \
+                    and parsed.meta.get("note") in ("unresolved_metric", "unmapped"):
+                parsed.meta["note"] = "model_filled_measure"
+                try:
+                    spec.explanation = ("The measure was supplied by the "
+                                        "language-understanding step and is "
+                                        "disclosed as model-inferred.")
+                except Exception:  # noqa: BLE001
+                    pass
         except Exception:  # noqa: BLE001 - evidence never fails a request
             pass
+
+    # THE SEMANTIC CLAIMS LEDGER (I5) — built ONCE, here, after the
+    # deterministic contract and the model merge and before any capability
+    # executes; carried on the parse metadata so the routed path and the
+    # point-in-time path compare what was CLAIMED with what they EXECUTED,
+    # and no guard has to read the sentence a second time.
+    try:
+        from mi_agent import semantic_claims as _claims_mod
+
+        _ledger = _claims_mod.build(
+            question, interpretation=_build_interpretation(), spec=spec,
+            parse_meta=parsed.meta, available_values=_values_for_recognition())
+        parsed.meta["semanticClaims"] = _ledger.to_dict()
+    except Exception as exc:  # noqa: BLE001 - the ledger never breaks routing
+        _logger.info("semantic claims ledger unavailable: %s: %s",
+                     type(exc).__name__, exc)
 
     request = RouteRequest(
         question=question, spec=spec, spec_dict=spec.to_dict(),
