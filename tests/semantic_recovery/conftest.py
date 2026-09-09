@@ -14,77 +14,79 @@ import pytest
 
 
 @pytest.fixture(scope="session")
-def demo_env():
-    """The demo book's environment, RESTORED when this file's tests finish.
+def book():
+    """The demo book, built under the demo environment and RESTORING it before
+    any test runs.
 
-    An earlier cut of this fixture mutated `os.environ` and left it that way,
-    which changed the book that every LATER test file resolved: the estate's
-    own census guard (`mi_agent/tests/test_semantic_census.py`) passed alone
-    and failed when it ran after these tests, because it was censusing a
-    different book. A test file that changes the meaning of the next one is
-    the same defect this whole sprint is about, in the test suite.
+    THE ENVIRONMENT IS NOT LEFT MUTATED. Two defects in earlier cuts of this
+    file, both found by tests in other files:
+
+      * a session-scoped fixture that set `os.environ` and restored it on
+        teardown restores at the END OF THE WHOLE SESSION — long after other
+        files have run. `MI_AGENT_AUTH_ENABLED=false` leaked into
+        `test_agent_identity_and_api`'s auth-guard test, which asserts the
+        guard's behaviour when auth IS enabled.
+      * `bind_geography` installed a geography contract process-wide, and the
+        estate's census guard then censused the corpus against this book's
+        contract.
+
+    Everything this file needs is resolved HERE, under the environment, and
+    the environment is put back before anything else sees it. Nothing below
+    reads it again: the parse is given its semantics, columns, values and
+    geography explicitly, which is what the production entry point does too.
     """
     warnings.simplefilter("ignore")
     before = dict(os.environ)
-    os.environ.setdefault("TRAKT_RUNTIME_MODE", "test")
-    from demo_platform import config as cfg
-    os.environ.update(cfg.mi_env(period_role="current"))
-    os.environ["MI_AGENT_LLM_PARSER"] = "off"
-    os.environ["MI_AGENT_LLM_ENABLED"] = "0"
-    os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
     try:
-        yield True
+        os.environ.setdefault("TRAKT_RUNTIME_MODE", "test")
+        from demo_platform import config as cfg
+        os.environ.update(cfg.mi_env(period_role="current"))
+        os.environ["MI_AGENT_LLM_PARSER"] = "off"
+        os.environ["MI_AGENT_LLM_ENABLED"] = "0"
+        os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
+
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api import mi_service
+        from mi_agent_api.data_source import get_dataframe, semantics_path
+
+        semantics = load_mi_semantics(semantics_path())
+        frame = get_dataframe()
+        return {
+            "semantics": semantics,
+            "frame": frame,
+            "columns": set(frame.columns),
+            "book_values": mi_service._book_values(frame, semantics),
+            # RESOLVED, never INSTALLED — see the note above.
+            "geography": mi_service._resolve_geography(None, None, frame),
+        }
     finally:
         os.environ.clear()
         os.environ.update(before)
 
 
 @pytest.fixture(scope="session")
-def semantics(demo_env):
-    from mi_agent.mi_query_validator import load_mi_semantics
-    from mi_agent_api.data_source import semantics_path
-    return load_mi_semantics(semantics_path())
+def semantics(book):
+    return book["semantics"]
 
 
 @pytest.fixture(scope="session")
-def frame(demo_env):
-    from mi_agent_api.data_source import get_dataframe
-    return get_dataframe()
+def frame(book):
+    return book["frame"]
 
 
 @pytest.fixture(scope="session")
-def book_values(frame, semantics):
-    from mi_agent_api import mi_service
-    return mi_service._book_values(frame, semantics)
+def book_values(book):
+    return book["book_values"]
 
 
 @pytest.fixture(scope="session")
-def columns(frame):
-    return set(frame.columns)
+def columns(book):
+    return book["columns"]
 
 
 @pytest.fixture(scope="session")
-def geography(frame):
-    """The demo book's geography contract — RESOLVED, never INSTALLED.
-
-    An earlier cut called `bind_geography`, which installs the contract for the
-    remainder of the enclosing `geography_context`. With no enclosing context
-    it stays installed for the whole PROCESS, and a session-scoped fixture
-    cannot undo that in time: its teardown runs at the end of the entire
-    pytest session, long after other files have run. The estate's census guard
-    then censused the corpus with this book's contract in force and reported a
-    movement ("by collateral region" binding `collateral_geography` instead of
-    `geographic_region_collateral`) that was an artefact of the test run.
-
-    Nothing here needs it installed: `ParsedQuestion.parse(geography=...)`
-    opens its own context, and every other test passes the contract
-    explicitly. Serving is unaffected either way — `mi_service` opens
-    `geography_context(None)` at the outermost edge of every request, so a
-    bound contract cannot outlive one.
-    """
-    from mi_agent_api import mi_service
-
-    return mi_service._resolve_geography(None, None, frame)
+def geography(book):
+    return book["geography"]
 
 
 @pytest.fixture
