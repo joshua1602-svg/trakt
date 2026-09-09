@@ -151,7 +151,35 @@ three new owner modules (`normalise`, `semantic_claims`, `capability_ownership`
 
 ## I. Go / no-go (Phase 9)
 
-_Completed below once the full suite lands._
+The sprint's targets, each answered by a measurement rather than a score:
+
+| Target | Verdict | Evidence |
+|---|---|---|
+| zero silent semantic substitutions | **MET for every mechanism found** | the two wrong answers in the vertical suites are gone; the substituting owners are deleted, not patched |
+| zero silently lost explicit filters / dimensions / periods / scopes | **MET** | a named period the frames lack now REFUSES (G1); a claimed lending window, pipeline status or earlier period refuses on the point-in-time path (G3 ledger); a dropped measure slot is named (P1-B) |
+| zero wrong dataset / measure | **MET for the mechanisms found** | capability ownership (CAP), the weighting qualifier (P0-E), the one normaliser (G2) |
+| equivalent phrasing → equivalent semantics | **MET where a normaliser decides it** | hyphenated and spaced spellings converge, proved end to end on the routed path |
+| unsupported long tail refuses safely | **MET** | "churn" is still unclaimed and still refuses — no bank-copied alias was added to make a question pass |
+| certified calculations unchanged | **MET** | 0/843 and 0/135 census movements for G1, G6 and G6-completion; the G7-lite movements are contract fields only, with zero metric/aggregation/filter/route movement |
+| P0 counts zero | **NOT ESTABLISHED** | the P0 counts are a property of the LIVE run against a deployed SHA. This sprint has not run one — see section L |
+
+**DEPLOY VERDICT: NO — not yet, and not because the work failed.**
+The sprint's own rule is to propose a deploy only when all P0 counts are zero,
+and P0 counts come from the live acceptance. The live acceptance cannot run:
+MI_BEARER is expired and no candidate SHA is deployed. Deploying now would
+change production with no acceptance run able to validate it, which is the one
+outcome worse than not deploying.
+
+### The six verdict lines, as far as this sprint can honestly answer them
+
+| | |
+|---|---|
+| `SEMANTIC_OWNERSHIP_CONSOLIDATED` | **YES** — 8 consolidations, every duplicate owner deleted, 0 live references remaining |
+| `INVARIANTS_HOLD` | **YES** — 66 tests, written before the code |
+| `NO_UNEXPLAINED_SEMANTIC_MOVEMENT` | **YES** — machine-checked over 843 + 135 questions |
+| `BROAD_NON_REGRESSION` | **YES for every changed surface** — 0 new failures against the untouched baseline in every targeted file set; the whole-estate suite is the one gate still running at the time of writing |
+| `MI_QUERY_AGENT_V1_LIVE_READY` | **NOT ESTABLISHED** — requires a live run |
+| `DEPLOY_RECOMMENDED` | **NO** — blocked on a token and a deploy, both the user's to give |
 
 ## J–M. Deployment and the live run (Phase 10)
 
