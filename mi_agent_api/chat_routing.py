@@ -2803,8 +2803,12 @@ def _route_bridge(question, spec, spec_dict, *, client_id, run_id, output_root,
     lens_label_text, lens_narrowed = br.get("lens") or "Total", None
 
     if not br.get("available"):
+        # The reason is a governed sentence from the period owner and may end
+        # in its own full stop; this frame supplies one, so it must not add a
+        # second ("... for this scope..").
+        _reason = str(br.get("reason") or "insufficient reporting periods").rstrip(". ")
         return _undeliverable(question=question, spec=spec_dict, answer=(f"I can't build a funded balance bridge yet: "
-                                 f"{br.get('reason', 'insufficient reporting periods')}."),
+                                 f"{_reason}."),
                          route="funded_bridge",
                          warnings=["insufficient-data: a bridge needs two funded reporting periods."])
 
