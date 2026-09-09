@@ -91,6 +91,25 @@ The `ae916af` commit message states 39 frozen-bank movements for G7-lite. The
 true count is **62** (26 + 36 above). The classification in that message is
 right; the count was estimated from a truncated listing instead of counted.
 
+### The classified service defects, and where each was fixed
+
+The 19 SERVICE_DEFECT rows from the earlier classification fall into five
+groups. Each was fixed by removing an OWNER, never by special-casing a
+question:
+
+| Group | Fixed by |
+|---|---|
+| **P0-A** a period word read as a categorical filter value ("prior", "previous", "live", "new", "exited") | G3 — the claimant asks the period, status, movement and seasoning owners |
+| **P0-B** a point-in-time question about a PAST period answered as at the current one, or read as a trend | the claims ledger — `period_as_at` refuses, and a LEVEL is no longer re-read as MOVEMENT by a second raw reader |
+| **P0-C** explicit period language not honoured | G1 — one period-pair owner; a named period the frames lack refuses instead of falling to the earliest |
+| **P0-D** a multi-measure request narrowed or refused | G2 (the hyphenated measure now binds, so C11 reads both) and P1-B (a coordinated slot is named, not dropped) |
+| **P0-E** a weighting qualifier read as a measure | `statistic` owns the weighting grammar and asks the measure owner |
+
+**P1-A paraphrase reachability** is addressed structurally — one owner per
+concept is what makes paraphrases converge, and the model may only bind
+REGISTERED concepts (proved by P3 in section E). Its measurement is the live
+bank's paraphrase-consistency count, which needs a live run.
+
 ## E. Model-layer proof (Phase 4)
 
 `tests/semantic_recovery/test_model_layer.py` — six properties, on REPLAYED
