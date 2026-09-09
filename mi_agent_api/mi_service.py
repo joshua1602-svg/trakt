@@ -1228,66 +1228,72 @@ def _guard_routed_answer(routed: Dict[str, Any], *, question: str,
 
 
 def _fail_closed_analytical(result: Dict[str, Any], *, question: str,
-                            view: str, available_values=None) -> Dict[str, Any]:
-    """§7 THE FAIL-CLOSED SAFETY RULE.
+                            view: str, available_values=None,
+                            claims: Any = None) -> Dict[str, Any]:
+    """§7 THE FAIL-CLOSED SAFETY RULE — on the SEMANTIC CLAIMS LEDGER.
 
-    A materially analytical question that no governed route claimed has reached
-    the generic point-in-time executor. That executor answers from ONE snapshot
-    of the funded tape with whatever measure and dimension the parse produced. It
-    has no concept of a pipeline, a limit, a run rate or a forecast — so for a
-    question in one of those families it cannot be right, only plausible.
+    A question that claims structure the point-in-time executor cannot carry —
+    a change between periods, an earlier period, a pipeline dataset, a lending
+    window, a stage movement, governed limits, a forecast — must never leave
+    here with a confident current-position figure that answers something else.
 
-    These are the four measured cases this exists to stop, all of them ``ok=True``
+    These are the measured cases this exists to stop, all of them ``ok=True``
     with a green guard before it:
 
         "How many loans are we completing at the moment?"  -> 11,035 loans
         "What completion rate are we running at?"          -> £1.96bn
         "Where are we closest to our limits?"              -> WA LTV by region
-        "Which of our limits are most at risk?"            -> balance by status
+        "What is the balance of new loans this month?"     -> the whole book
+        "What was the funded balance in the prior period?" -> this period's
 
-    The check is STRUCTURAL and runs AFTER execution, not before it, for the same
-    reason the P0 receipt does: the question is not what the answer was meant to
-    be, it is what the answer demonstrably carries. An answer that DOES carry the
-    structure the question needs is left completely alone — "how does the front
-    book compare with the back book?", answered by grouping on the seasoning
-    segment with both sides present, is a real comparison reached by another
-    mechanism, and refusing it would lose a capability the product has.
+    THE GUARD READS THE LEDGER, NOT THE SENTENCE (I5). What the question asks
+    for is decided once, by the owners, in `mi_agent.semantic_claims.build`;
+    this compares those claims with what this path demonstrably executed —
+    one snapshot, one dataset, the row predicates the spec carried. A second
+    raw reader here is how "the LTV the portfolio is running at" — a level —
+    came to be refused as a trend: the temporal owner said LEVEL and a keyword
+    reader said MOVEMENT, and the reader won.
 
-    Never refuses a question the boundary did not recognise as materially
-    analytical. "Balance by region" is not analytical and keeps the answer it has
-    always had.
+    The check is STRUCTURAL and runs AFTER execution. An answer that DOES carry
+    the structure the question needs is left alone.
     """
     if not isinstance(result, dict) or not result.get("ok"):
         return result
     try:
-        from mi_workflows.analytical import intent as intent_mod
+        from mi_agent import semantic_claims as claims_mod
 
-        # GOVERNED SPAN OWNERSHIP. The intent vocabulary owns no book field, so
-        # a family word found inside a span the book has already claimed as a
-        # categorical VALUE belongs to the value. Measured: brokers called
-        # "Growth Partners" and "Completion Network" made every question about
-        # them refuse — one as a movement question, one as a pipeline question.
-        reading = intent_mod.classify(_owned_question(question, available_values))
-        if not reading.materially_analytical:
+        ledger = claims_mod.as_claims(claims)
+        if ledger is None:
+            ledger = claims_mod.build(question, available_values=available_values)
+        if not ledger.requirements:
             return result
         spec = result.get("spec") if isinstance(result.get("spec"), dict) else {}
+        executed_fields = set((spec.get("filters") or {}).keys())
+        applied = result.get("populationApplied") or (
+            (result.get("metadata") or {}).get("populationApplied")) or {}
+        if isinstance(applied, dict):
+            executed_fields |= {str(f) for f in (applied.get("fields") or ())}
         evidence = {
             # The point-in-time path reads the funded/arrears view of the loan
             # tape. It never reads the governed pipeline extract.
             "dataset": view,
-            # And it reads ONE governed snapshot. A cross-period answer comes
-            # from a route, and a route would have claimed the question.
+            # And it reads ONE governed snapshot, as at the current period. A
+            # cross-period answer comes from a route, and a route would have
+            # claimed the question.
             "periods": 1,
+            "as_at": "current",
             "forecast": False,
             "limits": False,
+            "stage_movement": False,
             "grouping": spec.get("dimension") or "",
             "populations": 0,
+            "executed_fields": sorted(executed_fields),
         }
-        unmet = intent_mod.unmet_requirements(reading, evidence=evidence)
+        unmet = claims_mod.unmet(ledger, evidence)
         if not unmet:
             return result
 
-        message = intent_mod.refusal_message(reading, unmet)
+        message = claims_mod.refusal_message(ledger, unmet)
         result["ok"] = False
         result["error"] = message
         result["answer"] = message
