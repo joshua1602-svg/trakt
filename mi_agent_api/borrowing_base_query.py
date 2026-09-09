@@ -296,6 +296,15 @@ def read(question: str, spec: Any = None, *, view: str = "funded",
     core = bool(_BB_CORE_RE.search(text))
     facility = bool(_FACILITY_RE.search(text))
     eligible = bool(_ELIGIBLE_RE.search(text))
+    # THE CAPABILITY'S OWN CLAIM (I6): "how much collateral value are we able
+    # to borrow against" names no borrowing-base word this table knows, and is
+    # a borrowing-base question. The claim is the same one the parser masked
+    # the measure binder with, so recognition and parsing cannot disagree.
+    from mi_agent.borrowing_base import capacity as _capacity
+
+    capacity = list(_capacity.claims(text))
+    if capacity:
+        core = True
     if not (core or facility or eligible):
         return Reading(False, "no borrowing-base vocabulary")
     if _CONCENTRATION_RE.search(text) and not core:
@@ -403,6 +412,8 @@ def read(question: str, spec: Any = None, *, view: str = "funded",
     measures = [m for _, m in sorted(found, key=lambda pair: pair[0])]
     if reading.intent == _INTENT_BRIDGE:
         measures = ["borrowing_base"]
+    elif not measures and capacity:
+        measures = [_capacity.measure_for(concept) for _cap, concept, *_ in capacity]
     elif not measures:
         measures = (["borrowing_base", "facility_commitment", "facility_drawn",
                      "borrowing_base_headroom", "facility_utilisation"]

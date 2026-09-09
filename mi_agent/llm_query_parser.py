@@ -4865,11 +4865,34 @@ def _deterministic_parse(question: str, semantics: dict,
     trip this, because the one builder that emitted the pair now names the shape
     it carries. The guard is here so the class cannot return silently.
     """
+    # CAPABILITY OWNERSHIP, asked ONCE before any measure binds (I6). A span a
+    # governed capability claims — "collateral value ... borrow against" is the
+    # borrowing base's — is masked from measure binding and recorded here; two
+    # capabilities on one span refuse rather than pick.
+    from . import capability_ownership as _capability
+
+    cap_claims = _capability.claims(normalise_question(question).strip(), semantics)
+    arbitration = _capability.arbitrate(cap_claims)
+    if arbitration.unresolvable:
+        names = sorted({c.capability for pair in arbitration.conflicts for c in pair})
+        meta = _det_meta("low", False, [], note="capability_conflict")
+        meta["capability_claims"] = [c.to_dict() for c in cap_claims]
+        return (MIQuerySpec(
+            intent="summary", chart_type="none", aggregation="count",
+            title=question.strip(),
+            explanation=("More than one governed capability claims the same "
+                         "words here (" + ", ".join(names) + "), so the "
+                         "question is ambiguous between them. Say which you "
+                         "mean; no answer was substituted."),
+            output_format="text"), meta)
     with geography_context(geography if geography is not None
                            else active_geography()):
         parsed = _deterministic_parse_unchecked(
             question, semantics, available_columns=available_columns,
-            available_values=available_values)
+            available_values=available_values,
+            capability_claims=cap_claims)
+    if isinstance(parsed, tuple) and isinstance(parsed[1], dict):
+        parsed[1]["capability_claims"] = [c.to_dict() for c in cap_claims]
     spec = parsed[0] if isinstance(parsed, tuple) else parsed
     if spec is not None and not _spec_shape_is_coherent(spec):
         logger.info("deterministic parse discarded an incoherent spec shape for "
@@ -4881,7 +4904,8 @@ def _deterministic_parse(question: str, semantics: dict,
 
 def _deterministic_parse_unchecked(question: str, semantics: dict,
                          available_columns=None,
-                         available_values=None) -> Tuple[MIQuerySpec, dict]:
+                         available_values=None,
+                         capability_claims=()) -> Tuple[MIQuerySpec, dict]:
     """Parse a question into (MIQuerySpec, deterministic-parser metadata).
 
     Honours explicitly-requested dimensions EXACTLY and never substitutes an
@@ -4893,6 +4917,13 @@ def _deterministic_parse_unchecked(question: str, semantics: dict,
     # `question_interpretation.normalise` and nowhere else on this path.
     q = normalise_question(question).strip()
     title = question.strip()
+    if capability_claims:
+        # A CLAIMED SPAN BELONGS TO ITS CAPABILITY. Blanked, offsets preserved,
+        # before any measure or category reader sees the sentence — the same
+        # discipline as a claimed categorical value.
+        from . import capability_ownership as _capability
+
+        q = _capability.mask(q, capability_claims)
     top_n = _detect_top_n(q)
 
     # GOVERNED SPAN OWNERSHIP. The same sentence with spans the book has already
@@ -7082,6 +7113,7 @@ def parse_with_repair(
         meta.update({k: det_meta[k] for k in (
             "explicit_dimension_requested", "requested_dimension_terms",
             "dimension_substituted", "parser_confidence", "note")})
+        meta["capability_claims"] = list(det_meta.get("capability_claims") or [])
         return det_spec, meta
 
     # No LLM at all -> deterministic only.

@@ -1,0 +1,69 @@
+{
+ "compared": 135,
+ "moved": 2,
+ "by_kind": {
+  "route_moved": 2
+ },
+ "movements": [
+  {
+   "question_id": "Q122",
+   "case": "C41",
+   "question": "How much collateral value are we able to borrow against?",
+   "kind": "route_moved",
+   "moved": [
+    "metric",
+    "aggregation",
+    "qi_subject",
+    "qi_subject_provenance",
+    "first_candidate",
+    "candidates"
+   ],
+   "before": {
+    "metric": "current_valuation_amount",
+    "aggregation": "sum",
+    "qi_subject": "current_valuation_amount",
+    "qi_subject_provenance": "explicit_user",
+    "first_candidate": "generic",
+    "candidates": []
+   },
+   "after": {
+    "metric": null,
+    "aggregation": "count",
+    "qi_subject": "How much collateral value are we able to borrow against?",
+    "qi_subject_provenance": null,
+    "first_candidate": "borrowing_base",
+    "candidates": [
+     [
+      "borrowing_base",
+      0.85,
+      "borrowing-base vocabulary:current_position"
+     ]
+    ]
+   }
+  },
+  {
+   "question_id": "Q125",
+   "case": "C42",
+   "question": "Is there room left to draw against the facility?",
+   "kind": "route_moved",
+   "moved": [
+    "first_candidate",
+    "candidates"
+   ],
+   "before": {
+    "first_candidate": "generic",
+    "candidates": []
+   },
+   "after": {
+    "first_candidate": "borrowing_base",
+    "candidates": [
+     [
+      "borrowing_base",
+      0.85,
+      "borrowing-base vocabulary:current_position"
+     ]
+    ]
+   }
+  }
+ ]
+}
