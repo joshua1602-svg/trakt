@@ -783,3 +783,75 @@ class TestAPartialRunIsNeverAVerdict:
         assert payload["adjudication"]["MI_QUERY_AGENT_V1_LIVE_READY"] == "NO"
         assert payload["questions"] == []
         assert "refused mid-run" in payload["not_executable"]
+
+
+class TestTheSentinelIsNeverMistakenForData:
+    """E5/E6 — two examiner defects the full numeric evidence exposed."""
+
+    def _q(self, **over):
+        base = {"question_id": "Q109", "canonical_case_id": "C37", "variant_id": "v1",
+                "capability_family": "risk_limits_concentration", "question": "q",
+                "expected_route": "risk_limits", "acceptable_routes": ["risk_limits"],
+                "expected_answerability": "ANSWER", "expected_semantics": "s",
+                "expected_refusal_reason": None, "truth_method": "T1_CROSS_SURFACE",
+                "truth_key": "risk_limits_closest",
+                "truth_endpoint": "GET /mi/risk-limits",
+                "checks": ["names_closest_test"], "answerability_rule": None,
+                "notes": ""}
+        base.update(over)
+        return base
+
+    def test_an_unavailable_name_is_indeterminate_not_a_failure(self, collected):
+        # LIVE: the service named its closest test correctly and was scored
+        # WRONG for "not naming __UNAVAILABLE__".
+        blind = dict(collected)
+        blind["truths"] = dict(collected["truths"], risk_limits_closest=UNAVAILABLE)
+        row = acc.score(self._q(), envelope(
+            "Closest to breach: Borrower-age exposure — below 55 (headroom 0.00 pp)."),
+            blind, {})
+        assert row["checks"][0]["verdict"] == acc.INDET
+        assert row["outcome"] == acc.CORRECT
+
+    def test_a_named_test_that_is_absent_from_the_answer_still_fails(self, collected):
+        row = acc.score(self._q(), envelope("Nothing is near a limit."),
+                        collected, {})
+        assert row["outcome"] == acc.WRONG
+
+    def test_absent_recognises_every_sentinel(self):
+        assert acc.absent(UNAVAILABLE) and acc.absent(UNRESOLVED) and acc.absent(None)
+        assert not acc.absent("Top 3 brokers") and not acc.absent(0.0)
+
+    def test_counts_are_compared_against_counts_not_balances(self, collected):
+        # LIVE: "How many cases are at each pipeline stage?" answered 2,120 at
+        # KFI — which is exactly the independent KFI count — and was failed
+        # against the KFI BALANCE of 455,233,090.
+        q = {"question_id": "Q115", "canonical_case_id": "C39", "variant_id": "v1",
+             "capability_family": "pipeline_stage_movement", "question": "q",
+             "expected_route": "generic", "acceptable_routes": ["generic"],
+             "expected_answerability": "ANSWER", "expected_semantics": "s",
+             "expected_refusal_reason": None,
+             "truth_method": "T2_RECOMPUTED_IDENTITY",
+             "truth_key": "pipeline_stage_breakdown",
+             "truth_endpoint": "GET /mi/pipeline/snapshot",
+             "checks": ["cells_match_truth_rows"], "answerability_rule": None,
+             "notes": ""}
+        answer = envelope("stages", artifacts=[{"type": "table", "rows": [
+            {"stage": "KFI", "loan_count": 20},
+            {"stage": "Application", "loan_count": 22}]}])
+        row = acc.score(q, answer, collected, {})
+        assert row["outcome"] == acc.CORRECT, row["checks"][0]["detail"]
+
+    def test_a_genuinely_wrong_count_still_fails(self, collected):
+        q = {"question_id": "Q115", "canonical_case_id": "C39", "variant_id": "v1",
+             "capability_family": "pipeline_stage_movement", "question": "q",
+             "expected_route": "generic", "acceptable_routes": ["generic"],
+             "expected_answerability": "ANSWER", "expected_semantics": "s",
+             "expected_refusal_reason": None,
+             "truth_method": "T2_RECOMPUTED_IDENTITY",
+             "truth_key": "pipeline_stage_breakdown",
+             "truth_endpoint": "GET /mi/pipeline/snapshot",
+             "checks": ["cells_match_truth_rows"], "answerability_rule": None,
+             "notes": ""}
+        answer = envelope("stages", artifacts=[{"type": "table", "rows": [
+            {"stage": "KFI", "loan_count": 99}]}])
+        assert acc.score(q, answer, collected, {})["outcome"] == acc.WRONG

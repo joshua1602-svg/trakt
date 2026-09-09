@@ -315,7 +315,9 @@ def _close(a: float, b: float, rel: float = 0.005, absolute: float = 0.02) -> bo
 class Ctx:
     def __init__(self, question: Dict[str, Any], envelope: Dict[str, Any],
                  truths: Dict[str, Any], run: Dict[str, Any]):
-        self.q = question
+        self.q = dict(question)
+        self.q.setdefault("truth_description",
+                          truth_mod.describe(question.get("truth_key")))
         self.e = envelope
         self.t = truths
         self.run = run
@@ -326,6 +328,19 @@ class Ctx:
 
     def truth(self, key: Optional[str] = None) -> Any:
         return self.t.get(key or (self.q.get("truth_key") or ""), UNAVAILABLE)
+
+
+def absent(value: Any) -> bool:
+    """Whether a truth value is a SENTINEL rather than a value.
+
+    UNAVAILABLE and UNRESOLVED are strings. Every check that guarded with
+    `isinstance(value, str)` therefore accepted `"__UNAVAILABLE__"` as a
+    perfectly good answer and compared against it — which is how the live run
+    reported that the service "does not name __UNAVAILABLE__, the independently
+    closest test" and scored two correct answers WRONG for it. A sentinel that
+    can be mistaken for data is a sentinel that will be."""
+    return value is None or value is UNAVAILABLE or value is UNRESOLVED or (
+        isinstance(value, str) and value in (UNAVAILABLE, UNRESOLVED))
 
 
 def _c_numeric_matches_truth(c: Ctx) -> Tuple[str, str, Optional[str]]:
@@ -447,11 +462,23 @@ def _c_cells_reconcile_to_pipeline_count(c: Ctx):
 
 def _c_cells_match_truth_rows(c: Ctx) -> Tuple[str, str, Optional[str]]:
     rows = c.truth()
-    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+    if absent(rows) or not isinstance(rows, list) or not rows or not isinstance(
+            rows[0], dict):
         return INDET, "no independent grouped rows", R_TRUTH_UNAVAILABLE
-    numeric_field = "balance" if any(isinstance(r.get("balance"), (int, float))
-                                     for r in rows) else "count"
-    hints = _BALANCE_HINTS if numeric_field == "balance" else _COUNT_HINTS
+    # WHICH QUANTITY IS BEING COMPARED. This used to prefer `balance` whenever
+    # the truth rows carried one — so a question that asked for CASE COUNTS by
+    # pipeline stage had its counts compared against the stage BALANCES, and
+    # every row "disagreed" by four orders of magnitude on a service that had
+    # answered correctly. The unit is declared in the frozen bank's own truth
+    # description; read that rather than guessing from what the truth happens
+    # to carry.
+    unit = str((c.q.get("truth_description") or
+                truth_mod.describe(c.q.get("truth_key"))).get("unit", "")).lower()
+    wants_count = "count" in unit
+    numeric_field = "count" if wants_count else (
+        "balance" if any(isinstance(r.get("balance"), (int, float)) for r in rows)
+        else "count")
+    hints = _COUNT_HINTS if numeric_field == "count" else _BALANCE_HINTS
     cells = _cells(c.e, hints)
     if not cells:
         return INDET, "the answer published no grouped cells", R_NO_PRIMARY
@@ -482,7 +509,7 @@ def _c_top_area_matches_truth(c: Ctx) -> Tuple[str, str, Optional[str]]:
         return INDET, "no independent geography rows", R_TRUTH_UNAVAILABLE
     top = max(areas, key=lambda a: a.get("balance") or 0)
     name = str(top.get("name") or top.get("area") or top.get("itl3") or "")
-    if not name:
+    if not name or absent(name):
         return INDET, "the independent surface names no area", R_TRUTH_UNAVAILABLE
     if _norm(name) in _norm(c.text) or any(_norm(name) == _norm(label)
                                            for label, _ in (_cells(c.e, _BALANCE_HINTS) or [])):
@@ -492,7 +519,7 @@ def _c_top_area_matches_truth(c: Ctx) -> Tuple[str, str, Optional[str]]:
 
 def _c_top_region_matches_truth(c: Ctx) -> Tuple[str, str, Optional[str]]:
     top = c.t.get("strat_region_top", UNAVAILABLE)
-    if top is UNAVAILABLE or not isinstance(top, str):
+    if absent(top) or not isinstance(top, str):
         return INDET, "no independent largest region", R_TRUTH_UNAVAILABLE
     cells = _cells(c.e, _BALANCE_HINTS)
     if cells:
@@ -757,7 +784,7 @@ def _c_names_both_periods(c: Ctx) -> Tuple[str, str, Optional[str]]:
 
 def _c_names_closest_test(c: Ctx) -> Tuple[str, str, Optional[str]]:
     name = c.t.get("risk_limits_closest", UNAVAILABLE)
-    if not isinstance(name, str) or not name.strip():
+    if absent(name) or not isinstance(name, str) or not name.strip():
         return INDET, "the independent monitor names no closest test", R_TRUTH_UNAVAILABLE
     if _norm(name) in _norm(c.text):
         return PASS, f"names {name}, the independently closest test", None
