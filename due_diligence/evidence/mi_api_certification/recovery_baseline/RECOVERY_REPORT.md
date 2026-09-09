@@ -169,8 +169,34 @@ run at HEAD and at the untouched baseline, compared by test id:
 | CAP / G6 / G6-completion | 135 + 20 files | 0 |
 
 **Full suite** (`tests`, `mi_agent_api/tests`, `mi_agent/tests`,
-`question_interpretation/tests`): see section I — it is the last gate and its
-result is reported there, not assumed here.
+`question_interpretation/tests`), run end to end at HEAD and at the untouched
+baseline:
+
+| | baseline | HEAD |
+|---|---|---|
+| failed | 241 | **240** |
+| passed | 11,962 | **11,964** |
+| skipped | 761 | 761 |
+| runtime | 1:12:02 | 1:13:52 |
+
+One fewer failure and two more passes. The two failures that differ were run
+individually at both revisions:
+
+* `test_registry_governance::test_checked_in_registry_matches_generator` —
+  fails at BASELINE, passes at HEAD.
+* `mi_agent/tests/test_semantic_census::test_no_question_has_moved` — passes at
+  baseline, FAILED at head until its artifact was regenerated. This is the
+  estate's own census guard; see section D. Five questions moved, all already
+  classified, and the artifact is regenerated in the commit that reports them.
+
+The 241/240 failures are overwhelmingly the absent demo workspace data in this
+container, not this work: they are present, in the same tests, before any of it.
+
+**A limitation in how this was captured.** Both full runs were piped through
+`tail -120`, so only the last ~77 (baseline) and ~115 (head) failure identities
+were recorded, and a line-by-line comparison of the complete 240/241 sets is
+not available from them. The identity-level evidence is the per-surface runs
+above, which captured every failure in every file touching every changed owner.
 
 ## H. Ownership review (Phase 8)
 
