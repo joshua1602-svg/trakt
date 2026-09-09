@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Sequence
 
 import pandas as pd
 
@@ -100,12 +100,61 @@ def _prefix_to_itl3(outward: str, by_prefix: Dict[str, Dict[str, str]]) -> Optio
     return None
 
 
+def _itl3_code_field(columns: Sequence[str], geography: Any) -> Optional[str]:
+    """THE ITL3 CODE COLUMN THIS BOOK CARRIES — CHOSEN BY NAME.
+
+    A COLUMN OF CODES IS NOT A COLUMN OF PLACE NAMES, and asking whether it
+    looks like one decides this surface's availability by coincidence.
+
+    `mi_geography.code_field` answers with a FRAME, which puts the column's
+    VALUES to the region ladder before accepting it. That test is right for a
+    region column, whose values are places, and wrong for a code column, whose
+    values are codes: the ladder accepts `TLD33` and rejects `TLC22`, accepts
+    `TLK41` and rejects `TLK12`, so whether a book has a geography view at all
+    came down to which areas happened to appear in the first rows of its tape.
+    Measured live: the ITL3 exposure, the regional exposure and the largest-
+    regional-concentration answers were all lost on a book that carries the
+    codes perfectly well, and the same questions on the same book answered
+    correctly through routes that never consult this chooser.
+
+    So the question asked here is the one the certified build asked — DOES THE
+    BOOK CARRY THIS COLUMN — and `available_columns` is how the owner is asked
+    it. The ORDER is still the owner's (`FALLBACK_BASIS_ORDER`) and so is the
+    contract's precedence; this module holds no list of field names of its own.
+
+    THE CONTRACT'S BASIS STILL WINS, and that part is kept from the
+    consolidation rather than reverted: a book measured on the obligor codes is
+    measured on the obligor codes. What is restored is the SEARCH beneath it.
+    The certified build knew nothing of a contract and simply took the first of
+    the two code columns the book carried, so a contract naming a basis this
+    book does not carry must fall through to the remaining bases rather than
+    end the search — otherwise the repair would keep the very outcome it
+    exists to remove, an available book reported as having no geography.
+    """
+    from mi_agent import mi_geography as _geo
+
+    # The owner's own reading of which basis is in force — the contract passed
+    # in, else the one bound for this request. Re-deriving it here would put a
+    # second reader of the same fact in the estate, which is the defect the
+    # consolidation existed to remove and is not the defect being repaired.
+    stated = _geo._contract_basis(geography)
+    order = ((stated,) + tuple(b for b in _geo.FALLBACK_BASIS_ORDER if b != stated)
+             if stated else _geo.FALLBACK_BASIS_ORDER)
+    for basis in order:
+        field = _geo.code_field_for_basis(basis, available_columns=columns)
+        if field:
+            return field
+    return None
+
+
 def exposure_by_itl3(df: pd.DataFrame, geography: Any = None) -> Dict[str, Any]:
     """Exposure and loan count per ITL3 area, tape-driven. Never raises.
 
-    The ITL3 code column is the ONE geography owner's choice for this frame
-    under the contract in force (G6): a borrower-basis book is measured on the
-    obligor codes, a collateral-basis book on the collateral codes."""
+    The ITL3 code column is the ONE geography owner's field for the contract in
+    force (G6) — a borrower-basis book is measured on the obligor codes, a
+    collateral-basis book on the collateral codes — resolved against the columns
+    this book HAS, never against what its code values look like. See
+    `_itl3_code_field`."""
     from mi_agent import mi_geography as _geo
 
     lookup = _load_lookup()
@@ -113,7 +162,7 @@ def exposure_by_itl3(df: pd.DataFrame, geography: Any = None) -> Dict[str, Any]:
     name_by_code = lookup["name_by_code"]
     columns = list(getattr(df, "columns", []))
 
-    itl3_field = _geo.code_field(df, geography=geography)
+    itl3_field = _itl3_code_field(columns, geography)
     pc_field = next((f for f in _POSTCODE_FIELDS if f in columns), None)
     bal = coerce_numeric(df[_BALANCE]) if _BALANCE in columns else None
     if bal is None:
