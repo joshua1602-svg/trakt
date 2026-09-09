@@ -15,14 +15,28 @@ import pytest
 
 @pytest.fixture(scope="session")
 def demo_env():
+    """The demo book's environment, RESTORED when this file's tests finish.
+
+    An earlier cut of this fixture mutated `os.environ` and left it that way,
+    which changed the book that every LATER test file resolved: the estate's
+    own census guard (`mi_agent/tests/test_semantic_census.py`) passed alone
+    and failed when it ran after these tests, because it was censusing a
+    different book. A test file that changes the meaning of the next one is
+    the same defect this whole sprint is about, in the test suite.
+    """
     warnings.simplefilter("ignore")
+    before = dict(os.environ)
     os.environ.setdefault("TRAKT_RUNTIME_MODE", "test")
     from demo_platform import config as cfg
     os.environ.update(cfg.mi_env(period_role="current"))
     os.environ["MI_AGENT_LLM_PARSER"] = "off"
     os.environ["MI_AGENT_LLM_ENABLED"] = "0"
     os.environ["MI_AGENT_AUTH_ENABLED"] = "false"
-    return True
+    try:
+        yield True
+    finally:
+        os.environ.clear()
+        os.environ.update(before)
 
 
 @pytest.fixture(scope="session")
@@ -51,9 +65,26 @@ def columns(frame):
 
 @pytest.fixture(scope="session")
 def geography(frame):
-    from mi_agent import llm_query_parser as P
+    """The demo book's geography contract — RESOLVED, never INSTALLED.
+
+    An earlier cut called `bind_geography`, which installs the contract for the
+    remainder of the enclosing `geography_context`. With no enclosing context
+    it stays installed for the whole PROCESS, and a session-scoped fixture
+    cannot undo that in time: its teardown runs at the end of the entire
+    pytest session, long after other files have run. The estate's census guard
+    then censused the corpus with this book's contract in force and reported a
+    movement ("by collateral region" binding `collateral_geography` instead of
+    `geographic_region_collateral`) that was an artefact of the test run.
+
+    Nothing here needs it installed: `ParsedQuestion.parse(geography=...)`
+    opens its own context, and every other test passes the contract
+    explicitly. Serving is unaffected either way — `mi_service` opens
+    `geography_context(None)` at the outermost edge of every request, so a
+    bound contract cannot outlive one.
+    """
     from mi_agent_api import mi_service
-    return P.bind_geography(mi_service._resolve_geography(None, None, frame))
+
+    return mi_service._resolve_geography(None, None, frame)
 
 
 @pytest.fixture
