@@ -855,3 +855,71 @@ class TestTheSentinelIsNeverMistakenForData:
         answer = envelope("stages", artifacts=[{"type": "table", "rows": [
             {"stage": "KFI", "loan_count": 99}]}])
         assert acc.score(q, answer, collected, {})["outcome"] == acc.WRONG
+
+
+class TestE7AndE8:
+    """The last two examiner defects the corrected baseline exposed."""
+
+    def _q(self, **over):
+        base = {"question_id": "Q034", "canonical_case_id": "C12", "variant_id": "v1",
+                "capability_family": "geography", "question": "q",
+                "expected_route": "geo_exposure", "acceptable_routes": ["geo_exposure"],
+                "expected_answerability": "ANSWER", "expected_semantics": "s",
+                "expected_refusal_reason": None, "truth_method": "T1_CROSS_SURFACE",
+                "truth_key": "geo_total", "truth_endpoint": "GET /mi/geo/exposure",
+                "checks": ["cells_reconcile_to_geo_total"], "answerability_rule": None,
+                "notes": ""}
+        base.update(over)
+        return base
+
+    def test_a_capped_table_is_not_required_to_sum_to_the_uncapped_total(self, collected):
+        # LIVE: 15 rows published, "across 57 ITL3 area(s)" declared, failed
+        # against the 57-area total.
+        env = envelope("Largest geographic concentration: Swindon at £530k across "
+                       "57 ITL3 area(s).",
+                       artifacts=[{"type": "table", "title": "Funded exposure by ITL3 "
+                                   "area (top 15)",
+                                   "rows": [{"area": f"A{i}", "balance": 100000.0}
+                                            for i in range(15)]}])
+        row = acc.score(self._q(), env, collected, {})
+        assert row["checks"][0]["verdict"] == acc.INDET
+        assert "CAPPED" in row["checks"][0]["detail"]
+        assert row["outcome"] == acc.CORRECT
+
+    def test_an_uncapped_table_that_does_not_sum_still_fails(self, collected):
+        env = envelope("Exposure by area.", artifacts=[{"type": "table",
+                       "rows": [{"area": "Edinburgh", "balance": 90000000.0},
+                                {"area": "Bristol", "balance": 1.0}]}])
+        row = acc.score(self._q(), env, collected, {})
+        assert row["outcome"] == acc.WRONG
+
+    def test_the_cap_is_never_inferred_from_the_numbers_disagreeing(self, collected):
+        # Two rows, no declaration of any cap: that is a reconciliation failure,
+        # not a cap.
+        env = envelope("Exposure by area.", artifacts=[{"type": "table",
+                       "rows": [{"area": "A", "balance": 1.0}, {"area": "B", "balance": 2.0}]}])
+        assert acc._declared_cap(env, 2) is None
+
+    def test_a_fraction_series_is_compared_in_points_when_the_artifact_says_so(
+            self, collected):
+        q = self._q(canonical_case_id="C22", truth_key="evolution_wa_ltv_series",
+                    checks=["series_matches_truth"], expected_route="evolution",
+                    acceptable_routes=["evolution"])
+        env = envelope("WA current LTV over 2 period(s): latest 41.7%.", artifacts=[{
+            "type": "chart", "valueKey": "value", "xKey": "period",
+            "displayHints": {"value": {"format": "pct", "scale": "percent_fraction"}},
+            "rows": [{"period": "2026-05", "value": 0.415},
+                     {"period": "2026-06", "value": 0.417}]}])
+        row = acc.score(q, env, collected, {})
+        assert row["checks"][0]["verdict"] == acc.PASS, row["checks"][0]["detail"]
+
+    def test_a_small_value_is_not_assumed_to_be_a_fraction(self, collected):
+        # No declaration: 0.417 stays 0.417 and disagrees with 41.7 points.
+        q = self._q(canonical_case_id="C22", truth_key="evolution_wa_ltv_series",
+                    checks=["series_matches_truth"], expected_route="evolution",
+                    acceptable_routes=["evolution"])
+        env = envelope("series", artifacts=[{
+            "type": "chart", "valueKey": "value", "xKey": "period",
+            "rows": [{"period": "2026-05", "value": 0.415},
+                     {"period": "2026-06", "value": 0.417}]}])
+        assert acc.score(q, env, collected, {})["outcome"] == acc.WRONG

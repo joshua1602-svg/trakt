@@ -436,12 +436,45 @@ def _reconcile(c: Ctx, total_key: str, hints: Tuple[str, ...]
     cells = _cells(c.e, hints)
     if not cells:
         return INDET, "the answer published no grouped cells to reconcile", R_NO_PRIMARY
+    capped = _declared_cap(c.e, len(cells))
+    if capped:
+        return INDET, (f"the table is CAPPED ({capped}); its {len(cells)} visible "
+                       f"cells are not the whole population and cannot be required "
+                       f"to sum to {float(total):,.2f}"), R_TRUTH_UNAVAILABLE
     summed = sum(v for _, v in cells)
     if _close(summed, float(total), rel=0.01, absolute=1.0):
         return PASS, (f"{len(cells)} cells sum to {summed:,.2f} against the "
                       f"independent {total_key} {float(total):,.2f}"), None
     return FAIL, (f"{len(cells)} cells sum to {summed:,.2f}, but the independent "
                   f"{total_key} is {float(total):,.2f}"), R_CELLS
+
+
+_CAP_RE = re.compile(r"\b(?:across|covering|of)\s+(\d+)\s+(?:ITL3\s+)?"
+                     r"(?:areas?|groups?|regions?|categories|rows?|brokers?)\b", re.I)
+_TOP_RE = re.compile(r"\btop\s+(\d+)\b", re.I)
+
+
+def _declared_cap(envelope: Dict[str, Any], visible: int) -> Optional[str]:
+    """Whether the published table is a TOP-N view of a larger population.
+
+    E7. "Swindon at £530k … across 57 ITL3 area(s)" published fifteen rows, and
+    the check demanded that fifteen rows sum to the total of fifty-seven. A
+    capped table asserts its visible rows and its total separately; it does not
+    assert that the two are the same thing. The cap is read from what the
+    answer itself declares — its own group count, a "top N" title, or an
+    `otherCategories` residual — never inferred from the numbers disagreeing,
+    which would make every real reconciliation failure look like a cap."""
+    artifact = _rows_artifact(envelope) or {}
+    if artifact.get("otherCategories"):
+        return "declares otherCategories"
+    title = str(artifact.get("title") or "")
+    m = _TOP_RE.search(title)
+    if m and int(m.group(1)) <= visible:
+        return f"title declares top {m.group(1)}"
+    m = _CAP_RE.search(str(envelope.get("answer") or ""))
+    if m and int(m.group(1)) > visible:
+        return f"answer declares {m.group(1)} groups, {visible} published"
+    return None
 
 
 def _c_cells_reconcile_to_total(c: Ctx):
@@ -567,11 +600,26 @@ def _answer_series(c: Ctx) -> Optional[List[Tuple[str, float]]]:
     value_key = value_key or _pick_column(rows, _BALANCE_HINTS + _COUNT_HINTS, numeric=True)
     if not period_key or not value_key:
         return None
+    # E8 — ONE UNIT CONVENTION, READ FROM THE ARTIFACT'S OWN DECLARATION.
+    #
+    # The evolution surface stores a weighted-average LTV as a FRACTION and its
+    # chart declares `displayHints[value].scale = "percent_fraction"`; the
+    # snapshot tile and the bank's truth are in percentage POINTS. The truth was
+    # normalised to points and the answer's rows were not, so 0.47 was compared
+    # with 47.04 and a correct series failed three times. The scale is now read
+    # from what the artifact declares about itself, and only from that — a
+    # value under 1.0 is never assumed to be a fraction, because a 0.4% rate
+    # exists and a guess would turn it into 40%.
+    scale = 1.0
+    hints = artifact.get("displayHints") or {}
+    hint = hints.get(value_key) or hints.get("value") or {}
+    if str(hint.get("scale") or "").lower() == "percent_fraction":
+        scale = 100.0
     out = []
     for row in rows:
         value = row.get(value_key)
         if isinstance(value, (int, float)) and not isinstance(value, bool):
-            out.append((str(row.get(period_key)), float(value)))
+            out.append((str(row.get(period_key)), float(value) * scale))
     return out or None
 
 
