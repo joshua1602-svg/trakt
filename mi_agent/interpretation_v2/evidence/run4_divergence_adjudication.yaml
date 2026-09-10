@@ -1,0 +1,249 @@
+# =========================================================================
+# Phase 1 — why the 25 non-invariant Run 4 canonicals disagree.
+# =========================================================================
+#
+# Each entry is adjudicated from the Run 4 payloads alone, after putting all
+# three variants through the candidate NORMAL FORM (defaults filled, top-level
+# measures folded into the output list, legacy `period_pair` dropped, period
+# labels treated as wording for every relative form). What survives that is a
+# real disagreement; what does not was only a choice between two permitted
+# encodings.
+#
+# The brief predicted the divergence would be concentrated in three families —
+# output cardinality (~11), movement/bridge (~7), relative time (~5) — i.e. 23
+# of 25 attributable to contract redundancy. The measurement does not support
+# that, and the reasons below say case by case why.
+#
+# The `outputs` plan slot is the most frequent divergent slot (11 canonicals),
+# which is what made the output-cardinality hypothesis look strong. But it
+# decomposes into three quite different things, and only one of them is a
+# contract problem:
+#
+#   MEASURE SET differs   12 canonicals  the model chose 1 / 2 / 3 measures for
+#                                        an open question. No schema fixes this.
+#   DIMENSION SET differs  6 canonicals  one variant dropped a grouping the
+#                                        question states. A model miss.
+#   NESTING only           2 canonicals  same measures, same dimensions, wrapped
+#                                        differently. THIS is the redundancy.
+#
+# causes: contract_redundancy | under_determined_question | model_miss |
+#         wording_difference | missing_contract_slot | compiler_difference
+
+version: 1
+source_run: evidence/run4_135_with_metadata_access.json
+
+adjudication:
+
+  # ---- contract redundancy: two encodings of one meaning ---------------- #
+
+  SM09:
+    cause: contract_redundancy
+    reason: >-
+      The only difference is omitted-versus-explicit defaults: A wrote
+      time={form: current, labels: ['this period']} and comparison={kind: none};
+      B and C omitted both blocks entirely. Identical meaning. This is the one
+      canonical the normal form resolves on its own, proving the mechanism works
+      — and also showing how little of the total it accounts for.
+
+  Q12:
+    cause: contract_redundancy
+    reason: >-
+      All three name one measure (current_outstanding_balance) and the same two
+      dimensions (ltv_bucket, age_bucket). A and B put them at top level; C
+      wrapped them in two outputs. Same analysis, two encodings. Fixed by one
+      output representation.
+
+  Q17:
+    cause: contract_redundancy
+    reason: >-
+      Same measure, same three dimensions in all three. A and C used three
+      outputs; B used top-level with three dimensions. Pure nesting. Fixed by
+      one output representation.
+
+  Q19:
+    cause: contract_redundancy
+    reason: >-
+      "How did the Direct book change last month?" — A encoded the period as
+      previous_reporting_period + grain monthly; B and C as relative_pair +
+      grain monthly + periods_back 1. Two spellings of one relative
+      relationship. Fixed by one canonical relative form (anchor + offset +
+      unit). Note the normal form already equalises the omitted periods_back;
+      what remains is the form name itself.
+
+  Q18:
+    cause: contract_redundancy
+    reason: >-
+      "Give me a summary of how the funded book moved over the last month."
+      A and C chose capability funded_bridge / measure funded_balance_movement;
+      B chose period_movement / current_outstanding_balance with an explicit
+      relative_pair. These are two capabilities for one economic analysis, and
+      the model is picking between internal implementation owners. C then
+      REFUSED because funded_bridge + movement left the period at `current`.
+      This is the movement/bridge boundary the brief names, and it is real.
+
+  Q20:
+    cause: contract_redundancy
+    reason: >-
+      Same shape as Q18 inverted: A and C chose period_movement, B chose
+      funded_bridge and refused for the same reason. Two internal owners, one
+      user meaning.
+
+  Q22:
+    cause: contract_redundancy
+    reason: >-
+      "Which source portfolio contributed most to balance growth last month?"
+      A expressed it as operation=rank over dimension source_portfolio_id;
+      B and C as operation=compare with comparison={population_pair, direct,
+      acquired}. Ranking a two-valued dimension and comparing its two values are
+      the same request. A second redundancy the brief did not predict.
+
+  SM07:
+    cause: contract_redundancy
+    reason: >-
+      "What was the amount change on cases that stayed in Application?"
+      A and C filtered origin_stage == APPLICATION; B filtered pipeline_stage ==
+      APPLICATION. Two governed concepts address the same stage in a stayer
+      context — the specialist dimension and the generic one overlap. Narrow and
+      real.
+
+  # ---- under-determined questions: no schema change fixes these --------- #
+
+  Q08:
+    cause: under_determined_question
+    reason: >-
+      Operation rank versus summary AND measure set {concentration_share} /
+      {concentration_exposure} / both. "Where are our largest concentrations
+      today?" and "Summarise the main current portfolio concentrations" are not
+      the same request, and neither says how many figures it wants. Already
+      marked human_review before this phase.
+
+  Q09:
+    cause: under_determined_question
+    reason: >-
+      Operation summary (A, C) versus rank (B). "Are any limits breached or
+      close to breach?" asks for a status; "Which of our tests are most at risk
+      today?" asks for an ordering. The frozen variants differ in emphasis and
+      the contract faithfully records the difference.
+
+  Q25:
+    cause: under_determined_question
+    reason: >-
+      A reported {limit_breach_status}; B and C added limit_headroom. "Do we
+      expect to breach any concentration tests?" does not say whether headroom
+      is part of the answer. A schema with one output representation still has
+      to be told how many outputs.
+
+  NL5:
+    cause: under_determined_question
+    reason: >-
+      Same measure-set split as Q25 ({breach_status} versus
+      {breach_status, headroom}), plus grain monthly versus quarterly for "the
+      next three months" / "the next quarter" — which are different horizons in
+      the frozen wording, not two encodings of one.
+
+  NL6:
+    cause: under_determined_question
+    reason: >-
+      Measure sets of size one, two and three: {headroom} / {headroom,
+      utilisation} / {breach_status, headroom, utilisation}. "Which limits have
+      the least headroom?" names one measure; the other two variants add context
+      measures a reader might reasonably want. Genuinely open.
+
+  NL1:
+    cause: under_determined_question
+    reason: >-
+      Operation series versus compare, and measure sets of four versus two.
+      "The profile of our new lending" does not name its measures at all.
+      expected_semantics.yaml already records an unresolved tension on this
+      question's population, and it is marked human_review.
+
+  NL3:
+    cause: under_determined_question
+    reason: >-
+      Operations point_in_time / forecast_milestone / forecast_projection, and
+      three different measure sets. The question asks for a stock AND a
+      projection AND a timing across two capabilities. Marked human_review
+      before this phase; the brief's own ruling was not to settle it here.
+
+  NL4:
+    cause: under_determined_question
+    reason: >-
+      Capability forecast versus pipeline; forecast_completion_rate versus
+      pipeline_case_count filtered to COMPLETED. Independent truth Q4.2
+      classifies this as a RUN_RATE operation, which this vocabulary does not
+      carry — a genuine vocabulary gap already recorded, not a redundancy.
+
+  NL7:
+    cause: under_determined_question
+    reason: >-
+      "Riskier" names no governed measure. B clarified for exactly that reason
+      and A and C each picked {current_loan_to_value, youngest_borrower_age}
+      on their own initiative. The disagreement is about what the question
+      means, not how to encode it. (A and C additionally differ in nesting,
+      which the normal form would resolve — but B's clarification would not
+      become a plan.)
+
+  NL8:
+    cause: under_determined_question
+    reason: >-
+      Capability period_movement versus generic_analysis, operation compare
+      versus series, and time relative_pair / previous_reporting_period /
+      series. The independent truth gives "two or more governed snapshots"
+      without fixing whether that is a pair or a series, and the question does
+      not either. Marked human_review.
+
+  # ---- model misses: the question states it, one variant dropped it ----- #
+
+  Q14:
+    cause: model_miss
+    reason: >-
+      All three variants say region. B emitted only erm_product_type and
+      dropped the region grouping. Identical contract, one variant read the
+      sentence less completely. No schema change prevents this.
+
+  Q16:
+    cause: model_miss
+    reason: >-
+      Inverted: B included canonical_region_reporting, A and C dropped it,
+      though all three name region or geography. Same class as Q14.
+
+  Q21:
+    cause: model_miss
+    reason: >-
+      "Among loans with current LTV above 50%, where did balance increase the
+      most?" — C dropped the region dimension that A and B both carried. The
+      word "where" is the grouping, and one variant did not bind it.
+
+  # ---- legitimate wording difference: not a defect ---------------------- #
+
+  Q10:
+    cause: wording_difference
+    reason: >-
+      Q10B literally asks for "an overview of the pipeline by size and stage"
+      and the model correctly emitted a breakdown by pipeline_stage and
+      ticket_bucket. Q10A and Q10C ask only to summarise the pipeline. The
+      frozen variants are not semantically identical, so divergence here is
+      correct behaviour and should not be normalised away.
+
+  # ---- missing contract slot: already fixed after Run 4 ----------------- #
+
+  Q23:
+    cause: missing_contract_slot
+    reason: >-
+      "When does the funded book reach the £100m milestone?" — A and B encoded
+      the threshold as a filter on forecast_funded_balance; C declined to and
+      clarified. Neither was right: a milestone target is not a filter. Fixed by
+      the `target` slot added in f6958e0, after Run 4 was measured. A full
+      re-run would show the effect.
+
+  Q24:
+    cause: missing_contract_slot
+    reason: >-
+      Same cause as Q23: A clarified rather than express £250m as a filter, B
+      and C expressed it as one. Addressed by the `target` slot.
+
+  NL2:
+    cause: missing_contract_slot
+    reason: >-
+      Same cause again: B clarified on the £100m threshold while A and C
+      encoded it as a filter. Addressed by the `target` slot.
