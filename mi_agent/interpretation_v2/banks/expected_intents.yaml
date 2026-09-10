@@ -405,6 +405,17 @@ expectations:
       comparison: none
 
   # ---- pipeline stage movement ------------------------------------------ #
+  #
+  # `temporal` is deliberately UNSTATED for all nine. The window a stage
+  # movement spans is owned by the pipeline_stage_movement capability, not
+  # named by the question: "How many cases moved from KFI to Application?" is
+  # complete as it stands. These entries originally expected `relative_pair`,
+  # under a compiler rule that demanded the intent name two periods — a rule
+  # the first live run showed to be wrong, because it asked the interpreter to
+  # specify a methodology detail it is deliberately never shown. The rule was
+  # corrected; these expectations follow it. Scoring a period the question does
+  # not determine would be marking the interpreter against the fixture's
+  # assumption rather than against the question.
   SM01:
     derivation: 'Source subtype: transition. Cases counted moving between two
       named stages, period on period.'
@@ -412,7 +423,6 @@ expectations:
       capability: pipeline_stage_movement
       operation: transition
       population: [pipeline, all, any]
-      temporal: relative_pair
       comparison: none
 
   SM02:
@@ -422,7 +432,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: transition
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   SM03:
     derivation: 'Source subtype: transition.'
@@ -430,7 +440,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: transition
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   SM04:
     derivation: 'Source subtype: transition, measured in value.'
@@ -438,7 +448,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: transition
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   SM05:
     derivation: 'Source subtype: new_arrival — cases entering a stage from
@@ -447,7 +457,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: arrivals
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   SM06:
     derivation: 'Source subtype: stayer — cases present at a stage in both
@@ -456,7 +466,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: stayers
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   SM07:
     derivation: 'Source subtype: stayer_amount_change — the VALUE change on the
@@ -465,7 +475,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: stayers
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   SM08:
     derivation: 'Source subtype: departure — where leavers went, so the answer
@@ -474,7 +484,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: departures
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   SM09:
     derivation: 'Source subtype: reconciliation — opening, arrivals, departures
@@ -483,7 +493,7 @@ expectations:
       capability: pipeline_stage_movement
       operation: reconciliation
       population: [pipeline, all, any]
-      temporal: relative_pair
+      comparison: none
 
   # ---- analytical-intent NL bank ---------------------------------------- #
   NL1:
