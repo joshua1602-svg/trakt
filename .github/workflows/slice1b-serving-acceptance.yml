@@ -1,0 +1,133 @@
+name: Slice 1B live serving acceptance
+
+# Proves the ONE production assertion slice 1B adds: that for the allow-listed
+# principal the NEW deterministic result actually becomes the /mi/query response.
+#
+# WHY NOT THE SLICE 1A WORKFLOW. `deployed-shadow-acceptance.yml` adjudicates
+# through `run_acceptance.py`, whose adjudicator never reads the `serving` block
+# and stores the HTTP response under a field named `legacy_value` — so on a
+# serving canary it compares the new figure with itself. It cannot tell NEW from
+# LEGACY, and an eligible case that fell back to legacy would still classify as
+# parity and pass. That workflow is left exactly as it is.
+#
+# ORDER. The served commit is confirmed FIRST, by GET /health, and a mismatch
+# stops the run with zero questions asked — a POST would cost a live Opus
+# interpretation on a canary that is switched on. Then the evidence sink is
+# proved readable and its existing correlation ids are recorded, so no
+# pre-existing record can satisfy a case. Only then are the six asked.
+#
+# IT DEPLOYS NOTHING AND CONFIGURES NOTHING. `MI_AGENT_PLAN_SERVE` and
+# `MI_AGENT_PLAN_SERVE_PRINCIPALS` are App Service settings needing ARM access;
+# this repository's mi-api automation holds a publish profile, which grants Kudu
+# and nothing else. The canary must already be on when this runs, and turning it
+# off afterwards is an operator action the final step names on every run.
+#
+# THE TOKEN. `MI_BEARER` and the publish profile reach the script through `env:`
+# only — never an argv value, which lands in process listings and logs. Only
+# their lengths are printed, and the script rescans its own output for both and
+# refuses to write the file if either survived.
+
+on:
+  workflow_dispatch:
+    inputs:
+      expect_commit:
+        description: The deployed SHA this acceptance is certifying.
+        required: true
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      path:
+        default: /mi/query
+        required: true
+      portfolio_id:
+        description: The canary portfolio.
+        default: ERE/2026-06-30
+        required: true
+      evidence_path:
+        default: /home/LogFiles/mi-plan-shadow/evidence.jsonl
+        required: true
+      poll_timeout_seconds:
+        description: Per request. A timeout is INCONCLUSIVE, never a pass.
+        default: '120'
+        required: true
+      ref:
+        description: Repo ref to take the acceptance tooling from.
+        default: main
+        required: true
+
+permissions:
+  contents: read
+
+# Never two at once, and never cancelled mid-flight: overlapping runs would
+# each poll for the other's records.
+concurrency:
+  group: slice1b-serving-acceptance-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refuse to run without the credentials this needs
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"
+            exit 1
+          fi
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::AZURE_MI_API_PUBLISH_PROFILE is not set; which path \
+          served cannot be proved without reading the evidence sink"
+            exit 1
+          fi
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      - name: Run the six-question serving acceptance
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          BASE_URL: ${{ inputs.base_url }}
+          API_PATH: ${{ inputs.path }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit }}
+          EVIDENCE_PATH: ${{ inputs.evidence_path }}
+          POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/slice1b_serving_canary/run_serving_acceptance.py \
+            --base-url "$BASE_URL" \
+            --path "$API_PATH" \
+            --portfolio-id "$PORTFOLIO_ID" \
+            --expect-commit "$EXPECT_COMMIT" \
+            --evidence-path "$EVIDENCE_PATH" \
+            --poll-timeout "$POLL_TIMEOUT" \
+            --json-out slice1b-serving-acceptance.json
+
+      - name: Keep the evidence whatever the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slice1b-serving-acceptance
+          path: slice1b-serving-acceptance.json
+          if-no-files-found: warn
+
+      - name: Turn the serving canary back off
+        if: always()
+        run: |
+          echo "::warning::This workflow cannot change App Service settings — it \
+          holds a publish profile (Kudu), not ARM access. Set \
+          MI_AGENT_PLAN_SERVE back to off on trakt-mi-api now. The acceptance is \
+          not finished until that is done, whatever the verdict above."
