@@ -1,0 +1,13 @@
+{
+ "note": "The original 20-case reconnaissance bank, re-run unchanged at 2b00172 in a fresh worktree. It reproduced BYTE-IDENTICALLY to the result committed in deterministic_baseline/ \u2014 git diff is empty after the re-run. The original 16/20 is preserved, not rewritten; the geography reclassification is recorded in REPORT.md rather than by editing this result.",
+ "reproduced_identically": true,
+ "pass": 16,
+ "fail": 4,
+ "bank_size": 20,
+ "failures": [
+  "B4-filter-keeps-no-row",
+  "D2-itl3-codes",
+  "F1-as-at-unhonourable",
+  "F2-period-is-recorded"
+ ]
+}
