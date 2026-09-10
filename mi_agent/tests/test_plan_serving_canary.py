@@ -737,5 +737,232 @@ class TestTheCallSiteIsWiredExclusively(unittest.TestCase):
             self.assertFalse(canary.handles(None))
 
 
+# --------------------------------------------------------------------------- #
+# the scalar presentation defect: a correct figure, refused downstream
+# --------------------------------------------------------------------------- #
+#: The three scalar cases measured live on d360bead. Each computed the right
+#: figure, carried `serving.decision=NEW`, and reached the caller as
+#: UNSUPPORTED_QUESTION carrying no figure at all, because the coverage owner
+#: re-read the sentence, found a threshold facet, and could not see it in a
+#: legacy-shaped receipt this envelope does not have.
+A01 = "How many loans are to borrowers over 55 with LTV above 50%?"
+A02 = "What is the balance of loans to borrowers over 75 with LTV above 40%?"
+A03 = "How many drawdown loans have LTV above 50%?"
+A04 = ELIGIBLE_GROUPED
+A05 = "Show a table of balance by LTV bucket and ticket-size bucket."
+A06 = "Show a table of balance by LTV bucket and interest-rate bucket."
+
+
+def _bank_frame():
+    """The oracle's book plus the two bands the deployed frame also carries."""
+    import pandas as pd
+
+    book = truth.canonical_book()
+    book["ticket_bucket"] = pd.cut(
+        book[truth.BALANCE],
+        bins=[-1, 100_000, 200_000, 350_000, float("inf")],
+        labels=["<100k", "100-200k", "200-350k", "350k+"]).astype(str)
+    book["interest_rate_bucket"] = pd.cut(
+        book[truth.RATE], bins=[-1, 4, 5, 6, float("inf")],
+        labels=["<4%", "4-5%", "5-6%", "6%+"]).astype(str)
+    return book
+
+
+_BANK_BOOK = _bank_frame()
+
+
+def _through_the_coverage_gate(envelope, question, frame=None):
+    """The seam that refused in production: stamp the ledger, then enforce it."""
+    from mi_agent_api import mi_service
+
+    mi_service._stamp_semantic_coverage(
+        envelope, question=question, semantics=_SEMANTICS,
+        frame=_BANK_BOOK if frame is None else frame, geography=None)
+    ledger = (envelope.get("metadata") or {}).get("semanticCoverage") or {}
+    return mi_service._enforce_semantic_coverage(envelope), ledger
+
+
+def _serve_for(question):
+    return serve(question=question, frame=_BANK_BOOK), question
+
+
+class TestAScalarAnswerSurvivesTheCoverageGate(unittest.TestCase):
+    """Tests 1-3: the three live cases, end to end through the real gate."""
+
+    def _case(self, question, expected):
+        with _Canary():
+            envelope = serve(question=question, frame=_BANK_BOOK)
+            self.assertIsNotNone(envelope, "the case did not serve at all")
+            served_figure = next(
+                (k.get("rawValue") for a in envelope["artifacts"]
+                 for k in (a.get("kpis") or ())
+                 if isinstance(k.get("rawValue"), (int, float))
+                 and abs(float(k["rawValue"]) - expected) <= 0.01), None)
+            self.assertIsNotNone(
+                served_figure,
+                f"the rendered envelope never carried {expected}")
+
+            out, ledger = _through_the_coverage_gate(envelope, question)
+
+            self.assertTrue(out["ok"], f"the answer was refused: {out.get('error')}")
+            self.assertIsNone((out.get("metadata") or {}).get(
+                "semanticCoverageRefused"))
+            self.assertEqual(ledger.get("unaccounted"), [],
+                             "a governed predicate read as unaccounted")
+            self.assertTrue(ledger.get("concepts"),
+                            "the governed ledger recorded nothing")
+            self.assertEqual({c["owner"] for c in ledger["concepts"]},
+                             {"governed_plan + execution_receipt"})
+            self.assertEqual({c["disposition"] for c in ledger["concepts"]},
+                             {"resolved"})
+            # The figure is STILL THERE after the gate — the defect was that the
+            # artifacts were emptied and the answer replaced.
+            self.assertTrue(out["artifacts"], "the gate stripped the artifacts")
+            return out
+
+    def test_1_A01_threshold_pair_keeps_its_scalar(self):
+        expected = float(truth.row_count(
+            _BANK_BOOK, [(truth.AGE, "gt", 55), (truth.LTV, "gt", 50)]))
+        out = self._case(A01, expected)
+        self.assertNotIn("could not confirm", str(out["answer"]))
+
+    def test_2_A02_balance_over_two_thresholds_keeps_its_scalar(self):
+        expected = truth.total(_BANK_BOOK, truth.BALANCE,
+                               [(truth.AGE, "gt", 75), (truth.LTV, "gt", 40)])
+        self._case(A02, expected)
+
+    def test_3_A03_categorical_plus_threshold_keeps_its_scalar(self):
+        expected = float(((_BANK_BOOK.erm_product_type.str.lower() == "drawdown")
+                          & (_BANK_BOOK[truth.LTV] > 50)).sum())
+        self._case(A03, expected)
+
+
+class TestTheGateStaysFailClosed(unittest.TestCase):
+    """Tests 4-5: what the plan asked for must be PROVED, not assumed."""
+
+    def _served(self, question=A03):
+        with _Canary():
+            envelope = serve(question=question, frame=_BANK_BOOK)
+            self.assertIsNotNone(envelope)
+            return envelope
+
+    def test_4_a_predicate_the_receipt_omits_is_refused(self):
+        envelope = self._served()
+        applied = envelope["metadata"]["governedPlan"]["executed"]["applied_predicates"]
+        envelope["metadata"]["governedPlan"]["executed"]["applied_predicates"] = [
+            p for p in applied
+            if p.get("canonical_field") != "current_loan_to_value"]
+        out, ledger = _through_the_coverage_gate(envelope, A03)
+        self.assertFalse(out["ok"], "an unproved predicate was answered over")
+        self.assertTrue((out["metadata"]).get("semanticCoverageRefused"))
+        self.assertEqual([c["field"] for c in ledger["unaccounted"]],
+                         ["current_loan_to_value"])
+        self.assertEqual(out["artifacts"], [])
+
+    def test_5_a_receipt_proving_a_different_value_is_refused(self):
+        envelope = self._served()
+        for predicate in envelope["metadata"]["governedPlan"]["executed"][
+                "applied_predicates"]:
+            if predicate.get("canonical_field") == "current_loan_to_value":
+                predicate["values"] = ["40"]          # the plan asked for 50
+        out, ledger = _through_the_coverage_gate(envelope, A03)
+        self.assertFalse(out["ok"], "a different threshold was answered over")
+        self.assertEqual([c["field"] for c in ledger["unaccounted"]],
+                         ["current_loan_to_value"])
+
+    def test_5b_a_receipt_proving_a_different_direction_is_refused(self):
+        envelope = self._served()
+        for predicate in envelope["metadata"]["governedPlan"]["executed"][
+                "applied_predicates"]:
+            if predicate.get("canonical_field") == "current_loan_to_value":
+                predicate["op"] = "lt"               # the plan asked for gt
+        out, ledger = _through_the_coverage_gate(envelope, A03)
+        self.assertFalse(out["ok"], "the opposite direction was answered over")
+
+    def test_the_executors_own_percent_rescaling_still_proves_the_predicate(self):
+        # PRODUCTION SHAPE. The deployed frame is fractional, so the receipt
+        # recorded `gt 0.5` for a plan that asked `gt 50` — `PredicateExecution`
+        # documents `normalised_value` as the value AFTER percent rescaling.
+        # Requiring literal equality here would refuse every correct threshold.
+        envelope = self._served()
+        for predicate in envelope["metadata"]["governedPlan"]["executed"][
+                "applied_predicates"]:
+            if predicate.get("canonical_field") == "current_loan_to_value":
+                predicate["values"] = ["0.5"]
+        out, ledger = _through_the_coverage_gate(envelope, A03)
+        self.assertTrue(out["ok"], "the rescaled form was not accepted")
+        self.assertEqual(ledger["unaccounted"], [])
+
+
+class TestTheUnchangedCases(unittest.TestCase):
+    """Tests 6-8: grouped, legacy and unfiltered all behave as before."""
+
+    def test_6_the_grouped_cases_are_unchanged(self):
+        for question in (A04, A05, A06):
+            with self.subTest(question=question), _Canary():
+                envelope = serve(question=question, frame=_BANK_BOOK)
+                self.assertIsNotNone(envelope, f"{question!r} did not serve")
+                out, ledger = _through_the_coverage_gate(envelope, question)
+                self.assertTrue(out["ok"], f"refused: {out.get('error')}")
+                self.assertEqual(ledger.get("unaccounted"), [])
+                self.assertEqual(
+                    {c["kind"] for c in ledger["concepts"]},
+                    {"governed_plan:dimension"},
+                    "a grouped plan recorded something other than its axes")
+                self.assertTrue(out["artifacts"])
+
+    def test_7_a_legacy_envelope_still_goes_to_the_legacy_owner(self):
+        from mi_agent_api import mi_service
+        from question_interpretation import completeness
+
+        # A legacy answer carries no governedPlan block, so the governed branch
+        # declines it and `coverage_report` runs exactly as it always has.
+        legacy = {"ok": True, "answer": "the legacy answer", "artifacts": [],
+                  "metadata": {"parserMode": "llm"}, "spec": {}}
+        self.assertIsNone(mi_service._governed_plan_coverage(legacy))
+        called = []
+        real = completeness.coverage_report
+        with mock.patch.object(completeness, "coverage_report",
+                               lambda *a, **k: called.append(1) or real(*a, **k)):
+            mi_service._stamp_semantic_coverage(
+                legacy, question=A03, semantics=_SEMANTICS, frame=_BANK_BOOK,
+                geography=None)
+        self.assertEqual(called, [1], "the legacy path stopped being measured")
+        self.assertIn("semanticCoverage", legacy["metadata"])
+
+    def test_7b_a_governed_envelope_never_reaches_the_legacy_owner(self):
+        # THE ARCHITECTURE ASSERTION, as a runtime proof: once a plan exists,
+        # nothing re-reads the sentence. The legacy owner is replaced with a
+        # sentinel that raises, and the governed path must not touch it.
+        from question_interpretation import completeness
+
+        def sentinel(*_a, **_k):
+            raise AssertionError("the governed path re-read the question")
+
+        with _Canary():
+            envelope = serve(question=A03, frame=_BANK_BOOK)
+            with mock.patch.object(completeness, "coverage_report", sentinel), \
+                    mock.patch.object(completeness, "stated_concepts", sentinel):
+                out, ledger = _through_the_coverage_gate(envelope, A03)
+        self.assertTrue(out["ok"])
+        self.assertEqual(ledger["unaccounted"], [])
+
+    def test_8_an_unfiltered_ungrouped_plan_has_nothing_to_prove(self):
+        from mi_agent_api import mi_service
+
+        envelope = {"ok": True, "answer": "a figure", "artifacts": [{"type": "kpi"}],
+                    "metadata": {"parserMode": "governed_plan",
+                                 "governedPlan": {
+                                     "requested": {"filters": [], "dimensions": []},
+                                     "executed": {"applied_predicates": [],
+                                                  "group_field_keys": []}}}}
+        out, ledger = _through_the_coverage_gate(envelope, "whatever")
+        self.assertTrue(out["ok"])
+        self.assertEqual(ledger["concepts"], [])
+        self.assertEqual(ledger["unaccounted"], [])
+        self.assertEqual(out["artifacts"], [{"type": "kpi"}])
+        self.assertIsNotNone(mi_service._governed_plan_coverage(envelope))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

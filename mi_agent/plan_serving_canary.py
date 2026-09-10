@@ -205,7 +205,8 @@ def reconcile(spec: Any, result: Any) -> Tuple[bool, str]:
 # --------------------------------------------------------------------------- #
 
 def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
-           portfolio_id: Optional[str], as_of: Optional[str]) -> Dict[str, Any]:
+           portfolio_id: Optional[str], as_of: Optional[str],
+           requested: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """`(spec, MIQueryResult)` -> the existing React/API envelope.
 
     `mi_agent_api.adapters.adapt_workflow_result` is the contract every channel
@@ -251,7 +252,37 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
         "warnings": warnings,
         "metadata": {},
     }
-    return adapt_workflow_result(workflow, portfolio_id=portfolio_id, as_of=as_of)
+    payload = adapt_workflow_result(workflow, portfolio_id=portfolio_id,
+                                    as_of=as_of)
+    # THE TWO GOVERNED OBJECTS, CARRIED SO THE COVERAGE OWNER CAN RECONCILE THEM.
+    #
+    # Everything downstream of here used to have only one way to ask "was the LTV
+    # threshold applied": re-read the question and look for a legacy-shaped
+    # receipt. This envelope carries neither, so the owner found the facet
+    # unaccounted and converted three correct figures into UNSUPPORTED_QUESTION —
+    # A01/A02/A03 measured live on d360bead, each with the right number in the
+    # evidence and no number in the response.
+    #
+    # So the answer states WHAT WAS ASKED (the plan's own transcription, which the
+    # adapter read off the GovernedQueryPlan and never from the sentence) and WHAT
+    # RAN (the deterministic executor's own receipt). Additive metadata only: no
+    # pre-existing key changes, and a legacy answer never carries this block, so
+    # the legacy path cannot see any of it.
+    meta = payload.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        receipt = dict(getattr(result, "metadata", None) or {})
+        meta["governedPlan"] = {
+            "requested": dict(requested or {}),
+            "executed": {
+                "applied_predicates": receipt.get("applied_predicates") or [],
+                "group_field_keys": list(receipt.get("group_field_keys") or ()),
+                "aggregation": receipt.get("aggregation"),
+                "balance_field_used": receipt.get("balance_field_used"),
+                "percent_scale_detected": receipt.get("percent_scale_detected"),
+                "filtered_row_count": receipt.get("filtered_row_count"),
+            },
+        }
+    return payload
 
 
 # --------------------------------------------------------------------------- #
@@ -394,7 +425,8 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
 
     try:
         payload = render(spec, result, semantics, frame, question=question,
-                         portfolio_id=render_portfolio_id, as_of=as_of)
+                         portfolio_id=render_portfolio_id, as_of=as_of,
+                         requested=body["execution"].get("requested_semantics"))
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
         return None, RENDER_FAILED

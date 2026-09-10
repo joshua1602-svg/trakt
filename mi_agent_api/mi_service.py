@@ -40,7 +40,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 from trakt_core import perf as _perf
 from trakt_core.audit import emit_audit_event
@@ -203,6 +203,29 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
     Never raises into a request. A ledger that cannot be built is absent, which
     reads as "not measured" rather than "clean" — the standing F3 rule.
     """
+    # A GOVERNED-PLAN ANSWER IS RECONCILED BETWEEN TWO GOVERNED OBJECTS.
+    #
+    # Once a GovernedQueryPlan exists, no downstream owner may re-read the
+    # sentence to decide whether a semantic was applied — and that is exactly
+    # what `coverage_report` does: its requested side is
+    # `stated_concepts(question)` and its executed side is a legacy-shaped
+    # `executionSummary` this envelope does not carry. Measured live on d360bead,
+    # A01/A02/A03 each computed the right figure, carried `serving.decision=NEW`,
+    # and were then converted into UNSUPPORTED_QUESTION because the threshold
+    # facet read as unaccounted.
+    #
+    # So for this path the authorities are the plan's own transcription of what
+    # was asked and the deterministic executor's own receipt of what ran. The
+    # ledger SHAPE is unchanged, so `_enforce_semantic_coverage` reads it exactly
+    # as before and stays fail-closed: anything this cannot prove is still
+    # UNACCOUNTED and still refuses.
+    #
+    # Legacy answers never reach this branch — they carry no `governedPlan` block
+    # — so `coverage_report` and every legacy disposition are untouched.
+    governed = _governed_plan_coverage(envelope)
+    if governed is not None:
+        envelope["metadata"]["semanticCoverage"] = governed
+        return
     if semantics is None:
         return
     try:
@@ -218,6 +241,124 @@ def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
             geography=geography)
     except Exception as exc:  # noqa: BLE001 - coverage must never cost an answer
         logger.info("semantic coverage unavailable: %s: %s", type(exc).__name__, exc)
+
+
+#: The parser mode the slice 1 governed-plan serving path stamps on its answer.
+_GOVERNED_PLAN_MODE = "governed_plan"
+
+
+def _values_agree(requested: Any, executed: Any) -> bool:
+    """Is the value the executor compared the value the plan asked for?
+
+    Two governed records, compared; nothing re-derived. Numbers are compared
+    allowing the executor's OWN percent rescaling — `PredicateExecution`
+    documents `normalised_value` as "the value actually compared — after percent
+    rescaling, if any", so a plan asking `gt 50` against a fractional column is
+    proved by a receipt recording `gt 0.5`. Requiring literal equality here would
+    refuse every correct threshold; ignoring the value would stop this proving
+    anything. `gt 40` against a plan's `gt 50` still fails both forms, which is
+    the control that matters.
+
+    Strings compare case-folded: a categorical predicate's executed value is the
+    governed category, and casing is the book's, not the plan's.
+    """
+    wanted = executed if isinstance(executed, (list, tuple)) else [executed]
+    asked = requested if isinstance(requested, (list, tuple)) else [requested]
+    for one in asked:
+        matched = False
+        for other in wanted:
+            if str(one).strip().casefold() == str(other).strip().casefold():
+                matched = True
+                break
+            try:
+                left, right = float(one), float(other)
+            except (TypeError, ValueError):
+                continue
+            if (abs(left - right) < 1e-9 or abs(left / 100.0 - right) < 1e-9
+                    or abs(left - right / 100.0) < 1e-9):
+                matched = True
+                break
+        if not matched:
+            return False
+    return True
+
+
+def _predicate_proved(requested: Mapping[str, Any],
+                      applied: Sequence[Mapping[str, Any]]) -> bool:
+    """Did the executor run THIS predicate — same field, direction and value?"""
+    field = str(requested.get("field") or "")
+    comparator = str(requested.get("comparator") or "eq").strip().lower()
+    for entry in applied:
+        if not isinstance(entry, Mapping):
+            continue
+        executed_field = str(entry.get("canonical_field")
+                             or entry.get("field") or "")
+        if executed_field != field:
+            continue
+        if str(entry.get("op") or "").strip().lower() != comparator:
+            continue
+        if _values_agree(requested.get("value"), entry.get("values")):
+            return True
+    return False
+
+
+def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The coverage ledger for a governed-plan answer, or None if this is legacy.
+
+    Reads the plan's transcription of what was asked and the executor's receipt
+    of what ran, and NOTHING ELSE — no question, no recogniser, no parser. Emits
+    the same ledger shape `completeness.coverage_report` does, so the gate that
+    consumes it is unchanged and still fail-closed: a predicate or axis this
+    cannot prove is UNACCOUNTED and refuses exactly as before.
+    """
+    meta = envelope.get("metadata")
+    if not isinstance(meta, dict):
+        return None
+    if str(meta.get("parserMode") or "") != _GOVERNED_PLAN_MODE:
+        return None
+    block = meta.get("governedPlan")
+    if not isinstance(block, Mapping):
+        return None
+    requested = block.get("requested") or {}
+    executed = block.get("executed") or {}
+    applied = [e for e in (executed.get("applied_predicates") or ())
+               if isinstance(e, Mapping)]
+    grouped = {str(k) for k in (executed.get("group_field_keys") or ())}
+
+    entries: List[Dict[str, Any]] = []
+    for predicate in (requested.get("filters") or ()):
+        if not isinstance(predicate, Mapping):
+            continue
+        proved = _predicate_proved(predicate, applied)
+        entries.append({
+            "kind": "governed_plan:filter",
+            "field": str(predicate.get("field") or ""),
+            "value": f"{predicate.get('comparator')} {predicate.get('value')}",
+            "term": str(predicate.get("field") or ""),
+            "owner": "governed_plan + execution_receipt",
+            "disposition": _coverage_resolved() if proved else _coverage_missing(),
+        })
+    for axis in (requested.get("dimensions") or ()):
+        entries.append({
+            "kind": "governed_plan:dimension", "field": str(axis),
+            "value": str(axis), "term": str(axis),
+            "owner": "governed_plan + execution_receipt",
+            "disposition": (_coverage_resolved() if str(axis) in grouped
+                            else _coverage_missing()),
+        })
+    return {"version": 1, "concepts": entries,
+            "unaccounted": [e for e in entries
+                            if e["disposition"] == _coverage_missing()]}
+
+
+def _coverage_resolved() -> str:
+    from question_interpretation import completeness as _coverage
+    return _coverage.RESOLVED
+
+
+def _coverage_missing() -> str:
+    from question_interpretation import completeness as _coverage
+    return _coverage.UNACCOUNTED
 
 
 #: The words a refusal uses for a concept the answer did not account for. No
