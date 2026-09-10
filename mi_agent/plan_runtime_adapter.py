@@ -1,0 +1,434 @@
+#!/usr/bin/env python3
+"""A GovernedQueryPlan, handed to the existing deterministic owner. Shadow only.
+
+WHAT THIS IS FOR. `mi_agent.interpretation_v2` produces a signed-off
+`GovernedQueryPlan`; `mi_agent.mi_query_executor.execute_mi_query` is the proven
+generic calculation owner. Nothing converts between them — `query_plan_adapter`
+lifts an `MIQuerySpec` into `mi_agent.query_plan.QueryPlan`, which is a different
+object going the other way. This module is the missing seam, and it is
+deliberately the thinnest thing that can be called a seam.
+
+IT IS A DISPATCHER, NOT A READER. Every value it places into an `MIQuerySpec` has
+already been bound by the deterministic compiler and re-validated against the
+governed registry. The module therefore:
+
+    * never sees the question text — it is not a parameter, and a test asserts
+      the module's source contains no `question` identifier;
+    * never imports `re`, so it cannot pattern-match anything;
+    * never defaults a value the plan left empty. A missing value is an
+      ineligibility or a refusal, never a guess;
+    * never calculates. `execute_mi_query` owns arithmetic, as it always has.
+
+SLICE 1 IS NARROW ON PURPOSE. The eligibility contract below was derived from
+recorded evidence, not chosen: of the 135 plans in
+`interpretation_v2/evidence/run8_135_signoff_2b00172.json`, exactly the
+`generic_analysis` + `point_in_time`/`breakdown` + `current` + at-most-two-axes
+shape is expressible in the generic executor's own vocabulary
+(`{avg, count, max, median, min, sum, weighted_avg}`) with no scope dimension the
+production path resolves elsewhere. Everything else — a specialist capability, a
+stated historical period, an explicit Direct/Acquired lens, a second output, a
+third axis — is INELIGIBLE and says so. Widening this to raise coverage would be
+the defect, not the improvement.
+
+THE OLD PATH OWNS THE ANSWER. This module cannot serve a user. It returns a
+`ShadowOutcome` for comparison and nothing else; `mi_service` calls it inside a
+suppress-everything guard with the flag off by default.
+"""
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+
+from mi_agent.mi_query_spec import MIQuerySpec
+from mi_agent.query_plan import AVERAGE, COUNT, SUM, WEIGHTED_AVERAGE
+from mi_agent.query_plan_compiler import _MANY_DIMENSIONS, _RENDERING
+
+#: The shadow flag, following the repository's `MI_AGENT_*` environment
+#: convention. Two states only: this slice has no SERVE mode to enable.
+SHADOW_ENV_VAR = "MI_AGENT_PLAN_SHADOW"
+SHADOW_OFF = "off"
+SHADOW_ON = "shadow"
+
+
+def shadow_mode() -> str:
+    """`off` (the default) or `shadow`. Anything unrecognised reads as off."""
+    value = str(os.environ.get(SHADOW_ENV_VAR) or "").strip().lower()
+    return SHADOW_ON if value == SHADOW_ON else SHADOW_OFF
+
+
+# --------------------------------------------------------------------------- #
+# the eligibility contract
+# --------------------------------------------------------------------------- #
+
+#: The one capability this slice dispatches. A specialist capability owns its own
+#: input contract and its own arithmetic; handing its plan to the generic
+#: executor would compute a simpler question than the reader asked.
+ELIGIBLE_CAPABILITY = "generic_analysis"
+
+#: Operations the generic executor can express. `distribution` is excluded
+#: deliberately: it is owned by `period_change/distribution.py`, not by a
+#: groupby.
+ELIGIBLE_OPERATIONS = frozenset({"point_in_time", "breakdown"})
+
+#: The only period form this slice accepts. The production path resolves ONE
+#: frame per request and `mi_agent_workflow` refuses capabilities measured across
+#: snapshots; a stated historical period belongs to the temporal owner, which
+#: this slice does not touch.
+ELIGIBLE_PERIOD_FORMS = frozenset({"current"})
+
+#: The default total-funded population. An explicit Direct/Acquired lens is
+#: resolved and applied by `portfolio_lens` on the production path, and this
+#: slice does not reproduce that.
+ELIGIBLE_POPULATION_LENS = frozenset({"", "all", "total", "none"})
+
+#: Plan statistic -> the executor's aggregation vocabulary. A lookup, not a
+#: judgement: the compiler already decided the statistic and the registry already
+#: permitted it.
+_AGGREGATION: Mapping[str, str] = {
+    "sum": SUM,
+    "average": AVERAGE,
+    "weighted_average": WEIGHTED_AVERAGE,
+    "count": COUNT,
+}
+
+#: What the executor calls a row count, mirroring `query_plan_compiler`'s own
+#: constant rather than inventing a second name for the same thing.
+_ROW_COUNT_FIELD = "loan_count"
+
+MAX_DIMENSIONS = 2
+
+# Ineligibility reasons. Stable strings, because the ledger groups by them.
+NOT_A_PLAN = "NOT_A_PLAN"
+CAPABILITY_NOT_GENERIC = "CAPABILITY_NOT_GENERIC"
+OPERATION_NOT_GENERIC = "OPERATION_NOT_GENERIC"
+PERIOD_NOT_CURRENT = "PERIOD_NOT_CURRENT"
+EXPLICIT_LENS = "EXPLICIT_LENS"
+NOT_SINGLE_OUTPUT = "NOT_SINGLE_OUTPUT"
+TOO_MANY_DIMENSIONS = "TOO_MANY_DIMENSIONS"
+MEASURE_NOT_GENERIC = "MEASURE_NOT_GENERIC"
+MEASURE_UNBOUND = "MEASURE_UNBOUND"
+DIMENSION_UNBOUND = "DIMENSION_UNBOUND"
+FILTER_UNBOUND = "FILTER_UNBOUND"
+COMPARISON_REQUESTED = "COMPARISON_REQUESTED"
+TARGET_REQUESTED = "TARGET_REQUESTED"
+NO_MEASURE = "NO_MEASURE"
+
+
+@dataclass(frozen=True)
+class ShadowOutcome:
+    """One shadow attempt. Never a user-visible answer.
+
+    `eligible=False` is the ordinary case and carries `reason`; the production
+    path proceeds untouched either way.
+    """
+
+    eligible: bool
+    reason: str = ""
+    detail: str = ""
+    plan_id: str = ""
+    #: The spec this adapter handed to the existing executor, for the ledger.
+    spec: Optional[MIQuerySpec] = None
+    #: What the plan asked for, read off the plan and never re-derived.
+    requested: Mapping[str, Any] = field(default_factory=dict)
+    #: The scalar the existing executor produced, when there was one.
+    value: Optional[float] = None
+    #: The executor's own metadata — the resolved half of the receipt.
+    receipt: Mapping[str, Any] = field(default_factory=dict)
+    warnings: Tuple[str, ...] = ()
+    #: Set when the existing executor raised. Captured, never propagated.
+    error: str = ""
+
+    @property
+    def executed(self) -> bool:
+        return self.eligible and not self.error and self.spec is not None
+
+
+def _bound(value: Any) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def _measures_of(output: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
+    return tuple(output.get("measures") or ())
+
+
+def _as_mapping(plan: Any) -> Mapping[str, Any]:
+    """A plan as a plain mapping, whether it arrived as the object or a dict.
+
+    The evidence files hold plans as dicts and the live path holds them as
+    `GovernedQueryPlan`; reading one shape means the replay harness and
+    production exercise the same code.
+    """
+    if isinstance(plan, Mapping):
+        return plan
+    to_dict = getattr(plan, "to_dict", None)
+    return to_dict() if callable(to_dict) else {}
+
+
+def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
+    """`(eligible, reason, detail)` for Slice 1. Reads the plan only."""
+    body = _as_mapping(plan)
+    if not body:
+        return False, NOT_A_PLAN, "no plan, or a plan with no readable body"
+
+    if body.get("capability") != ELIGIBLE_CAPABILITY:
+        return (False, CAPABILITY_NOT_GENERIC,
+                f"capability={body.get('capability')!r} is specialist; it owns its "
+                f"own input contract and arithmetic")
+    if body.get("operation") not in ELIGIBLE_OPERATIONS:
+        return (False, OPERATION_NOT_GENERIC,
+                f"operation={body.get('operation')!r} is not expressible in the "
+                f"generic executor's vocabulary")
+
+    period = body.get("period") or {}
+    if period.get("form") not in ELIGIBLE_PERIOD_FORMS:
+        return (False, PERIOD_NOT_CURRENT,
+                f"period.form={period.get('form')!r} needs the temporal owner, "
+                f"which this slice does not touch")
+
+    lens = str(((body.get("population") or {}).get("lens") or "")).strip().lower()
+    if lens not in ELIGIBLE_POPULATION_LENS:
+        return (False, EXPLICIT_LENS,
+                f"population.lens={lens!r} is resolved and applied by "
+                f"portfolio_lens on the production path")
+
+    comparison = str(body.get("comparison_kind") or "none").strip().lower()
+    if comparison != "none":
+        return False, COMPARISON_REQUESTED, f"comparison_kind={comparison!r}"
+    if body.get("target"):
+        return False, TARGET_REQUESTED, "a target is a milestone, not an aggregate"
+
+    outputs = tuple(body.get("outputs") or ())
+    if len(outputs) != 1:
+        return False, NOT_SINGLE_OUTPUT, f"{len(outputs)} outputs"
+
+    output = outputs[0]
+    dimensions = tuple(output.get("dimensions") or ())
+    if len(dimensions) > MAX_DIMENSIONS:
+        return (False, TOO_MANY_DIMENSIONS,
+                f"{len(dimensions)} dimensions, limit {MAX_DIMENSIONS}")
+    for dim in dimensions:
+        if not _bound(dim.get("canonical_field")):
+            return (False, DIMENSION_UNBOUND,
+                    f"dimension {dim.get('concept')!r} has no canonical field")
+
+    measures = _measures_of(output)
+    if not measures:
+        return False, NO_MEASURE, "no measure to compute"
+    if len(measures) != 1:
+        # Several measures over one population is a multi-output question the
+        # generic single-metric spec cannot carry without loss.
+        return False, NOT_SINGLE_OUTPUT, f"{len(measures)} measures in one output"
+    measure = measures[0]
+    statistic = str(measure.get("statistic") or "")
+    if statistic not in _AGGREGATION:
+        return (False, MEASURE_NOT_GENERIC,
+                f"statistic={statistic!r} is capability-owned or unsupported here")
+    if statistic != "count" and not _bound(measure.get("canonical_field")):
+        return (False, MEASURE_UNBOUND,
+                f"measure {measure.get('concept')!r} has no canonical field")
+    if statistic == "weighted_average" and not _bound(measure.get("weight_field")):
+        return (False, MEASURE_UNBOUND,
+                "a weighted average names no weight field")
+
+    for flt in tuple(body.get("filters") or ()) + tuple(output.get("filters") or ()):
+        if not _bound(flt.get("canonical_field")):
+            return (False, FILTER_UNBOUND,
+                    f"filter {flt.get('concept')!r} has no canonical field")
+
+    return True, "", ""
+
+
+# --------------------------------------------------------------------------- #
+# the mechanical bind
+# --------------------------------------------------------------------------- #
+
+def _filters_for(body: Mapping[str, Any],
+                 output: Mapping[str, Any]) -> Dict[str, Any]:
+    """Plan filter bindings → the executor's `{field: value | {op, value}}`.
+
+    The same wire format `query_plan_compiler._filters_for` produces, written
+    against the plan's bindings. A categorical equality is a bare value; anything
+    with a direction keeps its operator.
+    """
+    out: Dict[str, Any] = {}
+    for flt in tuple(body.get("filters") or ()) + tuple(output.get("filters") or ()):
+        field_name = flt.get("canonical_field")
+        comparator = str(flt.get("comparator") or "eq").lower()
+        value = flt.get("value")
+        if comparator in ("eq", "", "equals"):
+            out[field_name] = value
+        else:
+            out[field_name] = {"op": comparator, "value": value}
+    return out
+
+
+def spec_for_plan(plan: Any) -> MIQuerySpec:
+    """`GovernedQueryPlan` → `MIQuerySpec`. Mechanical; every value pre-bound.
+
+    Caller must have established eligibility. Nothing here decides a semantic:
+    the statistic, the field, the axes and the predicates were all bound by the
+    deterministic compiler and re-validated against the governed registry before
+    this plan existed.
+    """
+    body = _as_mapping(plan)
+    output = (tuple(body.get("outputs") or ()) or ({},))[0]
+    measure = (_measures_of(output) or ({},))[0]
+    statistic = str(measure.get("statistic") or "")
+    aggregation = _AGGREGATION[statistic]
+
+    metric = (_ROW_COUNT_FIELD if aggregation == COUNT
+              else measure.get("canonical_field"))
+    axes = [d.get("canonical_field") for d in (output.get("dimensions") or ())]
+
+    # PRESENTATION, borrowed rather than invented. `MIQuerySpec` defaults to an
+    # intent/chart_type pair its own validator rejects, and the estate already
+    # owns the mapping from dimensionality to rendering in
+    # `query_plan_compiler._RENDERING` — "one axis is a bar; two are a matrix".
+    # Re-deriving it would make a second presentation owner, and the plan
+    # deliberately has no opinion about rendering.
+    #
+    # A SECOND AXIS IS NOT GIVEN A CHART ROLE. The executor validates `y` against
+    # the field's own declared chart roles, and a governed dimension may legally
+    # have none — `collateral_geography` carries ['color','filter','group','x'].
+    # Whether a field can be a chart's y axis is a presentation property of the
+    # field, and the plan knows nothing about it, so the adapter declines to
+    # assert a role it cannot verify and renders two axes as a table instead. The
+    # ANALYSIS is unaffected: the executor's `_all_group_dims` reads
+    # `spec.dimensions` then `spec.dimension`, so both axes are still grouped.
+    # Preserving the analysis and simplifying the picture is the direction
+    # `_RENDERING`'s own comment requires; the reverse would not be allowed.
+    if len(axes) > 1:
+        intent, chart_type, output_format = _MANY_DIMENSIONS
+    else:
+        intent, chart_type, output_format = _RENDERING.get(len(axes),
+                                                          _MANY_DIMENSIONS)
+
+    return MIQuerySpec(
+        intent=intent, chart_type=chart_type, output_format=output_format,
+        metric=None if aggregation == COUNT else metric,
+        aggregation=aggregation,
+        weight_field=measure.get("weight_field") or None,
+        dimension=axes[0] if axes else None,
+        x=axes[0] if len(axes) == 1 else None,
+        dimensions=list(axes),
+        filters=_filters_for(body, output),
+        explanation="Shadow execution of a governed plan (slice 1).",
+    )
+
+
+def requested_semantics(plan: Any) -> Dict[str, Any]:
+    """What the plan ASKED for, for the ledger's requested half.
+
+    Read straight off the plan. This is not a second interpretation; it is a
+    transcription, and it exists so a divergence can be attributed without
+    re-opening the plan object later.
+    """
+    body = _as_mapping(plan)
+    output = (tuple(body.get("outputs") or ()) or ({},))[0]
+    measure = (_measures_of(output) or ({},))[0]
+    period = body.get("period") or {}
+    return {
+        "capability": body.get("capability"),
+        "operation": body.get("operation"),
+        "measure_concept": measure.get("concept"),
+        "measure_field": measure.get("canonical_field"),
+        "statistic": measure.get("statistic"),
+        "weight_field": measure.get("weight_field"),
+        "dimensions": [d.get("canonical_field")
+                       for d in (output.get("dimensions") or ())],
+        "dimension_concepts": [d.get("concept")
+                               for d in (output.get("dimensions") or ())],
+        "filters": {f.get("canonical_field"): f.get("value")
+                    for f in (tuple(body.get("filters") or ())
+                              + tuple(output.get("filters") or ()))},
+        "population": body.get("population") or {},
+        "geography": body.get("geography") or {},
+        "period_form": period.get("form"),
+        "period_contract": period.get("contract"),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# dispatch
+# --------------------------------------------------------------------------- #
+
+def execute_shadow_governed_plan(plan: Any, resolved_frame: Any,
+                                 semantics: Any) -> ShadowOutcome:
+    """Validate, bind, and hand the plan to the existing deterministic owner.
+
+    `resolved_frame` is the frame the production request already resolved —
+    this module never selects one. `semantics` is the governed field registry the
+    production path already loaded.
+
+    Returns a `ShadowOutcome` in every circumstance, including failure. It raises
+    nothing: a shadow that could take down a served answer would be worse than no
+    shadow at all.
+    """
+    eligible, reason, detail = check_eligibility(plan)
+    plan_id = str(_as_mapping(plan).get("plan_id") or "")
+    if not eligible:
+        return ShadowOutcome(eligible=False, reason=reason, detail=detail,
+                             plan_id=plan_id)
+
+    try:
+        spec = spec_for_plan(plan)
+        requested = requested_semantics(plan)
+    except Exception as exc:                                     # noqa: BLE001
+        return ShadowOutcome(eligible=True, plan_id=plan_id,
+                             error=f"bind failed: {type(exc).__name__}: {exc}"[:300])
+
+    try:
+        from mi_agent.mi_query_executor import execute_mi_query
+        result = execute_mi_query(spec, resolved_frame, semantics)
+    except Exception as exc:                                     # noqa: BLE001
+        return ShadowOutcome(eligible=True, plan_id=plan_id, spec=spec,
+                             requested=requested,
+                             error=f"{type(exc).__name__}: {exc}"[:300])
+
+    metadata = dict(getattr(result, "metadata", None) or {})
+    value = _scalar_of(result, spec)
+    return ShadowOutcome(
+        eligible=True, plan_id=plan_id, spec=spec, requested=requested,
+        value=value,
+        receipt={
+            "aggregation": metadata.get("aggregation"),
+            "group_field_keys": list(metadata.get("group_field_keys") or ()),
+            "applied_predicates": metadata.get("applied_predicates"),
+            "input_row_count": metadata.get("input_row_count"),
+            "filtered_row_count": metadata.get("filtered_row_count"),
+            "balance_field_used": metadata.get("balance_field_used"),
+            "result_type": getattr(result, "result_type", None),
+            "row_count": getattr(result, "row_count", None),
+        },
+        warnings=tuple(str(w)[:200] for w in (getattr(result, "warnings", ()) or ())),
+    )
+
+
+def _scalar_of(result: Any, spec: MIQuerySpec) -> Optional[float]:
+    """The single figure, when the execution produced one.
+
+    A grouped execution has no scalar and returns None rather than a total the
+    plan never asked for — inventing one here would be this module deciding an
+    analytical question.
+    """
+    frame = getattr(result, "data", None)
+    if frame is None or getattr(frame, "empty", False):
+        return None
+    if list(getattr(spec, "dimensions", None) or ()):
+        return None
+    for column in (f"{spec.metric}_{spec.aggregation}", _ROW_COUNT_FIELD,
+                   spec.metric or ""):
+        if column and column in frame.columns:
+            try:
+                return float(frame.iloc[0][column])
+            except (TypeError, ValueError):
+                return None
+    numeric = [c for c in frame.columns
+               if str(frame[c].dtype).startswith(("int", "float"))]
+    if len(numeric) == 1:
+        try:
+            return float(frame.iloc[0][numeric[0]])
+        except (TypeError, ValueError):
+            return None
+    return None
