@@ -1,0 +1,68 @@
+{
+  "phase": "Slice 1 deployed shadow acceptance \u2014 phase 0 and the blocking finding",
+  "provenance": {
+    "deploy_candidate_sha": "5a6035fb17a15963f85cff22afe9e2344c8b4e93",
+    "tree_clean_outside_this_evidence_directory": true,
+    "uncommitted_paths_outside_this_evidence_directory": [],
+    "files_differing_from_accepted_slice1": [
+      "due_diligence/evidence/live_slice1_signoff/REPORT.md",
+      "due_diligence/evidence/live_slice1_signoff/dry_run_result.json",
+      "due_diligence/evidence/live_slice1_signoff/live_bank_manifest.json",
+      "due_diligence/evidence/live_slice1_signoff/live_bank_manifest.sha256",
+      "due_diligence/evidence/live_slice1_signoff/live_run.py",
+      "due_diligence/evidence/live_slice1_signoff/live_run_result.json",
+      "due_diligence/evidence/live_slice1_signoff/live_shadow_ledger.jsonl",
+      "due_diligence/evidence/live_slice1_signoff/preregister.py"
+    ],
+    "all_differences_are_evidence_only": true,
+    "product_tree_equivalent_to_accepted_slice1": true,
+    "interpretation_v2_code_frozen_since_run8": true,
+    "product_file_blob_hashes": {
+      "mi_agent/plan_runtime_adapter.py": {
+        "accepted": "e73196f69baf4405945263cb89374309eb599922",
+        "head": "e73196f69baf4405945263cb89374309eb599922"
+      },
+      "mi_agent_api/mi_service.py": {
+        "accepted": "e4948bafd1e2e99258d99d496980da1c943b9296",
+        "head": "e4948bafd1e2e99258d99d496980da1c943b9296"
+      },
+      "mi_agent/tests/test_plan_runtime_adapter.py": {
+        "accepted": "6bb08ed81be9b2de525228f28cc32ba14d4c0526",
+        "head": "6bb08ed81be9b2de525228f28cc32ba14d4c0526"
+      },
+      "mi_agent/tests/test_plan_shadow_does_not_serve.py": {
+        "accepted": "5c6d37746897066eeac5ce4512336d198c279b73",
+        "head": "5c6d37746897066eeac5ce4512336d198c279b73"
+      }
+    },
+    "product_files_unchanged": true,
+    "shadow_mode_with_var_unset": "off",
+    "shadow_default_off": true,
+    "quarantined_branch_is_ancestor": false
+  },
+  "call_site": {
+    "observe_arguments_at_the_call_site": "result=result, frame=df, semantics=semantics, view=view,                          portfolio_id=authorised.portfolio_id",
+    "call_site_passes_a_plan": false,
+    "set_plan_provider_references": [
+      "./mi_agent/plan_runtime_adapter.py:513:def set_plan_provider(provider: Optional[Any]) -> None:",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:61:        adapter.set_plan_provider(None)",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:69:            adapter.set_plan_provider(lambda: called.append(1) or plan())",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:82:                adapter.set_plan_provider(plan)",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:118:            adapter.set_plan_provider(provider)",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:143:            adapter.set_plan_provider(plan)",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:155:                adapter.set_plan_provider(plan)",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:172:            adapter.set_plan_provider(plan)",
+      "./mi_agent/tests/test_plan_shadow_does_not_serve.py:185:                adapter.set_plan_provider(plan)"
+    ],
+    "set_plan_provider_production_callers": [],
+    "request_path_imports_interpretation_v2": false
+  },
+  "deployed_shadow_is_inert": {
+    "flag_value_used": "shadow",
+    "observe_returned": null,
+    "ledger_file_created": false,
+    "ledger_rows": 0,
+    "served_envelope_unchanged": true,
+    "conclusion": "a deployed request produces no plan, no shadow execution and no ledger row even with the flag fully on"
+  }
+}
