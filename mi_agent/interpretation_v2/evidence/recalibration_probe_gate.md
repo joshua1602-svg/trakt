@@ -22,7 +22,7 @@ is exhaustion rather than a transient — unlike Run 7's two HTTP 529s, it canno
 be retried away.
 
 Evidence is filed as
-`recal_probe_PARTIAL_21of57_credit_exhausted.json`, named so it cannot be
+`recal_probe_PARTIAL_21of57_api_balance_exhausted.json`, named so it cannot be
 mistaken for a complete run, and carrying a `credit_exhaustion_note` that states
 the same limits as this document.
 
