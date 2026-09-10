@@ -432,3 +432,147 @@ def _scalar_of(result: Any, spec: MIQuerySpec) -> Optional[float]:
         except (TypeError, ValueError):
             return None
     return None
+
+
+# --------------------------------------------------------------------------- #
+# the shadow comparison ledger
+# --------------------------------------------------------------------------- #
+
+#: Where the ledger is written. Absent means "record nothing", so a deployment
+#: can run shadow execution without producing evidence it has nowhere to put.
+LEDGER_ENV_VAR = "MI_AGENT_PLAN_SHADOW_LEDGER"
+
+# Parity classifications. A difference is not automatically a defect in the new
+# path — the old path is a control, not the truth oracle.
+EXACT_SEMANTIC_PARITY = "EXACT_SEMANTIC_PARITY"
+PRESENTATION_ONLY = "PRESENTATION_ONLY"
+OLD_PATH_SEMANTIC_DIFFERENCE = "OLD_PATH_SEMANTIC_DIFFERENCE"
+NEW_PATH_SEMANTIC_DIFFERENCE = "NEW_PATH_SEMANTIC_DIFFERENCE"
+NUMERICAL_DIFFERENCE = "NUMERICAL_DIFFERENCE"
+DISPOSITION_DIFFERENCE = "DISPOSITION_DIFFERENCE"
+SHADOW_EXECUTION_ERROR = "SHADOW_EXECUTION_ERROR"
+NOT_ELIGIBLE = "NOT_ELIGIBLE"
+
+#: Test/replay seam. Production leaves this None and the interpreter is built
+#: lazily, so an OFF flag makes no model call and imports no interpreter.
+_PLAN_PROVIDER: Optional[Any] = None
+
+
+def set_plan_provider(provider: Optional[Any]) -> None:
+    """Inject a plan source. For tests and offline replay only."""
+    global _PLAN_PROVIDER
+    _PLAN_PROVIDER = provider
+
+
+def _old_value(result: Any) -> Optional[float]:
+    """The legacy path's headline figure, if its envelope carries one.
+
+    Read defensively and without interpretation: an envelope shape this does not
+    recognise yields None and the comparison says so, rather than guessing which
+    number was the answer.
+    """
+    if not isinstance(result, Mapping):
+        return None
+    for key in ("value", "total", "result"):
+        candidate = result.get(key)
+        if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+            return float(candidate)
+    metrics = result.get("metrics")
+    if isinstance(metrics, Mapping):
+        for candidate in metrics.values():
+            if isinstance(candidate, (int, float)) and not isinstance(candidate, bool):
+                return float(candidate)
+    return None
+
+
+def classify(outcome: "ShadowOutcome", old_result: Any) -> Tuple[str, str]:
+    """`(classification, note)` comparing one shadow outcome with the control.
+
+    Numerical and semantic parity are judged separately and answer TEXT is never
+    compared — two paths can phrase one correct figure differently, and a prose
+    match would hide a population difference behind identical wording.
+    """
+    if not outcome.eligible:
+        return NOT_ELIGIBLE, outcome.reason
+    if outcome.error:
+        return SHADOW_EXECUTION_ERROR, outcome.error
+    old_ok = bool(isinstance(old_result, Mapping) and old_result.get("ok"))
+    if not old_ok:
+        return (DISPOSITION_DIFFERENCE,
+                "the shadow executed where the control did not answer")
+    new_value, old_value = outcome.value, _old_value(old_result)
+    if new_value is None or old_value is None:
+        return (PRESENTATION_ONLY,
+                f"no comparable scalar (new={new_value!r}, control={old_value!r})")
+    if abs(new_value - old_value) < 0.01:
+        return EXACT_SEMANTIC_PARITY, ""
+    return (NUMERICAL_DIFFERENCE,
+            f"control={old_value!r} shadow={new_value!r} — needs adjudication, "
+            f"the control is not the truth oracle")
+
+
+def _ledger_record(outcome: "ShadowOutcome", classification: str, note: str,
+                   *, view: Optional[str], portfolio_id: Optional[str],
+                   old_result: Any, case_id: str = "") -> Dict[str, Any]:
+    """One comparison row. Aggregates and field NAMES only — never a loan row."""
+    return {
+        "case_id": case_id,
+        "classification": classification,
+        "note": note[:300],
+        "eligible": outcome.eligible,
+        "ineligible_reason": outcome.reason,
+        "plan_id": outcome.plan_id,
+        "requested": dict(outcome.requested),
+        "caller_dataset_view": view,
+        "caller_portfolio_id": portfolio_id,
+        "new_value": outcome.value,
+        "new_receipt": dict(outcome.receipt),
+        "new_warnings": list(outcome.warnings),
+        "new_error": outcome.error,
+        "control_ok": bool(isinstance(old_result, Mapping)
+                           and old_result.get("ok")),
+        "control_value": _old_value(old_result),
+        "control_route": (old_result.get("route")
+                          if isinstance(old_result, Mapping) else None),
+    }
+
+
+def _append_ledger(record: Mapping[str, Any]) -> None:
+    import json
+    path = str(os.environ.get(LEDGER_ENV_VAR) or "").strip()
+    if not path:
+        return
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, default=str) + "\n")
+
+
+def observe(*, result: Any, frame: Any, semantics: Any,
+            view: Optional[str] = None, portfolio_id: Optional[str] = None,
+            plan: Any = None, case_id: str = "") -> Optional[Dict[str, Any]]:
+    """The production shadow hook. Returns a record, or None when inactive.
+
+    Swallows everything. A shadow that could break a served answer would be worse
+    than no shadow, so every failure path here ends in a ledger row or silence —
+    never an exception reaching the caller.
+
+    `plan` may be supplied directly (replay); otherwise a provider is consulted.
+    With the flag off this returns immediately, having imported no interpreter and
+    made no model call.
+    """
+    try:
+        if shadow_mode() != SHADOW_ON:
+            return None
+        governed_plan = plan
+        if governed_plan is None and _PLAN_PROVIDER is not None:
+            governed_plan = _PLAN_PROVIDER()
+        if governed_plan is None:
+            return None
+        outcome = execute_shadow_governed_plan(governed_plan, frame, semantics)
+        classification, note = classify(outcome, result)
+        record = _ledger_record(outcome, classification, note, view=view,
+                                portfolio_id=portfolio_id, old_result=result,
+                                case_id=case_id)
+        _append_ledger(record)
+        return record
+    except Exception:                                            # noqa: BLE001
+        return None

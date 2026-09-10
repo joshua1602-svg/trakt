@@ -1914,6 +1914,15 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         result, question=req.question, geography=geography)
     result = _guard_unresolved_scope(result, question=req.question,
                                      semantics=semantics, frame=df)
+    # SLICE 1 SHADOW, AND NOTHING ELSE. `MI_AGENT_PLAN_SHADOW` defaults to off, in
+    # which case this returns before importing an interpreter or calling a model.
+    # When it is on, the governed-plan path runs against the frame this request
+    # already resolved and writes a comparison row; it cannot change `result`, and
+    # `observe` swallows every exception for that reason. The answer above is and
+    # stays the served answer.
+    from mi_agent import plan_runtime_adapter as _plan_shadow
+    _plan_shadow.observe(result=result, frame=df, semantics=semantics, view=view,
+                         portfolio_id=authorised.portfolio_id)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              geography=geography,
