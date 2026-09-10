@@ -120,14 +120,38 @@ MINIMUM SUFFICIENT GOVERNED INTENT
 Record the SMALLEST intent that completely and faithfully answers the question \
 asked — no smaller, and no larger.
 
-This is not literalism. Infer an element the question leaves unstated when \
-answering it REQUIRES that element and the governed metadata, the asset and \
-client context and the capability catalogue leave one materially clear reading. \
-"Show balance by region" does not need the user to name a statistic, a \
-capability or a geography basis when each is a unique governed consequence of \
-what was asked.
+Minimum sufficient does NOT mean explicit words only. A question is a request \
+for an ANALYSIS, not a list of slots to transcribe, and an analysis has \
+requirements of its own. Place every candidate element in one of four bands:
 
-It is the other direction that needs discipline. Do NOT add a measure, \
+  1. EXPLICITLY REQUESTED. The question states it. Always preserve it.
+  2. REQUIRED BY THE REQUESTED OPERATION, and unstated. The analysis cannot be
+     carried out without this element, and the governed metadata, the asset and
+     client context and the capability catalogue leave exactly ONE materially
+     clear reading of it. Include it.
+     The user not having said the word is not a reason to omit it.
+  3. OPTIONAL COMPANION. Useful, customary, analytically adjacent, or simply
+     available. Leave it out.
+  4. REQUIRED BY THE REQUESTED OPERATION, and genuinely open. The element is
+     needed and more than one governed reading is materially plausible. Do not
+     pick one silently and do not drop it — record a blocking ambiguity.
+
+So every element is settled by two questions in order, never one:
+
+    does the analysis require it?  no  ->  leave out, however useful
+                                   yes ->  is one governed reading clear?
+                                             yes ->  include it
+                                             no  ->  blocking ambiguity
+
+An operation that reports figures requires at least one measure; an operation \
+that compares requires both sides; an ordering requires something to order by; \
+a milestone requires its target. An intent that asks for movement, comparison \
+or ranking while naming nothing to move, compare or rank is not minimal, it is \
+INCOMPLETE — and the compiler will refuse it rather than guess on your behalf. \
+Restraint governs what you ADD beyond the request. It never governs what the \
+request itself entails.
+
+Discipline is still needed in the other direction. Do NOT add a measure, \
 dimension, comparison, analysis or output because it is useful, interesting, \
 customarily shown beside the requested figure, analytically related, or simply \
 available in Trakt. The test is:
@@ -136,9 +160,10 @@ available in Trakt. The test is:
     merely useful to add               ->  leave out
 
 A capability's `owned_measures` list is its INVENTORY, not a menu to fill in. \
-Name the measures the question asks to RECEIVE. What the capability needs \
-internally to compute them is its own business, and it does not need you to \
-enumerate it.
+Name the measures the question asks to RECEIVE — which includes the one it \
+unmistakably implies when it asks for an analysis of a single obvious quantity. \
+What the capability needs internally to compute those measures is its own \
+business, and it does not need you to enumerate it.
 
 RULES
 
@@ -193,7 +218,7 @@ RULES
 
 BEFORE YOU SUBMIT
 
-Check three things. Act on them; do not narrate them.
+Check these in order. Act on them; do not narrate them.
 
 A. PRESERVATION. Every material semantic element the question states \
    EXPLICITLY — measure, statistic, weight, population or portfolio lens, \
@@ -205,10 +230,20 @@ A. PRESERVATION. Every material semantic element the question states \
    quietly and answering something broader is the one outcome that must not \
    happen.
 
-B. NECESSITY. For every measure, dimension, comparison, analysis and output you \
-   included: is it necessary to answer THIS question? If it is not, remove it.
+B. COMPLETENESS. Does the operation you recorded require an element the question \
+   left unstated? Read your intent back as an instruction and ask whether it \
+   could actually be carried out. An operation with nothing to report, a \
+   comparison with one side, an ordering with nothing to order by, a milestone \
+   with no target: each is incomplete. Where exactly one governed reading of \
+   the missing element is materially clear, INCLUDE it. Where more than one is \
+   materially plausible, record a blocking ambiguity. Silently leaving it out \
+   is not one of the options.
 
-C. AMBIGUITY. Do two materially different governed readings remain — readings \
+C. RESTRAINT. For everything that survived A and B: is it explicitly requested, \
+   or required by the operation? If it is neither — if it is there because it \
+   is useful, conventional or adjacent — remove it.
+
+D. AMBIGUITY. Do two materially different governed readings remain — readings \
    that would make Trakt execute different work? Then set a blocking ambiguity. \
    If the intended analysis is materially clear, go ahead and record it.
 

@@ -61,6 +61,48 @@ def test_the_instruction_states_the_necessity_test():
             f"{invitation!r}")
 
 
+def test_minimum_sufficient_is_not_defined_as_literalism():
+    """The recalibration's whole subject.
+
+    Run 7 produced intents carrying an operation and no measure at all, because
+    the question had not said the measure's name. The compiler refused them —
+    correctly — but the omission was the interpreter's, and it came from reading
+    "smallest" as "only the words present". The instruction must rule that out
+    in terms, not merely hint at it.
+    """
+    assert "does NOT mean explicit words only" in SYSTEM_PROMPT
+    assert "not a reason to omit it" in SYSTEM_PROMPT
+    # Restraint has a scope, and the instruction must say what it is.
+    assert "never governs what the request itself entails" in SYSTEM_PROMPT
+
+
+def test_the_instruction_ranks_the_four_interpretation_bands():
+    """Priority, not a single yes/no test.
+
+    One test ("is it necessary?") cannot separate an element that is required
+    and clear from one that is required and open — the first must be included
+    and the second must clarify. Four bands can.
+    """
+    for band in ("EXPLICITLY REQUESTED", "REQUIRED BY THE REQUESTED OPERATION",
+                 "OPTIONAL COMPANION"):
+        assert band in SYSTEM_PROMPT, f"no band for {band!r}"
+    # Required-and-open is the CLARIFY band; required-and-clear is the include
+    # band. Both appear under the same heading, so check their dispositions.
+    assert "more than one governed reading is materially plausible" in SYSTEM_PROMPT
+    assert "exactly ONE materially" in SYSTEM_PROMPT
+
+
+def test_the_instruction_names_what_an_operation_requires():
+    """Generic entailments, not bank-specific ones.
+
+    The prompt may not say "a movement needs a balance" — that is tuning. It
+    may say that an operation reporting figures needs a measure, which is a
+    property of the contract and holds for the next bank too.
+    """
+    assert "requires at least one measure" in SYSTEM_PROMPT
+    assert "is not minimal, it is INCOMPLETE" in SYSTEM_PROMPT
+
+
 def test_the_instruction_says_an_owned_measure_list_is_not_a_menu():
     """The mechanical cause, named.
 
@@ -81,6 +123,20 @@ def test_the_instruction_requires_explicit_semantics_to_be_preserved():
                     "geography basis", "temporal", "comparison", "target"):
         assert element in SYSTEM_PROMPT, f"preservation omits {element!r}"
     assert "never simply absent" in SYSTEM_PROMPT
+
+
+def test_the_pre_submission_check_covers_all_three_directions():
+    """Preservation, completeness and restraint are three different failures.
+
+    Run 6 failed preservation (an explicit filter dropped). Run 7 failed
+    completeness (a required measure never named) while passing restraint. A
+    check that only asks "did I add too much?" cannot catch the second, which is
+    why NECESSITY alone was not enough.
+    """
+    for check in ("PRESERVATION", "COMPLETENESS", "RESTRAINT"):
+        assert check in SYSTEM_PROMPT, f"the submission check omits {check}"
+    assert "Silently leaving it out" in SYSTEM_PROMPT
+    assert "If it is neither" in SYSTEM_PROMPT
 
 
 def test_the_instruction_guards_against_becoming_clarification_heavy():

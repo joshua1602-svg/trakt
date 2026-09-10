@@ -51,15 +51,37 @@ from .opus_interpreter import (
 from .outcomes import OUTCOME_CLARIFY, OUTCOME_PLAN, OUTCOME_REFUSE
 from .vocabulary import load_governed_vocabulary
 
-#: The four cohort groups, by canonical id. Chosen from Run 6 evidence: the
-#: seven INTERPRETATION_POLICY canonicals, the two MODEL_MISS canonicals, a
-#: control of terse questions that were fully correct, and a control of
-#: questions that legitimately clarify.
+#: The cohort groups, by canonical id.
+#:
+#: The first four came from Run 6 evidence: the seven INTERPRETATION_POLICY
+#: canonicals, the two MODEL_MISS canonicals, a control of terse questions that
+#: were fully correct, and a control of questions that legitimately clarify.
+#:
+#: Run 7 forced two more. `completeness` is the class the minimum-sufficient
+#: policy broke: a question whose operation REQUIRES a measure the wording never
+#: names. Run 7 emitted movement with an empty measure list, the compiler raised
+#: MISSING_REQUIRED_SLOT, and three readings that had been plans became
+#: clarifications. Q18/Q19/Q20 are that family in the frozen bank, and they are
+#: the probe's primary subject now. `gains` holds what Phase 2A actually improved
+#: and nothing else already covered, so a recalibration cannot quietly buy the
+#: fix back by giving up what the fix bought. Phase 2A improved Q16B, Q20A and
+#: SM08A; the first two are already in `preservation` and `completeness` (their
+#: gains ARE those groups' subject), so only SM08 needs a home here. Groups do
+#: not overlap, so `outcomes_by_group` sums to the cohort.
+#:
+#: One membership note, recorded rather than edited. NL7 sits in `policy` because
+#: Run 6 classified it there, but Run 7 showed its measure set is genuinely open
+#: — "riskier" names no governed measure, and three readers picked three
+#: different baskets. On the recalibrated border it is a REQUIRED-AND-OPEN
+#: element, so NL7 clarifying is the correct outcome, not a regression. The group
+#: is left alone so these numbers stay comparable with the Phase 2A probe.
 COHORT: Mapping[str, Sequence[str]] = {
     "policy": ("NL6", "NL7", "Q08", "Q10", "Q24", "Q25", "SM09"),
+    "completeness": ("Q18", "Q19", "Q20"),
     "preservation": ("Q16", "Q21"),
     "concise": ("Q01", "Q02", "Q11", "SM01"),
     "ambiguity": ("BB01", "NL8"),
+    "gains": ("SM08",),
 }
 
 DEFECTS = ("ADDED_UNREQUESTED_MEASURE", "ADDED_UNREQUESTED_DIMENSION",
