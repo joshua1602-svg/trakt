@@ -1,9 +1,9 @@
 """Why do three paraphrases of one question disagree? Classified from evidence.
 
-This is the Phase 1 instrument. It takes a completed benchmark run and, for every
-non-invariant canonical, says what the FIRST material semantic difference was and
-which of six causes it belongs to. It changes nothing and decides nothing; it
-exists so that a schema change is proposed against named cases rather than
+This is the Phase 1 / 1.5 instrument. It takes a completed benchmark run and, for
+every non-invariant canonical, says what the FIRST material semantic difference
+was and which of seven causes it belongs to. It changes nothing and decides
+nothing; it exists so that a remedy is proposed against named cases rather than
 against a hunch.
 
 THE DISTINCTION THAT MATTERS
@@ -20,24 +20,28 @@ What survives that normalisation is real. What does not survive it was never a
 disagreement about meaning, only about which of two permitted encodings the
 model happened to pick — and that is the definition of contract redundancy.
 
-THE SIX CAUSES
---------------
-``contract_redundancy``
-    The schema permits two encodings of one meaning and the model chose
-    differently. Fixable by removing the redundancy. Named cases only.
-``under_determined_question``
-    The question does not settle it. "Summarise the main concentrations" does
-    not say whether that is one measure or three, and no schema change makes
-    three readers agree.
-``model_miss``
-    The question states something and one variant dropped it. An interpretation
-    error under an identical contract.
-``wording_difference``
-    The three frozen variants genuinely ask different things. Not a defect.
-``missing_contract_slot``
-    The intent had nowhere to put something the question states.
-``compiler_difference``
-    Identical intents compiled differently. Would be a determinism bug.
+THE SEVEN CAUSES
+----------------
+``REPRESENTATIONAL``
+    Same meaning, alternative CandidateIntent encoding. Fixable by removing the
+    redundancy from the contract. Named cases only.
+``INTERPRETATION_POLICY``
+    The model understood the core request and then added or omitted
+    analytically-related content around it — a second limit measure, an extra
+    grouping, a companion figure. Not a misreading and not a schema defect: the
+    system has never stated how much an answer should volunteer.
+``MODEL_MISS``
+    The question states something explicitly and a variant missed or misread it.
+``GENUINE_AMBIGUITY``
+    The wording reasonably admits more than one governed interpretation, and the
+    honest outcome may be to clarify.
+``MISSING_CONTRACT_SLOT``
+    The meaning is understood but CandidateIntent cannot represent it.
+``COMPILER``
+    The same CandidateIntent compiled differently. Would be a determinism bug.
+``OTHER``
+    Anything the six above do not cover, including a frozen bank whose three
+    variants genuinely ask different questions.
 
     python -m mi_agent.interpretation_v2.divergence_audit \\
         evidence/run4_135_with_metadata_access.json
@@ -50,16 +54,40 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-CONTRACT_REDUNDANCY = "contract_redundancy"
-UNDER_DETERMINED = "under_determined_question"
-MODEL_MISS = "model_miss"
-WORDING_DIFFERENCE = "wording_difference"
-MISSING_CONTRACT_SLOT = "missing_contract_slot"
-COMPILER_DIFFERENCE = "compiler_difference"
-UNCERTAIN = "uncertain"
+#: The Phase 1.5 taxonomy. It splits the old `under_determined_question` bucket
+#: into the two things that were hiding inside it, which is the distinction that
+#: decides where the next phase belongs:
+#:
+#:   GENUINE_AMBIGUITY      the wording admits more than one governed reading, so
+#:                          the honest answer is to clarify. A question problem.
+#:   INTERPRETATION_POLICY  the model understood the core request and then added
+#:                          or dropped analytically-related content around it. A
+#:                          policy problem — the system has no stated rule about
+#:                          how much to volunteer.
+#:
+#: Those call for completely different remedies, and the old label could not tell
+#: them apart.
+REPRESENTATIONAL = "REPRESENTATIONAL"
+INTERPRETATION_POLICY = "INTERPRETATION_POLICY"
+MODEL_MISS = "MODEL_MISS"
+GENUINE_AMBIGUITY = "GENUINE_AMBIGUITY"
+MISSING_CONTRACT_SLOT = "MISSING_CONTRACT_SLOT"
+COMPILER = "COMPILER"
+OTHER = "OTHER"
+UNCERTAIN = "UNCERTAIN"
 
-CAUSES = (CONTRACT_REDUNDANCY, UNDER_DETERMINED, MODEL_MISS, WORDING_DIFFERENCE,
-          MISSING_CONTRACT_SLOT, COMPILER_DIFFERENCE, UNCERTAIN)
+CAUSES = (REPRESENTATIONAL, INTERPRETATION_POLICY, MODEL_MISS, GENUINE_AMBIGUITY,
+          MISSING_CONTRACT_SLOT, COMPILER, OTHER, UNCERTAIN)
+
+#: For an INTERPRETATION_POLICY case, which direction the divergence runs.
+#: Derived mechanically from the payloads against a reference set, so the label
+#: is not a second opinion on top of the adjudication.
+POLICY_ADDED_MEASURE = "added unrequested measure"
+POLICY_OMITTED_MEASURE = "omitted required measure"
+POLICY_ADDED_DIMENSION = "added unrequested dimension"
+POLICY_OMITTED_DIMENSION = "omitted required dimension"
+POLICY_ADDED_CAPABILITY = "added unrequested capability/analysis"
+POLICY_OTHER = "other"
 
 #: Slot comparison order: coarsest first, so the "first material difference" is
 #: the one that explains the others rather than a downstream consequence.
@@ -144,6 +172,47 @@ def normal_form(payload: Optional[Mapping[str, Any]]) -> Optional[Dict[str, Any]
     }
 
 
+def policy_detail(forms: Sequence[Optional[Dict[str, Any]]],
+                  expected: Optional[Mapping[str, Any]] = None) -> List[str]:
+    """Which way an INTERPRETATION_POLICY divergence runs, derived mechanically.
+
+    The reference is the human-reviewable fixture where it states measures or
+    dimensions, because that is independent truth authored before any run. Where
+    it does not, the reference is what all three variants AGREED on — the core
+    request none of them disputed — so "added" means beyond the agreed core and
+    "omitted" means short of it.
+    """
+    live = [f for f in forms if f]
+    if len(live) < 2:
+        return []
+    detail: List[str] = []
+    expected = expected or {}
+
+    def reference(slot: str, fixture_key: str) -> set:
+        if expected.get(fixture_key) is not None:
+            return {str(v).strip().lower() for v in expected[fixture_key]}
+        return set.intersection(*[set(f[slot]) for f in live])
+
+    for slot, fixture_key, added, omitted in (
+            ("measure_set", "measures", POLICY_ADDED_MEASURE, POLICY_OMITTED_MEASURE),
+            ("dimension_set", "dimensions", POLICY_ADDED_DIMENSION,
+             POLICY_OMITTED_DIMENSION)):
+        ref = reference(slot, fixture_key)
+        seen = [set(f[slot]) for f in live]
+        if len({frozenset(s) for s in seen}) == 1:
+            continue
+        if any(s - ref for s in seen):
+            detail.append(added)
+        if any(ref - s for s in seen):
+            detail.append(omitted)
+
+    if len({f["capability"] for f in live}) > 1:
+        detail.append(POLICY_ADDED_CAPABILITY)
+    if not detail:
+        detail.append(POLICY_OTHER)
+    return detail
+
+
 def _differing_slots(forms: Sequence[Optional[Dict[str, Any]]]) -> List[str]:
     out = []
     for slot in SLOT_ORDER:
@@ -154,7 +223,8 @@ def _differing_slots(forms: Sequence[Optional[Dict[str, Any]]]) -> List[str]:
 
 
 def audit(run: Mapping[str, Any],
-          adjudication: Optional[Mapping[str, str]] = None) -> Dict[str, Any]:
+          adjudication: Optional[Mapping[str, str]] = None,
+          expectations: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """Classify every non-invariant canonical in a completed run."""
     by_question = {r["question_id"]: r for r in run["results"]}
     divergent = {d["canonical_id"]: d["divergent_slots"]
@@ -187,6 +257,8 @@ def audit(run: Mapping[str, Any],
             "resolved_by_normal_form": not remaining,
             "cause": adjudication.get(canonical_id, UNCERTAIN),
             "adjudication_reason": reasons.get(canonical_id, ""),
+            "policy_detail": policy_detail(
+                forms, ((expectations or {}).get(canonical_id) or {}).get("expected")),
         })
 
     by_cause: Dict[str, List[str]] = {c: [] for c in CAUSES}
@@ -224,7 +296,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             adjudication = (yaml.safe_load(text) or {}).get("adjudication", {})
         else:
             adjudication = json.loads(text)
-    report = audit(run, adjudication)
+    from .benchmark import load_expectations
+    report = audit(run, adjudication, load_expectations())
     if args.out:
         args.out.write_text(json.dumps(report, indent=1, default=str),
                             encoding="utf-8")
