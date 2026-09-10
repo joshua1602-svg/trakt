@@ -337,6 +337,28 @@ class SemanticPopulation:
 
 
 @dataclass(frozen=True)
+class SemanticTarget:
+    """A threshold the question names as a GOAL, not as a filter.
+
+    "When will we reach £100m?" does not narrow a population to loans over
+    £100m — it asks when an aggregate crosses a line. Run 4 had the interpreter
+    correctly refusing to express that as a filter, and correctly reporting that
+    it had nowhere else to put it: a milestone is not representable without a
+    slot for the number it is a milestone of.
+
+    The value is the user's own figure from their own question, exactly like
+    "borrowers over 55". It is not data from a book.
+    """
+
+    concept: str
+    value: Any = None
+    comparator: str = "gte"
+
+    def key(self) -> Tuple[Any, ...]:
+        return (self.concept, self.comparator, self.value)
+
+
+@dataclass(frozen=True)
 class SemanticComparison:
     """Two things held against each other, named semantically."""
 
@@ -404,6 +426,7 @@ class CandidateIntent:
     geography: SemanticGeography = field(default_factory=SemanticGeography)
     time: SemanticTime = field(default_factory=SemanticTime)
     comparison: SemanticComparison = field(default_factory=SemanticComparison)
+    target: Optional[SemanticTarget] = None
     outputs: Tuple[RequestedOutput, ...] = ()
     ambiguity: Tuple[Ambiguity, ...] = ()
     evidence: Tuple[SourceSpan, ...] = ()
@@ -442,6 +465,7 @@ class CandidateIntent:
             self.geography.key(),
             self.time.key(),
             self.comparison.key(),
+            self.target.key() if self.target else None,
             tuple(sorted(o.key() for o in self.effective_outputs())),
         )
 
@@ -455,7 +479,8 @@ class CandidateIntent:
 
 _INTENT_KEYS = ("schema_version", "capability", "operation", "population",
                 "measures", "dimensions", "filters", "geography", "time",
-                "comparison", "outputs", "ambiguity", "evidence")
+                "comparison", "target", "outputs", "ambiguity", "evidence")
+_TARGET_KEYS = ("concept", "value", "comparator")
 _MEASURE_KEYS = ("concept", "statistic", "weight")
 _FILTER_KEYS = ("concept", "comparator", "value")
 _GEO_KEYS = ("requested", "basis", "level", "group_by", "values")
@@ -604,6 +629,24 @@ def _parse_comparison(raw: Any, *, slot: str) -> SemanticComparison:
     )
 
 
+def _parse_target(raw: Any, *, slot: str) -> Optional[SemanticTarget]:
+    if raw is None:
+        return None
+    if not isinstance(raw, Mapping):
+        raise IntentParseError("INTENT_SCHEMA_INVALID", slot, "expected an object")
+    _known_keys(raw, _TARGET_KEYS, slot=slot)
+    value = _parse_value(raw.get("value"), slot=f"{slot}.value")
+    if value is None or isinstance(value, (list, tuple)):
+        raise IntentParseError("INTENT_SCHEMA_INVALID", f"{slot}.value",
+                               "a target needs exactly one threshold value")
+    return SemanticTarget(
+        concept=_term(raw.get("concept"), slot=f"{slot}.concept"),
+        value=value,
+        comparator=_enum(raw.get("comparator", "gte"), COMPARATORS,
+                         slot=f"{slot}.comparator"),
+    )
+
+
 def _parse_output(raw: Any, *, slot: str, index: int) -> RequestedOutput:
     if not isinstance(raw, Mapping):
         raise IntentParseError("INTENT_SCHEMA_INVALID", slot, "expected an object")
@@ -681,6 +724,7 @@ def parse_candidate_intent(payload: Any, *,
         geography=_parse_geography(payload.get("geography"), slot="geography"),
         time=_parse_time(payload.get("time"), slot="time"),
         comparison=_parse_comparison(payload.get("comparison"), slot="comparison"),
+        target=_parse_target(payload.get("target"), slot="target"),
         outputs=tuple(_parse_output(o, slot=f"outputs[{i}]", index=i)
                       for i, o in enumerate(payload.get("outputs") or ())),
         ambiguity=tuple(ambiguity),
@@ -781,6 +825,22 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                     "kind": {"type": "string", "enum": sorted(COMPARISON_KINDS)},
                     "left": term,
                     "right": term,
+                },
+            },
+            "target": {
+                "type": "object", "additionalProperties": False,
+                "required": ["concept", "value"],
+                "description": "A threshold the question names as a GOAL, for a "
+                               "milestone or a limit question. 'When will we "
+                               "reach one hundred million?' sets `concept` to "
+                               "the governed balance concept and `value` to the "
+                               "figure the question named. It is NOT a filter — "
+                               "it does not narrow the population.",
+                "properties": {
+                    "concept": term,
+                    "value": {"description": "The threshold figure from the "
+                                             "question."},
+                    "comparator": {"type": "string", "enum": sorted(COMPARATORS)},
                 },
             },
             "outputs": {

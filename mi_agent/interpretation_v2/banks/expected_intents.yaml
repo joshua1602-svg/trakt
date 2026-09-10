@@ -92,7 +92,7 @@ expectations:
       population: [funded, all, any]
       filters:
         - {concept: current_ltv, comparator: gt, value: 50}
-        - {concept: product_type, comparator: eq, value: drawdown}
+        - {concept: erm_product_type, comparator: eq, value: drawdown}
       dimensions: []
       temporal: current
       comparison: none
@@ -135,7 +135,11 @@ expectations:
       weight: [balance]
       population: [funded, direct, any]
       filters:
-        - {concept: product_type, comparator: eq, value: lump sum}
+        # `lump_sum` is the governed value, from the asset profile's
+        # match.product_type. The fixture originally said "lump sum"; once the
+        # value list was actually read, the registry's spelling is the one that
+        # counts.
+        - {concept: erm_product_type, comparator: eq, value: lump_sum}
       dimensions: []
       temporal: current
       comparison: none
@@ -291,7 +295,7 @@ expectations:
       statistic: [sum]
       population: [funded, all, any]
       filters:
-        - {concept: product_type, comparator: eq, value: drawdown}
+        - {concept: erm_product_type, comparator: eq, value: drawdown}
       dimensions: [ltv_bucket]
       temporal: current
       comparison: none
@@ -344,7 +348,7 @@ expectations:
       operation: movement
       population: [funded, all, any]
       filters:
-        - {concept: product_type, comparator: eq, value: drawdown}
+        - {concept: erm_product_type, comparator: eq, value: drawdown}
       dimensions: []
       temporal: relative_pair
       comparison: none

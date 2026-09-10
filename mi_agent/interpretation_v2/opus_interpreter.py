@@ -137,6 +137,15 @@ RULES
 3a. A filter value must come from `get_allowed_values`. If that reports \
    `has_governed_values: false`, do NOT assert a value against it: record it in \
    `ambiguity` with blocking=true instead. A value you cannot check is a guess.
+3b. A figure the question names as a GOAL goes in `target`, never in `filters`. \
+   "When will we reach one hundred million?" is a milestone whose target is the \
+   governed balance concept and the figure named; it does not narrow the \
+   population to loans above that figure. A `forecast_milestone` without a \
+   target is incomplete.
+3c. A period-on-period movement is stated ONCE, by the operation and \
+   `time.form` — there is no `period_pair` comparison. `comparison` is only for \
+   two POPULATIONS or two DIMENSION VALUES held against each other, and both \
+   sides must be named.
 4. If the question asks for more than one thing about the SAME population, use \
    `outputs` — one entry per figure or table, with `filters` on an output that \
    apply only to that figure. Do not split one question into unrelated ones.

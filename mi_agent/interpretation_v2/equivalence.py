@@ -67,7 +67,7 @@ class EquivalenceReport:
 #: explains every downstream one and reporting all of them equally would bury it.
 _SLOTS: Tuple[str, ...] = (
     "outcome", "capability", "operation", "population", "period", "geography",
-    "filters", "outputs",
+    "filters", "target", "outputs",
 )
 
 
@@ -91,6 +91,9 @@ def _slot_values(result: CompileResult) -> Dict[str, Any]:
                       if plan.geography else None),
         "filters": tuple(sorted((f.canonical_field or f.concept, f.comparator,
                                  str(f.value)) for f in plan.filters)),
+        "target": ((plan.target.canonical_field or plan.target.concept,
+                    plan.target.comparator, str(plan.target.value))
+                   if plan.target else None),
         "outputs": tuple(sorted(
             (tuple(sorted((m.canonical_field or m.concept, m.statistic,
                            m.weight_field or "") for m in o.measures)),

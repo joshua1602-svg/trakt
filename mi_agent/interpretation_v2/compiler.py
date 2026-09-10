@@ -78,6 +78,7 @@ from .plan import (
     PeriodBinding,
     PlanProvenance,
     PopulationBinding,
+    TargetBinding,
 )
 from .vocabulary import (
     CAPABILITY_OPERATIONS,
@@ -307,6 +308,9 @@ class DeterministicCompiler:
                                                          slot="filters")
         reasons.extend(filter_reasons)
 
+        target, target_reasons = self._bind_target(intent)
+        reasons.extend(target_reasons)
+
         outputs: List[OutputPlan] = []
         for output in intent.effective_outputs():
             plan_output, out_reasons, out_notes = self._bind_output(
@@ -338,6 +342,7 @@ class DeterministicCompiler:
             population=population,
             outputs=tuple(outputs),
             period=period,
+            target=target,
             comparison_kind=intent.comparison.kind,
             comparison_left=intent.comparison.left,
             comparison_right=intent.comparison.right,
@@ -368,12 +373,11 @@ class DeterministicCompiler:
 
         # Conflicting claims: a comparison that names no sides, or sides on a
         # comparison that is 'none'.
-        # A PERIOD pair names its two sides through the period contract, not
-        # through two terms — "how did the book change last month" states the
-        # pair completely. Only a population or dimension pair has to name what
-        # is being held against what.
+        # Every comparison kind names two sides, now that the redundant
+        # `period_pair` member is gone: a period-on-period movement is stated by
+        # the operation and the time form, not by a third flag.
         comparison = intent.comparison
-        if comparison.kind in ("population_pair", "dimension_pair") \
+        if comparison.kind != "none" \
                 and not (comparison.left and comparison.right):
             reasons.append(CompileReason(
                 CONFLICTING_CLAIMS, "comparison",
@@ -518,6 +522,42 @@ class DeterministicCompiler:
         return (PeriodBinding(form=time.form, labels=time.labels, grain=time.grain,
                               periods_back=time.periods_back, contract=contract,
                               resolved=settled, owned_by_capability=owned),
+                reasons)
+
+    def _bind_target(self, intent: CandidateIntent
+                     ) -> Tuple[Optional[TargetBinding], List[CompileReason]]:
+        """The threshold a milestone or limit question is asking about.
+
+        A target is not a filter: "when will we reach £100m" does not narrow the
+        population to loans over £100m, it asks when an aggregate crosses a
+        line. Run 4 had the interpreter refusing three milestone questions
+        because it had correctly declined to express the figure as a filter and
+        had nowhere else to put it.
+
+        A milestone with no target is MISSING_REQUIRED_SLOT: "when will we reach
+        it?" is not a question until the question says what "it" is.
+        """
+        reasons: List[CompileReason] = []
+        if intent.target is None:
+            if intent.operation == "forecast_milestone":
+                reasons.append(CompileReason(
+                    MISSING_REQUIRED_SLOT, "target",
+                    "a milestone needs the threshold it is a milestone of"))
+            return None, reasons
+
+        concept, reason = self._resolve(intent.target.concept, slot="target")
+        if reason is not None:
+            return None, [reason]
+        if not isinstance(intent.target.value, (int, float)) \
+                or isinstance(intent.target.value, bool):
+            return None, [CompileReason(
+                UNSUPPORTED_FILTER, "target",
+                "a threshold must be a number")]
+        return (TargetBinding(concept=concept.concept_id,
+                              comparator=intent.target.comparator,
+                              value=intent.target.value,
+                              canonical_field=concept.canonical_field,
+                              capability_owner=concept.owning_capability),
                 reasons)
 
     def _bind_geography(self, geography: SemanticGeography, *, slot: str
@@ -825,11 +865,6 @@ class DeterministicCompiler:
                 f"a {operation} needs two or more periods; the intent states "
                 f"{period.form!r}"))
 
-        if intent.comparison.kind == "period_pair" and period.form not in _MULTI_PERIOD_FORMS:
-            reasons.append(CompileReason(
-                CONFLICTING_CLAIMS, "comparison",
-                "a period comparison was requested against a single period"))
-
         return reasons
 
     # -- D. provenance ------------------------------------------------------ #
@@ -855,6 +890,7 @@ class DeterministicCompiler:
             "geography": list(intent.geography.key()),
             "time": list(intent.time.key()),
             "comparison": list(intent.comparison.key()),
+            "target": list(intent.target.key()) if intent.target else None,
             "evidence": [{"claim": e.claim, "text": e.text} for e in intent.evidence],
         }
         bindings: Dict[str, Any] = {

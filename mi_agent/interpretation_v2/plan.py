@@ -123,6 +123,17 @@ class PeriodBinding:
 
 
 @dataclass(frozen=True)
+class TargetBinding:
+    """A governed threshold a milestone or limit question is asking about."""
+
+    concept: str
+    comparator: str
+    value: Any
+    canonical_field: Optional[str] = None
+    capability_owner: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class PopulationBinding:
     """The governed population: the book state, the lens, the seasoning."""
 
@@ -183,6 +194,7 @@ class GovernedQueryPlan:
     comparison_right: Optional[str] = None
     filters: Tuple[FilterBinding, ...] = ()
     geography: Optional[GeographyBinding] = None
+    target: Optional[TargetBinding] = None
     provenance: PlanProvenance = field(default_factory=PlanProvenance)
 
     @property
@@ -254,6 +266,8 @@ class GovernedQueryPlan:
             found.append(predicate.canonical_field)
         if self.geography is not None:
             found.append(self.geography.canonical_field)
+        if self.target is not None and self.target.canonical_field:
+            found.append(self.target.canonical_field)
         for output in self.outputs:
             for measure in output.measures:
                 if measure.canonical_field:

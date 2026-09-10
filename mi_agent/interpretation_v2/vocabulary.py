@@ -133,8 +133,15 @@ POPULATION_BASES: FrozenSet[str] = frozenset({"funded", "pipeline", "forecast",
 POPULATION_LENSES: FrozenSet[str] = frozenset({"direct", "acquired", "all"})
 SEASONING_SEGMENTS: FrozenSet[str] = frozenset({"front_book", "back_book", "any"})
 
+#: A comparison names two POPULATIONS or two DIMENSION VALUES held against each
+#: other. It deliberately has no `period_pair` member: ``operation: movement``
+#: plus ``time.form: relative_pair`` already says "two periods", and a third
+#: slot saying it again is a slot the model fills inconsistently — measured, on
+#: run 4, as nine scoring misses and several paraphrase divergences where the
+#: bindings agreed and only this flag differed. Removing the redundancy removes
+#: the inconsistency.
 COMPARISON_KINDS: FrozenSet[str] = frozenset({
-    "none", "population_pair", "period_pair", "dimension_pair"})
+    "none", "population_pair", "dimension_pair"})
 
 #: Specialist measures OWNED by a capability, not composed from fields. Opus may
 #: name them; it is never shown how they are built.

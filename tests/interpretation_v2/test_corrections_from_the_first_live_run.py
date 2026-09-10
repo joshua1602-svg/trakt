@@ -67,17 +67,42 @@ def test_a_GENERIC_movement_still_needs_two_periods(compiler):
 
 
 # --------------------------------------------------------------------------- #
-# 2 · a period pair names its sides through the period contract
+# 2 · a period comparison is stated once, by the operation and the time form
 # --------------------------------------------------------------------------- #
 
-def test_a_period_pair_needs_no_left_and_right(compiler):
+def test_period_pair_is_not_a_comparison_kind():
+    """Run 4's largest remaining finding: three slots, one fact.
+
+    ``operation: movement`` plus ``time.form: relative_pair`` already says "two
+    periods". A `comparison.kind: period_pair` flag says it a third time, and
+    the model filled the redundant slot inconsistently across paraphrases —
+    nine scoring misses and several invariance divergences where every binding
+    agreed and only this flag differed. The member is gone; the redundancy with
+    it.
+    """
+    from mi_agent.interpretation_v2 import parse_candidate_intent
+    from mi_agent.interpretation_v2.intent import IntentParseError
+    from mi_agent.interpretation_v2.vocabulary import COMPARISON_KINDS
+
+    assert "period_pair" not in COMPARISON_KINDS
+    assert COMPARISON_KINDS == {"none", "population_pair", "dimension_pair"}
+
+    from .conftest import intent_payload
+    with pytest.raises(IntentParseError):
+        parse_candidate_intent(intent_payload(
+            comparison={"kind": "period_pair"}))
+
+
+def test_a_period_on_period_movement_needs_no_comparison_flag(compiler):
     """"How did the Direct book change last month?" states the pair completely."""
     intent = build_intent(capability="period_movement", operation="movement",
-                          time={"form": "relative_pair"},
-                          comparison={"kind": "period_pair"})
+                          population={"base": "funded", "lens": "direct",
+                                      "seasoning": "any"},
+                          time={"form": "relative_pair"})
     result = compiler.compile(intent)
     assert result.outcome == OUTCOME_PLAN, result.codes()
-    assert result.plan.comparison_kind == "period_pair"
+    assert result.plan.comparison_kind == "none"
+    assert result.plan.period.form == "relative_pair"
 
 
 @pytest.mark.parametrize("kind", ["population_pair", "dimension_pair"])
@@ -240,3 +265,72 @@ def test_the_declared_geography_default_matches_what_the_compiler_does(compiler)
     assert result.plan.geography.resolved_level == "reporting"
     assert result.plan.geography.canonical_field == "canonical_region_reporting"
     assert result.plan.geography.defaulted is True
+
+
+# --------------------------------------------------------------------------- #
+# 6 · a milestone target is a slot, not a filter
+# --------------------------------------------------------------------------- #
+
+def test_a_milestone_target_is_representable(compiler):
+    """Run 4's other finding: "when will we reach £100m" had nowhere to go.
+
+    The interpreter correctly refused to express the figure as a filter — a
+    milestone does not narrow the population to loans above it — and correctly
+    reported that it had no other slot. A forecast milestone is not
+    representable without one.
+    """
+    intent = build_intent(capability="forecast",
+                          operation="forecast_milestone",
+                          measures=[],
+                          time={"form": "forward_looking"},
+                          target={"concept": "forecast_funded_balance",
+                                  "value": 100_000_000})
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN, result.codes()
+    assert result.plan.target is not None
+    assert result.plan.target.concept == "forecast_funded_balance"
+    assert result.plan.target.value == 100_000_000
+    assert result.plan.target.comparator == "gte"
+    assert result.plan.target.capability_owner == "forecast"
+
+
+def test_a_milestone_without_a_target_is_incomplete(compiler):
+    """"When will we reach it?" is not a question until "it" is named."""
+    intent = build_intent(capability="forecast",
+                          operation="forecast_milestone", measures=[],
+                          time={"form": "forward_looking"})
+    result = compiler.compile(intent)
+    assert result.plan is None
+    assert "MISSING_REQUIRED_SLOT" in result.codes()
+
+
+def test_a_target_is_not_a_filter_and_does_not_narrow_the_population(compiler):
+    """The two are different authorised work, and the plan keeps them apart."""
+    with_target = compiler.compile(build_intent(
+        capability="forecast", operation="forecast_milestone", measures=[],
+        time={"form": "forward_looking"},
+        target={"concept": "forecast_funded_balance", "value": 100_000_000}))
+    assert with_target.plan.filters == ()
+    assert with_target.plan.target is not None
+
+
+def test_a_target_concept_is_still_validated(compiler):
+    intent = build_intent(capability="forecast",
+                          operation="forecast_milestone", measures=[],
+                          time={"form": "forward_looking"},
+                          target={"concept": "made_up_aggregate",
+                                  "value": 100_000_000})
+    result = compiler.compile(intent)
+    assert result.plan is None
+    assert "UNREGISTERED_CONCEPT" in result.codes()
+
+
+def test_a_target_must_be_a_number(compiler):
+    from mi_agent.interpretation_v2 import parse_candidate_intent
+    from mi_agent.interpretation_v2.intent import IntentParseError
+
+    from .conftest import intent_payload
+    with pytest.raises(IntentParseError):
+        parse_candidate_intent(intent_payload(
+            target={"concept": "forecast_funded_balance",
+                    "value": ["a", "b"]}))
