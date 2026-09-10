@@ -1,0 +1,634 @@
+# =========================================================================
+# Expected semantic intent for the 135-question interpretation benchmark.
+# =========================================================================
+#
+# HOW THIS FILE WAS WRITTEN — AND HOW IT WAS NOT
+# ----------------------------------------------
+# Each expectation is derived from TWO sources only:
+#
+#   1. the canonical question text, and
+#   2. independent semantic truth that already existed in this repository
+#      before this sprint —
+#        migration_phase0/MI_FINAL_ACCEPTANCE_75.yaml       (shape, family)
+#        tests/fixtures/.../STAGE_MOVEMENT_BANK.yaml        (subtype)
+#        migration_phase0/BORROWING_BASE_MI_BANK.yaml       (intent, measures)
+#        due_diligence/evidence/analytical_intent_v1/
+#            expected_semantics.yaml                        (family, operation,
+#                                                            population, period)
+#
+# It is NOT derived from what the deterministic parser resolves, from
+# QueryInterpretation, from the recogniser cascade, or from any run of the new
+# interpreter. Scoring a new interpreter by agreement with a known-flawed parser
+# measures agreement, not correctness.
+#
+# WHAT AN ABSENT KEY MEANS
+# ------------------------
+# A dimension that is not stated here is scored UNSCOREABLE, not correct. Where
+# the question genuinely supports more than one reading, the entry says so under
+# `human_review` and leaves the contested dimension out rather than inventing a
+# ruling this sprint has no authority to make. Ten of the forty-five canonicals
+# are marked that way; that count is a finding, not a gap to be filled by
+# guessing.
+#
+# `filters` values are the question's own literals. `population` is
+# (base, lens, seasoning). `output_structure` is how many distinct figures or
+# tables the question asks for.
+
+version: 1
+expectations:
+
+  # ---- BANK75 · multi-filter facts -------------------------------------- #
+  Q01:
+    derivation: >-
+      "How many loans" is a count of the row population. Two numeric predicates
+      qualify it. Source shape: "two numeric filters / COUNT".
+    expected:
+      capability: generic_analysis
+      operation: point_in_time
+      measures: [loan]
+      statistic: [count]
+      weight: []
+      population: [funded, all, any]
+      filters:
+        - {concept: borrower_age, comparator: gt, value: 55}
+        - {concept: current_ltv, comparator: gt, value: 50}
+      dimensions: []
+      geography_basis: null
+      geography_level: null
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q02:
+    derivation: >-
+      "the balance of loans ..." is the aggregate exposure of a filtered
+      population; the registry's governed statistic for balance is a sum.
+      Source shape: "two numeric filters / BALANCE".
+    expected:
+      capability: generic_analysis
+      operation: point_in_time
+      measures: [balance]
+      statistic: [sum]
+      weight: []
+      population: [funded, all, any]
+      filters:
+        - {concept: borrower_age, comparator: gt, value: 75}
+        - {concept: current_ltv, comparator: gt, value: 40}
+      dimensions: []
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q03:
+    derivation: >-
+      "drawdown loans" is a categorical predicate on product type; "how many"
+      is a count. Source shape: "categorical + numeric filter".
+    expected:
+      capability: generic_analysis
+      operation: point_in_time
+      measures: [loan]
+      statistic: [count]
+      weight: []
+      population: [funded, all, any]
+      filters:
+        - {concept: current_ltv, comparator: gt, value: 50}
+        - {concept: product_type, comparator: eq, value: drawdown}
+      dimensions: []
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q04:
+    derivation: >-
+      "Direct-book" is the provenance lens, "in London" restricts geography to a
+      named place, "borrowers over 75" is a row predicate. Source shape:
+      "scope + geography + numeric filter".
+    expected:
+      capability: generic_analysis
+      operation: point_in_time
+      measures: [balance]
+      statistic: [sum]
+      weight: []
+      population: [funded, direct, any]
+      filters:
+        - {concept: borrower_age, comparator: gt, value: 75}
+      dimensions: []
+      temporal: current
+      comparison: none
+      output_structure: 1
+    human_review: false
+    note: >-
+      geography is a RESTRICTION here (values ['London']), not a grouping, so
+      geography_basis/level are left unstated: the question names a place, not
+      a basis.
+
+  Q05:
+    derivation: >-
+      "weighted-average LTV" names the statistic explicitly; the registry's
+      governed weight for LTV is exposure. "lump sum" is a product predicate,
+      "Direct book" the lens. Source shape: "aggregation + category + scope".
+    expected:
+      capability: generic_analysis
+      operation: point_in_time
+      measures: [current_ltv]
+      statistic: [weighted_average]
+      weight: [balance]
+      population: [funded, direct, any]
+      filters:
+        - {concept: product_type, comparator: eq, value: lump sum}
+      dimensions: []
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  # ---- BANK75 · synthesis ----------------------------------------------- #
+  Q06:
+    derivation: '"Summarise the portfolio" is the portfolio-summary capability
+      answering for itself. Source family: synthesis.'
+    expected:
+      capability: portfolio_summary
+      operation: summary
+      population: [funded, all, any]
+      filters: []
+      dimensions: []
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q07:
+    derivation: >-
+      A named pair of provenance populations held against each other. Source
+      shape: "portfolio comparison".
+    expected:
+      capability: portfolio_summary
+      operation: compare
+      comparison: population_pair
+      temporal: current
+      output_structure: 1
+
+  Q08:
+    derivation: >-
+      Source shape: "concentration synthesis". The capability is unambiguous.
+    expected:
+      capability: concentration
+      temporal: current
+    human_review: true
+    note: >-
+      The three frozen variants do not agree on operation. Q08A ("Where are our
+      largest concentrations") and Q08B ("the biggest concentration exposures")
+      read as a RANK; Q08C ("Summarise the main current portfolio
+      concentrations") reads as a SUMMARY. Both readings are defensible from
+      the wording, so operation is left unstated and the paraphrase-invariance
+      result for Q08 is reported rather than judged.
+
+  Q09:
+    derivation: >-
+      "concentration limits ... breached or close to breach" is the limit
+      schedule assessed at the latest reporting date. Source shape: "current
+      limit position". Independent truth Q6.2 classifies the same family as
+      LIMITS_CONCENTRATION with a point-in-time period.
+    expected:
+      capability: limit_assessment
+      temporal: current
+      comparison: none
+
+  Q10:
+    derivation: 'Source shape: "pipeline synthesis" — the pipeline capability
+      summarising its own book.'
+    expected:
+      capability: pipeline
+      operation: summary
+      population: [pipeline, all, any]
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  # ---- BANK75 · multi-dimensional artefacts ------------------------------ #
+  Q11:
+    derivation: >-
+      Balance broken down by two governed bucket dimensions. Source shape:
+      "two-dimensional TABLE".
+    expected:
+      capability: generic_analysis
+      operation: breakdown
+      measures: [balance]
+      statistic: [sum]
+      population: [funded, all, any]
+      filters: []
+      dimensions: [ltv_bucket, ticket_size]
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q12:
+    derivation: 'Source shape: "two-dimensional CHART" — the same breakdown; the
+      artefact type is not a semantic dimension of the question.'
+    expected:
+      capability: generic_analysis
+      operation: breakdown
+      measures: [balance]
+      statistic: [sum]
+      population: [funded, all, any]
+      filters: []
+      dimensions: [age_bucket, ltv_bucket]
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q13:
+    derivation: 'Source shape: "two-dimensional TABLE".'
+    expected:
+      capability: generic_analysis
+      operation: breakdown
+      measures: [balance]
+      statistic: [sum]
+      population: [funded, all, any]
+      filters: []
+      dimensions: [interest_rate_bucket, ltv_bucket]
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q14:
+    derivation: >-
+      Loan count split by region and product type. Region is a GROUPING here,
+      and the questions do not say whose region, so no basis is expected.
+      Source shape: "two-dimensional categorical".
+    expected:
+      capability: generic_analysis
+      operation: breakdown
+      measures: [loan]
+      statistic: [count]
+      population: [funded, all, any]
+      filters: []
+      dimensions: [product_type]
+      geography_basis: null
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q15:
+    derivation: 'Source shape: "two-dimensional, single source portfolio".'
+    expected:
+      capability: generic_analysis
+      operation: breakdown
+      measures: [balance]
+      statistic: [sum]
+      population: [funded, direct, any]
+      filters: []
+      dimensions: [broker, product_type]
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q16:
+    derivation: 'Source shape: "filter + two dimensions" — a product predicate,
+      then a breakdown by geography and an LTV band.'
+    expected:
+      capability: generic_analysis
+      operation: breakdown
+      measures: [balance]
+      statistic: [sum]
+      population: [funded, all, any]
+      filters:
+        - {concept: product_type, comparator: eq, value: drawdown}
+      dimensions: [ltv_bucket]
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  Q17:
+    derivation: 'Source shape: "true three-dimensional output".'
+    expected:
+      capability: generic_analysis
+      operation: breakdown
+      measures: [balance]
+      statistic: [sum]
+      population: [funded, direct, any]
+      filters: []
+      dimensions: [age_bucket, ltv_bucket, ticket_size]
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  # ---- BANK75 · movement ------------------------------------------------- #
+  Q18:
+    derivation: >-
+      "How did the book change in the last month" is a period-on-period
+      movement over the whole funded book. Source family: movement.
+    expected:
+      capability: period_movement
+      operation: movement
+      population: [funded, all, any]
+      filters: []
+      dimensions: []
+      temporal: relative_pair
+      comparison: none
+
+  Q19:
+    derivation: 'Source shape: "scoped movement" — the same movement under the
+      Direct lens.'
+    expected:
+      capability: period_movement
+      operation: movement
+      population: [funded, direct, any]
+      filters: []
+      dimensions: []
+      temporal: relative_pair
+      comparison: none
+
+  Q20:
+    derivation: 'Source shape: "categorical filtered movement".'
+    expected:
+      capability: period_movement
+      operation: movement
+      population: [funded, all, any]
+      filters:
+        - {concept: product_type, comparator: eq, value: drawdown}
+      dimensions: []
+      temporal: relative_pair
+      comparison: none
+
+  Q21:
+    derivation: >-
+      "Which region added the most balance" ranks GROUPS by movement, filtered
+      to loans above 50% LTV. Source shape: "numeric-filtered ranked movement".
+    expected:
+      capability: period_movement
+      operation: rank
+      measures: [balance]
+      population: [funded, all, any]
+      filters:
+        - {concept: current_ltv, comparator: gt, value: 50}
+      temporal: relative_pair
+      comparison: none
+
+  Q22:
+    derivation: >-
+      "Which source portfolio contributed most" ranks the provenance dimension
+      by movement. Source shape: "movement attribution".
+    expected:
+      capability: period_movement
+      operation: rank
+      measures: [balance]
+      population: [funded, all, any]
+      temporal: relative_pair
+
+  # ---- BANK75 · strategic ------------------------------------------------ #
+  Q23:
+    derivation: >-
+      "When will we reach £100m" asks for a DATE at which a threshold is met —
+      a forward milestone. Source shape: "milestone already reached / threshold
+      semantics".
+    expected:
+      capability: forecast
+      operation: forecast_milestone
+      temporal: forward_looking
+      comparison: none
+
+  Q24:
+    derivation: 'Source shape: "forward milestone".'
+    expected:
+      capability: forecast
+      operation: forecast_milestone
+      temporal: forward_looking
+      comparison: none
+
+  Q25:
+    derivation: >-
+      "Do we expect to breach" projects the limit schedule forward. Source
+      shape: "forward concentration-risk assessment".
+    expected:
+      capability: limit_assessment
+      operation: forecast_projection
+      temporal: forward_looking
+      comparison: none
+
+  # ---- pipeline stage movement ------------------------------------------ #
+  SM01:
+    derivation: 'Source subtype: transition. Cases counted moving between two
+      named stages, period on period.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: transition
+      population: [pipeline, all, any]
+      temporal: relative_pair
+      comparison: none
+
+  SM02:
+    derivation: 'Source subtype: transition, measured in value rather than
+      count.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: transition
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  SM03:
+    derivation: 'Source subtype: transition.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: transition
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  SM04:
+    derivation: 'Source subtype: transition, measured in value.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: transition
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  SM05:
+    derivation: 'Source subtype: new_arrival — cases entering a stage from
+      outside the pipeline.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: arrivals
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  SM06:
+    derivation: 'Source subtype: stayer — cases present at a stage in both
+      periods.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: stayers
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  SM07:
+    derivation: 'Source subtype: stayer_amount_change — the VALUE change on the
+      stayers, not their count.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: stayers
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  SM08:
+    derivation: 'Source subtype: departure — where leavers went, so the answer
+      is broken down by destination.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: departures
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  SM09:
+    derivation: 'Source subtype: reconciliation — opening, arrivals, departures
+      and closing for one stage.'
+    expected:
+      capability: pipeline_stage_movement
+      operation: reconciliation
+      population: [pipeline, all, any]
+      temporal: relative_pair
+
+  # ---- analytical-intent NL bank ---------------------------------------- #
+  NL1:
+    derivation: >-
+      Independent truth Q1.1/Q1.2 classify this as MIX_PROFILE + MOVEMENT_TREND
+      with a CHANGE operation over two snapshots.
+    expected:
+      comparison: none
+    human_review: true
+    note: >-
+      expected_semantics.yaml records an unresolved TENSION on the population:
+      "our new lending" maps to the governed NEW window (months_on_book <= 1)
+      under one reading and to RECENT (<= 3) under another, and the two
+      variations of this question in that file are given DIFFERENT populations
+      for that reason. This sprint has no authority to settle it, so population
+      and operation are left unstated.
+
+  NL2:
+    derivation: >-
+      A threshold reached at a future date under the current trajectory — the
+      same forward-milestone shape the frozen BANK75 gives Q23/Q24.
+    expected:
+      capability: forecast
+      operation: forecast_milestone
+      temporal: forward_looking
+      comparison: none
+
+  NL3:
+    derivation: >-
+      Independent truth Q3.1: families PIPELINE + FORECAST_PROJECTION,
+      operations STOCK + EXPECTED_COMPLETION, population pipeline_stage ==
+      OFFER.
+    expected:
+      population: [pipeline, all, any]
+    human_review: true
+    note: >-
+      The question asks for a stock AND a projection AND a timing, spanning two
+      capabilities. Whether that is one intent with several outputs or two
+      intents is a target-architecture ruling this sprint deliberately does not
+      make; capability, operation and output_structure are left unstated and the
+      observed reading is reported.
+
+  NL4:
+    derivation: >-
+      Independent truth Q4.2: family PIPELINE, operations MOVEMENT + RUN_RATE,
+      population "completions per unit time — a flow, not a stock", period "a
+      rate, therefore two or more observations".
+    expected:
+      comparison: none
+    human_review: true
+    note: >-
+      A run rate is a flow over a window. Neither the generic operations nor the
+      specialist capabilities in this vocabulary carry a RUN_RATE operation, so
+      any capability/operation reading would be scored against a slot that does
+      not exist. Recorded as a genuine vocabulary gap rather than a model error.
+
+  NL5:
+    derivation: >-
+      Limits assessed forward over a named horizon — the same shape BANK75 gives
+      Q25, and independent truth classifies the family as LIMITS_CONCENTRATION.
+    expected:
+      capability: limit_assessment
+      operation: forecast_projection
+      temporal: forward_looking
+      comparison: none
+
+  NL6:
+    derivation: >-
+      Independent truth Q6.2: family LIMITS_CONCENTRATION, operations HEADROOM +
+      RANKING + STATUS, population "the governed limit schedule", period "point
+      in time, latest reporting date".
+    expected:
+      capability: limit_assessment
+      operation: rank
+      temporal: current
+      comparison: none
+
+  NL7:
+    derivation: >-
+      Independent truth Q7.2: families MIX_PROFILE + VINTAGE_COHORT, operations
+      COMPARISON + DIVERGENCE, population "seasoning_segment == Back Book
+      AGAINST months_on_book <= 3", period point in time.
+    expected:
+      operation: compare
+      comparison: population_pair
+      temporal: current
+    human_review: true
+    note: >-
+      expected_semantics.yaml records that the two sides of this comparison are
+      NOT complementary — back book is >12 months and recent is <=3, so loans
+      originated 4-12 months ago fall in neither. The pair is therefore
+      expected, but which populations bound it is left unstated.
+
+  NL8:
+    derivation: >-
+      Independent truth Q8.3/provenance: family MOVEMENT_TREND, operations DELTA
+      + TREND + COMPARISON, population "source_portfolio_type == direct AGAINST
+      == acquired", period "two or more governed snapshots".
+    expected:
+      comparison: population_pair
+      temporal: relative_pair
+    human_review: true
+    note: >-
+      The independent truth gives two or more snapshots without fixing whether
+      that is a pair or a series, so temporal is expected as relative_pair but a
+      `series` reading is recorded rather than failed; capability is left
+      unstated because MOVEMENT_TREND spans period_movement and
+      generic_analysis in this vocabulary.
+
+  NL9:
+    derivation: >-
+      Independent truth Q9.3: families PIPELINE + FORECAST_PROJECTION,
+      operations PROJECT_VALUE + EXPECTED_COMPLETION, population "the OPEN
+      pipeline", period "funded balance at the latest reporting date, plus
+      expected completions".
+    expected:
+      capability: forecast
+      operation: forecast_projection
+      temporal: forward_looking
+      comparison: none
+
+  # ---- borrowing base ---------------------------------------------------- #
+  BB01:
+    derivation: >-
+      Source bank gives these three questions the measure
+      `borrowing_base_headroom` on the `borrowing_base` route, family "current".
+      The specialist owns the arithmetic; the question only names it.
+    expected:
+      capability: borrowing_base
+      operation: headroom
+      temporal: current
+      comparison: none
+      output_structure: 1
+
+  BB02:
+    derivation: >-
+      Source bank family "bridge": the borrowing-base movement decomposed by the
+      specialist. "Why did the borrowing base change?" and "show it as a
+      waterfall" are the same request for the same artefact.
+    expected:
+      capability: borrowing_base
+      operation: bridge
+      comparison: none
+    human_review: true
+    note: >-
+      temporal is left unstated: a bridge needs two periods, but none of the
+      three frozen variants names which two, so relative_pair and
+      explicit_period are both defensible readings.
