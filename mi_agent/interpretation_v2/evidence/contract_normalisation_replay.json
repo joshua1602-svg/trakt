@@ -1,0 +1,390 @@
+{
+ "baseline_commit": "5ae1f73",
+ "live_opus_calls": 0,
+ "outcome_changes": [],
+ "runs": {
+  "probe57": {
+   "cases": 57,
+   "identity_moves": [
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_ac473de6bbaf17af",
+     "plan_id_before": "plan_2a92edc667df14d5",
+     "question": "NL8A"
+    },
+    {
+     "normalisations": [
+      "relative_period: previous_reporting_period -> relative_pair+periods_back=1 (operation 'movement' spans two periods)"
+     ],
+     "plan_id_after": "plan_fe2343b9648c5951",
+     "plan_id_before": "plan_b13c4cc004491c2a",
+     "question": "Q18A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_d030a4afab5b8976",
+     "plan_id_before": "plan_d3d147a325179935",
+     "question": "Q18B"
+    },
+    {
+     "normalisations": [
+      "relative_period: previous_reporting_period -> relative_pair+periods_back=1 (operation 'movement' spans two periods)"
+     ],
+     "plan_id_after": "plan_fe2343b9648c5951",
+     "plan_id_before": "plan_6ec8fa36198249c1",
+     "question": "Q18C"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_5681bb585344ef43",
+     "plan_id_before": "plan_04f6389fa12d1432",
+     "question": "Q19A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_5681bb585344ef43",
+     "plan_id_before": "plan_04f6389fa12d1432",
+     "question": "Q19B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_5681bb585344ef43",
+     "plan_id_before": "plan_50b578c2ab6790cf",
+     "question": "Q19C"
+    },
+    {
+     "normalisations": [
+      "relative_period: previous_reporting_period -> relative_pair+periods_back=1 (operation 'movement' spans two periods)"
+     ],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_4fb624e53baecfef",
+     "question": "Q20A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_c4b800e3413e43e0",
+     "question": "Q20B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_72d18d2c43005e55",
+     "question": "Q20C"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_55973c8e5a084edc",
+     "plan_id_before": "plan_f10480f206d4c320",
+     "question": "Q21A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_e3a18f4d18394576",
+     "plan_id_before": "plan_61e78ae513c767e3",
+     "question": "Q21B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_55973c8e5a084edc",
+     "plan_id_before": "plan_f10480f206d4c320",
+     "question": "Q21C"
+    }
+   ],
+   "invariance_gained": [
+    "Q19",
+    "Q20"
+   ],
+   "invariance_lost": [],
+   "paraphrase_invariant_after": "9/19",
+   "paraphrase_invariant_before": "7/19",
+   "plan_identities_moved": 13
+  },
+  "run6": {
+   "cases": 135,
+   "identity_moves": [
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_ea883dddafbbe0cc",
+     "plan_id_before": "plan_c68961edcf0e2ee2",
+     "question": "NL1B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_e1dfee0e820fbe7f",
+     "plan_id_before": "plan_bdf633cc8acee8f5",
+     "question": "NL1C"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_ac473de6bbaf17af",
+     "plan_id_before": "plan_2a92edc667df14d5",
+     "question": "NL8A"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_ac473de6bbaf17af",
+     "plan_id_before": "plan_2a92edc667df14d5",
+     "question": "NL8B"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_52c83fa8f52a753f",
+     "plan_id_before": "plan_db42b8c502e8afd7",
+     "question": "Q18B"
+    },
+    {
+     "normalisations": [
+      "relative_period: previous_reporting_period -> relative_pair+periods_back=1 (operation 'movement' spans two periods)"
+     ],
+     "plan_id_after": "plan_fe2343b9648c5951",
+     "plan_id_before": "plan_dde533ef67865cb6",
+     "question": "Q18C"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_5681bb585344ef43",
+     "plan_id_before": "plan_04f6389fa12d1432",
+     "question": "Q19A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_0d38b6972bf6ed38",
+     "plan_id_before": "plan_8c6151ccbe907c02",
+     "question": "Q19B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_5681bb585344ef43",
+     "plan_id_before": "plan_50b578c2ab6790cf",
+     "question": "Q19C"
+    },
+    {
+     "normalisations": [
+      "relative_period: previous_reporting_period -> relative_pair+periods_back=1 (operation 'movement' spans two periods)"
+     ],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_4fb624e53baecfef",
+     "question": "Q20A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_06f7730601c9e571",
+     "question": "Q20B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_72d18d2c43005e55",
+     "question": "Q20C"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_55973c8e5a084edc",
+     "plan_id_before": "plan_c7ba21dcc2ce049c",
+     "question": "Q21A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_ba4a9e4c17deeb01",
+     "plan_id_before": "plan_ec7eed5c58e28200",
+     "question": "Q21B"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_55973c8e5a084edc",
+     "plan_id_before": "plan_c7ba21dcc2ce049c",
+     "question": "Q21C"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_ee2dc58cb7fcb71e",
+     "plan_id_before": "plan_a2cad782d1574736",
+     "question": "Q22A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_25dd6ae393bfb1cd",
+     "plan_id_before": "plan_510e50bdf228024c",
+     "question": "Q22B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_6cee4939157b0d6d",
+     "plan_id_before": "plan_77f1c3d5c5a1d7f4",
+     "question": "Q22C"
+    }
+   ],
+   "invariance_gained": [
+    "Q20"
+   ],
+   "invariance_lost": [],
+   "paraphrase_invariant_after": "19/45",
+   "paraphrase_invariant_before": "18/45",
+   "plan_identities_moved": 18
+  },
+  "run7": {
+   "cases": 135,
+   "identity_moves": [
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_8dd77f466b82debe",
+     "plan_id_before": "plan_6941081c00e7053a",
+     "question": "NL1B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_ac473de6bbaf17af",
+     "plan_id_before": "plan_2a92edc667df14d5",
+     "question": "NL8A"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_ac473de6bbaf17af",
+     "plan_id_before": "plan_2a92edc667df14d5",
+     "question": "NL8B"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_fe2343b9648c5951",
+     "plan_id_before": "plan_c0f486914e6f199a",
+     "question": "Q18A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_52c83fa8f52a753f",
+     "plan_id_before": "plan_db42b8c502e8afd7",
+     "question": "Q18B"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_fe2343b9648c5951",
+     "plan_id_before": "plan_c0f486914e6f199a",
+     "question": "Q18C"
+    },
+    {
+     "normalisations": [
+      "relative_period: previous_reporting_period -> relative_pair+periods_back=1 (operation 'movement' spans two periods)"
+     ],
+     "plan_id_after": "plan_5681bb585344ef43",
+     "plan_id_before": "plan_375023a7467bf2b2",
+     "question": "Q19A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_c4b800e3413e43e0",
+     "question": "Q20A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_c4b800e3413e43e0",
+     "question": "Q20B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_e7b18eec773dfcf2",
+     "plan_id_before": "plan_72d18d2c43005e55",
+     "question": "Q20C"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_55973c8e5a084edc",
+     "plan_id_before": "plan_f10480f206d4c320",
+     "question": "Q21A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_e3a18f4d18394576",
+     "plan_id_before": "plan_61e78ae513c767e3",
+     "question": "Q21B"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_55973c8e5a084edc",
+     "plan_id_before": "plan_c7ba21dcc2ce049c",
+     "question": "Q21C"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_ee2dc58cb7fcb71e",
+     "plan_id_before": "plan_a2cad782d1574736",
+     "question": "Q22A"
+    },
+    {
+     "normalisations": [],
+     "plan_id_after": "plan_d7522ff2144dc48a",
+     "plan_id_before": "plan_8e2c5a1992208934",
+     "question": "Q22B"
+    },
+    {
+     "normalisations": [
+      "relative_period: relative_pair with no distance -> periods_back=1 (the adjacent pair)"
+     ],
+     "plan_id_after": "plan_6cee4939157b0d6d",
+     "plan_id_before": "plan_77f1c3d5c5a1d7f4",
+     "question": "Q22C"
+    }
+   ],
+   "invariance_gained": [
+    "Q20"
+   ],
+   "invariance_lost": [],
+   "paraphrase_invariant_after": "21/45",
+   "paraphrase_invariant_before": "20/45",
+   "plan_identities_moved": 16
+  }
+ },
+ "semantic_losses": [],
+ "totals": {
+  "authorised_fields_that_differ_anywhere": {
+   "period": 47
+  },
+  "idempotence_failures": 0,
+  "non_deterministic_compiles": 0,
+  "normalisation_3_fired": 0,
+  "normalisation_3_no_single_specialist_owner": 147,
+  "normalisation_3_owner_matched_the_claim": 180,
+  "outcome_or_reason_changes": 0,
+  "plan_identities_moved": 47,
+  "replay_cases": 327,
+  "semantic_losses": 0
+ },
+ "what_this_is": "A deterministic A/B replay. Every CandidateIntent recorded in Run 6, Run 7 and the 57-question recalibration probe was recompiled twice: once by the compiler at 5ae1f73 and once by this sprint's compiler. Zero Opus calls were made \u2014 the payloads were already on disk, and the compiler and contract were byte-identical across all three recorded runs, so the only variable is this sprint's change."
+}

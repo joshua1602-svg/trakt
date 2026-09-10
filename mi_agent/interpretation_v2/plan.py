@@ -20,7 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, Mapping, Optional, Sequence, Tuple
 
 PLAN_SCHEMA_VERSION = "governed_query_plan/1.0"
 
@@ -97,6 +97,39 @@ class GeographyBinding:
     #: state (a bare "by region" resolves to the harmonised reporting taxonomy).
     defaulted: bool = False
     default_reason: str = ""
+
+
+#: Period forms whose window is settled by ``form`` + ``grain`` +
+#: ``periods_back`` alone. For these, ``labels`` is the question's own wording
+#: and states nothing the contract does not already say, so it is excluded from
+#: plan IDENTITY — the plan still carries it, for a renderer and for disclosure.
+#:
+#: Run 6 measured this on NL9, whose three plans were identical except that one
+#: carried ``labels=["today's pipeline"]``; the recalibration probe measured it
+#: again on Q19, where ``["last month"]`` against ``["month-on-month"]`` was the
+#: ONLY difference between three otherwise identical movement plans.
+#:
+#: The remaining forms are excluded because a label can be load-bearing there.
+#: ``explicit_period`` is nothing BUT its label ("April") — the compiler refuses
+#: one with no labels. ``range`` and ``series`` accept a label as their only
+#: statement of span, which the compiler proves by raising AMBIGUOUS_PERIOD for a
+#: range carrying no labels, no grain and no period count. ``forward_looking``
+#: may state a horizon only in words.
+LABELS_ARE_WORDING_ONLY: FrozenSet[str] = frozenset({
+    "current", "previous_reporting_period", "relative_pair",
+})
+
+
+def identity_labels(form: str, labels: Sequence[str]) -> Tuple[str, ...]:
+    """The labels that belong in plan identity for this period form.
+
+    Empty for a form whose window the contract already settles. That is what
+    stops two spellings of the user's own words from reading as two different
+    authorised analyses.
+    """
+    if form in LABELS_ARE_WORDING_ONLY:
+        return ()
+    return tuple(labels)
 
 
 @dataclass(frozen=True)
@@ -241,6 +274,13 @@ class GovernedQueryPlan:
         population = body.get("population") or {}
         population["scope_predicates"] = sorted(
             population.get("scope_predicates") or [], key=_stable)
+        # NORMALISATION 1. A period label is the question's own wording. Where
+        # the contract already settles the window without it, it is not part of
+        # what was AUTHORISED — only of how it was asked.
+        period = body.get("period") or {}
+        if "form" in period:
+            period["labels"] = list(identity_labels(
+                str(period.get("form") or ""), period.get("labels") or ()))
         return body
 
     @classmethod

@@ -44,6 +44,7 @@ from .intent import (
     SemanticGeography,
     SemanticMeasure,
 )
+from .normalise import NORMAL_FORM_VERSION, canonical_intent
 from .outcomes import (
     AMBIGUOUS_DIMENSION,
     AMBIGUOUS_GEOGRAPHY,
@@ -274,6 +275,20 @@ class DeterministicCompiler:
         reasons: List[CompileReason] = []
         notes: List[str] = []
 
+        # 0. NORMALISE ------------------------------------------------------ #
+        # One economic meaning, one contract representation. This only REMOVES
+        # representational freedom: it rewrites a redundant spelling into the
+        # canonical one and derives an implementation owner the model should
+        # never have been choosing. The model's own claim is still recorded
+        # verbatim in provenance, so an audit can see both.
+        claimed = intent
+        normalisation = canonical_intent(
+            intent, self.context.vocabulary,
+            capability_operations=CAPABILITY_OPERATIONS)
+        intent = normalisation.intent
+        notes.extend(f"normalised [{NORMAL_FORM_VERSION}]: {applied}"
+                     for applied in normalisation.applied)
+
         # A. VALIDATE ------------------------------------------------------- #
         reasons.extend(self._validate(intent))
 
@@ -332,7 +347,7 @@ class DeterministicCompiler:
         # D. PRODUCE -------------------------------------------------------- #
         if reasons:
             return CompileResult(outcome=outcome_for(reasons), plan=None,
-                                 reasons=tuple(reasons), intent=intent,
+                                 reasons=tuple(reasons), intent=claimed,
                                  compiler_version=self.version)
 
         plan = GovernedQueryPlan(
@@ -348,11 +363,12 @@ class DeterministicCompiler:
             comparison_right=intent.comparison.right,
             filters=tuple(top_filters),
             geography=top_geography,
-            provenance=self._provenance(intent, outputs, top_geography,
-                                        population, notes),
+            provenance=self._provenance(claimed, outputs, top_geography,
+                                        population, notes,
+                                        normalised=normalisation),
         )
         return CompileResult(outcome=OUTCOME_PLAN, plan=plan, reasons=(),
-                             intent=intent, compiler_version=self.version)
+                             intent=claimed, compiler_version=self.version)
 
     # -- A. validate -------------------------------------------------------- #
 
@@ -872,13 +888,21 @@ class DeterministicCompiler:
     def _provenance(self, intent: CandidateIntent, outputs: Sequence[OutputPlan],
                     geography: Optional[GeographyBinding],
                     population: PopulationBinding,
-                    notes: Sequence[str]) -> PlanProvenance:
+                    notes: Sequence[str],
+                    *, normalised: Optional[Any] = None) -> PlanProvenance:
         """Record who decided what.
 
         ``intent_claims`` is the model's reading, copied verbatim and read by
         nothing. ``compiler_bindings`` is every physical choice this module
         made. Keeping them apart is what lets an auditor answer the question the
         architecture is judged on.
+
+        ``intent`` here is the CLAIMED intent, before normalisation. That matters:
+        a provenance recording the canonical form would quietly lose what the
+        model actually said, and "did the model pick this?" is the question the
+        split exists to answer. What normalisation changed is recorded beside it,
+        under ``compiler_bindings["normalisation"]``, because the rewrite is the
+        compiler's decision and belongs on the compiler's side of the line.
         """
         claims: Dict[str, Any] = {
             "capability": intent.capability,
@@ -912,6 +936,10 @@ class DeterministicCompiler:
                         {"concept": f.concept, "field": f.canonical_field,
                          "comparator": f.comparator} for f in output.filters],
                 } for output in outputs},
+            "normalisation": {
+                "normal_form_version": NORMAL_FORM_VERSION,
+                "applied": list(getattr(normalised, "applied", ()) or ()),
+            },
         }
         return PlanProvenance(
             question=intent.provenance.question,

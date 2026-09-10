@@ -1,0 +1,468 @@
+"""One economic meaning, one canonical contract representation.
+
+Three redundancies, each proved three ways: the rewrite happens, it converges the
+cases that were diverging, and it loses nothing. The third is the one worth
+writing tests for — a normalisation that quietly dropped a semantic element would
+converge beautifully and be worse than the redundancy it replaced.
+
+WHAT IS ASSERTED HERE
+---------------------
+    1. labels         two spellings of the user's words -> one plan identity
+    2. relative period  two spellings of one relationship -> one canonical form
+    3. owner          the implementation owner is DERIVED, never claimed
+
+    and for all three:
+        no semantic information is lost
+        the model's own claim survives in provenance
+        compilation stays deterministic and idempotent
+        no outcome changes from PLAN to a refusal
+        nothing outside the contract boundary moved
+"""
+
+from __future__ import annotations
+
+import ast
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from mi_agent.interpretation_v2.compiler import (
+    CAPABILITY_OPERATIONS,
+    CompilerContext,
+    DeterministicCompiler,
+)
+from mi_agent.interpretation_v2.compiler import (
+    _CAPABILITY_OWNED_PERIOD_OPERATIONS,
+    _MULTI_PERIOD_FORMS,
+    _MULTI_PERIOD_OPERATIONS,
+)
+from mi_agent.interpretation_v2.intent import parse_candidate_intent
+from mi_agent.interpretation_v2.normalise import (
+    BOUNDED,
+    CANONICAL_PAIR_FORM,
+    CANONICAL_PAIR_PERIODS_BACK,
+    NORMAL_FORM_VERSION,
+    PAIR_IMPLYING_OPERATIONS,
+    canonical_intent,
+)
+from mi_agent.interpretation_v2.plan import LABELS_ARE_WORDING_ONLY, identity_labels
+from mi_agent.interpretation_v2.vocabulary import load_governed_vocabulary
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_START = "5ae1f73"
+
+
+@pytest.fixture(scope="module")
+def vocabulary():
+    return load_governed_vocabulary()
+
+
+@pytest.fixture(scope="module")
+def compiler():
+    return DeterministicCompiler(CompilerContext())
+
+
+def movement_intent(**over):
+    """The Q19/Q20 shape: a period-on-period movement of a generic measure."""
+    payload = {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "period_movement",
+        "operation": "movement",
+        "measures": [{"concept": "current_outstanding_balance"}],
+        "time": {"form": "relative_pair", "grain": "monthly",
+                 "periods_back": 1, "labels": ["last month"]},
+    }
+    payload.update(over)
+    return parse_candidate_intent(payload)
+
+
+# --------------------------------------------------------------------------- #
+# 1. period labels
+# --------------------------------------------------------------------------- #
+
+def test_the_users_wording_does_not_change_what_was_authorised(compiler):
+    """Q19's whole residual divergence, in one assertion.
+
+    Q19A/B carried labels=["last month"] and Q19C carried ["month-on-month"].
+    Every other field was identical and the plans still hashed differently.
+    """
+    a = compiler.compile(movement_intent())
+    b = compiler.compile(movement_intent(
+        time={"form": "relative_pair", "grain": "monthly", "periods_back": 1,
+              "labels": ["month-on-month"]}))
+    assert a.plan is not None and b.plan is not None
+    assert a.plan.plan_id == b.plan.plan_id
+
+
+def test_the_plan_still_carries_the_words_it_was_given(compiler):
+    """Identity stops depending on labels. The plan does not stop having them.
+
+    A disclosure that cannot quote the period the user named is a worse answer,
+    so the label travels — it is simply not part of what was authorised.
+    """
+    plan = compiler.compile(movement_intent()).plan
+    assert plan.period.labels == ("last month",)
+    assert plan.provenance.intent_claims["time"][1] == ("last month",)
+
+
+def test_a_label_that_IS_the_period_stays_in_identity():
+    """The limit of normalisation 1, and the reason it is not a blanket strip.
+
+    "April" and "May" are explicit_period labels. They are not wording about a
+    window the contract already knows — they ARE the window, and collapsing them
+    would make two different months one plan.
+    """
+    assert identity_labels("explicit_period", ("April",)) == ("April",)
+    assert identity_labels("range", ("2024",)) == ("2024",)
+    assert identity_labels("series", ("last six months",)) == ("last six months",)
+    assert identity_labels("forward_looking", ("by year end",)) == ("by year end",)
+    # ...and the forms where the contract does settle it.
+    for form in LABELS_ARE_WORDING_ONLY:
+        assert identity_labels(form, ("whatever they said",)) == ()
+
+
+def test_two_different_named_months_remain_two_different_plans(compiler):
+    """The failure mode the previous test rules out, end to end."""
+    april = compiler.compile(movement_intent(
+        time={"form": "explicit_period", "grain": "monthly", "labels": ["April"]}))
+    may = compiler.compile(movement_intent(
+        time={"form": "explicit_period", "grain": "monthly", "labels": ["May"]}))
+    assert april.plan is not None and may.plan is not None
+    assert april.plan.plan_id != may.plan.plan_id
+
+
+# --------------------------------------------------------------------------- #
+# 2. relative period
+# --------------------------------------------------------------------------- #
+
+def test_one_relative_relationship_has_one_canonical_form(compiler, vocabulary):
+    """Q20A against Q20B/C: two spellings, one economic relationship."""
+    spelled_short = movement_intent(
+        time={"form": "previous_reporting_period", "grain": "monthly",
+              "labels": ["last month"]})
+    result = canonical_intent(spelled_short, vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.time.form == CANONICAL_PAIR_FORM
+    assert result.intent.time.periods_back == CANONICAL_PAIR_PERIODS_BACK
+    assert any("relative_period" in a for a in result.applied)
+
+    a = compiler.compile(spelled_short)
+    b = compiler.compile(movement_intent())
+    assert a.plan is not None and b.plan is not None
+    assert a.plan.plan_id == b.plan.plan_id
+
+
+def test_the_pair_rewrite_is_confined_to_operations_that_span_two_periods():
+    """Derived from the compiler's own sets, so the two cannot drift apart.
+
+    An operation that owns its own window is not ours to rewrite, and a series is
+    not a pair. What survives is exactly `movement`.
+    """
+    derived = (_MULTI_PERIOD_OPERATIONS
+               - _CAPABILITY_OWNED_PERIOD_OPERATIONS
+               - {"series"})
+    assert PAIR_IMPLYING_OPERATIONS == derived, (
+        "the pair-implying set no longer follows from the compiler's contracts")
+
+
+def test_a_single_period_question_keeps_its_single_period(compiler, vocabulary):
+    """Normalisation removes freedom; it does not add a period.
+
+    `previous_reporting_period` on a point-in-time question means ONE period —
+    last month's balance, not the change in it. Rewriting that to a pair would be
+    inventing a second period nobody asked for, which is the one thing a
+    normalisation may never do.
+    """
+    single = parse_candidate_intent({
+        "schema_version": "candidate_intent/1.0",
+        "capability": "portfolio_summary", "operation": "summary",
+        "measures": [{"concept": "current_outstanding_balance"}],
+        "time": {"form": "previous_reporting_period", "grain": "monthly"}})
+    result = canonical_intent(single, vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.time.form == "previous_reporting_period"
+    assert result.applied == ()
+
+
+def test_a_pair_with_no_distance_is_the_adjacent_pair(compiler, vocabulary):
+    """The third spelling, and the reason the first attempt converged nothing.
+
+    Normalising only `previous_reporting_period` -> `relative_pair+1` left
+    `relative_pair` with `periods_back` absent as a distinct third form, so Q19C
+    and Q20C still diverged from their siblings over nothing else. The compiler
+    accepts a pair with no distance as COMPLETE — unlike a range or a series, it
+    raises no AMBIGUOUS_PERIOD — which leaves adjacent as the only reading.
+    """
+    absent = movement_intent(time={"form": "relative_pair", "grain": "monthly",
+                                   "labels": ["month-on-month"]})
+    result = canonical_intent(absent, vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.time.periods_back == CANONICAL_PAIR_PERIODS_BACK
+    assert compiler.compile(absent).plan.plan_id == \
+        compiler.compile(movement_intent()).plan.plan_id
+
+
+def test_a_pair_zero_periods_apart_is_left_alone(vocabulary):
+    """Scope limit: absent is not the same as zero.
+
+    A pair zero periods apart is not the adjacent pair, and folding it in would
+    be changing a stated distance rather than supplying an implied one.
+    """
+    zero = movement_intent(time={"form": "relative_pair", "grain": "monthly",
+                                 "periods_back": 0})
+    result = canonical_intent(zero, vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.time.periods_back == 0
+    assert result.applied == ()
+
+
+def test_no_other_period_form_gains_an_implied_distance(vocabulary):
+    """The backlog this sprint is told not to broaden into stays untouched.
+
+    NL5 diverged over `periods_back` 0 against absent on a FORWARD-LOOKING
+    horizon. That is a different question from the adjacent-pair default and it
+    is not in scope here.
+    """
+    for form in ("forward_looking", "series", "range", "current"):
+        intent = movement_intent(
+            capability="forecast" if form == "forward_looking" else "period_movement",
+            time={"form": form, "grain": "quarterly", "labels": ["next quarter"]})
+        result = canonical_intent(intent, vocabulary,
+                                  capability_operations=CAPABILITY_OPERATIONS)
+        assert result.intent.time.periods_back is None, form
+
+
+def test_a_stated_period_distance_is_not_overwritten(vocabulary):
+    """Two periods back is not one period back.
+
+    The canonical form supplies periods_back=1 only where nothing was stated.
+    """
+    intent = movement_intent(
+        time={"form": "previous_reporting_period", "grain": "monthly",
+              "periods_back": 2})
+    result = canonical_intent(intent, vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.time.periods_back == 2
+
+
+def test_both_spellings_remain_valid_multi_period_forms():
+    """Proof the rewrite cannot change an outcome.
+
+    Either spelling satisfies the composition check, so normalising between them
+    can never turn a plan into an unsupported composition.
+    """
+    assert {"previous_reporting_period", CANONICAL_PAIR_FORM} <= _MULTI_PERIOD_FORMS
+
+
+# --------------------------------------------------------------------------- #
+# 3. implementation owner
+# --------------------------------------------------------------------------- #
+
+def test_the_implementation_owner_is_derived_from_the_measure(compiler, vocabulary):
+    """The model should never have been choosing between internal owners.
+
+    `funded_balance_movement` is owned by `funded_bridge`. Whatever capability
+    the model names, the owner of the measure it asked for is the owner.
+    """
+    intent = movement_intent(capability="period_movement",
+                             measures=[{"concept": "funded_balance_movement"}])
+    result = canonical_intent(intent, vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.capability == "funded_bridge"
+    assert any("implementation_owner" in a for a in result.applied)
+    assert compiler.compile(intent).plan.capability == "funded_bridge"
+
+
+def test_a_generic_measure_derives_no_owner_and_is_left_alone(vocabulary):
+    """`period_movement` owns no measures, so ownership settles nothing here."""
+    result = canonical_intent(movement_intent(), vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.capability == "period_movement"
+    assert not any("implementation_owner" in a for a in result.applied)
+
+
+def test_an_owner_that_cannot_do_the_operation_is_not_bound(vocabulary):
+    """Outcome neutrality, enforced rather than hoped for.
+
+    Rewriting the capability to an owner that does not support the stated
+    operation would convert a plan into UNSUPPORTED_OPERATION. A normalisation
+    that turns answers into refusals is not a normalisation.
+    """
+    impossible = "breakdown"
+    assert impossible not in CAPABILITY_OPERATIONS["funded_bridge"]
+    intent = movement_intent(
+        capability="period_movement", operation=impossible,
+        dimensions=["erm_product_type"],
+        measures=[{"concept": "funded_balance_movement"}])
+    result = canonical_intent(intent, vocabulary,
+                              capability_operations=CAPABILITY_OPERATIONS)
+    assert result.intent.capability == "period_movement"
+    assert result.applied == ()
+
+
+def test_what_normalisation_3_deliberately_does_not_collapse():
+    """The bound, recorded in the source so it cannot be mistaken for an oversight.
+
+    `period_movement`/`current_outstanding_balance` and
+    `funded_bridge`/`funded_balance_movement` name two different governed
+    MEASURES. Deciding which of them answers "how did the book change?" is
+    arithmetic, not representation, and this sprint may not change arithmetic.
+    """
+    assert "movement_measure_choice" in BOUNDED
+    assert "analytical behaviour" in BOUNDED["movement_measure_choice"]
+
+
+def test_two_different_measures_remain_two_different_plans(compiler):
+    """Because the bound above is real, not decorative."""
+    generic = compiler.compile(movement_intent())
+    specialist = compiler.compile(movement_intent(
+        measures=[{"concept": "funded_balance_movement"}]))
+    assert generic.plan is not None and specialist.plan is not None
+    assert generic.plan.plan_id != specialist.plan.plan_id
+
+
+# --------------------------------------------------------------------------- #
+# properties that must survive all three
+# --------------------------------------------------------------------------- #
+
+def test_normalisation_is_idempotent(vocabulary):
+    """A canonical intent is its own canonical form.
+
+    Without this, plan identity would depend on how many times the compiler ran,
+    which is a worse defect than the one being fixed.
+    """
+    for intent in (movement_intent(),
+                   movement_intent(time={"form": "previous_reporting_period",
+                                         "grain": "monthly"}),
+                   movement_intent(measures=[{"concept": "funded_balance_movement"}])):
+        once = canonical_intent(intent, vocabulary,
+                                capability_operations=CAPABILITY_OPERATIONS).intent
+        twice = canonical_intent(once, vocabulary,
+                                 capability_operations=CAPABILITY_OPERATIONS)
+        assert twice.applied == (), f"second pass changed something: {twice.applied}"
+        assert twice.intent.semantic_key() == once.semantic_key()
+
+
+def test_compilation_remains_deterministic(compiler):
+    """Rule I, re-asserted across the new step."""
+    intent = movement_intent(time={"form": "previous_reporting_period",
+                                   "grain": "monthly"})
+    ids = {compiler.compile(intent).plan.plan_id for _ in range(5)}
+    assert len(ids) == 1
+
+
+def test_the_model_s_own_claim_survives_every_rewrite(compiler):
+    """The audit question this architecture is judged on stays answerable.
+
+    A provenance that recorded only the canonical form could not say what the
+    model proposed, and "did the model pick this?" would become unanswerable.
+    """
+    intent = movement_intent(
+        capability="period_movement",
+        measures=[{"concept": "funded_balance_movement"}],
+        time={"form": "previous_reporting_period", "grain": "monthly"})
+    plan = compiler.compile(intent).plan
+    claims = plan.provenance.intent_claims
+    assert claims["capability"] == "period_movement"
+    assert claims["time"][0] == "previous_reporting_period"
+    # ...and what the compiler did to it is recorded on the compiler's side.
+    applied = plan.provenance.compiler_bindings["normalisation"]["applied"]
+    assert len(applied) == 2
+    assert plan.provenance.compiler_bindings["normalisation"][
+        "normal_form_version"] == NORMAL_FORM_VERSION
+
+
+def test_the_compile_result_reports_the_intent_the_model_emitted(compiler):
+    """A caller must not receive a rewritten intent as though it were the model's."""
+    intent = movement_intent(time={"form": "previous_reporting_period",
+                                   "grain": "monthly"})
+    result = compiler.compile(intent)
+    assert result.intent.time.form == "previous_reporting_period"
+
+
+def test_normalisation_never_reads_the_question():
+    """The rule the compiler obeys, extended to the module in front of it.
+
+    `normalise.py` has no access to the question text and must never acquire one:
+    a normal form derived from wording would be a recogniser with a new name.
+    """
+    source = (_REPO_ROOT / "mi_agent/interpretation_v2/normalise.py").read_text()
+    tree = ast.parse(source)
+    imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    imported |= {a.name for n in ast.walk(tree) if isinstance(n, ast.Import)
+                 for a in n.names}
+    assert "re" not in imported, "normalisation must not pattern-match language"
+    # Read the code, not the prose: the docstring is allowed to discuss
+    # provenance, and an attribute access would be reading the question.
+    reached = {node.attr for node in ast.walk(tree)
+               if isinstance(node, ast.Attribute)}
+    for forbidden in ("provenance", "question", "evidence"):
+        assert forbidden not in reached, (
+            f"normalisation reaches .{forbidden}, which carries the question's "
+            f"own words")
+
+
+# --------------------------------------------------------------------------- #
+# the sprint boundary
+# --------------------------------------------------------------------------- #
+
+def test_only_contract_modules_moved(vocabulary):
+    """Contract normalisation may touch the contract. Nothing else.
+
+    Named explicitly because the brief's boundary is the deliverable as much as
+    the normalisations are: an interpreter, metadata or registry edit smuggled in
+    here would make the replay evidence meaningless.
+    """
+    diff = subprocess.run(
+        ["git", "diff", "--name-status", _START, "--", "mi_agent", "engine",
+         "analytics_lib", "mi_agent_api", "frontend", "trakt_notifications",
+         "mi_workflows", "trakt_tools"],
+        cwd=_REPO_ROOT, capture_output=True, text=True)
+    if diff.returncode != 0:
+        pytest.skip("start commit not reachable in this checkout")
+    allowed_modified = {
+        "mi_agent/interpretation_v2/compiler.py",
+        "mi_agent/interpretation_v2/plan.py",
+    }
+    modified = set()
+    for line in diff.stdout.splitlines():
+        if not line.strip():
+            continue
+        status, path = line.split("\t", 1)
+        if status.startswith("M") and "/evidence/" not in path:
+            modified.add(path.strip())
+    assert modified <= allowed_modified, (
+        f"outside the contract boundary: {sorted(modified - allowed_modified)}")
+
+
+def test_the_interpreter_policy_did_not_move(vocabulary):
+    """Opus policy unchanged is a success condition, not an assumption."""
+    diff = subprocess.run(
+        ["git", "diff", "--name-only", _START, "--",
+         "mi_agent/interpretation_v2/opus_interpreter.py",
+         "mi_agent/interpretation_v2/metadata.py",
+         "mi_agent/interpretation_v2/vocabulary.py",
+         "mi_agent/interpretation_v2/outcomes.py",
+         "mi_agent/interpretation_v2/banks"],
+        cwd=_REPO_ROOT, capture_output=True, text=True)
+    if diff.returncode != 0:
+        pytest.skip("start commit not reachable in this checkout")
+    changed = [line for line in diff.stdout.splitlines() if line.strip()]
+    assert changed == [], f"outside this sprint's boundary: {changed}"
+
+
+def test_the_model_still_cannot_author_an_executable_binding():
+    """The invariant the whole architecture rests on, re-checked after a contract edit.
+
+    Normalisation gave the compiler one more decision to make. It must not have
+    given the intent one more slot to fill.
+    """
+    from mi_agent.interpretation_v2 import candidate_intent_json_schema
+
+    schema = candidate_intent_json_schema()
+    assert schema["additionalProperties"] is False
+    assert set(schema["properties"]) == {
+        "schema_version", "capability", "operation", "population", "measures",
+        "dimensions", "filters", "geography", "time", "comparison", "target",
+        "outputs", "ambiguity", "evidence"}

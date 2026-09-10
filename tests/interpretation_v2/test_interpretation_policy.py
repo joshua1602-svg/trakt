@@ -216,33 +216,33 @@ def test_the_governed_registries_did_not_change():
     assert changed == [], f"governed sources changed: {changed}"
 
 
-def test_the_compiler_and_contract_modules_are_untouched_by_this_phase():
-    """Measured against the commit this phase started from.
+def test_the_measured_policy_has_not_moved_since_it_was_measured():
+    """The policy phase's guard, pointed at its own conclusion instead of its start.
 
-    A policy sprint that edited the compiler would be a different sprint, and
-    its benchmark would measure two changes at once.
+    Until `5ae1f73` this test asserted the compiler had not moved since
+    `28422ec`, which was the right guard while the interpreter was the thing
+    being changed. Contract normalisation inverts that: the compiler and the
+    contract ARE the subject now, and the interpreter is what must hold still.
+
+    So the assertion is repointed rather than dropped. `5ae1f73` is the commit
+    whose 57-question probe produced the behaviour the evidence files describe;
+    if `opus_interpreter.py` moves after it, those numbers stop describing this
+    code, and the next benchmark would be measuring two changes at once — which
+    is the same failure the original guard existed to prevent.
     """
     import subprocess
 
-    start = "28422ec"
-    guarded = [
-        "mi_agent/interpretation_v2/intent.py",
-        "mi_agent/interpretation_v2/compiler.py",
-        "mi_agent/interpretation_v2/plan.py",
-        "mi_agent/interpretation_v2/equivalence.py",
-        "mi_agent/interpretation_v2/metadata.py",
-        "mi_agent/interpretation_v2/vocabulary.py",
-        "mi_agent/interpretation_v2/outcomes.py",
-        "mi_agent/interpretation_v2/banks/interpretation_bank_135.yaml",
-        "mi_agent/interpretation_v2/banks/expected_intents.yaml",
-    ]
-    diff = subprocess.run(["git", "diff", "--name-only", start, "--"] + guarded,
-                          cwd=_REPO_ROOT, capture_output=True, text=True)
+    measured_at = "5ae1f73"
+    diff = subprocess.run(
+        ["git", "diff", "--name-only", measured_at, "--",
+         "mi_agent/interpretation_v2/opus_interpreter.py"],
+        cwd=_REPO_ROOT, capture_output=True, text=True)
     if diff.returncode != 0:
-        pytest.skip("start commit not reachable in this checkout")
+        pytest.skip("measured commit not reachable in this checkout")
     changed = [line for line in diff.stdout.splitlines() if line.strip()]
     assert changed == [], (
-        f"Phase 2A is policy only, but these moved since {start}: {changed}")
+        f"the interpreter moved since its behaviour was measured at "
+        f"{measured_at}: {changed}")
 
 
 def test_production_surfaces_are_untouched():
@@ -272,22 +272,22 @@ def test_the_model_and_tool_configuration_did_not_change():
     assert AnthropicInterpreterClient.max_rounds == 6
 
 
-def test_the_only_MODIFIED_package_module_is_the_interpreter():
-    """New analysis tooling is fine; editing an existing module is not.
+def test_the_policy_phase_changed_only_the_interpreter():
+    """What the policy phase itself did, fixed as history rather than as a live guard.
 
-    The distinction matters for reading the benchmark: a probe script added
-    beside the package cannot change what the model is asked or what the
-    compiler decides, whereas an edit to any existing module would mean the run
-    measured two changes at once.
+    Measured between the phase's own endpoints, so it keeps saying something true
+    after later sprints edit other modules. The live boundary for whatever sprint
+    is in progress belongs to that sprint's own tests — for contract
+    normalisation, `test_contract_normalisation.py`.
     """
     import subprocess
 
     diff = subprocess.run(
-        ["git", "diff", "--name-status", "28422ec", "--",
+        ["git", "diff", "--name-status", "28422ec", "5ae1f73", "--",
          "mi_agent/interpretation_v2"],
         cwd=_REPO_ROOT, capture_output=True, text=True)
     if diff.returncode != 0:
-        pytest.skip("start commit not reachable in this checkout")
+        pytest.skip("phase commits not reachable in this checkout")
     modified = set()
     for line in diff.stdout.splitlines():
         if not line.strip():
