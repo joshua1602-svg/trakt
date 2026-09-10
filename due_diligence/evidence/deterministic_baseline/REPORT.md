@@ -197,8 +197,32 @@ failing at fixture setup — which the deterministic branch independently
 identified (`fe7fea03`, `2ac7bffb`: "my test fixtures were changing the meaning of
 other files' tests").
 
-`tests/` and `mi_agent_api/tests` did not finish inside this phase's window and
-are reported as not-measured rather than estimated.
+`tests/` and `mi_agent_api/tests` ran to completion but the result is **void, not
+a finding**, and the reason is mine. The run reported `1022 failed, 6466 passed,
+452 skipped, 2626 errors` in 25m17s — and I had piped its output through
+`tail -3`, so the only surviving lines are that summary and two test names. There
+are no tracebacks, no per-test list and no error signatures to classify, and the
+worktree it ran in has since been removed, so the figures cannot be attributed to
+anything.
+
+They are recorded here because the run happened and suppressing it would be
+worse, not because they mean anything. Specifically they must NOT be read as 1022
+deterministic defects:
+
+* the same invocation produced 94 collection errors from missing dependencies
+  alone before `fastapi`, `cffi`, `python-pptx`, `matplotlib`, `rapidfuzz` and
+  `python-multipart` were installed, so this surface is known to be
+  environment-sensitive;
+* 2626 errors against 6466 passes is the shape of setup or fixture failure
+  propagating, not of individual assertions disagreeing — and cross-file fixture
+  pollution on exactly this surface is a defect the deterministic branch
+  independently found and fixed (`fe7fea03`, `2ac7bffb`);
+* `mi_agent/tests`, captured properly, gives 1404 passed against 16 distinct
+  failing groups, which is the only broad figure in this report with evidence
+  behind it.
+
+Re-measuring this surface needs a fresh worktree and full output capture. It is
+left undone rather than guessed at.
 
 ## Verdict
 
