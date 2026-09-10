@@ -1,0 +1,2269 @@
+{
+  "what_this_is": "the recorded-plan substitute for the 843-question corpus, which is not present at HEAD",
+  "runs_replayed": [
+    "mi_agent/interpretation_v2/evidence/run8_135_signoff_2b00172.json",
+    "mi_agent/interpretation_v2/evidence/run1_135_first_measurement.json",
+    "mi_agent/interpretation_v2/evidence/run2_135_after_corrections.json",
+    "mi_agent/interpretation_v2/evidence/run3_135_rescored.json",
+    "mi_agent/interpretation_v2/evidence/run4_135_with_metadata_access.json",
+    "mi_agent/interpretation_v2/evidence/run6_135_head_0b663f7.json",
+    "mi_agent/interpretation_v2/evidence/run7_135_policy_2a.json"
+  ],
+  "aggregate": {
+    "total": 945,
+    "slice1_eligible": 115,
+    "not_eligible": 830,
+    "not_eligible_by_reason": {
+      "CAPABILITY_NOT_GENERIC": 585,
+      "NOT_A_PLAN": 111,
+      "EXPLICIT_LENS": 75,
+      "GEOGRAPHY_REQUESTED": 31,
+      "OPERATION_NOT_GENERIC": 28
+    },
+    "classifications": {
+      "EXACT_SEMANTIC_PARITY": 58,
+      "OUTSIDE_REPLAY_FIXTURE": 42,
+      "PRESENTATION_ONLY": 15
+    },
+    "grouped_verdicts": {
+      "GROUPED_CELL_PARITY": 15
+    },
+    "replay_fixture_field_gaps": {
+      "ticket_bucket": 21,
+      "interest_rate_bucket": 21
+    }
+  },
+  "distinct_eligible_questions": 18,
+  "distinct_eligible_plan_ids": 24,
+  "ledger": "due_diligence/evidence/plan_shadow_slice1/shadow_ledger.jsonl",
+  "ledger_rows": 73,
+  "live_opus_calls": 0,
+  "anthropic_client_imported": false,
+  "opus_interpreter_module_imported": true,
+  "runs": [
+    {
+      "source": "mi_agent/interpretation_v2/evidence/run8_135_signoff_2b00172.json",
+      "benchmark": "interpretation_v2/135",
+      "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+      "total": 135,
+      "slice1_eligible": 17,
+      "eligible_cases": [
+        "Q01A",
+        "Q01B",
+        "Q01C",
+        "Q02A",
+        "Q02B",
+        "Q02C",
+        "Q03A",
+        "Q03B",
+        "Q03C",
+        "Q11A",
+        "Q11B",
+        "Q11C",
+        "Q12A",
+        "Q12B",
+        "Q13A",
+        "Q13B",
+        "Q13C"
+      ],
+      "eligible_plan_ids": [
+        "plan_08020e58b735f771",
+        "plan_92964eb7c19d2b43",
+        "plan_ca02491b13e8e042",
+        "plan_d7adabfaa9308f12",
+        "plan_d9bfe5fd29761fb5",
+        "plan_e096446463a30208"
+      ],
+      "not_eligible": 118,
+      "not_eligible_by_reason": {
+        "CAPABILITY_NOT_GENERIC": 91,
+        "EXPLICIT_LENS": 12,
+        "NOT_A_PLAN": 9,
+        "GEOGRAPHY_REQUESTED": 5,
+        "OPERATION_NOT_GENERIC": 1
+      },
+      "not_eligible_cases": {
+        "EXPLICIT_LENS": [
+          "Q04A",
+          "Q04B",
+          "Q04C",
+          "Q05A",
+          "Q05B",
+          "Q05C",
+          "Q15A",
+          "Q15B",
+          "Q15C",
+          "Q17A",
+          "Q17B",
+          "Q17C"
+        ],
+        "CAPABILITY_NOT_GENERIC": [
+          "BB01A",
+          "BB01B",
+          "BB02A",
+          "BB02B",
+          "BB02C",
+          "NL1B",
+          "NL2A",
+          "NL2B",
+          "NL2C",
+          "NL3A",
+          "NL3C",
+          "NL4A",
+          "NL4B",
+          "NL4C",
+          "NL5A",
+          "NL5B",
+          "NL5C",
+          "NL6A",
+          "NL6B",
+          "NL6C",
+          "NL8A",
+          "NL8B",
+          "NL9A",
+          "NL9B",
+          "NL9C",
+          "Q06A",
+          "Q06B",
+          "Q06C",
+          "Q07A",
+          "Q07B",
+          "Q07C",
+          "Q08A",
+          "Q08B",
+          "Q08C",
+          "Q09A",
+          "Q09B",
+          "Q09C",
+          "Q10A",
+          "Q10B",
+          "Q10C",
+          "Q18A",
+          "Q18B",
+          "Q18C",
+          "Q19A",
+          "Q19B",
+          "Q19C",
+          "Q20A",
+          "Q20B",
+          "Q20C",
+          "Q21A",
+          "Q21B",
+          "Q21C",
+          "Q22A",
+          "Q22B",
+          "Q22C",
+          "Q23A",
+          "Q23B",
+          "Q23C",
+          "Q24A",
+          "Q24B",
+          "Q24C",
+          "Q25A",
+          "Q25B",
+          "Q25C",
+          "SM01A",
+          "SM01B",
+          "SM01C",
+          "SM02A",
+          "SM02B",
+          "SM02C",
+          "SM03A",
+          "SM03B",
+          "SM03C",
+          "SM04A",
+          "SM04B",
+          "SM04C",
+          "SM05A",
+          "SM05B",
+          "SM05C",
+          "SM06A",
+          "SM06B",
+          "SM06C",
+          "SM07A",
+          "SM07B",
+          "SM07C",
+          "SM08A",
+          "SM08B",
+          "SM08C",
+          "SM09A",
+          "SM09B",
+          "SM09C"
+        ],
+        "OPERATION_NOT_GENERIC": [
+          "Q12C"
+        ],
+        "GEOGRAPHY_REQUESTED": [
+          "Q14A",
+          "Q14B",
+          "Q14C",
+          "Q16A",
+          "Q16C"
+        ],
+        "NOT_A_PLAN": [
+          "BB01C",
+          "NL1A",
+          "NL1C",
+          "NL3B",
+          "NL7A",
+          "NL7B",
+          "NL7C",
+          "NL8C",
+          "Q16B"
+        ]
+      },
+      "plan_replay_fidelity": {
+        "counts": {
+          "PLAN_ID_IDENTICAL": 126,
+          "NO_PLAN_BOTH_TIMES": 9
+        },
+        "divergent": []
+      },
+      "classifications": {
+        "EXACT_SEMANTIC_PARITY": 9,
+        "OUTSIDE_REPLAY_FIXTURE": 6,
+        "PRESENTATION_ONLY": 2
+      },
+      "grouped_verdicts": {
+        "GROUPED_CELL_PARITY": 2
+      },
+      "replay_fixture_field_gaps": {
+        "ticket_bucket": 3,
+        "interest_rate_bucket": 3
+      },
+      "cases": [
+        {
+          "case_id": "run8:Q01A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q01B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q01C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q02A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q02B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q02C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q03A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q03B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q03C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run8:Q11A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run8:Q11B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run8:Q11C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run8:Q12A",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run8:Q12B",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run8:Q13A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run8:Q13B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run8:Q13C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        }
+      ],
+      "signed_off_run": true
+    },
+    {
+      "source": "mi_agent/interpretation_v2/evidence/run1_135_first_measurement.json",
+      "benchmark": "interpretation_v2/135",
+      "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+      "total": 135,
+      "slice1_eligible": 17,
+      "eligible_cases": [
+        "Q01A",
+        "Q01B",
+        "Q01C",
+        "Q02A",
+        "Q02B",
+        "Q02C",
+        "Q03A",
+        "Q03B",
+        "Q11A",
+        "Q11B",
+        "Q11C",
+        "Q12A",
+        "Q12B",
+        "Q12C",
+        "Q13A",
+        "Q13B",
+        "Q13C"
+      ],
+      "eligible_plan_ids": [
+        "plan_0870acd1249ccc86",
+        "plan_21b9bfa6fe7010ee",
+        "plan_45e2a416714d79ff",
+        "plan_56b5726fb5037e24",
+        "plan_a1f351b36e21cbe2",
+        "plan_c148e51212d8e8f4"
+      ],
+      "not_eligible": 118,
+      "not_eligible_by_reason": {
+        "CAPABILITY_NOT_GENERIC": 65,
+        "NOT_A_PLAN": 38,
+        "EXPLICIT_LENS": 9,
+        "OPERATION_NOT_GENERIC": 6
+      },
+      "not_eligible_cases": {
+        "CAPABILITY_NOT_GENERIC": [
+          "BB01A",
+          "BB01B",
+          "BB01C",
+          "BB02A",
+          "BB02B",
+          "BB02C",
+          "NL2A",
+          "NL2B",
+          "NL2C",
+          "NL3B",
+          "NL3C",
+          "NL4A",
+          "NL4C",
+          "NL5A",
+          "NL5B",
+          "NL5C",
+          "NL6B",
+          "NL6C",
+          "NL8A",
+          "NL8B",
+          "NL9A",
+          "NL9B",
+          "NL9C",
+          "Q03C",
+          "Q06A",
+          "Q06B",
+          "Q06C",
+          "Q07A",
+          "Q07B",
+          "Q07C",
+          "Q08C",
+          "Q09A",
+          "Q09B",
+          "Q09C",
+          "Q10A",
+          "Q10B",
+          "Q10C",
+          "Q18A",
+          "Q18B",
+          "Q18C",
+          "Q19B",
+          "Q19C",
+          "Q20B",
+          "Q22B",
+          "Q23A",
+          "Q23B",
+          "Q23C",
+          "Q24A",
+          "Q24B",
+          "Q24C",
+          "Q25A",
+          "Q25B",
+          "Q25C",
+          "SM01C",
+          "SM03A",
+          "SM03B",
+          "SM04B",
+          "SM05A",
+          "SM06A",
+          "SM06B",
+          "SM07A",
+          "SM07B",
+          "SM08A",
+          "SM08C",
+          "SM09B"
+        ],
+        "EXPLICIT_LENS": [
+          "Q04A",
+          "Q04C",
+          "Q05B",
+          "Q15A",
+          "Q15B",
+          "Q15C",
+          "Q17A",
+          "Q17B",
+          "Q17C"
+        ],
+        "NOT_A_PLAN": [
+          "NL3A",
+          "NL4B",
+          "NL6A",
+          "NL8C",
+          "Q04B",
+          "Q05A",
+          "Q05C",
+          "Q08A",
+          "Q08B",
+          "Q14A",
+          "Q14B",
+          "Q14C",
+          "Q16A",
+          "Q16B",
+          "Q16C",
+          "Q19A",
+          "Q20A",
+          "Q20C",
+          "Q21A",
+          "Q21B",
+          "Q21C",
+          "Q22A",
+          "Q22C",
+          "SM01A",
+          "SM01B",
+          "SM02A",
+          "SM02B",
+          "SM02C",
+          "SM03C",
+          "SM04A",
+          "SM04C",
+          "SM05B",
+          "SM05C",
+          "SM06C",
+          "SM07C",
+          "SM08B",
+          "SM09A",
+          "SM09C"
+        ],
+        "OPERATION_NOT_GENERIC": [
+          "NL1A",
+          "NL1B",
+          "NL1C",
+          "NL7A",
+          "NL7B",
+          "NL7C"
+        ]
+      },
+      "plan_replay_fidelity": {
+        "counts": {
+          "NOT_CHECKED": 135
+        },
+        "divergent": [],
+        "why": "recompile fidelity is asserted only for the run compiled at the current contract; an older run diverges because the NORMAL FORM changed, which is a recorded change, not a defect"
+      },
+      "classifications": {
+        "EXACT_SEMANTIC_PARITY": 8,
+        "OUTSIDE_REPLAY_FIXTURE": 6,
+        "PRESENTATION_ONLY": 3
+      },
+      "grouped_verdicts": {
+        "GROUPED_CELL_PARITY": 3
+      },
+      "replay_fixture_field_gaps": {
+        "ticket_bucket": 3,
+        "interest_rate_bucket": 3
+      },
+      "cases": [
+        {
+          "case_id": "run1:Q01A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q01B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q01C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q02A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q02B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q02C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q03A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q03B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run1:Q11A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run1:Q11B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run1:Q11C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run1:Q12A",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run1:Q12B",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run1:Q12C",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run1:Q13A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run1:Q13B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run1:Q13C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        }
+      ],
+      "signed_off_run": false
+    },
+    {
+      "source": "mi_agent/interpretation_v2/evidence/run2_135_after_corrections.json",
+      "benchmark": "interpretation_v2/135",
+      "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+      "total": 135,
+      "slice1_eligible": 15,
+      "eligible_cases": [
+        "Q01A",
+        "Q01B",
+        "Q01C",
+        "Q02A",
+        "Q02B",
+        "Q02C",
+        "Q03B",
+        "Q11A",
+        "Q11B",
+        "Q11C",
+        "Q12A",
+        "Q12B",
+        "Q13A",
+        "Q13B",
+        "Q13C"
+      ],
+      "eligible_plan_ids": [
+        "plan_0da35903b0578162",
+        "plan_24c14bbad45a9cbd",
+        "plan_263b3d524a57bca5",
+        "plan_388c69fe21751f04",
+        "plan_6328ea00c97c1a3c",
+        "plan_b24b6d64ae26048a"
+      ],
+      "not_eligible": 120,
+      "not_eligible_by_reason": {
+        "CAPABILITY_NOT_GENERIC": 81,
+        "NOT_A_PLAN": 21,
+        "EXPLICIT_LENS": 9,
+        "OPERATION_NOT_GENERIC": 5,
+        "GEOGRAPHY_REQUESTED": 4
+      },
+      "not_eligible_cases": {
+        "NOT_A_PLAN": [
+          "NL1A",
+          "NL1C",
+          "NL3A",
+          "NL3B",
+          "NL4B",
+          "NL4C",
+          "NL8C",
+          "Q03A",
+          "Q05A",
+          "Q05B",
+          "Q05C",
+          "Q16A",
+          "Q16C",
+          "Q20A",
+          "Q20C",
+          "Q21C",
+          "SM04B",
+          "SM05A",
+          "SM06C",
+          "SM07B",
+          "SM09A"
+        ],
+        "CAPABILITY_NOT_GENERIC": [
+          "BB01A",
+          "BB01B",
+          "BB01C",
+          "BB02A",
+          "BB02B",
+          "BB02C",
+          "NL2A",
+          "NL2B",
+          "NL2C",
+          "NL3C",
+          "NL4A",
+          "NL5A",
+          "NL5B",
+          "NL5C",
+          "NL6A",
+          "NL6B",
+          "NL6C",
+          "NL8A",
+          "NL8B",
+          "NL9A",
+          "NL9B",
+          "NL9C",
+          "Q03C",
+          "Q06A",
+          "Q06B",
+          "Q06C",
+          "Q07A",
+          "Q07B",
+          "Q07C",
+          "Q08A",
+          "Q08B",
+          "Q08C",
+          "Q09A",
+          "Q09B",
+          "Q09C",
+          "Q10A",
+          "Q10B",
+          "Q10C",
+          "Q18A",
+          "Q18B",
+          "Q18C",
+          "Q19A",
+          "Q19B",
+          "Q19C",
+          "Q20B",
+          "Q21A",
+          "Q21B",
+          "Q22A",
+          "Q22B",
+          "Q22C",
+          "Q23A",
+          "Q23B",
+          "Q23C",
+          "Q24A",
+          "Q24B",
+          "Q24C",
+          "Q25A",
+          "Q25B",
+          "Q25C",
+          "SM01A",
+          "SM01B",
+          "SM01C",
+          "SM02A",
+          "SM02B",
+          "SM02C",
+          "SM03A",
+          "SM03B",
+          "SM03C",
+          "SM04A",
+          "SM04C",
+          "SM05B",
+          "SM05C",
+          "SM06A",
+          "SM06B",
+          "SM07A",
+          "SM07C",
+          "SM08A",
+          "SM08B",
+          "SM08C",
+          "SM09B",
+          "SM09C"
+        ],
+        "EXPLICIT_LENS": [
+          "Q04A",
+          "Q04B",
+          "Q04C",
+          "Q15A",
+          "Q15B",
+          "Q15C",
+          "Q17A",
+          "Q17B",
+          "Q17C"
+        ],
+        "OPERATION_NOT_GENERIC": [
+          "NL1B",
+          "NL7A",
+          "NL7B",
+          "NL7C",
+          "Q12C"
+        ],
+        "GEOGRAPHY_REQUESTED": [
+          "Q14A",
+          "Q14B",
+          "Q14C",
+          "Q16B"
+        ]
+      },
+      "plan_replay_fidelity": {
+        "counts": {
+          "NOT_CHECKED": 135
+        },
+        "divergent": [],
+        "why": "recompile fidelity is asserted only for the run compiled at the current contract; an older run diverges because the NORMAL FORM changed, which is a recorded change, not a defect"
+      },
+      "classifications": {
+        "EXACT_SEMANTIC_PARITY": 7,
+        "OUTSIDE_REPLAY_FIXTURE": 6,
+        "PRESENTATION_ONLY": 2
+      },
+      "grouped_verdicts": {
+        "GROUPED_CELL_PARITY": 2
+      },
+      "replay_fixture_field_gaps": {
+        "ticket_bucket": 3,
+        "interest_rate_bucket": 3
+      },
+      "cases": [
+        {
+          "case_id": "run2:Q01A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run2:Q01B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run2:Q01C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run2:Q02A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run2:Q02B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run2:Q02C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run2:Q03B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run2:Q11A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run2:Q11B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run2:Q11C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run2:Q12A",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run2:Q12B",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run2:Q13A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run2:Q13B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run2:Q13C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        }
+      ],
+      "signed_off_run": false
+    },
+    {
+      "source": "mi_agent/interpretation_v2/evidence/run3_135_rescored.json",
+      "benchmark": "interpretation_v2/135",
+      "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+      "total": 135,
+      "slice1_eligible": 15,
+      "eligible_cases": [
+        "Q01A",
+        "Q01B",
+        "Q01C",
+        "Q02A",
+        "Q02B",
+        "Q02C",
+        "Q03B",
+        "Q11A",
+        "Q11B",
+        "Q11C",
+        "Q12A",
+        "Q12B",
+        "Q13A",
+        "Q13B",
+        "Q13C"
+      ],
+      "eligible_plan_ids": [
+        "plan_0da35903b0578162",
+        "plan_24c14bbad45a9cbd",
+        "plan_263b3d524a57bca5",
+        "plan_388c69fe21751f04",
+        "plan_6328ea00c97c1a3c",
+        "plan_b24b6d64ae26048a"
+      ],
+      "not_eligible": 120,
+      "not_eligible_by_reason": {
+        "CAPABILITY_NOT_GENERIC": 81,
+        "NOT_A_PLAN": 21,
+        "EXPLICIT_LENS": 9,
+        "OPERATION_NOT_GENERIC": 5,
+        "GEOGRAPHY_REQUESTED": 4
+      },
+      "not_eligible_cases": {
+        "NOT_A_PLAN": [
+          "NL1A",
+          "NL1C",
+          "NL3A",
+          "NL3B",
+          "NL4B",
+          "NL4C",
+          "NL8C",
+          "Q03A",
+          "Q05A",
+          "Q05B",
+          "Q05C",
+          "Q16A",
+          "Q16C",
+          "Q20A",
+          "Q20C",
+          "Q21C",
+          "SM04B",
+          "SM05A",
+          "SM06C",
+          "SM07B",
+          "SM09A"
+        ],
+        "CAPABILITY_NOT_GENERIC": [
+          "BB01A",
+          "BB01B",
+          "BB01C",
+          "BB02A",
+          "BB02B",
+          "BB02C",
+          "NL2A",
+          "NL2B",
+          "NL2C",
+          "NL3C",
+          "NL4A",
+          "NL5A",
+          "NL5B",
+          "NL5C",
+          "NL6A",
+          "NL6B",
+          "NL6C",
+          "NL8A",
+          "NL8B",
+          "NL9A",
+          "NL9B",
+          "NL9C",
+          "Q03C",
+          "Q06A",
+          "Q06B",
+          "Q06C",
+          "Q07A",
+          "Q07B",
+          "Q07C",
+          "Q08A",
+          "Q08B",
+          "Q08C",
+          "Q09A",
+          "Q09B",
+          "Q09C",
+          "Q10A",
+          "Q10B",
+          "Q10C",
+          "Q18A",
+          "Q18B",
+          "Q18C",
+          "Q19A",
+          "Q19B",
+          "Q19C",
+          "Q20B",
+          "Q21A",
+          "Q21B",
+          "Q22A",
+          "Q22B",
+          "Q22C",
+          "Q23A",
+          "Q23B",
+          "Q23C",
+          "Q24A",
+          "Q24B",
+          "Q24C",
+          "Q25A",
+          "Q25B",
+          "Q25C",
+          "SM01A",
+          "SM01B",
+          "SM01C",
+          "SM02A",
+          "SM02B",
+          "SM02C",
+          "SM03A",
+          "SM03B",
+          "SM03C",
+          "SM04A",
+          "SM04C",
+          "SM05B",
+          "SM05C",
+          "SM06A",
+          "SM06B",
+          "SM07A",
+          "SM07C",
+          "SM08A",
+          "SM08B",
+          "SM08C",
+          "SM09B",
+          "SM09C"
+        ],
+        "EXPLICIT_LENS": [
+          "Q04A",
+          "Q04B",
+          "Q04C",
+          "Q15A",
+          "Q15B",
+          "Q15C",
+          "Q17A",
+          "Q17B",
+          "Q17C"
+        ],
+        "OPERATION_NOT_GENERIC": [
+          "NL1B",
+          "NL7A",
+          "NL7B",
+          "NL7C",
+          "Q12C"
+        ],
+        "GEOGRAPHY_REQUESTED": [
+          "Q14A",
+          "Q14B",
+          "Q14C",
+          "Q16B"
+        ]
+      },
+      "plan_replay_fidelity": {
+        "counts": {
+          "NOT_CHECKED": 135
+        },
+        "divergent": [],
+        "why": "recompile fidelity is asserted only for the run compiled at the current contract; an older run diverges because the NORMAL FORM changed, which is a recorded change, not a defect"
+      },
+      "classifications": {
+        "EXACT_SEMANTIC_PARITY": 7,
+        "OUTSIDE_REPLAY_FIXTURE": 6,
+        "PRESENTATION_ONLY": 2
+      },
+      "grouped_verdicts": {
+        "GROUPED_CELL_PARITY": 2
+      },
+      "replay_fixture_field_gaps": {
+        "ticket_bucket": 3,
+        "interest_rate_bucket": 3
+      },
+      "cases": [
+        {
+          "case_id": "run3:Q01A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run3:Q01B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run3:Q01C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run3:Q02A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run3:Q02B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run3:Q02C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run3:Q03B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run3:Q11A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run3:Q11B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run3:Q11C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run3:Q12A",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run3:Q12B",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run3:Q13A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run3:Q13B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run3:Q13C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        }
+      ],
+      "signed_off_run": false
+    },
+    {
+      "source": "mi_agent/interpretation_v2/evidence/run4_135_with_metadata_access.json",
+      "benchmark": "interpretation_v2/135",
+      "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+      "total": 135,
+      "slice1_eligible": 17,
+      "eligible_cases": [
+        "Q01A",
+        "Q01B",
+        "Q01C",
+        "Q02A",
+        "Q02B",
+        "Q02C",
+        "Q03A",
+        "Q03B",
+        "Q03C",
+        "Q11A",
+        "Q11B",
+        "Q11C",
+        "Q12A",
+        "Q12B",
+        "Q13A",
+        "Q13B",
+        "Q13C"
+      ],
+      "eligible_plan_ids": [
+        "plan_047725b34043a4cd",
+        "plan_0bb8304574dfb775",
+        "plan_81448683d9bcf27e",
+        "plan_9e4d011af18a9f1a",
+        "plan_b936ab5e643e424a",
+        "plan_ce6b0668b462abb5"
+      ],
+      "not_eligible": 118,
+      "not_eligible_by_reason": {
+        "CAPABILITY_NOT_GENERIC": 87,
+        "EXPLICIT_LENS": 12,
+        "NOT_A_PLAN": 8,
+        "GEOGRAPHY_REQUESTED": 6,
+        "OPERATION_NOT_GENERIC": 5
+      },
+      "not_eligible_cases": {
+        "EXPLICIT_LENS": [
+          "Q04A",
+          "Q04B",
+          "Q04C",
+          "Q05A",
+          "Q05B",
+          "Q05C",
+          "Q15A",
+          "Q15B",
+          "Q15C",
+          "Q17A",
+          "Q17B",
+          "Q17C"
+        ],
+        "CAPABILITY_NOT_GENERIC": [
+          "BB01A",
+          "BB01B",
+          "BB01C",
+          "BB02A",
+          "BB02B",
+          "BB02C",
+          "NL2A",
+          "NL2C",
+          "NL3A",
+          "NL3B",
+          "NL3C",
+          "NL4A",
+          "NL4B",
+          "NL4C",
+          "NL5A",
+          "NL5B",
+          "NL5C",
+          "NL6A",
+          "NL6B",
+          "NL6C",
+          "NL8A",
+          "NL8B",
+          "NL9A",
+          "NL9B",
+          "NL9C",
+          "Q06A",
+          "Q06B",
+          "Q06C",
+          "Q07A",
+          "Q07B",
+          "Q07C",
+          "Q08A",
+          "Q08B",
+          "Q08C",
+          "Q09A",
+          "Q09B",
+          "Q09C",
+          "Q10A",
+          "Q10B",
+          "Q10C",
+          "Q18A",
+          "Q18B",
+          "Q19A",
+          "Q19B",
+          "Q19C",
+          "Q20A",
+          "Q20C",
+          "Q21A",
+          "Q21B",
+          "Q21C",
+          "Q22A",
+          "Q22B",
+          "Q22C",
+          "Q23A",
+          "Q23B",
+          "Q24B",
+          "Q24C",
+          "Q25A",
+          "Q25B",
+          "Q25C",
+          "SM01A",
+          "SM01B",
+          "SM01C",
+          "SM02A",
+          "SM02B",
+          "SM02C",
+          "SM03A",
+          "SM03B",
+          "SM03C",
+          "SM04A",
+          "SM04B",
+          "SM04C",
+          "SM05A",
+          "SM05B",
+          "SM05C",
+          "SM06A",
+          "SM06B",
+          "SM06C",
+          "SM07A",
+          "SM07B",
+          "SM07C",
+          "SM08A",
+          "SM08B",
+          "SM08C",
+          "SM09A",
+          "SM09B",
+          "SM09C"
+        ],
+        "OPERATION_NOT_GENERIC": [
+          "NL1A",
+          "NL1B",
+          "NL7A",
+          "NL7C",
+          "Q12C"
+        ],
+        "GEOGRAPHY_REQUESTED": [
+          "Q14A",
+          "Q14B",
+          "Q14C",
+          "Q16A",
+          "Q16B",
+          "Q16C"
+        ],
+        "NOT_A_PLAN": [
+          "NL1C",
+          "NL2B",
+          "NL7B",
+          "NL8C",
+          "Q18C",
+          "Q20B",
+          "Q23C",
+          "Q24A"
+        ]
+      },
+      "plan_replay_fidelity": {
+        "counts": {
+          "NOT_CHECKED": 135
+        },
+        "divergent": [],
+        "why": "recompile fidelity is asserted only for the run compiled at the current contract; an older run diverges because the NORMAL FORM changed, which is a recorded change, not a defect"
+      },
+      "classifications": {
+        "EXACT_SEMANTIC_PARITY": 9,
+        "OUTSIDE_REPLAY_FIXTURE": 6,
+        "PRESENTATION_ONLY": 2
+      },
+      "grouped_verdicts": {
+        "GROUPED_CELL_PARITY": 2
+      },
+      "replay_fixture_field_gaps": {
+        "ticket_bucket": 3,
+        "interest_rate_bucket": 3
+      },
+      "cases": [
+        {
+          "case_id": "run4:Q01A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q01B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q01C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q02A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q02B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q02C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q03A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q03B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q03C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run4:Q11A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run4:Q11B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run4:Q11C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run4:Q12A",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run4:Q12B",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run4:Q13A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run4:Q13B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run4:Q13C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        }
+      ],
+      "signed_off_run": false
+    },
+    {
+      "source": "mi_agent/interpretation_v2/evidence/run6_135_head_0b663f7.json",
+      "benchmark": "interpretation_v2/135",
+      "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+      "total": 135,
+      "slice1_eligible": 17,
+      "eligible_cases": [
+        "Q01A",
+        "Q01B",
+        "Q01C",
+        "Q02A",
+        "Q02B",
+        "Q02C",
+        "Q03A",
+        "Q03B",
+        "Q03C",
+        "Q11A",
+        "Q11B",
+        "Q11C",
+        "Q12A",
+        "Q12B",
+        "Q13A",
+        "Q13B",
+        "Q13C"
+      ],
+      "eligible_plan_ids": [
+        "plan_08020e58b735f771",
+        "plan_92964eb7c19d2b43",
+        "plan_ca02491b13e8e042",
+        "plan_d7adabfaa9308f12",
+        "plan_d9bfe5fd29761fb5",
+        "plan_e096446463a30208"
+      ],
+      "not_eligible": 118,
+      "not_eligible_by_reason": {
+        "CAPABILITY_NOT_GENERIC": 92,
+        "EXPLICIT_LENS": 12,
+        "GEOGRAPHY_REQUESTED": 6,
+        "OPERATION_NOT_GENERIC": 5,
+        "NOT_A_PLAN": 3
+      },
+      "not_eligible_cases": {
+        "EXPLICIT_LENS": [
+          "Q04A",
+          "Q04B",
+          "Q04C",
+          "Q05A",
+          "Q05B",
+          "Q05C",
+          "Q15A",
+          "Q15B",
+          "Q15C",
+          "Q17A",
+          "Q17B",
+          "Q17C"
+        ],
+        "CAPABILITY_NOT_GENERIC": [
+          "BB01A",
+          "BB01B",
+          "BB02A",
+          "BB02B",
+          "BB02C",
+          "NL1B",
+          "NL1C",
+          "NL2A",
+          "NL2B",
+          "NL2C",
+          "NL3A",
+          "NL3C",
+          "NL4A",
+          "NL4B",
+          "NL4C",
+          "NL5A",
+          "NL5B",
+          "NL5C",
+          "NL6A",
+          "NL6B",
+          "NL6C",
+          "NL8A",
+          "NL8B",
+          "NL9A",
+          "NL9B",
+          "NL9C",
+          "Q06A",
+          "Q06B",
+          "Q06C",
+          "Q07A",
+          "Q07B",
+          "Q07C",
+          "Q08A",
+          "Q08B",
+          "Q08C",
+          "Q09A",
+          "Q09B",
+          "Q09C",
+          "Q10A",
+          "Q10B",
+          "Q10C",
+          "Q18A",
+          "Q18B",
+          "Q18C",
+          "Q19A",
+          "Q19B",
+          "Q19C",
+          "Q20A",
+          "Q20B",
+          "Q20C",
+          "Q21A",
+          "Q21B",
+          "Q21C",
+          "Q22A",
+          "Q22B",
+          "Q22C",
+          "Q23A",
+          "Q23B",
+          "Q23C",
+          "Q24A",
+          "Q24B",
+          "Q24C",
+          "Q25A",
+          "Q25B",
+          "Q25C",
+          "SM01A",
+          "SM01B",
+          "SM01C",
+          "SM02A",
+          "SM02B",
+          "SM02C",
+          "SM03A",
+          "SM03B",
+          "SM03C",
+          "SM04A",
+          "SM04B",
+          "SM04C",
+          "SM05A",
+          "SM05B",
+          "SM05C",
+          "SM06A",
+          "SM06B",
+          "SM06C",
+          "SM07A",
+          "SM07B",
+          "SM07C",
+          "SM08A",
+          "SM08B",
+          "SM08C",
+          "SM09A",
+          "SM09B",
+          "SM09C"
+        ],
+        "OPERATION_NOT_GENERIC": [
+          "NL1A",
+          "NL7A",
+          "NL7B",
+          "NL7C",
+          "Q12C"
+        ],
+        "GEOGRAPHY_REQUESTED": [
+          "Q14A",
+          "Q14B",
+          "Q14C",
+          "Q16A",
+          "Q16B",
+          "Q16C"
+        ],
+        "NOT_A_PLAN": [
+          "BB01C",
+          "NL3B",
+          "NL8C"
+        ]
+      },
+      "plan_replay_fidelity": {
+        "counts": {
+          "NOT_CHECKED": 135
+        },
+        "divergent": [],
+        "why": "recompile fidelity is asserted only for the run compiled at the current contract; an older run diverges because the NORMAL FORM changed, which is a recorded change, not a defect"
+      },
+      "classifications": {
+        "EXACT_SEMANTIC_PARITY": 9,
+        "OUTSIDE_REPLAY_FIXTURE": 6,
+        "PRESENTATION_ONLY": 2
+      },
+      "grouped_verdicts": {
+        "GROUPED_CELL_PARITY": 2
+      },
+      "replay_fixture_field_gaps": {
+        "ticket_bucket": 3,
+        "interest_rate_bucket": 3
+      },
+      "cases": [
+        {
+          "case_id": "run6:Q01A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q01B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q01C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q02A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q02B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q02C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q03A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q03B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q03C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run6:Q11A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run6:Q11B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run6:Q11C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run6:Q12A",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run6:Q12B",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run6:Q13A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run6:Q13B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run6:Q13C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        }
+      ],
+      "signed_off_run": false
+    },
+    {
+      "source": "mi_agent/interpretation_v2/evidence/run7_135_policy_2a.json",
+      "benchmark": "interpretation_v2/135",
+      "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+      "total": 135,
+      "slice1_eligible": 17,
+      "eligible_cases": [
+        "Q01A",
+        "Q01B",
+        "Q01C",
+        "Q02A",
+        "Q02B",
+        "Q02C",
+        "Q03A",
+        "Q03B",
+        "Q03C",
+        "Q11A",
+        "Q11B",
+        "Q11C",
+        "Q12A",
+        "Q12B",
+        "Q13A",
+        "Q13B",
+        "Q13C"
+      ],
+      "eligible_plan_ids": [
+        "plan_08020e58b735f771",
+        "plan_92964eb7c19d2b43",
+        "plan_ca02491b13e8e042",
+        "plan_d7adabfaa9308f12",
+        "plan_d9bfe5fd29761fb5",
+        "plan_e096446463a30208"
+      ],
+      "not_eligible": 118,
+      "not_eligible_by_reason": {
+        "CAPABILITY_NOT_GENERIC": 88,
+        "EXPLICIT_LENS": 12,
+        "NOT_A_PLAN": 11,
+        "GEOGRAPHY_REQUESTED": 6,
+        "OPERATION_NOT_GENERIC": 1
+      },
+      "not_eligible_cases": {
+        "EXPLICIT_LENS": [
+          "Q04A",
+          "Q04B",
+          "Q04C",
+          "Q05A",
+          "Q05B",
+          "Q05C",
+          "Q15A",
+          "Q15B",
+          "Q15C",
+          "Q17A",
+          "Q17B",
+          "Q17C"
+        ],
+        "CAPABILITY_NOT_GENERIC": [
+          "BB01A",
+          "BB01B",
+          "BB02A",
+          "BB02B",
+          "BB02C",
+          "NL1B",
+          "NL2A",
+          "NL2B",
+          "NL2C",
+          "NL3A",
+          "NL4A",
+          "NL4B",
+          "NL4C",
+          "NL5A",
+          "NL5B",
+          "NL5C",
+          "NL6A",
+          "NL6B",
+          "NL6C",
+          "NL8A",
+          "NL8B",
+          "NL9A",
+          "NL9B",
+          "NL9C",
+          "Q06A",
+          "Q06B",
+          "Q06C",
+          "Q07A",
+          "Q07B",
+          "Q07C",
+          "Q08A",
+          "Q08B",
+          "Q08C",
+          "Q09A",
+          "Q09B",
+          "Q09C",
+          "Q10A",
+          "Q10B",
+          "Q10C",
+          "Q18A",
+          "Q18B",
+          "Q18C",
+          "Q19A",
+          "Q20A",
+          "Q20B",
+          "Q20C",
+          "Q21A",
+          "Q21B",
+          "Q21C",
+          "Q22A",
+          "Q22B",
+          "Q22C",
+          "Q23A",
+          "Q23B",
+          "Q23C",
+          "Q24A",
+          "Q24B",
+          "Q24C",
+          "Q25A",
+          "Q25B",
+          "Q25C",
+          "SM01A",
+          "SM01B",
+          "SM01C",
+          "SM02A",
+          "SM02B",
+          "SM02C",
+          "SM03A",
+          "SM03B",
+          "SM03C",
+          "SM04A",
+          "SM04B",
+          "SM04C",
+          "SM05A",
+          "SM05B",
+          "SM05C",
+          "SM06A",
+          "SM06B",
+          "SM06C",
+          "SM07A",
+          "SM07B",
+          "SM07C",
+          "SM08A",
+          "SM08B",
+          "SM08C",
+          "SM09A",
+          "SM09B",
+          "SM09C"
+        ],
+        "OPERATION_NOT_GENERIC": [
+          "Q12C"
+        ],
+        "GEOGRAPHY_REQUESTED": [
+          "Q14A",
+          "Q14B",
+          "Q14C",
+          "Q16A",
+          "Q16B",
+          "Q16C"
+        ],
+        "NOT_A_PLAN": [
+          "BB01C",
+          "NL1A",
+          "NL1C",
+          "NL3B",
+          "NL3C",
+          "NL7A",
+          "NL7B",
+          "NL7C",
+          "NL8C",
+          "Q19B",
+          "Q19C"
+        ]
+      },
+      "plan_replay_fidelity": {
+        "counts": {
+          "NOT_CHECKED": 135
+        },
+        "divergent": [],
+        "why": "recompile fidelity is asserted only for the run compiled at the current contract; an older run diverges because the NORMAL FORM changed, which is a recorded change, not a defect"
+      },
+      "classifications": {
+        "EXACT_SEMANTIC_PARITY": 9,
+        "OUTSIDE_REPLAY_FIXTURE": 6,
+        "PRESENTATION_ONLY": 2
+      },
+      "grouped_verdicts": {
+        "GROUPED_CELL_PARITY": 2
+      },
+      "replay_fixture_field_gaps": {
+        "ticket_bucket": 3,
+        "interest_rate_bucket": 3
+      },
+      "cases": [
+        {
+          "case_id": "run7:Q01A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q01B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q01C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 195.0,
+          "new_value": 195.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q02A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q02B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q02C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 37948448.76,
+          "new_value": 37948448.76,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q03A",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q03B",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q03C",
+          "classification": "EXACT_SEMANTIC_PARITY",
+          "note": "",
+          "control_value": 93.0,
+          "new_value": 93.0,
+          "dimensions": []
+        },
+        {
+          "case_id": "run7:Q11A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run7:Q11B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run7:Q11C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['ticket_bucket']"
+        },
+        {
+          "case_id": "run7:Q12A",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run7:Q12B",
+          "classification": "PRESENTATION_ONLY",
+          "note": "no comparable scalar (new=None, control=None)",
+          "control_value": null,
+          "new_value": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "grouped_verdict": "GROUPED_CELL_PARITY",
+          "grouped_note": "20 cells, all within 0.01"
+        },
+        {
+          "case_id": "run7:Q13A",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run7:Q13B",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        },
+        {
+          "case_id": "run7:Q13C",
+          "classification": "OUTSIDE_REPLAY_FIXTURE",
+          "note": "the replay book does not carry ['interest_rate_bucket']"
+        }
+      ],
+      "signed_off_run": false
+    }
+  ]
+}
