@@ -1,0 +1,15 @@
+# Deployment capability, measured 2026-09-10T17:34:23Z
+
+az CLI:            NOT INSTALLED
+deploy/auth env:   NONE
+MI_BEARER in session transcripts: 0 occurrences
+
+## Read-only reachability of the deployed hosts
+GET https://trakt-mi-api.azurewebsites.net/health -> http=000
+GET https://trakt-ops-api.azurewebsites.net/health -> http=000
+
+## What the egress proxy says about those attempts
+{"ts": "2026-09-10T16:56:43.739Z", "kind": "connect_rejected", "detail": "gateway answered 403 to CONNECT (policy denial or upstream failure)", "host": "trakt-mi-api.azurewebsites.net:443"}
+{"ts": "2026-09-10T16:56:44.091Z", "kind": "connect_rejected", "detail": "gateway answered 403 to CONNECT (policy denial or upstream failure)", "host": "trakt-ops-api.azurewebsites.net:443"}
+{"ts": "2026-09-10T16:56:47.835Z", "kind": "connect_rejected", "detail": "gateway answered 403 to CONNECT (policy denial or upstream failure)", "host": "trakt-mi-api.azurewebsites.net:443"}
+{"ts": "2026-09-10T16:59:23.666Z", "kind": "connect_rejected", "detail": "gateway answered 403 to CONNECT (policy denial or upstream failure)", "host": "trakt-mi-api.azurewebsites.net:443"}
