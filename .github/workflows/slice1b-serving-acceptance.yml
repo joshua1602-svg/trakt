@@ -27,7 +27,21 @@ name: Slice 1B live serving acceptance
 # their lengths are printed, and the script rescans its own output for both and
 # refuses to write the file if either survived.
 
+# HOW THIS IS TRIGGERED, and why it is not only `workflow_dispatch`. A
+# dispatchable workflow has to exist on the DEFAULT branch before the API will
+# accept a dispatch — an unregistered file 404s, as this one did. Registering it
+# on `main` is a write to the default branch, which is not something to do for a
+# one-off acceptance run. A `push` trigger runs from the branch it is pushed to
+# with no such registration, and scoping it to THIS FILE means it fires when the
+# acceptance is published and on no other push to the branch.
+#
+# `workflow_dispatch` is kept so the run is repeatable the moment somebody does
+# register it, and every value below falls back to the literal the push path
+# needs — `inputs.x` is empty on a push event.
 on:
+  push:
+    branches: [ 'claude/mi-plan-interpretation-compiler-v1-jfonpp' ]
+    paths: [ '.github/workflows/slice1b-serving-acceptance.yml' ]
   workflow_dispatch:
     inputs:
       expect_commit:
@@ -71,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || github.sha }}
 
       - uses: actions/setup-python@v5
         with:
@@ -99,12 +113,14 @@ jobs:
         env:
           MI_BEARER: ${{ secrets.MI_BEARER }}
           AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
-          BASE_URL: ${{ inputs.base_url }}
-          API_PATH: ${{ inputs.path }}
-          PORTFOLIO_ID: ${{ inputs.portfolio_id }}
-          EXPECT_COMMIT: ${{ inputs.expect_commit }}
-          EVIDENCE_PATH: ${{ inputs.evidence_path }}
-          POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds }}
+          # Each falls back to the literal the push path needs; on a dispatch the
+          # input wins. The expected SHA is the deployment under acceptance.
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          API_PATH: ${{ inputs.path || '/mi/query' }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id || 'ERE/2026-06-30' }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit || 'd360bead1ec5ea6d521ecaf86c59de2d8edaa79f' }}
+          EVIDENCE_PATH: ${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}
+          POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds || '120' }}
         run: |
           set -euo pipefail
           python due_diligence/evidence/slice1b_serving_canary/run_serving_acceptance.py \
