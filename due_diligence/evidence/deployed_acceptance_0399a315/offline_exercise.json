@@ -1,0 +1,651 @@
+{
+  "what_this_is": "the CI acceptance harness exercised end to end with NO deployment and NO model call, against local stand-ins for the API and the Kudu VFS. The 12 evidence records were produced by the REAL production orchestration (plan_shadow_wiring) replaying the frozen run-8 payloads, so they are the shape the deployed recorder writes.",
+  "not_a_deployed_result": true,
+  "why_it_matters": "it establishes that a green workflow means something and that a red one fires: the same harness, the same manifest, only the evidence differs between the two runs below",
+  "gates_proved_to_fail_closed": {
+    "no_credentials": "exit 2, refused before anything was asked",
+    "unreachable_host": "exit 2, stopped at provenance, 0 questions asked",
+    "unreadable_sink": "exit 2, stopped at the phase 2 gate, 0 questions asked \u2014 no model call can be spent on a run that could not adjudicate",
+    "pre_existing_records": "records already in the sink at stage 2 are excluded by correlation id, so a re-run cannot adjudicate the previous run's evidence"
+  },
+  "run_a_correct_evidence": {
+    "what_this_is": "deployed slice 1 shadow acceptance, 12 pre-registered cases",
+    "manifest_sha256": "f33348a28c08a8cf2ddc24dc83250f82834584101924baee18a318f3e59bdedc",
+    "manifest_verified_unchanged": true,
+    "base_url": "http://127.0.0.1:8731",
+    "path": "/mi/query",
+    "canary_portfolio_id": "ERE/2026-06-30",
+    "canary_client_id": "ERE",
+    "expect_commit": "0399a315",
+    "evidence_path": "/home/LogFiles/mi-plan-shadow/evidence.jsonl",
+    "polling": {
+      "interval_seconds": 2.0,
+      "timeout_seconds": 10.0
+    },
+    "shadow_enabled_by_this_harness": false,
+    "shadow_disabled_by_this_harness": false,
+    "shadow_disable_is_an_operator_action": true,
+    "stages": {
+      "provenance": {
+        "reached": "YES",
+        "authorised": "YES",
+        "served_commit": "0399a315b48a7cf6cf39403227a360703121db33",
+        "matches_expected": true
+      },
+      "sink": {
+        "scm_host": "http://127.0.0.1:8732",
+        "vfs_path": "LogFiles/mi-plan-shadow/evidence.jsonl",
+        "readable": true,
+        "detail": "read",
+        "records_present_before_the_run": 0
+      },
+      "canary_isolation": {
+        "isolated": "UNPROVEN \u2014 no --non-canary-portfolio-id was supplied; every retrieved record is still checked to belong to the one canary client"
+      }
+    },
+    "cases": [
+      {
+        "case_id": "A01",
+        "question": "How many loans are to borrowers over 55 with LTV above 50%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_2cb4378b5eef4e65ba34",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_08020e58b735f771",
+        "expected_plan_id": "plan_08020e58b735f771",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 195.0,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "AGREES",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A02",
+        "question": "What is the balance of loans to borrowers over 75 with LTV above 40%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_140e9e10bcb14958b5e0",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_e096446463a30208",
+        "expected_plan_id": "plan_e096446463a30208",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 37948448.76,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "DIFFERS",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A03",
+        "question": "How many drawdown loans have LTV above 50%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_2db2634b9ed04fc788a0",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_d7adabfaa9308f12",
+        "expected_plan_id": "plan_d7adabfaa9308f12",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 93.0,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "DIFFERS",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A04",
+        "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "grouped grid reconciles with the execution receipt's own group count; there is no independent oracle for deployed figures"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_f60ddc4a02f947b3ba42",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_92964eb7c19d2b43",
+        "expected_plan_id": "plan_92964eb7c19d2b43",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "grouped_cells": 20,
+        "receipt_row_count": 20,
+        "shadow_value": null,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A05",
+        "question": "Show a table of balance by LTV bucket and ticket-size bucket.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "TRUTH_UNAVAILABLE",
+        "notes": [
+          "execution error: MIQueryExecutionError: spec failed validation: Canonical column 'ticket_bucket' (for semantic field 'ticket_bucket') not present in dataset columns",
+          "the deployed frame does not carry ['ticket_bucket']; pre-registered as an acceptable branch and a dataset fact, not a defect"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_d762856c06b2453aabbd",
+        "disposition": "EXECUTION_ERROR",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_d9bfe5fd29761fb5",
+        "expected_plan_id": "plan_d9bfe5fd29761fb5",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A06",
+        "question": "Show a table of balance by LTV bucket and interest-rate bucket.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "TRUTH_UNAVAILABLE",
+        "notes": [
+          "execution error: MIQueryExecutionError: spec failed validation: Canonical column 'interest_rate_bucket' (for semantic field 'interest_rate_bucket') not present in dataset columns",
+          "the deployed frame does not carry ['interest_rate_bucket']; pre-registered as an acceptable branch and a dataset fact, not a defect"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_739c14ab2c0f40739409",
+        "disposition": "EXECUTION_ERROR",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_ca02491b13e8e042",
+        "expected_plan_id": "plan_ca02491b13e8e042",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A07",
+        "question": "How many loans have a borrower older than 55 and an LTV greater than 50%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_47e09b92f8b441c78a17",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_08020e58b735f771",
+        "expected_plan_id": "plan_08020e58b735f771",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 195.0,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "AGREES",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A08",
+        "question": "Show the total balance for loans with borrowers older than 75 and current LTV greater than 40%.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_4f3b0d8201794919bcef",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_e096446463a30208",
+        "expected_plan_id": "plan_e096446463a30208",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 37948448.76,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "DIFFERS",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B01",
+        "question": "What is the balance of Direct-book loans in London to borrowers over 75?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason EXPLICIT_LENS as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_eab1b224776846a498f6",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_6b4ced7ca93be1cb",
+        "expected_plan_id": "plan_6b4ced7ca93be1cb",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B02",
+        "question": "Show loan count by region and product type.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason GEOGRAPHY_REQUESTED as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_d5e08fcbb2884ee59aaa",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_9c6ebdc78046f1c2",
+        "expected_plan_id": "plan_9c6ebdc78046f1c2",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B03",
+        "question": "How did the Direct book change last month?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason CAPABILITY_NOT_GENERIC as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_df9b8e18f0a24bf78f3a",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_5681bb585344ef43",
+        "expected_plan_id": "plan_5681bb585344ef43",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B04",
+        "question": "Plot portfolio balance across LTV buckets and borrower-age buckets.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason OPERATION_NOT_GENERIC as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_06d7f3fdb2434a1c993c",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_c56510dee3605727",
+        "expected_plan_id": "plan_c56510dee3605727",
+        "evidence_lookup": "matched on question + client"
+      }
+    ],
+    "preflight_probe": {
+      "portfolio_id": "ERE/2026-06-30",
+      "on_the_canary_client": true,
+      "extra_shadow_interpretations": 1,
+      "note": "the probe ran as the canary client, so ONE shadow interpretation beyond the 12 was spent; its record is excluded from the bank by correlation id"
+    },
+    "classifications": {
+      "EXACT_SEMANTIC_PARITY": 6,
+      "TRUTH_UNAVAILABLE": 2,
+      "JUSTIFIED_INELIGIBLE": 4
+    },
+    "models_returned": [
+      "claude-opus-5"
+    ],
+    "model_substitutions": 0,
+    "records_from_a_client_other_than_the_canary": [],
+    "served_http_statuses": [
+      200
+    ],
+    "async_evidence_lost": 0,
+    "verdict": "PASS"
+  },
+  "run_b_one_silently_dropped_filter": {
+    "what_this_is": "deployed slice 1 shadow acceptance, 12 pre-registered cases",
+    "manifest_sha256": "f33348a28c08a8cf2ddc24dc83250f82834584101924baee18a318f3e59bdedc",
+    "manifest_verified_unchanged": true,
+    "base_url": "http://127.0.0.1:8731",
+    "path": "/mi/query",
+    "canary_portfolio_id": "ERE/2026-06-30",
+    "canary_client_id": "ERE",
+    "expect_commit": "0399a315",
+    "evidence_path": "/home/LogFiles/mi-plan-shadow/evidence.jsonl",
+    "polling": {
+      "interval_seconds": 2.0,
+      "timeout_seconds": 6.0
+    },
+    "shadow_enabled_by_this_harness": false,
+    "shadow_disabled_by_this_harness": false,
+    "shadow_disable_is_an_operator_action": true,
+    "stages": {
+      "provenance": {
+        "reached": "YES",
+        "authorised": "YES",
+        "served_commit": "0399a315b48a7cf6cf39403227a360703121db33",
+        "matches_expected": true
+      },
+      "sink": {
+        "scm_host": "http://127.0.0.1:8732",
+        "vfs_path": "LogFiles/mi-plan-shadow/evidence.jsonl",
+        "readable": true,
+        "detail": "read",
+        "records_present_before_the_run": 0
+      },
+      "canary_isolation": {
+        "isolated": "UNPROVEN \u2014 no --non-canary-portfolio-id was supplied; every retrieved record is still checked to belong to the one canary client"
+      }
+    },
+    "cases": [
+      {
+        "case_id": "A01",
+        "question": "How many loans are to borrowers over 55 with LTV above 50%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "DETERMINISTIC_EXECUTION_DEFECT",
+        "notes": [
+          "a stated facet did not reach the executable spec"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_2cb4378b5eef4e65ba34",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_08020e58b735f771",
+        "expected_plan_id": "plan_08020e58b735f771",
+        "filter_drops": [
+          "current_loan_to_value",
+          "youngest_borrower_age"
+        ],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A02",
+        "question": "What is the balance of loans to borrowers over 75 with LTV above 40%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_140e9e10bcb14958b5e0",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_e096446463a30208",
+        "expected_plan_id": "plan_e096446463a30208",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 37948448.76,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "DIFFERS",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A03",
+        "question": "How many drawdown loans have LTV above 50%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_2db2634b9ed04fc788a0",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_d7adabfaa9308f12",
+        "expected_plan_id": "plan_d7adabfaa9308f12",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 93.0,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "DIFFERS",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A04",
+        "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "grouped grid reconciles with the execution receipt's own group count; there is no independent oracle for deployed figures"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_f60ddc4a02f947b3ba42",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_92964eb7c19d2b43",
+        "expected_plan_id": "plan_92964eb7c19d2b43",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "grouped_cells": 20,
+        "receipt_row_count": 20,
+        "shadow_value": null,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A05",
+        "question": "Show a table of balance by LTV bucket and ticket-size bucket.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "TRUTH_UNAVAILABLE",
+        "notes": [
+          "execution error: MIQueryExecutionError: spec failed validation: Canonical column 'ticket_bucket' (for semantic field 'ticket_bucket') not present in dataset columns",
+          "the deployed frame does not carry ['ticket_bucket']; pre-registered as an acceptable branch and a dataset fact, not a defect"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_d762856c06b2453aabbd",
+        "disposition": "EXECUTION_ERROR",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_d9bfe5fd29761fb5",
+        "expected_plan_id": "plan_d9bfe5fd29761fb5",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A06",
+        "question": "Show a table of balance by LTV bucket and interest-rate bucket.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "TRUTH_UNAVAILABLE",
+        "notes": [
+          "execution error: MIQueryExecutionError: spec failed validation: Canonical column 'interest_rate_bucket' (for semantic field 'interest_rate_bucket') not present in dataset columns",
+          "the deployed frame does not carry ['interest_rate_bucket']; pre-registered as an acceptable branch and a dataset fact, not a defect"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_739c14ab2c0f40739409",
+        "disposition": "EXECUTION_ERROR",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_ca02491b13e8e042",
+        "expected_plan_id": "plan_ca02491b13e8e042",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A07",
+        "question": "How many loans have a borrower older than 55 and an LTV greater than 50%?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_47e09b92f8b441c78a17",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_08020e58b735f771",
+        "expected_plan_id": "plan_08020e58b735f771",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 195.0,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "AGREES",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "A08",
+        "question": "Show the total balance for loans with borrowers older than 75 and current LTV greater than 40%.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "EXACT_SEMANTIC_PARITY",
+        "notes": [
+          "the legacy figure is a SIGNAL, not the oracle: agreement is not a pass and disagreement is not a defect without independent truth"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_4f3b0d8201794919bcef",
+        "disposition": "EXECUTED",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_e096446463a30208",
+        "expected_plan_id": "plan_e096446463a30208",
+        "filter_drops": [],
+        "dimension_drops": [],
+        "measure_dropped": false,
+        "shadow_value": 37948448.76,
+        "legacy_value": 195.0,
+        "truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+        "legacy_agreement_signal": "DIFFERS",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B01",
+        "question": "What is the balance of Direct-book loans in London to borrowers over 75?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason EXPLICIT_LENS as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_eab1b224776846a498f6",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_6b4ced7ca93be1cb",
+        "expected_plan_id": "plan_6b4ced7ca93be1cb",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B02",
+        "question": "Show loan count by region and product type.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason GEOGRAPHY_REQUESTED as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_d5e08fcbb2884ee59aaa",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_9c6ebdc78046f1c2",
+        "expected_plan_id": "plan_9c6ebdc78046f1c2",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B03",
+        "question": "How did the Direct book change last month?",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason CAPABILITY_NOT_GENERIC as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_df9b8e18f0a24bf78f3a",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_5681bb585344ef43",
+        "expected_plan_id": "plan_5681bb585344ef43",
+        "evidence_lookup": "matched on question + client"
+      },
+      {
+        "case_id": "B04",
+        "question": "Plot portfolio balance across LTV buckets and borrower-age buckets.",
+        "legacy_http_status": 200,
+        "legacy_ok": true,
+        "classification": "JUSTIFIED_INELIGIBLE",
+        "notes": [
+          "gate reason OPERATION_NOT_GENERIC as pre-registered"
+        ],
+        "silent_drops": [],
+        "semantic_changes": [],
+        "correlation_id": "shadow_06d7f3fdb2434a1c993c",
+        "disposition": "INELIGIBLE",
+        "model_id": "claude-opus-5",
+        "plan_id": "plan_c56510dee3605727",
+        "expected_plan_id": "plan_c56510dee3605727",
+        "evidence_lookup": "matched on question + client"
+      }
+    ],
+    "preflight_probe": {
+      "portfolio_id": "ERE/2026-06-30",
+      "on_the_canary_client": true,
+      "extra_shadow_interpretations": 1,
+      "note": "the probe ran as the canary client, so ONE shadow interpretation beyond the 12 was spent; its record is excluded from the bank by correlation id"
+    },
+    "classifications": {
+      "DETERMINISTIC_EXECUTION_DEFECT": 1,
+      "EXACT_SEMANTIC_PARITY": 5,
+      "TRUTH_UNAVAILABLE": 2,
+      "JUSTIFIED_INELIGIBLE": 4
+    },
+    "models_returned": [
+      "claude-opus-5"
+    ],
+    "model_substitutions": 0,
+    "records_from_a_client_other_than_the_canary": [],
+    "served_http_statuses": [
+      200
+    ],
+    "async_evidence_lost": 0,
+    "verdict": "FAIL"
+  }
+}
