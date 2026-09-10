@@ -69,7 +69,11 @@ def evidence_for(case, *, eligible=None, reason="", plan=None, execution=None,
         "request": {"question": case["question"], "client_id": "ERE"},
         "disposition": disposition,
         "model": {"model_id": "claude-opus-5", "raw_payload": {"x": 1}},
-        "interpretation": {"candidate_intent": {"schema_version": "x"}},
+        # `produced_intent` is what `plan_shadow_wiring._shadow` actually writes
+        # (`bool(outcome.ok)`), and the completed-interpretation rule reads it. The
+        # helper omitted it before that rule existed.
+        "interpretation": {"produced_intent": outcome == "PLAN",
+                           "candidate_intent": {"schema_version": "x"}},
         "compiler": {"outcome": outcome, "plan": plan if outcome == "PLAN" else None,
                      "plan_id": plan_id or case["expected_frozen_plan_id"]},
         "eligibility": {"eligible": eligible, "reason": reason},
@@ -286,6 +290,159 @@ class TestAdjudication(unittest.TestCase):
                 self.assertIsNone(case["independent_numerical_truth"])
                 self.assertIn("TRUTH_UNAVAILABLE",
                               case["independent_numerical_truth_status"])
+
+
+class TestPassIsImpossibleWithoutRealInterpretations(unittest.TestCase):
+    """The fail-closed rule, exercised through the REAL `verdict_for`.
+
+    Not a reimplementation of the branch: a hand-reproduction of it gave the wrong
+    answer once already, which is why the rule is a function now.
+    """
+
+    CLIENT = "ERE"
+
+    def _adjudicated(self, records):
+        """Run the real adjudicator over (case, record) pairs, as main() does."""
+        out = []
+        for case, record in zip(MANIFEST["cases"], records):
+            verdict = harness.adjudicate(case, record, LEGACY_OK)
+            verdict["raw_evidence"] = record
+            out.append(verdict)
+        return out
+
+    def _verdict(self, records):
+        adjudicated = self._adjudicated(records)
+        return harness.verdict_for(adjudicated, client_id=self.CLIENT,
+                                   expected_cases=len(MANIFEST["cases"]))
+
+    def _good(self, case):
+        """A record for a case that completed on the required model."""
+        if case["expected_slice1_eligible"]:
+            return evidence_for(case, execution=executed(case))
+        return evidence_for(case, disposition="INELIGIBLE")
+
+    def _interpreter_failure(self, case):
+        """Exactly what plan_shadow_wiring writes when no model answered."""
+        return {
+            "correlation_id": f"shadow_nokey_{case['case_id']}",
+            "request": {"question": case["question"], "client_id": self.CLIENT},
+            "disposition": harness.INTERPRETER_FAILURE,
+            "model": {"model_id": "", "raw_payload": None,
+                      "failure": {"code": "MODEL_UNAVAILABLE",
+                                  "subject": "interpreter",
+                                  "detail": "no ANTHROPIC_API_KEY"}},
+            "interpretation": {"produced_intent": False,
+                               "candidate_intent": None},
+            "compiler": {"outcome": "REFUSE", "plan": None, "plan_id": None,
+                         "reason_codes": ["MODEL_UNAVAILABLE"]},
+            "eligibility": None,
+            "execution": None,
+        }
+
+    # -- A ------------------------------------------------------------------
+    def test_A_twelve_interpreter_failures_fail(self):
+        records = [self._interpreter_failure(c) for c in MANIFEST["cases"]]
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.FAIL)
+        self.assertEqual(tallies["successful_interpretations"], 0)
+        self.assertEqual(tallies["interpreter_failures"], 12)
+        self.assertIn("did not happen", tallies["fail_reason"])
+
+    # -- B ------------------------------------------------------------------
+    def test_B_one_interpreter_failure_among_eleven_successes_fails(self):
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        records[5] = self._interpreter_failure(MANIFEST["cases"][5])
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.FAIL)
+        self.assertEqual(tallies["successful_interpretations"], 11)
+        self.assertEqual(tallies["interpreter_failures"], 1)
+
+    # -- C ------------------------------------------------------------------
+    def test_C_one_wrong_model_fails(self):
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        records[2]["model"]["model_id"] = "claude-haiku-4-5-20251001"
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.FAIL)
+        self.assertEqual(tallies["model_substitutions"], 1)
+        self.assertIn("claude-haiku-4-5-20251001", tallies["fail_reason"])
+
+    def test_C2_an_empty_model_identity_is_not_a_success(self):
+        """Rule 4: "no model answered" must never read as "the right model did"."""
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        records[0]["model"]["model_id"] = ""
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.FAIL)
+        self.assertEqual(tallies["successful_interpretations"], 11)
+        self.assertEqual(tallies["model_substitutions"], 0,
+                         "an empty identity is absence, not substitution")
+
+    # -- D ------------------------------------------------------------------
+    def test_D_twelve_good_opus_interpretations_can_still_pass(self):
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.PASS, tallies.get("fail_reason"))
+        self.assertEqual(tallies["successful_interpretations"], 12)
+        self.assertEqual(tallies["models_returned"], ["claude-opus-5"])
+
+    def test_D2_a_dated_opus_identifier_still_counts(self):
+        """One notion of "is Opus 5", shared with the substitution count."""
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        for record in records:
+            record["model"]["model_id"] = "claude-opus-5-20260101"
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.PASS, tallies.get("fail_reason"))
+        self.assertEqual(tallies["model_substitutions"], 0)
+
+    # -- E ------------------------------------------------------------------
+    def test_E_a_harmless_movement_on_an_ineligible_control_does_not_fail(self):
+        """B03's plan moves, the gate still blocks it, nothing executes.
+
+        The deviation is reported; it must not become a blanket failure merely for
+        carrying that label, because the eligibility boundary did its job.
+        """
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        index = next(i for i, c in enumerate(MANIFEST["cases"])
+                     if c["case_id"] == "B03")
+        case = MANIFEST["cases"][index]
+        moved = self._good(case)
+        # A different population base — a real interpretation movement — while the
+        # capability, and so the gate's refusal, is unchanged.
+        moved["compiler"]["plan"]["population"]["base"] = "forecast"
+        records[index] = moved
+
+        adjudicated = self._adjudicated(records)
+        this_case = next(c for c in adjudicated if c["case_id"] == "B03")
+        self.assertEqual(this_case["classification"],
+                         harness.INTERPRETATION_DEVIATION)
+        self.assertFalse(this_case["silent_drops"])
+        verdict, tallies = harness.verdict_for(
+            adjudicated, client_id=self.CLIENT,
+            expected_cases=len(MANIFEST["cases"]))
+        self.assertEqual(verdict, harness.PASS, tallies.get("fail_reason"))
+        self.assertEqual(tallies["classifications"]
+                         [harness.INTERPRETATION_DEVIATION], 1)
+
+    def test_E2_a_deviation_that_costs_an_eligible_case_its_filter_still_fails(self):
+        """The other half of the principle: the facet checks still bite."""
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        index = next(i for i, c in enumerate(MANIFEST["cases"])
+                     if c["case_id"] == "A01")
+        records[index]["execution"]["bound_spec"]["filters"] = {}
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.FAIL)
+        self.assertEqual(
+            tallies["classifications"][harness.DETERMINISTIC_EXECUTION_DEFECT], 1)
+
+    # -- the rule's own guards ----------------------------------------------
+    def test_an_interpretation_deviation_is_not_a_defect_by_itself(self):
+        self.assertNotIn(harness.INTERPRETATION_DEVIATION, harness.DEFECTS)
+
+    def test_a_missing_record_still_reads_as_inconclusive_not_failure(self):
+        records = [self._good(c) for c in MANIFEST["cases"]]
+        records[4] = None
+        verdict, tallies = self._verdict(records)
+        self.assertEqual(verdict, harness.INCONCLUSIVE)
+        self.assertEqual(tallies["async_evidence_lost"], 1)
 
 
 class TestTheScrubber(unittest.TestCase):

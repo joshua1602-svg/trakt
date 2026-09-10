@@ -80,9 +80,45 @@ ASYNC_EVIDENCE_LOST = "ASYNC_EVIDENCE_LOST"
 TRUTH_UNAVAILABLE = "TRUTH_UNAVAILABLE"
 SHADOW_NOT_ACTIVE = "SHADOW_NOT_ACTIVE"
 
+#: The disposition `plan_shadow_wiring` records when the interpreter did not
+#: produce an intent — no key, no reachable model, or a malformed payload.
+INTERPRETER_FAILURE = "INTERPRETER_FAILURE"
+
 #: Classifications that make the run FAIL rather than merely inconclusive.
+#: INTERPRETATION_DEVIATION is deliberately NOT here: a harmless movement on an
+#: already-ineligible control that the gate still blocks is reportable without
+#: failing the architecture, and a movement that costs an eligible case its
+#: semantics already fails through the eligibility and facet checks below.
 DEFECTS = frozenset({ELIGIBILITY_DEFECT, DETERMINISTIC_EXECUTION_DEFECT,
                      LEGACY_NEW_DIVERGENCE})
+
+
+def is_required_model(model_id: Optional[str]) -> bool:
+    """Whether a recorded model identity is the model this acceptance requires.
+
+    ONE notion of "is Opus 5", used by both the substitution count and the
+    completed-interpretation count — two different rules for the same question
+    would be incoherent. A dated identifier (`claude-opus-5-20260101`) counts;
+    anything not carrying the required name does not, and an empty identity never
+    does, because "no model answered" must not read as "the right model answered".
+    """
+    return bool(str(model_id or "").strip()) and REQUIRED_MODEL in str(model_id)
+
+
+def interpretation_completed(record: Optional[Mapping[str, Any]]) -> bool:
+    """Whether a shadow interpretation actually happened, on the required model.
+
+    Three things must hold, and the order is the point: a record exists, the
+    interpreter produced an intent (so an INTERPRETER_FAILURE can never qualify),
+    and the model identity it came back with is the required one.
+    """
+    if not record:
+        return False
+    if record.get("disposition") == INTERPRETER_FAILURE:
+        return False
+    if not (record.get("interpretation") or {}).get("produced_intent"):
+        return False
+    return is_required_model((record.get("model") or {}).get("model_id"))
 
 #: Facets whose LOSS is a silent semantic drop rather than a change.
 LOSABLE = ("filters", "dimensions", "measure_field", "statistic",
@@ -234,6 +270,13 @@ def adjudicate(case: Mapping[str, Any], record: Optional[Mapping[str, Any]],
         "silent_drops": [],
         "semantic_changes": [],
     }
+    # Set on EVERY path, including the early returns below, because the verdict
+    # counts these and a field that only some branches populate would under-count
+    # exactly the failures it exists to catch.
+    out["interpretation_completed"] = interpretation_completed(record)
+    out["interpreter_failure"] = bool(
+        record and record.get("disposition") == INTERPRETER_FAILURE)
+
     if record is None:
         out["classification"] = ASYNC_EVIDENCE_LOST
         out["notes"].append("no evidence record arrived within the polling "
@@ -374,6 +417,92 @@ def adjudicate(case: Mapping[str, Any], record: Optional[Mapping[str, Any]],
 # --------------------------------------------------------------------------- #
 # the run
 # --------------------------------------------------------------------------- #
+
+def verdict_for(adjudicated: List[Dict[str, Any]], *, client_id: str,
+                expected_cases: int) -> Tuple[str, Dict[str, Any]]:
+    """`(verdict, tallies)` for a whole run. Pure, so it can be TESTED.
+
+    It lived inline in `main()` and was therefore only reachable by running the
+    whole acceptance, which meant checking it by hand — and a hand-reproduction of
+    this branch gave the wrong answer once already. It is a function now so the
+    tests exercise the real rule rather than a copy of it.
+
+    THE FAIL-CLOSED RULE. A PASS is unreachable unless every pre-registered case
+    completed a real interpretation on the required model. "No model answered" is
+    not a silent zero: it fails. What is deliberately NOT here is any rule making
+    an INTERPRETATION_DEVIATION a defect by itself — a movement on an
+    already-ineligible control that the gate still blocks stays reportable, and a
+    movement that costs an eligible case its semantics already fails through the
+    eligibility and facet checks.
+    """
+    counts: Dict[str, int] = {}
+    for case in adjudicated:
+        counts[case["classification"]] = counts.get(case["classification"], 0) + 1
+
+    foreign_clients = sorted({
+        str(((c.get("raw_evidence") or {}).get("request") or {}).get("client_id"))
+        for c in adjudicated if c.get("raw_evidence")} - {client_id})
+    models = sorted({c.get("model_id") for c in adjudicated if c.get("model_id")})
+    substitutions = sum(1 for c in adjudicated
+                        if c.get("model_id")
+                        and not is_required_model(c["model_id"]))
+    completed = sum(1 for c in adjudicated if c.get("interpretation_completed"))
+    interpreter_failures = sum(1 for c in adjudicated
+                               if c.get("interpreter_failure"))
+    lost = counts.get(ASYNC_EVIDENCE_LOST, 0)
+
+    tallies = {
+        "classifications": counts,
+        "models_returned": models,
+        "model_substitutions": substitutions,
+        "successful_interpretations": completed,
+        "expected_interpretations": expected_cases,
+        "interpreter_failures": interpreter_failures,
+        "records_from_a_client_other_than_the_canary": foreign_clients,
+        "async_evidence_lost": lost,
+    }
+
+    if not any(c.get("raw_evidence") for c in adjudicated):
+        tallies["shadow_not_active"] = (
+            "no evidence record arrived for ANY case. The three causes, none of "
+            "them a semantic result: MI_AGENT_PLAN_SHADOW is not 'shadow'; the "
+            "canary client is not in MI_AGENT_PLAN_SHADOW_CLIENTS; or the sink "
+            "path configured on the app is not the one read here")
+        counts[SHADOW_NOT_ACTIVE] = len(adjudicated)
+        return INCONCLUSIVE, tallies
+    if interpreter_failures:
+        tallies["fail_reason"] = (
+            f"{interpreter_failures} of {expected_cases} cases recorded "
+            f"INTERPRETER_FAILURE; an acceptance cannot pass on interpretations "
+            f"that did not happen")
+        return FAIL, tallies
+    if substitutions:
+        tallies["fail_reason"] = (f"{substitutions} case(s) came back on a model "
+                                 f"other than {REQUIRED_MODEL}: {models}")
+        return FAIL, tallies
+    if foreign_clients:
+        tallies["fail_reason"] = (f"shadow evidence exists for a client other "
+                                 f"than the canary: {foreign_clients}")
+        return FAIL, tallies
+    if any(c["classification"] in DEFECTS for c in adjudicated):
+        tallies["fail_reason"] = "a semantic or eligibility defect was found"
+        return FAIL, tallies
+    # A RECORD THAT NEVER ARRIVED IS INCONCLUSIVE, and is checked BEFORE the
+    # completed count so it stays that way. A recycled worker losing a record is
+    # an infrastructure fact the brief names explicitly as neither a pass nor a
+    # semantic failure; ordering the count first turned every lost record into a
+    # FAIL, which this rule was never meant to do. A lost record still cannot
+    # produce a PASS — that is what this branch is.
+    if lost:
+        return INCONCLUSIVE, tallies
+    if completed != expected_cases:
+        tallies["fail_reason"] = (
+            f"only {completed} of {expected_cases} cases completed an "
+            f"interpretation on {REQUIRED_MODEL}; a missing or empty model "
+            f"identity is not a success")
+        return FAIL, tallies
+    return PASS, tallies
+
 
 def verify_manifest() -> Dict[str, Any]:
     body = MANIFEST.read_text()
@@ -608,44 +737,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     report["cases"] = adjudicated
 
     # -- stage 5: the verdict ------------------------------------------------
-    counts: Dict[str, int] = {}
-    for case in adjudicated:
-        counts[case["classification"]] = counts.get(case["classification"], 0) + 1
-    foreign_clients = sorted({
-        str(((c.get("raw_evidence") or {}).get("request") or {}).get("client_id"))
-        for c in adjudicated if c.get("raw_evidence")} - {client_id})
-    models = sorted({c.get("model_id") for c in adjudicated if c.get("model_id")})
-
-    report["classifications"] = counts
-    report["models_returned"] = models
-    report["model_substitutions"] = sum(
-        1 for c in adjudicated
-        if c.get("model_id") and REQUIRED_MODEL not in str(c["model_id"]))
-    report["records_from_a_client_other_than_the_canary"] = foreign_clients
+    verdict, tallies = verdict_for(adjudicated, client_id=client_id,
+                                  expected_cases=len(manifest["cases"]))
+    report.update(tallies)
+    report["verdict"] = verdict
     report["served_http_statuses"] = sorted(
         {c["legacy_http_status"] for c in adjudicated})
-    report["async_evidence_lost"] = counts.get(ASYNC_EVIDENCE_LOST, 0)
-
-    if not any(c.get("raw_evidence") for c in adjudicated):
-        report["verdict"] = INCONCLUSIVE
-        report["shadow_not_active"] = (
-            "no evidence record arrived for ANY case. The three causes, none of "
-            "them a semantic result: MI_AGENT_PLAN_SHADOW is not 'shadow'; the "
-            "canary client is not in MI_AGENT_PLAN_SHADOW_CLIENTS; or the sink "
-            "path configured on the app is not the one read here")
-        counts[SHADOW_NOT_ACTIVE] = len(adjudicated)
-    elif any(c["classification"] in DEFECTS for c in adjudicated):
-        report["verdict"] = FAIL
-    elif report["model_substitutions"] or foreign_clients:
-        report["verdict"] = FAIL
-    elif report["async_evidence_lost"]:
-        report["verdict"] = INCONCLUSIVE
-    else:
-        report["verdict"] = PASS
 
     _save(report, args.json_out, secrets)
-    print(f"\nclassifications    {counts}")
-    print(f"models returned    {models or 'NONE'}")
+    print(f"\nclassifications    {tallies['classifications']}")
+    print(f"models returned    {tallies['models_returned'] or 'NONE'}")
+    print(f"interpretations    {tallies['successful_interpretations']} of "
+          f"{tallies['expected_interpretations']} completed on {REQUIRED_MODEL}; "
+          f"{tallies['interpreter_failures']} interpreter failure(s)")
+    if tallies.get("fail_reason"):
+        print(f"fail reason        {tallies['fail_reason']}")
     print(f"verdict            {report['verdict']}")
     print("::notice::this harness neither enabled nor disabled the shadow. Set "
           "MI_AGENT_PLAN_SHADOW back to off now — it is an app setting and needs "
