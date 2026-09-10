@@ -445,6 +445,123 @@ class TestPassIsImpossibleWithoutRealInterpretations(unittest.TestCase):
         self.assertEqual(tallies["async_evidence_lost"], 1)
 
 
+class TestItRunsOnABareRunner(unittest.TestCase):
+    """The GitHub runner's import path, reproduced.
+
+    No acceptance workflow in this estate installs Python dependencies, so the
+    harness has to import and adjudicate with nothing but the standard library
+    available. It did not: `semantics_of` imported `preregister`, which imports
+    `mi_agent.plan_runtime_adapter`, which loads `mi_agent/__init__.py`, which
+    imports PyYAML — and run 34520491626 died on
+    `ModuleNotFoundError: No module named 'yaml'` mid-bank, after two live
+    interpretations had been spent.
+
+    So this runs in a SUBPROCESS with `yaml`, `pandas` and `mi_agent` made
+    unimportable, which is a harsher environment than the runner and therefore a
+    sound proxy for it.
+    """
+
+    # Placeholders are substituted with `replace`, not `format`: the script is
+    # Python and full of braces, and formatting it treated them as fields.
+    BLOCKER = r'''
+import sys, json
+BLOCKED = ("yaml", "pandas", "numpy", "mi_agent")
+
+class Blocker:
+    def find_module(self, name, path=None):
+        return self.find_spec(name, path)
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in BLOCKED:
+            raise ModuleNotFoundError("blocked for this test: " + name)
+        return None
+
+sys.meta_path.insert(0, Blocker())
+sys.path.insert(0, @HARNESS_DIR@)
+sys.path.insert(0, @REPO_ROOT@)
+
+import run_acceptance as h            # must import with nothing installed
+
+case = json.loads(@CASE@)
+record = json.loads(@RECORD@)
+legacy = {"ok": True, "http_status": 200, "value": 195.0, "route": None,
+          "transport_error": False}
+verdict = h.adjudicate(case, record, legacy)
+verdict["raw_evidence"] = record
+overall, tallies = h.verdict_for([verdict], client_id="ERE", expected_cases=1)
+print(json.dumps({"classification": verdict["classification"],
+                  "completed": tallies["successful_interpretations"],
+                  "overall": overall,
+                  "semantics": h.semantics_of(record["compiler"]["plan"])}))
+'''
+
+    def _run_blocked(self, case, record):
+        import subprocess
+        script = (self.BLOCKER
+                  .replace("@HARNESS_DIR@", repr(str(_HARNESS)))
+                  .replace("@REPO_ROOT@", repr(str(_REPO_ROOT)))
+                  .replace("@CASE@", repr(json.dumps(case)))
+                  .replace("@RECORD@", repr(json.dumps(record))))
+        finished = subprocess.run([sys.executable, "-c", script], text=True,
+                                  capture_output=True, cwd=str(_REPO_ROOT))
+        if finished.returncode != 0:
+            self.fail(f"the harness cannot run on a bare runner:\n"
+                      f"{finished.stderr[-3000:]}")
+        return json.loads(finished.stdout.strip().splitlines()[-1])
+
+    def test_it_imports_and_adjudicates_with_no_product_dependencies(self):
+        case = BY_ID["A01"]
+        record = evidence_for(case, execution=executed(case))
+        out = self._run_blocked(case, record)
+        self.assertEqual(out["classification"], harness.EXACT_SEMANTIC_PARITY)
+        self.assertEqual(out["completed"], 1)
+        self.assertEqual(out["overall"], harness.PASS)
+
+    def test_the_projection_is_computed_without_importing_mi_agent(self):
+        """The exact call that crashed the deployed run."""
+        case = BY_ID["A04"]
+        record = evidence_for(case, execution=executed(case))
+        out = self._run_blocked(case, record)
+        self.assertEqual(out["semantics"]["dimensions"],
+                         list(case["expected_semantics"]["dimensions"]))
+
+    def test_the_harness_names_no_product_module_at_module_scope(self):
+        source = (_HARNESS / "run_acceptance.py").read_text()
+        head = source.split("def publish_profile_credentials")[0]
+        for forbidden in ("import preregister", "from mi_agent", "import mi_agent",
+                          "import yaml", "import pandas"):
+            self.assertNotIn(forbidden, head,
+                             f"{forbidden} puts the product's dependency tree on "
+                             f"the runner")
+
+
+class TestTheProjectionMatchesTheFrozenManifest(unittest.TestCase):
+    """The drift guard between the harness's copy and `preregister`'s.
+
+    Two copies of the projection exist: the pure one in the harness, and
+    `preregister._semantics`, which built the manifest. They are only safe while
+    they agree, and the committed manifest is the arbiter — its
+    `expected_semantics` is what every live plan is compared against.
+    """
+
+    FROZEN = (_REPO_ROOT / "mi_agent" / "interpretation_v2" / "evidence"
+              / "run8_135_signoff_2b00172.json")
+
+    def test_every_case_projects_to_its_preregistered_semantics(self):
+        frozen = json.loads(self.FROZEN.read_text())
+        by_question_id = {r["question_id"]: r for r in frozen["results"]}
+        checked = 0
+        for case in MANIFEST["cases"]:
+            plan = by_question_id[case["frozen_question_id"]].get("plan")
+            self.assertIsNotNone(plan, case["frozen_question_id"])
+            self.assertEqual(
+                harness._comparable(harness.semantics_of(plan)),
+                harness._comparable(case["expected_semantics"]),
+                f"{case['case_id']} ({case['frozen_question_id']}): the harness's "
+                f"projection no longer matches the manifest it adjudicates against")
+            checked += 1
+        self.assertEqual(checked, 12)
+
+
 class TestTheScrubber(unittest.TestCase):
 
     def test_a_secret_value_is_removed_wherever_it_appears(self):

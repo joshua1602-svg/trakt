@@ -237,10 +237,48 @@ def _comparable(value: Any) -> Any:
 
 
 def semantics_of(plan: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
-    """The same projection the manifest pre-registered, over a live plan."""
-    sys.path.insert(0, str(HERE))
-    import preregister
-    return preregister._semantics(plan)
+    """The same projection the manifest pre-registered, over a live plan.
+
+    PURE, AND DELIBERATELY IMPORTS NOTHING. This used to call
+    `preregister._semantics` by importing that module — which needs
+    `mi_agent.plan_runtime_adapter` for the manifest it builds, which loads
+    `mi_agent/__init__.py`, which imports PyYAML. On a GitHub runner with no
+    dependencies installed that raised `ModuleNotFoundError: No module named
+    'yaml'` in the middle of the bank, after two live interpretations had already
+    been spent. The projection itself never needed any of it: it reads a plan dict
+    and returns a dict. No acceptance workflow in this estate installs Python
+    dependencies, so an acceptance harness has to be import-light; this one was
+    not, and that was the whole defect.
+
+    The logic is identical to `preregister._semantics`, and the guard against the
+    two copies drifting is not discipline but a test: every case's projection of
+    the frozen plan must equal the `expected_semantics` the committed manifest
+    recorded. If either copy moves, that comparison fails.
+    """
+    if not plan:
+        return {}
+    output = (tuple(plan.get("outputs") or ()) or ({},))[0]
+    measure = (tuple(output.get("measures") or ()) or ({},))[0]
+    geography = plan.get("geography") or {}
+    return {
+        "capability": plan.get("capability"),
+        "operation": plan.get("operation"),
+        "statistic": measure.get("statistic"),
+        "measure_field": measure.get("canonical_field"),
+        "weight_field": measure.get("weight_field"),
+        "dimensions": [d["canonical_field"]
+                       for d in (output.get("dimensions") or ())],
+        "filters": sorted((f["canonical_field"],
+                           str(f.get("comparator") or "eq"), f.get("value"))
+                          for f in (tuple(plan.get("filters") or ())
+                                    + tuple(output.get("filters") or ()))),
+        "population_base": (plan.get("population") or {}).get("base"),
+        "population_lens": (plan.get("population") or {}).get("lens"),
+        "period_form": (plan.get("period") or {}).get("form"),
+        "comparison_kind": plan.get("comparison_kind"),
+        "geography_requested": bool(geography),
+        "output_count": len(plan.get("outputs") or ()),
+    }
 
 
 def compare_semantics(expected: Mapping[str, Any],
