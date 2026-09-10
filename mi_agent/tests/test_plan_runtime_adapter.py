@@ -36,7 +36,8 @@ PRODUCT = "erm_product_type"
 
 def plan(*, capability="generic_analysis", operation="point_in_time",
          measures=None, dimensions=(), filters=(), output_filters=(),
-         period_form="current", lens="all", outputs=None,
+         period_form="current", lens="all", outputs=None, geography=None,
+         output_geography=None,
          comparison_kind="none", target=None, plan_id="plan_test"):
     """A GovernedQueryPlan-shaped dict. The adapter reads plans, not objects."""
     if measures is None:
@@ -46,7 +47,7 @@ def plan(*, capability="generic_analysis", operation="point_in_time",
     body_outputs = outputs if outputs is not None else [{
         "id": "primary", "measures": list(measures),
         "dimensions": [{"concept": d, "canonical_field": d} for d in dimensions],
-        "filters": list(output_filters), "geography": None}]
+        "filters": list(output_filters), "geography": output_geography}]
     return {
         "schema_version": "governed_query_plan/1.0",
         "capability": capability, "operation": operation,
@@ -58,9 +59,20 @@ def plan(*, capability="generic_analysis", operation="point_in_time",
                    "resolved": True, "owned_by_capability": False},
         "comparison_kind": comparison_kind, "comparison_left": None,
         "comparison_right": None,
-        "filters": list(filters), "geography": None, "target": target,
+        "filters": list(filters), "geography": geography, "target": target,
         "plan_id": plan_id,
     }
+
+
+#: A geography binding of the shape the compiler actually emits — taken from the
+#: recorded run-8 plans for Q14 and Q16, not invented.
+GEOGRAPHY_BINDING = {
+    "requested_basis": None, "requested_level": "reporting",
+    "resolved_level": "reporting", "canonical_field": "canonical_region_reporting",
+    "group_by": True, "values": [], "defaulted": True,
+    "default_reason": "no basis was stated; level 'reporting' is governed by the "
+                      "reporting taxonomy",
+}
 
 
 def flt(field, value, comparator="eq"):
@@ -207,8 +219,26 @@ class TestEligibleExecution(unittest.TestCase):
         self.assertEqual(out.requested["measure_field"], BALANCE)
         self.assertEqual(out.requested["statistic"], "sum")
         self.assertEqual(out.requested["dimensions"], [PRODUCT])
-        self.assertEqual(out.requested["filters"], {"borrower_type": "Joint"})
+        self.assertEqual(out.requested["filters"],
+                         [{"field": "borrower_type", "comparator": "eq",
+                           "value": "Joint"}])
         self.assertEqual(out.requested["period_form"], "current")
+
+    def test_the_requested_half_keeps_the_direction_of_every_predicate(self):
+        """A direction survives into the ledger row.
+
+        The resolved half records `op` per predicate; if the requested half
+        collapses to `{field: value}` then `>` and `=` look identical on the
+        requested side and a divergence cannot be adjudicated from the row
+        afterwards.
+        """
+        out = run(plan(filters=[flt(LTV, 50, "gt"), flt(AGE, 70, "lt"),
+                                flt("borrower_type", "Joint")]))
+        self.assertEqual(out.requested["filters"], [
+            {"field": LTV, "comparator": "gt", "value": 50},
+            {"field": AGE, "comparator": "lt", "value": 70},
+            {"field": "borrower_type", "comparator": "eq", "value": "Joint"},
+        ])
 
 
 # --------------------------------------------------------------------------- #
@@ -243,6 +273,27 @@ class TestIneligibility(unittest.TestCase):
     def test_forward_looking(self):
         self._refused(plan(period_form="forward_looking"),
                       adapter.PERIOD_NOT_CURRENT)
+
+    def test_a_geography_axis_the_adapter_cannot_bind(self):
+        """The corpus-replay finding: a stated region axis is never dropped.
+
+        This module binds no geography axis, so a plan that states one has to be
+        refused. Executing it would group by the OTHER axis alone and present the
+        answer as though it were the breakdown the reader authorised.
+        """
+        self._refused(plan(operation="breakdown", dimensions=["ltv_bucket"],
+                           geography=GEOGRAPHY_BINDING),
+                      adapter.GEOGRAPHY_REQUESTED)
+
+    def test_a_geography_binding_on_the_output_is_equally_refused(self):
+        self._refused(plan(operation="breakdown",
+                           output_geography=GEOGRAPHY_BINDING),
+                      adapter.GEOGRAPHY_REQUESTED)
+
+    def test_a_geography_restriction_without_grouping_is_also_refused(self):
+        """`values` restricts the population, and this slice binds no predicate."""
+        binding = dict(GEOGRAPHY_BINDING, group_by=False, values=["Scotland"])
+        self._refused(plan(geography=binding), adapter.GEOGRAPHY_REQUESTED)
 
     def test_direct_lens(self):
         self._refused(plan(lens="direct"), adapter.EXPLICIT_LENS)
@@ -326,6 +377,27 @@ class TestIneligibility(unittest.TestCase):
         p["outputs"][0]["dimensions"] = [{"concept": "vibes",
                                           "canonical_field": None}]
         self._refused(p, adapter.DIMENSION_UNBOUND)
+
+    def test_two_predicates_on_one_field_are_refused_not_collapsed(self):
+        """`MIQuerySpec.filters` is keyed by field, so the second would win alone.
+
+        An LTV band stated as two bounds would arrive at the executor as `< 80`
+        with the `> 50` gone, and the answer would be a population the reader
+        never asked for. The band belongs in a single `between`.
+        """
+        out = self._refused(plan(filters=[flt(LTV, 50, "gt"), flt(LTV, 80, "lt")]),
+                            adapter.FILTER_NOT_EXPRESSIBLE)
+        self.assertIn(LTV, out.detail)
+
+    def test_a_band_stated_once_is_carried_whole(self):
+        """The expressible form of the same restriction still works, as a list.
+
+        A multi-valued bound reaches the executor as the LIST its filters have
+        always held — the estate's own `_executor_value` shape — not as a tuple.
+        """
+        p = plan(filters=[flt(LTV, (40, 60), "between")])
+        spec = adapter.spec_for_plan(p)
+        self.assertEqual(spec.filters, {LTV: {"op": "between", "value": [40, 60]}})
 
     def test_unbound_filter(self):
         p = plan()
@@ -417,6 +489,49 @@ class TestAdapterDiscipline(unittest.TestCase):
         self.assertEqual(spec.aggregation, "sum")
         self.assertEqual(list(spec.dimensions), [PRODUCT, REGION])
         self.assertEqual(set(spec.filters), {"borrower_type", PRODUCT})
+
+    def test_every_facet_of_the_plan_contract_is_classified(self):
+        """The guard that the geography miss got past, written structurally.
+
+        The earlier facet test checked the facets the local `plan()` helper could
+        express, and that helper hard-coded `geography: None` — so a whole facet
+        of the real contract was never put to the adapter at all. Reading the
+        facet list off `GovernedQueryPlan` itself closes that: each field has to
+        be declared CARRIED into the spec, REFUSED as an ineligibility, or
+        IDENTITY/provenance, and a facet added to the contract later fails this
+        test until somebody decides which it is.
+        """
+        import dataclasses
+        from mi_agent.interpretation_v2.plan import GovernedQueryPlan, OutputPlan
+
+        carried = {"capability", "operation", "outputs", "filters",
+                   "measures", "dimensions"}
+        refused = {"population", "period", "comparison_kind", "comparison_left",
+                   "comparison_right", "geography", "target"}
+        identity = {"schema_version", "provenance", "id"}
+
+        facets = {f.name for f in dataclasses.fields(GovernedQueryPlan)}
+        facets |= {f.name for f in dataclasses.fields(OutputPlan)}
+        unclassified = facets - carried - refused - identity
+        self.assertFalse(
+            unclassified,
+            f"the plan contract grew facets this slice has not classified: "
+            f"{sorted(unclassified)}. Each must be carried into the spec or "
+            f"refused by check_eligibility — never silently ignored.")
+
+        # And the refusable ones must actually refuse, not merely be listed here.
+        for p, reason in (
+            (plan(lens="direct"), adapter.EXPLICIT_LENS),
+            (plan(period_form="explicit_period"), adapter.PERIOD_NOT_CURRENT),
+            (plan(comparison_kind="period_over_period"),
+             adapter.COMPARISON_REQUESTED),
+            (plan(target={"concept": "funding_target", "value": 1.0}),
+             adapter.TARGET_REQUESTED),
+            (plan(geography=GEOGRAPHY_BINDING), adapter.GEOGRAPHY_REQUESTED),
+            (plan(output_geography=GEOGRAPHY_BINDING),
+             adapter.GEOGRAPHY_REQUESTED),
+        ):
+            self.assertEqual(adapter.check_eligibility(p)[1], reason)
 
 
 if __name__ == "__main__":

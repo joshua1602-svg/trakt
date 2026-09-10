@@ -26,9 +26,9 @@ recorded evidence, not chosen: of the 135 plans in
 shape is expressible in the generic executor's own vocabulary
 (`{avg, count, max, median, min, sum, weighted_avg}`) with no scope dimension the
 production path resolves elsewhere. Everything else — a specialist capability, a
-stated historical period, an explicit Direct/Acquired lens, a second output, a
-third axis — is INELIGIBLE and says so. Widening this to raise coverage would be
-the defect, not the improvement.
+stated historical period, an explicit Direct/Acquired lens, a governed geography
+axis, a second output, a third axis — is INELIGIBLE and says so. Widening this to
+raise coverage would be the defect, not the improvement.
 
 THE OLD PATH OWNS THE ANSWER. This module cannot serve a user. It returns a
 `ShadowOutcome` for comparison and nothing else; `mi_service` calls it inside a
@@ -42,7 +42,8 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from mi_agent.mi_query_spec import MIQuerySpec
 from mi_agent.query_plan import AVERAGE, COUNT, SUM, WEIGHTED_AVERAGE
-from mi_agent.query_plan_compiler import _MANY_DIMENSIONS, _RENDERING
+from mi_agent.query_plan_compiler import (_MANY_DIMENSIONS, _RENDERING,
+                                          _executor_value)
 
 #: The shadow flag, following the repository's `MI_AGENT_*` environment
 #: convention. Two states only: this slice has no SERVE mode to enable.
@@ -113,6 +114,8 @@ FILTER_UNBOUND = "FILTER_UNBOUND"
 COMPARISON_REQUESTED = "COMPARISON_REQUESTED"
 TARGET_REQUESTED = "TARGET_REQUESTED"
 NO_MEASURE = "NO_MEASURE"
+GEOGRAPHY_REQUESTED = "GEOGRAPHY_REQUESTED"
+FILTER_NOT_EXPRESSIBLE = "FILTER_NOT_EXPRESSIBLE"
 
 
 @dataclass(frozen=True)
@@ -192,6 +195,28 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 f"population.lens={lens!r} is resolved and applied by "
                 f"portfolio_lens on the production path")
 
+    # GEOGRAPHY IS ITS OWN OWNER, AND THIS SLICE BINDS NONE OF IT. A plan's
+    # geography binding carries a resolved basis and level chosen by
+    # `config/asset/mi_geography.yaml`, and it may group, restrict, or both. The
+    # adapter binds no geography axis and no geography predicate, so a plan that
+    # states one cannot be executed here without computing a DIFFERENT breakdown
+    # from the one the reader authorised — and doing that silently is the exact
+    # failure this whole control plane exists to stop.
+    #
+    # Found by the slice 1 corpus replay, not by reasoning: five of the eligible
+    # recorded plans (Q14A/B/C, Q16A, Q16C) carry `group_by: True` on
+    # `canonical_region_reporting`, and the shadow was grouping by their other
+    # axis alone. The plan is the contract; an axis it states and this module
+    # cannot carry is an ineligibility, never a narrowing.
+    for binding in (body.get("geography"),
+                    *(o.get("geography") for o in (body.get("outputs") or ()))):
+        if isinstance(binding, Mapping) and binding:
+            return (False, GEOGRAPHY_REQUESTED,
+                    f"geography level={binding.get('resolved_level')!r} "
+                    f"field={binding.get('canonical_field')!r} "
+                    f"group_by={bool(binding.get('group_by'))} — owned by the "
+                    f"geography basis resolver, which this slice does not touch")
+
     comparison = str(body.get("comparison_kind") or "none").strip().lower()
     if comparison != "none":
         return False, COMPARISON_REQUESTED, f"comparison_kind={comparison!r}"
@@ -231,10 +256,23 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         return (False, MEASURE_UNBOUND,
                 "a weighted average names no weight field")
 
+    seen_filter_fields = set()
     for flt in tuple(body.get("filters") or ()) + tuple(output.get("filters") or ()):
-        if not _bound(flt.get("canonical_field")):
+        canonical_field = flt.get("canonical_field")
+        if not _bound(canonical_field):
             return (False, FILTER_UNBOUND,
                     f"filter {flt.get('concept')!r} has no canonical field")
+        # ONE PREDICATE PER FIELD IS THE EXECUTOR'S WIRE FORMAT, not a choice
+        # this module gets to make: `MIQuerySpec.filters` is keyed by field, so a
+        # second predicate on the same one would overwrite the first and the
+        # population would silently widen or narrow. A band belongs in a single
+        # `between`, and a plan that states two bounds separately is refused.
+        if canonical_field in seen_filter_fields:
+            return (False, FILTER_NOT_EXPRESSIBLE,
+                    f"two predicates on {canonical_field!r}; the executor's "
+                    f"filter format carries one per field and dropping either "
+                    f"would change the population")
+        seen_filter_fields.add(canonical_field)
 
     return True, "", ""
 
@@ -249,13 +287,19 @@ def _filters_for(body: Mapping[str, Any],
 
     The same wire format `query_plan_compiler._filters_for` produces, written
     against the plan's bindings. A categorical equality is a bare value; anything
-    with a direction keeps its operator.
+    with a direction keeps its operator. The value passes through the estate's own
+    `_executor_value`, so a multi-valued bound arrives as the LIST the executor's
+    filters have always held rather than as a tuple.
+
+    Caller must have established eligibility: this shape holds ONE predicate per
+    field, so a plan with two on the same field is refused upstream rather than
+    quietly losing a bound here.
     """
     out: Dict[str, Any] = {}
     for flt in tuple(body.get("filters") or ()) + tuple(output.get("filters") or ()):
         field_name = flt.get("canonical_field")
         comparator = str(flt.get("comparator") or "eq").lower()
-        value = flt.get("value")
+        value = _executor_value(flt.get("value"))
         if comparator in ("eq", "", "equals"):
             out[field_name] = value
         else:
@@ -339,9 +383,17 @@ def requested_semantics(plan: Any) -> Dict[str, Any]:
                        for d in (output.get("dimensions") or ())],
         "dimension_concepts": [d.get("concept")
                                for d in (output.get("dimensions") or ())],
-        "filters": {f.get("canonical_field"): f.get("value")
+        # A LIST, AND THE COMPARATOR WITH IT. This was a `{field: value}` dict,
+        # which lost two things the resolved half of the receipt keeps: the
+        # direction (`applied_predicates` records `op`, so "age > 55" and
+        # "age == 55" were indistinguishable on the requested side), and a second
+        # predicate on the same field (an LTV band collapsed to one bound). A
+        # ledger that cannot state what was asked cannot adjudicate a divergence.
+        "filters": [{"field": f.get("canonical_field"),
+                     "comparator": str(f.get("comparator") or "eq"),
+                     "value": f.get("value")}
                     for f in (tuple(body.get("filters") or ())
-                              + tuple(output.get("filters") or ()))},
+                              + tuple(output.get("filters") or ()))],
         "population": body.get("population") or {},
         "geography": body.get("geography") or {},
         "period_form": period.get("form"),
