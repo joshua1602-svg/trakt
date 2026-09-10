@@ -103,7 +103,11 @@ class TestGate3OffByDefault(unittest.TestCase):
         """
         source = (_REPO_ROOT / "mi_agent_api" / "mi_service.py").read_text()
         head = source.split("def _run_analysis")[0]
-        for forbidden in ("interpretation_v2", "plan_runtime_adapter"):
+        # `plan_shadow_wiring` joined this list when slice 1A made the call site
+        # build plans: it is the module that can reach an interpreter now, so it
+        # is the one that must not be loaded for every request regardless of flag.
+        for forbidden in ("interpretation_v2", "plan_runtime_adapter",
+                          "plan_shadow_wiring", "plan_shadow_evidence"):
             self.assertNotIn(forbidden, head,
                              f"{forbidden} is imported at module scope")
 

@@ -1914,15 +1914,28 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         result, question=req.question, geography=geography)
     result = _guard_unresolved_scope(result, question=req.question,
                                      semantics=semantics, frame=df)
-    # SLICE 1 SHADOW, AND NOTHING ELSE. `MI_AGENT_PLAN_SHADOW` defaults to off, in
-    # which case this returns before importing an interpreter or calling a model.
-    # When it is on, the governed-plan path runs against the frame this request
-    # already resolved and writes a comparison row; it cannot change `result`, and
-    # `observe` swallows every exception for that reason. The answer above is and
-    # stays the served answer.
-    from mi_agent import plan_runtime_adapter as _plan_shadow
-    _plan_shadow.observe(result=result, frame=df, semantics=semantics, view=view,
-                         portfolio_id=authorised.portfolio_id)
+    # SLICE 1 SHADOW, AND NOTHING ELSE. Three conditions, all of which must hold
+    # before any work happens: `MI_AGENT_PLAN_SHADOW` must be exactly `shadow`,
+    # and `MI_AGENT_PLAN_SHADOW_CLIENTS` must name THIS client, and a shadow must
+    # not already be in flight. Off or outside the canary, this returns having
+    # built no interpreter and called no model.
+    #
+    # In the canary it hands the question to the frozen `interpretation_v2`, and
+    # the plan that comes back to the accepted slice 1 gate and adapter, against
+    # the frame THIS request already resolved. The work is dispatched to a daemon
+    # thread, so the answer above is unchanged in content and in latency alike — a
+    # live interpretation measured 10-26 seconds, and spending that inline would
+    # be influencing the served response however identical its content.
+    #
+    # An earlier version of this comment claimed the governed-plan path ran
+    # whenever the flag was on. That was false: the call passed no plan and
+    # nothing in production installed a plan provider, so the shadow was inert.
+    # The deployed-shadow preflight found it; this is the wiring it was missing.
+    from mi_agent import plan_shadow_wiring as _plan_shadow
+    _plan_shadow.observe_request(question=req.question, client_id=client_id,
+                                 run_id=run_id, result=result, frame=df,
+                                 semantics=semantics, view=view,
+                                 portfolio_id=authorised.portfolio_id)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              geography=geography,
