@@ -1,0 +1,1071 @@
+{
+ "base_sha": "ea8c65b592ae5d2203d924bf66afa051618641e6",
+ "bank": "scope_bank",
+ "bank_size": 28,
+ "tally": {
+  "FAIL": 24,
+  "PASS": 4
+ },
+ "fixture_figures": {
+  "all_periods_all_lenses": 136132618.88,
+  "period_2026-03-31": 24851104.669999998,
+  "period_2026-05-31": 41321206.13,
+  "period_2026-06-30": 69960308.08000001,
+  "lens_Direct": 109449739.44,
+  "lens_Acquired": 26682879.439999998,
+  "period_2026-03-31_lens_Direct": 19721796.319999997,
+  "period_2026-03-31_lens_Acquired": 5129308.35,
+  "period_2026-05-31_lens_Direct": 33484343.910000004,
+  "period_2026-05-31_lens_Acquired": 7836862.22,
+  "period_2026-06-30_lens_Direct": 56243599.21,
+  "period_2026-06-30_lens_Acquired": 13716708.87,
+  "dataset_funded": 136132618.88,
+  "dataset_pipeline": 85445021.33
+ },
+ "silent": [
+  "P04-A-and-B-differ",
+  "P05-unavailable-period",
+  "P06-impossible-period",
+  "P07-future-period",
+  "P08-no-period-stated",
+  "P09-receipt-proves-requested-and-resolved",
+  "P10-period-with-grouping",
+  "DS03-dataset-mismatch",
+  "DS04-receipt-names-the-dataset",
+  "L04-invalid-lens",
+  "L05-receipt-names-the-lens",
+  "L06-direct-and-acquired-sum-to-total"
+ ],
+ "cases": [
+  {
+   "case_id": "P01-current-period",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2026-06-30",
+   "expectation": "the current-period total",
+   "truth_source": "scope_oracle.total(period=CURRENT)",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 69960308.08, got 136132618.88",
+   "silent": false,
+   "expected_result": 69960308.08000001,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P02-historical-A",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2026-03-31",
+   "expectation": "the March total",
+   "truth_source": "scope_oracle.total(period=HISTORICAL_A)",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 24851104.67, got 136132618.88",
+   "silent": false,
+   "expected_result": 24851104.669999998,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P03-historical-B-previous",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2026-05-31",
+   "expectation": "the May total",
+   "truth_source": "scope_oracle.total(period=PREVIOUS)",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 41321206.13, got 136132618.88",
+   "silent": false,
+   "expected_result": 41321206.13,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P04-A-and-B-differ",
+   "dimension": "PERIOD",
+   "requested_semantics": "two different historical periods",
+   "expectation": "two different figures, matching their own truths",
+   "truth_source": "scope_oracle \u2014 the two totals are 16.5m apart by construction",
+   "note": "the single strongest proof that a period is honoured at all",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "two different periods returned the identical figure 136132618.88; truth says 24851104.67 and 41321206.13",
+   "silent": true,
+   "expected_result": {
+    "A": 24851104.669999998,
+    "B": 41321206.13
+   },
+   "actual_result": {
+    "A": 136132618.88,
+    "B": 136132618.88
+   },
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P05-unavailable-period",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2019-12-31 (plausible, not in the book)",
+   "expectation": "a governed refusal or an explicit unavailability disclosure",
+   "truth_source": "scope_oracle \u2014 the book carries no such period",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SILENT_FALLBACK",
+   "detail": "answered 136132618.88 \u2014 the unscoped figure \u2014 with no refusal and no warning",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P06-impossible-period",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2026-02-30 (not a calendar date)",
+   "expectation": "a governed refusal",
+   "truth_source": "scope_oracle \u2014 February has no 30th",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SILENT_FALLBACK",
+   "detail": "answered 136132618.88 \u2014 the unscoped figure \u2014 with no refusal and no warning",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P07-future-period",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2099-12-31",
+   "expectation": "a governed refusal",
+   "truth_source": "scope_oracle \u2014 after every observation",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SILENT_FALLBACK",
+   "detail": "answered 136132618.88 \u2014 the unscoped figure \u2014 with no refusal and no warning",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P08-no-period-stated",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=None on a three-period book",
+   "expectation": "either one period, or an explicit disclosure that three were spanned",
+   "truth_source": "scope_oracle \u2014 spanning three periods triple-counts the book",
+   "note": "the default is a semantic decision; silence about it is not",
+   "verdict": "FAIL",
+   "failure_class": "SILENT_MULTI_PERIOD",
+   "detail": "summed all three periods to 136132618.88 with no disclosure that the figure is not one period",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P09-receipt-proves-requested-and-resolved",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2026-03-31",
+   "expectation": "the receipt evidences BOTH the requested and the resolved period",
+   "truth_source": "the plan object versus the receipt",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "RECEIPT_GOVERNANCE",
+   "detail": "the receipt evidences no requested/resolved period (requested 2026-03-31)",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "P10-period-with-grouping",
+   "dimension": "PERIOD",
+   "requested_semantics": "period=2026-03-31 grouped by region",
+   "expectation": "March cells only",
+   "truth_source": "scope_oracle.grouped(period=HISTORICAL_A)",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "the period was not applied to the cells: ['North West: 31763507.89 != 6921723.68', 'Scotland: 35277771.19 != 7501909.76']",
+   "silent": true,
+   "expected_result": {
+    "North West": 6921723.680000001,
+    "Scotland": 7501909.76,
+    "South East": 3862923.14,
+    "Wales": 6564548.090000002
+   },
+   "actual_result": null,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "DS01-funded",
+   "dimension": "DATASET",
+   "requested_semantics": "dataset=funded, funded frame supplied",
+   "expectation": "the funded total",
+   "truth_source": "scope_oracle.total(funded)",
+   "note": "",
+   "verdict": "PASS",
+   "failure_class": null,
+   "detail": "136132618.88",
+   "silent": false,
+   "expected_result": 136132618.88,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "DS02-pipeline",
+   "dimension": "DATASET",
+   "requested_semantics": "dataset=pipeline, pipeline frame supplied",
+   "expectation": "the pipeline total, 50m clear of every funded figure",
+   "truth_source": "scope_oracle.total(pipeline)",
+   "note": "",
+   "verdict": "PASS",
+   "failure_class": null,
+   "detail": "85445021.33",
+   "silent": false,
+   "expected_result": 85445021.33,
+   "actual_result": 85445021.33,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 60,
+    "rows_out": 60
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 22.72); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "DS03-dataset-mismatch",
+   "dimension": "DATASET",
+   "requested_semantics": "dataset=pipeline while the FUNDED frame is supplied",
+   "expectation": "a governed refusal or a disclosed mismatch \u2014 never a silent answer",
+   "truth_source": "scope_oracle \u2014 the frame is funded, the plan says pipeline",
+   "note": "tests whether the declared dataset is verified against what arrived",
+   "verdict": "FAIL",
+   "failure_class": "SILENT_FALLBACK",
+   "detail": "answered 136132618.88 \u2014 the unscoped figure \u2014 with no refusal and no warning",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "DS04-receipt-names-the-dataset",
+   "dimension": "DATASET",
+   "requested_semantics": "dataset=funded",
+   "expectation": "the receipt names the dataset executed",
+   "truth_source": "the plan object versus the receipt",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "RECEIPT_GOVERNANCE",
+   "detail": "the receipt does not name the dataset (requested 'funded'); receipt says <ABSENT>=None",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "L01-no-lens-is-total-funded",
+   "dimension": "LENS",
+   "requested_semantics": "lens=None",
+   "expectation": "the whole current book, both lenses",
+   "truth_source": "scope_oracle.total(period=CURRENT)",
+   "note": "the default must not narrow",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 69960308.08, got 136132618.88",
+   "silent": false,
+   "expected_result": 69960308.08000001,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "L02-direct",
+   "dimension": "LENS",
+   "requested_semantics": "lens=direct",
+   "expectation": "the Direct population only",
+   "truth_source": "scope_oracle.total(period=CURRENT, lens=Direct)",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 56243599.21, got 136132618.88",
+   "silent": false,
+   "expected_result": 56243599.21,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "L03-acquired",
+   "dimension": "LENS",
+   "requested_semantics": "lens=acquired",
+   "expectation": "the Acquired population only",
+   "truth_source": "scope_oracle.total(period=CURRENT, lens=Acquired)",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 13716708.87, got 136132618.88",
+   "silent": false,
+   "expected_result": 13716708.87,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "L04-invalid-lens",
+   "dimension": "LENS",
+   "requested_semantics": "lens=nonsense",
+   "expectation": "a governed refusal",
+   "truth_source": "scope_oracle \u2014 no such population exists",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SILENT_FALLBACK",
+   "detail": "answered 136132618.88 \u2014 the unscoped figure \u2014 with no refusal and no warning",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "L05-receipt-names-the-lens",
+   "dimension": "LENS",
+   "requested_semantics": "lens=direct",
+   "expectation": "the receipt names the lens applied",
+   "truth_source": "the plan object versus the receipt",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "RECEIPT_GOVERNANCE",
+   "detail": "the receipt does not name the lens (requested 'direct'); receipt says <ABSENT>=None",
+   "silent": true,
+   "expected_result": null,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "L06-direct-and-acquired-sum-to-total",
+   "dimension": "LENS",
+   "requested_semantics": "the two lenses separately",
+   "expectation": "Direct + Acquired == the unlensed total",
+   "truth_source": "scope_oracle \u2014 the two lenses partition the book",
+   "note": "",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "both lenses returned 136132618.88",
+   "silent": true,
+   "expected_result": {
+    "direct": 56243599.21,
+    "acquired": 13716708.87,
+    "total": 69960308.08000001
+   },
+   "actual_result": {
+    "direct": 136132618.88,
+    "acquired": 136132618.88
+   },
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X01-period-plus-filter",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "period=2026-06-30 + borrower_type=Joint",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 34523985.18, got 65953587.76",
+   "silent": false,
+   "expected_result": 34523985.18,
+   "actual_result": 65953587.76,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 259
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 1
+   },
+   "warnings": [
+    "filter borrower_type='Joint' kept 259/545 rows",
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X02-dataset-plus-filter",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "dataset=pipeline + borrower_type=Joint",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "PASS",
+   "failure_class": null,
+   "detail": "47709199.98",
+   "silent": false,
+   "expected_result": 47709199.980000004,
+   "actual_result": 47709199.980000004,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 60,
+    "rows_out": 34
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 1
+   },
+   "warnings": [
+    "filter borrower_type='Joint' kept 34/60 rows",
+    "percent-scale heuristically detected as 'whole_number_percent' (median 22.72); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X03-lens-plus-filter",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "lens=direct + borrower_type=Joint",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 29079543.37, got 65953587.76",
+   "silent": false,
+   "expected_result": 29079543.37,
+   "actual_result": 65953587.76,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 259
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 1
+   },
+   "warnings": [
+    "filter borrower_type='Joint' kept 259/545 rows",
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X04-period-plus-dataset",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "dataset=pipeline + period=2026-06-30",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "PASS",
+   "failure_class": null,
+   "detail": "85445021.33",
+   "silent": false,
+   "expected_result": 85445021.33,
+   "actual_result": 85445021.33,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 60,
+    "rows_out": 60
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 22.72); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X05-period-plus-lens",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "period=2026-03-31 + lens=acquired",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 5129308.35, got 136132618.88",
+   "silent": false,
+   "expected_result": 5129308.35,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X06-dataset-plus-lens",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "dataset=funded + lens=direct",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 56243599.21, got 136132618.88",
+   "silent": false,
+   "expected_result": 56243599.21,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X07-period-dataset-lens",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "dataset=funded + period=2026-05-31 + lens=direct",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 33484343.91, got 136132618.88",
+   "silent": false,
+   "expected_result": 33484343.910000004,
+   "actual_result": 136132618.88,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 545
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 0
+   },
+   "warnings": [
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  },
+  {
+   "case_id": "X08-period-dataset-lens-filter",
+   "dimension": "COMPOSITION",
+   "requested_semantics": "dataset=funded + period=2026-05-31 + lens=direct + Joint",
+   "expectation": "every stated constraint applied together",
+   "truth_source": "scope_oracle with the same constraints",
+   "note": "adding one scope constraint must never drop another",
+   "verdict": "FAIL",
+   "failure_class": "SCOPE_NOT_HONOURED",
+   "detail": "expected 13548161.43, got 65953587.76",
+   "silent": false,
+   "expected_result": 13548161.43,
+   "actual_result": 65953587.76,
+   "disposition": "EXECUTED",
+   "semantic_receipt": {
+    "requested_period": "<ABSENT>=None",
+    "resolved_period": "<ABSENT>=None",
+    "lens": "<ABSENT>=None",
+    "dataset": "<ABSENT>=None",
+    "rows_in": 545,
+    "rows_out": 259
+   },
+   "compiled_spec_scope": {
+    "reporting_date": null,
+    "as_of_date": null,
+    "temporal_mode": null,
+    "execution_mode": null,
+    "portfolio_lens": null,
+    "compare_periods": [],
+    "dataset": "<ABSENT>",
+    "filters": 1
+   },
+   "warnings": [
+    "filter borrower_type='Joint' kept 259/545 rows",
+    "percent-scale heuristically detected as 'whole_number_percent' (median 28.43); the executor does NOT rescale percentages"
+   ]
+  }
+ ]
+}
