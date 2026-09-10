@@ -1,0 +1,281 @@
+# =========================================================================
+# Phase 1.5 — why the 27 non-invariant Run 6 canonicals disagree.
+# =========================================================================
+#
+# Run 6 is the authoritative current-state benchmark: HEAD 0b663f7,
+# claude-opus-5, 135/135 successful calls, 0 failures, frozen questions and
+# compiler unchanged.
+#
+# Every entry is adjudicated from the Run 6 payloads after putting all three
+# variants through the same NORMAL FORM the Phase 1 instrument applies
+# (defaults filled, top-level measures folded into the output list, period
+# labels treated as wording for every relative form). What survives that is a
+# real disagreement about meaning.
+#
+# WHY THIS DIFFERS FROM PHASE 1's ANSWER
+# --------------------------------------
+# Phase 1 put 8 of 25 on contract redundancy. This pass puts 12 of 27 on
+# REPRESENTATIONAL, and the increase is not a change of opinion — it is two
+# things the Phase 1 taxonomy could not see:
+#
+#   * splitting `under_determined_question` separates GENUINE_AMBIGUITY from
+#     INTERPRETATION_POLICY, and 7 canonicals move into the policy class;
+#   * three further representational overlaps surfaced in Run 6 that Phase 1
+#     did not name — overlapping OPERATION members (breakdown/distribution,
+#     departures/transition), an undefined `population.base` for forward-looking
+#     questions, and period LABELS carried in plan identity.
+#
+# NL9 is the proof of the last one: its three plans are identical except that
+# NL9B carried time.labels = ["today's pipeline"] and the other two carried
+# none. Those are the question's own words. The normal form resolves NL9
+# outright, which is why it is the one canonical listed as
+# resolved_by_normal_form_alone.
+
+version: 1
+source_run: evidence/run6_135_head_0b663f7.json
+head: 0b663f7
+
+adjudication:
+
+  # ======================================================================
+  # REPRESENTATIONAL — same meaning, alternative CandidateIntent encoding
+  # ======================================================================
+
+  NL9:
+    cause: REPRESENTATIONAL
+    reason: >-
+      The three plans are byte-identical except time.labels: NL9B carried
+      ["today's pipeline"], NL9A and NL9C carried none. Period labels are the
+      question's own WORDS and are load-bearing only for explicit_period, where
+      they are the sole statement of which period. Carrying them in plan
+      identity for every other form makes wording a difference in authorised
+      work. The normal form resolves this canonical on its own.
+
+  Q17:
+    cause: REPRESENTATIONAL
+    reason: >-
+      Same measure, same three dimensions, same population. A and C wrapped them
+      in three outputs; B used one. Pure nesting.
+
+  Q12:
+    cause: REPRESENTATIONAL
+    reason: >-
+      Same measure, same two dimensions. A and B called it operation=breakdown
+      in one output; C called it operation=distribution in two. A grouped
+      aggregate over governed bands is one analysis, and two OPERATION members
+      describe it. An operation-enum overlap, not a different request.
+
+  Q20:
+    cause: REPRESENTATIONAL
+    reason: >-
+      Identical in every slot except the period encoding: A used
+      previous_reporting_period + monthly, B and C relative_pair + monthly +
+      periods_back 1. One relative relationship, two spellings.
+
+  NL5:
+    cause: REPRESENTATIONAL
+    reason: >-
+      All three agree on capability, operation, measures and dimensions. A and C
+      differ ONLY in periods_back 0 versus absent — the same horizon written two
+      ways — which is sufficient on its own to break invariance. (B additionally
+      uses grain=quarterly because its question says "next quarter" rather than
+      "next three months"; that part is a wording difference, and it is not what
+      splits A from C.)
+
+  Q19:
+    cause: REPRESENTATIONAL
+    reason: >-
+      "How did the Direct book change last month?" All three agree on the
+      period. A and C chose capability=period_movement with
+      current_outstanding_balance; B chose funded_bridge with
+      funded_balance_movement. Two capabilities implementing one economic
+      analysis, and the model is choosing between internal owners.
+
+  Q18:
+    cause: REPRESENTATIONAL
+    reason: >-
+      Same movement/bridge duplication as Q19, and messier: A is
+      funded_bridge/bridge, B period_movement/movement, C funded_bridge/movement.
+      Three combinations of two capabilities and two operations for one request.
+
+  SM08:
+    cause: REPRESENTATIONAL
+    reason: >-
+      "Where did cases leaving Offer go?" All three group by destination_stage.
+      B and C used operation=departures with cases_departed; A used
+      operation=transition with cases_moved. A departure broken down by
+      destination and a transition out of a stage are the same analysis under
+      two operation names.
+
+  SM07:
+    cause: REPRESENTATIONAL
+    reason: >-
+      Identical except the stage filter concept: A used origin_stage ==
+      APPLICATION, B and C used pipeline_stage == APPLICATION. Two governed
+      concepts address one stage in a stayer context.
+
+  Q22:
+    cause: REPRESENTATIONAL
+    reason: >-
+      "Which source portfolio contributed most to balance growth last month?"
+      A expressed it as rank over dimension source_portfolio_id; B and C as
+      compare with comparison={population_pair, direct, acquired}. Ranking a
+      two-valued dimension and comparing its two values are one request.
+
+  Q23:
+    cause: REPRESENTATIONAL
+    reason: >-
+      Identical including the target, differing only in population.base:
+      A and B said forecast, C said funded. For a forward-looking milestone the
+      contract never defines whether `base` names the book being projected or
+      the projection itself, so both readings are permitted encodings of one
+      meaning. An undefined contract semantic, not a disagreement.
+
+  NL2:
+    cause: REPRESENTATIONAL
+    reason: >-
+      Same as Q23 and on the same axis: A and C said funded, B said forecast,
+      everything else including the £100m target identical. The same undefined
+      `population.base` semantic for a forward-looking question.
+
+  # ======================================================================
+  # INTERPRETATION_POLICY — core request understood, adjacent content
+  # added or dropped. Nothing in the system states how much to volunteer.
+  # ======================================================================
+
+  NL6:
+    cause: INTERPRETATION_POLICY
+    reason: >-
+      "Which concentration limits have the least headroom?" — identical
+      capability, operation and dimension. A reported {limit_headroom}; B and C
+      added limit_utilisation. The question names one measure; two readers
+      volunteered a companion. No schema change decides this.
+
+  Q24:
+    cause: INTERPRETATION_POLICY
+    reason: >-
+      All three carry the £250m target and forecast_milestone_date. A and B also
+      report forecast_funded_balance; C does not. "When will we reach £250m?"
+      asks for a date; two readers added the balance alongside it.
+
+  Q25:
+    cause: INTERPRETATION_POLICY
+    reason: >-
+      Measure sets of one, two and three limit measures on identical capability
+      and dimension. C additionally read the question as current headroom rather
+      than a forward projection, which is a temporal miss on top of the policy
+      divergence, and is recorded here rather than split into a second entry.
+
+  NL7:
+    cause: INTERPRETATION_POLICY
+    reason: >-
+      All three understood the comparison (population_pair over the seasoning
+      split). The measure sets are two, one and four: "riskier" names no single
+      governed measure, and each reader chose a different basket of proxies for
+      it. The core request is agreed; the scope of the answer is not.
+
+  SM09:
+    cause: INTERPRETATION_POLICY
+    reason: >-
+      "Reconcile the Application stage." Measure sets of five, four and two
+      drawn from the same governed reconciliation family (opening, arrivals,
+      departures, stayers, closing). What a reconciliation reports is arguably
+      the CAPABILITY's to decide, which is why this is policy rather than
+      ambiguity — the model is enumerating something it should probably not have
+      to enumerate.
+
+  Q10:
+    cause: INTERPRETATION_POLICY
+    reason: >-
+      Identical measures. Dimensions are none, {pipeline_stage, ticket_bucket},
+      and {pipeline_stage}. Q10B's question does say "by size and stage", so
+      part of this is wording — but Q10C added a stage grouping its question
+      never asked for, and that is policy.
+
+  Q08:
+    cause: INTERPRETATION_POLICY
+    reason: >-
+      A and B both rank, and differ only in WHICH measure —
+      concentration_share against concentration_exposure — for the same request.
+      That is a policy choice between two adjacent measures. C additionally
+      summarises rather than ranks, which its wording supports.
+
+  # ======================================================================
+  # MODEL_MISS — the question states it and a variant missed it
+  # ======================================================================
+
+  Q16:
+    cause: MODEL_MISS
+    reason: >-
+      "Break drawdown balance down by both geography and LTV band." A and C
+      bound erm_product_type == drawdown; B bound no filter at all. The product
+      restriction is explicit in all three wordings and one variant dropped it.
+      Identical contract, one less complete reading.
+
+  Q21:
+    cause: MODEL_MISS
+    reason: >-
+      "Which region added the most balance last month?" B grouped by
+      canonical_region_reporting; A and C grouped by nothing. "Which region" IS
+      the grouping, and two variants did not bind it — they planned anyway
+      because period_movement is permitted to own its grouping, which means the
+      miss passed silently.
+
+  # ======================================================================
+  # GENUINE_AMBIGUITY — the wording admits more than one governed reading
+  # ======================================================================
+
+  BB01:
+    cause: GENUINE_AMBIGUITY
+    reason: >-
+      The three frozen variants are "What is the borrowing-base headroom?",
+      "How much headroom do we have under the borrowing base?" and "What is the
+      headroom?" The third names no subject: headroom under the facility, or
+      against a concentration limit? BB01C clarified, and that is the correct
+      outcome — this canonical SHOULD be non-invariant, because its third
+      variant is a genuinely less specific question.
+
+  NL1:
+    cause: GENUINE_AMBIGUITY
+    reason: >-
+      "The profile of our new lending" names no measures and no window.
+      Capability, operation, measures, dimensions and time all differ.
+      expected_semantics.yaml already records an unresolved tension on this
+      question's population; marked human_review before any run.
+
+  NL3:
+    cause: GENUINE_AMBIGUITY
+    reason: >-
+      A stock, a projection and a timing across two capabilities. NL3B refused.
+      Marked human_review; the brief's own ruling was not to settle it here.
+
+  NL4:
+    cause: GENUINE_AMBIGUITY
+    reason: >-
+      "What completion rate are we running at?" Independent truth Q4.2
+      classifies this as a RUN_RATE operation, which this vocabulary does not
+      carry. Run 6 produced three different capabilities — forecast, pipeline
+      and pipeline_stage_movement — because none of them is the right one. A
+      vocabulary gap presenting as ambiguity, already recorded.
+
+  NL8:
+    cause: GENUINE_AMBIGUITY
+    reason: >-
+      Independent truth gives "two or more governed snapshots" without fixing
+      whether that is a pair or a series, and the question does not either. A
+      and B chose relative_pair, C chose series and clarified. Marked
+      human_review.
+
+  # ======================================================================
+  # OTHER — the frozen variants genuinely ask different questions
+  # ======================================================================
+
+  Q09:
+    cause: OTHER
+    reason: >-
+      Identical capability, measures and dimensions in all three. The operations
+      are summary, rank, summary — and the wordings are "Are any limits breached
+      or close to breach?" (a status), "Which tests are most at risk today?" (an
+      ordering) and "Summarise our current position" (a summary). The frozen
+      variants ask three different shapes of the same subject, so divergence
+      here is correct and must not be normalised away.
