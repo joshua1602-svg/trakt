@@ -161,6 +161,36 @@ def test_nothing_outside_the_new_boundary_imports_it():
             sorted(set(offenders))))
 
 
+def test_the_package_does_not_use_the_legacy_parser_as_an_oracle():
+    """The legacy parser may be READ for governed vocabulary. It may not
+    interpret.
+
+    ``question_interpretation.lexical.pipeline_stage_vocabulary`` is the
+    estate's one question-side stage table, and reading a table is not the same
+    as taking a second opinion on what a sentence means — that is the whole
+    distinction this package exists to hold. Everything that DOES interpret is
+    forbidden here.
+    """
+    forbidden = ("llm_query_parser", "mi_agent.interpreter", "semantic_resolver",
+                 "query_plan_adapter", "question_interpretation.projection",
+                 "question_interpretation.claim_merge",
+                 "question_interpretation.routed_surface",
+                 "concept_merge_arm", "parsed_question", "mi_query_validator")
+    offenders = []
+    for path in _PACKAGE.rglob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                names = [node.module]
+            for name in names:
+                if any(bad in name for bad in forbidden):
+                    offenders.append(f"{path.name}: {name}")
+    assert offenders == [], offenders
+
+
 def test_the_package_imports_no_executor_engine_or_route():
     """The boundary ends at the plan. Nothing here can run one."""
     forbidden = ("mi_query_executor", "query_plan_execution", "mi_agent_api",

@@ -4,13 +4,14 @@
 question
    │
    ▼
-OpusInterpreter          the model owns LANGUAGE
+OpusInterpreter  ◄──►  read-only governed metadata
+   │                     system registry · asset config
+   │                     portfolio config · capability catalogue
+   ▼
+CandidateIntent          meaning — a PROPOSAL, never a binding
    │
    ▼
-CandidateIntent          meaning — never a binding
-   │
-   ▼
-DeterministicCompiler    the compiler owns BINDING
+DeterministicCompiler    re-validates every concept independently
    │
    ├──────────────► GovernedQueryPlan
    └──────────────► Refuse / Clarify
@@ -57,31 +58,48 @@ scope here.
 `CandidateIntent` and `GovernedQueryPlan` are different objects, and the
 difference is enforced rather than documented.
 
-The model may say:
+Opus reads Trakt's governed registries through read-only retrieval tools and
+**may name a canonical concept identifier** it found there:
 
 ```json
-{"measures": [{"concept": "loan_to_value", "statistic": "weighted_average",
-               "weight": "balance"}],
+{"measures": [{"concept": "current_loan_to_value",
+               "statistic": "weighted_average"}],
  "geography": {"basis": "collateral", "level": "itl3"},
  "time": {"form": "previous_reporting_period"}}
 ```
 
-The model cannot say `field: current_ltv`, `snapshot: 2026-06-30`, a dataframe
+Naming it does not make it authoritative. The compiler re-derives **existence,
+ambiguity, asset applicability, portfolio availability, permitted operation and
+physical binding** from the same index before anything enters a plan — an
+identifier the registry lacks is `UNREGISTERED_CONCEPT`, a word two concepts
+claim is `AMBIGUOUS_*`, one outside this asset class is `CONCEPT_UNAVAILABLE`.
+
+What the model cannot say is `field: …`, `snapshot: 2026-06-30`, a dataframe
 expression, SQL, or pandas — **there is no slot for it**. Three layers:
 
 1. **No slot exists.** Walked and asserted over the dataclass tree.
 2. **The generated schema is closed.** `additionalProperties: false` everywhere,
-   with `tool_choice` pinned, so a compliant generation cannot emit one.
+   so a compliant generation cannot emit one.
 3. **The parser fails closed.** An unknown key, an out-of-vocabulary enum, a code
    marker, an ISO date or a snapshot-shaped token rejects the whole intent.
    Nothing is stripped and salvaged, and there is no repair loop.
+
+### The data boundary, which did not move
+
+Metadata is not data. `search_concepts`, `get_concept_metadata`,
+`get_allowed_values`, `search_capabilities`, `get_capability_metadata`,
+`get_asset_metadata` and `get_portfolio_semantic_context` are the entire tool
+surface, all read-only. Loan rows, borrower data, balances, calculated MI
+answers, facility commitments, advance rates and reporting dates never reach the
+model — asserted by walking every tool's output, not by intent.
 
 ## Modules
 
 | file | what it owns |
 |---|---|
 | `intent.py` | the `CandidateIntent` contract, its JSON schema, fail-closed parsing |
-| `vocabulary.py` | the semantic boundary in front of the physical registries |
+| `vocabulary.py` | the authoritative concept index — one index, read by the metadata tools AND by the compiler |
+| `metadata.py` | the read-only adapter over the governed estate, and the tool surface |
 | `opus_interpreter.py` | the one place a model is consulted, and the only place the prompt is built |
 | `compiler.py` | validate → bind → authorise → produce |
 | `plan.py` | the immutable, versioned `GovernedQueryPlan` |
@@ -97,6 +115,27 @@ recogniser cascade, no second opinion from wording. `compiler.py` does not impor
 `re`, and the same intent under two completely different question strings
 compiles to a byte-identical plan. Source-span evidence is copied into
 provenance and read by nothing.
+
+## The governed estate this reads
+
+| source | what it contributes |
+|---|---|
+| `config/system/fields_registry.yaml` | canonical fields, data types, enum domains |
+| `mi_agent/mi_semantics_field_registry.yaml` | business names, synonyms, roles, permitted aggregations |
+| `config/business_semantics_registry.yaml` | analytical concept, temporality, asset applicability |
+| `config/system/enum_synonyms.yaml` | governed value spellings |
+| `question_interpretation/lexical.py` | the governed pipeline stages |
+| `config/asset/product_profiles.yaml` | the governed product types, asset capabilities |
+| `config/asset/mi_geography.yaml` | primary geography basis by asset class |
+| `config/mi/buckets.yaml` | governed band labels |
+| `config/mi/region_taxonomy.yaml` | governed region values |
+| `config/system/mi_capability_registry.yaml` | the 28-capability catalogue |
+| `config/risk/concentration_test_library.yaml` | 42 governed limit metrics |
+| `config/risk/funding_facilities.yaml` | facility PRESENCE only — never the commitment |
+| `config/client/config_client_ERE.yaml` | asset class, currency, country |
+
+Nothing here is redesigned, curated or written back. It is a read-only
+projection, built once and cached.
 
 ## Running it
 

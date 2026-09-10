@@ -10,8 +10,13 @@ three ways rather than one:
   2. AN UNKNOWN KEY IS REFUSED. A payload carrying ``field``, ``column``,
      ``sql`` or ``snapshot`` beside a legitimate slot does not have that key
      ignored — the whole intent is refused.
-  3. A PHYSICAL COLUMN NAME DOES NOT BIND. Feeding the canonical field name
-     instead of the business term is UNREGISTERED_CONCEPT, not a lucky match.
+  3. NAMING IS NOT AUTHORITY. Opus may read a canonical identifier out of the
+     governed registry and name it — that is deliberate, and the addendum's
+     point. What it cannot do is make one up: an identifier the registry does
+     not carry is UNREGISTERED_CONCEPT, an identifier two concepts claim is
+     AMBIGUOUS, and one that does not apply to this asset class is
+     CONCEPT_UNAVAILABLE. Every binding on a plan is the registry's answer,
+     re-derived, not the model's string trusted.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ import pytest
 from mi_agent.interpretation_v2 import (
     CandidateIntent,
     IntentParseError,
+    OUTCOME_PLAN,
     OUTCOME_REFUSE,
     parse_candidate_intent,
 )
@@ -124,52 +130,99 @@ def test_every_physical_key_name_is_covered_by_the_guard():
         assert expected in _PHYSICAL_KEY_NAMES
 
 
-@pytest.mark.parametrize("physical_name", [
-    "current_outstanding_balance",
-    "current_loan_to_value",
-    "canonical_region_reporting",
-    "geographic_region_obligor_itl3",
-    "youngest_borrower_age",
-    "current_principal_balance",
-    "indexed_loan_to_value",
-    "original_loan_to_value",
-    "current_interest_rate",
-    "erm_product_type",
-    "broker_channel",
+@pytest.mark.parametrize("concept_id,expected_field", [
+    ("current_outstanding_balance", "current_outstanding_balance"),
+    ("current_loan_to_value", "current_loan_to_value"),
+    ("youngest_borrower_age", "youngest_borrower_age"),
+    ("erm_product_type", "erm_product_type"),
 ])
-def test_a_canonical_column_name_is_not_a_semantic_term(physical_name, compiler):
-    """The physical schema is not the model's vocabulary.
+def test_a_named_identifier_is_a_proposal_not_an_authority(
+        concept_id, expected_field, compiler):
+    """Opus may READ an identifier out of the registry and name it.
 
-    Each of these is a real column in the MI semantics registry whose BUSINESS
-    term is something else ("balance", "current_ltv", "region"). Supplying the
-    column name is not a shortcut to the field — it is an unregistered concept.
+    That is the addendum's whole point: an interpreter kept away from the
+    governed metadata is an interpreter that clarifies on ordinary questions.
+    What naming it does NOT do is shorten the check. The compiler re-derives
+    the binding from the same authoritative index, and the plan's field is the
+    registry's answer, not the model's string — which is why a term that
+    resolves to a DIFFERENT field (an alias) lands on the registry's field and
+    not on the word the model typed.
     """
-    intent = build_intent(measures=[{"concept": physical_name}])
+    intent = build_intent(measures=[{"concept": concept_id}])
     result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN, result.codes()
+    assert result.plan.outputs[0].measures[0].canonical_field == expected_field
+
+
+def test_an_alias_binds_to_the_registrys_field_not_to_the_word_typed(compiler):
+    intent = build_intent(measures=[{"concept": "balance"}])
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN
+    measure = result.plan.outputs[0].measures[0]
+    assert measure.concept == "current_outstanding_balance"
+    assert measure.canonical_field == "current_outstanding_balance"
+
+
+@pytest.mark.parametrize("invented", [
+    "current_outstanding_balance_v2",
+    "loans.current_balance",
+    "tbl_loans__balance",
+    "ebitda",
+    "my_custom_column",
+    "current_ltv_adjusted",
+])
+def test_an_unregistered_identifier_still_fails_closed(invented, compiler):
+    """Seeing the registry is not the same as being able to invent an entry.
+
+    An identifier that looks like a column but is not IN the registry is
+    UNREGISTERED_CONCEPT, never a lucky binding.
+    """
+    result = compiler.compile(build_intent(measures=[{"concept": invented}]))
     assert result.outcome == OUTCOME_REFUSE
     assert "UNREGISTERED_CONCEPT" in result.codes()
     assert result.plan is None
 
 
-def test_the_vocabulary_never_offers_the_model_a_column_name_as_a_term(vocabulary):
-    """The model cannot learn the physical schema from what it is offered.
+def test_a_word_two_governed_concepts_claim_is_not_bound_to_either(compiler):
+    """"region" is claimed by seven governed fields. Resolving it to one would
+    be the compiler deciding what the reader meant."""
+    result = compiler.compile(build_intent(measures=[{"concept": "region"}]))
+    assert result.plan is None
+    assert "AMBIGUOUS_MEASURE" in result.codes()
+    reason = next(r for r in result.reasons if r.code == "AMBIGUOUS_MEASURE")
+    assert len(reason.spans) > 1, "an ambiguity must name its candidates"
 
-    The check is on the TERMS — the words the model is told to output — not on
-    every string in the payload. A synonym list legitimately contains ordinary
-    business words ("lien", "charge") that happen to spell some column
-    elsewhere; a synonym binds nothing and is there to help the model recognise
-    the concept, which is the opposite of leaking a schema.
+
+def test_a_concept_outside_this_asset_class_fails_closed(vocabulary, compiler):
+    """Existence is not applicability.
+
+    The Business Semantics Registry declares which asset classes a concept
+    applies to, and the compiler checks it — a concept that exists but does not
+    apply here is CONCEPT_UNAVAILABLE, not a plan.
     """
-    from mi_agent.interpretation_v2 import canonical_field_names
+    from dataclasses import replace as _replace
 
-    offered = set()
-    for rows in vocabulary.prompt_payload()["concepts"].values():
-        offered.update(row["term"] for row in rows)
+    from mi_agent.interpretation_v2 import CompilerContext, DeterministicCompiler
 
-    business_terms = {c.term for c in vocabulary.concepts.values()}
-    leaked = sorted(f for f in canonical_field_names()
-                    if f in offered and f not in business_terms)
-    assert leaked == [], f"canonical fields offered as terms: {leaked}"
+    concept = vocabulary.resolve("current_outstanding_balance")
+    narrowed = _replace(vocabulary, concepts=dict(
+        vocabulary.concepts,
+        current_outstanding_balance=_replace(
+            concept, asset_applicability=("auto_finance",))))
+    result = DeterministicCompiler(CompilerContext(narrowed)).compile(
+        build_intent(measures=[{"concept": "current_outstanding_balance"}]))
+    assert result.outcome == OUTCOME_REFUSE
+    assert "CONCEPT_UNAVAILABLE" in result.codes()
 
-    # And every offered term really is a governed concept, not a stray string.
-    assert offered <= business_terms
+
+def test_the_orientation_block_is_not_the_registry(vocabulary):
+    """The model is oriented, then it RETRIEVES.
+
+    The standing block carries the closed enumerations and counts — not the
+    concepts. Dumping 150 of them into every prompt was the previous design's
+    other mistake: 24k tokens a question, and still too little about each one.
+    """
+    payload = vocabulary.orientation_payload()
+    assert "concepts" not in payload
+    assert payload["concept_counts"]["total"] > 100
+    assert "search_concepts" in payload["how_to_find_a_concept"]

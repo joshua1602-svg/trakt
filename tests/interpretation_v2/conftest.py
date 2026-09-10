@@ -62,9 +62,14 @@ class ScriptedClient:
         self.last_system = None
         self.last_user = None
         self.last_tool_schema = None
+        self.last_metadata_tools = None
+        self.last_dispatch = None
 
-    def emit_intent(self, *, system, user, tool_schema, tool_name):
+    def emit_intent(self, *, system, user, tool_schema, tool_name,
+                    metadata_tools=(), dispatch=None):
         self.calls += 1
+        self.last_metadata_tools = metadata_tools
+        self.last_dispatch = dispatch
         self.last_system = system
         self.last_user = user
         self.last_tool_schema = tool_schema

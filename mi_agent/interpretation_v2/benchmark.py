@@ -140,6 +140,7 @@ class QuestionResult:
     reasons: Tuple[Mapping[str, Any], ...] = ()
     plan_id: str = ""
     plan: Optional[Mapping[str, Any]] = None
+    metadata_calls: Tuple[Mapping[str, Any], ...] = ()
     scored: Mapping[str, Optional[bool]] = field(default_factory=dict)
     verdict: str = ""
     error_class: str = ""
@@ -149,6 +150,7 @@ class QuestionResult:
         body = asdict(self)
         body["reason_codes"] = list(self.reason_codes)
         body["reasons"] = [dict(r) for r in self.reasons]
+        body["metadata_calls"] = [dict(c) for c in self.metadata_calls]
         return body
 
 
@@ -216,13 +218,15 @@ def run_benchmark(*, interpreter: OpusInterpreter,
             outcome=compiled.outcome,
             reason_codes=tuple(compiled.codes()),
             reasons=tuple(r.to_dict() for r in compiled.reasons),
+            metadata_calls=tuple(outcome.metadata_calls),
             latency_ms=elapsed,
         )
         if compiled.is_plan:
             result.plan_id = compiled.plan.plan_id
             result.plan = compiled.plan.to_dict()
             result.scored = score_intent(outcome.intent, expected.get("expected", {}),
-                                         plan=compiled.plan)
+                                         plan=compiled.plan,
+                                         vocabulary=interpreter.vocabulary)
         result.error_class = _error_class(result.reason_codes)
         result.verdict = _verdict(result, bool(expected.get("human_review")))
         results.append(result)
@@ -261,6 +265,15 @@ def _report(bank, expectations, results: Sequence[QuestionResult],
 
     human_review = sorted(cid for cid, entry in expectations.items()
                           if entry.get("human_review"))
+
+    #: What the interpreter actually looked up. A run where nothing was
+    #: retrieved would mean the model answered from memory, which is the
+    #: behaviour the metadata tools exist to replace.
+    retrieval: Dict[str, int] = {}
+    for result in results:
+        for call in result.metadata_calls:
+            name = str(call.get("tool") or "")
+            retrieval[name] = retrieval.get(name, 0) + 1
     invariant = [r for r in invariance if r.invariant]
 
     return {
@@ -287,6 +300,11 @@ def _report(bank, expectations, results: Sequence[QuestionResult],
             OUTCOME_REFUSE: sum(1 for r in results if r.outcome == OUTCOME_REFUSE),
         },
         "error_taxonomy": errors,
+        "metadata_retrieval": {
+            "total_calls": sum(retrieval.values()),
+            "questions_that_retrieved": sum(1 for r in results if r.metadata_calls),
+            "by_tool": dict(sorted(retrieval.items(), key=lambda kv: -kv[1])),
+        },
         "per_dimension": per_dimension,
         "paraphrase_invariance": {
             "canonicals": len(invariance),

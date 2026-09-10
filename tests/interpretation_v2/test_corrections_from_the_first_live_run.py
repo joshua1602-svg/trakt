@@ -159,31 +159,61 @@ def test_a_GENERIC_rank_still_needs_something_to_rank(compiler):
 # --------------------------------------------------------------------------- #
 
 def test_a_dimension_with_a_governed_enum_shows_its_business_values():
+    from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+
     vocabulary = load_governed_vocabulary()
-    collateral = vocabulary.resolve("collateral_type")
-    assert collateral is not None
-    assert collateral.values, "collateral_type declares a governed enum domain"
-    view = collateral.public_view()
-    assert isinstance(view["values"], list)
+    service = GovernedMetadataService(vocabulary)
+    result = service.get_allowed_values("collateral_type")
+    assert result["has_governed_values"] is True
+    assert result["values"]
     # Business spellings, never the ESMA codes behind them.
-    assert not any(v.isupper() and len(v) == 4 for v in view["values"])
+    assert not any(v.isupper() and len(v) == 4 for v in result["values"])
 
 
-def test_a_dimension_with_no_governed_enum_says_so_rather_than_staying_silent():
-    """The first run's most important finding.
+def test_the_product_and_stage_gap_the_first_runs_closed_over():
+    """Runs 1-3's largest finding, and where it actually lived.
 
-    ``erm_product_type`` carries ``allowed_values: null`` in the canonical
-    registry: there is no governed list of product values. The interpreter
-    correctly declined to assert "drawdown" as a filter value — and could only
-    do that because the vocabulary told it no list exists. Silence would have
-    read as "any value is fine".
+    Sixteen of twenty clarifications were the interpreter declining to assert
+    "drawdown" or "Offer", because ``fields_registry.allowed_values`` is null
+    for product type and pipeline stage. The values were governed all along, in
+    two sources the vocabulary was not reading: the asset profile's
+    ``match.product_type``, and the estate's one question-side stage
+    vocabulary. Reading them is the addendum applied.
     """
+    from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+
+    service = GovernedMetadataService(load_governed_vocabulary())
+
+    products = service.get_allowed_values("erm_product_type")
+    assert products["has_governed_values"] is True
+    assert "drawdown" in products["values"]
+    assert "lump_sum" in products["values"]
+
+    stages = service.get_allowed_values("pipeline_stage")
+    assert stages["has_governed_values"] is True
+    assert {"KFI", "APPLICATION", "OFFER", "COMPLETED"} <= set(stages["values"])
+
+
+def test_a_dimension_with_no_governed_enum_still_says_so():
+    """Absence must be reported, not left as silence.
+
+    Some dimensions genuinely have no governed value list. The tool says so
+    explicitly and tells the interpreter what to do about it, because silence
+    reads as "any value is fine" — which is how a guess gets asserted.
+    """
+    from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+
     vocabulary = load_governed_vocabulary()
-    product = vocabulary.resolve("product_type")
-    assert product is not None
-    assert product.values == ()
-    view = product.public_view()
-    assert "NO GOVERNED VALUE LIST" in view["values"]
+    service = GovernedMetadataService(vocabulary)
+    ungoverned = [c.concept_id for c in vocabulary.concepts.values()
+                  if c.role == "dimension" and not c.values
+                  and not c.owning_capability]
+    assert ungoverned, "premise: some dimensions carry no governed values"
+
+    result = service.get_allowed_values(ungoverned[0])
+    assert result["found"] is True
+    assert result["has_governed_values"] is False
+    assert "Do NOT assert a filter value" in result["guidance"]
 
 
 def test_the_governed_defaults_are_declared_to_the_model():
@@ -191,7 +221,7 @@ def test_the_governed_defaults_are_declared_to_the_model():
     defaults. On the first run nothing said so, and the interpreter blocked on
     every bare "region" it saw."""
     vocabulary = load_governed_vocabulary()
-    declared = vocabulary.prompt_payload()["governed_defaults"]
+    declared = vocabulary.orientation_payload()["governed_defaults"]
     assert declared == dict(GOVERNED_DEFAULTS)
     for slot in ("geography.basis", "geography.level", "measures[].statistic",
                  "measures[].weight", "population.base", "time.form"):

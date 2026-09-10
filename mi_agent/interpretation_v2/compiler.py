@@ -45,7 +45,9 @@ from .intent import (
     SemanticMeasure,
 )
 from .outcomes import (
+    AMBIGUOUS_DIMENSION,
     AMBIGUOUS_GEOGRAPHY,
+    AMBIGUOUS_MEASURE,
     AMBIGUOUS_PERIOD,
     CAPABILITY_UNAVAILABLE,
     CONCEPT_UNAVAILABLE,
@@ -401,19 +403,37 @@ class DeterministicCompiler:
     # -- B. bind ------------------------------------------------------------ #
 
     def _resolve(self, term: str, *, slot: str,
-                 expect_role: Optional[str] = None
+                 expect_role: Optional[str] = None,
+                 ambiguity_code: str = UNREGISTERED_CONCEPT
                  ) -> Tuple[Optional[SemanticConcept], Optional[CompileReason]]:
-        """One semantic term -> one governed concept, or a governed refusal.
+        """One proposed term -> one governed concept, or a governed refusal.
 
-        This is the ONLY place a term becomes a binding, and it is exact-match
-        against the governed vocabulary. There is no fuzzy fallback: a term that
-        is not the governed spelling is not a governed term, and a physical
-        column name is not a semantic term.
+        The model may have READ this identifier out of the registry. That does
+        not shorten the check: existence, ambiguity, asset applicability and
+        portfolio availability are all re-derived here, against the same
+        authoritative index the metadata tools serve from. A concept the model
+        found is a PROPOSAL; this method is where it becomes a binding or a
+        refusal, and there is no path between the two.
+
+        Exact-match only, with no fuzzy fallback. A word claimed by more than
+        one governed concept resolves to none and names the candidates.
         """
-        concept = self.context.vocabulary.resolve(term)
+        vocabulary = self.context.vocabulary
+        concept = vocabulary.resolve(term)
         if concept is None:
+            candidates = vocabulary.candidates(term)
+            if len(candidates) > 1:
+                return None, CompileReason(
+                    ambiguity_code, term,
+                    f"{term!r} names more than one governed concept ({slot})",
+                    tuple(c.concept_id for c in candidates))
             return None, CompileReason(UNREGISTERED_CONCEPT, term,
-                                       f"not a governed term ({slot})")
+                                       f"not a governed concept ({slot})")
+        if not vocabulary.applies_here(concept):
+            return None, CompileReason(
+                CONCEPT_UNAVAILABLE, term,
+                f"governed, but does not apply to asset class "
+                f"{vocabulary.asset_class!r}")
         if not self.context.field_present(concept.canonical_field):
             return None, CompileReason(CONCEPT_UNAVAILABLE, term,
                                        "governed, but absent from this book")
@@ -600,7 +620,7 @@ class DeterministicCompiler:
                     f"{predicate.comparator!r} has no meaning on it"))
                 continue
             bound.append(FilterBinding(
-                concept=concept.term, comparator=predicate.comparator,
+                concept=concept.concept_id, comparator=predicate.comparator,
                 canonical_field=concept.canonical_field,
                 value=list(value) if isinstance(value, tuple) else value,
                 capability_owner=concept.owning_capability))
@@ -611,7 +631,8 @@ class DeterministicCompiler:
                                  List[str]]:
         reasons: List[CompileReason] = []
         notes: List[str] = []
-        concept, reason = self._resolve(measure.concept, slot=slot)
+        concept, reason = self._resolve(measure.concept, slot=slot,
+                                        ambiguity_code=AMBIGUOUS_MEASURE)
         if reason is not None:
             return None, [reason], notes
 
@@ -630,7 +651,7 @@ class DeterministicCompiler:
                     "a specialist measure carries its own weighting"))
             if reasons:
                 return None, reasons, notes
-            return (MeasureBinding(concept=concept.term, statistic="capability",
+            return (MeasureBinding(concept=concept.concept_id, statistic="capability",
                                    canonical_field=None,
                                    capability_owner=concept.owning_capability),
                     reasons, notes)
@@ -654,7 +675,7 @@ class DeterministicCompiler:
                 return None, [CompileReason(
                     MISSING_REQUIRED_SLOT, measure.concept,
                     "no statistic was named and the registry sets no default")], notes
-            notes.append(f"statistic for {concept.term!r} defaulted to "
+            notes.append(f"statistic for {concept.concept_id!r} defaulted to "
                          f"{statistic!r} by the governed registry")
         elif concept.allowed_statistics and statistic not in concept.allowed_statistics:
             return None, [CompileReason(
@@ -665,7 +686,7 @@ class DeterministicCompiler:
         weight_concept: Optional[str] = None
         weight_field: Optional[str] = None
         if statistic in STATISTICS_REQUIRING_WEIGHT:
-            term = measure.weight or concept.default_weight_term
+            term = measure.weight or concept.default_weight_concept
             if term is None:
                 return None, [CompileReason(
                     MISSING_REQUIRED_SLOT, measure.concept,
@@ -676,15 +697,15 @@ class DeterministicCompiler:
             if weight_reason is not None:
                 return None, [weight_reason], notes
             if measure.weight is None:
-                notes.append(f"weight for {concept.term!r} defaulted to "
-                             f"{weight.term!r} by the governed registry")
-            weight_concept, weight_field = weight.term, weight.canonical_field
+                notes.append(f"weight for {concept.concept_id!r} defaulted to "
+                             f"{weight.concept_id!r} by the governed registry")
+            weight_concept, weight_field = weight.concept_id, weight.canonical_field
         elif measure.weight is not None and statistic in STATISTICS_FORBIDDING_WEIGHT:
             return None, [CompileReason(
                 WEIGHT_NOT_PERMITTED, measure.concept,
                 f"statistic {statistic!r} takes no weight")], notes
 
-        return (MeasureBinding(concept=concept.term, statistic=statistic,
+        return (MeasureBinding(concept=concept.concept_id, statistic=statistic,
                                canonical_field=concept.canonical_field,
                                weight_concept=weight_concept,
                                weight_field=weight_field,
@@ -708,25 +729,44 @@ class DeterministicCompiler:
                 measures.append(bound)
 
         dimensions: List[DimensionBinding] = []
+        geography_from_dimension: Optional[SemanticGeography] = None
         for index, term in enumerate(output.dimensions):
             concept, reason = self._resolve(term, slot=f"{slot}.dimensions[{index}]",
-                                            expect_role="dimension")
+                                            expect_role="dimension",
+                                            ambiguity_code=AMBIGUOUS_DIMENSION)
             if reason is not None:
                 reasons.append(reason)
                 continue
+            # A geography concept named as a dimension is NOT grouped as a bare
+            # column: it travels into the geography contract, which is where
+            # basis and level are governed. The model naming
+            # `geographic_region_obligor` has already answered "whose region",
+            # so the compiler reads the basis off the concept rather than
+            # asking again.
+            if concept.is_geography:
+                geography_from_dimension = SemanticGeography(
+                    requested=True, basis=concept.geography_basis,
+                    level=concept.geography_level, group_by=True)
+                notes.append(f"{concept.concept_id!r} routed into the geography "
+                             f"contract as basis={concept.geography_basis}, "
+                             f"level={concept.geography_level}")
+                continue
             dimensions.append(DimensionBinding(
-                concept=concept.term, canonical_field=concept.canonical_field,
+                concept=concept.concept_id, canonical_field=concept.canonical_field,
                 capability_owner=concept.owning_capability))
 
         filters, filter_reasons = self._bind_filters(output.filters,
                                                      slot=f"{slot}.filters")
         reasons.extend(filter_reasons)
 
+        requested_geography = output.geography
+        if geography_from_dimension is not None and not requested_geography.requested:
+            requested_geography = geography_from_dimension
         geography, geo_reasons, geo_notes = self._bind_geography(
-            output.geography, slot=f"{slot}.geography")
+            requested_geography, slot=f"{slot}.geography")
         reasons.extend(geo_reasons)
         notes.extend(geo_notes)
-        if geography is None and not output.geography.requested:
+        if geography is None and not requested_geography.requested:
             geography = inherited_geography
 
         if reasons:

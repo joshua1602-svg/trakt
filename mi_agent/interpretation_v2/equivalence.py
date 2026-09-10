@@ -263,16 +263,35 @@ def observed_dimensions_from_plan(plan: GovernedQueryPlan) -> Dict[str, Any]:
     }
 
 
-def _normalise_expected(key: str, value: Any) -> Any:
+def _canonical_concept(term: Any, vocabulary) -> str:
+    """A fixture's word, resolved to the identifier the registry gives it.
+
+    The expectations are written in business words ("balance", "current_ltv")
+    and a plan binds governed identifiers ("current_outstanding_balance"). Both
+    are put through the SAME index before comparison, so the score measures
+    whether the reading agrees about the CONCEPT — not whether the fixture
+    happened to spell it the way the registry does.
+    """
+    text = str(term).strip().lower()
+    if vocabulary is None:
+        return text
+    concept = vocabulary.resolve(text)
+    return concept.concept_id if concept is not None else text
+
+
+def _normalise_expected(key: str, value: Any, vocabulary=None) -> Any:
     if value is None:
         return None
-    if key in ("measures", "statistic", "weight", "dimensions"):
+    if key in ("measures", "dimensions", "weight"):
+        return tuple(sorted(_canonical_concept(v, vocabulary) for v in value))
+    if key == "statistic":
         return tuple(sorted(str(v).strip().lower() for v in value))
     if key == "population":
         return tuple(value)
     if key == "filters":
         return tuple(sorted(
-            (str(f["concept"]).lower(), str(f["comparator"]).lower(),
+            (_canonical_concept(f["concept"], vocabulary),
+             str(f["comparator"]).lower(),
              tuple(sorted(map(str, f["value"])))
              if isinstance(f.get("value"), (list, tuple)) else f.get("value"))
             for f in value))
@@ -282,8 +301,8 @@ def _normalise_expected(key: str, value: Any) -> Any:
 
 
 def score_intent(intent, expected: Mapping[str, Any], *,
-                 plan: Optional[GovernedQueryPlan] = None
-                 ) -> Dict[str, Optional[bool]]:
+                 plan: Optional[GovernedQueryPlan] = None,
+                 vocabulary=None) -> Dict[str, Optional[bool]]:
     """Per-dimension truth against a human-reviewable fixture.
 
     A dimension the fixture does not state is scored ``None`` — NOT correct.
@@ -298,5 +317,6 @@ def score_intent(intent, expected: Mapping[str, Any], *,
         if key not in expected:
             scored[key] = None
             continue
-        scored[key] = observed.get(key) == _normalise_expected(key, expected[key])
+        scored[key] = observed.get(key) == _normalise_expected(
+            key, expected[key], vocabulary)
     return scored

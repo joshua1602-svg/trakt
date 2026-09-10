@@ -115,12 +115,28 @@ def test_headroom_is_a_capability_and_an_operation_not_an_arithmetic(compiler):
 
 
 def test_the_interpreter_is_never_shown_the_specialist_arithmetic(vocabulary):
-    """Opus can NAME the borrowing base. It cannot learn how one is built."""
-    payload = json.dumps(vocabulary.prompt_payload())
-    for internal in ("advance_rate", "advance rate", "reserve", "haircut",
-                     "eligible_balance_formula", "concentration_limit_deduction"):
-        assert internal not in payload, (
-            f"the specialist's internals leaked into the prompt: {internal!r}")
+    """Opus can NAME the borrowing base. It cannot learn how one is built.
+
+    Checked across the whole retrieval surface, not just the standing prompt:
+    the metadata tools are how the model reaches anything now, so an internal
+    that leaked through one of them would leak just as surely.
+    """
+    from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+
+    service = GovernedMetadataService(vocabulary)
+    surface = json.dumps([
+        vocabulary.orientation_payload(),
+        service.search_concepts("borrowing base", limit=40),
+        service.get_concept_metadata("borrowing_base_headroom"),
+        service.get_capability_metadata("borrowing_base"),
+        service.search_capabilities("borrowing", limit=40),
+        service.get_asset_metadata(),
+    ], default=str)
+    for internal in ("advance_rate", "advance rate", "haircut",
+                     "eligible_balance_formula", "concentration_limit_deduction",
+                     "reserve_amount"):
+        assert internal not in surface, (
+            f"the specialist's internals leaked to the model: {internal!r}")
 
     headroom = vocabulary.resolve("borrowing_base_headroom")
     assert headroom is not None

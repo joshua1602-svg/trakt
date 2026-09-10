@@ -6,20 +6,32 @@ it is consulted about one thing: what does this sentence mean?
 What the model receives
 -----------------------
     the user's question
-    the governed semantic vocabulary (terms, not columns)
     the closed enumerations it may choose from
     the CandidateIntent JSON schema
+    READ-ONLY metadata tools over Trakt's governed registries
+
+The last of those is the change measurement forced. A single flat vocabulary
+dumped into every prompt cost 24k tokens a question and still left the
+interpreter unable to verify that "drawdown" is a product; it now retrieves what
+it needs, the way an analyst inspects a workbook's headers and definitions
+before deciding what a question means.
+
+Opus may therefore SEE canonical identifiers and name them. That does not make
+it authoritative: the compiler independently re-derives existence, ambiguity,
+asset applicability, portfolio availability and physical binding for every
+concept before a plan can carry it.
 
 What the model never receives
 -----------------------------
     loan rows, borrower data, balances
     calculated portfolio values, MI answers
     dataframe contents of any kind
-    the canonical field registry
+    facility commitments, advance rates or drawn amounts
+    a reporting date or any other snapshot handle
 
-The prompt is assembled here and nowhere else, so
-``tests/interpretation_v2/test_model_sees_no_data.py`` can assert the whole
-payload — it has one function to inspect, not a call graph.
+The prompt is assembled here and nowhere else, and every metadata tool result
+comes from one dispatcher, so ``test_model_sees_no_data.py`` can assert the
+whole surface — two functions and one service to inspect, not a call graph.
 
 Structured generation
 ---------------------
@@ -60,6 +72,7 @@ from .outcomes import (
     CompileReason,
     REASON_CODES,
 )
+from .metadata import GovernedMetadataService, metadata_tool_schemas
 from .vocabulary import GovernedVocabulary, load_governed_vocabulary
 
 INTERPRETER_VERSION = "interpretation_v2.opus_interpreter/1.0.0"
@@ -78,18 +91,36 @@ except Exception:  # noqa: BLE001
 
 SYSTEM_PROMPT = """\
 You are the interpretation layer of a governed portfolio-MI system. Your ONLY \
-job is to read one business question and record what it MEANS, using the \
-governed semantic vocabulary you are given.
+job is to read one business question and record what it MEANS.
 
 You are not a query engine. You never calculate anything, you never see any \
-data, and you never choose how a figure is produced.
+data, and you never choose how a figure is produced. Everything you name is a \
+PROPOSAL: a deterministic compiler independently re-validates every concept \
+against the same governed registry before anything runs, and will refuse \
+rather than approximate.
+
+HOW TO WORK
+
+You have read-only metadata tools over Trakt's governed registries. Use them — \
+do not guess a concept identifier from memory. A normal sequence is:
+
+  * `search_concepts` to find the governed identifier for a business word;
+  * `get_concept_metadata` to confirm its role, temporality and permitted
+    statistics;
+  * `get_allowed_values` BEFORE asserting any filter value;
+  * `search_capabilities` / `get_capability_metadata` when the question asks
+    for a named analysis rather than a figure;
+  * `get_asset_metadata` and `get_portfolio_semantic_context` when the question
+    depends on what this environment actually is.
+
+Retrieve what you need, then call `emit_candidate_intent` exactly once.
 
 RULES
 
-1. Use ONLY terms from the supplied vocabulary. If the question needs a concept \
-   that is not there, do not substitute the nearest one — record it in \
-   `ambiguity` and leave the slot empty. A refusal downstream is correct; a \
-   near-miss binding is not.
+1. Name governed concept identifiers you have confirmed through the tools. If \
+   the question needs a concept the registry does not carry, do not substitute \
+   the nearest one — record it in `ambiguity` and leave the slot empty. A \
+   refusal downstream is correct; a near-miss binding is not.
 2. Never emit a database column, a table name, a snapshot identifier, a date, \
    SQL, pandas, or any code. Time is stated SEMANTICALLY: `current`, \
    `previous_reporting_period`, `relative_pair`, `explicit_period`, `range`, \
@@ -103,16 +134,18 @@ RULES
    somebody else owns. A concept marked `owned_by_capability` takes NO \
    `statistic` and NO `weight` — the capability decides both — and it needs no \
    period stated for a movement it defines itself.
-3a. A filter value must come from the dimension's `values` list. If a \
-   dimension shows no governed value list, do NOT assert a value against it: \
-   record it in `ambiguity` instead. A value you cannot check is a guess.
+3a. A filter value must come from `get_allowed_values`. If that reports \
+   `has_governed_values: false`, do NOT assert a value against it: record it in \
+   `ambiguity` with blocking=true instead. A value you cannot check is a guess.
 4. If the question asks for more than one thing about the SAME population, use \
    `outputs` — one entry per figure or table, with `filters` on an output that \
    apply only to that figure. Do not split one question into unrelated ones.
 5. Geography has two axes and both matter: `basis` is whose geography (the \
    borrower's = obligor, the property's = collateral, or the client's own \
    reporting taxonomy) and `level` is how fine. If the question says "region" \
-   without saying whose, leave `basis` empty rather than guessing.
+   without saying whose, leave `basis` empty rather than guessing — at level \
+   `reporting` a governed default resolves it, so an empty basis there is safe \
+   and is NOT a blocking ambiguity.
 6. Record `evidence`: for each material claim, the words from the question that \
    support it.
 7. `statistic` is what the question asks for. If it does not say, leave it \
@@ -131,13 +164,16 @@ Answer only by calling the `emit_candidate_intent` tool.
 class InterpreterClient(Protocol):
     """The transport boundary. Implementations own auth, retries and the SDK.
 
-    Kept this thin so tests never touch a network and a replayed run is
-    indistinguishable from a live one to everything downstream.
+    ``emit_intent`` runs the WHOLE exchange — metadata retrieval included —
+    because a client that returned one turn at a time would put the tool loop in
+    two places. The dispatcher it is handed is the only thing that can answer a
+    metadata call, and it can only answer with metadata.
     """
 
     def emit_intent(self, *, system: Sequence[Mapping[str, Any]], user: str,
-                    tool_schema: Mapping[str, Any],
-                    tool_name: str) -> "ModelResponse":
+                    tool_schema: Mapping[str, Any], tool_name: str,
+                    metadata_tools: Sequence[Mapping[str, Any]] = (),
+                    dispatch: Optional[Any] = None) -> "ModelResponse":
         ...
 
 
@@ -150,6 +186,8 @@ class ModelResponse:
     usage: Mapping[str, Any] = field(default_factory=dict)
     error: str = ""
     raw_text: str = ""
+    #: The metadata retrievals the model made on the way. Provenance only.
+    metadata_calls: Tuple[Mapping[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -166,6 +204,8 @@ class InterpretationOutcome:
     model_id: str = ""
     usage: Mapping[str, Any] = field(default_factory=dict)
     raw_payload: Optional[Mapping[str, Any]] = None
+    #: Which governed metadata the model retrieved before answering.
+    metadata_calls: Tuple[Mapping[str, Any], ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -177,22 +217,26 @@ class InterpretationOutcome:
 # --------------------------------------------------------------------------- #
 
 def build_system_blocks(vocabulary: GovernedVocabulary) -> List[Dict[str, Any]]:
-    """The standing context: the rules, then the governed vocabulary.
+    """The standing context: the rules, then a short orientation block.
 
-    The vocabulary is identical for every question in a run, so it belongs in
-    the cached prefix rather than being re-sent 135 times — a breakpoint on the
-    last block covers the tools and the system together.
+    Deliberately NOT the registry. Dumping 150 concepts into every prompt cost
+    24k tokens a question and still under-described every one of them; the model
+    now RETRIEVES what it needs through the metadata tools, the way an analyst
+    inspects the workbook's headers and definitions before deciding what a
+    question means.
 
-    Nothing in here is data. ``vocabulary.prompt_payload`` is the only source of
-    the vocabulary block and it carries no canonical fields, no rows, no totals
-    and no answers; ``test_model_sees_no_data`` asserts that over this exact
-    function's output.
+    Identical for every question in a run, so it sits in the cached prefix — a
+    breakpoint on the last block covers the tools and the system together.
+
+    Nothing in here is data. ``test_model_sees_no_data`` asserts that over this
+    exact function's output and over every metadata tool result.
     """
     return [
         {"type": "text", "text": SYSTEM_PROMPT},
         {"type": "text",
-         "text": ("GOVERNED VOCABULARY — the only terms you may use:\n"
-                  + json.dumps(vocabulary.prompt_payload(), indent=1,
+         "text": ("GOVERNED CONTEXT — the closed enumerations, and how to find "
+                  "everything else:\n"
+                  + json.dumps(vocabulary.orientation_payload(), indent=1,
                                sort_keys=True)),
          "cache_control": {"type": "ephemeral"}},
     ]
@@ -227,23 +271,34 @@ class AnthropicInterpreterClient:
     acceptance claim would be false, and the only way to know is to read it back.
     """
 
+    #: How many retrieve-then-think rounds the model gets before the intent tool
+    #: is forced. Bounded because an unbounded loop is an unbounded bill, and
+    #: because a question needing more than this many lookups is a question the
+    #: vocabulary does not describe well enough — which is a finding, not a
+    #: reason to keep paying.
+    max_rounds = 6
+
     def __init__(self, *, model: str = CONFIGURED_MODEL,
                  api_key: Optional[str] = None, max_tokens: int = 4096,
                  temperature: Optional[float] = None,
-                 timeout: float = 120.0) -> None:
+                 timeout: float = 180.0, max_rounds: Optional[int] = None) -> None:
         self.model = model
         self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._timeout = timeout
+        if max_rounds is not None:
+            self.max_rounds = max(1, int(max_rounds))
 
     @property
     def available(self) -> bool:
         return bool(self._api_key)
 
     def emit_intent(self, *, system: Sequence[Mapping[str, Any]], user: str,
-                    tool_schema: Mapping[str, Any],
-                    tool_name: str) -> ModelResponse:  # pragma: no cover - networked
+                    tool_schema: Mapping[str, Any], tool_name: str,
+                    metadata_tools: Sequence[Mapping[str, Any]] = (),
+                    dispatch: Optional[Any] = None
+                    ) -> ModelResponse:  # pragma: no cover - networked
         if not self._api_key:
             return ModelResponse(payload=None,
                                  error="no ANTHROPIC_API_KEY in the environment")
@@ -253,46 +308,83 @@ class AnthropicInterpreterClient:
             return ModelResponse(payload=None, error=f"anthropic SDK absent: {exc}")
 
         client = anthropic.Anthropic(api_key=self._api_key, timeout=self._timeout)
-        kwargs: Dict[str, Any] = {
-            "model": self.model,
-            "max_tokens": self._max_tokens,
-            "system": [dict(block) for block in system],
-            "tools": [dict(tool_schema)],
-            "tool_choice": {"type": "tool", "name": tool_name},
-            "messages": [{"role": "user", "content": user}],
-        }
-        # Not every model exposes a temperature control, and the SDK rejects the
-        # argument outright where it does not. Omitted unless asked for, so a
-        # model that has no such knob is not unreachable because of one.
-        if self._temperature is not None:
-            kwargs["temperature"] = self._temperature
-        try:
-            message = client.messages.create(**kwargs)
-        except Exception as exc:  # noqa: BLE001 - transport failure is an outcome
-            return ModelResponse(payload=None, error=f"{type(exc).__name__}: {exc}")
+        tools = [dict(t) for t in metadata_tools] + [dict(tool_schema)]
+        messages: List[Dict[str, Any]] = [{"role": "user", "content": user}]
+        usage = {"input_tokens": 0, "output_tokens": 0,
+                 "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+        calls: List[Dict[str, Any]] = []
+        model_id = ""
 
-        usage = {}
-        if getattr(message, "usage", None) is not None:
-            usage = {
-                "input_tokens": getattr(message.usage, "input_tokens", None),
-                "output_tokens": getattr(message.usage, "output_tokens", None),
-                "cache_creation_input_tokens":
-                    getattr(message.usage, "cache_creation_input_tokens", None),
-                "cache_read_input_tokens":
-                    getattr(message.usage, "cache_read_input_tokens", None),
+        for round_index in range(self.max_rounds):
+            kwargs: Dict[str, Any] = {
+                "model": self.model,
+                "max_tokens": self._max_tokens,
+                "system": [dict(block) for block in system],
+                "tools": tools,
+                "messages": messages,
             }
-        payload = None
-        text_parts: List[str] = []
-        for block in message.content or ():
-            if getattr(block, "type", "") == "tool_use" and getattr(block, "name", "") == tool_name:
-                payload = getattr(block, "input", None)
-            elif getattr(block, "type", "") == "text":
-                text_parts.append(getattr(block, "text", ""))
-        return ModelResponse(payload=payload,
-                             model_id=str(getattr(message, "model", "") or ""),
-                             usage=usage, raw_text="".join(text_parts),
-                             error="" if payload is not None
-                                   else "no tool_use block in the response")
+            # The last round FORCES the intent tool. Left to itself a model can
+            # keep retrieving; the loop has to end in a verdict, and ending it
+            # by giving up would turn a bounded budget into a silent failure.
+            kwargs["tool_choice"] = ({"type": "tool", "name": tool_name}
+                                     if round_index == self.max_rounds - 1
+                                     else {"type": "auto"})
+            # Not every model exposes a temperature control, and the SDK rejects
+            # the argument outright where it does not.
+            if self._temperature is not None:
+                kwargs["temperature"] = self._temperature
+            try:
+                message = client.messages.create(**kwargs)
+            except Exception as exc:  # noqa: BLE001 - transport failure is an outcome
+                return ModelResponse(payload=None, usage=usage, model_id=model_id,
+                                     error=f"{type(exc).__name__}: {exc}",
+                                     metadata_calls=tuple(calls))
+
+            model_id = str(getattr(message, "model", "") or "") or model_id
+            if getattr(message, "usage", None) is not None:
+                for key in usage:
+                    usage[key] += int(getattr(message.usage, key, 0) or 0)
+
+            payload = None
+            text_parts: List[str] = []
+            metadata_requests: List[Any] = []
+            for block in message.content or ():
+                kind = getattr(block, "type", "")
+                if kind == "tool_use":
+                    if getattr(block, "name", "") == tool_name:
+                        payload = getattr(block, "input", None)
+                    else:
+                        metadata_requests.append(block)
+                elif kind == "text":
+                    text_parts.append(getattr(block, "text", ""))
+
+            if payload is not None:
+                return ModelResponse(payload=payload, model_id=model_id,
+                                     usage=usage, raw_text="".join(text_parts),
+                                     metadata_calls=tuple(calls))
+
+            if not metadata_requests:
+                return ModelResponse(payload=None, model_id=model_id, usage=usage,
+                                     raw_text="".join(text_parts),
+                                     error="no tool_use block in the response",
+                                     metadata_calls=tuple(calls))
+
+            messages.append({"role": "assistant", "content": message.content})
+            results = []
+            for block in metadata_requests:
+                name = getattr(block, "name", "")
+                arguments = getattr(block, "input", {}) or {}
+                result = (dispatch(name, arguments) if dispatch is not None
+                          else {"error": "no metadata service available"})
+                calls.append({"tool": name, "arguments": dict(arguments)})
+                results.append({"type": "tool_result",
+                                "tool_use_id": getattr(block, "id", ""),
+                                "content": json.dumps(result, default=str)})
+            messages.append({"role": "user", "content": results})
+
+        return ModelResponse(payload=None, model_id=model_id, usage=usage,
+                             error=f"no intent after {self.max_rounds} rounds",
+                             metadata_calls=tuple(calls))
 
 
 class ReplayClient:
@@ -310,8 +402,9 @@ class ReplayClient:
         self._model_id = model_id
 
     def emit_intent(self, *, system: Sequence[Mapping[str, Any]], user: str,
-                    tool_schema: Mapping[str, Any],
-                    tool_name: str) -> ModelResponse:
+                    tool_schema: Mapping[str, Any], tool_name: str,
+                    metadata_tools: Sequence[Mapping[str, Any]] = (),
+                    dispatch: Optional[Any] = None) -> ModelResponse:
         question = user.rsplit("QUESTION:\n", 1)[-1].split("\n\nRecord what")[0].strip()
         if question not in self._payloads:
             return ModelResponse(payload=None,
@@ -340,23 +433,32 @@ class OpusInterpreter:
     version = INTERPRETER_VERSION
 
     def __init__(self, client: InterpreterClient, *,
-                 vocabulary: Optional[GovernedVocabulary] = None) -> None:
+                 vocabulary: Optional[GovernedVocabulary] = None,
+                 metadata: Optional[GovernedMetadataService] = None) -> None:
         self.client = client
         self.vocabulary = vocabulary or load_governed_vocabulary()
+        #: The metadata service reads from the SAME index the compiler validates
+        #: against. A service that drifted from it would advertise concepts that
+        #: then refuse, which is worse than showing the model nothing.
+        self.metadata = metadata or GovernedMetadataService(self.vocabulary)
 
     def interpret(self, question: str) -> InterpretationOutcome:
         system = build_system_blocks(self.vocabulary)
         user = build_user_prompt(question)
-        response = self.client.emit_intent(system=system, user=user,
-                                           tool_schema=build_tool_schema(),
-                                           tool_name=INTENT_TOOL_NAME)
+        service = GovernedMetadataService(self.vocabulary)
+        response = self.client.emit_intent(
+            system=system, user=user, tool_schema=build_tool_schema(),
+            tool_name=INTENT_TOOL_NAME,
+            metadata_tools=metadata_tool_schemas(),
+            dispatch=service.call)
 
         if response.payload is None:
             return InterpretationOutcome(
                 question=question,
                 reason=CompileReason(MODEL_UNAVAILABLE, "interpreter",
                                      response.error or "no payload returned"),
-                model_id=response.model_id, usage=response.usage)
+                model_id=response.model_id, usage=response.usage,
+                metadata_calls=response.metadata_calls)
 
         provenance = IntentProvenance(
             question=question,
@@ -373,19 +475,22 @@ class OpusInterpreter:
                 question=question,
                 reason=CompileReason(code, exc.subject, exc.detail),
                 model_id=response.model_id, usage=response.usage,
-                raw_payload=response.payload)
+                raw_payload=response.payload,
+                metadata_calls=response.metadata_calls)
         except Exception as exc:  # noqa: BLE001 - any parse failure is a refusal
             return InterpretationOutcome(
                 question=question,
                 reason=CompileReason(MODEL_OUTPUT_MALFORMED, "intent",
                                      f"{type(exc).__name__}: {exc}"),
                 model_id=response.model_id, usage=response.usage,
-                raw_payload=response.payload)
+                raw_payload=response.payload,
+                metadata_calls=response.metadata_calls)
 
         return InterpretationOutcome(question=question, intent=intent,
                                      model_id=response.model_id,
                                      usage=response.usage,
-                                     raw_payload=response.payload)
+                                     raw_payload=response.payload,
+                                     metadata_calls=response.metadata_calls)
 
 
 def interpret_and_compile(question: str, interpreter: OpusInterpreter,
