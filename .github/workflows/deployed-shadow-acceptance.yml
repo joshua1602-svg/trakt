@@ -1,0 +1,173 @@
+name: Deployed slice 1 shadow acceptance
+
+# Runs the 12-case deployed shadow acceptance against the REAL authenticated API,
+# adjudicating against the manifest hashed and committed before any model call:
+# due_diligence/evidence/deployed_acceptance_0399a315/acceptance_manifest.json.
+#
+# WHAT IT PROVES, in the order it proves it. The served commit is confirmed first,
+# through the estate's existing `certify_mi_api.preflight`, and a mismatch is NOT
+# EXECUTABLE rather than a pass. Then the shadow evidence sink is proved READABLE
+# from this runner, BEFORE a single model call is spent — an acceptance that cannot
+# read the evidence can only produce a transcript. Only then are the 12 questions
+# asked, each followed by a bounded poll of the sink, and only then is anything
+# adjudicated.
+#
+# WHAT IT DELIBERATELY DOES NOT DO.
+#
+#   IT DOES NOT ENABLE OR DISABLE THE SHADOW. `MI_AGENT_PLAN_SHADOW`,
+#   `MI_AGENT_PLAN_SHADOW_CLIENTS` and `MI_AGENT_PLAN_SHADOW_EVIDENCE` are App
+#   Service settings, and changing them needs ARM access. This repository's
+#   mi-api automation holds a PUBLISH PROFILE, which grants Kudu and nothing
+#   else — so the canary must already be configured when this runs, and turning
+#   it off afterwards is an operator action. The final step says so on every run,
+#   pass or fail, and the evidence records it as outstanding rather than claiming
+#   it was done.
+#
+#   IT DOES NOT DEPLOY BY DEFAULT. `deploy: true` chains to the existing
+#   deploy-mi-api workflow rather than copying its packaging. With `deploy:
+#   false` the acceptance runs against whatever is already serving, and
+#   `expect_commit` is what makes that safe.
+#
+# THE TOKEN. `MI_BEARER` and the publish profile reach the harness through `env:`
+# only. Neither is ever interpolated into a `run:` script, echoed, or passed as an
+# argv value — a secret in argv lands in process listings and logs. Only their
+# LENGTHS are printed, the harness writes neither into its evidence, and it
+# re-scans the serialised output for both and refuses to write the file if either
+# survived.
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the checked-out ref first, through deploy-mi-api.
+        type: boolean
+        default: false
+      expect_commit:
+        description: The deployed SHA this acceptance is certifying.
+        required: true
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      path:
+        default: /mi/query
+        required: true
+      portfolio_id:
+        description: >-
+          The CANARY portfolio. Its client half must be the one id configured in
+          MI_AGENT_PLAN_SHADOW_CLIENTS.
+        default: ERE/2026-06-30
+        required: true
+      non_canary_portfolio_id:
+        description: >-
+          Optional second portfolio, for a real isolation probe. Leave empty and
+          isolation is reported UNPROVEN rather than assumed.
+        default: ''
+      evidence_path:
+        description: The shadow evidence sink path configured on the App Service.
+        default: /home/LogFiles/mi-plan-shadow/evidence.jsonl
+        required: true
+      poll_interval_seconds:
+        default: '2'
+        required: true
+      poll_timeout_seconds:
+        description: Per request. A timeout is ASYNC_EVIDENCE_LOST, not a failure.
+        default: '60'
+        required: true
+      ref:
+        description: Repo ref to take the harness from.
+        default: main
+        required: true
+
+permissions:
+  contents: read
+
+# One acceptance at a time, and never cancelled mid-flight: the canary allows a
+# single shadow in flight, so two overlapping runs would skip each other's
+# requests as SHADOW_SKIPPED_BUSY and adjudicate nothing.
+concurrency:
+  group: deployed-shadow-acceptance-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ inputs.deploy }}
+    uses: ./.github/workflows/deploy-mi-api.yml
+    secrets: inherit
+
+  accept:
+    needs: [deploy]
+    # `always()` so the acceptance still runs when the deploy job was SKIPPED,
+    # which is the default path. A FAILED deploy must not be accepted.
+    if: ${{ always() && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refuse to run without the credentials this needs
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"
+            exit 1
+          fi
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::repository secret AZURE_MI_API_PUBLISH_PROFILE is not \
+          set; the shadow evidence sink cannot be read without it"
+            exit 1
+          fi
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      - name: Run the 12-case deployed shadow acceptance
+        env:
+          # Secrets: env only, never argv, never echoed.
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          # Inputs through env too, so no dispatch value is ever pasted into a
+          # shell command line.
+          BASE_URL: ${{ inputs.base_url }}
+          API_PATH: ${{ inputs.path }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id }}
+          NON_CANARY_PORTFOLIO_ID: ${{ inputs.non_canary_portfolio_id }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit }}
+          EVIDENCE_PATH: ${{ inputs.evidence_path }}
+          POLL_INTERVAL: ${{ inputs.poll_interval_seconds }}
+          POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/deployed_acceptance_0399a315/run_acceptance.py \
+            --base-url "$BASE_URL" \
+            --path "$API_PATH" \
+            --portfolio-id "$PORTFOLIO_ID" \
+            --non-canary-portfolio-id "$NON_CANARY_PORTFOLIO_ID" \
+            --expect-commit "$EXPECT_COMMIT" \
+            --evidence-path "$EVIDENCE_PATH" \
+            --poll-interval "$POLL_INTERVAL" \
+            --poll-timeout "$POLL_TIMEOUT" \
+            --json-out deployed-shadow-acceptance.json
+
+      - name: Keep the evidence whatever the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployed-shadow-acceptance
+          path: deployed-shadow-acceptance.json
+          if-no-files-found: warn
+
+      - name: Turn the shadow back off
+        if: always()
+        run: |
+          echo "::warning::This workflow cannot change App Service settings — it \
+          holds a publish profile (Kudu), not ARM access. Set \
+          MI_AGENT_PLAN_SHADOW back to off on trakt-mi-api now. The acceptance \
+          is not finished until that is done, whatever the verdict above."
