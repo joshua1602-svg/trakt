@@ -216,6 +216,41 @@ def _record_spec(spec: Any) -> Optional[Dict[str, Any]]:
         return None
 
 
+def record_plan_stages(body: Dict[str, Any], outcome: Any, compiled: Any) -> None:
+    """Fill the model / interpretation / compiler stages of one record.
+
+    ONE OWNER FOR THE RECORD SHAPE. The slice 1B serving canary records the same
+    three stages, and the deployed acceptance adjudicates on these exact keys —
+    two copies of this that drifted would corrupt the evidence corpus rather than
+    merely duplicate code, so both callers come here.
+    """
+    body["model"] = {
+        "model_id": outcome.model_id,
+        "usage": dict(outcome.usage or {}),
+        "raw_payload": outcome.raw_payload,
+        "metadata_calls": [dict(call) for call in
+                           (outcome.metadata_calls or ())],
+        "failure": (outcome.reason.to_dict()
+                    if (outcome.reason is not None and not outcome.ok)
+                    else None),
+    }
+    # The ambiguities are read off the SERIALISED intent rather than off the
+    # dataclass: `CandidateIntent.to_dict` is an `asdict`, so it already
+    # carries them whole, and `Ambiguity` has no `to_dict` of its own — asking
+    # it for one raised and lost the entire record. Caught by these tests.
+    intent_body = (outcome.intent.to_dict()
+                   if outcome.intent is not None else None)
+    body["interpretation"] = {
+        "produced_intent": bool(outcome.ok),
+        "candidate_intent": intent_body,
+        "ambiguities": list((intent_body or {}).get("ambiguity") or ()),
+    }
+    body["compiler"] = dict(compiled.to_dict(),
+                            reason_codes=list(compiled.codes()),
+                            plan_id=(compiled.plan.plan_id
+                                     if compiled.is_plan else None))
+
+
 def _shadow(*, question: str, client_id: Optional[str], run_id: Optional[str],
             result: Any, frame: Any, semantics: Any, view: Optional[str],
             portfolio_id: Optional[str], cid: str) -> Dict[str, Any]:
@@ -228,33 +263,7 @@ def _shadow(*, question: str, client_id: Optional[str], run_id: Optional[str],
                                portfolio_id=portfolio_id)
     try:
         outcome, compiled = build_plan(question)
-
-        body["model"] = {
-            "model_id": outcome.model_id,
-            "usage": dict(outcome.usage or {}),
-            "raw_payload": outcome.raw_payload,
-            "metadata_calls": [dict(call) for call in
-                               (outcome.metadata_calls or ())],
-            "failure": (outcome.reason.to_dict()
-                        if (outcome.reason is not None and not outcome.ok)
-                        else None),
-        }
-        # The ambiguities are read off the SERIALISED intent rather than off the
-        # dataclass: `CandidateIntent.to_dict` is an `asdict`, so it already
-        # carries them whole, and `Ambiguity` has no `to_dict` of its own — asking
-        # it for one raised and lost the entire record. Caught by these tests.
-        intent_body = (outcome.intent.to_dict()
-                       if outcome.intent is not None else None)
-        body["interpretation"] = {
-            "produced_intent": bool(outcome.ok),
-            "candidate_intent": intent_body,
-            "ambiguities": list((intent_body or {}).get("ambiguity") or ()),
-        }
-        compiled_body = compiled.to_dict()
-        body["compiler"] = dict(compiled_body,
-                                reason_codes=list(compiled.codes()),
-                                plan_id=(compiled.plan.plan_id
-                                         if compiled.is_plan else None))
+        record_plan_stages(body, outcome, compiled)
 
         if not outcome.ok:
             body["disposition"] = evidence.INTERPRETER_FAILURE

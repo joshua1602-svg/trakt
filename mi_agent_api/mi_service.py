@@ -606,7 +606,8 @@ def execute_governed_mi_query(
         # and the frame is not resolved until inside; `_run_analysis` binds into
         # it as soon as the book is in hand, and this `with` tears it down.
         with _parser_mod.geography_context(None):
-            payload = _run_analysis(request, authorised, view, deps)
+            payload = _run_analysis(request, authorised, view, deps,
+                                    context=context)
     except Exception as exc:  # noqa: BLE001 - surface a refusal, never a 500
         logger.exception("MI analysis failed for question=%r portfolio=%r",
                          request.question, authorised.portfolio_id)
@@ -1613,7 +1614,8 @@ def _guard_unresolved_scope(envelope: Dict[str, Any], *, question: str,
 
 
 def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: str,
-                  deps: CapabilityDependencies) -> Dict[str, Any]:
+                  deps: CapabilityDependencies, *,
+                  context: Optional[ExecutionContext] = None) -> Dict[str, Any]:
     """The analytical pipeline.
 
     The question is parsed **once**, above routing, and the resulting
@@ -1625,6 +1627,12 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     Routed governed capabilities first (compare / evolution / forecast / risk /
     geo / cohort / bridge / scenario); anything unmatched falls through to the
     deterministic point-in-time executor.
+
+    `context` is the TRUSTED caller identity, and the only thing read from it is
+    `actor_id` — the slice 1B serving canary is an allow-list of individuals, and
+    the authenticated principal is the one fact that can decide membership.
+    ``None`` means no identity was threaded, which is the fail-closed state: the
+    canary cannot match and the legacy path serves.
     """
     from mi_agent.mi_agent_workflow import run_mi_agent_query
     from mi_agent.mi_query_validator import load_mi_semantics
@@ -1931,11 +1939,31 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # whenever the flag was on. That was false: the call passed no plan and
     # nothing in production installed a plan provider, so the shadow was inert.
     # The deployed-shadow preflight found it; this is the wiring it was missing.
-    from mi_agent import plan_shadow_wiring as _plan_shadow
-    _plan_shadow.observe_request(question=req.question, client_id=client_id,
-                                 run_id=run_id, result=result, frame=df,
-                                 semantics=semantics, view=view,
-                                 portfolio_id=authorised.portfolio_id)
+    #
+    # SLICE 1B — THE SERVING CANARY. For ONE allow-listed principal the eligible
+    # slice 1 result may BECOME this response; for everybody else this is the
+    # shadow above and nothing else. The two are exclusive because a request the
+    # canary handled has already bought its interpretation, and shadowing it
+    # would buy a second and compare the new result against itself.
+    #
+    # The legacy envelope is complete before either runs, so `serve` returning
+    # None — off, ineligible, clarify, refuse, any failure — leaves `result`
+    # exactly as the legacy path built it.
+    from mi_agent import plan_serving_canary as _plan_serving
+    if _plan_serving.handles(context):
+        served = _plan_serving.serve(
+            question=req.question, context=context, client_id=client_id,
+            run_id=run_id, legacy_result=result, frame=df, semantics=semantics,
+            view=view, portfolio_id=authorised.portfolio_id,
+            render_portfolio_id=portfolio_id, as_of=req.as_of_date)
+        if served is not None:
+            result = served
+    else:
+        from mi_agent import plan_shadow_wiring as _plan_shadow
+        _plan_shadow.observe_request(question=req.question, client_id=client_id,
+                                     run_id=run_id, result=result, frame=df,
+                                     semantics=semantics, view=view,
+                                     portfolio_id=authorised.portfolio_id)
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              geography=geography,
