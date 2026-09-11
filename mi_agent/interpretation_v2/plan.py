@@ -177,6 +177,12 @@ class PopulationBinding:
     #: own filters, so the two channels stay distinguishable (see
     #: mi_agent.population — scope and row predicates are not one thing).
     scope_predicates: Tuple[FilterBinding, ...] = ()
+    #: The named source portfolio the question asked for, as the reader named it,
+    #: and the canonical id it was bound to. Both, because an audit has to be
+    #: able to see WHAT WAS ASKED beside WHAT IT BECAME — the id alone cannot
+    #: show that "the ALP book" was the phrase that produced it.
+    source_reference: Optional[str] = None
+    source_portfolio_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -274,6 +280,26 @@ class GovernedQueryPlan:
         population = body.get("population") or {}
         population["scope_predicates"] = sorted(
             population.get("scope_predicates") or [], key=_stable)
+        # NORMALISATION 2. A named source portfolio is carried twice: as the
+        # reader's WORDING (`source_reference`) and as the id it resolved to
+        # (`source_portfolio_id`). Neither belongs in the identity.
+        #
+        # The wording is how it was asked — "the ALP back book" and "ALP
+        # Acquired Back Book" name one book, and a hash that noticed would call
+        # two phrasings of one analysis divergent, which is the very thing the
+        # period-label normalisation above exists to prevent.
+        #
+        # The resolved id is authorised content, but it is already in the
+        # identity: binding it PRODUCED the `source_portfolio_id` scope
+        # predicate hashed just above. Hashing it again would only mean a plan
+        # that names a book and a plan that filters to it directly differ for no
+        # difference in the work.
+        #
+        # Together this also keeps every plan_id recorded before named sources
+        # existed exactly as it was, which is what lets the sign-off corpus
+        # still replay.
+        population.pop("source_reference", None)
+        population.pop("source_portfolio_id", None)
         # NORMALISATION 1. A period label is the question's own wording. Where
         # the contract already settles the window without it, it is not part of
         # what was AUTHORISED — only of how it was asked.

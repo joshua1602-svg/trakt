@@ -50,6 +50,7 @@ from .outcomes import (
     AMBIGUOUS_GEOGRAPHY,
     AMBIGUOUS_MEASURE,
     AMBIGUOUS_PERIOD,
+    AMBIGUOUS_POPULATION,
     CAPABILITY_UNAVAILABLE,
     CONCEPT_UNAVAILABLE,
     CONFLICTING_CLAIMS,
@@ -205,6 +206,9 @@ _ORDERED_FORMATS = frozenset({"integer", "number", "float", "decimal",
 #: The governed field carrying each population axis. The compiler picks these;
 #: the model names only the semantic axis value.
 _POPULATION_LENS_FIELD = "source_portfolio_type"
+#: The governed IDENTITY column a named source portfolio binds to. Distinct from
+#: the role column above: one says which book, the other what kind.
+_SOURCE_ID_FIELD = "source_portfolio_id"
 _POPULATION_SEASONING_FIELD = "seasoning_segment"
 _POPULATION_BASE_FIELD = "funded_status"
 
@@ -228,18 +232,27 @@ class CompilerContext:
     """
 
     __slots__ = ("vocabulary", "capabilities", "available_fields", "book_id",
-                 "interpreter_vocabulary")
+                 "interpreter_vocabulary", "source_registry")
 
     def __init__(self, vocabulary: Optional[GovernedVocabulary] = None, *,
                  capabilities: Optional[Iterable[str]] = None,
                  available_fields: Optional[Iterable[str]] = None,
-                 book_id: Optional[str] = None) -> None:
+                 book_id: Optional[str] = None,
+                 source_registry: Any = None) -> None:
         self.vocabulary = vocabulary or load_governed_vocabulary()
         self.capabilities: FrozenSet[str] = (
             frozenset(capabilities) & self.vocabulary.capabilities
             if capabilities is not None else self.vocabulary.capabilities)
         self.available_fields: FrozenSet[str] = frozenset(
             str(f).strip() for f in (available_fields or ()) if f)
+        #: THE CLIENT'S GOVERNED SOURCE PORTFOLIOS, for binding a named source.
+        #: A `trakt_core.portfolio.PortfolioRegistry`, or None where the caller
+        #: supplied none — in which case a question naming a source is REFUSED,
+        #: because a name that cannot be checked against anything is a name
+        #: nobody governed. It is the same kind of per-book knowledge as
+        #: `available_fields` and `book_id`, and it is client-scoped by
+        #: construction: a registry is built for one client.
+        self.source_registry = source_registry
         self.book_id = book_id
         #: The narrowed view to hand an interpreter for this book.
         self.interpreter_vocabulary = (
@@ -469,6 +482,7 @@ class DeterministicCompiler:
         reasons: List[CompileReason] = []
         notes: List[str] = []
         predicates: List[FilterBinding] = []
+        bound_source_id: Optional[str] = None
 
         # Only a NON-default axis produces a predicate. The default book state
         # is a dataset selection, not a row filter, and conflating the two is
@@ -484,6 +498,21 @@ class DeterministicCompiler:
                 reasons.append(CompileReason(
                     CONCEPT_UNAVAILABLE, "population.lens",
                     f"this book carries no {_POPULATION_LENS_FIELD}"))
+        # A NAMED SOURCE IS AN IDENTITY, bound to the identity column. It is a
+        # separate axis from the lens above: a role says which KIND of book, a
+        # name says WHICH book, and a client may hold two acquired ones. Both may
+        # be stated, and both then apply — the registry decides whether they
+        # agree, not this module.
+        if population.source_reference:
+            predicate, reason = self._bind_source(population.source_reference)
+            if reason is not None:
+                reasons.append(reason)
+            else:
+                predicates.append(predicate)
+                notes.append(f"source {population.source_reference!r} bound to "
+                             f"{_SOURCE_ID_FIELD}={predicate.value!r}")
+                bound_source_id = predicate.value
+
         if population.seasoning != "any":
             if self.context.field_present(_POPULATION_SEASONING_FIELD):
                 predicates.append(FilterBinding(
@@ -507,8 +536,48 @@ class DeterministicCompiler:
 
         return (PopulationBinding(base=population.base, lens=population.lens,
                                   seasoning=population.seasoning,
-                                  scope_predicates=tuple(predicates)),
+                                  scope_predicates=tuple(predicates),
+                                  source_reference=population.source_reference,
+                                  source_portfolio_id=bound_source_id),
                 reasons, notes)
+
+    def _bind_source(self, reference: str):
+        """A governed source NAME -> a predicate on the identity column.
+
+        Every way this can fail refuses. There is no nearest match, no widening
+        to the whole book, and no falling back to a role: answering about a book
+        the reader did not name is the failure this axis exists to prevent, and
+        it is indistinguishable from a correct answer once rendered.
+        """
+        from trakt_core.portfolio import SOURCE_AMBIGUOUS, SOURCE_UNKNOWN
+
+        registry = self.context.source_registry
+        if registry is None:
+            return None, CompileReason(
+                CONCEPT_UNAVAILABLE, "population.source_reference",
+                f"no governed source registry is available for this book, so "
+                f"{reference!r} cannot be resolved to a portfolio")
+        if not self.context.field_present(_SOURCE_ID_FIELD):
+            return None, CompileReason(
+                CONCEPT_UNAVAILABLE, "population.source_reference",
+                f"this book carries no {_SOURCE_ID_FIELD}")
+
+        record, why = registry.resolve_reference(reference)
+        if record is None:
+            declared = sorted({n for n in registry.declared_names()})
+            if why == SOURCE_AMBIGUOUS:
+                return None, CompileReason(
+                    AMBIGUOUS_POPULATION, "population.source_reference",
+                    f"{reference!r} names more than one governed portfolio; "
+                    f"name one of {declared}")
+            assert why == SOURCE_UNKNOWN
+            return None, CompileReason(
+                CONCEPT_UNAVAILABLE, "population.source_reference",
+                f"{reference!r} is not a governed source portfolio for this "
+                f"book; it governs {declared}")
+        return FilterBinding(concept="source_portfolio", comparator="eq",
+                             canonical_field=_SOURCE_ID_FIELD,
+                             value=record.portfolio_id), None
 
     def _bind_period(self, intent: CandidateIntent
                      ) -> Tuple[PeriodBinding, List[CompileReason]]:

@@ -99,6 +99,12 @@ REASON_NO_ROWS_IN_SCOPE = "NO_ROWS_IN_SCOPE"
 REASON_NO_PORTFOLIOS_IN_SCOPE = "NO_PORTFOLIOS_IN_SCOPE"
 REASON_NOT_APPLICABLE = "NOT_APPLICABLE"
 
+#: A named source portfolio that no governed name matches. Refused, never
+#: widened to Total and never matched to the nearest book.
+SOURCE_UNKNOWN = "SOURCE_UNKNOWN"
+#: A name more than one governed book answers to. Clarified, never picked.
+SOURCE_AMBIGUOUS = "SOURCE_AMBIGUOUS"
+
 #: Forecast treatments. ``origination`` books project new lending; ``runoff``
 #: books amortise down a SUPPLIED curve; ``hold_constant`` books are carried flat
 #: because no governed runoff assumption exists. Trakt never invents a curve.
@@ -162,10 +168,31 @@ class PortfolioRecord:
     row_count: Optional[int] = None
     #: True when the portfolio is present in the canonical data (vs metadata-only).
     present_in_data: bool = True
+    #: GOVERNED NAMES FOR THIS BOOK, declared at onboarding. What a reader calls
+    #: it, so a question naming it can be resolved to this id without anybody
+    #: guessing. Production ids are opaque client strings — `alp_acquired` — and
+    #: nobody says those out loud; without a declared alias a named question
+    #: REFUSES rather than being matched by shape.
+    aliases: Tuple[str, ...] = ()
 
     @property
     def display_label(self) -> str:
         return self.label or self.portfolio_id
+
+    @property
+    def names(self) -> Tuple[str, ...]:
+        """Every governed way to name this book: its id, its label, its aliases.
+
+        The id is included because it IS a governed name — a caller holding one
+        from a dropdown must resolve by the same call as a reader saying the
+        book's name, or there are two resolvers.
+        """
+        found: List[str] = []
+        for name in (self.portfolio_id, self.label) + tuple(self.aliases):
+            cleaned = _clean(name)
+            if cleaned and cleaned.lower() not in {f.lower() for f in found}:
+                found.append(cleaned)
+        return tuple(found)
 
     @property
     def has_runoff_profile(self) -> bool:
@@ -185,6 +212,7 @@ class PortfolioRecord:
             "reporting_dates": list(self.reporting_dates),
             "row_count": self.row_count,
             "present_in_data": self.present_in_data,
+            "aliases": list(self.aliases),
         }
 
 
@@ -214,6 +242,46 @@ class PortfolioRegistry:
             if p.portfolio_id.lower() == low:
                 return p
         return None
+
+    def resolve_reference(self, reference: Optional[str]
+                          ) -> Tuple[Optional["PortfolioRecord"], str]:
+        """A governed NAME -> `(record, reason)`. The one owner of that lookup.
+
+        `reason` is `""` on a hit, `SOURCE_UNKNOWN` when no governed name
+        matches, and `SOURCE_AMBIGUOUS` when more than one book answers to it.
+        Neither miss returns a record, because the two ways of being wrong here
+        are answering about a book the reader did not name and answering about
+        one of several they might have meant.
+
+        MATCHING IS EXACT, case-folded and whitespace-trimmed, against names the
+        client DECLARED — id, label, alias. No prefix matching, no edit
+        distance, no "nearest": a book is not a search result. A reader whose
+        phrasing is not yet declared gets a refusal naming what is available,
+        which is an onboarding gap somebody can close, rather than a confident
+        answer about the wrong portfolio.
+
+        CLIENT SCOPE IS STRUCTURAL. A registry is built for ONE client, so a
+        reference can only ever reach that client's books; there is no argument
+        here by which another client's portfolio could be named.
+        """
+        wanted = _clean(reference)
+        if not wanted:
+            return None, SOURCE_UNKNOWN
+        low = wanted.lower()
+        matches = [p for p in self.portfolios
+                   if low in {n.lower() for n in p.names}]
+        if not matches:
+            return None, SOURCE_UNKNOWN
+        if len({m.portfolio_id for m in matches}) > 1:
+            return None, SOURCE_AMBIGUOUS
+        return matches[0], ""
+
+    def declared_names(self) -> List[str]:
+        """Every governed name in this registry — for a refusal that helps."""
+        found: List[str] = []
+        for portfolio in self.portfolios:
+            found.extend(portfolio.names)
+        return found
 
     def ids(self) -> List[str]:
         return [p.portfolio_id for p in self.portfolios]
@@ -323,6 +391,21 @@ def _registry_sort_key(record: "PortfolioRecord") -> Tuple[int, str]:
     rank = PORTFOLIO_TYPES.index(ptype) if ptype in PORTFOLIO_TYPES else (
         len(PORTFOLIO_TYPES) if ptype else len(PORTFOLIO_TYPES) + 1)
     return rank, record.portfolio_id.lower()
+
+
+def _aliases_of(cfg: Mapping[str, Any]) -> Tuple[str, ...]:
+    """The governed aliases a portfolio entry declares, cleaned and de-duplicated."""
+    raw = cfg.get("aliases")
+    if raw is None:
+        return ()
+    if isinstance(raw, (str, bytes)):
+        raw = [raw]
+    found: List[str] = []
+    for value in raw:
+        cleaned = _clean(value)
+        if cleaned and cleaned.lower() not in {f.lower() for f in found}:
+            found.append(cleaned)
+    return tuple(found)
 
 
 def build_registry(
@@ -461,6 +544,11 @@ def build_registry(
             reporting_dates=reporting_dates,
             row_count=slot.get("row_count"),
             present_in_data=bool(slot.get("seen")),
+            # DECLARED NAMES ONLY. There is deliberately no inference from the id
+            # or the label — the same rule the asset class follows above, and for
+            # the same reason: a guessed name resolves a reader's question to a
+            # book nobody chose.
+            aliases=_aliases_of(cfg),
         ))
     out.sort(key=_registry_sort_key)
     return PortfolioRegistry(portfolios=tuple(out), client_id=client_id)

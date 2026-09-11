@@ -85,6 +85,11 @@ ELIGIBLE_PERIOD_FORMS = frozenset({"current"})
 #: default; this adapter does not widen the vocabulary, it stops refusing it.
 GOVERNED_LENS_ROLES = frozenset({"direct", "acquired"})
 
+#: The two governed scope columns. A ROLE says what kind of book; a NAME says
+#: which one. Different axes, different columns, and both may apply at once.
+_ROLE_FIELD = "source_portfolio_type"
+_SOURCE_ID_FIELD = "source_portfolio_id"
+
 #: The population lenses the governed path may execute.
 #:
 #: `""` / `all` / `total` / `none` all state the whole funded book and produce no
@@ -291,12 +296,22 @@ def check_structure(plan: Any) -> Tuple[bool, str, str]:
     # one failure a scope axis exists to prevent. Refused rather than repaired:
     # inventing the predicate here would make this module a second owner of what
     # a role means.
-    if lens in GOVERNED_LENS_ROLES and not [
-            predicate for predicate in (population.get("scope_predicates") or ())
-            if str(predicate.get("canonical_field") or "")]:
+    bound_scope = {str(predicate.get("canonical_field") or "")
+                   for predicate in (population.get("scope_predicates") or ())
+                   if str(predicate.get("canonical_field") or "")}
+    if lens in GOVERNED_LENS_ROLES and _ROLE_FIELD not in bound_scope:
         return (False, SCOPE_NOT_BOUND,
                 f"population.lens={lens!r} states a governed role and the plan "
                 f"carries no scope predicate to apply it")
+    # THE SAME RULE FOR A NAMED BOOK. A plan naming "the ALP back book" with no
+    # predicate on the identity column would be computed over every book and
+    # labelled with the one book the reader asked about.
+    if str(population.get("source_reference") or "").strip() \
+            and _SOURCE_ID_FIELD not in bound_scope:
+        return (False, SCOPE_NOT_BOUND,
+                f"population.source_reference="
+                f"{population.get('source_reference')!r} names a portfolio and "
+                f"the plan carries no scope predicate to apply it")
 
     # GEOGRAPHY IS ITS OWN OWNER, AND THIS SLICE BINDS NONE OF IT. A plan's
     # geography binding carries a resolved basis and level chosen by

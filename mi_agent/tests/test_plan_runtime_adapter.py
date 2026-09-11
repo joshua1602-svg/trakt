@@ -811,5 +811,213 @@ class TestScopeFailsClosed(unittest.TestCase):
         assert adapter.GOVERNED_LENS_ROLES <= adapter.ELIGIBLE_POPULATION_LENS
 
 
+# --------------------------------------------------------------------------- #
+# SLICE 3 — the NAMED source portfolio
+# --------------------------------------------------------------------------- #
+#
+# A ROLE and a NAME are different axes. `population.lens` says what KIND of book
+# (direct / acquired), a universal enum; `population.source_reference` says WHICH
+# book, and that is client-specific, so it cannot be an enum in a client-agnostic
+# schema. The model states the name as the reader said it and the compiler binds
+# it against that client's governed registry — the model never authors an id, a
+# path or a dataset.
+#
+# Production ids are opaque client strings (`alp_acquired`). Nobody says those,
+# so resolution is by DECLARED name — id, label, or an alias the client declared
+# at onboarding — and nothing else. No prefix match, no edit distance, no
+# nearest: a book is not a search result.
+
+SOURCE_ID_FIELD = "source_portfolio_id"
+_IDS = ("alp_origination", "alp_acquired", "nbs_acquired")
+_TYPES = {"alp_origination": "direct", "alp_acquired": "acquired",
+          "nbs_acquired": "acquired"}
+
+
+def sourced_book():
+    """The oracle's book with governed provenance, assigned by ROW INDEX."""
+    from mi_agent.tests import portfolio_truth_oracle as _truth
+    book = _truth.canonical_book().reset_index(drop=True)
+    book[SOURCE_ID_FIELD] = [_IDS[i % 3] for i in range(len(book))]
+    book["source_portfolio_type"] = [_TYPES[x] for x in book[SOURCE_ID_FIELD]]
+    return book
+
+
+SOURCED = sourced_book()
+
+
+def governed_registry(metadata=None, client_id="ERE"):
+    from trakt_core.portfolio import build_registry
+    return build_registry(
+        [{"source_portfolio_id": i, "source_portfolio_type": _TYPES[i]}
+         for i in _IDS],
+        metadata=metadata if metadata is not None else {
+            "alp_acquired": {"source_portfolio_label": "ALP Acquired Back Book",
+                             "aliases": ["ALP back book"]},
+            "nbs_acquired": {"source_portfolio_label": "NBS Acquired",
+                             "aliases": ["the NBS book"]},
+            "alp_origination": {"source_portfolio_label": "ALP Originations"}},
+        client_id=client_id)
+
+
+def named_intent(reference=None, **overrides):
+    payload = scoped_intent(**overrides)
+    payload["population"] = dict(payload["population"],
+                                 source_reference=reference)
+    return payload
+
+
+def compiled_with(payload, registry=None):
+    from mi_agent.interpretation_v2.compiler import (CompilerContext,
+                                                     DeterministicCompiler)
+    from mi_agent.interpretation_v2.intent import parse_candidate_intent
+    context = CompilerContext(
+        source_registry=governed_registry() if registry is None else registry)
+    return DeterministicCompiler(context).compile(parse_candidate_intent(payload))
+
+
+def executed_named(reference, **overrides):
+    from mi_agent.mi_query_executor import execute_mi_query
+    result = compiled_with(named_intent(reference, **overrides))
+    assert result.is_plan, f"did not compile: {result.outcome} {result.codes()}"
+    plan = result.plan.to_dict()
+    ok, why, detail = adapter.check_eligibility(plan)
+    assert ok, f"ineligible: {why} {detail}"
+    spec = adapter.spec_for_plan(plan)
+    return plan, spec, execute_mi_query(spec, SOURCED, _SEMANTICS)
+
+
+def oracle_source(portfolio_id):
+    from mi_agent.tests import portfolio_truth_oracle as _truth
+    rows = SOURCED[SOURCED[SOURCE_ID_FIELD] == portfolio_id]
+    return float(rows[_truth.BALANCE].sum())
+
+
+class TestANamedSourceResolvesToOneGovernedBook(unittest.TestCase):
+
+    def test_every_declared_name_reaches_the_same_book(self):
+        """An id, a label and an alias are three governed names for one book,
+        and all three must resolve identically — otherwise there are two
+        resolvers and a reader's phrasing decides the answer."""
+        from mi_agent.tests import portfolio_truth_oracle as _truth
+        for reference in ("alp_acquired", "ALP Acquired Back Book",
+                          "ALP back book", "  alp back BOOK  "):
+            with self.subTest(reference=reference):
+                _, spec, result = executed_named(reference)
+                self.assertEqual(spec.filters.get(SOURCE_ID_FIELD),
+                                 "alp_acquired")
+                served = float(result.data[f"{_truth.BALANCE}_sum"].iloc[0])
+                self.assertAlmostEqual(served, oracle_source("alp_acquired"), 2)
+
+    def test_the_scope_is_proven_in_the_receipt(self):
+        _, _, result = executed_named("ALP back book")
+        self.assertIn(SOURCE_ID_FIELD, receipt_fields(result))
+
+    def test_the_plan_records_what_was_asked_and_what_it_became(self):
+        """An audit must see the phrase beside the id. The id alone cannot show
+        that "the NBS book" was what produced it."""
+        plan = compiled_with(named_intent("the NBS book")).plan.to_dict()
+        self.assertEqual(plan["population"]["source_reference"], "the NBS book")
+        self.assertEqual(plan["population"]["source_portfolio_id"],
+                         "nbs_acquired")
+
+    def test_a_name_and_a_role_are_different_axes_and_both_apply(self):
+        _, spec, result = executed_named("ALP back book", lens="acquired")
+        self.assertEqual(spec.filters.get(SOURCE_ID_FIELD), "alp_acquired")
+        self.assertEqual(spec.filters.get("source_portfolio_type"), "acquired")
+        self.assertEqual(receipt_fields(result),
+                         sorted([SOURCE_ID_FIELD, "source_portfolio_type"]))
+
+    def test_a_name_composes_with_ordinary_predicates(self):
+        _, _, result = executed_named(
+            "ALP back book",
+            measures=[{"concept": "loan", "statistic": "count"}],
+            filters=[{"concept": "erm_product_type", "comparator": "eq",
+                      "value": "drawdown"}])
+        expected = int(((SOURCED[SOURCE_ID_FIELD] == "alp_acquired")
+                        & (SOURCED.erm_product_type.str.lower()
+                           == "drawdown")).sum())
+        self.assertEqual(int(result.data["loan_count"].iloc[0]), expected)
+
+    def test_no_name_is_the_whole_book(self):
+        from mi_agent.tests import portfolio_truth_oracle as _truth
+        result = compiled_with(named_intent(None))
+        self.assertTrue(result.is_plan)
+        self.assertEqual(result.plan.population.scope_predicates, ())
+        self.assertIsNone(result.plan.population.source_portfolio_id)
+
+
+class TestANameThatCannotBeSettledIsRefused(unittest.TestCase):
+    """Every way this fails, fails closed. Answering about a book the reader did
+    not name is indistinguishable from a correct answer once rendered."""
+
+    def test_an_unknown_name_refuses_and_says_what_is_governed(self):
+        result = compiled_with(named_intent("Halifax"))
+        self.assertFalse(result.is_plan)
+        self.assertIn("CONCEPT_UNAVAILABLE", result.codes())
+        self.assertIn("alp_acquired", str(result.reasons))
+
+    def test_an_unknown_name_never_widens_to_total(self):
+        """`trakt_core.resolve_scope` widens an unrecognised context to Total and
+        flags it — right for a stale dashboard selection, and the exact silent
+        widening a governed answer may never do."""
+        result = compiled_with(named_intent("Halifax"))
+        self.assertFalse(result.is_plan, "an unknown book became a total")
+
+    def test_an_alias_two_books_answer_to_clarifies(self):
+        shared = governed_registry(metadata={
+            "alp_acquired": {"aliases": ["back book"]},
+            "nbs_acquired": {"aliases": ["back book"]}})
+        result = compiled_with(named_intent("back book"), registry=shared)
+        self.assertFalse(result.is_plan)
+        self.assertEqual(result.outcome, "CLARIFY")
+        self.assertIn("AMBIGUOUS_POPULATION", result.codes())
+
+    def test_with_no_governed_registry_a_name_cannot_be_checked(self):
+        from mi_agent.interpretation_v2.compiler import (CompilerContext,
+                                                         DeterministicCompiler)
+        from mi_agent.interpretation_v2.intent import parse_candidate_intent
+        result = DeterministicCompiler(CompilerContext()).compile(
+            parse_candidate_intent(named_intent("ALP back book")))
+        self.assertFalse(result.is_plan)
+        self.assertIn("CONCEPT_UNAVAILABLE", result.codes())
+
+    def test_a_role_word_is_not_a_source_name(self):
+        """"acquired" is a lens, not a book. Resolving it as a name would make
+        two axes answer to the same word."""
+        self.assertIsNone(governed_registry().resolve_reference("acquired")[0])
+
+    def test_another_clients_portfolio_is_not_reachable(self):
+        """Scope is structural: a registry is built for ONE client, so there is
+        no argument by which another client's book could be named."""
+        other = governed_registry(client_id="OTHER", metadata={})
+        self.assertIsNone(governed_registry().resolve_reference(
+            "other_only_book")[0])
+        self.assertIsNone(other.resolve_reference("ALP back book")[0])
+
+    def test_a_named_source_with_no_bound_predicate_is_refused(self):
+        plan = compiled_with(named_intent("ALP back book")).plan.to_dict()
+        plan["population"]["scope_predicates"] = []
+        ok, why, _ = adapter.check_eligibility(plan)
+        self.assertFalse(ok)
+        self.assertEqual(why, adapter.SCOPE_NOT_BOUND)
+
+
+class TestTheClientRegistryIsNeverCached(unittest.TestCase):
+    """A process-wide compiler holding one client's books would resolve the next
+    client's question against them."""
+
+    def test_the_cached_compiler_holds_no_registry(self):
+        from mi_agent import plan_shadow_wiring as wiring
+        self.assertIsNone(wiring._compiler().context.source_registry)
+
+    def test_a_registry_produces_a_request_scoped_compiler(self):
+        from mi_agent import plan_shadow_wiring as wiring
+        cached = wiring._compiler()
+        scoped = wiring._compiler(governed_registry())
+        self.assertIsNot(scoped, cached)
+        self.assertIs(wiring._compiler(), cached, "the cache was replaced")
+        self.assertIsNone(wiring._compiler().context.source_registry)
+
+
 if __name__ == "__main__":
     unittest.main()

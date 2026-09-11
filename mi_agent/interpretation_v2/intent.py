@@ -331,9 +331,20 @@ class SemanticPopulation:
     base: str = "funded"
     lens: str = "all"
     seasoning: str = "any"
+    #: A NAMED source portfolio, as the reader named it. Free text on purpose:
+    #: `lens` is a closed enum because Direct/Acquired are universal roles, but a
+    #: source portfolio's name belongs to one client, and this schema is
+    #: client-agnostic. So the model states the NAME and the deterministic layer
+    #: binds it against that client's governed registry — the model never
+    #: authors an id, a path or a dataset. Unresolvable or ambiguous names are
+    #: refused there, not guessed here.
+    #:
+    #: This is its own slot rather than a widened `lens`: a role and an identity
+    #: are different axes, and a client may hold two acquired books.
+    source_reference: Optional[str] = None
 
     def key(self) -> Tuple[Any, ...]:
-        return (self.base, self.lens, self.seasoning)
+        return (self.base, self.lens, self.seasoning, self.source_reference)
 
 
 @dataclass(frozen=True)
@@ -485,7 +496,7 @@ _MEASURE_KEYS = ("concept", "statistic", "weight")
 _FILTER_KEYS = ("concept", "comparator", "value")
 _GEO_KEYS = ("requested", "basis", "level", "group_by", "values")
 _TIME_KEYS = ("form", "labels", "grain", "periods_back")
-_POP_KEYS = ("base", "lens", "seasoning")
+_POP_KEYS = ("base", "lens", "seasoning", "source_reference")
 _CMP_KEYS = ("kind", "left", "right")
 _OUTPUT_KEYS = ("id", "measures", "dimensions", "filters", "geography")
 _AMBIG_KEYS = ("slot", "note", "options", "blocking")
@@ -612,7 +623,36 @@ def _parse_population(raw: Any, *, slot: str) -> SemanticPopulation:
         lens=_enum(raw.get("lens", "all"), POPULATION_LENSES, slot=f"{slot}.lens"),
         seasoning=_enum(raw.get("seasoning", "any"), _SEASONING,
                         slot=f"{slot}.seasoning"),
+        source_reference=_source_reference(raw.get("source_reference"),
+                                           slot=f"{slot}.source_reference"),
     )
+
+
+#: The longest a governed source name may be. Not a semantic limit — a guard
+#: against a model pasting a sentence into an identity slot, which would then be
+#: refused by the registry anyway but is worth refusing at the shape.
+_MAX_SOURCE_REFERENCE = 120
+
+
+def _source_reference(value: Any, *, slot: str) -> Optional[str]:
+    """A named source portfolio, cleaned. NOT resolved — that is the compiler's.
+
+    Absent, null and blank all mean "no named source", which is the default and
+    is not the same as naming the whole book: `lens` states that.
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise IntentParseError("INTENT_SCHEMA_INVALID", slot,
+                               "expected a governed source portfolio name")
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) > _MAX_SOURCE_REFERENCE:
+        raise IntentParseError("INTENT_SCHEMA_INVALID", slot,
+                               f"a source name may not exceed "
+                               f"{_MAX_SOURCE_REFERENCE} characters")
+    return text
 
 
 def _parse_comparison(raw: Any, *, slot: str) -> SemanticComparison:
@@ -800,6 +840,11 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                     "base": {"type": "string", "enum": sorted(POPULATION_BASES)},
                     "lens": {"type": "string", "enum": sorted(POPULATION_LENSES)},
                     "seasoning": {"type": "string", "enum": sorted(SEASONING_SEGMENTS)},
+                    # A NAME, never an id or a path. The deterministic layer
+                    # binds it against the client's governed registry and
+                    # refuses what it cannot resolve.
+                    "source_reference": {"type": ["string", "null"],
+                                         "maxLength": _MAX_SOURCE_REFERENCE},
                 },
             },
             "measures": {"type": "array", "items": measure},

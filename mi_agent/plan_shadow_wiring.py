@@ -154,16 +154,30 @@ def _interpreter() -> Any:
     return _interpreter_cache
 
 
-def _compiler() -> Any:
+def _compiler(source_registry: Any = None) -> Any:
+    """The frozen compiler, or a REQUEST-SCOPED one when a client registry is given.
+
+    THE CACHE MUST NEVER HOLD A CLIENT'S REGISTRY. `_compiler_cache` is
+    process-wide, so putting one client's governed source portfolios into it
+    would let the next request — for a different client — resolve a name against
+    them. A registry is therefore never cached: it produces a compiler for that
+    one request and is discarded with it.
+
+    With no registry this returns exactly the compiler it always did, built the
+    way the 135-question sign-off built it.
+    """
+    from mi_agent.interpretation_v2.compiler import (CompilerContext,
+                                                     DeterministicCompiler)
+    if source_registry is not None:
+        return DeterministicCompiler(
+            CompilerContext(source_registry=source_registry))
     global _compiler_cache
     if _compiler_cache is None:
-        from mi_agent.interpretation_v2.compiler import (CompilerContext,
-                                                         DeterministicCompiler)
         _compiler_cache = DeterministicCompiler(CompilerContext())
     return _compiler_cache
 
 
-def build_plan(question: str) -> Tuple[Any, Any]:
+def build_plan(question: str, *, source_registry: Any = None) -> Tuple[Any, Any]:
     """`question -> (InterpretationOutcome, CompileResult)`. One attempt.
 
     Exactly the sequence `run_benchmark` uses, and exactly one interpretation per
@@ -172,7 +186,11 @@ def build_plan(question: str) -> Tuple[Any, Any]:
     """
     from mi_agent.interpretation_v2.outcomes import refuse
 
-    compiler = _compiler()
+    # `source_registry` is THIS request's client's governed source portfolios,
+    # supplied by the caller that knows which client is asking. Omitted, a
+    # question naming a portfolio is refused — which is the fail-closed state,
+    # and the state every caller is in until the production seam supplies one.
+    compiler = _compiler(source_registry)
     outcome = _interpreter().interpret(question)
     compiled = (compiler.compile(outcome.intent) if outcome.ok
                 else refuse(outcome.reason, compiler_version=compiler.version))

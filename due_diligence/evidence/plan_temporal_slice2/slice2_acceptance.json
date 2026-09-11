@@ -546,7 +546,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -867,7 +869,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -1118,7 +1122,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -1494,7 +1500,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -1869,7 +1877,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -2241,7 +2251,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -2517,7 +2529,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -2905,7 +2919,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -3395,7 +3411,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -3696,7 +3714,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -4261,7 +4281,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -4586,7 +4608,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -4916,7 +4940,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "explicit_period",
@@ -5109,7 +5135,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "explicit_period",
@@ -5306,7 +5334,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "range",
@@ -5578,7 +5608,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "range",
@@ -5873,7 +5905,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "relative_pair",
@@ -6103,7 +6137,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "previous_reporting_period",
@@ -6325,7 +6361,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -6399,7 +6437,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -6533,7 +6573,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -6607,7 +6649,9 @@
             "base": "pipeline",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -6695,7 +6739,9 @@
                 "value": "acquired",
                 "capability_owner": null
               }
-            ]
+            ],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -6866,7 +6912,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "relative_pair",
@@ -6940,7 +6988,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -7014,7 +7064,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "series",
@@ -7088,7 +7140,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {},
           "period_form": "explicit_period",
@@ -7162,7 +7216,9 @@
             "base": "funded",
             "lens": "all",
             "seasoning": "any",
-            "scope_predicates": []
+            "scope_predicates": [],
+            "source_reference": null,
+            "source_portfolio_id": null
           },
           "geography": {
             "requested_basis": "collateral",
