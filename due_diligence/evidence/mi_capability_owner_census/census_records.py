@@ -1,0 +1,1732 @@
+#!/usr/bin/env python3
+"""THE census, as data. One source of truth for the Markdown and the JSON.
+
+READ-ONLY EVIDENCE. Nothing here is imported by any product module; it is a
+record of what was traced at CENSUS_SHA, not a contract anything executes.
+
+Every record was established by tracing the execution path, not by reading a
+module name. Where a field could not be established from code, tests, committed
+evidence or an offline deterministic run, it is marked UNPROVEN.
+"""
+
+CENSUS_SHA = "4337d71de1e0c92e66d09511bb5471a9a4a6d475"
+BRANCH = "claude/mi-capability-owner-census-9at6it"
+
+# --------------------------------------------------------------------------- #
+# What "the new plan path" means in this repository
+# --------------------------------------------------------------------------- #
+GLOSSARY = {
+    "GovernedQueryPlan": (
+        "mi_agent/query_plan.py — QueryPlan / AnalyticalScope / PlannedOutput / "
+        "ScopeDelta / Predicate. The repository contains no symbol literally "
+        "named `GovernedQueryPlan`; this is the contract the brief refers to."),
+    "the new Opus path": (
+        "mi_agent.llm_query_parser (default model claude-opus-5, "
+        "mi_agent/mi_agent_config.py:41) proposes an MIQuerySpec. "
+        "mi_agent/parsed_question.py:152 then LIFTS that spec into a QueryPlan "
+        "via query_plan_adapter.compiled_spec_for and executes the COMPILED "
+        "spec. Opus never emits a QueryPlan directly; the plan is a lift of the "
+        "parser's spec, deterministic and model-independent."),
+    "CONNECTED": (
+        "The lift succeeds (plan_from_spec returns a plan) AND the request is "
+        "executed by the generic deterministic executor that the compiler "
+        "targets. A liftable spec claimed by a specialist route is NOT "
+        "connected: the plan was the parse's semantic contract, but the route "
+        "executes through its own owner, which no plan reaches."),
+    "second plan layer": (
+        "mi_agent_api/analytical_plan.py carries a DIFFERENT plan artefact "
+        "(Plan/Step over derived primitives), driven by "
+        "question_interpretation.schema.QuestionInterpretation. Six routes are "
+        "converted onto it. It is not the GovernedQueryPlan and the two do not "
+        "compose today."),
+}
+
+# --------------------------------------------------------------------------- #
+# Measured facts (offline, deterministic parser, committed corpora)
+# --------------------------------------------------------------------------- #
+MEASUREMENTS = {
+    "corpus": "question_interpretation/stage1_corpus.json + stage2_corpus.json",
+    "distinct_questions": 882,
+    "liftable_to_query_plan": 660,
+    "not_liftable": 222,
+    "liftable_pct": 74.8,
+    "claimed_by_generic_executor": 714,
+    "claimed_by_a_specialist_route": 168,
+    "generic_and_liftable_ie_CONNECTED": 607,
+    "connected_pct": 68.8,
+    "decline_reasons": {
+        "ranking / superlative (ranking_mode, sort_by, top_n, limit, sort_direction)": 109,
+        "time axis / series (line chart whose x is a date, not a grouping dim)": 35,
+        "forecast (forecast_mode, forecast_question, forecast_target_value)": 28,
+        "risk limits (risk_limit_query, risk_limit_category, risk_monitor_mode)": 20,
+        "unavailable_filters (a DISCLOSURE field, not a semantic)": 12,
+        "temporal compare (temporal_mode, compare_periods)": 7,
+        "share aggregation (not in query_plan.OPERATIONS)": 5,
+        "funded bridge (bridge_query)": 3,
+        "cohort progression (cohort_progression)": 3,
+    },
+    "mi_query_spec_fields_total": 76,
+    "mi_query_spec_fields_modelled_by_plan": 18,
+    "mi_query_spec_fields_unmodelled": 58,
+    "method": (
+        "probes/lift_census_probe.py and probes/route_claim_probe.py, both "
+        "read-only, offline, deterministic parser (llm_enabled=False), no "
+        "network and no model call. Route claims are evaluated without data "
+        "roots, so routes whose recognition needs a frame or a resolved dataset "
+        "(pipeline_summary) under-report; probes/targeted_route_probe.py covers "
+        "those by name."),
+}
+
+EXECUTION_PROOFS = [
+    {"claim": "Pipeline AMOUNT BY STAGE is owned by the generic executor and is "
+              "carried by the QueryPlan on the live path.",
+     "how": "ParsedQuestion.parse('How much is in the pipeline by stage?') -> "
+            "meta['semantic_contract'] == 'query_plan'; execute_mi_query over "
+            "pipeline_contract.load_prepared_pipeline(<committed fixture>).",
+     "fixture": "tests/fixtures/client_001_mi_pack/pipeline/2025-11-01/"
+                "M2L_KFI_and_Pipeline_2025_11_01.csv",
+     "result": "table, 4 rows: APPLICATION 485,000 / COMPLETED 450,000 / "
+               "OFFER 420,000 / KFI 400,000; group_field_keys=['pipeline_stage'];"
+               " a full reconciliation block was emitted.",
+     "verdict": "CONFIRMED — the brief's worked example reproduces."},
+    {"claim": "Grouped TOP-N ranking already executes inside the same owner; it "
+              "is the PLAN that cannot carry it.",
+     "how": "Same fixture. 'Top 2 stages by amount.' parses to ranking_mode="
+            "'grouped', sort_by='current_outstanding_balance', top_n=2.",
+     "result": "execute_mi_query returned exactly 2 ranked rows. "
+               "plan_from_spec returned None; meta['semantic_contract'] is None.",
+     "verdict": "CONFIRMED — capability EXISTS, plan NOT representable."},
+    {"claim": "A pipeline-stage NARROWING is applied from raw text AFTER the "
+              "plan, not from the plan.",
+     "how": "Same fixture. 'What is the amount for offer stage cases?' parses "
+            "with spec.filters == {} and executes ungrouped-by-request over all "
+            "four stages when execute_mi_query is called directly.",
+     "result": "The narrowing is injected later by mi_agent_workflow from "
+               "question_interpretation.lexical.pipeline_stage_request(question).",
+     "verdict": "CONFIRMED — raw-text coupling on the CONNECTED path."},
+    {"claim": "The plan layer's own contract tests pass at CENSUS_SHA.",
+     "how": "python -m pytest mi_agent/tests/test_query_plan_adapter.py "
+            "test_query_plan_compiler.py test_query_plan_contracts.py "
+            "test_shadow_replay.py test_query_plan_execution.py "
+            "test_query_plan_is_the_live_contract.py test_query_plan_reconciliation.py",
+     "result": "80 passed, 114 subtests passed. No product file modified.",
+     "verdict": "CONFIRMED"},
+]
+
+# --------------------------------------------------------------------------- #
+# The capability records
+# --------------------------------------------------------------------------- #
+# Field key:
+#   name, intents, dataset, dataset_owner, preparation_owner, calculation_owner,
+#   entry_points, measures, filters, dimensions, temporal, population_scope,
+#   raw_text_required, raw_text_where, evidence, plan_representable,
+#   plan_gap, connectivity, connectivity_gap, gap_class, complexity, notes
+CAPABILITIES = [
+# ------------------------------------------------------------------ 1
+dict(
+ name="generic_analysis — funded current aggregation",
+ intents=["What is the total funded balance?",
+          "What is the balance by broker?",
+          "How many loans are to borrowers over 55 with LTV above 50%?",
+          "What is the weighted average LTV by region?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.datasets._resolve_query_frame / mi_agent_api.snapshots",
+ preparation_owner="mi_agent_api.funded_prep.prepare_funded_mi_dataset",
+ calculation_owner="mi_agent.mi_query_executor.execute_mi_query",
+ entry_points=["POST /mi/query -> mi_agent_api.mi_service -> "
+               "mi_agent.mi_agent_workflow.run_mi_agent_query:944",
+               "mi_agent.mi_runtime.run_mi_query (CLI / simulation only — NOT "
+               "on the HTTP serving path at this SHA)",
+               "mi_agent.query_plan_execution.execute_query_plan (contract "
+               "tests only; no production caller)"],
+ measures="COUNT, SUM, AVG, WEIGHTED_AVG, MEDIAN, MIN, MAX over any registry "
+          "metric (42 metric-role fields); plus SHARE and CONTRIBUTION, which "
+          "the executor owns but query_plan.OPERATIONS does not name.",
+ filters="YES_GENERIC — mi_query_executor._apply_filters / "
+         "governed_predicate_mask: eq, in, gt, ge, lt, le, between, contains, "
+         "date bounds, over any registry field.",
+ dimensions="YES_GENERIC — every dimension-role field in "
+            "mi_agent/mi_semantics_field_registry.yaml (59 at this SHA); the "
+            "authoritative set is mi_query_executor._all_group_dims over "
+            "spec.dimensions then spec.dimension. 1, 2 or 3+ axes.",
+ temporal="current",
+ population_scope="whole book / Direct / Acquired / named source / cohort / "
+                  "row-predicate population",
+ raw_text_required="YES",
+ raw_text_where=[
+   "mi_agent_api.workspace.resolve_dataset(question) — THE dataset, called at "
+   "mi_agent_api/mi_service.py:487, downstream of nothing and upstream of "
+   "everything. AnalyticalScope.dataset is left None on the live lift.",
+   "mi_agent.portfolio_lens.resolve_lens_with_default(question, ...) — the "
+   "source-portfolio POPULATION, applied to the spec at "
+   "mi_agent/mi_agent_workflow.py:763 AFTER the plan lift.",
+   "question_interpretation.lexical.pipeline_stage_request(question) — a stage "
+   "FILTER injected into spec.filters at mi_agent/mi_agent_workflow.py:808.",
+   "mi_agent.mi_agent_workflow.missing_dimension_policy_for(question) — "
+   "bucket vs exclude for missing grouping values, which moves grouped "
+   "denominators and coverage (mi_agent/mi_agent_workflow.py:490).",
+   "mi_agent.mi_agent_workflow `_grouping_marker` regex at line 880 — decides "
+   "whether a failed spec may be auto-recovered to a KPI/table.",
+   "mi_agent.execution_receipt.detect_requested_facets(question, ...) — "
+   "re-derives material facets FROM THE SENTENCE and can turn an answer into a "
+   "refusal (facet state LOST). 5,015 lines; not presentation."],
+ evidence=["receipt (mi_agent.execution_receipt)",
+           "reconciliation (mi_query_executor._build_reconciliation: input / "
+           "included / excluded records + balance + coverage %)",
+           "dataset identity + run_id (metadata.dataset, metadata.run_id)",
+           "applied predicates (metadata.applied_predicates — field, operator, "
+           "values, distinct from reconciliation.filters which echoes the spec)",
+           "applied filter fields (metadata.applied_filter_fields)",
+           "grouped dimensions (metadata.group_field_keys) and rejected ones",
+           "dimension + filter invariants (mi_agent.mi_query_contract)",
+           "query trace (mi_query_contract.build_query_trace)"],
+ plan_representable="YES",
+ plan_gap="",
+ connectivity="CONNECTED",
+ connectivity_gap="NONE for the measure/filter/dimension core. The plan's "
+                  "dataset, portfolio_lens and period slots are NOT populated "
+                  "on the live path — compiled_spec_for(spec) is called with no "
+                  "scope kwargs at mi_agent/parsed_question.py:154 — so the "
+                  "frame-selecting facts remain outside the plan.",
+ gap_class=["DATASET_BINDING", "RAW_TEXT_COUPLING", "RECEIPT_ADAPTATION"],
+ complexity="TRIVIAL",
+ notes="607 of 882 corpus questions (68.8%) reach this owner through the plan. "
+       "This one function is the single largest MI surface in the estate."),
+# ------------------------------------------------------------------ 2
+dict(
+ name="generic_analysis — pipeline current aggregation (incl. pipeline stage analysis)",
+ intents=["How much is in the pipeline by stage?",
+          "How many cases are at Offer?",
+          "What is the pipeline amount by broker?",
+          "Pipeline exposure by region."],
+ dataset="pipeline",
+ dataset_owner="mi_agent_api.pipeline_contract.discover_pipeline_sources / "
+               "resolve_pipeline_source / load_prepared_pipeline",
+ preparation_owner="mi_agent_api.pipeline_prep.prepare_pipeline_mi_dataset",
+ calculation_owner="mi_agent.mi_query_executor.execute_mi_query  (IDENTICAL to "
+                   "record 1 — one owner, two prepared frames)",
+ entry_points=["POST /mi/query (dataset resolved to PIPELINE by "
+               "workspace.resolve_dataset)",
+               "GET /mi/pipeline/snapshot -> pipeline_contract."
+               "compute_pipeline_snapshot (a DIFFERENT owner: stage COUNTS and "
+               "cap breakdown, not arbitrary measures)"],
+ measures="Same governed set as record 1, over the canonical economic fields "
+          "pipeline_prep maps onto the funded names (so funded and pipeline "
+          "correlate). Stage amounts included.",
+ filters="YES_GENERIC — the same _apply_filters, plus pipeline_stage.",
+ dimensions="YES_GENERIC — the same registry, plus pipeline_stage and the "
+            "pipeline-only fields pipeline_prep derives.",
+ temporal="current",
+ population_scope="pipeline (whole). The weekly extract carries no "
+                  "source-portfolio provenance, so a Direct/Acquired lens "
+                  "cannot narrow it; chat_routing._pipeline_scope_disclosure "
+                  "discloses this rather than silently widening.",
+ raw_text_required="YES",
+ raw_text_where=["Identical to record 1. Additionally the stage narrowing is "
+                 "ALWAYS raw-text sourced: spec.filters carries no stage, and "
+                 "lexical.pipeline_stage_request(question) injects it "
+                 "(proved by execution — see EXECUTION_PROOFS[2])."],
+ evidence=["as record 1, plus pipeline source lineage from pipeline_contract "
+           "(source file, extract date, weekly inventory)"],
+ plan_representable="YES",
+ plan_gap="",
+ connectivity="CONNECTED",
+ connectivity_gap="The plan cannot say WHICH DATASET, and cannot carry the "
+                  "stage narrowing, so both survive only as post-plan text "
+                  "reads. Proven: 'How much is in the pipeline by stage?' "
+                  "stamps semantic_contract=query_plan, and the stage filter "
+                  "for 'the amount for offer stage cases' does not.",
+ gap_class=["DATASET_BINDING", "RAW_TEXT_COUPLING", "RECEIPT_ADAPTATION"],
+ complexity="SMALL",
+ notes="THE BRIEF'S WORKED EXAMPLE, reproduced at this SHA. pipeline_contract "
+       "exposes stage counts; stage AMOUNTS come from the generic executor over "
+       "the prepared pipeline frame. One correction: the live chain is "
+       "mi_service -> mi_agent_workflow -> execute_mi_query. mi_runtime."
+       "run_mi_query is NOT on the HTTP serving path at this SHA (its only "
+       "callers are scripts/ and simulation/)."),
+# ------------------------------------------------------------------ 3
+dict(
+ name="forecast-view analysis (derived funded + weighted pipeline frame)",
+ intents=["Forecast funded balance by region.",
+          "What is the forecast book by broker?"],
+ dataset="derived",
+ dataset_owner="mi_agent_api.workspace.build_forecast_view_frame",
+ preparation_owner="funded_prep + pipeline_prep, then the derived projection",
+ calculation_owner="mi_agent.mi_query_executor.execute_mi_query (same owner)",
+ entry_points=["POST /mi/query where workspace.resolve_dataset returns FORECAST"],
+ measures="as record 1; current_outstanding_balance carries the forecast "
+          "contribution so any 'X by dimension' yields forecast X by dimension.",
+ filters="YES_GENERIC over the projected columns only.",
+ dimensions="YES_LIMITED — the derived frame keeps a subset of the book's "
+            "columns; mi_agent_api/datasets.py BOOK_COLUMNS_ATTR records the "
+            "source schema so an availability check does not report a field the "
+            "book carries as absent.",
+ temporal="current",
+ population_scope="whole book + whole pipeline",
+ raw_text_required="YES",
+ raw_text_where=["workspace.resolve_dataset(question) — the word 'forecast' "
+                 "anywhere selects this view (datasets.py:721 documents the "
+                 "substring test and its consequence)."],
+ evidence=["as record 1, plus the derived-frame book-column stamp"],
+ plan_representable="YES",
+ plan_gap="",
+ connectivity="CONNECTED",
+ connectivity_gap="Same DATASET_BINDING gap as records 1-2, and sharper here: "
+                  "the dataset choice changes the FRAME's columns, so a plan "
+                  "with dataset=None cannot state what its own scope was.",
+ gap_class=["DATASET_BINDING", "RECEIPT_ADAPTATION"],
+ complexity="SMALL",
+ notes="12 corpus lifts are blocked by `unavailable_filters` alone — a "
+       "DISCLOSURE field recording predicates that could NOT be applied. It "
+       "declines the lift only because the inverted liftability test treats "
+       "every unmodelled field as semantic."),
+# ------------------------------------------------------------------ 4
+dict(
+ name="superlative / ranking (grouped top-N and loan-level)",
+ intents=["Which brokers have the largest exposure?",
+          "Top 5 regions by balance.",
+          "What is the largest single loan?",
+          "Show the 10 biggest loans."],
+ dataset="funded|pipeline",
+ dataset_owner="as records 1-2",
+ preparation_owner="as records 1-2",
+ calculation_owner="mi_agent.mi_query_executor._apply_top_n (grouped) and "
+                   "mi_agent.mi_query_executor._execute_ranked_loans "
+                   "(loan-level) — both inside execute_mi_query",
+ entry_points=["POST /mi/query (generic path)",
+               "mi_workflows.engine.ranked_distribution (analytical layer, "
+               "concentration workflow) — a SECOND ranking owner",
+               "mi_agent.period_change.ranking.rank_movement — a THIRD, over "
+               "movements rather than levels",
+               "mi_agent_api.movement_detail.rank_contributors — a FOURTH",
+               "analytics_lib.concentration.top_n_concentration and "
+               "mi_agent.risk_monitor.concentration.top_n_concentration — two more"],
+ measures="the ranked measure is any governed metric; ordering basis is "
+          "spec.sort_by with rank priority (balance, count, concentration).",
+ filters="YES_GENERIC (ranking runs after _apply_filters)",
+ dimensions="YES_GENERIC",
+ temporal="current",
+ population_scope="as records 1-2",
+ raw_text_required="NO at calculation (spec.ranking_mode / sort_by / top_n / "
+                   "limit / sort_direction are structured). YES at "
+                   "interpretation — but that is the parse, not a post-plan read.",
+ raw_text_where=[],
+ evidence=["as record 1; execution_receipt.detect_unranked_superlative "
+           "additionally fails closed when a superlative was asked for and no "
+           "ranking ran"],
+ plan_representable="NO",
+ plan_gap="AnalyticalScope/PlannedOutput have NO ordering and NO limit slot. "
+          "There is no place to say 'order by this measure, descending, keep 5' "
+          "and no place to say 'the single largest row'. Five spec fields carry "
+          "it today — ranking_mode, sort_by, sort_direction, top_n, limit — and "
+          "all five are outside MODELLED_FIELDS.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="One missing plan semantic: an ORDERING (measure + direction) "
+                  "and a LIMIT, at plan or output level. The arithmetic already "
+                  "exists in the executor the compiler targets.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "RECEIPT_ADAPTATION"],
+ complexity="SMALL",
+ notes="THE SINGLE LARGEST CONNECTIVITY GAP IN THE ESTATE: 109 of 882 corpus "
+       "questions (12.4%) — 93 of them on the generic path, i.e. they would be "
+       "connected the moment the slot exists. Proven to execute correctly "
+       "today (EXECUTION_PROOFS[1]). This is NOT a capability gap."),
+# ------------------------------------------------------------------ 5
+dict(
+ name="share / contribution analysis",
+ intents=["What percentage of the book has LTV above 50%?",
+          "What share of the book is joint borrowers?",
+          "How much does each region contribute to the weighted average LTV?"],
+ dataset="funded|pipeline",
+ dataset_owner="as records 1-2",
+ preparation_owner="as records 1-2",
+ calculation_owner="mi_agent.mi_query_executor._execute_share and "
+                   "mi_agent.mi_query_executor._execute_contribution",
+ entry_points=["POST /mi/query (generic path)",
+               "mi_workflows.engine.aggregate(share_basis=...) — a second owner "
+               "used by the BSR workflows",
+               "mi_agent.period_change.calculations._aggregate_share — a third"],
+ measures="share of loan_count or of any monetary metric; contribution is "
+          "weight-field based",
+ filters="YES_GENERIC — and a share is the one path handed BOTH the filtered "
+         "and the unfiltered frame, because it needs both populations.",
+ dimensions="YES_GENERIC for contribution; share is whole-book denominated.",
+ temporal="current",
+ population_scope="as records 1-2",
+ raw_text_required="NO at calculation.",
+ raw_text_where=[],
+ evidence=["metadata.share_basis, metadata.contribution_weight_field, plus the "
+           "record-1 reconciliation block"],
+ plan_representable="NO",
+ plan_gap="query_plan.OPERATIONS is (count, sum, avg, weighted_avg, median, "
+          "min, max). `share` and `contribution` are not in it, and "
+          "PlannedOutput.__post_init__ RAISES on an operation outside the set, "
+          "so plan_from_spec declines. A share also needs a DENOMINATOR "
+          "population, which AnalyticalScope cannot express: a ScopeDelta may "
+          "only narrow, so 'this population as a fraction of the book' has no "
+          "second scope to point at.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Two slots: the operation vocabulary, and a denominator "
+                  "scope reference (the one direction ScopeDelta deliberately "
+                  "forbids).",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="MEDIUM",
+ notes="5 corpus questions declined on this alone. Medium rather than small "
+       "because the denominator is a genuine contract question, not a field: "
+       "adding a widening delta would break the asymmetry ScopeDelta exists to "
+       "guarantee."),
+# ------------------------------------------------------------------ 6
+dict(
+ name="loan-level listing, scatter and bubble",
+ intents=["List the loans above £500k.",
+          "Plot LTV against interest rate.",
+          "Show a bubble chart of balance by age and LTV."],
+ dataset="funded|pipeline",
+ dataset_owner="as records 1-2",
+ preparation_owner="as records 1-2",
+ calculation_owner="mi_agent.mi_query_executor._execute_loan_level",
+ entry_points=["POST /mi/query (generic path)"],
+ measures="row-level values of any registry field; deterministic sampling "
+          "(sample_seed=42) with a declared max_loan_level_rows.",
+ filters="YES_GENERIC",
+ dimensions="axes rather than groupings (x / y / size / color)",
+ temporal="current",
+ population_scope="as records 1-2",
+ raw_text_required="NO at calculation.",
+ raw_text_where=[],
+ evidence=["as record 1, plus the sampling disclosure in metadata"],
+ plan_representable="NO",
+ plan_gap="AnalyticalScope models GROUPING dimensions only. x/y are liftable "
+          "ONLY as restatements of dimensions[0]/[1] (query_plan_adapter."
+          "_is_liftable), and `size`/`color` are unmodelled outright. A "
+          "row-level answer is also not a PlannedOutput: there is no operation.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="No plan concept for 'the rows themselves, unaggregated'.",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="MEDIUM",
+ notes="Shares the ranking gap where the listing is ordered."),
+# ------------------------------------------------------------------ 7
+dict(
+ name="stratification / bucketed dimensions",
+ intents=["Balance by LTV bucket.", "Loan count by ticket-size band.",
+          "Balance by age bucket."],
+ dataset="funded|pipeline",
+ dataset_owner="as records 1-2",
+ preparation_owner="analytics_lib.buckets.materialise_buckets (config-driven "
+                   "bands) + mi_agent.quantile_buckets.materialise_quantile_"
+                   "bucket (asset-agnostic quartiles) — run during preparation",
+ calculation_owner="mi_agent.mi_query_executor.execute_mi_query over the "
+                   "materialised bucket column (the bucket is a DIMENSION by "
+                   "the time the executor sees it)",
+ entry_points=["POST /mi/query", "dashboard stratification surfaces",
+               "analytics_lib.stratify.stratify (a second, dashboard-side owner)"],
+ measures="as record 1",
+ filters="YES_GENERIC",
+ dimensions="YES_GENERIC over registry-named bucket dimensions",
+ temporal="current",
+ population_scope="as records 1-2",
+ raw_text_required="NO at calculation.",
+ raw_text_where=[],
+ evidence=["bucket definitions are registry/config-named and appear in "
+           "resolved_fields; the reconciliation block covers the bucket column"],
+ plan_representable="YES",
+ plan_gap="",
+ connectivity="CONNECTED",
+ connectivity_gap="NONE — a bucket is an ordinary dimension at execution. "
+                  "spec.bucket_strategy / bucket_count / bucket_field are "
+                  "unmodelled, so a question that RESTATES the strategy in "
+                  "words declines; the ordinary 'by LTV bucket' form does not.",
+ gap_class=[],
+ complexity="TRIVIAL",
+ notes="A capability that looks specialist and is not: the arithmetic is "
+       "record 1's."),
+# ------------------------------------------------------------------ 8
+dict(
+ name="funded temporal analysis / evolution (time series)",
+ intents=["Show funded balance evolution by month.",
+          "How has the weighted average LTV moved over the last six months?",
+          "Show monthly balance evolution by broker."],
+ dataset="funded",
+ dataset_owner="mi_agent_api.evolution.funded_frames over "
+               "mi_agent_api.snapshots (the governed monthly funded runs)",
+ preparation_owner="mi_agent_api.funded_prep.prepare_funded_mi_dataset per period",
+ calculation_owner="mi_agent_api.temporal_query.execute_temporal — which calls "
+                   "mi_agent.mi_query_executor.execute_mi_query ONCE PER PERIOD. "
+                   "The lowest owner of every FIGURE is the executor; "
+                   "execute_temporal owns only the period stacking. "
+                   "mi_agent_api.evolution.assemble_funded_evolution remains the "
+                   "owner for the DASHBOARD series (five fixed metrics).",
+ entry_points=["POST /mi/query -> chat_routing._route_evolution",
+               "GET /mi/evolution/funded",
+               "GET /mi/evolution/funnel, /mi/evolution/forecast"],
+ measures="MI-Query path: the full governed set, because each period is an "
+          "ordinary executor call. Dashboard path: balance, loan count, WA LTV, "
+          "WA interest rate, average youngest-borrower age.",
+ filters="YES_GENERIC on the MI-Query path — and temporal_query."
+         "predicates_applied_in_every_period proves the SAME predicates ran in "
+         "every period rather than assuming it. YES_LIMITED on the dashboard path.",
+ dimensions="YES_GENERIC on the MI-Query path (time x dimension); "
+            "temporal_query.series_by_category assembles the per-category series.",
+ temporal="series, weekly, monthly",
+ population_scope="whole book / Direct / Acquired / named source",
+ raw_text_required="YES",
+ raw_text_where=["mi_agent_api/chat_routing.py _route_evolution reads the "
+                 "question for the grain and for the grouped-answer shape "
+                 "(_grouped_evolution_answer); _resolve_lens(question, "
+                 "source_lens) resolves the population."],
+ evidence=["per-period reconciliation and lineage (run id, reporting date, "
+           "source file) — the point-in-time MI standard, per period",
+           "predicates_applied_in_every_period",
+           "receipt"],
+ plan_representable="NO",
+ plan_gap="AnalyticalScope.period is a SINGLE optional string. There is no "
+          "slot for a period RANGE, a GRAIN (weekly/monthly) or a TIME AXIS. "
+          "query_plan_adapter._is_liftable explicitly refuses a spec whose `x` "
+          "is a time axis rather than dimensions[0], and documents why: a plan "
+          "that claimed such a question has no dimensions would misdescribe it.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="A temporal axis on the plan: {grain, window or explicit "
+                  "period list} plus the rule that a series is N executions of "
+                  "one scope. The compiler already does N-executions-per-plan "
+                  "for N populations; a series is the same shape over periods.",
+ gap_class=["TEMPORAL_BINDING"],
+ complexity="MEDIUM",
+ notes="35 corpus declines are exactly this. temporal_query.py was written to "
+       "make the executor the single owner of a period figure — that work "
+       "means the plan only has to carry the AXIS, not the arithmetic."),
+# ------------------------------------------------------------------ 9
+dict(
+ name="pipeline evolution (weekly history, funnel evolution)",
+ intents=["How has the pipeline moved over the last five weeks?",
+          "Show the pipeline funnel over time.",
+          "What is the five-week average pipeline amount?"],
+ dataset="pipeline",
+ dataset_owner="mi_agent_api.pipeline_contract.collect_weekly_history / "
+               "build_pipeline_history / weekly_extract_inventory",
+ preparation_owner="mi_agent_api.pipeline_prep.prepare_pipeline_mi_dataset per week",
+ calculation_owner="mi_agent_api.evolution.pipeline_evolution and "
+                   "mi_agent_api.evolution.pipeline_funnel_evolution "
+                   "(+ five_week_average, weekly_flow)",
+ entry_points=["GET /mi/evolution/pipeline", "GET /mi/evolution/funnel",
+               "POST /mi/query -> _route_evolution where the dataset is PIPELINE"],
+ measures="pipeline_amount (= sum of current_outstanding_balance on the "
+          "prepared frame), case counts, per-stage levels, weekly flow",
+ filters="YES_LIMITED — stage and the prepared-frame fields; not the executor's "
+         "generic predicate set.",
+ dimensions="YES_LIMITED — stage and the funnel's own levels.",
+ temporal="series, weekly, movement",
+ population_scope="pipeline (whole) — no source-portfolio provenance available",
+ raw_text_required="YES",
+ raw_text_where=["_route_evolution as record 8"],
+ evidence=["weekly extract inventory and per-week lineage",
+           "reconciliation per period"],
+ plan_representable="NO",
+ plan_gap="As record 8, plus: the funnel's stage levels are a fixed vocabulary "
+          "rather than a governed dimension the plan can name.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Temporal axis (as record 8) and a pipeline-series binding.",
+ gap_class=["TEMPORAL_BINDING", "DATASET_BINDING"],
+ complexity="MEDIUM",
+ notes="A DIFFERENT calculation owner from record 8 despite the shared route "
+       "name — kept separate deliberately."),
+# ------------------------------------------------------------------ 10
+dict(
+ name="temporal comparison (two named reporting periods)",
+ intents=["Compare October and November funded balance.",
+          "How did pipeline amount change from last week?",
+          "What was the balance last month versus this month?"],
+ dataset="both",
+ dataset_owner="mi_agent_api.workspace.resolve_dataset, then evolution."
+               "funded_frames or pipeline_contract.collect_weekly_history",
+ preparation_owner="funded_prep / pipeline_prep per period",
+ calculation_owner="mi_agent_api.temporal_compare.compare_periods (delta, "
+                   "pct delta, direction) over the series built by "
+                   "temporal_compare.run_temporal_compare; the per-period FIGURE "
+                   "comes from the evolution assembly, not from a second engine.",
+ entry_points=["POST /mi/query -> chat_routing._route_compare",
+               "GET /mi/evolution/compare",
+               "mi_agent_api.analytical_plan.temporal_compare (Conversion 5 — "
+               "the interpretation-driven plan, already converted)"],
+ measures="resolve_metric_key maps (dataset, metric, aggregation) onto the "
+          "governed period metric keys — a bounded set, not the full registry.",
+ filters="NO on this owner. A narrowed comparison is not expressible here.",
+ dimensions="NO — whole-population comparison only.",
+ temporal="compare",
+ population_scope="whole book / dataset-wide",
+ raw_text_required="NO at the calculation owner. The route reads the sentence "
+                   "only to build the contract, and Conversion 5 moved that "
+                   "read onto the QuestionInterpretation.",
+ raw_text_where=[],
+ evidence=["per-period reconciliation", "source periods (governed source files)",
+           "a controlled insufficient-data response when a period or metric is "
+           "missing", "receipt"],
+ plan_representable="NO",
+ plan_gap="No second period, and no comparison relationship. A QueryPlan has "
+          "ONE shared scope with ONE period; two periods are two scopes with no "
+          "contract saying they are to be compared rather than merely both "
+          "reported.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="A comparison relationship between two scopes, plus a "
+                  "period-pair slot. Note the compiler ALREADY executes several "
+                  "scopes per plan — what is missing is the statement that one "
+                  "is the baseline for the other.",
+ gap_class=["TEMPORAL_BINDING", "MISSING_PLAN_SEMANTIC"],
+ complexity="MEDIUM",
+ notes="7 corpus declines. Already converted onto the OTHER plan layer "
+       "(analytical_plan), with committed equivalence evidence at "
+       "migration_phase0/plan_equivalence_temporal_compare.py."),
+# ------------------------------------------------------------------ 11
+dict(
+ name="portfolio_summary (funded headline position)",
+ intents=["Summarise the portfolio.", "Give me a portfolio overview.",
+          "What is the current position of the book?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.evolution.funded_frames over output_root",
+ preparation_owner="mi_agent_api.funded_prep.prepare_funded_mi_dataset",
+ calculation_owner="mi_agent_api.movement_summary.portfolio_summary, invoked "
+                   "through mi_agent_api.analytical_plan.portfolio_summary "
+                   "(Conversion 1). The primitives are evolution.funded_frames, "
+                   "evolution._scope_frame_lens, evolution."
+                   "assemble_funded_evolution, movement_summary._regional_"
+                   "exposure and movement_summary._cohorts.",
+ entry_points=["POST /mi/query -> chat_routing._route_portfolio_summary",
+               "mi_agent_api.analytical_plan.portfolio_summary"],
+ measures="loan count, funded balance, WA current LTV, WA interest rate, "
+          "average youngest-borrower age — a FIXED headline set, not the "
+          "registry.",
+ filters="NO — a summary is not narrowed by predicates; it is narrowed by "
+         "POPULATION (source scope) only.",
+ dimensions="YES_LIMITED — largest regional exposures and cohort balances, "
+            "fixed by the summary contract.",
+ temporal="current",
+ population_scope="whole book / Direct / Acquired / named source, from "
+                  "QuestionInterpretation.source_scope",
+ raw_text_required="NO",
+ raw_text_where=["None. Conversion 1 is the reference conversion: "
+                 "_summary_population takes the population from the "
+                 "interpretation contract and RETURNS NOTHING when there is no "
+                 "contract, rather than falling back to a second reader "
+                 "(chat_routing.py:761-799). analytical_plan.build_plan is "
+                 "structurally forbidden from reading the question "
+                 "(assert_no_question_read)."],
+ evidence=["receipt", "reconciliation", "governed run artefact lineage",
+           "lens label + resolved portfolio-id list",
+           "lensApplied disclosure (chat_routing._disclose_* )"],
+ plan_representable="PARTIAL",
+ plan_gap="A QueryPlan CAN carry the five headline measures as five "
+          "PlannedOutputs over one scope. It CANNOT carry the regional-exposure "
+          "ranking (no ordering slot — record 4) nor the cohort block.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="The route executes through analytical_plan (the OTHER plan "
+                  "layer). Nothing routes a QueryPlan here. A liftable summary "
+                  "spec is still lifted at parse — measured 4 of 4 corpus "
+                  "summary questions — and then the route ignores it.",
+ gap_class=["DISPATCH_ONLY", "PLAN_TO_SPEC_ADAPTER", "MISSING_PLAN_SEMANTIC"],
+ complexity="MEDIUM",
+ notes="THE CLEAREST 'EXISTS=YES, REPRESENTABLE=PARTIAL, CONNECTED=NO' CASE. "
+       "Also the clearest evidence that raw-text independence is achievable: "
+       "this route has none."),
+# ------------------------------------------------------------------ 12
+dict(
+ name="pipeline_summary (pipeline headline position)",
+ intents=["What is the current pipeline position?",
+          "Summarise the pipeline."],
+ dataset="pipeline",
+ dataset_owner="mi_agent_api.pipeline_contract.resolve_pipeline_source",
+ preparation_owner="mi_agent_api.pipeline_prep.prepare_pipeline_mi_dataset",
+ calculation_owner="mi_agent_api.pipeline_contract.compute_pipeline_snapshot "
+                   "(+ cap_breakdown)",
+ entry_points=["POST /mi/query -> chat_routing._route_pipeline_summary",
+               "GET /mi/pipeline/snapshot"],
+ measures="case count, gross amount, per-stage counts, completion-probability "
+          "summary, cap breakdown",
+ filters="NO",
+ dimensions="YES_LIMITED — stage",
+ temporal="current",
+ population_scope="pipeline (whole); declared-provenance disclosure via "
+                  "pipeline_prep.declared_source_provenance",
+ raw_text_required="YES",
+ raw_text_where=["chat_routing._is_pipeline_summary(question, spec) for the "
+                 "claim; chat_routing._pipeline_scope_disclosure -> "
+                 "_resolve_lens(question, source_lens) for the scope sentence."],
+ evidence=["pipeline source lineage", "declared source provenance disclosure",
+           "receipt"],
+ plan_representable="PARTIAL",
+ plan_gap="Stage counts and stage amounts ARE representable (record 2 proves "
+          "it). The completion-probability summary and cap breakdown are not: "
+          "they are derived facts of the preparation layer, not aggregations.",
+ connectivity="PARTIAL",
+ connectivity_gap="The measurable half already reaches the plan through the "
+                  "generic path; the headline block does not, because this "
+                  "route claims the question before the generic path runs.",
+ gap_class=["DISPATCH_ONLY", "PLAN_TO_SPEC_ADAPTER"],
+ complexity="SMALL",
+ notes="Did not fire in the offline route probe because recognition requires "
+       "the dataset owner to say PIPELINE first; covered by name in "
+       "probes/targeted_route_probe.py."),
+# ------------------------------------------------------------------ 13
+dict(
+ name="period_movement (month-on-month with attribution)",
+ intents=["What has changed versus last month?",
+          "What moved since the prior reporting period?",
+          "How much of the movement is new completions?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.evolution.funded_frames",
+ preparation_owner="mi_agent_api.funded_prep.prepare_funded_mi_dataset",
+ calculation_owner="mi_agent_api.movement_summary.period_movement (+ _delta), "
+                   "invoked through mi_agent_api.analytical_plan.period_movement "
+                   "(Conversion 2)",
+ entry_points=["POST /mi/query -> chat_routing._route_period_movement",
+               "mi_agent_api.analytical_plan.period_movement"],
+ measures="the record-11 headline set, as movements; plus regional attribution "
+          "of the balance movement and each source portfolio's contribution",
+ filters="NO",
+ dimensions="YES_LIMITED — region and source portfolio, fixed by contract",
+ temporal="compare, movement",
+ population_scope="as record 11",
+ raw_text_required="NO",
+ raw_text_where=["None at the calculation owner. The route reads the sentence "
+                 "only to claim (_is_period_movement)."],
+ evidence=["receipt", "per-period reconciliation", "prior-period lineage",
+           "attribution decomposition"],
+ plan_representable="PARTIAL",
+ plan_gap="No comparison relationship (as record 10) and no attribution "
+          "concept. The measures themselves are representable.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="As record 11 — it executes through the other plan layer.",
+ gap_class=["DISPATCH_ONLY", "PLAN_TO_SPEC_ADAPTER", "TEMPORAL_BINDING",
+            "MISSING_PLAN_SEMANTIC"],
+ complexity="MEDIUM",
+ notes="Conversion 2 generalised Conversion 1's plan artefact; the primitive "
+       "vocabulary and the population step were reused unchanged."),
+# ------------------------------------------------------------------ 14
+dict(
+ name="period change analysis (Business-Semantics-Registry driven)",
+ intents=["What changed in the portfolio this month?",
+          "Which metrics moved most between the last two snapshots?",
+          "How did the composition shift?"],
+ dataset="funded (two snapshots)",
+ dataset_owner="mi_agent_api.snapshots -> mi_agent.period_change.models."
+               "SnapshotFrame; periods resolved by period_change.periods."
+               "resolve_periods",
+ preparation_owner="mi_agent_api.funded_prep.prepare_funded_mi_dataset per snapshot",
+ calculation_owner="mi_agent.period_change.workflow.run_period_change_analysis, "
+                   "delegating to period_change.calculations.aggregate "
+                   "(numeric / weighted / share), period_change.distribution."
+                   "distribution_change, period_change.bridge.balance_bridge and "
+                   "period_change.ranking.rank_movement",
+ entry_points=["POST /mi/query -> mi_agent_api.period_change_route."
+               "route_period_change", "direct API / job construction of "
+               "PeriodChangeRequest"],
+ measures="every field the Business Semantics Registry governs "
+          "(config/business_semantics_registry.yaml), selected by "
+          "period_change.selection.select_fields against a declared policy "
+          "(config/period_change_selection.yaml) — not a hard-coded list.",
+ filters="YES_LIMITED — scope (portfolio ids, asset classes) and the selection "
+         "policy; not arbitrary row predicates.",
+ dimensions="YES_GENERIC over registry dimensions, as composition shifts.",
+ temporal="compare, movement",
+ population_scope="whole book / governed portfolio scope, authorisation-bounded "
+                  "(check_scope_access fails closed rather than intersecting)",
+ raw_text_required="NO",
+ raw_text_where=["The calculation is text-free: PeriodChangeRequest carries "
+                 "`question` but workflow.py reads it ONLY to echo it in "
+                 "to_dict(). Verified by inspection — the only three "
+                 "occurrences of `question` in workflow.py are the field, the "
+                 "docstring and the echo. The recognition read is memoised "
+                 "pre-claim (RouteRequest.remember_recognition) so the handler "
+                 "does not re-read."],
+ evidence=["receipt", "reconciliation", "audit block naming the registry "
+           "version and selection policy", "explicit limitations and excluded "
+           "candidates", "ranked movement receipt (mi_agent_api.movement_receipt)",
+           "mixed-currency guard"],
+ plan_representable="NO",
+ plan_gap="A QueryPlan carries outputs over ONE scope. This is a two-snapshot "
+          "MOVEMENT with per-unit ranking, distribution shift and a balance "
+          "bridge — four relationship concepts the plan has no slot for.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Comparison relationship + movement + distribution-shift "
+                  "concepts.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "TEMPORAL_BINDING"],
+ complexity="LARGE",
+ notes="Architecturally the most advanced route in the estate and the least "
+       "raw-text coupled. Migrating it is about the PLAN growing up to it, not "
+       "about the route changing."),
+# ------------------------------------------------------------------ 15
+dict(
+ name="funded bridge / balance attribution waterfall",
+ intents=["What drove the change in funded balance?",
+          "Break down the balance movement by broker.",
+          "Show the funded bridge for the last quarter."],
+ dataset="funded (period range)",
+ dataset_owner="mi_agent_api.evolution.funded_frames",
+ preparation_owner="mi_agent_api.funded_prep.prepare_funded_mi_dataset",
+ calculation_owner="mi_agent_api.evolution.funded_bridge",
+ entry_points=["POST /mi/query -> chat_routing._route_bridge",
+               "mi_agent_api.analytical_plan.funded_bridge (Conversion 4)"],
+ measures="balance movement decomposed into attribution components",
+ filters="YES_LIMITED — population scope",
+ dimensions="YES_GENERIC for the bridge dimension (spec.bridge_dimension, "
+            "resolved through the governed registry by Conversion 4)",
+ temporal="movement, compare",
+ population_scope="whole book / Direct / Acquired / named source",
+ raw_text_required="NO",
+ raw_text_where=["Conversion 4 moved the population and the grouping concept "
+                 "onto the interpretation contract; equivalence is evidenced at "
+                 "migration_phase0/plan_equivalence_funded_bridge.py, which "
+                 "compares the shipped and compositional paths on ROWS."],
+ evidence=["receipt", "reconciliation", "start period and window disclosure",
+           "bridge component attribution"],
+ plan_representable="NO",
+ plan_gap="A bridge is a DECOMPOSITION of a movement into components. There is "
+          "no plan concept for a component set, and no period range.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Movement decomposition semantics + period range.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "TEMPORAL_BINDING"],
+ complexity="LARGE",
+ notes="3 corpus declines on spec.bridge_query alone."),
+# ------------------------------------------------------------------ 16
+dict(
+ name="cohort / vintage analysis (static pool)",
+ intents=["Show the book by origination vintage.",
+          "What is the balance by vintage year?",
+          "What is the weighted average LTV of the 2022 vintage?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.datasets / snapshots",
+ preparation_owner="mi_agent_api.funded_prep (derives vintage_year and "
+                   "months_on_book)",
+ calculation_owner="mi_agent_api.cohorts.cohort_analysis, over "
+                   "analytics_lib.cohort.cohort_table / add_cohort_period / "
+                   "months_on_book",
+ entry_points=["GET /mi/cohorts", "GET /mi/cohorts/vintages",
+               "mi_workflows.analytical capability id `vintage_analysis`",
+               "POST /mi/query via the analytical layer"],
+ measures="balance, loan count, book share, balance-weighted LTV / interest "
+          "rate / months-on-book per vintage. metricsAvailable declares exactly "
+          "what was computed; nothing is fabricated.",
+ filters="YES_LIMITED — population",
+ dimensions="vintage (year or configured grain)",
+ temporal="current (point-in-time static pool)",
+ population_scope="whole book / Direct / Acquired / named source",
+ raw_text_required="NO",
+ raw_text_where=[],
+ evidence=["metricsAvailable (an explicit statement of what the tape supported)",
+           "reconciliation", "declared limitation: redemption / completion / "
+           "performance curves are NOT computed in the MI path"],
+ plan_representable="YES",
+ plan_gap="Vintage is an ordinary dimension and the metrics are ordinary "
+          "aggregations. A plan CAN express this.",
+ connectivity="PARTIAL",
+ connectivity_gap="A bare 'balance by vintage year' already reaches the generic "
+                  "executor through the plan (vintage_year is a prepared "
+                  "column). The /mi/cohorts SERVICE shape — book share, "
+                  "metricsAvailable — is a different owner nothing routes a "
+                  "plan to.",
+ gap_class=["DISPATCH_ONLY", "PLAN_TO_SPEC_ADAPTER"],
+ complexity="SMALL",
+ notes="A capability that looks specialist and is largely record 1 with a "
+       "prepared dimension."),
+# ------------------------------------------------------------------ 17
+dict(
+ name="cohort progression (metric progression by vintage across reporting dates)",
+ intents=["Track the 2023 vintage across reporting dates.",
+          "How has each vintage's balance progressed?",
+          "Show cohort progression for the front book."],
+ dataset="funded (multi-period)",
+ dataset_owner="mi_agent_api.evolution.funded_frames",
+ preparation_owner="mi_agent_api.funded_prep",
+ calculation_owner="mi_agent_api.evolution.funded_cohort_progression; "
+                   "cohort formation and static-pool membership from "
+                   "mi_agent_api.cohorts.cohort_entry_map / cohort_formation / "
+                   "cohort_static_pool",
+ entry_points=["POST /mi/query -> chat_routing._route_cohort_progression",
+               "GET /mi/cohorts/progression"],
+ measures="the governed metric per vintage per reporting date",
+ filters="YES_LIMITED — population, vintage, grain",
+ dimensions="vintage x reporting date",
+ temporal="series, movement",
+ population_scope="whole book / Direct / Acquired / named source",
+ raw_text_required="YES",
+ raw_text_where=["chat_routing._route_cohort_progression -> "
+                 "_portfolio_lens.resolve_lens_with_default(question, ...) — "
+                 "the population, read from the sentence after the parse."],
+ evidence=["per-period reconciliation and lineage", "cohort membership basis",
+           "receipt"],
+ plan_representable="NO",
+ plan_gap="A cohort progression is a MATRIX over (vintage x period) with "
+          "static-pool membership. No period axis and no membership concept.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Temporal axis + static-pool membership semantics.",
+ gap_class=["TEMPORAL_BINDING", "MISSING_PLAN_SEMANTIC", "RAW_TEXT_COUPLING"],
+ complexity="LARGE",
+ notes="3 corpus declines on spec.cohort_progression."),
+# ------------------------------------------------------------------ 18
+dict(
+ name="cohort conversion (cumulative KFI -> Funded)",
+ intents=["What is our conversion rate?",
+          "What proportion of KFIs complete?",
+          "How many KFI cases have funded?"],
+ dataset="pipeline history",
+ dataset_owner="mi_agent_api.pipeline_contract.collect_weekly_history",
+ preparation_owner="mi_agent_api.pipeline_prep.prepare_pipeline_mi_dataset per week",
+ calculation_owner="mi_agent_api.pipeline_history.build_historical_completion_"
+                   "model — empirical stage->completion transitions tracked "
+                   "case-by-case across consecutive weekly snapshots, with a "
+                   "MIN_OBSERVATIONS sufficiency floor below which the "
+                   "configured stage probability is used instead.",
+ entry_points=["POST /mi/query -> chat_routing._route_conversion"],
+ measures="cumulative cohort conversion rate, timing per stage",
+ filters="NO",
+ dimensions="stage",
+ temporal="series (cohort cumulative)",
+ population_scope="pipeline (whole)",
+ raw_text_required="NO at the calculation owner (_is_conversion reads only to "
+                   "claim).",
+ raw_text_where=[],
+ evidence=["pipeline_history.historical_model_evidence — observation counts, "
+           "sufficiency verdict per stage, and whether config or empirical was "
+           "used", "weekly extract inventory"],
+ plan_representable="NO",
+ plan_gap="A cohort conversion is a longitudinal CASE-TRACKING calculation, "
+          "not an aggregation over a frame. A QueryPlan has no concept of "
+          "following one entity across snapshots.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Entity-tracking-across-snapshots semantics.",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="LARGE",
+ notes="Genuinely specialist. Building the model replays every retained weekly "
+       "extract, which is why RouteRequest defers it behind a provider."),
+# ------------------------------------------------------------------ 19
+dict(
+ name="pipeline stage movement / transitions",
+ intents=["How many cases went from KFI into Application?",
+          "What moved into Offer last week?",
+          "How much value transitioned out of Application?"],
+ dataset="pipeline (two weekly extracts)",
+ dataset_owner="mi_agent_api.pipeline_contract.collect_weekly_history + "
+               "movement_detail.select_pair",
+ preparation_owner="mi_agent_api.pipeline_prep.prepare_pipeline_mi_dataset + "
+                   "pipeline_prep.case_stage_frame",
+ calculation_owner="mi_agent_api.movement_detail.stage_transition_events -> "
+                   "transition_matrix / new_arrival_summary / stayer_summary / "
+                   "departure_summary / event_totals / stage_reconciliation / "
+                   "global_reconciliation, assembled by "
+                   "movement_detail.build_stage_transition_detail",
+ entry_points=["POST /mi/query -> mi_agent_api.stage_movement_query.handle",
+               "GET /mi/insight/movement-detail",
+               "mi_agent_pptx deck generation"],
+ measures="gross case-level transitions and their amounts, per source/"
+          "destination stage pair",
+ filters="YES_LIMITED — a named stage or a source/destination pair",
+ dimensions="stage x stage (the transition matrix)",
+ temporal="movement (two governed weekly extracts)",
+ population_scope="pipeline (whole)",
+ raw_text_required="NO at calculation. YES at recognition — "
+                   "stage_movement_query.read(question) parses the stage pair, "
+                   "and is MEMOISED pre-claim (remember_recognition) so the "
+                   "handler consumes the reading rather than re-reading. A "
+                   "fallback re-read exists at stage_movement_query.py:555.",
+ raw_text_where=["mi_agent_api.stage_movement_query.read — recognition-time, "
+                 "memoised; the fallback `or read(request.question)` is the "
+                 "only post-claim re-read and fires only when the memo is absent."],
+ evidence=["stage_reconciliation and global_reconciliation — every case "
+           "accounted for as arrival, stayer, transition or departure",
+           "extract pair identity and dates", "receipt"],
+ plan_representable="NO",
+ plan_gap="A transition is a relationship between an entity's state in two "
+          "snapshots. AnalyticalScope describes ROWS IN ONE FRAME.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Entity-state-transition semantics.",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="LARGE",
+ notes="This route exists precisely because a STOCK was being substituted for "
+       "a TRANSITION: 'How many cases went from KFI into Application?' was "
+       "answered with the current KFI stock. Narrowing this capability during "
+       "migration would reintroduce that defect."),
+# ------------------------------------------------------------------ 20
+dict(
+ name="pipeline movement summary (all stages, one interval)",
+ intents=["Give me the stage movement summary.",
+          "Summarise pipeline movement this week.",
+          "How did the whole pipeline move?"],
+ dataset="pipeline (two weekly extracts)",
+ dataset_owner="as record 19",
+ preparation_owner="as record 19",
+ calculation_owner="mi_agent_api.pipeline_movement_summary.build — COMPOSES "
+                   "the payload movement_detail.resolve_stage_transition_detail "
+                   "already publishes. It defines no metric and pairs no "
+                   "snapshots; record 19 is the calculation owner.",
+ entry_points=["POST /mi/query -> pipeline_movement_summary.handle"],
+ measures="as record 19, aggregated across all stages",
+ filters="NO (that is the point — it names no stage)",
+ dimensions="all stages",
+ temporal="movement",
+ population_scope="pipeline (whole)",
+ raw_text_required="NO at calculation; recognition-time read, memoised.",
+ raw_text_where=["mi_agent_api.pipeline_movement_summary.read — recognition-"
+                 "time, memoised; fallback re-read at line 364."],
+ evidence=["inherits record 19's reconciliation wholesale"],
+ plan_representable="NO",
+ plan_gap="As record 19.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="As record 19.",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="LARGE",
+ notes="SAME CALCULATION OWNER as record 19 — two routes, one owner. Recorded "
+       "separately only because the user intent and the refusal behaviour "
+       "genuinely differ (record 19 returns nothing without a named stage)."),
+# ------------------------------------------------------------------ 21
+dict(
+ name="geography analysis (UK ITL3 exposure)",
+ intents=["Where is the book concentrated geographically?",
+          "Show exposure by ITL3 area.",
+          "What is our exposure in Bristol?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.datasets (frame_resolver)",
+ preparation_owner="mi_agent_api.funded_prep; ITL3 derived from the tape's "
+                   "geographic_region_*_itl3 field or from the property "
+                   "postcode via uk_itl_master_lookup_v2.csv",
+ calculation_owner="mi_agent_api.geo.exposure_by_itl3",
+ entry_points=["POST /mi/query -> chat_routing._route_geo",
+               "GET /mi/geo/exposure",
+               "mi_agent_api.analytical_plan.geo_exposure (converted)"],
+ measures="exposure (balance) and loan count per ITL3 area, with each area's "
+          "share of the total",
+ filters="YES_LIMITED — population scope",
+ dimensions="ITL3 area",
+ temporal="current",
+ population_scope="whole book / Direct / Acquired / named source",
+ raw_text_required="YES",
+ raw_text_where=["mi_agent.mi_geography.stated_basis(question) — WHICH "
+                 "geography the answer is measured on (obligor vs collateral). "
+                 "The geography contract is resolved once at parse and carried "
+                 "on ParsedQuestion.geography, but stated_basis is a raw-text "
+                 "reader by construction."],
+ evidence=["geography basis disclosure (which geography the book reports on, "
+           "and how that was decided — mi_agent.mi_geography)",
+           "region_basis_block", "reconciliation", "receipt"],
+ plan_representable="PARTIAL",
+ plan_gap="ITL3 area is an ordinary dimension and exposure an ordinary sum, so "
+          "the aggregation is representable. The GEOGRAPHY BASIS is not: "
+          "AnalyticalScope has no slot for 'measured on the collateral "
+          "geography', and a plan that omitted it would describe a different "
+          "analysis from the one that ran.",
+ connectivity="PARTIAL",
+ connectivity_gap="A geography-basis slot on the scope. 4 of 12 corpus "
+                  "geo-claimed questions lift today; they lift WITHOUT the "
+                  "basis, which is the risk.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "RAW_TEXT_COUPLING"],
+ complexity="MEDIUM",
+ notes="Committed equivalence evidence for the OTHER plan layer at "
+       "migration_phase0/plan_equivalence_geo_exposure.py, and shipped "
+       "evidence at due_diligence/evidence/mi_geography/."),
+# ------------------------------------------------------------------ 22
+dict(
+ name="concentration analysis (governed dimension distribution)",
+ intents=["Where is the book concentrated?",
+          "How concentrated is our broker exposure?",
+          "What share does the largest region hold?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.datasets (frame_resolver) at one reporting date",
+ preparation_owner="mi_agent_api.funded_prep",
+ calculation_owner="mi_workflows.engine.ranked_distribution and "
+                   "mi_workflows.engine.distribution, orchestrated by "
+                   "mi_workflows.concentration_analysis.run_concentration_analysis",
+ entry_points=["POST /mi/query -> chat_routing._route_concentration",
+               "mi_workflows.analytical capability id `population_profile`"],
+ measures="exposure share, count share, rank, cumulative share, top-N share, "
+          "and an explicit unknown block that stays in the denominator",
+ filters="YES_LIMITED — one governed portfolio scope, one reporting date",
+ dimensions="YES_GENERIC over the Business Semantics Registry's declarations "
+            "carrying analytical_role=dimension with the governed "
+            "`concentration` category (config/business_semantics_registry.yaml) "
+            "— the registry is the contract, not a list in code.",
+ temporal="current",
+ population_scope="one governed portfolio scope",
+ raw_text_required="NO",
+ raw_text_where=["The workflow REFUSES to run without a pre-claim reading "
+                 "(concentration_analysis.py:686 — 'NO READING, NO ANSWER'). "
+                 "requested_concept / requested_single_name_kind were removed "
+                 "from the execution path deliberately; `question` survives "
+                 "only in controlled-failure text."],
+ evidence=["every exclusion recorded with its reason",
+           "the registry declaration behind every dimension analysed",
+           "unknown share disclosed rather than dropped",
+           "receipt", "reconciliation"],
+ plan_representable="PARTIAL",
+ plan_gap="The distribution itself is a grouped aggregation plus a ranking — "
+          "representable the moment record 4's ordering slot exists. The "
+          "CONCENTRATION FRAMING (which dimensions are concentration "
+          "dimensions, what the unknown block means) is a registry decision the "
+          "plan has no slot to reference.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Ordering/limit slot (record 4) plus a registry-category "
+                  "reference. 10 of 19 corpus concentration questions lift "
+                  "today and are then claimed by this route instead.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "DISPATCH_ONLY", "PLAN_TO_SPEC_ADAPTER"],
+ complexity="MEDIUM",
+ notes="A SECOND ranking owner (engine.ranked_distribution) alongside the "
+       "executor's _apply_top_n."),
+# ------------------------------------------------------------------ 23
+dict(
+ name="limit assessment / approved concentration tests and headroom",
+ intents=["Are we breaching any concentration limits?",
+          "What is the headroom on the top-3-broker test?",
+          "Which limits are closest to breach?",
+          "What changed in risk limits this month?"],
+ dataset="funded + approved limit configuration",
+ dataset_owner="mi_agent_api.snapshots + mi_agent.concentration_tests.store / "
+               "library (approved configuration), with Schedule 8 extraction "
+               "via mi_agent.risk_monitor.schedule8_extractor as a declared "
+               "fallback",
+ preparation_owner="mi_agent_api.funded_prep",
+ calculation_owner="mi_agent.concentration_tests.evaluation.evaluate_active_"
+                   "tests (+ _utilization, _headroom, _breach_amount, "
+                   "summarise), reached through mi_agent_api."
+                   "concentration_tests_api.compute_concentration_tests. "
+                   "mi_agent_api.risk_limits.compute_risk_limits is a SECOND "
+                   "owner for the React Risk Limits panel, built on "
+                   "analytics_lib.concentration.group_shares / "
+                   "top_n_concentration.",
+ entry_points=["POST /mi/query -> chat_routing._route_risk and "
+               "_route_concentration_tests",
+               "GET /mi/risk-limits", "GET /mi/concentration-tests (+ "
+               "/drillthrough, /drivers, /history)",
+               "mi_workflows.analytical capability id `concentration_limits`"],
+ measures="actual, limit, headroom, utilisation, breach amount, status "
+          "(green/amber/red/needs_review/unavailable), movement vs the prior "
+          "funded run, source and confidence",
+ filters="YES_LIMITED — the test's own population resolver "
+         "(evaluation.resolve_population)",
+ dimensions="the tested dimension per approved test",
+ temporal="current; compare_concentration_periods for month-on-month",
+ population_scope="whole funded book at one reporting date",
+ raw_text_required="YES",
+ raw_text_where=["mi_agent_api.concentration_query.detect_intent(question) — "
+                 "chooses between list / get / summary / compare, i.e. WHICH "
+                 "analysis runs, from the sentence, called at "
+                 "chat_routing._route_concentration_tests via "
+                 "conc_query.answer(question, envelope).",
+                 "chat_routing._projects_forward(question, spec) — decides "
+                 "whether the question is FORWARD-looking and must be declined "
+                 "rather than answered with today's status."],
+ evidence=["source precedence always disclosed (approved_configuration vs "
+           "extracted vs unavailable) and never silent",
+           "missing fields per test", "a test whose input field the book lacks "
+           "is reported unavailable, never as passing",
+           "funded_attribution_status", "receipt"],
+ plan_representable="NO",
+ plan_gap="A limit test is actual-vs-threshold-with-status against an APPROVED "
+          "CONFIGURATION. The plan has no threshold, no status vocabulary and "
+          "no reference to a governed test library.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Threshold/limit semantics and a configuration reference.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "RAW_TEXT_COUPLING"],
+ complexity="LARGE",
+ notes="20 corpus declines. The FORWARD-looking variant is declined by design "
+       "and is a genuine capability gap — see record 28."),
+# ------------------------------------------------------------------ 24
+dict(
+ name="borrowing base / facility utilisation / eligibility",
+ intents=["What is our borrowing base?",
+          "What is the facility utilisation?",
+          "How much eligible collateral do we have?",
+          "What is ineligible and why?"],
+ dataset="funded + facility configuration + governed concentration results",
+ dataset_owner="mi_agent_api.borrowing_base_api (resolves the governed frames "
+               "and the governed concentration results)",
+ preparation_owner="mi_agent_api.funded_prep",
+ calculation_owner="mi_agent.borrowing_base.calculator.calculate "
+                   "(+ summarise_eligibility, concentration_adjustment, "
+                   "nearest_concentration, _invariants); eligibility rules in "
+                   "mi_agent.borrowing_base.eligibility",
+ entry_points=["POST /mi/query -> mi_agent_api.borrowing_base_query.handle",
+               "GET /mi/borrowing-base", "GET /mi/borrowing-base/loans",
+               "React Eligibility & Concentrations tab"],
+ measures="eligible / ineligible balance, concentration adjustment, borrowing "
+          "base, drawn, commitment, utilisation, headroom, nearest "
+          "concentration test",
+ filters="YES_LIMITED — eligibility rules are the filter vocabulary",
+ dimensions="ineligibility reason; concentration test",
+ temporal="current",
+ population_scope="whole funded book",
+ raw_text_required="NO at calculation; recognition-time read, memoised "
+                   "(borrowing_base_query.read at recognition, "
+                   "remember_recognition, handler consumes the memo).",
+ raw_text_where=["mi_agent_api.borrowing_base_query.read(question, spec, "
+                 "view=...) — recognition-time; fallback re-read at line 649."],
+ evidence=["mi_agent.borrowing_base.receipt", "calculator._invariants "
+           "(overlap and totals checks)", "eligibility rule attribution per "
+           "loan", "the same envelope the dashboard renders — one calculation, "
+           "three surfaces"],
+ plan_representable="NO",
+ plan_gap="Eligibility is a RULE SET, not a predicate set; a borrowing base is "
+          "a contractual construction. Neither has a plan slot.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Facility/eligibility semantics.",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="LARGE",
+ notes="Genuinely specialist; it calculates nothing in the MI layer — "
+       "borrowing_base_query answers from the governed envelope."),
+# ------------------------------------------------------------------ 25
+dict(
+ name="forecast / expected funding — run-rate extrapolation and milestones",
+ intents=["When do we reach £100m?",
+          "What is our completion run-rate?",
+          "How long until the book doubles?",
+          "What is the expected funding over the next six months?"],
+ dataset="funded history + pipeline",
+ dataset_owner="mi_agent_api.evolution.funded_frames + "
+               "mi_agent_api.pipeline_contract",
+ preparation_owner="funded_prep + pipeline_prep",
+ calculation_owner="mi_agent_api.forecast_extrapolation.run_rate_model "
+                   "(Model A), kfi_conversion_model (Model B) and "
+                   "build_extrapolation (assembly + milestone solving), over "
+                   "completion_history",
+ entry_points=["POST /mi/query -> chat_routing._route_forecast",
+               "GET /mi/forecast/extrapolation", "GET /mi/evolution/forecast",
+               "mi_workflows.analytical capability ids `completion_run_rate` "
+               "and `threshold_projection`"],
+ measures="monthly run-rate, annualised rate, projected balance series, "
+          "milestone dates to declared thresholds, downside/base/upside BANDS "
+          "(explicitly labelled indicative scenario bands, not statistical CIs)",
+ filters="NO",
+ dimensions="none (whole-book projection)",
+ temporal="series (forward), other (milestone solving)",
+ population_scope="whole book",
+ raw_text_required="YES",
+ raw_text_where=["chat_routing._route_forecast -> "
+                 "mi_agent.period_request.requested_unit(question) — the "
+                 "temporal unit of the projection, read from the sentence after "
+                 "the parse."],
+ evidence=["the three models are kept apart and labelled; the point-in-time "
+           "weighted pipeline is NOT presented as the scale-up forecast",
+           "band basis disclosure", "horizon bound — beyond it the answer is "
+           "'not within the horizon', never an extrapolated date",
+           "receipt"],
+ plan_representable="NO",
+ plan_gap="Projection, run-rate and milestone-solving are forward-looking "
+          "constructions. A QueryPlan describes rows that EXIST.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Projection semantics.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "RAW_TEXT_COUPLING"],
+ complexity="LARGE",
+ notes="28 corpus declines — the second largest decline group after ranking."),
+# ------------------------------------------------------------------ 26
+dict(
+ name="forecast bridge (funded + probability-weighted pipeline)",
+ intents=["What will the book be worth once the pipeline completes?",
+          "What is the forecast funded balance?",
+          "Which pipeline cases are on the watchlist?"],
+ dataset="funded + pipeline (aggregate composition)",
+ dataset_owner="mi_agent_api.snapshots + mi_agent_api.pipeline_contract",
+ preparation_owner="funded_prep + pipeline_prep (which sources completion "
+                   "probabilities from config/client/pipeline_expected_funding."
+                   "yaml — never from the frontend)",
+ calculation_owner="mi_agent_api.forecast_bridge.compute_forecast_bridge "
+                   "(+ portfolio_projections, build_pipeline_watchlist), using "
+                   "the same formula implemented row-level in "
+                   "mi_agent.states.assembler.total_forecast_funded",
+ entry_points=["GET /mi/forecast/snapshot",
+               "mi_workflows.analytical capability id `funded_balance_forecast`",
+               "POST /mi/query via the analytical layer"],
+ measures="forecast_funded_balance = current_funded_balance + "
+          "sum(expected_funded_amount * completion_probability); plus a "
+          "deterministic watchlist",
+ filters="NO",
+ dimensions="portfolio (projections)",
+ temporal="current + forward",
+ population_scope="whole funded book + whole pipeline",
+ raw_text_required="NO",
+ raw_text_where=[],
+ evidence=["an AGGREGATE composition — pipeline rows are never merged into the "
+           "funded book, and the module says so",
+           "without a governed pipeline the forecast is reported unavailable "
+           "and the funded balance is explicitly NOT labelled a forecast",
+           "probability provenance"],
+ plan_representable="NO",
+ plan_gap="Two datasets composed at the AGGREGATE level, with a probability "
+          "weighting. A QueryPlan has one dataset slot and no cross-dataset "
+          "composition.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Cross-dataset aggregate composition.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "DATASET_BINDING"],
+ complexity="LARGE",
+ notes="Committed hardening evidence at "
+       "due_diligence/evidence/forecast_composition_hardening/."),
+# ------------------------------------------------------------------ 27
+dict(
+ name="scenario / what-if on the completion run-rate",
+ intents=["If conversion improved by 10%, when do we reach £50m?",
+          "What if our run-rate halved?"],
+ dataset="derived from the forecast base",
+ dataset_owner="mi_agent_api.forecast_extrapolation (resolves the base)",
+ preparation_owner="n/a — the engine is pure",
+ calculation_owner="mi_agent_api.scenario.apply_scenario "
+                   "(+ multiplier_from_conversion_delta)",
+ entry_points=["POST /mi/query -> chat_routing._route_scenario"],
+ measures="adjusted projected balance series and milestone date, alongside the "
+          "unchanged base for comparison",
+ filters="NO",
+ dimensions="none",
+ temporal="other (forward, perturbed)",
+ population_scope="whole book",
+ raw_text_required="YES",
+ raw_text_where=["chat_routing._scenario_multiplier(question) — the MAGNITUDE "
+                 "of the perturbation, quantified from the sentence at "
+                 "chat_routing.py:2263. The engine itself is pure and takes "
+                 "typed overrides; the number reaching it comes from text."],
+ evidence=["base and adjusted series both returned, so the perturbation is "
+           "visible rather than asserted", "receipt"],
+ plan_representable="NO",
+ plan_gap="A counterfactual perturbation of a forward model. No plan slot, and "
+          "no rows to scope.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Scenario/perturbation semantics.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "RAW_TEXT_COUPLING"],
+ complexity="LARGE",
+ notes="The engine is side-effect free and would be trivially reusable; it is "
+       "the MAGNITUDE extraction that is text-bound."),
+# ------------------------------------------------------------------ 28
+dict(
+ name="portfolio risk comparison (two governed scopes at one date)",
+ intents=["Compare the direct and acquired books.",
+          "How does portfolio A compare with portfolio B on risk?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.datasets (one frame, two scopes applied)",
+ preparation_owner="mi_agent_api.funded_prep",
+ calculation_owner="mi_workflows.portfolio_risk_comparison."
+                   "run_portfolio_risk_comparison, over "
+                   "mi_workflows.engine.aggregate / compare_values / "
+                   "directionality_verdict / mixed_currency_guard",
+ entry_points=["POST /mi/query -> chat_routing._route_portfolio_comparison"],
+ measures="every field the Business Semantics Registry declares comparable, "
+          "with its declared aggregation, weight, share basis and "
+          "directionality",
+ filters="YES_LIMITED — the two governed scopes",
+ dimensions="the compared fields",
+ temporal="current (one reporting date, two populations)",
+ population_scope="two governed portfolio scopes",
+ raw_text_required="YES",
+ raw_text_where=["mi_workflows.portfolio_risk_comparison."
+                 "resolve_comparison_scopes(question, reg) — called INSIDE "
+                 "run_portfolio_risk_comparison (line 524). The two POPULATIONS "
+                 "are decided from raw text at execution time. Contrast "
+                 "concentration_analysis, whose equivalent read was moved to "
+                 "recognition and memoised."],
+ evidence=["comparability decision per field, from the registry",
+           "shared asset class resolution", "mixed-currency guard — monetary "
+           "metrics only compared where currency profiles match, no FX ever",
+           "receipt"],
+ plan_representable="PARTIAL",
+ plan_gap="TWO populations over one frame is the one thing QueryPlan was built "
+          "for — but only as NARROWINGS of one shared scope. Two sibling "
+          "populations that are not nested cannot both be a ScopeDelta of one "
+          "shared scope, and there is no comparison relationship.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Sibling (non-nested) scopes plus a comparison relationship.",
+ gap_class=["MISSING_PLAN_SEMANTIC", "RAW_TEXT_COUPLING"],
+ complexity="LARGE",
+ notes="The ONE workflow whose population is still resolved from raw text "
+       "inside the calculation entry point."),
+# ------------------------------------------------------------------ 29
+dict(
+ name="analytical composition layer (multi-capability plans)",
+ intents=["How is the book doing and where are we most exposed?",
+          "Summarise the position and tell me if we are near any limits.",
+          "What is the front book worth versus the back book?"],
+ dataset="varies by plan",
+ dataset_owner="mi_workflows.analytical.context (lazy, memoised; delegates "
+               "every resolution to the existing service)",
+ preparation_owner="delegated",
+ calculation_owner="NONE OF ITS OWN — mi_workflows.analytical.orchestrator "
+                   "runs each call through the capability's registered "
+                   "deterministic executor. tests/test_analytical_capability_"
+                   "layer.py parses the source to enforce that no adapter "
+                   "computes a financial result.",
+ entry_points=["POST /mi/query -> mi_workflows.analytical.route.recogniser() — "
+               "registered FIRST and at a higher confidence, and declining "
+               "every question a single-capability route already owns"],
+ measures="the union of the ten declared capabilities in "
+          "mi_workflows/analytical/registry.py",
+ filters="delegated",
+ dimensions="delegated",
+ temporal="delegated",
+ population_scope="mi_workflows.analytical.populations — the ONLY place a "
+                  "population is created here, and every one comes from an "
+                  "existing governed resolver (mi_agent.seasoning for the "
+                  "front/back binary partition, the portfolio registry for "
+                  "provenance)",
+ raw_text_required="YES",
+ raw_text_where=["mi_workflows.analytical.planner.plan_for reads the "
+                 "structured parse plus a controlled vocabulary to build the "
+                 "plan. This is PLANNING, not post-plan re-reading — but it is "
+                 "a separate reader from the QueryPlan lift, and the two plans "
+                 "do not compose."],
+ evidence=["Finding objects carrying their own unavailability notes",
+           "narrative may only read findings, so a sentence cannot contain a "
+           "figure the deterministic layer did not produce",
+           "per-capability limitations declared in the registry"],
+ plan_representable="NO",
+ plan_gap="This is a plan OVER capabilities; QueryPlan is a plan over one "
+          "population's outputs. They are different altitudes and neither "
+          "contains the other today.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="No relationship defined between the two plan artefacts.",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="LARGE",
+ notes="35 corpus questions claimed; 29 of them ALSO lift to a QueryPlan at "
+       "parse, which is a measured sign the two layers overlap without "
+       "composing."),
+# ------------------------------------------------------------------ 30
+dict(
+ name="source portfolio scope (Direct / Acquired / named source / cohort)",
+ intents=["What is the balance in the acquired book?",
+          "Direct originations only.",
+          "How does direct_001 compare?"],
+ dataset="cross-cutting",
+ dataset_owner="mi_agent_api.portfolio_context.build_registry — the SAME "
+               "governed registry React renders its portfolio selector from",
+ preparation_owner="engine/provenance.py stamps source_portfolio_type / "
+                   "source_portfolio_id at onboarding",
+ calculation_owner="NOT A CALCULATION — mi_agent.portfolio_lens."
+                   "resolve_lens_with_default resolves the NAME, and "
+                   "mi_agent_api.portfolio_context.resolve_context resolves what "
+                   "it CONTAINS (an explicit portfolio-id list, so a newly "
+                   "onboarded member widens the group with no code change). "
+                   "The narrowing is then an ordinary predicate.",
+ entry_points=["every lens-aware route (chat_routing._resolve_lens, four call "
+               "sites)", "the generic path (mi_agent_workflow.py:763)",
+               "QuestionInterpretation.source_scope (the converted routes)"],
+ measures="n/a",
+ filters="YES_GENERIC — realised as a filter on the provenance fields; it only "
+         "narrows rows and never changes a calculation",
+ dimensions="source_portfolio_id / source_portfolio_type",
+ temporal="n/a",
+ population_scope="Total / Direct / Acquired / named source / cohort",
+ raw_text_required="YES",
+ raw_text_where=["mi_agent.portfolio_lens.resolve_lens_with_default(question, "
+                 "default_lens, ...) — a question's own words OVERRIDE the "
+                 "caller's UI selection by design. Called at "
+                 "mi_agent/mi_agent_workflow.py:763 (generic path) and "
+                 "mi_agent_api/chat_routing.py:579/4019/4075/4724."],
+ evidence=["resolved portfolio-id list, never a type string, so a group is "
+           "exactly the sum of its registered members",
+           "lensApplied boolean + explicit disclosure when a non-total lens "
+           "could NOT be applied",
+           "a disclosure when the QUESTION'S WORDING WIDENED the caller's "
+           "selection (chat_routing._disclose_wording_widened_the_scope)",
+           "a warning when the requested portfolio is not in the registry and "
+           "the answer therefore covers the TOTAL book"],
+ plan_representable="PARTIAL",
+ plan_gap="AnalyticalScope HAS a portfolio_lens slot. It is simply not "
+          "populated: mi_agent/parsed_question.py:154 calls "
+          "compiled_spec_for(spec) with no scope kwargs, so the lens comes from "
+          "spec.portfolio_lens, which is empty at parse and is set later.",
+ connectivity="PARTIAL",
+ connectivity_gap="The seam exists and is unused. plan_from_spec already "
+                  "accepts dataset / portfolio_lens / period kwargs; nothing "
+                  "passes them.",
+ gap_class=["DATASET_BINDING", "RAW_TEXT_COUPLING"],
+ complexity="TRIVIAL",
+ notes="ONE OF THE CHEAPEST REAL GAPS IN THE CENSUS: the contract, the "
+       "resolver and the parameter all exist. Only the call site is missing."),
+# ------------------------------------------------------------------ 31
+dict(
+ name="seasoning / front-book vs back-book population",
+ intents=["What is the front book worth?",
+          "Balance by seasoning segment.",
+          "How much was written in the last lending window?"],
+ dataset="funded",
+ dataset_owner="mi_agent_api.datasets",
+ preparation_owner="mi_agent_api.funded_prep (vintage_year, months_on_book); "
+                   "mi_agent.seasoning.months_between",
+ calculation_owner="NOT A CALCULATION — mi_agent.seasoning."
+                   "resolve_population_predicate / resolve_segment_population "
+                   "decide the BOUNDARY (a governed BINARY PARTITION, so naming "
+                   "one side makes the other available by construction). The "
+                   "aggregation is record 1's.",
+ entry_points=["the generic path (as a predicate)",
+               "mi_workflows.analytical.populations"],
+ measures="n/a",
+ filters="YES_GENERIC once resolved to a predicate",
+ dimensions="seasoning segment",
+ temporal="n/a",
+ population_scope="front book / back book / named lending window",
+ raw_text_required="YES",
+ raw_text_where=["mi_agent.seasoning.segments_named(text) / "
+                 "lending_windows_named(text) / resolve_population_predicate"
+                 "(text, ...) — the boundary is read from the sentence."],
+ evidence=["the configured seasoning boundary is disclosed",
+           "mi_agent.population.apply_population emits proof the predicate ran"],
+ plan_representable="YES",
+ plan_gap="A resolved seasoning predicate is an ordinary Predicate on a "
+          "prepared column.",
+ connectivity="PARTIAL",
+ connectivity_gap="Where the parser resolves the segment into spec.filters the "
+                  "plan carries it. Where seasoning is resolved later (the "
+                  "analytical layer's populations module) it does not.",
+ gap_class=["RAW_TEXT_COUPLING"],
+ complexity="SMALL",
+ notes="A governed BINARY partition, which is why naming one side is safe."),
+# ------------------------------------------------------------------ 32
+dict(
+ name="week-on-week movement attribution (hover / drill)",
+ intents=["What changed between these two weeks?",
+          "What contributed to the pipeline movement?"],
+ dataset="pipeline (two weekly extracts)",
+ dataset_owner="mi_agent_api.movement_detail.select_pair over "
+               "pipeline_contract.collect_weekly_history",
+ preparation_owner="mi_agent_api.pipeline_prep",
+ calculation_owner="mi_agent_api.movement_detail.movement_components "
+                   "(+ component_summary, rank_contributors, "
+                   "reassignment_counts), assembled by build_movement_detail",
+ entry_points=["GET /mi/insight/movement-detail",
+               "mi_agent_api.insight_engine (weekly brief — composes, does not "
+               "calculate)"],
+ measures="the SAME number the chart already plots, decomposed — no metric is "
+          "defined here",
+ filters="YES_LIMITED — the dimension being decomposed",
+ dimensions="any dimension the prepared frame carries",
+ temporal="movement (two adjacent weekly extracts)",
+ population_scope="pipeline (whole)",
+ raw_text_required="NO",
+ raw_text_where=[],
+ evidence=["headline recomputed from the same prepared frames the chart used",
+           "component reconciliation", "extract pair identity"],
+ plan_representable="NO",
+ plan_gap="A decomposition of a delta between two frames.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="Movement decomposition semantics (shared with record 15).",
+ gap_class=["MISSING_PLAN_SEMANTIC"],
+ complexity="LARGE",
+ notes="Dashboard-facing; reachable from MI Query only indirectly, through "
+       "records 19-20 which consume the same module."),
+# ------------------------------------------------------------------ 33
+dict(
+ name="FORWARD-LOOKING approved-limit projection",
+ intents=["Do we expect to breach any concentration limits?",
+          "Which concentration tests are we at risk of breaching?"],
+ dataset="funded + pipeline + approved limit configuration",
+ dataset_owner="n/a",
+ preparation_owner="n/a",
+ calculation_owner="NONE. This is the census's one GENUINE_CAPABILITY_GAP.",
+ entry_points=["POST /mi/query — chat_routing's `risk_limits` recogniser "
+               "DECLINES when chat_routing._projects_forward(question, spec) is "
+               "true, and the existing forward-projection facet produces the "
+               "refusal."],
+ measures="none",
+ filters="n/a",
+ dimensions="n/a",
+ temporal="none",
+ population_scope="n/a",
+ raw_text_required="YES (the decline test reads the sentence)",
+ raw_text_where=["chat_routing._projects_forward(question, spec)"],
+ evidence=["A CONTROLLED REFUSAL rather than a substitution. Measured before "
+           "the gate, these questions were answered with TODAY's status "
+           "('5 passed, 6 breaches … Nearest to limit: Top 3 brokers') — "
+           "current-state substitution, recorded against Q25A/B/C in the frozen "
+           "readiness bank."],
+ plan_representable="NO",
+ plan_gap="n/a — there is nothing to represent.",
+ connectivity="NOT_CONNECTED",
+ connectivity_gap="n/a",
+ gap_class=["GENUINE_CAPABILITY_GAP"],
+ complexity="LARGE",
+ notes="risk_monitor.run_funded_vs_forecast is deliberately NOT wired in: it "
+       "forecasts group SHARES against placeholder RAG thresholds "
+       "(amber 0.20 / red 0.30), carries no approved test name and no headroom, "
+       "needs a caller-supplied dimension and a SnapshotStore the MI path does "
+       "not construct. Documented at "
+       "migration_phase0/MI_CURRENT_VS_FORWARD_CONCENTRATION.md. "
+       "THE ONLY GENUINE CAPABILITY GAP IN THIS CENSUS."),
+]
+
+# --------------------------------------------------------------------------- #
+# Cross-cutting raw-text audit — the exact functions
+# --------------------------------------------------------------------------- #
+RAW_TEXT_READERS = [
+ dict(fn="mi_agent_api.workspace.resolve_dataset", decides="dataset",
+      where="mi_agent_api/mi_service.py:487", post_plan=True,
+      note="THE dataset owner. Called before routing and before any plan slot "
+           "could be filled; AnalyticalScope.dataset is left None."),
+ dict(fn="mi_agent.portfolio_lens.resolve_lens_with_default", decides="scope / population",
+      where="mi_agent/mi_agent_workflow.py:763; mi_agent_api/chat_routing.py:"
+            "579, 4019, 4075, 4724", post_plan=True,
+      note="Applies filters to the spec AFTER the QueryPlan lift."),
+ dict(fn="question_interpretation.lexical.pipeline_stage_request", decides="filter",
+      where="mi_agent/mi_agent_workflow.py:808", post_plan=True,
+      note="Injects a stage predicate into spec.filters. Proven by execution."),
+ dict(fn="mi_agent.mi_agent_workflow.missing_dimension_policy_for", decides="aggregation coverage",
+      where="mi_agent/mi_agent_workflow.py:490, used at :942", post_plan=True,
+      note="bucket vs exclude moves grouped denominators and coverage %."),
+ dict(fn="mi_agent.mi_agent_workflow `_grouping_marker` regex", decides="aggregation / output shape",
+      where="mi_agent/mi_agent_workflow.py:880", post_plan=True,
+      note="Gates whether a failed spec may be auto-recovered to a KPI/table."),
+ dict(fn="mi_agent.execution_receipt.detect_requested_facets", decides="capability / completeness",
+      where="mi_agent/mi_agent_workflow.py (receipt assembly)", post_plan=True,
+      note="Re-derives material facets FROM THE SENTENCE and can REFUSE the "
+           "answer (facet state LOST). Not presentation."),
+ dict(fn="mi_agent_api.concentration_query.detect_intent", decides="capability",
+      where="mi_agent_api/chat_routing.py:_route_concentration_tests -> "
+            "conc_query.answer(question, envelope)", post_plan=True,
+      note="Chooses list / get / summary / compare from the sentence."),
+ dict(fn="mi_agent_api.chat_routing._scenario_multiplier", decides="scenario magnitude",
+      where="mi_agent_api/chat_routing.py:2263", post_plan=True,
+      note="Quantifies the perturbation from the sentence."),
+ dict(fn="mi_agent.period_request.requested_unit", decides="period",
+      where="mi_agent_api/chat_routing.py:_route_forecast", post_plan=True,
+      note="The projection's temporal unit."),
+ dict(fn="mi_agent.mi_geography.stated_basis", decides="dimension (geography basis)",
+      where="mi_agent/mi_geography.py:348, consumed by the geography contract",
+      post_plan=True,
+      note="Obligor vs collateral geography — which geography the answer is "
+           "measured on."),
+ dict(fn="mi_workflows.portfolio_risk_comparison.resolve_comparison_scopes",
+      decides="scope (two populations)",
+      where="mi_workflows/portfolio_risk_comparison.py:524, INSIDE "
+            "run_portfolio_risk_comparison", post_plan=True,
+      note="The only workflow that still resolves its populations from raw "
+           "text inside the calculation entry point."),
+ dict(fn="mi_agent.seasoning.resolve_population_predicate", decides="scope",
+      where="mi_workflows/analytical/populations.py", post_plan=True,
+      note="Front/back book boundary."),
+ dict(fn="mi_agent_api.chat_routing._projects_forward", decides="capability",
+      where="mi_agent_api/chat_routing.py (risk_limits recogniser)", post_plan=False,
+      note="A recognition-time decline test, not a post-plan read."),
+ dict(fn="mi_agent_api.stage_movement_query.read", decides="filter / capability",
+      where="recognition, memoised via remember_recognition; fallback re-read "
+            "at stage_movement_query.py:555", post_plan=False,
+      note="Reading at recognition IS recognition. Listed for completeness."),
+ dict(fn="mi_agent_api.pipeline_movement_summary.read", decides="period",
+      where="recognition, memoised; fallback at line 364", post_plan=False,
+      note="As above."),
+ dict(fn="mi_agent_api.borrowing_base_query.read", decides="capability",
+      where="recognition, memoised; fallback at line 649", post_plan=False,
+      note="As above."),
+ dict(fn="mi_agent.period_change.rank_request.detect_rank_request",
+      decides="aggregation (ranking basis / top-n)",
+      where="recognition-time for the period-change route", post_plan=False,
+      note="As above."),
+]
+
+# --------------------------------------------------------------------------- #
+# Owner map — inverted
+# --------------------------------------------------------------------------- #
+OWNER_MAP = [
+ ("mi_agent.mi_query_executor.execute_mi_query", [
+   "funded current aggregation (count/sum/avg/weighted/median/min/max)",
+   "pipeline current aggregation, including stage counts AND stage amounts",
+   "forecast-view aggregation over the derived frame",
+   "grouped top-N ranking (_apply_top_n) and loan-level ranking (_execute_ranked_loans)",
+   "share (_execute_share) and contribution (_execute_contribution)",
+   "loan-level listing, scatter and bubble (_execute_loan_level)",
+   "bucketed / stratified dimensions (over materialised bucket columns)",
+   "multi-measure sets over one population (the P1E path)",
+   "1, 2 and 3+ dimension grouping",
+   "shared predicate execution (_apply_filters / governed_predicate_mask)",
+   "EVERY per-period figure in a temporal series, via temporal_query.execute_temporal",
+   "reconciliation and applied-predicate evidence for all of the above"]),
+ ("mi_workflows.engine (aggregate / distribution / ranked_distribution / "
+  "compare_values / directionality_verdict / mixed_currency_guard)", [
+   "concentration analysis",
+   "portfolio risk comparison",
+   "the analytical layer's portfolio_snapshot and population_profile",
+   "a SECOND ranking implementation alongside the executor's _apply_top_n"]),
+ ("mi_agent_api.evolution (funded_frames / assemble_funded_evolution / "
+  "pipeline_evolution / pipeline_funnel_evolution / funded_bridge / "
+  "funded_cohort_progression)", [
+   "funded dashboard time series (five metrics)",
+   "pipeline weekly series and funnel evolution",
+   "funded balance attribution bridge",
+   "cohort progression across reporting dates",
+   "the period stack every converted plan route reads"]),
+ ("mi_agent_api.movement_summary (portfolio_summary / period_movement / _delta "
+  "/ _regional_exposure / _cohorts)", [
+   "funded headline position",
+   "month-on-month movement with regional and source attribution"]),
+ ("mi_agent.period_change (workflow.run_period_change_analysis + calculations "
+  "+ distribution + bridge + ranking)", [
+   "governed period change analysis",
+   "the analytical layer's period_movement capability"]),
+ ("mi_agent_api.movement_detail (movement_components / stage_transition_events "
+  "/ transition_matrix / build_stage_transition_detail)", [
+   "pipeline stage movement and transitions (chat)",
+   "all-stage pipeline movement summary (chat)",
+   "week-on-week movement attribution (hover / drill)",
+   "the weekly brief's movement inputs",
+   "PPTX deck movement slides"]),
+ ("mi_agent_api.pipeline_contract (load_prepared_pipeline / "
+  "compute_pipeline_snapshot / collect_weekly_history / cap_breakdown)", [
+   "pipeline headline position",
+   "the prepared pipeline frame EVERY pipeline capability operates on",
+   "the analytical layer's pipeline_stock and pipeline_completion_forecast"]),
+ ("mi_agent_api.forecast_extrapolation (run_rate_model / kfi_conversion_model "
+  "/ build_extrapolation)", [
+   "run-rate forecast and milestone solving",
+   "the analytical layer's completion_run_rate and threshold_projection",
+   "the base the scenario engine perturbs"]),
+ ("mi_agent.concentration_tests.evaluation.evaluate_active_tests", [
+   "approved concentration tests, headroom and breach status (chat)",
+   "the Risk Limits workspace",
+   "Copilot limit questions",
+   "the concentration adjustment inside the borrowing base",
+   "the analytical layer's concentration_limits"]),
+ ("analytics_lib.concentration (group_shares / top_n_concentration / "
+  "limit_usage / rag_status)", [
+   "mi_agent_api.risk_limits.compute_risk_limits",
+   "mi_agent.risk_monitor.concentration",
+   "the Streamlit-era risk monitor's logic, preserved"]),
+ ("analytics_lib.cohort (cohort_table / add_cohort_period / months_on_book)", [
+   "vintage / static-pool analysis",
+   "cohort formation and static-pool membership",
+   "the months_on_book dimension the funded preparation derives"]),
+ ("analytics_lib.buckets.materialise_buckets + mi_agent.quantile_buckets", [
+   "every bucketed dimension in the registry (LTV, age, ticket size, rate, "
+   "time-on-book)",
+   "so every 'by X bucket' question in records 1-3"]),
+ ("mi_agent.borrowing_base.calculator.calculate", [
+   "borrowing base, eligibility and facility utilisation (chat)",
+   "GET /mi/borrowing-base",
+   "the React Eligibility & Concentrations tab"]),
+ ("mi_agent_api.temporal_query.execute_temporal", [
+   "MI-Query temporal series (delegating every FIGURE to the executor)",
+   "time x dimension series"]),
+ ("mi_agent_api.temporal_compare.compare_periods", [
+   "two-period comparison delta / pct / direction"]),
+ ("mi_agent_api.geo.exposure_by_itl3", ["ITL3 geographic exposure"]),
+ ("mi_agent_api.cohorts (cohort_analysis / cohort_formation / cohort_static_pool)",
+  ["vintage analysis", "cohort membership for progression"]),
+ ("mi_agent_api.forecast_bridge.compute_forecast_bridge", [
+   "forecast funded balance (funded + weighted pipeline)",
+   "pipeline watchlist",
+   "the analytical layer's funded_balance_forecast"]),
+ ("mi_agent_api.pipeline_history.build_historical_completion_model", [
+   "cohort conversion (KFI -> Funded)",
+   "the empirical stage probabilities the pipeline forecast prefers over config"]),
+ ("mi_agent_api.scenario.apply_scenario", ["what-if on the completion run-rate"]),
+ ("mi_agent.states (assembler / temporal.compare / temporal.trend / forecast)", [
+   "the mi_runtime state/temporal/risk engines — reachable from the CLI "
+   "interpreter and the simulation harness, NOT from the HTTP serving path at "
+   "this SHA",
+   "assembler.total_forecast_funded, whose formula forecast_bridge reuses"]),
+]
+
+# Layers that COMPOSE without calculating — recorded so they are not mistaken
+# for owners.
+COMPOSING_LAYERS = [
+ ("mi_workflows.analytical.orchestrator", "runs registered executors; "
+  "tests parse the source to prove no adapter computes a financial result"),
+ ("mi_agent_api.analytical_plan", "interpretation -> plan -> EXISTING "
+  "primitives; structurally forbidden from reading the question"),
+ ("mi_agent.query_plan_compiler / query_plan_execution", "QueryPlan -> the "
+  "specs the executor already accepts; no arithmetic"),
+ ("mi_agent_api.pipeline_movement_summary", "composes movement_detail's payload"),
+ ("mi_agent_api.insight_engine", "assembles the weekly brief from governed "
+  "movement, concentration and funnel outputs"),
+ ("mi_agent_api.borrowing_base_query", "answers from the governed borrowingBase "
+  "envelope"),
+ ("mi_agent_api.concentration_query", "answers from the governed "
+  "concentration-test envelope"),
+ ("mi_workflows.analytical.narrative", "findings in, prose out; may only read "
+  "findings"),
+]
