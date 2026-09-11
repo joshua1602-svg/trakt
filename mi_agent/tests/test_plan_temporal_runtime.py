@@ -131,11 +131,11 @@ def test_a_temporal_plan_is_still_refused_by_slice_one(compiler):
                     {"concept": "loan", "statistic": "count"}],
           time={"form": "series", "grain": "monthly", "periods_back": 6}),
      adapter.NOT_SINGLE_OUTPUT),
-    # an explicit Direct/Acquired lens is another owner's
-    (dict(operation="series",
-          population={"base": "funded", "lens": "acquired", "seasoning": "any"},
-          time={"form": "series", "grain": "monthly", "periods_back": 6}),
-     adapter.EXPLICIT_LENS),
+    # A GOVERNED DIRECT/ACQUIRED LENS IS NO LONGER ANOTHER OWNER'S. Slice 3
+    # carries it as an ordinary predicate on `source_portfolio_type`, applied
+    # inside every snapshot by this same runtime — see TestTheRoleScopeHolds
+    # across every snapshot, below. What the perimeter still refuses is a role
+    # with no predicate bound to it (SCOPE_NOT_BOUND).
     # a governed geography axis is the geography owner's
     (dict(operation="series",
           geography={"requested": True, "basis": "collateral",
@@ -943,3 +943,127 @@ class TestThereIsOneBoundedRangeOwner:
         source = _code_of(temporal._resolve_bounded_range)
         assert ".resolve(store)" in source
         assert "reporting_date <" not in source and "rd >=" not in source
+
+class TestTheRoleScopeHoldsAcrossEverySnapshot:
+    """Slice 3 through the temporal runtime, which needed no change at all.
+
+    The scope is resolved ONCE, by the compiler, into an ordinary predicate. The
+    temporal runtime then does what it already did — hand the same spec to
+    `execute_mi_query` per snapshot — so the role is applied in each and proven
+    in each receipt. A separate temporal scope mechanism would have been a second
+    owner of the same semantic.
+    """
+
+    SPARSE = ["2025-10-31", "2025-11-30", "2026-06-30"]
+    ROLE_FIELD = "source_portfolio_type"
+
+    def book(self):
+        book = truth.canonical_book().reset_index(drop=True)
+        book[self.ROLE_FIELD] = ["direct" if i % 3 else "acquired"
+                                 for i in range(len(book))]
+        return book
+
+    def store_for(self, tmp_path_factory, frame, dates=None):
+        return fixture.build_store(
+            tmp_path_factory.mktemp("scoped"),
+            [(d, frame.copy()) for d in (dates or self.SPARSE)])
+
+    def scoped_series(self, compiler, store, semantics, lens="acquired", **over):
+        payload = intent(operation="series",
+                         population={"base": "funded", "lens": lens,
+                                     "seasoning": "any"},
+                         time={"form": "series", "grain": "monthly"})
+        payload.update(over)
+        return temporal.execute_temporal_plan(
+            plan_for(compiler, payload), store=store,
+            client_id=fixture.CLIENT_ID, semantics=semantics,
+            route=fixture.ROUTE)
+
+    def test_every_period_is_scoped_and_proves_it(self, compiler, semantics,
+                                                  tmp_path_factory):
+        book = self.book()
+        outcome = self.scoped_series(
+            compiler, self.store_for(tmp_path_factory, book), semantics)
+        assert outcome.executed, outcome.reason
+        expected = float(book[book[self.ROLE_FIELD] == "acquired"][
+            truth.BALANCE].sum())
+        assert [p.reporting_date for p in outcome.points] == self.SPARSE
+        for point in outcome.points:
+            assert abs(point.value - expected) < 0.01
+            applied = {e.get("canonical_field")
+                       for e in (point.receipt.get("applied_predicates") or ())}
+            assert self.ROLE_FIELD in applied, \
+                f"{point.reporting_date} lost the scope"
+
+    def test_the_scope_composes_with_a_filter_in_every_period(
+            self, compiler, semantics, tmp_path_factory):
+        book = self.book()
+        outcome = self.scoped_series(
+            compiler, self.store_for(tmp_path_factory, book), semantics,
+            measures=[{"concept": "loan", "statistic": "count"}],
+            filters=[{"concept": "erm_product_type", "comparator": "eq",
+                      "value": "drawdown"}])
+        assert outcome.executed, outcome.reason
+        expected = int(((book[self.ROLE_FIELD] == "acquired")
+                        & (book.erm_product_type.str.lower() == "drawdown")).sum())
+        for point in outcome.points:
+            assert abs(point.value - expected) < 0.01
+            applied = {e.get("canonical_field")
+                       for e in (point.receipt.get("applied_predicates") or ())}
+            assert {self.ROLE_FIELD, "erm_product_type"} <= applied
+
+    def test_a_period_comparison_scopes_both_periods(self, compiler, semantics,
+                                                     tmp_path_factory):
+        outcome = temporal.execute_temporal_plan(
+            plan_for(compiler, intent(
+                operation="compare",
+                population={"base": "funded", "lens": "acquired",
+                            "seasoning": "any"},
+                time={"form": "relative_pair"})),
+            store=self.store_for(tmp_path_factory, self.book()),
+            client_id=fixture.CLIENT_ID, semantics=semantics,
+            route=fixture.ROUTE)
+        assert outcome.executed and len(outcome.points) == 2
+        for point in outcome.points:
+            assert self.ROLE_FIELD in {
+                e.get("canonical_field")
+                for e in (point.receipt.get("applied_predicates") or ())}
+
+    def test_a_valid_scope_with_no_matching_rows_is_a_zero_not_a_failure(
+            self, compiler, semantics, tmp_path_factory):
+        """The distinction the contract turns on: "scope exists, nothing matched"
+        is an answer; "scope could not be proven" is a refusal."""
+        book = self.book()
+        book[self.ROLE_FIELD] = "direct"          # no acquired rows anywhere
+        outcome = self.scoped_series(
+            compiler, self.store_for(tmp_path_factory, book), semantics)
+        assert outcome.executed, outcome.reason
+        assert [p.value for p in outcome.points] == [0.0, 0.0, 0.0]
+
+    def test_a_snapshot_that_cannot_prove_the_scope_fails_closed(
+            self, compiler, semantics, tmp_path_factory):
+        """The other half: one period whose frame carries no role column at all.
+        The series must refuse rather than serve two scoped periods and one
+        whole-book one."""
+        scoped, bare = self.book(), truth.canonical_book()
+        store = fixture.build_store(
+            tmp_path_factory.mktemp("mixed"),
+            [(self.SPARSE[0], scoped.copy()), (self.SPARSE[1], scoped.copy()),
+             (self.SPARSE[2], bare.copy())])
+        outcome = self.scoped_series(compiler, store, semantics)
+        assert not (outcome.executed and outcome.reconciled), \
+            "a period without the role column was served alongside scoped ones"
+
+    def test_no_lens_is_the_whole_book_in_every_period(self, compiler, semantics,
+                                                       tmp_path_factory):
+        book = self.book()
+        outcome = self.scoped_series(
+            compiler, self.store_for(tmp_path_factory, book), semantics,
+            lens="all")
+        assert outcome.executed, outcome.reason
+        expected = float(book[truth.BALANCE].sum())
+        for point in outcome.points:
+            assert abs(point.value - expected) < 0.01
+            assert self.ROLE_FIELD not in {
+                e.get("canonical_field")
+                for e in (point.receipt.get("applied_predicates") or ())}

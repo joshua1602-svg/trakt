@@ -455,5 +455,81 @@ class TestNoRawTextRereadAfterThePlan(unittest.TestCase):
                          "a predicate no receipt proves was answered over")
 
 
+# --------------------------------------------------------------------------- #
+# SLICE 3 — the governed role scope, through the same coverage owner
+# --------------------------------------------------------------------------- #
+class TestTheRequestedScopeMustReachExecution(unittest.TestCase):
+    """Requested scope = the plan. Executed scope = the receipts. Nothing else.
+
+    `reconcile_receipt` is deliberately the STRUCTURAL half — it asks whether a
+    predicate on the field ran, not which value it compared — so the claim that
+    a receipt proving `direct` cannot answer a question asking `acquired` is
+    owned here, by the same requested-vs-executed reconciliation that adjudicates
+    every other governed predicate. Slice 3 adds no second mechanism for it; it
+    only has to put the scope on the requested side, which `plan_predicates`
+    does.
+    """
+
+    ROLE_FIELD = "source_portfolio_type"
+
+    def _requested(self, role="acquired"):
+        return {"filters": [{"field": self.ROLE_FIELD, "comparator": "eq",
+                             "value": role}], "dimensions": []}
+
+    def _gate(self, executed, role="acquired"):
+        envelope = {"ok": True, "artifacts": [{"rows": []}], "metadata": {
+            "parserMode": "governed_plan",
+            "governedPlan": {"requested": self._requested(role),
+                             "executed": executed}}}
+        mi_service._stamp_semantic_coverage(
+            envelope, question="(never read on this path)", semantics={},
+            frame=None, geography=None)
+        ledger = envelope["metadata"]["semanticCoverage"]
+        return mi_service._enforce_semantic_coverage(envelope), ledger
+
+    def _receipt(self, role):
+        return [{"canonical_field": self.ROLE_FIELD, "op": "eq",
+                 "values": [role]}]
+
+    def test_the_role_that_ran_is_the_role_that_was_asked(self):
+        out, ledger = self._gate({"applied_predicates": self._receipt("acquired"),
+                                  "group_field_keys": []})
+        self.assertTrue(out["ok"], out.get("error"))
+        self.assertEqual(ledger["unaccounted"], [])
+
+    def test_a_receipt_proving_a_different_role_is_refused(self):
+        """Answering the DIRECT book under a question about the ACQUIRED one is
+        the worst outcome this axis can produce: plausible, wrong, and silent."""
+        out, ledger = self._gate({"applied_predicates": self._receipt("direct"),
+                                  "group_field_keys": []})
+        self.assertFalse(out["ok"], "a different book was served")
+        self.assertEqual([c["field"] for c in ledger["unaccounted"]],
+                         [self.ROLE_FIELD])
+
+    def test_a_receipt_with_no_scope_at_all_is_refused(self):
+        out, ledger = self._gate({"applied_predicates": [],
+                                  "group_field_keys": []})
+        self.assertFalse(out["ok"], "an unscoped total was served as a role")
+        self.assertEqual([c["field"] for c in ledger["unaccounted"]],
+                         [self.ROLE_FIELD])
+
+    def test_one_snapshot_losing_the_scope_refuses_the_whole_series(self):
+        """Slice 2's per-snapshot rule, doing Slice 3's work unchanged."""
+        out, _ = self._gate({"snapshots": [
+            {"applied_predicates": self._receipt("acquired"),
+             "group_field_keys": []},
+            {"applied_predicates": self._receipt("acquired"),
+             "group_field_keys": []},
+            {"applied_predicates": [], "group_field_keys": []}]})
+        self.assertFalse(out["ok"], "a period without the scope was served")
+
+    def test_a_series_scoped_in_every_snapshot_is_served(self):
+        out, ledger = self._gate({"snapshots": [
+            {"applied_predicates": self._receipt("acquired"),
+             "group_field_keys": []} for _ in range(3)]})
+        self.assertTrue(out["ok"], out.get("error"))
+        self.assertEqual(ledger["unaccounted"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

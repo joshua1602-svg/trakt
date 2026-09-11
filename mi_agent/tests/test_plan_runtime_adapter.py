@@ -295,11 +295,46 @@ class TestIneligibility(unittest.TestCase):
         binding = dict(GEOGRAPHY_BINDING, group_by=False, values=["Scotland"])
         self._refused(plan(geography=binding), adapter.GEOGRAPHY_REQUESTED)
 
-    def test_direct_lens(self):
-        self._refused(plan(lens="direct"), adapter.EXPLICIT_LENS)
+    # THE TWO GOVERNED ROLES ARE NO LONGER REFUSED. They were, and these two
+    # cases asserted it: the compiler bound the lens to a `source_portfolio_type`
+    # predicate, but nothing carried that predicate to the executor, so refusing
+    # was the only honest answer. `plan_predicates` carries it now, and refusing
+    # a plan this adapter can express would be the wrong kind of caution. What is
+    # still refused is a lens the governed vocabulary does not define, which
+    # never reaches a plan at all — see TestScopeFailsClosed below.
+    #
+    # EXPLICIT_LENS itself is kept rather than deleted: it is the reason a lens
+    # is refused when a deployment narrows ELIGIBLE_POPULATION_LENS, and a reason
+    # code that no longer exists cannot be read in an old evidence record.
+    def _scoped(self, role):
+        scoped = plan(lens=role)
+        scoped["population"]["scope_predicates"] = [
+            {"concept": "portfolio_lens", "comparator": "eq",
+             "canonical_field": "source_portfolio_type", "value": role}]
+        return scoped
 
-    def test_acquired_lens(self):
-        self._refused(plan(lens="acquired"), adapter.EXPLICIT_LENS)
+    def test_direct_lens_is_eligible(self):
+        ok, why, _ = adapter.check_eligibility(self._scoped("direct"))
+        self.assertTrue(ok, f"the direct role was refused: {why}")
+
+    def test_acquired_lens_is_eligible(self):
+        ok, why, _ = adapter.check_eligibility(self._scoped("acquired"))
+        self.assertTrue(ok, f"the acquired role was refused: {why}")
+
+    def test_a_role_with_no_scope_predicate_is_refused(self):
+        """The worst available shape: a plan that says "acquired" and would be
+        computed over the whole book. The compiler cannot emit it; the adapter
+        refuses it anyway rather than trusting that."""
+        self._refused(plan(lens="acquired"), adapter.SCOPE_NOT_BOUND)
+
+    def test_a_lens_outside_the_eligible_set_is_still_EXPLICIT_LENS(self):
+        """The guard still guards; only its membership changed."""
+        previous = adapter.ELIGIBLE_POPULATION_LENS
+        adapter.ELIGIBLE_POPULATION_LENS = frozenset({"", "all", "total", "none"})
+        try:
+            self._refused(self._scoped("acquired"), adapter.EXPLICIT_LENS)
+        finally:
+            adapter.ELIGIBLE_POPULATION_LENS = previous
 
     def test_specialist_bridge(self):
         self._refused(plan(capability="funded_bridge", operation="bridge"),
@@ -504,9 +539,15 @@ class TestAdapterDiscipline(unittest.TestCase):
         import dataclasses
         from mi_agent.interpretation_v2.plan import GovernedQueryPlan, OutputPlan
 
+        # `population` MOVED from refused to carried in slice 3. Its lens is a
+        # governed Direct/Acquired role, the compiler binds it to a
+        # `source_portfolio_type` predicate, and `plan_predicates` now carries
+        # that predicate into the spec — so refusing it would be the adapter
+        # declining a plan it can express. The carried assertion below is what
+        # keeps it honest: a facet listed here has to actually arrive.
         carried = {"capability", "operation", "outputs", "filters",
-                   "measures", "dimensions"}
-        refused = {"population", "period", "comparison_kind", "comparison_left",
+                   "measures", "dimensions", "population"}
+        refused = {"period", "comparison_kind", "comparison_left",
                    "comparison_right", "geography", "target"}
         identity = {"schema_version", "provenance", "id"}
 
@@ -519,9 +560,27 @@ class TestAdapterDiscipline(unittest.TestCase):
             f"{sorted(unclassified)}. Each must be carried into the spec or "
             f"refused by check_eligibility — never silently ignored.")
 
+        # A CARRIED FACET MUST ACTUALLY ARRIVE. Listing `population` above is a
+        # claim, and this is the evidence for it: the governed role reaches the
+        # executor's filters rather than being quietly dropped, which is the
+        # exact failure mode "carried" is supposed to rule out.
+        for role in ("direct", "acquired"):
+            scoped = plan(lens=role)
+            # The predicate the compiler binds for this lens. The local helper
+            # states the lens without one, which is a shape no compiler emits —
+            # and which `check_structure` now refuses outright.
+            scoped["population"]["scope_predicates"] = [
+                {"concept": "portfolio_lens", "comparator": "eq",
+                 "canonical_field": "source_portfolio_type", "value": role}]
+            spec = adapter.spec_for_plan(scoped)
+            self.assertEqual(spec.filters.get("source_portfolio_type"), role,
+                             f"the {role} lens never reached the spec")
+        self.assertNotIn("source_portfolio_type",
+                         adapter.spec_for_plan(plan(lens="all")).filters,
+                         "the default population became a predicate")
+
         # And the refusable ones must actually refuse, not merely be listed here.
         for p, reason in (
-            (plan(lens="direct"), adapter.EXPLICIT_LENS),
             (plan(period_form="explicit_period"), adapter.PERIOD_NOT_CURRENT),
             (plan(comparison_kind="period_over_period"),
              adapter.COMPARISON_REQUESTED),
@@ -532,6 +591,224 @@ class TestAdapterDiscipline(unittest.TestCase):
              adapter.GEOGRAPHY_REQUESTED),
         ):
             self.assertEqual(adapter.check_eligibility(p)[1], reason)
+
+
+
+# --------------------------------------------------------------------------- #
+# SLICE 3 — the governed Direct/Acquired role scope
+# --------------------------------------------------------------------------- #
+#
+# The representation was never missing. `CandidateIntent.population.lens` has
+# always admitted {direct, acquired, all}, and `compiler._bind_population` has
+# always bound a non-default lens to a governed predicate on
+# `source_portfolio_type` — held in `population.scope_predicates` rather than in
+# `filters`, because the population axis resolves before the output does.
+#
+# What was missing was two lines of plumbing. `ELIGIBLE_POPULATION_LENS` refused
+# every explicit lens as EXPLICIT_LENS, and `_filters_for` read only the two
+# `filters` slots — so an admitted lens would have been SILENTLY DROPPED between
+# the plan and the executor and the answer would have read as a correct total.
+#
+# `plan_predicates` is the one accessor all three readers now share: the
+# duplicate-field check, the executor bind, and the requested half of the
+# coverage ledger. Three readers of the same thing is how a requested side and
+# an executed side drift apart.
+
+import pandas as _pd
+
+ROLE_FIELD = "source_portfolio_type"
+
+
+def provenanced_book(n: int = 400):
+    """The oracle's book plus the governed provenance contract.
+
+    Roles are assigned by ROW INDEX, never from a name, so the oracle can count
+    them without borrowing any product judgement about what "acquired" means.
+    """
+    from mi_agent.tests import portfolio_truth_oracle as _truth
+    book = _truth.canonical_book(n=n).reset_index(drop=True)
+    book[ROLE_FIELD] = ["direct" if i % 3 else "acquired" for i in range(len(book))]
+    return book
+
+
+BOOK = provenanced_book()
+
+
+def scoped_intent(lens="all", **overrides):
+    payload = {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis", "operation": "point_in_time",
+        "population": {"base": "funded", "lens": lens, "seasoning": "any"},
+        "measures": [{"concept": "current_outstanding_balance",
+                      "statistic": "sum"}],
+        "dimensions": [], "filters": [], "geography": {"requested": False},
+        "comparison": {"kind": "none"}, "time": {"form": "current"},
+    }
+    payload.update(overrides)
+    return payload
+
+
+def compiled(payload):
+    from mi_agent.interpretation_v2.compiler import DeterministicCompiler
+    from mi_agent.interpretation_v2.intent import parse_candidate_intent
+    return DeterministicCompiler().compile(parse_candidate_intent(payload))
+
+
+def executed(payload, frame=None):
+    """Plan -> eligibility -> spec -> the one calculation owner."""
+    from mi_agent.mi_query_executor import execute_mi_query
+    result = compiled(payload)
+    assert result.is_plan, f"did not compile: {result.outcome} {result.codes()}"
+    plan = result.plan.to_dict()
+    ok, why, detail = adapter.check_eligibility(plan)
+    assert ok, f"ineligible: {why} {detail}"
+    spec = adapter.spec_for_plan(plan)
+    return plan, spec, execute_mi_query(spec, BOOK if frame is None else frame,
+                                        _SEMANTICS)
+
+
+def receipt_fields(result):
+    return sorted(e.get("canonical_field")
+                  for e in (result.metadata.get("applied_predicates") or ()))
+
+
+def oracle_sum(role=None, frame=None):
+    from mi_agent.tests import portfolio_truth_oracle as _truth
+    book = BOOK if frame is None else frame
+    rows = book if role is None else book[book[ROLE_FIELD] == role]
+    return float(rows[_truth.BALANCE].sum())
+
+
+class TestTheDefaultIsTotalFunded(unittest.TestCase):
+    """The contract this slice must not disturb."""
+
+    def test_no_lens_produces_no_scope_predicate(self):
+        plan, spec, _ = executed(scoped_intent())
+        assert not (plan["population"].get("scope_predicates") or ())
+        assert ROLE_FIELD not in (spec.filters or {})
+
+    def test_no_lens_is_the_whole_book(self):
+        from mi_agent.tests import portfolio_truth_oracle as _truth
+        _, _, result = executed(scoped_intent())
+        served = float(result.data[f"{_truth.BALANCE}_sum"].iloc[0])
+        assert abs(served - oracle_sum()) < 0.01
+
+    def test_lens_all_is_identical_to_no_lens(self):
+        from mi_agent.tests import portfolio_truth_oracle as _truth
+        _, _, default = executed(scoped_intent())
+        _, _, explicit = executed(scoped_intent(lens="all"))
+        column = f"{_truth.BALANCE}_sum"
+        assert float(default.data[column].iloc[0]) == float(
+            explicit.data[column].iloc[0])
+
+
+class TestAGovernedRoleScopesThePopulation(unittest.TestCase):
+
+    def test_the_role_selects_exactly_its_own_rows(self):
+        from mi_agent.tests import portfolio_truth_oracle as _truth
+        for role in ("direct", "acquired"):
+            with self.subTest(role=role):
+                _, _, result = executed(scoped_intent(lens=role))
+                served = float(result.data[f"{_truth.BALANCE}_sum"].iloc[0])
+                assert abs(served - oracle_sum(role)) < 0.01
+
+    def test_the_scope_reaches_the_executor_and_the_receipt(self):
+        for role in ("direct", "acquired"):
+            with self.subTest(role=role):
+                _, spec, result = executed(scoped_intent(lens=role))
+                assert spec.filters.get(ROLE_FIELD) == role
+                assert ROLE_FIELD in receipt_fields(result)
+
+    def test_the_role_binds_to_the_canonical_role_column_not_a_portfolio_id(self):
+        """A role is a semantic, never a client's physical portfolio id."""
+        result = compiled(scoped_intent(lens="acquired"))
+        predicates = result.plan.population.scope_predicates
+        assert [p.canonical_field for p in predicates] == [ROLE_FIELD]
+        assert [p.value for p in predicates] == ["acquired"]
+
+    def test_scope_composes_with_ordinary_predicates(self):
+        _, spec, result = executed(scoped_intent(
+            lens="acquired",
+            measures=[{"concept": "loan", "statistic": "count"}],
+            filters=[{"concept": "erm_product_type", "comparator": "eq",
+                      "value": "drawdown"},
+                     {"concept": "current_loan_to_value", "comparator": "gt",
+                      "value": 50}]))
+        expected = int(((BOOK[ROLE_FIELD] == "acquired")
+                        & (BOOK.erm_product_type.str.lower() == "drawdown")
+                        & (BOOK.current_loan_to_value > 50)).sum())
+        assert int(result.data["loan_count"].iloc[0]) == expected
+        assert receipt_fields(result) == sorted(
+            ["current_loan_to_value", "erm_product_type", ROLE_FIELD])
+
+    def test_scope_composes_with_a_governed_dimension(self):
+        _, _, result = executed(scoped_intent(
+            lens="acquired", operation="breakdown",
+            measures=[{"concept": "loan", "statistic": "count"}],
+            dimensions=["ltv_bucket"]))
+        served = result.data.set_index("ltv_bucket")["loan_count"].to_dict()
+        acquired = BOOK[BOOK[ROLE_FIELD] == "acquired"]
+        assert served == acquired.groupby("ltv_bucket").size().to_dict()
+
+
+class TestScopeIsNeverSilentlyDropped(unittest.TestCase):
+    """The failure this wiring exists to prevent: an answer that reads as a
+    correct total because the scope never reached the executor."""
+
+    def test_every_reader_sees_the_scope_predicate(self):
+        plan = compiled(scoped_intent(lens="acquired")).plan.to_dict()
+        output = (plan.get("outputs") or ({},))[0]
+        fields = [p.get("canonical_field")
+                  for p in adapter.plan_predicates(plan, output)]
+        assert ROLE_FIELD in fields
+        assert ROLE_FIELD in adapter.spec_for_plan(plan).filters
+        assert ROLE_FIELD in [f["field"] for f in
+                              adapter.requested_semantics(plan)["filters"]]
+
+    def test_the_requested_ledger_states_the_role_that_was_asked(self):
+        plan = compiled(scoped_intent(lens="acquired")).plan.to_dict()
+        stated = [f for f in adapter.requested_semantics(plan)["filters"]
+                  if f["field"] == ROLE_FIELD]
+        assert stated == [{"field": ROLE_FIELD, "comparator": "eq",
+                           "value": "acquired"}]
+
+    def test_a_receipt_without_the_scope_fails_reconciliation(self):
+        import copy
+        _, spec, result = executed(scoped_intent(lens="acquired"))
+        stripped = copy.deepcopy(result)
+        stripped.metadata["applied_predicates"] = [
+            e for e in result.metadata["applied_predicates"]
+            if e.get("canonical_field") != ROLE_FIELD]
+        ok, why = adapter.reconcile_receipt(spec, stripped)
+        assert not ok and ROLE_FIELD in why
+
+
+class TestScopeFailsClosed(unittest.TestCase):
+
+    def test_an_unknown_role_never_becomes_a_plan(self):
+        from mi_agent.interpretation_v2.intent import (IntentParseError,
+                                                       parse_candidate_intent)
+        with self.assertRaises(IntentParseError):
+            parse_candidate_intent(scoped_intent(lens="wholesale"))
+
+    def test_a_book_without_the_role_column_refuses_rather_than_widening(self):
+        """The control that matters most: an explicit Acquired against a book
+        that cannot prove the role must REFUSE, never answer over Total."""
+        from mi_agent.interpretation_v2.compiler import (CompilerContext,
+                                                         DeterministicCompiler)
+        from mi_agent.interpretation_v2.intent import parse_candidate_intent
+        from mi_agent.tests import portfolio_truth_oracle as _truth
+        bare = DeterministicCompiler(CompilerContext(
+            available_fields=frozenset({_truth.BALANCE, "loan_identifier"})))
+        result = bare.compile(parse_candidate_intent(scoped_intent(lens="acquired")))
+        assert not result.is_plan
+        assert "CONCEPT_UNAVAILABLE" in result.codes()
+
+    def test_the_adapter_admits_exactly_the_governed_vocabulary(self):
+        """It does not widen what a lens may say; it stops refusing it."""
+        from mi_agent.interpretation_v2.vocabulary import POPULATION_LENSES
+        assert adapter.GOVERNED_LENS_ROLES == POPULATION_LENSES - {"all"}
+        assert adapter.GOVERNED_LENS_ROLES <= adapter.ELIGIBLE_POPULATION_LENS
 
 
 if __name__ == "__main__":

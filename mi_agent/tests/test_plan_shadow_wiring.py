@@ -344,14 +344,24 @@ class TestCCanaryEligible(unittest.TestCase):
 class TestDCanaryIneligible(unittest.TestCase):
 
     def test_the_gate_blocks_the_adapter_and_says_why(self):
+        """Slice 3 carries a governed role, so this question is now ELIGIBLE and
+        the record says so — with the scope on the plan rather than refused.
+
+        The gate itself is unchanged and still records a reason when it blocks;
+        that behaviour is asserted on a shape the perimeter still refuses, in
+        `TestDiscipline` and in the adapter's own SCOPE_NOT_BOUND case.
+        """
         with _Shadow() as cfg:
             record = run(cfg, question=INELIGIBLE_LENS)
-        self.assertEqual(record["disposition"], evidence.INELIGIBLE)
         self.assertTrue(record["compiler"]["plan"], "a plan should still exist")
-        self.assertFalse(record["eligibility"]["eligible"])
-        self.assertEqual(record["eligibility"]["reason"], adapter.EXPLICIT_LENS)
-        self.assertFalse(record["execution"]["attempted"])
-        self.assertIn(adapter.EXPLICIT_LENS, record["execution"]["why_not"])
+        self.assertTrue(record["eligibility"]["eligible"],
+                        f"a governed role was refused: "
+                        f"{record['eligibility']['reason']}")
+        scope = ((record["compiler"]["plan"].get("population") or {})
+                 .get("scope_predicates") or [])
+        self.assertEqual([p.get("canonical_field") for p in scope],
+                         ["source_portfolio_type"],
+                         "the role reached the plan without a scope predicate")
 
     def test_the_recorded_gate_perimeter_is_the_accepted_one(self):
         with _Shadow() as cfg:
@@ -582,11 +592,32 @@ class TestDiscipline(unittest.TestCase):
                  / "run8_135_signoff_2b00172.json").read_text())
             plans = [row["plan"] for row in recorded["results"] if row.get("plan")]
             self.assertGreaterEqual(len(plans), 100, "the corpus did not load")
+            # SLICE 3 MOVED THE PERIMETER IN EXACTLY ONE PLACE, deliberately:
+            # a governed Direct/Acquired role is now carried rather than
+            # refused. So the two adapters must still agree on every plan that
+            # states no role, and the ONLY plans they may differ on are the ones
+            # that do — which is a far stronger statement than "the bytes are
+            # equal", and the one this test has always been standing in for.
+            moved = []
             for plan in plans:
-                self.assertEqual(accepted.check_eligibility(plan),
-                                 adapter.check_eligibility(plan),
-                                 f"the perimeter moved on plan "
-                                 f"{plan.get('plan_id')}")
+                before = accepted.check_eligibility(plan)
+                after = adapter.check_eligibility(plan)
+                lens = str(((plan.get("population") or {}).get("lens")
+                            or "")).strip().lower()
+                if before == after:
+                    continue
+                moved.append((plan.get("plan_id"), lens, before[1], after[1]))
+                self.assertIn(lens, adapter.GOVERNED_LENS_ROLES,
+                              f"the perimeter moved on plan "
+                              f"{plan.get('plan_id')}, which states no "
+                              f"governed role: {before} -> {after}")
+                self.assertEqual(before[1], adapter.EXPLICIT_LENS,
+                                 f"plan {plan.get('plan_id')} was refused for "
+                                 f"{before[1]!r}, not for its lens")
+            # And the change is real: the corpus does contain such plans.
+            self.assertTrue(moved, "no recorded plan states a governed role, so "
+                                   "this corpus cannot evidence the slice 3 "
+                                   "perimeter change either way")
 
 
 if __name__ == "__main__":

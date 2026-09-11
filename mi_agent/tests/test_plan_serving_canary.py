@@ -346,15 +346,30 @@ class TestCCanaryEligibleServesNew(unittest.TestCase):
 # --------------------------------------------------------------------------- #
 class TestDIneligibleServesLegacy(unittest.TestCase):
 
-    def test_an_explicit_lens_is_not_served(self):
-        with _Canary() as cfg:
-            self.assertIsNone(serve(question=INELIGIBLE_LENS))
-            row = cfg.rows()[-1]
-            self.assertEqual(row["disposition"], evidence.INELIGIBLE)
-            self.assertFalse(row["serving"]["new_path_eligible"])
-            self.assertEqual(row["serving"]["decision"], "LEGACY_FALLBACK")
-            self.assertTrue(row["serving"]["reason"].startswith("INELIGIBLE:"))
-            self.assertFalse(row["execution"]["attempted"])
+    def test_a_role_stated_without_a_bound_scope_is_not_served(self):
+        """Slice 3 admits a governed Direct/Acquired lens, so the question that
+        used to be refused for HAVING a lens is no longer the control.
+
+        What is still refused — and what matters far more — is a plan that names
+        a role and carries no predicate to apply it. Serving that would compute
+        over the whole book and label the answer "Direct".
+        """
+        ok, why, _ = adapter.check_eligibility({
+            "schema_version": "governed_query_plan/1.0",
+            "capability": "generic_analysis", "operation": "point_in_time",
+            "population": {"base": "funded", "lens": "direct",
+                           "seasoning": "any", "scope_predicates": []},
+            "outputs": [{"measures": [{"concept": "current_outstanding_balance",
+                                       "canonical_field":
+                                           "current_outstanding_balance",
+                                       "statistic": "sum"}],
+                         "dimensions": [], "filters": []}],
+            "period": {"form": "current", "labels": [], "grain": None,
+                       "periods_back": None, "contract": ""},
+            "filters": [], "geography": None, "target": None,
+            "comparison_kind": "none"})
+        self.assertFalse(ok)
+        self.assertEqual(why, adapter.SCOPE_NOT_BOUND)
 
     def test_every_perimeter_refusal_falls_back(self):
         # The four shapes the legacy question-reading guards exist to catch are

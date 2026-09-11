@@ -78,10 +78,28 @@ ELIGIBLE_OPERATIONS = frozenset({"point_in_time", "breakdown"})
 #: this slice does not touch.
 ELIGIBLE_PERIOD_FORMS = frozenset({"current"})
 
-#: The default total-funded population. An explicit Direct/Acquired lens is
-#: resolved and applied by `portfolio_lens` on the production path, and this
-#: slice does not reproduce that.
-ELIGIBLE_POPULATION_LENS = frozenset({"", "all", "total", "none"})
+#: The governed portfolio ROLES an explicit lens may name. `all` is the default
+#: and is not a lens at all — it states the whole funded book, which is the
+#: population every question already has. These are the roles
+#: `interpretation_v2.vocabulary.POPULATION_LENSES` already admits, minus that
+#: default; this adapter does not widen the vocabulary, it stops refusing it.
+GOVERNED_LENS_ROLES = frozenset({"direct", "acquired"})
+
+#: The population lenses the governed path may execute.
+#:
+#: `""` / `all` / `total` / `none` all state the whole funded book and produce no
+#: predicate. `direct` and `acquired` are the governed ROLES, which the compiler
+#: has always bound to a `source_portfolio_type` predicate
+#: (`compiler._POPULATION_LENS_FIELD`) — and which this adapter used to refuse
+#: as `EXPLICIT_LENS` because nothing carried that predicate through to the
+#: executor. Now that `plan_predicates` does, the refusal would be the adapter
+#: declining a plan it can express.
+#:
+#: A role is not a client's portfolio id and never becomes one here: the compiler
+#: binds the role to the canonical role COLUMN, and a book whose tape carries no
+#: such column fails at compile time with CONCEPT_UNAVAILABLE rather than
+#: answering over a wider population.
+ELIGIBLE_POPULATION_LENS = frozenset({"", "all", "total", "none"}) | GOVERNED_LENS_ROLES
 
 #: Plan statistic -> the executor's aggregation vocabulary. A lookup, not a
 #: judgement: the compiler already decided the statistic and the registry already
@@ -105,6 +123,12 @@ CAPABILITY_NOT_GENERIC = "CAPABILITY_NOT_GENERIC"
 OPERATION_NOT_GENERIC = "OPERATION_NOT_GENERIC"
 PERIOD_NOT_CURRENT = "PERIOD_NOT_CURRENT"
 EXPLICIT_LENS = "EXPLICIT_LENS"
+#: A plan naming a governed role whose scope predicate is missing. The compiler
+#: cannot produce this — it binds the predicate or refuses with
+#: CONCEPT_UNAVAILABLE — but the adapter is a separate owner and the cost of
+#: being wrong is the worst shape available: an answer computed over the WHOLE
+#: book while the plan, the ledger and the reader all say "acquired".
+SCOPE_NOT_BOUND = "SCOPE_NOT_BOUND"
 NOT_SINGLE_OUTPUT = "NOT_SINGLE_OUTPUT"
 TOO_MANY_DIMENSIONS = "TOO_MANY_DIMENSIONS"
 MEASURE_NOT_GENERIC = "MEASURE_NOT_GENERIC"
@@ -212,6 +236,36 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     return check_structure(plan)
 
 
+def plan_predicates(body: Mapping[str, Any],
+                    output: Mapping[str, Any]) -> Tuple[Mapping[str, Any], ...]:
+    """EVERY governed predicate this plan authorises, in one place.
+
+    The plan states its predicates in three slots — plan-level `filters`,
+    output-level `filters`, and `population.scope_predicates` — and the third is
+    where an explicit Direct/Acquired lens lands. `compiler._bind_population`
+    puts it there rather than in `filters` because the population axis is
+    resolved before the output is, but by the time a plan exists it is an
+    ordinary `FilterBinding` on `source_portfolio_type` and nothing downstream
+    should care which slot carried it.
+
+    ONE ACCESSOR BECAUSE THREE READERS MUST NOT DRIFT. The eligibility check,
+    the executor bind and the coverage ledger each used to read the two `filters`
+    slots directly, so a scope predicate would have passed the duplicate-field
+    check unseen, been dropped on the way to the executor, and been absent from
+    the requested side of the ledger — a silent scope drop that reads as a
+    correct total. Slice 2 lost a week to exactly that shape of divergence
+    between a requested side and an executed one.
+
+    `lens == "all"` produces no scope predicate at the compiler, so the default
+    total-funded population is unchanged here by construction rather than by a
+    branch.
+    """
+    population = body.get("population") or {}
+    return (tuple(body.get("filters") or ())
+            + tuple(output.get("filters") or ())
+            + tuple(population.get("scope_predicates") or ()))
+
+
 def check_structure(plan: Any) -> Tuple[bool, str, str]:
     """Everything the generic executor needs that is NOT about time.
 
@@ -225,11 +279,24 @@ def check_structure(plan: Any) -> Tuple[bool, str, str]:
     if not body:
         return False, NOT_A_PLAN, "no plan, or a plan with no readable body"
 
-    lens = str(((body.get("population") or {}).get("lens") or "")).strip().lower()
+    population = body.get("population") or {}
+    lens = str(population.get("lens") or "").strip().lower()
     if lens not in ELIGIBLE_POPULATION_LENS:
         return (False, EXPLICIT_LENS,
                 f"population.lens={lens!r} is resolved and applied by "
                 f"portfolio_lens on the production path")
+    # A STATED ROLE MUST ARRIVE AS A PREDICATE. The compiler binds one or refuses,
+    # so a role with no predicate is a plan no compiler wrote — and executing it
+    # would answer over the whole book under the word "acquired", which is the
+    # one failure a scope axis exists to prevent. Refused rather than repaired:
+    # inventing the predicate here would make this module a second owner of what
+    # a role means.
+    if lens in GOVERNED_LENS_ROLES and not [
+            predicate for predicate in (population.get("scope_predicates") or ())
+            if str(predicate.get("canonical_field") or "")]:
+        return (False, SCOPE_NOT_BOUND,
+                f"population.lens={lens!r} states a governed role and the plan "
+                f"carries no scope predicate to apply it")
 
     # GEOGRAPHY IS ITS OWN OWNER, AND THIS SLICE BINDS NONE OF IT. A plan's
     # geography binding carries a resolved basis and level chosen by
@@ -293,7 +360,7 @@ def check_structure(plan: Any) -> Tuple[bool, str, str]:
                 "a weighted average names no weight field")
 
     seen_filter_fields = set()
-    for flt in tuple(body.get("filters") or ()) + tuple(output.get("filters") or ()):
+    for flt in plan_predicates(body, output):
         canonical_field = flt.get("canonical_field")
         if not _bound(canonical_field):
             return (False, FILTER_UNBOUND,
@@ -332,7 +399,7 @@ def _filters_for(body: Mapping[str, Any],
     quietly losing a bound here.
     """
     out: Dict[str, Any] = {}
-    for flt in tuple(body.get("filters") or ()) + tuple(output.get("filters") or ()):
+    for flt in plan_predicates(body, output):
         field_name = flt.get("canonical_field")
         comparator = str(flt.get("comparator") or "eq").lower()
         value = _executor_value(flt.get("value"))
@@ -425,11 +492,15 @@ def requested_semantics(plan: Any) -> Dict[str, Any]:
         # "age == 55" were indistinguishable on the requested side), and a second
         # predicate on the same field (an LTV band collapsed to one bound). A
         # ledger that cannot state what was asked cannot adjudicate a divergence.
+        # THE SCOPE IS PART OF WHAT WAS ASKED. It reaches the executor through
+        # `plan_predicates`, so it must reach the ledger the same way or the
+        # coverage owner would find a predicate in the receipt that the request
+        # never claimed — and on a temporal answer it must hold for every
+        # snapshot, which the slice 2 per-receipt rule already enforces.
         "filters": [{"field": f.get("canonical_field"),
                      "comparator": str(f.get("comparator") or "eq"),
                      "value": f.get("value")}
-                    for f in (tuple(body.get("filters") or ())
-                              + tuple(output.get("filters") or ()))],
+                    for f in plan_predicates(body, output)],
         "population": body.get("population") or {},
         "geography": body.get("geography") or {},
         "period_form": period.get("form"),

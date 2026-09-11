@@ -166,10 +166,25 @@ def _mask(frame: pd.DataFrame,
 
 
 def _predicates(plan: Mapping[str, Any]) -> List[Tuple[str, str, Any]]:
+    """Every governed predicate the plan authorises, through the ONE owner.
+
+    This used to read the two `filters` slots itself, which made it a fourth
+    reader of something `plan_runtime_adapter.plan_predicates` already owns —
+    and the fourth reader drifted the moment slice 3 put an explicit
+    Direct/Acquired role into `population.scope_predicates`. Two consequences,
+    both of them this harness lying rather than the product failing: a scoped
+    plan's `source_portfolio_type` was invisible to the fixture-gap check, so a
+    book that simply lacks the column was reported as SHADOW_EXECUTION_ERROR
+    instead of OUTSIDE_REPLAY_FIXTURE; and `control_scalar` — the INDEPENDENT
+    oracle — would have computed a whole-book figure for a scoped plan and
+    called the engine's correct scoped answer a divergence.
+
+    An independent oracle must be independent about the CALCULATION, not about
+    which predicates the plan states.
+    """
     output = (tuple(plan.get("outputs") or ()) or ({},))[0]
     return [(f["canonical_field"], str(f.get("comparator") or "eq"), f.get("value"))
-            for f in (tuple(plan.get("filters") or ())
-                      + tuple(output.get("filters") or ()))]
+            for f in adapter.plan_predicates(plan, output)]
 
 
 def _referenced_fields(plan: Mapping[str, Any]) -> set:

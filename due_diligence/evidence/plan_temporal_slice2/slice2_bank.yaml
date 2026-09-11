@@ -423,7 +423,26 @@ cases:
     population: {base: funded, lens: acquired, seasoning: any}
     measures: [{concept: current_outstanding_balance, statistic: sum}]
     time: {form: series, grain: monthly, labels: ["each month"]}
-  expect: {disposition: INELIGIBLE, reason: EXPLICIT_LENS}
+  expect: {disposition: REFUSE, reason: EXECUTION_FAILED}
+  note: >
+    THIS CONTROL WAS PASSING FOR THE WRONG REASON, and slice 3 exposed it.
+    The question is acquisition ATTRIBUTION — "how much of the growth came
+    from" — which is out of scope. What refused it was EXPLICIT_LENS: the
+    acquired lens, which slice 3 now carries as an ordinary governed predicate.
+    The recorded intent expresses no attribution at all; it is a plain acquired
+    balance series, which is a legitimate slice 3 answer to a DIFFERENT question
+    from the one asked.
+    So the safety here never came from the perimeter understanding the question.
+    A genuine attribution intent carries `capability: period_movement` /
+    `operation: movement` and is refused by CAPABILITY_NOT_GENERIC — S2-N8
+    covers that, and covers it for the right reason.
+    What remains is an INTERPRETATION risk, not a deterministic one: if the
+    model maps an attribution question onto a plain scoped series, no downstream
+    owner can tell, because the plan it produced is valid. That belongs to the
+    slice 3 model-boundary task, which must test exactly this sentence.
+    The expectation below records what the offline bank now does — the fixture
+    book carries no `source_portfolio_type`, so the acquired scope cannot be
+    applied and execution fails closed rather than answering over the whole book.
 
 - id: S2-N8
   question: "Why did funded balance increase last month?"
