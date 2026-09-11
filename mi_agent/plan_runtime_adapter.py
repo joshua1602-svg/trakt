@@ -526,22 +526,50 @@ def _filters_for(body: Mapping[str, Any],
     return out
 
 
-def spec_for_plan(plan: Any) -> MIQuerySpec:
+def spec_for_plan(plan: Any, *,
+                  measure_binding: Optional[Tuple[Optional[str], str]] = None
+                  ) -> MIQuerySpec:
     """`GovernedQueryPlan` → `MIQuerySpec`. Mechanical; every value pre-bound.
 
     Caller must have established eligibility. Nothing here decides a semantic:
     the statistic, the field, the axes and the predicates were all bound by the
     deterministic compiler and re-validated against the governed registry before
     this plan existed.
+
+    `measure_binding` is `(canonical_field, aggregation)` for the ONE case the
+    plan genuinely cannot state: a CAPABILITY-OWNED measure. Those measures carry
+    `statistic="capability"` and `canonical_field=null` BY DESIGN — the governed
+    vocabulary declares them owned by a capability precisely so the model is
+    never shown how they are built, which means the field and the arithmetic are
+    the capability's to supply and not this module's to guess. A specialist
+    runtime that holds that knowledge passes it here rather than assembling a
+    second `MIQuerySpec` of its own: everything else about the spec — the axes,
+    the predicates, and the rendering rules borrowed from the compiler — is
+    identical for a specialist measure and a generic one, and a second builder
+    would be a second presentation owner with no reason to exist.
+
+    It is an OVERRIDE OF TWO FIELDS, not an escape hatch. Both halves are
+    required together, so a caller cannot supply a field and leave the
+    arithmetic to a default.
     """
     body = _as_mapping(plan)
     output = (tuple(body.get("outputs") or ()) or ({},))[0]
     measure = (_measures_of(output) or ({},))[0]
-    statistic = str(measure.get("statistic") or "")
-    aggregation = _AGGREGATION[statistic]
 
-    metric = (_ROW_COUNT_FIELD if aggregation == COUNT
-              else measure.get("canonical_field"))
+    if measure_binding is not None:
+        bound_field, aggregation = measure_binding
+        if aggregation not in _AGGREGATION.values():
+            raise ValueError(f"aggregation {aggregation!r} is not a governed "
+                             f"executor aggregation")
+        metric = _ROW_COUNT_FIELD if aggregation == COUNT else bound_field
+        if aggregation != COUNT and not _bound(metric):
+            raise ValueError("a capability measure binding must name the field "
+                             "its arithmetic runs over")
+    else:
+        statistic = str(measure.get("statistic") or "")
+        aggregation = _AGGREGATION[statistic]
+        metric = (_ROW_COUNT_FIELD if aggregation == COUNT
+                  else measure.get("canonical_field"))
     axes = [d.get("canonical_field") for d in (output.get("dimensions") or ())]
 
     # PRESENTATION, borrowed rather than invented. `MIQuerySpec` defaults to an

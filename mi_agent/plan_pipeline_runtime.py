@@ -17,11 +17,32 @@ WHAT THIS IS, AND WHAT IT IS NOT. It is a TRANSLATOR. It turns an
 already-compiled plan into the arguments the existing Pipeline owners already
 take, calls them, and writes down what ran. It computes nothing:
 
-    balance        pipeline_contract.load_prepared_pipeline -> report
-                     ["total_pipeline_amount"]
+    balance          pipeline_contract.load_prepared_pipeline -> report
+                       ["total_pipeline_amount"]
     case count       the same report ["row_count"]
-    by stage         the same report ["stage_counts"]
+    count by stage   the same report ["stage_counts"]
+    amount by stage  mi_query_executor.execute_mi_query over the SAME prepared
+                       frame — the owner the legacy /mi/query path already uses
     weekly history   evolution.pipeline_evolution -> ["periods"], ["byStage"]
+
+THE GROUPED AMOUNT WAS REFUSED HERE FIRST, and that refusal was a defect of
+tracing rather than of the estate. The first trace asked which of the PIPELINE
+CAPABILITY's own owners produces an amount per stage, found that the preparation
+report carries `stage_counts` and no per-stage amount, and concluded that only
+the weekly owner breaks amount down by stage. It never asked the question that
+decides it: what does the accepted legacy path do with "Show pipeline amount by
+stage"? It binds Balance summed by Pipeline Stage and hands it to
+`execute_mi_query` over this very frame, which carries
+`current_outstanding_balance` and `pipeline_stage` as ordinary columns. The
+figure existed all along, under a general owner rather than a pipeline-specific
+one, and this runtime now fetches it from there.
+
+WHICH COLUMN IS "THE PIPELINE AMOUNT" IS THE CAPABILITY'S TO SAY.
+`pipeline_amount` is capability-owned in the governed vocabulary and carries no
+canonical field by design, so the plan cannot name one and this runtime must not
+guess. It reads `pipeline_prep.PIPELINE_AMOUNT_FIELD` — the column the Pipeline
+owner's own `total_pipeline_amount` sums — which makes the stage figures and the
+total the same definition by construction instead of by coincidence.
 
 Every one of those takes DATA and never the question — which is the property
 that makes plan-native execution possible at all, and the one the trace had to
@@ -249,15 +270,6 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     if operation not in CURRENT_OPERATIONS:
         return (False, OPERATION_NOT_SUPPORTED,
                 f"operation={operation!r} has no current pipeline owner")
-    # A CURRENT grouped AMOUNT has no existing owner: the preparation report
-    # carries `stage_counts` and no per-stage amount, and the only per-stage
-    # amounts in the estate are the WEEKLY ones the evolution owner builds.
-    # Refused rather than summed here.
-    if dimensions and SUPPORTED_MEASURES[measures[0]] == _AMOUNT:
-        return (False, MEASURE_NOT_SUPPORTED,
-                "the current pipeline report carries counts by stage and no "
-                "amount by stage; only the weekly owner breaks amount down by "
-                "stage, so this is refused rather than recomputed")
     return True, "", ""
 
 
@@ -281,9 +293,20 @@ class PipelineOutcome:
         self.receipt = receipt or {}
 
 
+#: WHICH LOWER-LEVEL OWNER PRODUCED THE FIGURES. Named in the receipt because
+#: this runtime dispatches to more than one, and "the pipeline runtime answered"
+#: does not distinguish a total read off a preparation report from a grouped sum
+#: the generic executor computed over the same frame. A reader reconciling an
+#: answer needs to know which.
+OWNER_REPORT = "pipeline_contract.load_prepared_pipeline"
+OWNER_EVOLUTION = "evolution.pipeline_evolution"
+OWNER_GENERIC_EXECUTOR = "mi_query_executor.execute_mi_query"
+
+
 def _receipt(plan: Mapping[str, Any], *, measure: str, kind: str,
              dimensions: Sequence[str], dataset: Mapping[str, Any],
-             result_shape: str, periods: Optional[Sequence[str]] = None
+             result_shape: str, owner: str,
+             periods: Optional[Sequence[str]] = None
              ) -> Dict[str, Any]:
     """The governed execution receipt for one pipeline execution.
 
@@ -305,6 +328,7 @@ def _receipt(plan: Mapping[str, Any], *, measure: str, kind: str,
         # none was applied.
         "applied_predicates": [],
         "result_shape": result_shape,
+        "execution_owner": owner,
     }
     if periods is not None:
         row["temporal_basis"] = TEMPORAL_BASIS
@@ -313,13 +337,110 @@ def _receipt(plan: Mapping[str, Any], *, measure: str, kind: str,
     return row
 
 
+def _execute_current_grouped_amount(plan: Any, *, body: Mapping[str, Any],
+                                    frame: Any, semantics: Any, measure: str,
+                                    kind: str, dimensions: Sequence[str],
+                                    dataset: Mapping[str, Any]) -> PipelineOutcome:
+    """A CURRENT pipeline amount, grouped, through the estate's existing engine.
+
+    THE OWNER IS `execute_mi_query`, and it is the owner the legacy /mi/query
+    path already uses for exactly this question: the prepared pipeline frame
+    carries `current_outstanding_balance` and `pipeline_stage` as ordinary
+    columns, and "Show pipeline amount by stage" has been answered as Balance
+    summed by Pipeline Stage since before this runtime existed. Nothing new is
+    computed; a figure that used to be refused here is now fetched from where it
+    already lived.
+
+    THE SPEC IS BUILT FROM THE PLAN, by `adapter.spec_for_plan` — the same
+    translator the funded runtime uses, so the axes, the predicates and the
+    rendering rules have one owner and not two. The only thing passed in is the
+    MEASURE BINDING, because `pipeline_amount` is capability-owned: the governed
+    vocabulary gives it no canonical field on purpose, and the capability is the
+    thing entitled to say which column its arithmetic runs over. That column is
+    `pipeline_prep.PIPELINE_AMOUNT_FIELD` — the one the Pipeline owner's own
+    `total_pipeline_amount` sums — so the grouped figures and the total come
+    from the same definition by construction rather than by coincidence.
+
+    NO QUESTION IS READ, no groupby is written here, and no measure owner is
+    created.
+    """
+    from mi_agent import plan_runtime_adapter as adapter
+    from mi_agent.mi_query_executor import execute_mi_query
+    from mi_agent.query_plan import SUM
+    from mi_agent_api.pipeline_prep import PIPELINE_AMOUNT_FIELD
+
+    if semantics is None:
+        return PipelineOutcome(
+            ok=False, reason=SOURCE_UNAVAILABLE,
+            detail="no governed field registry was supplied; a grouped pipeline "
+                   "amount is executed by the generic engine, which requires one")
+    if frame is None or PIPELINE_AMOUNT_FIELD not in getattr(frame, "columns", ()):
+        return PipelineOutcome(
+            ok=False, reason=EXECUTION_FAILED,
+            detail=f"the prepared pipeline frame carries no "
+                   f"{PIPELINE_AMOUNT_FIELD!r} column")
+
+    try:
+        spec = adapter.spec_for_plan(
+            plan, measure_binding=(PIPELINE_AMOUNT_FIELD, SUM))
+        result = execute_mi_query(spec, frame, semantics)
+    except Exception as exc:                                         # noqa: BLE001
+        return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
+                               detail=f"{type(exc).__name__}: {exc}"[:200])
+
+    # THE EXECUTOR IS ASKED WHETHER IT DID WHAT THE SPEC SAID, rather than
+    # assumed to have. `reconcile_receipt` is the funded runtime's own structural
+    # check and it reads the executor's metadata, so a grouping silently dropped
+    # or a predicate silently skipped fails here instead of being rendered.
+    ok, why_not = adapter.reconcile_receipt(spec, result)
+    if not ok:
+        return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
+                               detail=f"executor receipt did not reconcile: "
+                                      f"{why_not}"[:200])
+
+    column = adapter.value_column(spec)
+    data = getattr(result, "data", None)
+    axis = dimensions[0]
+    if data is None or column not in getattr(data, "columns", ()) \
+            or axis not in getattr(data, "columns", ()):
+        return PipelineOutcome(
+            ok=False, reason=EXECUTION_FAILED,
+            detail=f"the executor returned no {column!r} by {axis!r}")
+
+    cells = [{axis: str(row[axis]),
+              "value": (float(row[column]) if row[column] is not None else None)}
+             for _, row in data.iterrows()]
+
+    metadata = dict(getattr(result, "metadata", None) or {})
+    receipt = _receipt(body, measure=measure, kind=kind, dimensions=dimensions,
+                       dataset=dataset, result_shape="grouped",
+                       owner=OWNER_GENERIC_EXECUTOR)
+    # WHAT THE ENGINE REPORTS IT DID, beside what it was asked for. The keys are
+    # the generic receipt's own, so the coverage ledger reads a specialist
+    # grouped answer with the vocabulary it already has.
+    receipt.update({
+        "measure_field": spec.metric,
+        "aggregation": metadata.get("aggregation") or spec.aggregation,
+        "group_field_keys": list(metadata.get("group_field_keys") or dimensions),
+        "applied_predicates": list(metadata.get("applied_predicates") or ()),
+        "input_row_count": metadata.get("input_row_count"),
+        "filtered_row_count": metadata.get("filtered_row_count"),
+    })
+    return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
+
+
 def execute_current(plan: Any, *, source: Any,
+                    semantics: Any = None,
                     history_model: Optional[Mapping[str, Any]] = None
                     ) -> PipelineOutcome:
     """The CURRENT pipeline extract, through the owner that already prepares it.
 
     `source` is the governed discovery scope the caller resolved — this runtime
     does not discover, does not read a root, and does not choose a client.
+
+    `semantics` is the governed field registry the production request already
+    loaded. It is needed only for a GROUPED AMOUNT, which the generic executor
+    owns; a scalar or a count is read off the preparation report and needs none.
     """
     from mi_agent_api import pipeline_contract as pipeline_mod
 
@@ -349,6 +470,30 @@ def execute_current(plan: Any, *, source: Any,
         "row_count": int(report.get("row_count", len(frame))),
     }
 
+    if dimensions and kind == _AMOUNT:
+        # A CURRENT AMOUNT BY STAGE, through the GENERIC DETERMINISTIC ENGINE.
+        #
+        # This runtime first refused it, on the reading that the preparation
+        # report carries `stage_counts` and no per-stage amount and that the
+        # only per-stage amounts in the estate were the weekly ones. That trace
+        # was INCOMPLETE and the refusal was wrong: it looked only at the
+        # pipeline CAPABILITY's owners and never at the owner the legacy
+        # /mi/query path actually uses, which is `execute_mi_query` running over
+        # this same prepared pipeline frame. "Show pipeline amount by stage" has
+        # been answered as Balance summed by Pipeline Stage all along.
+        #
+        # So the figures come from the engine that already produces them, not
+        # from a groupby written here — there is no `sum`, no `groupby` and no
+        # second arithmetic in this module. The measure binding is the one thing
+        # the plan cannot carry, because `pipeline_amount` is capability-owned
+        # and has no canonical field by design; it is supplied from
+        # `pipeline_prep.PIPELINE_AMOUNT_FIELD`, which is the column the Pipeline
+        # owner's own `total_pipeline_amount` sums. The capability states the
+        # field; the engine does the arithmetic; neither is invented here.
+        return _execute_current_grouped_amount(
+            plan, body=body, frame=frame, semantics=semantics,
+            measure=measure, kind=kind, dimensions=dimensions, dataset=dataset)
+
     if dimensions:
         # COUNTS BY STAGE, read off the preparation report. `stage_counts` is
         # the Pipeline owner's own grouping; nothing is grouped here.
@@ -363,7 +508,8 @@ def execute_current(plan: Any, *, source: Any,
             ok=True, cells=cells, value=None,
             receipt=_receipt(body, measure=measure, kind=kind,
                              dimensions=dimensions, dataset=dataset,
-                             result_shape="grouped"))
+                             result_shape="grouped",
+                             owner=OWNER_REPORT))
 
     if kind == _AMOUNT:
         value = report.get("total_pipeline_amount")
@@ -376,7 +522,8 @@ def execute_current(plan: Any, *, source: Any,
     return PipelineOutcome(
         ok=True, value=float(value), cells=None,
         receipt=_receipt(body, measure=measure, kind=kind, dimensions=[],
-                         dataset=dataset, result_shape="scalar"))
+                         dataset=dataset, result_shape="scalar",
+                         owner=OWNER_REPORT))
 
 
 def execute_temporal(plan: Any, *, root: Any, client_id: str,
@@ -438,7 +585,7 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
             ok=True, cells=cells, value=None,
             receipt=_receipt(body, measure=measure, kind=kind,
                              dimensions=dimensions, dataset=dataset,
-                             result_shape="grouped_series",
+                             result_shape="grouped_series", owner=OWNER_EVOLUTION,
                              periods=sorted({c["period"] for c in cells})))
 
     metric = "pipeline_amount" if kind == _AMOUNT else "pipeline_case_count"
@@ -451,4 +598,4 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
         ok=True, cells=cells, value=None,
         receipt=_receipt(body, measure=measure, kind=kind, dimensions=[],
                          dataset=dataset, result_shape="series",
-                         periods=weeks))
+                         owner=OWNER_EVOLUTION, periods=weeks))

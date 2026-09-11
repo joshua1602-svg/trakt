@@ -684,6 +684,20 @@ def _derive_pipeline_buckets(out: pd.DataFrame, derived: List[str]) -> None:
 # --------------------------------------------------------------------------- #
 # Report (metadata + data-quality diagnostics)
 # --------------------------------------------------------------------------- #
+
+#: THE COLUMN `total_pipeline_amount` SUMS, named once so the figure and the
+#: field cannot drift apart. This was an inline literal at the one place the
+#: total is computed, which made the definition of "the pipeline amount" a
+#: property of a line rather than of this module — and left any other reader
+#: (the governed plan runtime among them) to re-derive it from a heuristic and
+#: hope the two agreed. They do agree today; nothing enforced it.
+#:
+#: `pipeline_amount` is a CAPABILITY-OWNED measure in the governed vocabulary:
+#: it carries no canonical field by design, because the capability is the thing
+#: that knows how it is built. This constant is that knowledge, stated where the
+#: capability already keeps it.
+PIPELINE_AMOUNT_FIELD = "current_outstanding_balance"
+
 _DIMENSION_FIELDS = [
     "pipeline_stage", "pipeline_status", "pipeline_stage_bucket",
     "geographic_region_obligor", "collateral_geography", "origination_channel",
@@ -809,8 +823,8 @@ def _build_report(out: pd.DataFrame, mapping: Dict[str, str], unmatched: List[st
     if "pipeline_stage" in out.columns:
         stage_counts = {str(k): int(v) for k, v in
                         out["pipeline_stage"].value_counts(dropna=False).items()}
-    total_amount = (float(coerce_numeric(out["current_outstanding_balance"]).sum())
-                    if "current_outstanding_balance" in out.columns else 0.0)
+    total_amount = (float(coerce_numeric(out[PIPELINE_AMOUNT_FIELD]).sum())
+                    if PIPELINE_AMOUNT_FIELD in out.columns else 0.0)
     expected_funded = (float(coerce_numeric(out["expected_funded_amount"]).sum())
                        if "expected_funded_amount" in out.columns else 0.0)
     weighted_expected = (float(coerce_numeric(out["weighted_expected_funded_amount"]).sum())

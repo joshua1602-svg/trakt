@@ -25,6 +25,24 @@ _CLIENT = "client_001"
 _SOURCE = {"source_file": _EXTRACT, "pipeline_as_of_date": "2025-10-01"}
 
 
+def _pipeline_mod():
+    from mi_agent_api import pipeline_contract
+    return pipeline_contract
+
+
+def _semantics():
+    """The governed field registry the production request loads. Cached."""
+    global _SEMANTICS
+    if _SEMANTICS is None:
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.data_source import semantics_path
+        _SEMANTICS = load_mi_semantics(semantics_path())
+    return _SEMANTICS
+
+
+_SEMANTICS = None
+
+
 def _code_of(module) -> str:
     """The module's EXECUTABLE text: docstrings and comments stripped.
 
@@ -332,12 +350,6 @@ def test_unsupported_pipeline_shapes_refuse_rather_than_approximate():
                                "value": "drawdown"}])
     assert pipeline_rt.check_eligibility(filtered)[1] == (
         pipeline_rt.FILTERS_NOT_SUPPORTED)
-    # a current AMOUNT by stage, which no existing owner computes
-    amount_by_stage = _plan(operation="breakdown",
-                            measures=[{"concept": "pipeline_amount"}],
-                            dimensions=["pipeline_stage"])
-    assert pipeline_rt.check_eligibility(amount_by_stage)[1] == (
-        pipeline_rt.MEASURE_NOT_SUPPORTED)
     # a period form the pipeline estate has no owner for
     ranged = _plan(time={"form": "range", "labels": ["May 2026", "June 2026"]})
     assert pipeline_rt.check_eligibility(ranged)[1] == (
@@ -459,3 +471,150 @@ def test_serve_still_refuses_an_unmigrated_specialist_capability(monkeypatch):
          "time": {"form": "current"}}, monkeypatch)
     assert payload is None
     assert record["eligibility"]["reason"] == adapter.CAPABILITY_NOT_GENERIC
+
+
+# --------------------------------------------------------------------------- #
+# a CURRENT pipeline amount by stage — the figure the estate already answers
+# --------------------------------------------------------------------------- #
+#
+# This runtime first REFUSED this shape, on a trace that read only the pipeline
+# capability's own owners: the preparation report carries `stage_counts` and no
+# per-stage amount, and the only per-stage amounts looked to be the weekly ones.
+# The trace was incomplete. The legacy /mi/query path answers "Show pipeline
+# amount by stage" through `execute_mi_query` over this same prepared frame, and
+# has done all along. These controls pin the figures to THAT answer, so the
+# governed path cannot quietly diverge from the accepted one.
+
+def _amount_by_stage_plan():
+    return _plan(operation="breakdown",
+                 measures=[{"concept": "pipeline_amount"}],
+                 dimensions=["pipeline_stage"])
+
+
+def _legacy_amount_by_stage():
+    """The ACCEPTED answer, from the legacy path, computed here and not pasted.
+
+    Hard-coding the five figures would prove the runtime matches a number
+    somebody once wrote down. Running the legacy path proves it matches the
+    estate, and keeps proving it when the fixture changes.
+    """
+    from mi_agent.mi_agent_workflow import run_mi_agent_query
+    frame, _ = _pipeline_mod().load_prepared_pipeline(_EXTRACT)
+    out = run_mi_agent_query("Show pipeline amount by stage.",
+                             data=frame, semantics=_semantics())
+    assert out["ok"], out.get("error")
+    spec, result = out["spec"], out["query_result"]
+    assert spec["dimension"] == "pipeline_stage", spec
+    column = f"{spec['metric']}_{spec['aggregation']}"
+    return {str(r["pipeline_stage"]): float(r[column])
+            for _, r in result.data.iterrows()}
+
+
+def test_a_current_pipeline_amount_by_stage_is_eligible():
+    ok, reason, _detail = pipeline_rt.check_eligibility(_amount_by_stage_plan())
+    assert ok, reason
+
+
+def test_a_current_pipeline_amount_by_stage_matches_the_accepted_answer():
+    outcome = pipeline_rt.execute_current(
+        _amount_by_stage_plan(), source={"source_file": _EXTRACT},
+        semantics=_semantics())
+    assert outcome.ok, f"{outcome.reason}: {outcome.detail}"
+    served = {c["pipeline_stage"]: c["value"] for c in outcome.cells}
+    assert served == _legacy_amount_by_stage()
+
+
+def test_the_grouped_amounts_reconcile_to_the_pipeline_owners_own_total():
+    # The stage figures and `total_pipeline_amount` must be the SAME definition
+    # of "the pipeline amount", not two that happen to agree. They share a field
+    # by construction: `pipeline_prep.PIPELINE_AMOUNT_FIELD` is the column the
+    # report sums, and the measure binding names that constant.
+    _frame, report = _pipeline_mod().load_prepared_pipeline(_EXTRACT)
+    outcome = pipeline_rt.execute_current(
+        _amount_by_stage_plan(), source={"source_file": _EXTRACT},
+        semantics=_semantics())
+    assert outcome.ok, f"{outcome.reason}: {outcome.detail}"
+    total = round(sum(c["value"] for c in outcome.cells), 2)
+    assert total == report["total_pipeline_amount"]
+
+
+def test_the_receipt_proves_the_measure_the_axis_and_the_owner():
+    outcome = pipeline_rt.execute_current(
+        _amount_by_stage_plan(), source={"source_file": _EXTRACT},
+        semantics=_semantics())
+    receipt = outcome.receipt
+    assert receipt["measure_concept"] == "pipeline_amount"
+    assert receipt["group_field_keys"] == ["pipeline_stage"]
+    assert receipt["aggregation"] == "sum"
+    assert receipt["execution_owner"] == pipeline_rt.OWNER_GENERIC_EXECUTOR
+    # The field is the capability's, read from the capability's own module.
+    from mi_agent_api.pipeline_prep import PIPELINE_AMOUNT_FIELD
+    assert receipt["measure_field"] == PIPELINE_AMOUNT_FIELD
+    # Every row of the extract was in scope: this shape carries no predicate.
+    assert receipt["applied_predicates"] == []
+    assert receipt["input_row_count"] == receipt["filtered_row_count"]
+
+
+def test_the_runtime_implements_no_grouping_of_its_own():
+    # The whole point of routing to the existing engine: no second arithmetic.
+    source = _code_of(pipeline_rt)
+    for forbidden in ("groupby", ".sum()", "pivot_table", "value_counts"):
+        assert forbidden not in source, (
+            f"the pipeline runtime computes {forbidden!r} itself; the estate's "
+            f"deterministic engine owns pipeline arithmetic")
+
+
+def test_a_grouped_amount_without_a_field_registry_refuses_rather_than_guesses():
+    outcome = pipeline_rt.execute_current(
+        _amount_by_stage_plan(), source={"source_file": _EXTRACT}, semantics=None)
+    assert not outcome.ok
+    assert outcome.reason == pipeline_rt.SOURCE_UNAVAILABLE
+
+
+def test_counts_by_stage_are_unchanged_by_the_amount_wiring():
+    # The count path still reads the Pipeline owner's own `stage_counts`, and is
+    # deliberately untouched here.
+    plan = _plan(operation="breakdown",
+                 measures=[{"concept": "pipeline_case_count"}],
+                 dimensions=["pipeline_stage"])
+    outcome = pipeline_rt.execute_current(plan, source={"source_file": _EXTRACT},
+                                          semantics=_semantics())
+    assert outcome.ok, f"{outcome.reason}: {outcome.detail}"
+    _frame, report = _pipeline_mod().load_prepared_pipeline(_EXTRACT)
+    served = {c["pipeline_stage"]: c["value"] for c in outcome.cells}
+    assert served == {str(k): float(v) for k, v in report["stage_counts"].items()}
+    assert outcome.receipt["execution_owner"] == pipeline_rt.OWNER_REPORT
+
+
+_PIPELINE_BY_STAGE_INTENT = {
+    "schema_version": "candidate_intent/1.0", "capability": "pipeline",
+    "operation": "breakdown", "population": {"base": "pipeline"},
+    "measures": [{"concept": "pipeline_amount"}],
+    "dimensions": ["pipeline_stage"], "time": {"form": "current"}}
+
+
+def test_serve_answers_a_current_amount_by_stage_with_the_accepted_figures(monkeypatch):
+    """End to end, and the figures are the estate's, not this runtime's.
+
+    The real field registry is threaded here rather than the `{}` the other
+    end-to-end controls use: a grouped amount is executed by the generic engine,
+    which needs one. That is the production shape — `mi_service` loads the
+    registry once per request and passes it to `serve`.
+    """
+    payload, record = _served(_PIPELINE_BY_STAGE_INTENT, monkeypatch,
+                              semantics=_semantics())
+    assert payload is not None, (record.get("execution"), record.get("eligibility"))
+    assert record["serving"]["decision"] == "NEW"
+    assert record["execution"]["runtime"] == "pipeline_current"
+
+    receipt = record["execution"]["receipt"]
+    assert receipt["measure_concept"] == "pipeline_amount"
+    assert receipt["group_field_keys"] == ["pipeline_stage"]
+    assert receipt["execution_owner"] == pipeline_rt.OWNER_GENERIC_EXECUTOR
+
+    served = {c["pipeline_stage"]: c["value"]
+              for c in record["execution"]["grouped_cells"]}
+    assert served == _legacy_amount_by_stage()
+
+    from mi_agent_api.mi_service import _governed_plan_coverage
+    assert _governed_plan_coverage(payload)["unaccounted"] == []

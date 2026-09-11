@@ -412,7 +412,8 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
 
 
 def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
-                      question: str, render_portfolio_id: Optional[str],
+                      question: str, semantics: Any,
+                      render_portfolio_id: Optional[str],
                       as_of: Optional[str], pipeline_source: Any,
                       pipeline_root: Any, pipeline_client_id: Optional[str],
                       pipeline_history: Any, pipeline_run_id: Optional[str]
@@ -463,7 +464,8 @@ def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
                 to_run_id=pipeline_run_id, history_model=pipeline_history)
         else:
             outcome = pipeline_rt.execute_current(
-                plan, source=pipeline_source, history_model=pipeline_history)
+                plan, source=pipeline_source, semantics=semantics,
+                history_model=pipeline_history)
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
         body["disposition"] = evidence.EXECUTION_ERROR
@@ -793,7 +795,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # they did, refusing with CAPABILITY_NOT_GENERIC.
     if pipeline_rt.claims(plan):
         return _attempt_pipeline(
-            body, plan=plan, question=question,
+            body, plan=plan, question=question, semantics=semantics,
             render_portfolio_id=render_portfolio_id, as_of=as_of,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
