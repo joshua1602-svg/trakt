@@ -711,10 +711,88 @@ class TestTheCallSiteIsWiredExclusively(unittest.TestCase):
                     found.add(child.func.attr)
         return found
 
+    @staticmethod
+    def _attempt_helper():
+        """`_governed_serving_attempt` — the ONE place `serve` is called from.
+
+        It was written inline under the membership branch when the point-in-time
+        path was the only place the canary ran. The legacy router returns before
+        that site, so a routed question could never reach the governed path at
+        all; the attempt is now offered on both branches through this single
+        helper, and the membership test moved INSIDE it so that both callers are
+        gated by the same line rather than by two copies of it.
+        """
+        for node in ast.walk(TestTheCallSiteIsWiredExclusively
+                             ._run_analysis_tree()):
+            if (isinstance(node, ast.FunctionDef)
+                    and node.name == "_governed_serving_attempt"):
+                return node
+        raise AssertionError("_governed_serving_attempt was not found")
+
+    def test_serve_is_called_from_exactly_one_place(self):
+        """Two call sites would be two chances to forget the membership test."""
+        tree = self._run_analysis_tree()
+        sites = [n for n in ast.walk(tree)
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                 and n.func.attr == "serve"]
+        self.assertEqual(len(sites), 1,
+                         "`serve` is reachable from more than one call site")
+        self.assertIn("serve", self._calls([self._attempt_helper()]))
+
     def test_serve_is_only_reachable_under_the_membership_test(self):
+        """The guard is the helper's first statement, and it RETURNS."""
+        helper = self._attempt_helper()
+        guard = next((n for n in helper.body
+                      if isinstance(n, ast.If)
+                      and isinstance(n.test, ast.UnaryOp)
+                      and isinstance(n.test.op, ast.Not)
+                      and isinstance(n.test.operand, ast.Call)
+                      and getattr(n.test.operand.func, "attr", "") == "handles"),
+                     None)
+        self.assertIsNotNone(guard, "the membership test does not guard `serve`")
+        self.assertEqual([a.id for a in guard.test.operand.args
+                          if isinstance(a, ast.Name)], ["context"],
+                         "the membership test is not given the trusted context")
+        self.assertTrue(any(isinstance(n, ast.Return) for n in guard.body),
+                        "a non-member falls through to `serve`")
+        # And nothing is called before it.
+        self.assertNotIn("serve", self._calls(
+            helper.body[:helper.body.index(guard)]))
+
+    def test_the_point_in_time_branch_still_gates_the_attempt(self):
         branch = self._branch()
-        self.assertIn("serve", self._calls(branch.body))
-        self.assertNotIn("serve", self._calls(branch.orelse))
+        self.assertIn("_governed_serving_attempt",
+                      [c.func.id for c in ast.walk(branch)
+                       if isinstance(c, ast.Call)
+                       and isinstance(c.func, ast.Name)])
+
+    def test_the_routed_branch_is_offered_the_attempt_before_it_returns(self):
+        """The serving-order defect, pinned: a routed question reaches the
+        governed path, and it reaches it BEFORE the routed envelope is returned.
+
+        Measured live on 9ab14b34 — S2-P1, S2-P4 and S2-P5 produced no evidence
+        record at all, because `serve` was never called for them.
+        """
+        tree = self._run_analysis_tree()
+        routed_branch = next(
+            (n for n in ast.walk(tree)
+             if isinstance(n, ast.If) and isinstance(n.test, ast.Compare)
+             and isinstance(n.test.left, ast.Name)
+             and n.test.left.id == "routed"), None)
+        self.assertIsNotNone(routed_branch, "the routed branch was not found")
+        body = routed_branch.body
+        attempts = [i for i, node in enumerate(body)
+                    for c in ast.walk(node)
+                    if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                    and c.func.id == "_governed_serving_attempt"]
+        self.assertTrue(attempts, "a routed question never reaches the "
+                                  "governed path")
+        returns = [i for i, node in enumerate(body)
+                   if isinstance(node, ast.Return)]
+        self.assertTrue(returns, "the routed branch does not return")
+        self.assertLess(min(attempts), max(returns),
+                        "the routed envelope is returned before the governed "
+                        "path is offered the request")
 
     def test_the_shadow_is_the_else_so_neither_runs_twice(self):
         branch = self._branch()

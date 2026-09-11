@@ -302,6 +302,35 @@ def _predicate_proved(requested: Mapping[str, Any],
     return False
 
 
+def _execution_receipts(executed: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """Every deterministic receipt this answer rests on, as a list.
+
+    A slice 1 answer is ONE execution and carries its receipt at the top level.
+    A slice 2 answer is one execution PER SNAPSHOT and carries them under
+    `snapshots`, because one snapshot's receipt cannot describe a series —
+    `plan_temporal_runtime.served_evidence` is the owner of that shape and is
+    not changed by this.
+
+    Returning a LIST is what lets ONE rule serve both, rather than a second
+    coverage owner for time: a requested predicate is proved only when every
+    receipt proves it, and a single-execution answer is simply the one-element
+    case. An empty list proves nothing and therefore refuses, which is the
+    fail-closed state a served answer can never actually reach — a temporal
+    result with no executed snapshot is never served.
+
+    Reading only the top level is the defect this repairs. A temporal answer's
+    top level carries no `applied_predicates` and no `group_field_keys`, so
+    every requested filter and axis read as unaccounted and a correctly executed
+    series was converted to UNSUPPORTED_QUESTION — S2-P3 measured live on
+    9ab14b34, three snapshots executed with the filter in every receipt and no
+    rows in the response.
+    """
+    snapshots = executed.get("snapshots")
+    if isinstance(snapshots, Sequence) and not isinstance(snapshots, (str, bytes)):
+        return [dict(s) for s in snapshots if isinstance(s, Mapping)]
+    return [dict(executed)]
+
+
 def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """The coverage ledger for a governed-plan answer, or None if this is legacy.
 
@@ -321,15 +350,19 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
         return None
     requested = block.get("requested") or {}
     executed = block.get("executed") or {}
-    applied = [e for e in (executed.get("applied_predicates") or ())
-               if isinstance(e, Mapping)]
-    grouped = {str(k) for k in (executed.get("group_field_keys") or ())}
+    receipts = _execution_receipts(executed)
 
     entries: List[Dict[str, Any]] = []
     for predicate in (requested.get("filters") or ()):
         if not isinstance(predicate, Mapping):
             continue
-        proved = _predicate_proved(predicate, applied)
+        # EVERY receipt, not any: a predicate proved on one snapshot and absent
+        # from another did not hold over the series that was answered.
+        proved = bool(receipts) and all(
+            _predicate_proved(predicate,
+                              [e for e in (receipt.get("applied_predicates") or ())
+                               if isinstance(e, Mapping)])
+            for receipt in receipts)
         entries.append({
             "kind": "governed_plan:filter",
             "field": str(predicate.get("field") or ""),
@@ -339,11 +372,14 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
             "disposition": _coverage_resolved() if proved else _coverage_missing(),
         })
     for axis in (requested.get("dimensions") or ()):
+        grouped = bool(receipts) and all(
+            str(axis) in {str(k) for k in (receipt.get("group_field_keys") or ())}
+            for receipt in receipts)
         entries.append({
             "kind": "governed_plan:dimension", "field": str(axis),
             "value": str(axis), "term": str(axis),
             "owner": "governed_plan + execution_receipt",
-            "disposition": (_coverage_resolved() if str(axis) in grouped
+            "disposition": (_coverage_resolved() if grouped
                             else _coverage_missing()),
         })
     return {"version": 1, "concepts": entries,
@@ -1866,6 +1902,51 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         return _error_envelope("The MI Agent could not interpret this question.",
                                req=req, view=view)
 
+    # THE GOVERNED SERVING ATTEMPT, DEFINED ONCE AND OFFERED ON BOTH PATHS.
+    #
+    # WHY THIS IS NOT WHERE IT WAS. The canary used to be called at ONE site, at
+    # the foot of the point-in-time branch. The legacy chat router returns before
+    # that site, so every question it claimed — the trend, evolution and
+    # period-comparison shapes, which is to say precisely the temporal ones —
+    # never reached the governed path at all, whatever the flag said. Measured
+    # live on 9ab14b34: S2-P1, S2-P4 and S2-P5 produced no evidence record,
+    # because `serve` was never called for them.
+    #
+    # So the attempt is offered on both branches, and the decision of what it may
+    # claim is unchanged: `handles` still reads the principal and nothing else,
+    # and the GovernedQueryPlan and its perimeter still decide eligibility. No
+    # raw text chooses a path here, the legacy router is not told about slice 2,
+    # and nothing is disabled — a request the governed path declines is answered
+    # by exactly the envelope that branch had already built.
+    #
+    # THE LEGACY ANSWER IS STILL COMPUTED FIRST AND KEPT. `serve` takes it as the
+    # fallback it returns to on any failure, which is what makes the fallback
+    # incapable of failing. Precedence here means the governed result may BECOME
+    # the response before the legacy one is returned — not that the legacy one is
+    # skipped.
+    def _governed_serving_attempt(legacy_envelope: Dict[str, Any]
+                                  ) -> Optional[Dict[str, Any]]:
+        from mi_agent import plan_serving_canary as _plan_serving
+        if not _plan_serving.handles(context):
+            return None
+        # THE GOVERNED CATALOGUE, PASSED IN — the same shape as `frame` and
+        # `semantics`. A temporal plan resolves its snapshots against the
+        # catalogue production already owns (`datasets.snapshot_index`, the one
+        # `/mi/snapshots` and the dropdowns are built from), scoped to THIS
+        # client; `build_store` returns None on any fault, and None means the
+        # temporal path is unavailable and the legacy envelope serves. A slice 1
+        # request never reads any of this.
+        from mi_agent_api import governed_snapshot_store as _snapshot_store
+        return _plan_serving.serve(
+            question=req.question, context=context, client_id=client_id,
+            run_id=run_id, legacy_result=legacy_envelope, frame=df,
+            semantics=semantics, view=view,
+            portfolio_id=authorised.portfolio_id,
+            render_portfolio_id=portfolio_id, as_of=req.as_of_date,
+            snapshot_store=_snapshot_store.build_store(ds, client_id),
+            snapshot_client_id=client_id,
+            snapshot_route=_snapshot_store.FUNDED_ROUTE)
+
     routed = None
     try:
         def _routed_frame(cli: str, rid: Optional[str]):
@@ -1978,6 +2059,18 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         # SITE 1 OF 2 — a named GEOGRAPHY this book does not carry.
         routed = _guard_stated_geography_basis(
             routed, question=req.question, geography=geography)
+        # BEFORE THE ROUTED ENVELOPE BECOMES AUTHORITATIVE — see the helper above.
+        served = _governed_serving_attempt(routed)
+        if served is not None:
+            # A GOVERNED ANSWER IS NOT THE ROUTED ONE, so it is not labelled with
+            # the routed capability's run requirement: it resolved its own
+            # snapshots from the governed catalogue. It is stamped exactly as a
+            # governed answer on the point-in-time branch is, so which branch the
+            # request happened to arrive on is not visible in the response.
+            return _governed_context(served, req=req, client_id=client_id,
+                                     run_id=run_id, geography=geography,
+                                     view=view, run_required=bool(run_id),
+                                     semantics=semantics, frame=df)
         return _governed_context(routed, req=req, client_id=client_id, run_id=run_id,
                                  geography=geography,
                                  view=view, run_required=_route_requires_run(route),
@@ -2090,27 +2183,18 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # The legacy envelope is complete before either runs, so `serve` returning
     # None — off, ineligible, clarify, refuse, any failure — leaves `result`
     # exactly as the legacy path built it.
+    # THE SAME ATTEMPT THE ROUTED BRANCH MAKES, through the one helper defined
+    # above. It was written out here when this was the only place it happened.
     from mi_agent import plan_serving_canary as _plan_serving
     if _plan_serving.handles(context):
-        # THE GOVERNED CATALOGUE, PASSED IN — the same shape as `frame` and
-        # `semantics`, which this call site has always supplied. A temporal plan
-        # resolves its snapshots against the catalogue production already owns
-        # (`datasets.snapshot_index`, the one `/mi/snapshots` and the dropdowns
-        # are built from), scoped to THIS client; `build_store` returns None on
-        # any fault, and None means the temporal path is unavailable and the
-        # legacy envelope serves. A slice 1 request never reads any of this.
-        from mi_agent_api import governed_snapshot_store as _snapshot_store
-        served = _plan_serving.serve(
-            question=req.question, context=context, client_id=client_id,
-            run_id=run_id, legacy_result=result, frame=df, semantics=semantics,
-            view=view, portfolio_id=authorised.portfolio_id,
-            render_portfolio_id=portfolio_id, as_of=req.as_of_date,
-            snapshot_store=_snapshot_store.build_store(ds, client_id),
-            snapshot_client_id=client_id,
-            snapshot_route=_snapshot_store.FUNDED_ROUTE)
+        served = _governed_serving_attempt(result)
         if served is not None:
             result = served
     else:
+        # THE SHADOW STAYS WHERE IT WAS, on this branch only. Extending it to
+        # routed questions would buy a live interpretation for every
+        # non-canary caller who asked a trend question — a change to the
+        # behaviour, and the bill, of principals this repair does not touch.
         from mi_agent import plan_shadow_wiring as _plan_shadow
         _plan_shadow.observe_request(question=req.question, client_id=client_id,
                                      run_id=run_id, result=result, frame=df,
