@@ -53,6 +53,13 @@ on:
           only and calls nothing.
         default: ''
         required: false
+      only:
+        description: >-
+          Ask ONLY these case ids (comma separated), e.g. `S2-P2`. The bank is
+          filtered, never edited, and the report records what was held back.
+          Empty asks the whole bank.
+        default: ''
+        required: false
       stable_reads:
         description: >-
           Successful /health reads required by `provenance`, at least 15s
@@ -178,9 +185,11 @@ jobs:
           EXPECT_COMMIT: ${{ inputs.expect_commit }}
           EVIDENCE_PATH: ${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}
           POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds || '120' }}
+          ONLY: ${{ inputs.only || '' }}
         run: |
           set -euo pipefail
           python due_diligence/evidence/plan_temporal_slice2/run_temporal_acceptance.py \
+            --only "$ONLY" \
             --base-url "$BASE_URL" \
             --path "$API_PATH" \
             --portfolio-id "$PORTFOLIO_ID" \

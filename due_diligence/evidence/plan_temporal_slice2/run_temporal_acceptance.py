@@ -472,6 +472,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--poll-interval", type=float, default=3.0)
     parser.add_argument("--poll-timeout", type=float, default=120.0)
     parser.add_argument("--json-out", default="slice2-temporal-acceptance.json")
+    parser.add_argument("--only", default="",
+                        help="ask ONLY these case ids (comma separated). The "
+                             "bank is not edited: it is filtered, and the "
+                             "report records which cases were asked and which "
+                             "were not")
     parser.add_argument("--self-test", action="store_true",
                         help="exercise the reconciliation rules offline; "
                              "makes no network call")
@@ -494,6 +499,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.provenance_only:
         return provenance_only(args)
 
+    # WHICH CASES THIS RUN ASKS. The bank itself is never edited — a bank a
+    # harness can rewrite is a bank that can be made to pass — so a narrowed run
+    # FILTERS it and the report states both what was asked and what was held
+    # back. A targeted re-check of one case is then a recorded subset of the
+    # standing bank rather than a different bank with the same name.
+    wanted = [c.strip() for c in args.only.split(",") if c.strip()]
+    unknown = [c for c in wanted if c not in {case["case_id"] for case in BANK}]
+    if unknown:
+        print(f"::error::--only names cases the bank does not contain: {unknown}")
+        return 2
+    bank = tuple(c for c in BANK if not wanted or c["case_id"] in wanted)
+
     bearer = os.environ.get("MI_BEARER", "").strip()
     profile = os.environ.get("AZURE_MI_API_PUBLISH_PROFILE", "").strip()
     secrets = [s for s in (bearer, profile) if len(s) >= ra.MIN_SECRET_LENGTH]
@@ -502,7 +519,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         "what_this_is": "slice 2 live temporal acceptance — did the NEW "
                         "temporal result become the response, and does it "
                         "reconcile to the execution receipt",
-        "bank": [c["case_id"] for c in BANK],
+        "bank": [c["case_id"] for c in bank],
+        "bank_full": [c["case_id"] for c in BANK],
+        "not_asked": [c["case_id"] for c in BANK if c not in bank],
         "portfolio_id": args.portfolio_id, "expect_commit": args.expect_commit,
         "stages": {}, "cases": [],
     }
@@ -553,13 +572,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     # asked after it. Retrying semantics against an unusable credential would
     # turn one free rejection into five.
     ask = _live_asker(args.base_url, args.path, [], args.portfolio_id)
-    for case in BANK:
+    for case in bank:
         envelope = ask(case["question"])
         if envelope.get("__http_status__") in (401, 403):
             return stop("auth", "AUTH / NOT_EXECUTABLE",
                         f"{case['case_id']} was rejected with HTTP "
                         f"{envelope.get('__http_status__')}; the remaining "
-                        f"{len(BANK) - BANK.index(case) - 1} questions were "
+                        f"{len(bank) - bank.index(case) - 1} questions were "
                         f"not asked")
         record, matched = (None, "not polled")
         if not envelope.get("__transport_error__"):
