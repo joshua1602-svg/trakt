@@ -79,16 +79,42 @@ from certify_mi_api import _live_asker                               # noqa: E40
 #: Agreement tolerance, the same 0.01 every other adjudicator in this estate uses.
 TOLERANCE = 0.01
 
+#: THE GOVERNED CATALOGUE THIS ACCEPTANCE RUNS AGAINST, as production holds it.
+#:
+#: Used for ONE thing: asserting WHICH periods were selected. No figure is taken
+#: from it and none is written down anywhere in this file — the execution receipt
+#: remains the numeric oracle. Snapshot IDENTITY is a different kind of claim
+#: from a portfolio VALUE: it is a property of the catalogue rather than of the
+#: book, it is stable between runs, and a harness that cannot say which periods
+#: were expected cannot tell a correct selection from a fabricated one.
+#:
+#: The book is SPARSE — three reporting periods, with December 2025 to May 2026
+#: absent. That is the point of asserting it: an answer that reports those six
+#: months has invented them.
+PRODUCTION_CATALOGUE: Tuple[str, ...] = ("2025-10-31", "2025-11-30", "2026-06-30")
+
 #: The bank. FIXED — six questions, asked once each, never reworded and never
 #: extended at run time. A bank a harness can edit is a bank that can be made to
 #: pass.
+#:
+#: S2-P2 WAS CORRECTED AFTER THE FIRST PRODUCTION RUN. It asked for "the last 6
+#: months", which this catalogue cannot answer: a six-month relative window ends
+#: at 2026-06-30 and needs 2026-01-31 through 2026-05-31, none of which exist.
+#: The live refusal was CORRECT, and the case was measuring the bank's own
+#: assumption rather than the product. It now states an explicit range whose
+#: bounds the catalogue does carry, so what it tests is what it was always meant
+#: to test: that a bounded range returns the governed periods inside it and does
+#: not fabricate the gap.
 BANK: Tuple[Dict[str, Any], ...] = (
     {"case_id": "S2-P1", "kind": "series",
      "question": "What was funded balance each month?",
-     "why": "whole available monthly series — grain-only resolution"},
+     "why": "whole available monthly series — grain-only resolution",
+     "expect_snapshots": PRODUCTION_CATALOGUE},
     {"case_id": "S2-P2", "kind": "series",
-     "question": "Show funded balance over the last 6 months.",
-     "why": "bounded relative series — periods_back resolution"},
+     "question": "Show funded balance from October 2025 to June 2026.",
+     "why": "a bounded explicit range returns the governed periods inside it "
+            "and fabricates nothing for the months the book does not carry",
+     "expect_snapshots": PRODUCTION_CATALOGUE},
     {"case_id": "S2-P3", "kind": "series",
      "question": "How many drawdown loans were there each month?",
      "why": "a governed filter survives every selected snapshot"},
@@ -313,7 +339,10 @@ def classify_negative(record: Mapping[str, Any],
 # --------------------------------------------------------------------------- #
 
 def adjudicate(case: Mapping[str, Any], envelope: Mapping[str, Any],
-               record: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+               record: Optional[Mapping[str, Any]],
+               client_id: str = "",
+               catalogue: Sequence[str] = PRODUCTION_CATALOGUE
+               ) -> Dict[str, Any]:
     """Everything asserted about one case, from the response and the record."""
     out: Dict[str, Any] = {
         "case_id": case["case_id"], "question": case["question"],
@@ -383,6 +412,38 @@ def adjudicate(case: Mapping[str, Any], envelope: Mapping[str, Any],
         problems.append("no snapshot was selected")
     if any(not sid for sid in out["snapshot_ids"]):
         problems.append("a selected period carries no snapshot identity")
+
+    # -- WHICH periods, not how many ---------------------------------------- #
+    #
+    # NO PERIOD MAY BE INVENTED. Every selected reporting date must be one the
+    # governed catalogue actually holds. This is the assertion that separates
+    # "returned the three periods the book has" from "returned a contiguous
+    # nine-month series", and the latter is the failure the sparse catalogue
+    # exists to expose here.
+    # THE CATALOGUE IS A PARAMETER, not a global, so this one rule serves
+    # whichever book the run is pointed at — production here, the fixture's own
+    # history under `--shape-check`. An empty catalogue means "not asserted".
+    selected = [str(d) for d in (out["snapshots"] or ())]
+    known = [str(d) for d in (catalogue or ())]
+    invented = [d for d in selected if d not in known] if known else []
+    if invented:
+        problems.append(f"period(s) the governed catalogue does not hold: "
+                        f"{invented} — the catalogue is {known}")
+
+    # NO OTHER CLIENT'S RUN. Applied to the production identity form `client/run`
+    # only: an id carrying no client segment states nothing about ownership, and
+    # reading the whole id as a client name would invent a finding.
+    foreign = sorted({str(sid).split("/", 1)[0] for sid in out["snapshot_ids"]
+                      if sid and "/" in str(sid)
+                      and str(sid).split("/", 1)[0] != client_id})
+    if client_id and foreign:
+        problems.append(f"snapshot(s) belonging to another client: {foreign}")
+
+    # And for the cases whose whole point is WHICH periods a window names.
+    expected = case.get("expect_snapshots")
+    if expected is not None and selected != list(expected):
+        problems.append(f"selected {selected} — this window names "
+                        f"{list(expected)}")
     if (record.get("execution") or {}).get("error"):
         problems.append(f"execution error: "
                         f"{(record.get('execution') or {}).get('error')!r}")
@@ -483,7 +544,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 sink, case["question"], client_id,
                 interval=args.poll_interval, timeout=args.poll_timeout,
                 already=already)
-        adjudicated = adjudicate(case, envelope, record)
+        adjudicated = adjudicate(case, envelope, record, client_id)
         adjudicated["evidence_match"] = matched
         report["cases"].append(adjudicated)
         print(f"  {adjudicated['verdict']} {case['case_id']:<6} "
@@ -555,7 +616,7 @@ def self_test() -> int:
     check("bank questions are the specified wording",
           [c["question"] for c in BANK] == [
               "What was funded balance each month?",
-              "Show funded balance over the last 6 months.",
+              "Show funded balance from October 2025 to June 2026.",
               "How many drawdown loans were there each month?",
               "Show loan count by LTV bucket each month.",
               "What was funded balance this month versus last month?",
@@ -569,18 +630,20 @@ def self_test() -> int:
           value_column(_record([], aggregation="count")) == "loan_count")
 
     # series
-    points = [{"reporting_date": "2026-05-31", "value": 10.0,
-               "snapshot_id": "ERE/run_20260531"},
+    # The synthetic series uses dates the governed catalogue actually holds, so
+    # the no-fabrication assertion is exercised rather than tripped.
+    points = [{"reporting_date": "2025-11-30", "value": 10.0,
+               "snapshot_id": "ERE/run_20251130"},
               {"reporting_date": "2026-06-30", "value": 20.0,
                "snapshot_id": "ERE/run_20260630"}]
-    good = _envelope([{"reporting_date": "2026-05-31",
+    good = _envelope([{"reporting_date": "2025-11-30",
                        "current_outstanding_balance_sum": 10.0},
                       {"reporting_date": "2026-06-30",
                        "current_outstanding_balance_sum": 20.0}])
     found, checked = reconcile_series(_record(points), http_rows(good))
     check("series reconciles a faithful response", not found and checked == 2,
           str(found))
-    drifted = _envelope([{"reporting_date": "2026-05-31",
+    drifted = _envelope([{"reporting_date": "2025-11-30",
                           "current_outstanding_balance_sum": 10.0},
                          {"reporting_date": "2026-06-30",
                           "current_outstanding_balance_sum": 999.0}])
@@ -590,7 +653,7 @@ def self_test() -> int:
                           "current_outstanding_balance_sum": 20.0}])
     found, _ = reconcile_series(_record(points), http_rows(missing))
     check("series CATCHES a dropped period", bool(found), str(found))
-    extra = _envelope([{"reporting_date": "2026-04-30",
+    extra = _envelope([{"reporting_date": "2025-10-31",
                         "current_outstanding_balance_sum": 5.0},
                        *good["artifacts"][0]["rows"]])
     found, _ = reconcile_series(_record(points), http_rows(extra))
@@ -691,26 +754,58 @@ def self_test() -> int:
           not classify_negative(refused, http_rows(good)))
 
     # adjudication wiring
-    verdict = adjudicate(BANK[0], good, _record(points))
+    generic = BANK[2]                      # S2-P3: no window to name
+    verdict = adjudicate(generic, good, _record(points), "ERE")
     check("a faithful positive adjudicates PASS", verdict["verdict"] == "PASS",
           str(verdict["problems"]))
     check("the snapshot identities are recorded",
-          verdict["snapshot_ids"] == ["ERE/run_20260531", "ERE/run_20260630"])
+          verdict["snapshot_ids"] == ["ERE/run_20251130", "ERE/run_20260630"])
     legacy = _record(points, decision="LEGACY_FALLBACK")
     check("a legacy fallback adjudicates FAIL",
-          adjudicate(BANK[0], good, legacy)["verdict"] == "FAIL")
+          adjudicate(generic, good, legacy, "ERE")["verdict"] == "FAIL")
     check("a missing evidence record adjudicates FAIL",
-          adjudicate(BANK[0], good, None)["verdict"] == "FAIL")
+          adjudicate(generic, good, None, "ERE")["verdict"] == "FAIL")
     wrong_model = _record(points)
     wrong_model["model"]["model_id"] = "claude-3-5-sonnet"
     check("a wrong model adjudicates FAIL",
-          adjudicate(BANK[0], good, wrong_model)["verdict"] == "FAIL")
+          adjudicate(generic, good, wrong_model, "ERE")["verdict"] == "FAIL")
     coverage = dict(good, semanticCoverageRefused=True)
     check("a coverage refusal on a served result adjudicates FAIL",
-          adjudicate(BANK[0], coverage, _record(points))["verdict"] == "FAIL")
+          adjudicate(generic, coverage, _record(points), "ERE")["verdict"] == "FAIL")
     check("a transport error adjudicates FAIL",
-          adjudicate(BANK[0], {"__transport_error__": True,
-                               "__http_status__": 401}, None)["verdict"] == "FAIL")
+          adjudicate(generic, {"__transport_error__": True,
+                              "__http_status__": 401}, None, "ERE")["verdict"] == "FAIL")
+
+    # -- which periods, not how many ---------------------------------------- #
+    check("the catalogue under acceptance is the sparse production one",
+          PRODUCTION_CATALOGUE == ("2025-10-31", "2025-11-30", "2026-06-30"))
+    fabricated = _record(points + [{"reporting_date": "2026-03-31", "value": 5.0,
+                                    "snapshot_id": "ERE/run_20260331"}])
+    invented = _envelope([*good["artifacts"][0]["rows"],
+                          {"reporting_date": "2026-03-31",
+                           "current_outstanding_balance_sum": 5.0}])
+    check("a period the catalogue does not hold is CAUGHT",
+          adjudicate(generic, invented, fabricated, "ERE")["verdict"] == "FAIL")
+    foreign = _record([{"reporting_date": "2026-06-30", "value": 1.0,
+                        "snapshot_id": "OTHER/run_20260630"}])
+    check("another client's snapshot is CAUGHT",
+          adjudicate(generic, _envelope([
+              {"reporting_date": "2026-06-30",
+               "current_outstanding_balance_sum": 1.0}]),
+              foreign, "ERE")["verdict"] == "FAIL")
+    windowed = dict(BANK[1])                       # S2-P2 names its three periods
+    check("a window that names its periods CATCHES a short selection",
+          adjudicate(windowed, good, _record(points), "ERE")["verdict"] == "FAIL")
+    whole = [{"reporting_date": d, "value": float(i),
+              "snapshot_id": f"ERE/run_{d.replace('-', '')}"}
+             for i, d in enumerate(PRODUCTION_CATALOGUE)]
+    whole_rows = _envelope([{"reporting_date": d,
+                             "current_outstanding_balance_sum": float(i)}
+                            for i, d in enumerate(PRODUCTION_CATALOGUE)])
+    check("a window that names its periods PASSES when they are all served",
+          adjudicate(windowed, whole_rows, _record(whole), "ERE")["verdict"]
+          == "PASS",
+          str(adjudicate(windowed, whole_rows, _record(whole), "ERE")["problems"]))
 
     failed = [c for c in checks if not c[1]]
     print("=== SLICE 2 TEMPORAL ACCEPTANCE — SELF TEST (no network)")
@@ -784,9 +879,14 @@ def shape_check() -> int:
                 question, store=store, semantics=semantics, frames=book,
                 principal=tsi.CANARY_PRINCIPAL)
             envelope = dict(payload) if payload else {"ok": True, "artifacts": []}
+            # The fixture's OWN history and client, because this mode proves
+            # the adjudicator reads the product's shape — it is not pointed at
+            # production and must not be judged against production's catalogue.
             out = adjudicate({"case_id": case, "kind": kind,
                               "question": question, "why": kind},
-                             envelope, record)
+                             envelope, record,
+                             client_id=fixture.CLIENT_ID,
+                             catalogue=tuple(tsi.CATALOGUE))
             real = [p for p in out["problems"]
                     if _REPLAY_MODEL_PROBLEM not in p]
             failures += bool(real)
