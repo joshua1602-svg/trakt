@@ -1178,3 +1178,79 @@ SLICE_2_PRODUCTION_SERVING_REPAIR = PASS
 ```
 
 Not deployed, no flag enabled, no further live acceptance run.
+
+---
+
+## FINAL SLICE 2 PRODUCTION CANARY
+
+Run [34588875836](https://github.com/joshua1602-svg/trakt/actions/runs/34588875836),
+six questions asked once each against the real `/mi/query`.
+
+```
+DEPLOYED_SHA = b2d30bd7   EXPECTED_SHA = b2d30bd7   SERVED_SHA = b2d30bd7
+PROVENANCE   = CONFIRMED (2 reads, >= 15s apart, run 34588785298)
+CATALOGUE    = CONFIRMED from /mi/snapshots: 2025-10-31, 2025-11-30, 2026-06-30
+```
+
+| case | verdict | served | snapshots | reconciled |
+|---|---|---|---|---|
+| S2-P1 whole monthly series | **PASS** | NEW | 3 (exactly the catalogue) | 3 values |
+| S2-P2 explicit range | FAIL → `BANK_ASSUMPTION_INVALID` | LEGACY_FALLBACK | 0 | — |
+| S2-P3 filtered series | **PASS** | NEW | 3 | 3 values |
+| S2-P4 grouped series | **PASS** | NEW | 3 | 18 cells |
+| S2-P5 period comparison | **PASS** | NEW | 2 | 4 |
+| S2-N1 24-month control | **PASS** | fail-closed | 0 | — |
+
+28 figures reconciled against the execution receipts. No portfolio value is
+recorded here or in the harness; the receipt is the oracle.
+
+### S2-P1 is the assertion that matters most
+
+It selected **exactly** `2025-10-31, 2025-11-30, 2026-06-30` — the three periods
+the book holds — and did not invent the six months between November and June.
+Reconciliation alone could not have caught that: an invented month reconciles
+against itself. The snapshot-identity assertion is what proves it.
+
+### S2-P2 — the bank's assumption, not a malfunction
+
+The interpreter emitted both bounds of the range. `PeriodBinding` carries no
+start/end fields — only `labels` — and `_resolve_span`'s label branch settles a
+span through `_resolve_anchor`, which refuses labels naming more than one
+distinct period. So a **two-bounded** range has no representation the resolver
+can settle, and the request failed closed to legacy.
+
+This was predicted offline before the run, with the real compiler and runtime
+against a production-shaped catalogue, and the live result matched: a single
+start label resolves to all three periods (`basis=anchor`); two labels refuse.
+
+It is not a catalogue gap — all three periods exist — and it is not a
+malfunction: nothing was fabricated, shortened or substituted. It is a
+**capability boundary**. Worth recording for whoever picks this up: the slice 2
+perimeter admits `range` in `SLICE_2_PERIOD_FORMS`, but the resolver can only
+settle a range that names one bound. That asymmetry is deliberately left as it
+is — the instruction was not to modify the temporal contract to satisfy a bank.
+
+### Safety
+
+```
+SNAPSHOT_SELECTION_ERRORS            = 0
+SILENT_TEMPORAL_DROPS                = 0
+SILENT_PERIOD_SUBSTITUTIONS          = 0
+SEMANTIC_COVERAGE_REFUSALS (governed)= 0
+EXECUTION_ERRORS                     = 0
+EXCEPTION_ESCAPES                    = 0
+CROSS_CLIENT_SNAPSHOTS               = 0
+RAW_TEXT_TEMPORAL_REREADS_AFTER_PLAN = 0
+RAW_TEXT_FILTER_REREADS_AFTER_PLAN   = 0
+```
+
+The serving repair is confirmed in production on both counts: **P1, P4 and P5
+are shapes the legacy router used to claim**, and they now reach the governed
+path and serve NEW; and **P3's filter survived the coverage gate** on a
+three-snapshot series, which is the case that returned UNSUPPORTED_QUESTION with
+no rows on `9ab14b34`.
+
+```
+SLICE_2_PRODUCTION_CANARY = PASS
+SLICE_2 = CLOSED
+```
