@@ -1086,3 +1086,95 @@ ACCEPTANCE_TOOL_LOC = 808 (script) + 178 (workflow); 556 of the script is code,
 
 Nothing was deployed, `MI_AGENT_PLAN_SERVE` was not enabled, Opus was not
 called, Slice 2 was not modified and Slice 3 was not started.
+
+---
+
+## PRODUCTION SERVING REPAIR (after the first canary)
+
+The first Slice 2 production canary on `9ab14b34` exposed two product defects
+and one environment mismatch. The two defects are fixed in `d33ba881`; the
+mismatch is recorded here and deliberately left alone.
+
+### Defect 1 — the legacy router preempted the canary
+
+`_run_analysis` called the serving canary at ONE site, at the foot of the
+point-in-time branch. The legacy chat router returns before that site, so every
+shape it claimed — trend, evolution, period comparison, which is to say
+precisely the temporal ones — could never reach the governed path at all,
+whatever the flag said. S2-P1, S2-P4 and S2-P5 produced **no evidence record**
+in production because `serve` was never called for them.
+
+The attempt is now offered on both branches through one helper, with the
+membership test inside it so both callers are gated by the same line. `handles`
+still reads the principal and nothing else; the plan and its perimeter still
+decide what may be claimed; no raw text chooses a path; the legacy router is
+untouched and is told nothing about Slice 2; and a request the governed path
+declines is answered by exactly the envelope that branch had already built. The
+shadow stays on the point-in-time branch alone — extending it to routed
+questions would buy a live interpretation for every non-canary caller who asked
+a trend question.
+
+### Defect 2 — the governed coverage owner could not read a series
+
+**This was not the raw-text reread it first looked like, and the first report of
+it was wrong on mechanism.** `render` stamps `parser_mode=governed_plan`, so
+`completeness.coverage_report` is never reached on this path. The governed
+reconciler ran and could not see evidence that was one level down:
+`_governed_plan_coverage` read `applied_predicates` and `group_field_keys` at
+the **top level**, and a temporal answer keeps its receipts **per snapshot**. So
+every requested predicate and axis read as unaccounted, and S2-P3 — served NEW,
+three snapshots, the filter in every receipt — reached the caller as
+UNSUPPORTED_QUESTION with no rows.
+
+`_execution_receipts` now returns the receipts as a **list**, which lets one
+rule serve both shapes rather than growing a second coverage owner for time:
+
+> a requested predicate is proved only when **every** receipt proves it —
+> canonical field, direction and governed value, through the existing
+> `_values_agree` normalisation — and a single-execution answer is the
+> one-element case. An empty list proves nothing and refuses.
+
+The gate was repaired, **not bypassed**. Exempting temporal answers would have
+traded a false refusal for an unchecked one. A snapshot that omits or
+contradicts the predicate still refuses, and both are pinned by tests.
+
+### Finding 2 — recorded, not fixed
+
+The production catalogue currently holds three runs:
+
+```
+2025-10-31
+2025-11-30
+2026-06-30
+```
+
+So *"Show funded balance over the last 6 months"* cannot produce a six-month
+series, and the live refusal was **correct**. Nothing was fabricated, shortened,
+reinterpreted or special-cased; `SnapshotSelector` is untouched and no
+production data was added. This is an acceptance-bank/environment mismatch, not
+a Slice 2 product defect, and it stays as it is.
+
+### Proof
+
+No model call anywhere. The temporal cases compile a frozen `CandidateIntent`
+with the real `DeterministicCompiler` and execute it against the real fixture
+store, so the plan and the receipts are the product's own; the precedence cases
+drive the real `/mi/query`. 22 new tests, **8 of which fail on the pre-fix
+code**. The call-site exclusivity tests were rewritten for the new shape rather
+than relaxed — `serve` is now asserted reachable from exactly one place, guarded
+by a membership test that returns, and the routed branch is asserted to offer
+the attempt *before* it returns.
+
+Blast radius measured rather than assumed: the whole `mi_agent_api` suite was
+run against the pre-fix and post-fix trees and the failure sets are **byte
+identical** (36 failed, 42 errors, 1728 passed both times — all pre-existing,
+in pipeline/onboarding materialisation fixtures untouched by this change).
+
+```
+PRODUCT_FILES_CHANGED        = 1
+PRODUCT_NET_EXECUTABLE_LOC   = 42
+LIVE_OPUS_CALLS              = 0
+SLICE_2_PRODUCTION_SERVING_REPAIR = PASS
+```
+
+Not deployed, no flag enabled, no further live acceptance run.
