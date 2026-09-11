@@ -53,7 +53,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent.states.selectors import SnapshotSelector
-from snapshot.model import SnapshotNotFoundError
+from snapshot.model import SnapshotNotFoundError, parse_date
 
 # --------------------------------------------------------------------------- #
 # the slice 2 eligibility perimeter
@@ -101,6 +101,10 @@ UNSUPPORTED_CADENCE = "UNSUPPORTED_CADENCE"
 PERIOD_NOT_AVAILABLE = "PERIOD_NOT_AVAILABLE"
 PERIOD_LABEL_UNRESOLVED = "PERIOD_LABEL_UNRESOLVED"
 PERIOD_LABEL_AMBIGUOUS = "PERIOD_LABEL_AMBIGUOUS"
+#: A range whose end precedes its start. Refused rather than reordered: the
+#: bounds are what the reader said, and swapping them would answer a different
+#: question while reporting the one that was asked.
+PERIOD_RANGE_REVERSED = "PERIOD_RANGE_REVERSED"
 NO_SNAPSHOTS = "NO_SNAPSHOTS"
 INSUFFICIENT_SNAPSHOTS = "INSUFFICIENT_SNAPSHOTS"
 SNAPSHOT_LOAD_FAILED = "SNAPSHOT_LOAD_FAILED"
@@ -113,7 +117,7 @@ EMPTY_ACROSS_EVERY_SNAPSHOT = "EMPTY_ACROSS_EVERY_SNAPSHOT"
 #: not a judgement made per call.
 CLARIFIABLE_REASONS = frozenset({
     PERIOD_NOT_AVAILABLE, PERIOD_LABEL_UNRESOLVED, PERIOD_LABEL_AMBIGUOUS,
-    INSUFFICIENT_SNAPSHOTS, UNSUPPORTED_CADENCE,
+    INSUFFICIENT_SNAPSHOTS, UNSUPPORTED_CADENCE, PERIOD_RANGE_REVERSED,
 })
 
 #: The column the assembled series is keyed by. The governed header's reporting
@@ -398,24 +402,32 @@ def _match_anchor(anchor: PeriodAnchor, headers: Sequence[Any]) -> List[Any]:
     return found
 
 
-def _resolve_anchor(labels: Sequence[str], headers: Sequence[Any],
-                    requested: Mapping[str, Any]
-                    ) -> Tuple[Optional[Any], Optional[TemporalResolution]]:
-    """`(header, failure)` for the one governed period the labels name."""
-    anchors = [a for a in (parse_anchor(label) for label in labels)
-               if a is not None]
-    if not anchors:
-        return None, _fail(
-            PERIOD_LABEL_UNRESOLVED,
-            f"no governed period is named by {list(labels)!r}; this contract "
-            f"reads a month, optionally with a year, and clarifies otherwise",
-            requested)
-    distinct = {(a.month, a.year) for a in anchors}
-    if len(distinct) > 1:
-        return None, _fail(PERIOD_LABEL_AMBIGUOUS,
-                           f"{list(labels)!r} names more than one period",
-                           requested)
-    anchor = anchors[0]
+def _anchors_of(labels: Sequence[str]) -> List[PeriodAnchor]:
+    """The DISTINCT governed periods these labels name, in the order named.
+
+    Order is the reader's, never sorted. A range states its bounds in the order
+    it means them, and reordering here would make a reversed range look valid.
+    """
+    found: List[PeriodAnchor] = []
+    seen = set()
+    for label in labels:
+        anchor = parse_anchor(label)
+        if anchor is None:
+            continue
+        key = (anchor.month, anchor.year)
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append(anchor)
+    return found
+
+
+def _settle_anchor(anchor: PeriodAnchor, headers: Sequence[Any],
+                   requested: Mapping[str, Any]
+                   ) -> Tuple[Optional[Any], Optional[TemporalResolution]]:
+    """`(header, failure)` for ONE named period. The single owner of the rule
+    that a named period becomes a governed header — so a range's two bounds are
+    settled by exactly the rule a single anchor is."""
     matches = _match_anchor(anchor, headers)
     if not matches:
         return None, _fail(
@@ -433,6 +445,76 @@ def _resolve_anchor(labels: Sequence[str], headers: Sequence[Any],
             f"({[str(h.reporting_date) for h in matches]}); name the year",
             requested)
     return matches[0], None
+
+
+def _resolve_anchor(labels: Sequence[str], headers: Sequence[Any],
+                    requested: Mapping[str, Any]
+                    ) -> Tuple[Optional[Any], Optional[TemporalResolution]]:
+    """`(header, failure)` for the one governed period the labels name."""
+    anchors = _anchors_of(labels)
+    if not anchors:
+        return None, _fail(
+            PERIOD_LABEL_UNRESOLVED,
+            f"no governed period is named by {list(labels)!r}; this contract "
+            f"reads a month, optionally with a year, and clarifies otherwise",
+            requested)
+    if len(anchors) > 1:
+        return None, _fail(PERIOD_LABEL_AMBIGUOUS,
+                           f"{list(labels)!r} names more than one period",
+                           requested)
+    return _settle_anchor(anchors[0], headers, requested)
+
+
+def _resolve_bounded_range(anchors: Sequence[PeriodAnchor],
+                           headers: Sequence[Any],
+                           requested: Mapping[str, Any], *, client_id: str,
+                           route: Optional[str], store: Any
+                           ) -> TemporalResolution:
+    """A span the reader bounded at BOTH ends.
+
+    "all governed observations available within the bounds" — never a
+    manufactured contiguous series. The window is handed to
+    `SnapshotSelector.range`, which is the estate's existing owner of
+    `select_between` and is already what the whole-series and since-anchor forms
+    use with one bound left open; `SnapshotStore.resolve_range` is inclusive on
+    both ends, returns only periods the catalogue holds, and orders them by
+    reporting date. Nothing here knows what a month is, so a quarterly or
+    irregular book is selected by exactly the same code.
+
+    BOTH BOUNDS ARE SETTLED BY THE ANCHOR OWNER, so a bound that names no
+    governed period, or names one the book carries twice, fails exactly as it
+    does on a single-anchor span. This function adds no new way to name a period;
+    it only stops discarding the second one.
+    """
+    start_header, failure = _settle_anchor(anchors[0], headers, requested)
+    if failure is not None:
+        return failure
+    end_header, failure = _settle_anchor(anchors[-1], headers, requested)
+    if failure is not None:
+        return failure
+
+    start_date = parse_date(start_header.reporting_date)
+    end_date = parse_date(end_header.reporting_date)
+    if start_date is not None and end_date is not None and start_date > end_date:
+        return _fail(
+            PERIOD_RANGE_REVERSED,
+            f"the range runs from {anchors[0].label!r} "
+            f"({start_header.reporting_date}) to {anchors[-1].label!r} "
+            f"({end_header.reporting_date}), which ends before it begins",
+            requested)
+
+    selector = SnapshotSelector.range(client_id, start_header.reporting_date,
+                                      end_header.reporting_date, route=route)
+    chosen = selector.resolve(store)
+    if not chosen:
+        return _fail(
+            PERIOD_NOT_AVAILABLE,
+            f"the catalogue carries no reporting period between "
+            f"{start_header.reporting_date} and {end_header.reporting_date}",
+            requested)
+    return TemporalResolution(ok=True, shape=SHAPE_SERIES, basis="bounded_range",
+                              selector=selector, headers=tuple(chosen),
+                              requested=requested)
 
 
 def resolve_temporal(plan: Any, store: Any, *, client_id: str,
@@ -582,6 +664,35 @@ def _resolve_span(form: str, labels: Sequence[str], periods_back: Any,
                                   headers=tuple(chosen), requested=requested)
 
     if labels:
+        # TWO NAMED PERIODS ARE TWO BOUNDS, not an ambiguity. Every span used to
+        # reach `_resolve_anchor`, which refuses labels naming more than one
+        # period — correct for a span with ONE bound and wrong for a range,
+        # which states two by definition. "From October 2025 to June 2026" was
+        # refused as ambiguous with both bounds correctly interpreted and the
+        # catalogue holding every period inside them.
+        #
+        # One bound still resolves exactly as before; three or more still
+        # clarify, through the same owner.
+        # A BOUND THAT CANNOT BE READ IS NOT A BOUND THAT CAN BE DROPPED.
+        # `_anchors_of` skips a label naming no governed period, which is right
+        # when nothing else names one (the span then clarifies) and wrong when
+        # something does: "from <unreadable> to June 2026" would quietly become
+        # "since June 2026" — the reader's start bound discarded and a narrower
+        # window answered under the question they asked. Caught by the
+        # unresolved-start control.
+        unreadable = [label for label in labels if parse_anchor(label) is None]
+        bounds = _anchors_of(labels)
+        if bounds and unreadable:
+            return _fail(
+                PERIOD_LABEL_UNRESOLVED,
+                f"{unreadable!r} names no governed period, and the span states "
+                f"it alongside {[a.label for a in bounds]!r}; a bound this "
+                f"contract cannot read is not one it may leave out",
+                requested)
+        if len(bounds) == 2:
+            return _resolve_bounded_range(bounds, headers, requested,
+                                          client_id=client_id, route=route,
+                                          store=store)
         start, failure = _resolve_anchor(labels, headers, requested)
         if failure is not None:
             return failure

@@ -654,3 +654,292 @@ def test_last_n_never_returns_a_short_series(store):
         store.resolve_last_n(fixture.CLIENT_ID, 99, route=fixture.ROUTE)
     with pytest.raises(SnapshotNotFoundError):
         store.resolve_last_n(fixture.CLIENT_ID, 0, route=fixture.ROUTE)
+
+# --------------------------------------------------------------------------- #
+# bounded ranges: a span the reader bounded at BOTH ends
+# --------------------------------------------------------------------------- #
+#
+# "Show funded balance from October 2025 to June 2026" was refused as ambiguous
+# on the live production canary, with both bounds correctly interpreted and the
+# catalogue holding every period inside them. Every span reached `_resolve_anchor`,
+# which refuses labels naming more than one period — right for a span with ONE
+# bound, wrong for a range, which states two by definition.
+#
+# The selection primitive was never missing: `SnapshotStore.resolve_range` is
+# inclusive on both ends, returns only periods the catalogue holds, orders them
+# by reporting date and knows nothing about months. The whole-series and
+# since-anchor forms already use it with one bound left open, and
+# `states.temporal.trend_across` already uses it with two. The resolver simply
+# never passed the second bound.
+#
+# A BOUNDED RANGE MEANS "every governed observation inside the bounds", never a
+# manufactured contiguous series — which is why the sparse case below is the one
+# that matters most.
+
+SPARSE = ["2025-10-31", "2025-11-30", "2026-06-30"]
+IRREGULAR = ["2024-03-31", "2024-09-30", "2025-02-28", "2025-11-30", "2026-06-30"]
+
+
+def catalogue(dates):
+    from mi_agent.tests import portfolio_truth_oracle as _truth
+    book = _truth.canonical_book()
+    return [(d, book.copy()) for d in dates]
+
+
+@pytest.fixture
+def sparse_store(tmp_path_factory):
+    return fixture.build_store(tmp_path_factory.mktemp("sparse"),
+                               catalogue(SPARSE))
+
+
+@pytest.fixture
+def irregular_store(tmp_path_factory):
+    return fixture.build_store(tmp_path_factory.mktemp("irregular"),
+                               catalogue(IRREGULAR))
+
+
+def bounded(compiler, store, semantics, start, end, **overrides):
+    payload = dict(intent(operation="series",
+                          time={"form": "range", "labels": [start, end]}))
+    payload.update(overrides)
+    return temporal.execute_temporal_plan(
+        plan_for(compiler, payload), store=store, client_id=fixture.CLIENT_ID,
+        semantics=semantics, route=fixture.ROUTE)
+
+
+def selected(outcome):
+    return [p.reporting_date for p in outcome.points]
+
+
+class TestBoundedRangeSelectsWhatExists:
+    """All governed observations inside the bounds. Never more, never invented."""
+
+    def test_a_sparse_range_returns_only_the_periods_the_book_holds(
+            self, compiler, sparse_store, semantics):
+        """The live case. Nine calendar months, three governed observations."""
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "October 2025", "June 2026")
+        assert outcome.executed, outcome.reason
+        assert selected(outcome) == SPARSE
+        assert outcome.basis == "bounded_range"
+
+    def test_it_does_not_fabricate_the_months_between(
+            self, compiler, sparse_store, semantics):
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "October 2025", "June 2026")
+        for invented in ("2025-12-31", "2026-01-31", "2026-02-28",
+                         "2026-03-31", "2026-04-30", "2026-05-31"):
+            assert invented not in selected(outcome)
+
+    def test_a_dense_range_returns_every_period_inside_it(
+            self, compiler, store, semantics, history):
+        dates = [d for d, _ in history]
+        outcome = bounded(compiler, store, semantics,
+                          "December 2025", "March 2026")
+        assert selected(outcome) == [d for d in dates
+                                     if "2025-12-31" <= d <= "2026-03-31"]
+
+    def test_an_irregular_catalogue_is_selected_by_the_same_rule(
+            self, compiler, irregular_store, semantics):
+        """Cadence-neutral: nothing here assumes one observation per month."""
+        outcome = bounded(compiler, irregular_store, semantics,
+                          "September 2024", "February 2025")
+        assert selected(outcome) == ["2024-09-30", "2025-02-28"]
+
+    def test_both_bounds_on_one_period_selects_exactly_that_period(
+            self, compiler, sparse_store, semantics):
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "June 2026", "June 2026")
+        assert selected(outcome) == ["2026-06-30"]
+
+    def test_the_bounds_are_inclusive(self, compiler, irregular_store, semantics):
+        outcome = bounded(compiler, irregular_store, semantics,
+                          "March 2024", "September 2024")
+        assert selected(outcome) == ["2024-03-31", "2024-09-30"]
+
+
+class TestBoundedRangeCarriesSliceOneSemantics:
+    """A range is a window, not a different calculation."""
+
+    def test_a_governed_filter_is_applied_on_every_selected_period(
+            self, compiler, sparse_store, semantics):
+        outcome = bounded(
+            compiler, sparse_store, semantics, "October 2025", "June 2026",
+            measures=[{"concept": "loan", "statistic": "count"}],
+            filters=[{"concept": "erm_product_type", "comparator": "eq",
+                      "value": "drawdown"}])
+        assert selected(outcome) == SPARSE
+        for point in outcome.points:
+            applied = point.receipt.get("applied_predicates") or []
+            assert any(e.get("canonical_field") == "erm_product_type"
+                       for e in applied), f"{point.reporting_date} lost the filter"
+
+    def test_a_governed_dimension_groups_every_selected_period(
+            self, compiler, sparse_store, semantics):
+        outcome = bounded(
+            compiler, sparse_store, semantics, "October 2025", "June 2026",
+            measures=[{"concept": "loan", "statistic": "count"}],
+            dimensions=["ltv_bucket"])
+        assert selected(outcome) == SPARSE
+        for point in outcome.points:
+            assert point.cells, f"{point.reporting_date} produced no cells"
+            assert "ltv_bucket" in point.receipt.get("group_field_keys") or ()
+
+
+class TestBoundedRangeFailsClosed:
+    """A bound that cannot be settled is never quietly dropped or reordered."""
+
+    def test_an_unreadable_start_bound_refuses(
+            self, compiler, sparse_store, semantics):
+        """The silent substitution this control exists to catch.
+
+        `_anchors_of` skips a label naming no governed period. With a readable
+        end bound beside it, the span would otherwise become "since June 2026" —
+        the reader's start discarded and a narrower window answered under the
+        question they asked.
+        """
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "Smarch 2025", "June 2026")
+        assert not outcome.executed
+        assert outcome.reason == temporal.PERIOD_LABEL_UNRESOLVED
+        assert not outcome.points
+
+    def test_an_unreadable_end_bound_refuses(
+            self, compiler, sparse_store, semantics):
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "October 2025", "Smarch 2026")
+        assert not outcome.executed
+        assert outcome.reason == temporal.PERIOD_LABEL_UNRESOLVED
+
+    def test_a_bound_the_catalogue_does_not_carry_refuses(
+            self, compiler, sparse_store, semantics):
+        """Settled by the same rule a single anchor is."""
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "October 2025", "March 2026")
+        assert not outcome.executed
+        assert outcome.reason == temporal.PERIOD_NOT_AVAILABLE
+
+    def test_reversed_bounds_refuse_rather_than_reorder(
+            self, compiler, sparse_store, semantics):
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "June 2026", "October 2025")
+        assert not outcome.executed
+        assert outcome.reason == temporal.PERIOD_RANGE_REVERSED
+        assert not outcome.points
+
+    def test_more_than_two_bounds_clarify(self, compiler, sparse_store, semantics):
+        payload = intent(operation="series", time={
+            "form": "range",
+            "labels": ["October 2025", "November 2025", "June 2026"]})
+        outcome = temporal.execute_temporal_plan(
+            plan_for(compiler, payload), store=sparse_store,
+            client_id=fixture.CLIENT_ID, semantics=semantics,
+            route=fixture.ROUTE)
+        assert not outcome.executed
+        assert outcome.reason == temporal.PERIOD_LABEL_AMBIGUOUS
+
+
+class TestTheSingleBoundFormsAreUnchanged:
+    """One bound still means what it meant. The repair only stops discarding a
+    second one."""
+
+    def test_since_a_period_still_runs_to_the_end_of_the_book(
+            self, compiler, sparse_store, semantics):
+        payload = intent(operation="series",
+                         time={"form": "series", "labels": ["November 2025"]})
+        outcome = temporal.execute_temporal_plan(
+            plan_for(compiler, payload), store=sparse_store,
+            client_id=fixture.CLIENT_ID, semantics=semantics,
+            route=fixture.ROUTE)
+        assert selected(outcome) == ["2025-11-30", "2026-06-30"]
+        assert outcome.basis == "anchor"
+
+    def test_a_label_restated_is_one_bound_not_two(
+            self, compiler, sparse_store, semantics):
+        """`["March", "since March"]` is a real recorded shape: two labels, one
+        period. It must stay a since-anchor span, not read as a range."""
+        payload = intent(operation="series", time={
+            "form": "series", "labels": ["November 2025", "since November 2025"]})
+        outcome = temporal.execute_temporal_plan(
+            plan_for(compiler, payload), store=sparse_store,
+            client_id=fixture.CLIENT_ID, semantics=semantics,
+            route=fixture.ROUTE)
+        assert outcome.basis == "anchor"
+        assert selected(outcome) == ["2025-11-30", "2026-06-30"]
+
+    def test_the_whole_series_form_is_unchanged(
+            self, compiler, sparse_store, semantics):
+        payload = intent(operation="series",
+                         time={"form": "series", "grain": "monthly"})
+        outcome = temporal.execute_temporal_plan(
+            plan_for(compiler, payload), store=sparse_store,
+            client_id=fixture.CLIENT_ID, semantics=semantics,
+            route=fixture.ROUTE)
+        assert selected(outcome) == SPARSE
+        assert outcome.basis == "cadence"
+
+    def test_an_overlong_window_still_fails_closed(
+            self, compiler, sparse_store, semantics):
+        payload = intent(operation="series", time={
+            "form": "series", "grain": "monthly", "periods_back": 120})
+        outcome = temporal.execute_temporal_plan(
+            plan_for(compiler, payload), store=sparse_store,
+            client_id=fixture.CLIENT_ID, semantics=semantics,
+            route=fixture.ROUTE)
+        assert not outcome.executed
+        assert not outcome.points
+
+
+def _code_of(function) -> str:
+    """A function's executable source, with its docstring removed.
+
+    The guards below look for date arithmetic in the CODE. Scanning the raw
+    source made the docstring's own explanation of cadence-neutrality — the word
+    "quarterly" — read as a cadence assumption, which is the test failing for
+    saying what it does rather than for what it does.
+    """
+    import ast
+    import inspect
+    import textwrap
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+    node = tree.body[0]
+    if (node.body and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)):
+        node.body = node.body[1:]
+    return ast.unparse(node)
+
+
+class TestThereIsOneBoundedRangeOwner:
+    """The selection is the estate's existing primitive, not a second engine."""
+
+    def test_the_range_is_resolved_through_the_snapshot_selector(
+            self, compiler, sparse_store, semantics):
+        outcome = bounded(compiler, sparse_store, semantics,
+                          "October 2025", "June 2026")
+        selector = outcome.resolution.selector
+        assert selector.mode == "range"
+        assert selector.start_date == "2025-10-31"
+        assert selector.end_date == "2026-06-30"
+
+    def test_the_runtime_owns_no_date_arithmetic_of_its_own(self):
+        """No month counting, no calendar walk, no cadence assumption.
+
+        The window is two governed reporting dates read off two headers and
+        handed to the selector. If this ever starts constructing dates, it has
+        become a second temporal engine and can name a period the book lacks.
+        """
+        source = _code_of(temporal._resolve_bounded_range)
+        for forbidden in ("timedelta", "relativedelta", "dateutil", "calendar",
+                          "strftime", "datetime(", "monthly", "quarterly"):
+            assert forbidden not in source, f"the range owner reaches {forbidden}"
+        assert "SnapshotSelector.range" in source, \
+            "the range is no longer resolved through the estate's own primitive"
+
+    def test_the_selection_itself_belongs_to_the_snapshot_store(self):
+        """`select_between` is `SnapshotStore.resolve_range`, and this proves the
+        runtime does not filter headers itself — the bounds go to the store."""
+        source = _code_of(temporal._resolve_bounded_range)
+        assert ".resolve(store)" in source
+        assert "reporting_date <" not in source and "rd >=" not in source
