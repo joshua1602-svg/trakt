@@ -508,6 +508,57 @@ def _envelope(field: str = "pipeline_amount", value: float = 1230000.0,
     return {"ok": True, "artifacts": artefacts, "metadata": {}}
 
 
+def _runtime_keys(relative_path: str, func_name: str) -> set:
+    """The dict keys a runtime function really writes, read from its source.
+
+    WHY PARSE RATHER THAN IMPORT. This bank runs on a bare runner with the
+    standard library only — `mi_agent` reaches for yaml and pandas, and giving
+    the acceptance the product's dependency tree to check a dict shape is the
+    wrong trade. WHY PARSE RATHER THAN RETYPE: a shape written out by hand here
+    records what its author believed on the day, which is exactly the mistake
+    this function exists to stop. F2 failed a live canary because the funded
+    temporal record was assumed to look like the pipeline one.
+
+    Collects every constant string key of a dict literal and every `d["k"] = v`
+    written inside the function, so a receipt assembled in two steps is read
+    whole.
+    """
+    import ast
+
+    source = (_REPO / relative_path).read_text(encoding="utf-8")
+    target = next((n for n in ast.walk(ast.parse(source))
+                   if isinstance(n, ast.FunctionDef) and n.name == func_name),
+                  None)
+    if target is None:
+        raise AssertionError(f"{func_name} no longer exists in {relative_path}; "
+                             f"this bank is asserting a shape that is gone")
+    keys = set()
+    for node in ast.walk(target):
+        if isinstance(node, ast.Dict):
+            keys.update(k.value for k in node.keys
+                        if isinstance(k, ast.Constant) and isinstance(k.value, str))
+        elif isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store):
+            index = node.slice
+            if isinstance(index, ast.Constant) and isinstance(index.value, str):
+                keys.add(index.value)
+    return keys
+
+
+def _runtime_const(relative_path: str, name: str) -> str:
+    """A module-level string constant, read from source for the same reason."""
+    import ast
+
+    source = (_REPO / relative_path).read_text(encoding="utf-8")
+    for node in ast.parse(source).body:
+        targets = (node.targets if isinstance(node, ast.Assign)
+                   else [node.target] if isinstance(node, ast.AnnAssign) else [])
+        for target in targets:
+            if (isinstance(target, ast.Name) and target.id == name
+                    and isinstance(node.value, ast.Constant)):
+                return str(node.value.value)
+    raise AssertionError(f"{name} no longer exists in {relative_path}")
+
+
 def self_test() -> int:
     failures: List[str] = []
 
@@ -624,24 +675,25 @@ def self_test() -> int:
     # shape — which is the only way a bank can keep telling the truth about
     # production rather than about its author's recollection.
 
-    from mi_agent import plan_pipeline_runtime as pipeline_rt
-    from mi_agent import plan_temporal_runtime as temporal_rt
-
-    real_temporal = temporal_rt.TemporalOutcome(eligible=True).to_dict()
-    real_receipt = pipeline_rt._receipt(
-        {}, measure="pipeline_amount", kind="amount",
-        dimensions=["pipeline_stage"], dataset={}, result_shape="grouped",
-        owner=pipeline_rt.OWNER_GENERIC_EXECUTOR)
+    # The runtimes are READ, not imported: this self-test runs on a bare runner
+    # with the standard library only, and importing `mi_agent` pulls in yaml and
+    # pandas. `_runtime_keys` parses the real source, so the shapes are still the
+    # runtimes' own rather than this file's recollection — which is the whole
+    # point — without the bank acquiring the product's dependencies.
+    real_temporal = _runtime_keys("mi_agent/plan_temporal_runtime.py", "to_dict")
+    real_receipt = _runtime_keys("mi_agent/plan_pipeline_runtime.py", "_receipt")
+    owner_generic = _runtime_const("mi_agent/plan_pipeline_runtime.py",
+                                   "OWNER_GENERIC_EXECUTOR")
 
     check("the funded series is read from the key the temporal runtime writes",
           "points" in real_temporal and "grouped_cells" not in real_temporal)
     check("the receipt fields this bank asserts are the ones the runtime writes",
           {"measure_concept", "group_field_keys", "population_base",
-           "capability", "execution_owner"} <= set(real_receipt))
+           "capability", "execution_owner"} <= real_receipt)
 
     # F2 — a funded SERIES, recorded exactly as `_attempt_temporal` records it:
     # `execution["temporal"]`, one point per snapshot, and NO `grouped_cells`.
-    series = dict(real_temporal)
+    series = {k: None for k in real_temporal}
     series["reconciled"] = True
     series["points"] = [
         {"snapshot_id": "s1", "reporting_date": "2026-05-31", "value": 37_900_000.0,
@@ -689,14 +741,17 @@ def self_test() -> int:
         "runtime": "pipeline_current", "value": None,
         "grouped_cells": [{"pipeline_stage": "OFFER", "value": 450000.0},
                           {"pipeline_stage": "KFI", "value": 390000.0}],
-        "receipt": dict(real_receipt, population_base=PIPELINE,
-                        capability=PIPELINE)})
+        "receipt": dict({k: None for k in real_receipt},
+                        population_base=PIPELINE, capability=PIPELINE,
+                        measure_concept="pipeline_amount",
+                        group_field_keys=["pipeline_stage"],
+                        execution_owner=owner_generic)})
     rows = [{"pipeline_stage": "OFFER"}, {"pipeline_stage": "KFI"}]
     out = adjudicate(p5, _envelope(value=None, rows=rows), amount)
     check("P5 passes when the receipt names the AMOUNT and the stage axis",
           out["verdict"] == "PASS" and out["measure_concept"] == "pipeline_amount")
     check("P5 records which lower-level owner produced the figures",
-          out["execution_owner"] == pipeline_rt.OWNER_GENERIC_EXECUTOR)
+          out["execution_owner"] == owner_generic)
 
     counted = json.loads(json.dumps(amount))
     counted["execution"]["receipt"]["measure_concept"] = "pipeline_case_count"
