@@ -60,6 +60,7 @@ from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
+from mi_agent import plan_pipeline_runtime as pipeline_rt
 from mi_agent import plan_temporal_runtime as temporal
 
 logger = logging.getLogger("mi_agent.plan_serving_canary")
@@ -324,7 +325,15 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           snapshot_store: Any = None,
           snapshot_client_id: Optional[str] = None,
           snapshot_route: Optional[str] = None,
-          source_registry: Any = None) -> Optional[Dict[str, Any]]:
+          source_registry: Any = None,
+          # THE PIPELINE OWNERS' INPUTS, resolved by the caller that already owns
+          # discovery. This module loads nothing and discovers nothing: it is
+          # handed the governed source scope, the weekly history root and the
+          # client whose extracts they are, exactly as it is handed the funded
+          # frame and the funded snapshot catalogue.
+          pipeline_source: Any = None, pipeline_root: Any = None,
+          pipeline_client_id: Optional[str] = None,
+          pipeline_history: Any = None) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
     Raises nothing: a serving canary that could fail a request would be worse
@@ -352,6 +361,9 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             snapshot_store=snapshot_store,
             snapshot_client_id=snapshot_client_id,
             snapshot_route=snapshot_route,
+            pipeline_source=pipeline_source, pipeline_root=pipeline_root,
+            pipeline_client_id=pipeline_client_id,
+            pipeline_history=pipeline_history, pipeline_run_id=run_id,
             # `view` IS THE EXECUTED POPULATION, and it is load-bearing here
             # rather than decorative. It is the governed dataset identity the
             # caller resolved `frame` with — `mi_service` passes the same string
@@ -397,6 +409,214 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
         logger.warning("the serving record could not be completed; the answer "
                        "stands", exc_info=True)
     return payload
+
+
+def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
+                      question: str, render_portfolio_id: Optional[str],
+                      as_of: Optional[str], pipeline_source: Any,
+                      pipeline_root: Any, pipeline_client_id: Optional[str],
+                      pipeline_history: Any, pipeline_run_id: Optional[str]
+                      ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One PIPELINE serving attempt. Same contract as `_attempt`: `(payload, reason)`.
+
+    Stage for stage the slice 1 attempt: perimeter, prove the population,
+    execute, render, record. What differs is whose perimeter and whose runtime —
+    the pipeline runtime declares its own executable population and calls the
+    Pipeline owners that already compute these figures.
+
+    THE POPULATION IS PROVED AGAINST THE PIPELINE RUNTIME'S OWN DECLARATION, not
+    a merged list. `adapter.check_population_base` takes the executable set as an
+    argument for exactly this: the funded runtime says it executes funded, this
+    one says it executes pipeline, and a plan is refused by whichever runtime it
+    reached if the two do not agree. One global list saying both runtimes execute
+    both populations would prove nothing.
+    """
+    eligible, why, detail = pipeline_rt.check_eligibility(plan)
+    body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail,
+                           "perimeter": "pipeline_specialist"}
+    if not eligible:
+        body["execution"] = {"attempted": False, "why_not": f"{why}: {detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{why}"
+
+    base_ok, base_why, base_detail = adapter.check_population_base(
+        plan, pipeline_rt.EXECUTION_POPULATION,
+        executable=pipeline_rt.EXECUTABLE_POPULATIONS)
+    if not base_ok:
+        body["eligibility"] = {"eligible": False, "reason": base_why,
+                               "detail": base_detail,
+                               "perimeter": "pipeline_population"}
+        body["execution"] = {"attempted": False,
+                             "why_not": f"{base_why}: {base_detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{base_why}"
+
+    temporal_plan = pipeline_rt.is_temporal(plan)
+    body["execution"] = {"attempted": True,
+                         "runtime": ("pipeline_temporal" if temporal_plan
+                                     else "pipeline_current"),
+                         "requested_semantics": adapter.requested_semantics(plan)}
+    try:
+        if temporal_plan:
+            outcome = pipeline_rt.execute_temporal(
+                plan, root=pipeline_root, client_id=pipeline_client_id or "",
+                to_run_id=pipeline_run_id, history_model=pipeline_history)
+        else:
+            outcome = pipeline_rt.execute_current(
+                plan, source=pipeline_source, history_model=pipeline_history)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, EXECUTION_FAILED
+    if not outcome.ok:
+        body["execution"].update({"attempted": False,
+                                  "why_not": f"{outcome.reason}: {outcome.detail}"[:300]})
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{outcome.reason}"
+
+    body["execution"].update({
+        "value": outcome.value,
+        "grouped_cells": outcome.cells,
+        "receipt": dict(outcome.receipt),
+        "row_count": (len(outcome.cells) if outcome.cells is not None else None),
+    })
+    body["disposition"] = evidence.EXECUTED
+
+    try:
+        payload = render_pipeline(plan, outcome, question=question,
+                                  portfolio_id=render_portfolio_id, as_of=as_of)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    if not isinstance(payload, Mapping) or not payload.get("ok"):
+        body["execution"]["render_error"] = "the rendered envelope was not ok"
+        return None, RENDER_FAILED
+    return dict(payload), ""
+
+
+def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
+                    portfolio_id: Optional[str], as_of: Optional[str]
+                    ) -> Dict[str, Any]:
+    """The pipeline result, in the envelope every channel already renders.
+
+    THE ARTEFACT BUILDERS ARE THE ESTATE'S, not a second presenter. The accepted
+    pipeline routes already publish through `chat_routing`'s KPI, chart and
+    envelope builders, so a governed pipeline answer is shaped the same way the
+    legacy one is and no channel learns a new form. Only the BUILDERS are
+    borrowed — `try_route`, the router itself, is never called, and the forbidden
+    entry-point guard asserts it.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    def _uid() -> str:
+        return f"art_{uuid.uuid4().hex[:8]}"
+
+    def _artefact(kind: str, title: str, **rest) -> Dict[str, Any]:
+        """One artefact in the estate's published shape.
+
+        BUILT HERE RATHER THAN BORROWED, and not by preference. `chat_routing`
+        owns identical builders, but the serving path may not import that module
+        — `test_the_module_names_no_legacy_semantic_owner_in_its_code` bans it,
+        and rightly: importing the legacy router to borrow a presenter drags the
+        whole legacy semantic estate into the governed path. The keys below are
+        the same contract every channel already renders, so nothing downstream
+        learns a new form; only the construction is local.
+        """
+        return {"id": _uid(), "type": kind, "title": title,
+                "source": {"engine": "mi_agent.governed_plan",
+                           "label": f"MI Agent · {kind}", "spec": spec_dict,
+                           "asOf": as_of, "portfolio": portfolio_id},
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "mock": False, **rest}
+
+    receipt = dict(outcome.receipt)
+    measure = str(receipt.get("measure_concept") or "")
+    is_amount = receipt.get("measure_kind") == "amount"
+    axis = (receipt.get("group_field_keys") or [None])[0]
+    spec_dict = {"capability": receipt.get("capability"),
+                 "population": receipt.get("population_base"),
+                 "measure": measure, "dimensions": receipt.get("group_field_keys")}
+    shape = str(receipt.get("result_shape") or "")
+
+    if shape == "scalar":
+        value = float(outcome.value)
+        kpis = [{"field": measure, "label": _PIPELINE_LABELS.get(measure, measure),
+                 "value": (f"£{value:,.0f}" if is_amount else f"{value:,.0f}"),
+                 "rawValue": value}]
+        artefacts = [_artefact("kpi", "Pipeline", kpis=kpis,
+                               description="Governed pipeline extract.")]
+        answer = (f"Pipeline {_PIPELINE_LABELS.get(measure, measure).lower()} is "
+                  f"{kpis[0]['value']}.")
+    elif shape == "grouped":
+        rows = [{str(axis): c[axis], "value": c["value"]} for c in outcome.cells]
+        artefacts = [_artefact(
+            "table", "Pipeline by stage", rows=rows,
+            columns=[{"key": str(axis), "label": "Stage"},
+                     {"key": "value",
+                      "label": _PIPELINE_LABELS.get(measure, measure)}],
+            description=f"{len(rows)} rows.")]
+        answer = f"Pipeline by {axis} across {len(rows)} governed stage(s)."
+    else:
+        # A SERIES, weekly. One row per governed extract; a grouped series gets
+        # one column per stage, which is the shape the accepted evolution route
+        # already publishes.
+        periods = sorted({str(c["period"]) for c in outcome.cells})
+        if axis:
+            stages = sorted({str(c[axis]) for c in outcome.cells})
+            rows = [{"period": per,
+                     **{st: sum(float(c["value"] or 0) for c in outcome.cells
+                                if str(c["period"]) == per and str(c[axis]) == st)
+                        for st in stages}}
+                    for per in periods]
+            series = [{"key": st, "label": st} for st in stages]
+            answer = (f"Pipeline by {axis} across {len(periods)} governed weekly "
+                      f"extract(s): {', '.join(stages)}.")
+        else:
+            rows = [{"period": str(c["period"]), "value": c["value"]}
+                    for c in outcome.cells]
+            series = [{"key": "value",
+                       "label": _PIPELINE_LABELS.get(measure, measure)}]
+            answer = (f"Pipeline {_PIPELINE_LABELS.get(measure, measure).lower()} "
+                      f"across {len(periods)} governed weekly extract(s).")
+        artefacts = [_artefact(
+            "chart", "Pipeline over time", chartType="line", xKey="period",
+            rows=rows, series=series,
+            valueFormat=("gbp" if is_amount else "number"), displayHints={})]
+
+    reconciliation = {"dataset": "pipeline", "coverage_by_balance_pct": 100.0}
+    for artefact in artefacts:
+        artefact.setdefault("reconciliation", reconciliation)
+    payload: Dict[str, Any] = {
+        "ok": True, "error": None, "question": question, "answer": answer,
+        "interpreted": "", "spec": spec_dict,
+        "validation": {"ok": True, "errors": [], "warnings": [],
+                       "resolved_fields": {}},
+        "artifacts": artefacts, "reconciliation": reconciliation,
+        "sourceNotes": [], "warnings": [], "diagnostics": [], "assumptions": [],
+        "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                     "route": "governed_plan_pipeline", "lensApplied": None},
+    }
+    meta = payload.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        meta["parserMode"] = "governed_plan"
+        # THE TWO GOVERNED OBJECTS, exactly as the slice 1 renderer carries them,
+        # so the coverage owner reconciles a pipeline answer by the same reading
+        # it applies to a funded one.
+        meta["governedPlan"] = {
+            "requested": dict(adapter.requested_semantics(plan)),
+            "executed": receipt,
+        }
+    return payload
+
+
+#: Reader-facing names for the governed pipeline measures. Presentation only.
+_PIPELINE_LABELS = {
+    "pipeline_amount": "Pipeline amount",
+    "pipeline_case_count": "Pipeline case count",
+    "loan": "Pipeline case count",
+    "loan_count": "Pipeline case count",
+}
 
 
 def _attempt_temporal(body: Dict[str, Any], *, plan: Mapping[str, Any],
@@ -525,7 +745,11 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              snapshot_client_id: Optional[str] = None,
              snapshot_route: Optional[str] = None,
              source_registry: Any = None,
-             execution_population: Optional[str] = None
+             execution_population: Optional[str] = None,
+             pipeline_source: Any = None, pipeline_root: Any = None,
+             pipeline_client_id: Optional[str] = None,
+             pipeline_history: Any = None,
+             pipeline_run_id: Optional[str] = None
              ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One serving attempt. `(payload or None, reason)`; fills `body` as it goes."""
     from mi_agent.interpretation_v2.outcomes import (OUTCOME_CLARIFY, OUTCOME_PLAN,
@@ -556,6 +780,24 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # From here the accepted slice 1 perimeter owns every decision, and nothing
     # below edits the plan the compiler emitted.
     plan = compiled.plan.to_dict()
+
+    # SPECIALIST CAPABILITY DISPATCH, FIRST, and from the plan alone.
+    #
+    # A pipeline plan is not the funded runtime's to refuse: the population gate
+    # below speaks for the FUNDED runtime and would answer
+    # POPULATION_NOT_EXECUTABLE for a plan that has a perfectly good owner. So
+    # the capability is read off the plan and dispatched before any funded
+    # perimeter runs. `claims` reads `plan.capability` and nothing else — no
+    # question, no dataset, no recogniser — and the six specialist capabilities
+    # that have NOT been migrated match nothing here and fall through exactly as
+    # they did, refusing with CAPABILITY_NOT_GENERIC.
+    if pipeline_rt.claims(plan):
+        return _attempt_pipeline(
+            body, plan=plan, question=question,
+            render_portfolio_id=render_portfolio_id, as_of=as_of,
+            pipeline_source=pipeline_source, pipeline_root=pipeline_root,
+            pipeline_client_id=pipeline_client_id,
+            pipeline_history=pipeline_history, pipeline_run_id=pipeline_run_id)
 
     # WHICH POPULATION, BEFORE WHICH RUNTIME. Placed above the dispatch because
     # it is true of both: the temporal runtime reads the same funded route the

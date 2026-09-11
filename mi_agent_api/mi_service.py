@@ -423,6 +423,49 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
                             if executed_base == requested_base
                             else _coverage_missing()),
         })
+    # A SPECIALIST ANSWER PROVES ITS CAPABILITY AND ITS MEASURE TOO.
+    #
+    # For `generic_analysis` the measure is a canonical field and the predicates
+    # and axes below are the whole of what can drift. A specialist capability
+    # owns its own arithmetic, so the thing that must not drift is WHICH
+    # capability ran and WHICH of its measures — a pipeline plan answered by a
+    # different capability, or by the case count when it asked for the amount,
+    # is a silent substitution the predicate ledger cannot see.
+    requested_capability = str(requested.get("capability") or "")
+    if requested_capability and requested_capability != "generic_analysis":
+        executed_capability = str(executed.get("capability") or "")
+        entries.append({
+            "kind": "governed_plan:capability", "field": "capability",
+            "value": requested_capability, "term": requested_capability,
+            "owner": "governed_plan + specialist execution receipt",
+            "disposition": (_coverage_resolved()
+                            if executed_capability == requested_capability
+                            else _coverage_missing()),
+        })
+        wanted_measure = str(requested.get("measure_concept") or "")
+        if wanted_measure:
+            entries.append({
+                "kind": "governed_plan:measure", "field": "measure",
+                "value": wanted_measure, "term": wanted_measure,
+                "owner": "governed_plan + specialist execution receipt",
+                "disposition": (_coverage_resolved()
+                                if str(executed.get("measure_concept") or "")
+                                == wanted_measure else _coverage_missing()),
+            })
+        for axis in (requested.get("dimensions") or ()):
+            grouped = str(axis) in {str(k) for k in
+                                    (executed.get("group_field_keys") or ())}
+            entries.append({
+                "kind": "governed_plan:dimension", "field": str(axis),
+                "value": str(axis), "term": str(axis),
+                "owner": "governed_plan + specialist execution receipt",
+                "disposition": (_coverage_resolved() if grouped
+                                else _coverage_missing()),
+            })
+        return {"version": 1, "concepts": entries,
+                "unaccounted": [e for e in entries
+                                if e["disposition"] == _coverage_missing()]}
+
     for axis in (requested.get("dimensions") or ()):
         grouped = bool(receipts) and all(
             str(axis) in {str(k) for k in (receipt.get("group_field_keys") or ())}
@@ -1976,6 +2019,30 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # incapable of failing. Precedence here means the governed result may BECOME
     # the response before the legacy one is returned — not that the legacy one is
     # skipped.
+    def _pipeline_inputs(ds_mod, cid: Optional[str], rid: Optional[str]
+                         ) -> Dict[str, Any]:
+        """What the Pipeline owners need, from the module that already finds it.
+
+        Nothing is discovered or loaded here and no new loader exists: this is
+        `datasets`' own `_resolve_pipeline_source`, `_pipeline_discovery_root`
+        and `_pipeline_history` — the same three the accepted pipeline routes
+        use — handed to the canary the way the funded frame and the funded
+        snapshot catalogue already are. Every fault degrades to None, and a
+        pipeline plan with no source refuses rather than being answered from
+        anything else.
+        """
+        found: Dict[str, Any] = {"pipeline_source": None, "pipeline_root": None,
+                                 "pipeline_client_id": cid,
+                                 "pipeline_history": None}
+        try:
+            found["pipeline_source"] = ds_mod._resolve_pipeline_source(cid, rid)
+            found["pipeline_root"] = ds_mod._pipeline_discovery_root()
+            found["pipeline_history"] = ds_mod._pipeline_history(cid)
+        except Exception:  # noqa: BLE001 - the canary never costs an answer
+            logger.warning("pipeline inputs could not be resolved for the "
+                           "governed attempt", exc_info=True)
+        return found
+
     def _governed_serving_attempt(legacy_envelope: Dict[str, Any]
                                   ) -> Optional[Dict[str, Any]]:
         from mi_agent import plan_serving_canary as _plan_serving
@@ -1998,7 +2065,12 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             snapshot_store=_snapshot_store.build_store(ds, client_id),
             snapshot_client_id=client_id,
             snapshot_route=_snapshot_store.FUNDED_ROUTE,
-            source_registry=_source_registry(df, client_id))
+            source_registry=_source_registry(df, client_id),
+            # THE PIPELINE OWNERS' INPUTS, resolved by the dataset module that
+            # already owns discovery. A pipeline PLAN is served from these
+            # regardless of which view the legacy router picked, which is what
+            # makes the plan — and not the sentence — decide the dataset.
+            **_pipeline_inputs(ds, client_id, run_id))
 
     routed = None
     try:
