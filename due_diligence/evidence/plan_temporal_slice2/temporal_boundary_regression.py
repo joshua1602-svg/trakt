@@ -169,6 +169,7 @@ def main(argv: Sequence[str] = ()) -> int:
             plan = compiled.plan.to_dict()
             record["plan_id"] = plan.get("plan_id")
             record["capability"] = plan.get("capability")
+            record["operation"] = plan.get("operation")
             record["period_form"] = (plan.get("period") or {}).get("form")
             record["physical_binding"] = harness.physical_binding(plan)
 
@@ -211,11 +212,16 @@ def main(argv: Sequence[str] = ()) -> int:
                     f"physical binding: {record['physical_binding']}")
             records.append(record)
 
+    # A SUBSET SOURCE IS A FIRST-CLASS INPUT. The retest file carries four cases,
+    # so every cohort below is intersected with what is actually present rather
+    # than indexed blindly — a KeyError here would report a harness limitation
+    # as a failed correction.
     by_id = {r["id"]: r for r in records}
+    subset = len(records) < len(expected)
     originally_passing = [r for r in records
                           if r["verdict_before_correction"] in harness._HELD]
-    grain_only = [by_id[i] for i in ("T03", "T04", "T06", "T07")]
-    capability = [by_id[i] for i in ("T01", "T05", "T10", "T11")]
+    grain_only = [by_id[i] for i in ("T03", "T04", "T06", "T07") if i in by_id]
+    capability = [by_id[i] for i in ("T01", "T05", "T10", "T11") if i in by_id]
 
     def holds(record: Mapping[str, Any]) -> bool:
         if record["problems"]:
@@ -232,12 +238,21 @@ def main(argv: Sequence[str] = ()) -> int:
 
     report = {
         "source": source.name,
+        "is_subset": subset,
         "payloads": "captured live Opus output, replayed; zero model calls",
         "vocabulary_note": ("payloads emitted at vocabulary 2.0.0, replayed "
                             "against a compiler at 2.1.0; the compiler reads no "
                             "capability-boundary block"),
-        "original_pass_replay": f"{original_pass}/{len(originally_passing)}",
-        "grain_only_replay": f"{grain_pass}/{len(grain_only)}",
+        # On a subset source `verdict_before_correction` is that file's OWN
+        # verdict, so this counts "held, and still holds" rather than the
+        # fifteen-case regression. Named so it cannot be misread as the latter.
+        "original_pass_replay": (f"{original_pass}/{len(originally_passing)}"
+                                 if not subset else
+                                 f"{original_pass}/{len(originally_passing)} "
+                                 f"(subset: held-and-still-holds, not the "
+                                 f"fifteen-case regression)"),
+        "grain_only_replay": (f"{grain_pass}/{len(grain_only)}" if grain_only
+                              else "not in this source"),
         "capability_cases_still_ineligible": [
             {"id": r["id"], "capability": r.get("capability"),
              "disposition": r["disposition"]} for r in capability],
@@ -254,19 +269,25 @@ def main(argv: Sequence[str] = ()) -> int:
     out.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
     print("=== SLICE 2 BOUNDARY CORRECTION — REPLAY OF CAPTURED PAYLOADS")
+    print(f"  SOURCE                 {source.name}"
+          f"{'  (SUBSET)' if subset else ''}")
     print(f"  ORIGINAL_PASS_REPLAY   {report['original_pass_replay']}")
     print(f"  GRAIN_ONLY_REPLAY      {report['grain_only_replay']}")
     for record in grain_only:
         print(f"    {record['id']}  {record['disposition']} basis={record.get('basis')} "
               f"snapshots={len(record.get('snapshots') or ())} "
               f"(was {record['verdict_before_correction']})")
-    print("  CAPABILITY CASES — unchanged by replay, they need a live re-ask")
-    for record in capability:
-        print(f"    {record['id']}  capability={record.get('capability')!r} "
-              f"-> {record['disposition']}")
-    print("  CONTROLS")
-    for case_id, why in CONTROLS.items():
-        print(f"    {case_id}  {by_id[case_id]['disposition']:<34} {why}")
+    if capability:
+        print("  CAPABILITY CASES")
+        for record in capability:
+            print(f"    {record['id']}  capability={record.get('capability')!r} "
+                  f"operation={record.get('operation')!r} "
+                  f"-> {record['disposition']}")
+    if any(case_id in by_id for case_id in CONTROLS):
+        print("  CONTROLS")
+        for case_id, why in CONTROLS.items():
+            if case_id in by_id:
+                print(f"    {case_id}  {by_id[case_id]['disposition']:<34} {why}")
     print(f"  SCALARS_RECONCILED     {report['scalars_reconciled']}")
     print(f"  CELLS_RECONCILED       {report['cells_reconciled']}")
     print(f"  PHYSICAL_BINDINGS      {report['physical_bindings']}")
@@ -274,8 +295,27 @@ def main(argv: Sequence[str] = ()) -> int:
     for record in failures:
         print(f"  FAIL {record['id']}: {record['problems'][:3]}")
     print(f"  WRITTEN                {out.relative_to(_REPO_ROOT)}")
+    # WHAT COUNTS AS PASS DEPENDS ON WHAT THE SOURCE IS, and conflating the two
+    # reported the fifteen-case regression as a failure for containing exactly
+    # the pre-correction payloads it is supposed to contain.
+    #
+    #   the full run   payloads emitted BEFORE the correction. The four
+    #                  capability cases are period_movement and are CORRECTLY
+    #                  ineligible here; requiring them to execute would demand
+    #                  that a replay change what the model said. They are
+    #                  reported, not scored.
+    #   a retest       payloads emitted AFTER it, by a re-ask. Every non-control
+    #                  case must execute, because that is the whole question.
+    capability_ids = {"T01", "T05", "T10", "T11"}
+    must_execute = [r for r in records if r["id"] not in CONTROLS
+                    and (subset or r["id"] not in capability_ids)]
     ok = (original_pass == len(originally_passing)
-          and grain_pass == len(grain_only) and not failures)
+          and grain_pass == len(grain_only) and not failures
+          and all(r["disposition"] == "EXECUTED" for r in must_execute))
+    report["scored_cases"] = [r["id"] for r in must_execute]
+    report["reported_not_scored"] = [
+        r["id"] for r in records
+        if r["id"] in capability_ids and r not in must_execute]
     print(f"  RESULT                 {'PASS' if ok else 'FAIL'}")
     return 0 if ok else 1
 

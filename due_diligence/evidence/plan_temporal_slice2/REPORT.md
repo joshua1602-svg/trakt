@@ -539,30 +539,80 @@ recorded plans, 115 eligible, same histogram, same 73 ledger rows). The Slice 1
 and 1B suites pass: 197 tests across the adapter, the serving canary, the shadow
 wiring, the evidence recorder and the replay.
 
-### The live retest is built and has not been run
-
-The four capability cases need a live re-ask, because a replay of payloads
-emitted at vocabulary 2.0.0 cannot tell you what a model shown 2.1.0 would say.
+### The live retest — four calls, and one case still open
 
 ```
-LIVE_OPUS_CALLS = 0        (4 authorised, 0 made)
-BLOCKER         = no rotated ANTHROPIC_API_KEY in this environment
+LIVE_OPUS_CALLS            = 4   (4 authorised, 4 made, no retries)
+GENERIC_ANALYSIS_ROUTING   = 4/4
+LIVE_TEMPORAL_PLAN_CORRECT = 3/4
 ```
 
-`temporal_live_run.py --only T01,T05,T10,T11` asks exactly those four, one call
-each, no retry, no paraphrase — the budget falls to the size of the subset, and
-a subset result is written to its own file so it can never overwrite the
-fifteen-case run. Rehearsed offline: 4/4 through the identical pipeline.
-`temporal_boundary_regression.py <result>` then executes and reconciles them
-against the independent oracle.
+Tokens: 16,433 input · 5,252 output · 102,630 cache read. One call per case, no
+retry, no paraphrase. The manifest sha256 was verified first; the subset result
+is written to its own file and cannot overwrite the fifteen-case run.
+
+**The capability correction worked, completely.** All four moved from
+`period_movement` to `generic_analysis` — the vocabulary change did the whole
+job it was asked to do:
+
+| case | before | after | snapshots |
+|---|---|---|---|
+| T01 "…changed over the last six months?" | `period_movement/movement` | `generic_analysis/series`, `periods_back: 6` | 6, correct, executed |
+| T05 "…average LTV changed over the last four months?" | `period_movement/series` | `generic_analysis/series`, `periods_back: 4` | 4, correct, executed |
+| T11 "…this month versus last month?" | `period_movement/movement` | `generic_analysis/compare`, `relative_pair` | 2, correct, executed |
+| T10 "…changed since March?" | `period_movement/movement` | `generic_analysis/**movement**` | refused |
+
+Three executed and reconciled against the independent oracle — 12 scalars, zero
+discrepancies. And across all four:
+
+```
+TEMPORAL_INTENT_ABSENT                    = 0
+WRONG_SNAPSHOTS                           = 0
+MODEL_AUTHORED_PHYSICAL_SNAPSHOT_BINDINGS = 0
+```
+
+### T10 — the same finding, one level down
+
+T10 now carries the right capability and the wrong OPERATION:
+`generic_analysis` + `operation: movement`, which the Slice 2 perimeter refuses
+as `OPERATION_NOT_TEMPORAL`. Its temporal binding is fine —
+`labels: ["March", "since March"]` resolves to the four periods from March
+onwards — and the refusal is fail-closed, not a wrong answer.
+
+`CAPABILITY_BOUNDARIES` separated the two CAPABILITIES and said nothing about
+which OPERATION a "how has X changed" question takes. `CAPABILITY_OPERATIONS`
+lists `movement` under `generic_analysis`, so "changed" can still land there.
+The boundary statement fixed the layer it addressed and the ambiguity moved down
+one.
+
+The obvious next step is to extend the same statement to the operation —
+`series` for a level across periods, `movement` only where a cause or
+decomposition is asked for — and re-ask T10. **That was not done here.** This
+turn authorised two named issues, one call per case and no retries, and a third
+edit followed by a third re-ask of the same four questions starts to be tuning
+against a fifteen-question bank rather than fixing an architecture. It is a
+decision to take deliberately, not one to slide into.
+
+### Final accounting
+
+```
+7 originally passing        (replayed, 7/7)
+4 grain-only corrected      (replayed, 4/4)
+3 capability corrected      (live, 3/4)
+= 14/15
+
+SLICE_2_TEMPORAL_BOUNDARY = FAIL against the stated 15/15 criterion
+                            14/15 settled; T10 open on operation vocabulary
+```
+
+Reported as FAIL because the success criterion was 15/15. Every other assertion
+held: no temporal intent absent, no wrong snapshots, no silent drops, no period
+substitutions, no physical bindings, no raw-text rereads after the plan, and no
+Slice 1 regression.
 
 ```bash
-ANTHROPIC_API_KEY=... python .../temporal_live_run.py --only T01,T05,T10,T11
-python .../temporal_boundary_regression.py temporal_live_retest_result.json
-```
-
-```
-SLICE_2_TEMPORAL_BOUNDARY = 11/15 settled deterministically; 4 pending the live re-ask
+python .../temporal_boundary_regression.py                                   # 15-case, PASS
+python .../temporal_boundary_regression.py temporal_live_retest_result.json  # retest, FAIL on T10
 ```
 
 ---

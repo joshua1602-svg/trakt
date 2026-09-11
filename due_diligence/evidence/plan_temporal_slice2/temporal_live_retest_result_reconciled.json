@@ -1,0 +1,145 @@
+{
+  "source": "temporal_live_retest_result.json",
+  "is_subset": true,
+  "payloads": "captured live Opus output, replayed; zero model calls",
+  "vocabulary_note": "payloads emitted at vocabulary 2.0.0, replayed against a compiler at 2.1.0; the compiler reads no capability-boundary block",
+  "original_pass_replay": "3/3 (subset: held-and-still-holds, not the fifteen-case regression)",
+  "grain_only_replay": "not in this source",
+  "capability_cases_still_ineligible": [
+    {
+      "id": "T01",
+      "capability": "generic_analysis",
+      "disposition": "EXECUTED"
+    },
+    {
+      "id": "T05",
+      "capability": "generic_analysis",
+      "disposition": "EXECUTED"
+    },
+    {
+      "id": "T10",
+      "capability": "generic_analysis",
+      "disposition": "INELIGIBLE:OPERATION_NOT_TEMPORAL"
+    },
+    {
+      "id": "T11",
+      "capability": "generic_analysis",
+      "disposition": "EXECUTED"
+    }
+  ],
+  "controls": {},
+  "scalars_reconciled": 12,
+  "cells_reconciled": 0,
+  "physical_bindings": 0,
+  "dispositions": {
+    "EXECUTED": 3,
+    "INELIGIBLE:OPERATION_NOT_TEMPORAL": 1
+  },
+  "results": [
+    {
+      "id": "T01",
+      "question": "How has funded balance changed over the last six months?",
+      "category": "last_n_months",
+      "verdict_before_correction": "TEMPORAL_BOUNDARY_HELD",
+      "problems": [],
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_6ec06afdc588dca2",
+      "capability": "generic_analysis",
+      "operation": "series",
+      "period_form": "series",
+      "physical_binding": null,
+      "eligible": true,
+      "reason": "",
+      "detail": "",
+      "shape": "time_series",
+      "basis": "count",
+      "snapshots": [
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "disposition": "EXECUTED",
+      "scalars_reconciled": 6,
+      "cells_reconciled": 0
+    },
+    {
+      "id": "T05",
+      "question": "How has average LTV changed over the last four months?",
+      "category": "average_over_time",
+      "verdict_before_correction": "TEMPORAL_BOUNDARY_HELD",
+      "problems": [],
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_2fef52f4a99c8980",
+      "capability": "generic_analysis",
+      "operation": "series",
+      "period_form": "series",
+      "physical_binding": null,
+      "eligible": true,
+      "reason": "",
+      "detail": "",
+      "shape": "time_series",
+      "basis": "count",
+      "snapshots": [
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "disposition": "EXECUTED",
+      "scalars_reconciled": 4,
+      "cells_reconciled": 0
+    },
+    {
+      "id": "T10",
+      "question": "How has funded balance changed since March?",
+      "category": "since_period",
+      "verdict_before_correction": "UNEXPECTED_INELIGIBLE",
+      "problems": [],
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_69c9dde1255ba6b8",
+      "capability": "generic_analysis",
+      "operation": "movement",
+      "period_form": "range",
+      "physical_binding": null,
+      "eligible": false,
+      "reason": "OPERATION_NOT_TEMPORAL",
+      "detail": "operation='movement' is not a single-measure evaluation across snapshots",
+      "shape": "",
+      "basis": "",
+      "snapshots": [],
+      "disposition": "INELIGIBLE:OPERATION_NOT_TEMPORAL"
+    },
+    {
+      "id": "T11",
+      "question": "What was funded balance this month versus last month?",
+      "category": "current_versus_prior",
+      "verdict_before_correction": "TEMPORAL_BOUNDARY_HELD",
+      "problems": [],
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_2ab6a0421b34c068",
+      "capability": "generic_analysis",
+      "operation": "compare",
+      "period_form": "relative_pair",
+      "physical_binding": null,
+      "eligible": true,
+      "reason": "",
+      "detail": "",
+      "shape": "period_comparison",
+      "basis": "pair",
+      "snapshots": [
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "disposition": "EXECUTED",
+      "scalars_reconciled": 2,
+      "cells_reconciled": 0
+    }
+  ]
+}
