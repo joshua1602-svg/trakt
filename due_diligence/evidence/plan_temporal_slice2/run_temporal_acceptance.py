@@ -478,12 +478,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--shape-check", action="store_true",
                         help="adjudicate records the real serving path wrote, "
                              "offline; makes no network or model call")
+    parser.add_argument("--provenance-only", action="store_true",
+                        help="confirm WHICH build is serving and stop; one GET "
+                             "per read, no question asked, no model call")
+    parser.add_argument("--stable-reads", type=int, default=1,
+                        help="successful /health reads required")
+    parser.add_argument("--stable-gap", type=float, default=15.0,
+                        help="minimum seconds between those reads")
     args = parser.parse_args(argv)
 
     if args.self_test:
         return self_test()
     if args.shape_check:
         return shape_check()
+    if args.provenance_only:
+        return provenance_only(args)
 
     bearer = os.environ.get("MI_BEARER", "").strip()
     profile = os.environ.get("AZURE_MI_API_PUBLISH_PROFILE", "").strip()
@@ -573,6 +582,54 @@ def main(argv: Optional[List[str]] = None) -> int:
     print(f"  VERDICT {report['verdict']}  {json.dumps(report['totals'])}")
     print("  REMINDER: turning the canary back off is an operator action.")
     return 0 if ok else 1
+
+
+# --------------------------------------------------------------------------- #
+# provenance: which build is serving, for nothing
+# --------------------------------------------------------------------------- #
+
+def provenance_only(args: Any) -> int:
+    """Confirm the served build and STOP. No question is asked.
+
+    WHY IT IS ITS OWN MODE. The bank run already confirms provenance before its
+    first question, and that is the gate that protects the questions. But a
+    deployment has to be confirmed BEFORE an operator is asked to switch the
+    canary on, and again after the restart that follows — and doing either by
+    starting the bank would spend six live interpretations to learn one string.
+
+    `--stable-reads 2 --stable-gap 15` is the restart check: an App Service that
+    is still cycling answers once and then stops answering, so one read proves
+    the build and two reads far enough apart prove it is actually up. A failed
+    read inside the window is not fatal; failing to accumulate the required
+    reads before the deadline is.
+    """
+    import time
+
+    deadline = time.monotonic() + max(args.poll_timeout, 60.0)
+    reads: List[Tuple[float, str]] = []
+    expected = (args.expect_commit or "").strip()
+    while time.monotonic() < deadline:
+        served = s1b.served_commit(args.base_url)
+        now = time.monotonic()
+        if served:
+            if expected and not served.startswith(expected[:7]):
+                print(f"::error::provenance: serving {served}, expected "
+                      f"{expected}")
+                print(f"SERVED_SHA = {served}")
+                return 2
+            if not reads or (now - reads[-1][0]) >= args.stable_gap:
+                reads.append((now, served))
+                print(f"  read {len(reads)}/{args.stable_reads}: {served}")
+        if len(reads) >= args.stable_reads:
+            print(f"EXPECTED_SHA = {expected or '(unpinned)'}")
+            print(f"SERVED_SHA   = {reads[-1][1]}")
+            print(f"PROVENANCE   = CONFIRMED "
+                  f"({len(reads)} reads, >= {args.stable_gap}s apart)")
+            return 0
+        time.sleep(min(5.0, args.stable_gap))
+    print(f"::error::provenance: only {len(reads)} of {args.stable_reads} "
+          f"health reads succeeded before the deadline")
+    return 2
 
 
 # --------------------------------------------------------------------------- #

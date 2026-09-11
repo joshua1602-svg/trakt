@@ -47,10 +47,18 @@ on:
     inputs:
       mode:
         description: >-
-          `bank` asks the six live questions. Anything else (and the push path,
-          where inputs are empty) runs the offline self-test only and calls
-          nothing.
+          `bank` asks the six live questions. `provenance` confirms which build
+          is serving by GET /health and stops, asking nothing. Anything else
+          (and the push path, where inputs are empty) runs the offline self-test
+          only and calls nothing.
         default: ''
+        required: false
+      stable_reads:
+        description: >-
+          Successful /health reads required by `provenance`, at least 15s
+          apart. Use 2 after a restart: a cycling App Service answers once and
+          then stops.
+        default: '1'
         required: false
       expect_commit:
         description: The deployed SHA this acceptance is certifying.
@@ -108,6 +116,26 @@ jobs:
           set -euo pipefail
           python due_diligence/evidence/plan_temporal_slice2/run_temporal_acceptance.py \
             --self-test
+
+      # WHICH BUILD IS SERVING, for nothing. One GET per read, no question
+      # asked, no model call. Run before asking an operator to switch the canary
+      # on, and again after the restart that follows — doing either by starting
+      # the bank would spend six live interpretations to learn one string.
+      - name: Confirm the served build
+        if: ${{ inputs.mode == 'provenance' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit }}
+          STABLE_READS: ${{ inputs.stable_reads || '1' }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/plan_temporal_slice2/run_temporal_acceptance.py \
+            --provenance-only \
+            --base-url "$BASE_URL" \
+            --expect-commit "$EXPECT_COMMIT" \
+            --stable-reads "$STABLE_READS" \
+            --poll-timeout 300
 
       - name: Refuse to run the bank without the credentials it needs
         if: ${{ inputs.mode == 'bank' }}
