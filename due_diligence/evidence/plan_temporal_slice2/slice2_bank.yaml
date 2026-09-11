@@ -1,0 +1,486 @@
+# Slice 2 acceptance bank — funded-book temporal evaluation.
+#
+# THIRTY cases: EIGHTEEN questions that must execute and reconcile — the ten
+# required categories with a paraphrase on five of them — and TWELVE negative
+# and safety controls, which the slice 2 contract asks for as a separate set.
+# Small on purpose; this is a capability slice, not a corpus.
+#
+# WHERE THE INTENTS COME FROM, STATED PLAINLY. Each case carries a
+# `CandidateIntent` payload. Twenty of them are AUTHORED — written here, parsed
+# by the production `parse_candidate_intent` and compiled by the production
+# `DeterministicCompiler`, so what they exercise is the compiler, the perimeter,
+# the temporal resolver and the executor. They are NOT model output, because
+# this environment holds no ANTHROPIC_API_KEY and the slice was measured with
+# zero live calls. They therefore prove nothing about whether Opus states
+# temporal intent this way, and the report says so rather than implying model
+# coverage the run did not buy.
+#
+# The two cases marked `source: recorded` DO come from the model: they are
+# `NL1A` and `NL8C` of `run8_135_signoff_2b00172.json`, the only two
+# generic-analysis series interpretations in the recorded corpus, replayed here
+# byte-for-byte as Opus emitted them. What they show is worth having and is not
+# flattering: real temporal questions arrive with a period the contract cannot
+# settle, and slice 2 clarifies rather than choosing a window.
+#
+# `expect.snapshots` is written out by hand against the eight-month fixture
+# (2025-11-30 … 2026-06-30). It is not read back from the product, so a wrongly
+# selected snapshot fails here instead of agreeing with itself.
+
+fixture:
+  periods: 8
+  first_reporting_date: "2025-11-30"
+  last_reporting_date: "2026-06-30"
+  cadence: monthly
+
+cases:
+
+# --- 1. funded balance over the last N months ------------------------------ #
+- id: S2-01
+  question: "How has funded balance changed over the last 6 months?"
+  category: last_n_months
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: monthly, periods_back: 6, labels: ["the last six months"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: count
+    snapshots: ["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: sum, column: current_outstanding_balance}
+
+- id: S2-02
+  question: "Show me the funded book balance for each of the last three months."
+  category: last_n_months
+  paraphrase_of: S2-01
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: monthly, periods_back: 3, labels: ["the last three months"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: count
+    snapshots: ["2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: sum, column: current_outstanding_balance}
+
+# --- 2. funded balance each month ------------------------------------------ #
+- id: S2-03
+  question: "What was funded balance each month?"
+  category: each_month
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: whole_series
+    snapshots: ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: sum, column: current_outstanding_balance}
+
+- id: S2-04
+  question: "Give me the funded balance month by month."
+  category: each_month
+  paraphrase_of: S2-03
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: monthly, labels: ["month by month"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: whole_series
+    snapshots: ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: sum, column: current_outstanding_balance}
+
+# --- 3. loan count each month ---------------------------------------------- #
+- id: S2-05
+  question: "How many loans were on the book each month?"
+  category: count_each_month
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: loan, statistic: count}]
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: whole_series
+    snapshots: ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: count}
+
+# --- 4. average LTV over time ---------------------------------------------- #
+- id: S2-06
+  question: "How has average LTV changed over the last four months?"
+  category: average_over_time
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_loan_to_value, statistic: average}]
+    time: {form: series, grain: monthly, periods_back: 4, labels: ["the last four months"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: count
+    snapshots: ["2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: avg, column: current_loan_to_value}
+
+- id: S2-07
+  question: "What has weighted average LTV been each month?"
+  category: average_over_time
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures:
+      - concept: current_loan_to_value
+        statistic: weighted_average
+        weight: current_outstanding_balance
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: whole_series
+    snapshots: ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: weighted_avg, column: current_loan_to_value}
+
+# --- 5. filtered evolution -------------------------------------------------- #
+- id: S2-08
+  question: "How many drawdown loans were there each month?"
+  category: filtered_evolution
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: loan, statistic: count}]
+    filters: [{concept: erm_product_type, comparator: eq, value: drawdown}]
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: whole_series
+    snapshots: ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle:
+      how: count
+      predicates: [[erm_product_type, eq, Drawdown]]
+
+- id: S2-09
+  question: "Over the last three months, what has the balance of loans above 50% LTV been?"
+  category: filtered_evolution
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    filters: [{concept: current_loan_to_value, comparator: gt, value: 50}]
+    time: {form: series, grain: monthly, periods_back: 3, labels: ["the last three months"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: count
+    snapshots: ["2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle:
+      how: sum
+      column: current_outstanding_balance
+      predicates: [[current_loan_to_value, gt, 50]]
+
+# --- 6. time x one dimension ------------------------------------------------ #
+- id: S2-10
+  question: "Show loan count by LTV bucket each month."
+  category: time_by_one_dimension
+  intent:
+    capability: generic_analysis
+    operation: breakdown
+    measures: [{concept: loan, statistic: count}]
+    dimensions: [ltv_bucket]
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: whole_series
+    snapshots: ["2025-11-30", "2025-12-31", "2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: count, group_by: [ltv_bucket]}
+
+- id: S2-11
+  question: "How has balance by product type moved over the last four months?"
+  category: time_by_one_dimension
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    dimensions: [erm_product_type]
+    time: {form: series, grain: monthly, periods_back: 4, labels: ["the last four months"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: count
+    snapshots: ["2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: sum, column: current_outstanding_balance, group_by: [erm_product_type]}
+
+# --- 7. time x two dimensions ---------------------------------------------- #
+- id: S2-12
+  question: "Show loan count by LTV bucket and product type for the last two months."
+  category: time_by_two_dimensions
+  intent:
+    capability: generic_analysis
+    operation: breakdown
+    measures: [{concept: loan, statistic: count}]
+    dimensions: [ltv_bucket, erm_product_type]
+    time: {form: series, grain: monthly, periods_back: 2, labels: ["the last two months"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: count
+    snapshots: ["2026-05-31", "2026-06-30"]
+    oracle: {how: count, group_by: [ltv_bucket, erm_product_type]}
+
+# --- 8. explicit period ----------------------------------------------------- #
+- id: S2-13
+  question: "What was funded balance in April?"
+  category: explicit_period
+  intent:
+    capability: generic_analysis
+    operation: point_in_time
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: explicit_period, grain: monthly, labels: ["April"]}
+  expect:
+    disposition: EXECUTED
+    shape: single_period
+    basis: anchor
+    snapshots: ["2026-04-30"]
+    oracle: {how: sum, column: current_outstanding_balance}
+
+- id: S2-14
+  question: "How many loans did we have in December 2025?"
+  category: explicit_period
+  intent:
+    capability: generic_analysis
+    operation: point_in_time
+    measures: [{concept: loan, statistic: count}]
+    time: {form: explicit_period, grain: monthly, labels: ["December 2025"]}
+  expect:
+    disposition: EXECUTED
+    shape: single_period
+    basis: anchor
+    snapshots: ["2025-12-31"]
+    oracle: {how: count}
+
+# --- 9. since <period> ------------------------------------------------------ #
+- id: S2-15
+  question: "How has funded balance changed since March?"
+  category: since_period
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: range, grain: monthly, labels: ["since March"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: anchor
+    snapshots: ["2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: sum, column: current_outstanding_balance}
+
+- id: S2-16
+  question: "From February onwards, how many loans has the book carried?"
+  category: since_period
+  paraphrase_of: S2-15
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: loan, statistic: count}]
+    time: {form: range, grain: monthly, labels: ["from February"]}
+  expect:
+    disposition: EXECUTED
+    shape: time_series
+    basis: anchor
+    snapshots: ["2026-02-28", "2026-03-31", "2026-04-30", "2026-05-31", "2026-06-30"]
+    oracle: {how: count}
+
+# --- 10. current versus prior period ---------------------------------------- #
+- id: S2-17
+  question: "What was funded balance this month versus last month?"
+  category: current_versus_prior
+  intent:
+    capability: generic_analysis
+    operation: compare
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: relative_pair, grain: monthly, periods_back: 1, labels: ["this month versus last month"]}
+  expect:
+    disposition: EXECUTED
+    shape: period_comparison
+    basis: pair
+    snapshots: ["2026-05-31", "2026-06-30"]
+    oracle: {how: sum, column: current_outstanding_balance}
+
+- id: S2-18
+  question: "Compare the loan count now with the previous reporting period."
+  category: current_versus_prior
+  intent:
+    capability: generic_analysis
+    operation: compare
+    measures: [{concept: loan, statistic: count}]
+    time: {form: previous_reporting_period, grain: monthly, labels: ["the previous reporting period"]}
+  expect:
+    disposition: EXECUTED
+    shape: period_comparison
+    basis: pair
+    snapshots: ["2026-05-31", "2026-06-30"]
+    oracle: {how: count}
+
+# ==========================================================================  #
+# NEGATIVE AND SAFETY CONTROLS — every one of these must fail closed.
+# ==========================================================================  #
+
+- id: S2-N1
+  question: "How has funded balance changed over the last twelve months?"
+  category: unavailable_period
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: monthly, periods_back: 12, labels: ["the last twelve months"]}
+  expect: {disposition: CLARIFY, reason: PERIOD_NOT_AVAILABLE}
+
+- id: S2-N2
+  question: "How has funded balance moved recently?"
+  category: ambiguous_period
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: monthly, labels: ["last few months"]}
+  expect: {disposition: CLARIFY, reason: PERIOD_LABEL_UNRESOLVED}
+  note: >
+    A vague recency. The legacy path resolves this by governed convention
+    (`period_request.governed_recent_months`, three months) and discloses the
+    choice; slice 2 clarifies instead, because a window chosen for the reader is
+    a period substitution however well it is disclosed.
+
+# --- the two recorded model interpretations, verbatim ----------------------- #
+#
+# NOT paraphrased and not tidied: these are the `intent` blocks of NL1A and NL8C
+# as Opus emitted them in run 8, which are the ONLY two generic-analysis
+# temporal interpretations the recorded corpus contains. Both clarify at the
+# compiler, before slice 2's perimeter is consulted. That is the finding, and it
+# is why this bank exists: the 135-question corpus covers movement, bridge and
+# forecast temporal questions and contains no funded-book temporal EVALUATION
+# question at all.
+
+- id: S2-R1
+  question: "How has the profile of our new lending changed over the last few months?"
+  category: recorded_interpretation
+  source: recorded
+  recorded_case: NL1A
+  expect: {disposition: COMPILE_CLARIFY, reason: MODEL_FLAGGED_AMBIGUITY}
+
+- id: S2-R2
+  question: "Are direct and acquired balances developing differently over time?"
+  category: recorded_interpretation
+  source: recorded
+  recorded_case: NL8C
+  expect: {disposition: COMPILE_CLARIFY, reason: AMBIGUOUS_PERIOD}
+
+- id: S2-N4
+  question: "What will funded balance be over the next three months?"
+  category: future_period
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: forward_looking, grain: monthly, labels: ["the next three months"]}
+  expect: {disposition: COMPILE_REFUSE, reason: UNSUPPORTED_COMPOSITION}
+
+- id: S2-N5
+  question: "Show funded balance for each of the last four weeks."
+  category: unsupported_cadence
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: weekly, periods_back: 4, labels: ["the last four weeks"]}
+  expect: {disposition: CLARIFY, reason: UNSUPPORTED_CADENCE}
+
+- id: S2-N6
+  question: "How has the pipeline moved each month?"
+  category: pipeline_temporal
+  intent:
+    capability: generic_analysis
+    operation: series
+    population: {base: pipeline, lens: all, seasoning: any}
+    measures: [{concept: loan, statistic: count}]
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect: {disposition: INELIGIBLE, reason: POPULATION_NOT_FUNDED}
+
+- id: S2-N7
+  question: "How much of the balance growth came from the acquired book each month?"
+  category: acquisition_attribution
+  intent:
+    capability: generic_analysis
+    operation: series
+    population: {base: funded, lens: acquired, seasoning: any}
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect: {disposition: INELIGIBLE, reason: EXPLICIT_LENS}
+
+- id: S2-N8
+  question: "Why did funded balance increase last month?"
+  category: movement_cause
+  intent:
+    capability: generic_analysis
+    operation: movement
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: relative_pair, grain: monthly, periods_back: 1, labels: ["last month"]}
+  expect: {disposition: INELIGIBLE, reason: OPERATION_NOT_TEMPORAL}
+
+- id: S2-N9
+  question: "Give balance, loan count and average LTV each month."
+  category: multi_output_temporal
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures:
+      - {concept: current_outstanding_balance, statistic: sum}
+      - {concept: loan, statistic: count}
+      - {concept: current_loan_to_value, statistic: average}
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect: {disposition: INELIGIBLE, reason: NOT_SINGLE_OUTPUT}
+
+- id: S2-N10
+  question: "How has the borrowing base moved each month?"
+  category: specialist_measure
+  intent:
+    capability: borrowing_base
+    operation: series
+    measures: [{concept: borrowing_base}]
+    time: {form: series, grain: monthly, labels: ["each month"]}
+  expect: {disposition: INELIGIBLE, reason: CAPABILITY_NOT_GENERIC}
+
+- id: S2-N11
+  question: "What was funded balance in August?"
+  category: absent_snapshot
+  intent:
+    capability: generic_analysis
+    operation: point_in_time
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    time: {form: explicit_period, grain: monthly, labels: ["August"]}
+  expect: {disposition: CLARIFY, reason: PERIOD_NOT_AVAILABLE}
+
+- id: S2-N12
+  question: "Show funded balance by region over the last three months."
+  category: geography_axis
+  intent:
+    capability: generic_analysis
+    operation: series
+    measures: [{concept: current_outstanding_balance, statistic: sum}]
+    geography: {requested: true, basis: collateral, level: reporting, group_by: true}
+    time: {form: series, grain: monthly, periods_back: 3, labels: ["the last three months"]}
+  expect: {disposition: INELIGIBLE, reason: GEOGRAPHY_REQUESTED}
+  note: >
+    IN the slice 2 contract as a shape and OUT of it as a binding. The geography
+    axis is resolved by the geography basis owner, which the accepted slice 1
+    adapter binds none of; slice 2 does not widen that, so a time x geography
+    question is ineligible rather than answered on some other axis. Recorded
+    here as a known boundary, not as a defect.

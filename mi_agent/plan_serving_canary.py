@@ -177,20 +177,16 @@ def reconcile(spec: Any, result: Any) -> Tuple[bool, str]:
     zero, so a result-frame emptiness check passed it and the canary served the
     zero — found by this module's own tests, not by reading the code.
     """
+    # THE STRUCTURAL HALF LIVES IN THE ADAPTER. It is the same question the
+    # temporal runtime asks of each snapshot, and two copies of it that drifted
+    # would let one path serve what the other refuses. Behaviour here is
+    # unchanged: the same two checks, in the same order, before the same rows
+    # and emptiness rulings below.
+    structural_ok, why_not = adapter.reconcile_receipt(spec, result)
+    if not structural_ok:
+        return False, why_not
+
     metadata = dict(getattr(result, "metadata", None) or {})
-
-    applied = {str(entry.get("field")) for entry in
-               (metadata.get("applied_predicates") or ())
-               if isinstance(entry, Mapping)}
-    for field_name in (getattr(spec, "filters", None) or {}):
-        if str(field_name) not in applied:
-            return False, f"predicate on {field_name!r} was not applied"
-
-    grouped = {str(key) for key in (metadata.get("group_field_keys") or ())}
-    for axis in (getattr(spec, "dimensions", None) or ()):
-        if str(axis) not in grouped:
-            return False, f"axis {axis!r} was not grouped"
-
     frame = getattr(result, "data", None)
     if frame is None or getattr(frame, "empty", True):
         return False, "the execution produced no rows"

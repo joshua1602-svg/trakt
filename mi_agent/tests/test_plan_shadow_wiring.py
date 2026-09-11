@@ -539,16 +539,54 @@ class TestDiscipline(unittest.TestCase):
             self.assertNotIn(mutation, compact,
                              f"the plan is modified: {mutation}")
 
-    def test_the_accepted_adapter_is_untouched_by_this_slice(self):
+    def test_the_accepted_adapter_decides_exactly_what_it_always_did(self):
+        """The slice 1 perimeter is unchanged — as a DECISION, not as bytes.
+
+        This began as a hash of `plan_runtime_adapter.py` against the blob at
+        `6f42df67`, defending the claim that the wiring slice added a call site
+        and no semantics. Slice 2 needed the structural half of
+        `check_eligibility` under a different temporal perimeter and split the
+        function to share it, so the bytes moved and the hash could no longer
+        say anything.
+
+        What the hash was standing in for is asserted directly instead, and more
+        strongly: the ACCEPTED adapter and the CURRENT one are both loaded, and
+        every one of the 135 recorded plans is put to both. A verdict that
+        differs on any plan — eligible or not, and for which reason — fails
+        here. Bytes may move; decisions may not.
+        """
+        import importlib.util
         import subprocess
-        accepted = subprocess.run(
-            ("git", "rev-parse", "6f42df67:mi_agent/plan_runtime_adapter.py"),
-            cwd=_REPO_ROOT, text=True, capture_output=True).stdout.strip()
-        current = subprocess.run(
-            ("git", "hash-object", "mi_agent/plan_runtime_adapter.py"),
-            cwd=_REPO_ROOT, text=True, capture_output=True).stdout.strip()
-        self.assertEqual(accepted, current,
-                         "the accepted slice 1 adapter changed")
+
+        blob = subprocess.run(
+            ("git", "show", "6f42df67:mi_agent/plan_runtime_adapter.py"),
+            cwd=_REPO_ROOT, text=True, capture_output=True).stdout
+        self.assertTrue(blob.strip(), "the accepted adapter blob is unreadable")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "accepted_adapter.py"
+            path.write_text(blob, encoding="utf-8")
+            spec = importlib.util.spec_from_file_location(
+                "accepted_plan_runtime_adapter", path)
+            accepted = importlib.util.module_from_spec(spec)
+            # Registered BEFORE execution: `dataclasses` resolves a frozen
+            # class's own module by name, and an unregistered one raises.
+            sys.modules[spec.name] = accepted
+            try:
+                spec.loader.exec_module(accepted)
+            finally:
+                sys.modules.pop(spec.name, None)
+
+            recorded = json.loads(
+                (_REPO_ROOT / "mi_agent" / "interpretation_v2" / "evidence"
+                 / "run8_135_signoff_2b00172.json").read_text())
+            plans = [row["plan"] for row in recorded["results"] if row.get("plan")]
+            self.assertGreaterEqual(len(plans), 100, "the corpus did not load")
+            for plan in plans:
+                self.assertEqual(accepted.check_eligibility(plan),
+                                 adapter.check_eligibility(plan),
+                                 f"the perimeter moved on plan "
+                                 f"{plan.get('plan_id')}")
 
 
 if __name__ == "__main__":

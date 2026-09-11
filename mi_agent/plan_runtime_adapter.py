@@ -168,16 +168,36 @@ def _as_mapping(plan: Any) -> Mapping[str, Any]:
     return to_dict() if callable(to_dict) else {}
 
 
-def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
-    """`(eligible, reason, detail)` for Slice 1. Reads the plan only."""
+def check_capability(plan: Any) -> Tuple[bool, str, str]:
+    """`(ok, reason, detail)` for the capability alone. Slice-agnostic.
+
+    Split out of `check_eligibility` so slice 2 can require the same generic
+    capability without restating the test. Nothing about time is decided here.
+    """
     body = _as_mapping(plan)
     if not body:
         return False, NOT_A_PLAN, "no plan, or a plan with no readable body"
-
     if body.get("capability") != ELIGIBLE_CAPABILITY:
         return (False, CAPABILITY_NOT_GENERIC,
                 f"capability={body.get('capability')!r} is specialist; it owns its "
                 f"own input contract and arithmetic")
+    return True, "", ""
+
+
+def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
+    """`(eligible, reason, detail)` for Slice 1. Reads the plan only.
+
+    UNCHANGED BEHAVIOUR. Slice 2 needed the structural half of this test with a
+    different temporal perimeter, so the structural half moved to
+    `check_structure` and is called from here in the same position it occupied
+    before. The reason codes, their precedence and their details are identical,
+    and the slice 1 corpus replay is what says so rather than this sentence.
+    """
+    body = _as_mapping(plan)
+    ok, reason, detail = check_capability(plan)
+    if not ok:
+        return ok, reason, detail
+
     if body.get("operation") not in ELIGIBLE_OPERATIONS:
         return (False, OPERATION_NOT_GENERIC,
                 f"operation={body.get('operation')!r} is not expressible in the "
@@ -188,6 +208,22 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         return (False, PERIOD_NOT_CURRENT,
                 f"period.form={period.get('form')!r} needs the temporal owner, "
                 f"which this slice does not touch")
+
+    return check_structure(plan)
+
+
+def check_structure(plan: Any) -> Tuple[bool, str, str]:
+    """Everything the generic executor needs that is NOT about time.
+
+    The population lens, the geography contract, the comparison and target
+    slots, the single output, the axis count and their bindings, the single
+    measure and its statistic, and one predicate per field. Called by slice 1
+    and by slice 2 alike, so a plan that is structurally inexpressible is
+    refused identically whichever period it names.
+    """
+    body = _as_mapping(plan)
+    if not body:
+        return False, NOT_A_PLAN, "no plan, or a plan with no readable body"
 
     lens = str(((body.get("population") or {}).get("lens") or "")).strip().lower()
     if lens not in ELIGIBLE_POPULATION_LENS:
@@ -455,6 +491,46 @@ def execute_shadow_governed_plan(plan: Any, resolved_frame: Any,
         },
         warnings=tuple(str(w)[:200] for w in (getattr(result, "warnings", ()) or ())),
     )
+
+
+def value_column(spec: MIQuerySpec) -> str:
+    """The executor column carrying this spec's figure.
+
+    `execute_mi_query` names an aggregated column `<metric>_<aggregation>` and a
+    row count `loan_count`. One owner for that naming, because a caller that
+    guessed it would silently read the wrong column of a grouped frame.
+    """
+    if spec.aggregation == COUNT:
+        return _ROW_COUNT_FIELD
+    return f"{spec.metric}_{spec.aggregation}"
+
+
+def reconcile_receipt(spec: Any, result: Any) -> Tuple[bool, str]:
+    """Did the executor apply every predicate and group on every axis the spec
+    named? `(ok, why_not)`.
+
+    The STRUCTURAL half of `plan_serving_canary.reconcile`, split out so the
+    temporal runtime can ask the same question of each snapshot without also
+    inheriting the serving decision about an empty population — which is a
+    presentation ruling about ONE answer, and not the same ruling for one point
+    of a series.
+
+    Reads the bound spec and the executor's own receipt. No question, no plan
+    re-interpretation.
+    """
+    metadata = dict(getattr(result, "metadata", None) or {})
+    applied = {str(entry.get("field")) for entry in
+               (metadata.get("applied_predicates") or ())
+               if isinstance(entry, Mapping)}
+    for field_name in (getattr(spec, "filters", None) or {}):
+        if str(field_name) not in applied:
+            return False, f"predicate on {field_name!r} was not applied"
+
+    grouped = {str(key) for key in (metadata.get("group_field_keys") or ())}
+    for axis in (getattr(spec, "dimensions", None) or ()):
+        if str(axis) not in grouped:
+            return False, f"axis {axis!r} was not grouped"
+    return True, ""
 
 
 def _scalar_of(result: Any, spec: MIQuerySpec) -> Optional[float]:
