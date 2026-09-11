@@ -1,0 +1,187 @@
+name: Specialist pipeline live acceptance
+
+# Proves the one production assertion this slice adds: that a PIPELINE
+# GovernedQueryPlan is executed by the EXISTING Pipeline owners, that the figure
+# the caller receives is the one those owners recorded, and that funded serving
+# is untouched.
+#
+# WHY NOT THE EXISTING WORKFLOWS. slice1b, slice2 and slice3 each pin their own
+# fixed bank, and not one of them contains a pipeline question — nor does any of
+# their harnesses read `capability` or the execution runtime off the record, so
+# none could tell a pipeline answer from a funded one. All three are left as
+# they are.
+#
+# THIS WORKFLOW DEPLOYS NOTHING AND CONFIGURES NOTHING. The canary must already
+# be on, and turning it off afterwards is an operator action the final step names
+# on every run. `MI_BEARER` and the publish profile reach the script through
+# `env:` only, never argv, and only their lengths are printed.
+#
+# The push path runs the OFFLINE SELF-TEST ONLY: asking the bank before the
+# deployment and the canary are in place would spend six live interpretations to
+# prove that the legacy path still serves.
+
+on:
+  push:
+    branches: [ 'claude/funded-book-temporal-slice-2-d568jg' ]
+    paths: [ '.github/workflows/specialist-pipeline-acceptance.yml' ]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >-
+          `bank` asks the six live questions. `provenance` confirms which build
+          is serving by GET /health and stops, asking nothing. Anything else
+          (and the push path, where inputs are empty) runs the offline self-test
+          only and calls nothing.
+        default: ''
+        required: false
+      stable_reads:
+        description: >-
+          Successful /health reads required by `provenance`, at least 15s
+          apart. Use 2 after a restart: a cycling App Service answers once and
+          then stops.
+        default: '1'
+        required: false
+      expect_commit:
+        description: The deployed SHA this acceptance is certifying.
+        required: false
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: false
+      path:
+        default: /mi/query
+        required: false
+      portfolio_id:
+        description: The canary portfolio.
+        default: ERE/2026-06-30
+        required: false
+      evidence_path:
+        default: /home/LogFiles/mi-plan-shadow/evidence.jsonl
+        required: false
+      poll_timeout_seconds:
+        description: Per request. A timeout is INCONCLUSIVE, never a pass.
+        default: '120'
+        required: false
+      ref:
+        description: Repo ref to take the acceptance tooling from.
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+# Never two at once, and never cancelled mid-flight: overlapping runs would each
+# poll for the other's records.
+concurrency:
+  group: specialist-pipeline-acceptance-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # ALWAYS, and always FIRST. It costs nothing, calls nothing and needs no
+      # credentials, and a harness whose own reconciliation rules do not hold has
+      # no business asking production anything. On the push path it is the whole
+      # run.
+      - name: Prove the harness before it is pointed at anything
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/specialist_pipeline/run_pipeline_acceptance.py \
+            --self-test
+
+      # WHICH BUILD IS SERVING, for nothing. One GET per read, no question
+      # asked, no model call. Run before asking an operator to switch the canary
+      # on, and again after the restart that follows — doing either by starting
+      # the bank would spend six live interpretations to learn one string.
+      - name: Confirm the served build
+        if: ${{ inputs.mode == 'provenance' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit }}
+          STABLE_READS: ${{ inputs.stable_reads || '1' }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/specialist_pipeline/run_pipeline_acceptance.py \
+            --provenance-only \
+            --base-url "$BASE_URL" \
+            --expect-commit "$EXPECT_COMMIT" \
+            --stable-reads "$STABLE_READS" \
+            --poll-timeout 300
+
+      - name: Refuse to run the bank without the credentials it needs
+        if: ${{ inputs.mode == 'bank' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          # Checked HERE so a bank run without a pinned SHA fails before a single
+          # question is asked, rather than inside the script after the first.
+          EXPECT_COMMIT: ${{ inputs.expect_commit }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"
+            exit 1
+          fi
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::AZURE_MI_API_PUBLISH_PROFILE is not set; which path \
+          served cannot be proved without reading the evidence sink"
+            exit 1
+          fi
+          if [ -z "${EXPECT_COMMIT:-}" ]; then
+            echo "::error::expect_commit is required for a bank run; an \
+          acceptance that does not pin the SHA it certifies certifies nothing"
+            exit 1
+          fi
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      # The six live questions, once each. Dispatch-only, and only with
+      # `mode: bank`. The script confirms the served commit by GET /health first
+      # and stops with ZERO questions asked on a mismatch.
+      - name: Run the six-question pipeline acceptance
+        if: ${{ inputs.mode == 'bank' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          API_PATH: ${{ inputs.path || '/mi/query' }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id || 'ERE/2026-06-30' }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit }}
+          EVIDENCE_PATH: ${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}
+          POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds || '120' }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/specialist_pipeline/run_pipeline_acceptance.py \
+            --base-url "$BASE_URL" \
+            --path "$API_PATH" \
+            --portfolio-id "$PORTFOLIO_ID" \
+            --expect-commit "$EXPECT_COMMIT" \
+            --evidence-path "$EVIDENCE_PATH" \
+            --poll-timeout "$POLL_TIMEOUT" \
+            --json-out pipeline-acceptance.json
+
+      - name: Keep the evidence whatever the verdict
+        if: ${{ always() && inputs.mode == 'bank' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: specialist-pipeline-acceptance
+          path: pipeline-acceptance.json
+          if-no-files-found: warn
+
+      - name: Turn the serving canary back off
+        if: ${{ always() && inputs.mode == 'bank' }}
+        run: |
+          echo "::warning::This workflow cannot change App Service settings — it \
+          holds a publish profile (Kudu), not ARM access. Set \
+          MI_AGENT_PLAN_SERVE back to off on trakt-mi-api now. The acceptance is \
+          not finished until that is done, whatever the verdict above."
