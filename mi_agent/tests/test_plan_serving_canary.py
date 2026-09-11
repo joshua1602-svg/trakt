@@ -118,7 +118,12 @@ class _Canary:
                 return OpusInterpreter(UnavailableClient("no key in this test"))
         elif self.interpreter == "raises":
             class Boom:
-                def interpret(self, question):
+                # `**kwargs` because the interpreter's signature grows: slice 3
+                # added `source_registry`, and a stub that pins the old one
+                # turns a real interpreter fault into a TypeError, which is a
+                # different failure with a different disposition. The point of
+                # this stub is that the interpreter RAISED, not how it is called.
+                def interpret(self, question, **kwargs):
                     raise RuntimeError("interpreter exploded")
 
             def factory():
@@ -911,7 +916,13 @@ class TestAScalarAnswerSurvivesTheCoverageGate(unittest.TestCase):
             self.assertTrue(ledger.get("concepts"),
                             "the governed ledger recorded nothing")
             self.assertEqual({c["owner"] for c in ledger["concepts"]},
-                             {"governed_plan + execution_receipt"})
+                             {"governed_plan + execution_receipt",
+                              # WHICH POPULATION the answer is about, proved
+                              # against the runtime's own frame identity. A
+                              # predicate correctly applied to the wrong dataset
+                              # is still the wrong answer, so the ledger records
+                              # the population beside the predicates.
+                              "governed_plan + runtime population identity"})
             self.assertEqual({c["disposition"] for c in ledger["concepts"]},
                              {"resolved"})
             # The figure is STILL THERE after the gate — the defect was that the
@@ -1006,8 +1017,9 @@ class TestTheUnchangedCases(unittest.TestCase):
                 self.assertEqual(ledger.get("unaccounted"), [])
                 self.assertEqual(
                     {c["kind"] for c in ledger["concepts"]},
-                    {"governed_plan:dimension"},
-                    "a grouped plan recorded something other than its axes")
+                    {"governed_plan:dimension", "governed_plan:population"},
+                    "a grouped plan recorded something other than its axes "
+                    "and the population it ran over")
                 self.assertTrue(out["artifacts"])
 
     def test_7_a_legacy_envelope_still_goes_to_the_legacy_owner(self):

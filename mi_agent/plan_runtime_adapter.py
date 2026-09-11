@@ -38,7 +38,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import (Any, Dict, FrozenSet, Iterable, List, Mapping, Optional,
+                    Sequence, Tuple)
 
 from mi_agent.mi_query_spec import MIQuerySpec
 from mi_agent.query_plan import AVERAGE, COUNT, SUM, WEIGHTED_AVERAGE
@@ -145,6 +146,32 @@ TARGET_REQUESTED = "TARGET_REQUESTED"
 NO_MEASURE = "NO_MEASURE"
 GEOGRAPHY_REQUESTED = "GEOGRAPHY_REQUESTED"
 FILTER_NOT_EXPRESSIBLE = "FILTER_NOT_EXPRESSIBLE"
+#: The runtime could not say WHICH POPULATION it executed over. Fail-closed by
+#: construction: a caller that does not declare its frame's identity gets no
+#: governed answer, because an unproven population is exactly the state in which
+#: a pipeline question is answered with funded numbers.
+EXECUTED_POPULATION_UNPROVEN = "EXECUTED_POPULATION_UNPROVEN"
+#: The plan asks for a population this runtime does not execute.
+POPULATION_NOT_EXECUTABLE = "POPULATION_NOT_EXECUTABLE"
+#: The plan asks for one population and the runtime loaded another.
+POPULATION_BASE_MISMATCH = "POPULATION_BASE_MISMATCH"
+
+#: WHICH POPULATIONS THIS RUNTIME CAN EXECUTE. Funded, and only funded: the
+#: generic executor binds funded fields against a funded frame, and `mi_service`
+#: resolves that frame through `datasets._resolve_query_frame("funded", …)`.
+#:
+#: THIS IS THE REGISTRATION POINT FOR A FUTURE OWNER, and the reason
+#: `population.base` does not need redesigning when one arrives: a deterministic
+#: pipeline runtime declares `pipeline` here (or declares its own set and calls
+#: `check_population_base` with it), and nothing in `CandidateIntent`, the
+#: compiler or the plan changes. Until then a pipeline plan is refused rather
+#: than approximated, which is the whole point.
+EXECUTABLE_POPULATIONS: FrozenSet[str] = frozenset({"funded"})
+
+#: The governed default. `compiler._bind_population` already resolves an unstated
+#: base to `funded`, so every plan carries one; this is the belt for the braces,
+#: and it keeps a plan dict assembled by a test honest too.
+DEFAULT_POPULATION_BASE = "funded"
 
 
 @dataclass(frozen=True)
@@ -239,6 +266,80 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 f"which this slice does not touch")
 
     return check_structure(plan)
+
+
+def requested_population_base(plan: Any) -> str:
+    """WHICH POPULATION the plan asks about. The requested side, and its owner.
+
+    Read off `GovernedQueryPlan.population.base` and from nothing else — never
+    the question, never the frame, never the rows that came back. The plan is
+    the transcription of what was asked, and this is the field that carries it.
+    """
+    population = (_as_mapping(plan).get("population") or {})
+    base = str(population.get("base") or "").strip().lower()
+    return base or DEFAULT_POPULATION_BASE
+
+
+def check_population_base(plan: Any, executed_population: Any,
+                          executable: Optional[Iterable[str]] = None
+                          ) -> Tuple[bool, str, str]:
+    """Does the population the plan ASKED FOR match the one that will RUN?
+
+    THE DEFECT THIS CLOSES. `spec_for_plan` binds measures, filters, dimensions
+    and scope predicates — and not `population.base`. Three plans asking for
+    funded, pipeline and whole_book bound to three IDENTICAL specs, the
+    perimeter admitted a `generic_analysis` plan whatever its base, and
+    `mi_service` supplies the funded frame. So a plan stating
+    `population.base = pipeline` would have executed over funded rows and been
+    served as a governed answer, with the coverage ledger — which reconciles
+    filters and dimensions only — seeing nothing wrong. Measured on the
+    signed-off corpus: of 135 recorded plans, 83 funded, 34 pipeline, 8
+    forecast and 1 whole_book, and the only reason none of the 43 non-funded
+    ones reached the executor is that each was already ineligible for an
+    unrelated reason. That is luck, not a control.
+
+    THE TWO SIDES, AND WHERE EACH COMES FROM.
+
+        requested   `plan.population.base`, the plan's own transcription
+        executed    `executed_population`, DECLARED by the runtime that
+                    resolved the frame — `mi_service` passes the same `view` it
+                    called `datasets._resolve_query_frame` with
+
+    Neither side is inferred. The question is not re-read, the result rows are
+    not counted, and no field is sniffed: this compares two governed records the
+    way `reconcile` compares the bound spec with the execution receipt.
+
+    THREE WAYS TO FAIL, ALL CLOSED.
+
+    1. The runtime declared nothing. An unproven population is the state the
+       defect lived in, so it refuses rather than assuming funded.
+    2. The plan wants a population this runtime does not execute — `pipeline`,
+       `forecast`, or `whole_book`, which spans two frames and cannot be proven
+       against one. A future owner registers itself in `EXECUTABLE_POPULATIONS`
+       rather than being special-cased here.
+    3. The plan wants one population and the runtime loaded another.
+
+    `(eligible, reason, detail)`, matching every other perimeter check.
+    """
+    allowed = frozenset(str(p).strip().lower() for p in
+                        (executable if executable is not None
+                         else EXECUTABLE_POPULATIONS))
+    executed = str(executed_population or "").strip().lower()
+    if not executed:
+        return (False, EXECUTED_POPULATION_UNPROVEN,
+                "the runtime did not declare which population it executes over, "
+                "so the plan's population cannot be proven")
+    requested = requested_population_base(plan)
+    if requested not in allowed:
+        return (False, POPULATION_NOT_EXECUTABLE,
+                f"population.base={requested!r} is not executed by this runtime "
+                f"(it executes {sorted(allowed)}); it is refused rather than "
+                f"answered over {executed!r}")
+    if requested != executed:
+        return (False, POPULATION_BASE_MISMATCH,
+                f"the plan asks about the {requested!r} population and the "
+                f"runtime loaded the {executed!r} one")
+    return True, "", ""
 
 
 def plan_predicates(body: Mapping[str, Any],

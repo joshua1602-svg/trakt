@@ -402,6 +402,27 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
             "owner": "governed_plan + execution_receipt",
             "disposition": _coverage_resolved() if proved else _coverage_missing(),
         })
+    # WHICH POPULATION THE ANSWER IS ABOUT, reconciled like any other governed
+    # concept. The perimeter already refuses a plan whose base the runtime does
+    # not execute, so this is the second, independent proof on the way out — and
+    # it is the one that reads the SERVED envelope rather than the plan, which
+    # is where a future renderer or a future runtime could still drift. A base
+    # the executed side does not state is UNACCOUNTED and refuses, because the
+    # alternative is assuming the answer came from the population it asked for.
+    requested_base = str(((requested.get("population") or {})
+                          if isinstance(requested.get("population"), Mapping)
+                          else {}).get("base") or "")
+    if requested_base:
+        executed_base = str(executed.get("population_base") or "")
+        entries.append({
+            "kind": "governed_plan:population",
+            "field": "population.base", "value": requested_base,
+            "term": f"the {requested_base} book",
+            "owner": "governed_plan + runtime population identity",
+            "disposition": (_coverage_resolved()
+                            if executed_base == requested_base
+                            else _coverage_missing()),
+        })
     for axis in (requested.get("dimensions") or ()):
         grouped = bool(receipts) and all(
             str(axis) in {str(k) for k in (receipt.get("group_field_keys") or ())}

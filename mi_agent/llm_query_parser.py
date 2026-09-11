@@ -6728,6 +6728,26 @@ def resolve_seasoning_role(spec: MIQuerySpec, question: str,
         return None
     predicate = _seasoning.resolve_population_predicate(question, columns)
     if not predicate:
+        # NO PREDICATE IS NOT ALWAYS "NOTHING TO DO". When the only seasoning
+        # window a question named was named by a phrase the governed LIFECYCLE
+        # ontology owns — "the back book", "the front book" — the seasoning
+        # owner deliberately declines to narrow, because the phrase names a
+        # POPULATION (funded / pipeline) and not a vintage.
+        #
+        # The parser's dimension binder does not know that. It had already put
+        # `seasoning_segment` on the axis from the same words, via the registry
+        # synonyms, so declining the filter and stopping here left "what is the
+        # back book balance?" answered as a two-bar seasoning BREAKDOWN. The
+        # reader gets a different analysis either way, which is precisely the
+        # fallback reinterpretation this change exists to remove — it is the
+        # same defect wearing a grouping instead of a filter.
+        #
+        # So the ROLE decision is completed rather than abandoned: the phrase is
+        # not about seasoning at all, so it is neither a filter nor an axis. An
+        # axis the reader asked for IN SEASONING WORDS is untouched — "balance
+        # by seasoning segment" says the word, and `_asks_for_seasoning_axis`
+        # is what tells the two apart.
+        _strip_lifecycle_seasoning_axis(spec, question, _seasoning)
         return None
 
     filters = getattr(spec, "filters", None)
@@ -6769,6 +6789,41 @@ def resolve_seasoning_role(spec: MIQuerySpec, question: str,
     if getattr(spec, "dimension", None) in strip:
         spec.dimension = None
     return predicate
+
+
+#: The words that ask for the seasoning AXIS in so many terms. A question using
+#: one of these wants the breakdown and keeps it, whatever else it names. Taken
+#: from the registry's own vocabulary for the field rather than invented here.
+_EXPLICIT_SEASONING_AXIS = ("seasoning", "months on book", "time on book",
+                            "vintage", "mob")
+
+
+def _strip_lifecycle_seasoning_axis(spec: MIQuerySpec, question: str,
+                                    _seasoning) -> None:
+    """Drop a seasoning axis that only a governed LIFECYCLE phrase put there.
+
+    Narrow on purpose, and it declines in three ways. It does nothing unless a
+    lifecycle-owned phrase actually named a window; it does nothing if the
+    reader asked for seasoning in seasoning words; and it removes an AXIS only —
+    no filter is added, no population is narrowed, and nothing else on the spec
+    is touched. The result is the answer the sentence asked for: the balance of
+    a population, ungrouped.
+    """
+    text = str(question or "")
+    lowered = text.lower()
+    if any(word in lowered for word in _EXPLICIT_SEASONING_AXIS):
+        return
+    named = [k for k in _seasoning.lending_windows_named(text)
+             if _seasoning.lifecycle_owned_only(text, k)]
+    if not named:
+        return
+    field = _seasoning.SEASONING_SEGMENT_FIELD
+    for attr in ("dimensions", "hierarchy"):
+        values = getattr(spec, attr, None)
+        if isinstance(values, list):
+            setattr(spec, attr, [d for d in values if d != field])
+    if getattr(spec, "dimension", None) == field:
+        spec.dimension = None
 
 
 #: Set by ``parse_with_repair`` so the scope-role check can resolve canonical

@@ -237,8 +237,18 @@ class TemporalCoverage(unittest.TestCase):
             client_id=fixture.CLIENT_ID, semantics=self.semantics,
             route=fixture.ROUTE)
 
-    def envelope_for(self, outcome):
-        """The envelope `render` builds, in the part the coverage owner reads."""
+    def envelope_for(self, outcome, execution_population="funded"):
+        """The envelope `render` builds, in the part the coverage owner reads.
+
+        `population_base` is part of that shape now. The renderer stamps the
+        governed dataset identity the runtime resolved its frame with, because a
+        predicate correctly applied to the wrong dataset is still the wrong
+        answer — and the coverage owner refuses an envelope that cannot say
+        which population ran. Pass `None` to exercise that refusal.
+        """
+        executed = dict(temporal.served_evidence(outcome))
+        if execution_population:
+            executed["population_base"] = execution_population
         return {"ok": True,
                 "artifacts": [{"rows": [{"reporting_date": p.reporting_date,
                                          "loan_count": p.value}
@@ -247,7 +257,27 @@ class TemporalCoverage(unittest.TestCase):
                     "parserMode": "governed_plan",
                     "governedPlan": {
                         "requested": dict(outcome.requested),
-                        "executed": temporal.served_evidence(outcome)}}}
+                        "executed": executed}}}
+
+    def test_a_series_that_cannot_name_its_population_is_refused(self):
+        """The temporal path is gated on the same terms as slice 1.
+
+        A series whose evidence proves every predicate on every snapshot and
+        cannot say WHICH POPULATION those snapshots are is refused, because the
+        alternative is assuming it was the one the plan asked for.
+        """
+        outcome = self.outcome()
+        out, ledger = self.through_the_gate(
+            self.envelope_for(outcome, execution_population=None))
+        self.assertFalse(out["ok"])
+        self.assertIn("population.base",
+                      {c["field"] for c in ledger["concepts"]})
+
+    def test_a_series_answered_over_another_population_is_refused(self):
+        outcome = self.outcome()
+        out, _ = self.through_the_gate(
+            self.envelope_for(outcome, execution_population="pipeline"))
+        self.assertFalse(out["ok"])
 
     def through_the_gate(self, envelope):
         mi_service._stamp_semantic_coverage(
@@ -268,10 +298,12 @@ class TemporalCoverage(unittest.TestCase):
         self.assertIsNone((out.get("metadata") or {}).get(
             "semanticCoverageRefused"))
         self.assertEqual(ledger.get("unaccounted"), [])
+        # The predicate the plan asked for, AND the population it ran over.
         self.assertEqual([c["field"] for c in ledger["concepts"]],
-                         ["erm_product_type"])
+                         ["erm_product_type", "population.base"])
         self.assertEqual({c["owner"] for c in ledger["concepts"]},
-                         {"governed_plan + execution_receipt"})
+                         {"governed_plan + execution_receipt",
+                          "governed_plan + runtime population identity"})
         self.assertEqual(len(out["artifacts"][0]["rows"]), served_rows,
                          "the gate stripped the temporal rows")
 

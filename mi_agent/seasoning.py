@@ -166,6 +166,50 @@ _SEGMENT_PHRASES: Tuple[Tuple[str, str], ...] = (
 )
 
 #: ---------------------------------------------------------------------------
+#: THE FOUR PHRASES THE GOVERNED LIFECYCLE ONTOLOGY OWNS.
+#: ---------------------------------------------------------------------------
+#: The governed portfolio ontology says:
+#:
+#:     back book  = the FUNDED population        front book = the PIPELINE
+#:
+#: a LIFECYCLE reading, owned by `population.base` in the governed plan. These
+#: four were being read here as a SEASONING cohort — a vintage of the funded
+#: book — so a canary request whose governed attempt fell back acquired the
+#: other meaning on the way out. Audited: "What is the back book balance?"
+#: served the whole funded book on the governed path and
+#: `seasoning_segment = Back Book` on the legacy one, from one sentence.
+#:
+#: THEY ARE MARKED, NOT DELETED, because three readers consult the table above
+#: and only ONE of them is selection:
+#:
+#:   * `segments_named` / `lending_windows_named` answer "which windows does
+#:     this question NAME". Deleting a phrase from that turns a COMPARISON into
+#:     a narrowing — measured while making this change: "the risk profile of
+#:     recent originations versus the back book" went from naming two windows
+#:     (and correctly selecting neither) to naming one and narrowing to it,
+#:     which regresses a signed-off canonical.
+#:   * `mask_segment_phrases` claims the span before the place-resolver runs.
+#:     P1J-1 measured the cost of dropping one: "how many acquired loans are in
+#:     the front book?" had "Front" read as a region, filtering a collateral
+#:     geography that matched no rows and making a governed population of 250
+#:     loans unreachable.
+#:   * `resolve_population_predicate` SELECTS, and selection is the one decision
+#:     the lifecycle ontology has taken over.
+#:
+#: So only selection consults this set. The other six phrases are vintage
+#: vocabulary and stay this module's: "seasoned loans" is not a lifecycle stage,
+#: and a reader asking for it is asking exactly what this axis measures.
+_LIFECYCLE_OWNED: FrozenSet[str] = frozenset({
+    r"\bfront book\b",
+    r"\bnew origination(?:s)?\b",
+    r"\bback book\b",
+    r"\bbackbook\b",
+})
+assert _LIFECYCLE_OWNED <= {p for p, _ in _SEGMENT_PHRASES}, (
+    "a lifecycle-owned phrase is not in the recognition table, so marking it "
+    "would do nothing")
+
+#: ---------------------------------------------------------------------------
 #: GOVERNED LENDING WINDOWS — the business ruling of 2026-08.
 #: ---------------------------------------------------------------------------
 #: A second, FINER reading of the same axis. The binary front/back partition
@@ -232,12 +276,52 @@ _SEGMENT_RES: Tuple[Tuple[Any, str], ...] = ()
 
 
 def _segment_res() -> Tuple[Tuple[Any, str], ...]:
+    """Every recognised phrase, compiled. Recognition and masking read this."""
     global _SEGMENT_RES
     if not _SEGMENT_RES:
         import re
         _SEGMENT_RES = tuple((re.compile(p, re.I), seg)
                              for p, seg in _SEGMENT_PHRASES)
     return _SEGMENT_RES
+
+
+_LIFECYCLE_RES: Tuple[Tuple[Any, str], ...] = ()
+
+
+def _lifecycle_res() -> Tuple[Tuple[Any, str], ...]:
+    """The lifecycle-owned phrases, compiled. Only SELECTION reads this."""
+    global _LIFECYCLE_RES
+    if not _LIFECYCLE_RES:
+        import re
+        _LIFECYCLE_RES = tuple((re.compile(p, re.I), seg)
+                               for p, seg in _SEGMENT_PHRASES
+                               if p in _LIFECYCLE_OWNED)
+    return _LIFECYCLE_RES
+
+
+def lifecycle_owned_only(text: Optional[str], window_key: str) -> bool:
+    """Was this window named ONLY by phrases the lifecycle ontology owns?
+
+    The question selection has to ask before it narrows. "The back book" names
+    the back-book window through a phrase that is now the funded population's,
+    so nothing may be narrowed; "seasoned loans" names the same window through a
+    phrase that is still a vintage, so it may. A question naming both is the
+    second case — the reader did say a vintage word.
+    """
+    if not text:
+        return False
+    named_at_all = False
+    for rx, segment in _segment_res():
+        if _SEGMENT_TO_WINDOW.get(segment) != window_key:
+            continue
+        if rx.search(str(text)):
+            named_at_all = True
+            if (rx.pattern, segment) not in {(r.pattern, s)
+                                             for r, s in _lifecycle_res()}:
+                return False               # a vintage phrase named it too
+    if not named_at_all:
+        return False                       # a lending-window phrase named it
+    return True
 
 
 def segments_named(text: Optional[str]) -> List[str]:
@@ -418,6 +502,14 @@ def resolve_population_predicate(text: Optional[str],
     """
     keys = list(lending_windows_named(text or ""))
     if len(keys) != 1:
+        return None
+    # THE LIFECYCLE ONTOLOGY OWNS THE GENERIC PHRASES. A question whose only
+    # window was named by "the back book" or "the front book" is naming a
+    # POPULATION — funded or pipeline — and narrowing it to a vintage here is
+    # the fallback reinterpretation this check exists to stop. Recognition is
+    # untouched: the window is still NAMED, so a comparison is still a
+    # comparison and the span is still masked before the place-resolver runs.
+    if lifecycle_owned_only(text, keys[0]):
         return None
     if config is None:
         try:

@@ -211,7 +211,8 @@ def reconcile(spec: Any, result: Any) -> Tuple[bool, str]:
 def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
            portfolio_id: Optional[str], as_of: Optional[str],
            requested: Optional[Mapping[str, Any]] = None,
-           executed: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+           executed: Optional[Mapping[str, Any]] = None,
+           execution_population: Optional[str] = None) -> Dict[str, Any]:
     """`(spec, MIQueryResult)` -> the existing React/API envelope.
 
     `mi_agent_api.adapters.adapt_workflow_result` is the contract every channel
@@ -281,16 +282,25 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
         # hands its own per-snapshot evidence in here rather than growing a
         # second renderer. A slice 1 answer passes None and is byte-identical to
         # what it always was.
+        executed_block = dict(executed) if executed is not None else {
+            "applied_predicates": receipt.get("applied_predicates") or [],
+            "group_field_keys": list(receipt.get("group_field_keys") or ()),
+            "aggregation": receipt.get("aggregation"),
+            "balance_field_used": receipt.get("balance_field_used"),
+            "percent_scale_detected": receipt.get("percent_scale_detected"),
+            "filtered_row_count": receipt.get("filtered_row_count"),
+        }
+        # WHICH POPULATION ACTUALLY RAN, declared by the runtime that resolved
+        # the frame. The receipt above proves which PREDICATES ran; nothing in
+        # it names the population they ran over, and a filter correctly applied
+        # to the wrong dataset is still the wrong answer. Absent, the coverage
+        # ledger finds the population unaccounted and refuses — which is the
+        # right failure, because the alternative is assuming funded.
+        if execution_population:
+            executed_block["population_base"] = str(execution_population)
         meta["governedPlan"] = {
             "requested": dict(requested or {}),
-            "executed": dict(executed) if executed is not None else {
-                "applied_predicates": receipt.get("applied_predicates") or [],
-                "group_field_keys": list(receipt.get("group_field_keys") or ()),
-                "aggregation": receipt.get("aggregation"),
-                "balance_field_used": receipt.get("balance_field_used"),
-                "percent_scale_detected": receipt.get("percent_scale_detected"),
-                "filtered_row_count": receipt.get("filtered_row_count"),
-            },
+            "executed": executed_block,
         }
     return payload
 
@@ -301,7 +311,13 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
 
 def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           run_id: Optional[str] = None, legacy_result: Any, frame: Any,
-          semantics: Any, view: Optional[str] = None,
+          semantics: Any,
+          # THE EXECUTED POPULATION. `funded` | `pipeline` | `forecast` — the
+          # governed dataset identity the caller resolved `frame` with. It was
+          # already supplied for the evidence record; it is now the fact the
+          # perimeter reconciles the plan's `population.base` against, and an
+          # unset one serves nothing.
+          view: Optional[str] = None,
           portfolio_id: Optional[str] = None,
           render_portfolio_id: Optional[str] = None,
           as_of: Optional[str] = None,
@@ -336,7 +352,14 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             snapshot_store=snapshot_store,
             snapshot_client_id=snapshot_client_id,
             snapshot_route=snapshot_route,
-            source_registry=source_registry)
+            # `view` IS THE EXECUTED POPULATION, and it is load-bearing here
+            # rather than decorative. It is the governed dataset identity the
+            # caller resolved `frame` with — `mi_service` passes the same string
+            # it called `datasets._resolve_query_frame(view, …)` with — so it
+            # states what was LOADED. A SECOND parameter carrying the same fact
+            # is not added on purpose: two fields that must agree is the defect
+            # class this gate exists to close.
+            execution_population=view)
     except Exception as exc:                                         # noqa: BLE001
         payload, reason = None, UNEXPECTED_ERROR
         body["disposition"] = evidence.ORCHESTRATION_ERROR
@@ -380,7 +403,8 @@ def _attempt_temporal(body: Dict[str, Any], *, plan: Mapping[str, Any],
                       question: str, semantics: Any, store: Any,
                       snapshot_client_id: Optional[str],
                       snapshot_route: Optional[str],
-                      render_portfolio_id: Optional[str], as_of: Optional[str]
+                      render_portfolio_id: Optional[str], as_of: Optional[str],
+                      execution_population: Optional[str] = None
                       ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One temporal serving attempt. Same contract as `_attempt`.
 
@@ -447,7 +471,8 @@ def _attempt_temporal(body: Dict[str, Any], *, plan: Mapping[str, Any],
         payload = render(outcome.spec, result, semantics, hints_frame,
                          question=question, portfolio_id=render_portfolio_id,
                          as_of=as_of, requested=dict(outcome.requested),
-                         executed=temporal.served_evidence(outcome))
+                         executed=temporal.served_evidence(outcome),
+                         execution_population=execution_population)
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
         return None, RENDER_FAILED
@@ -499,7 +524,8 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              snapshot_store: Any = None,
              snapshot_client_id: Optional[str] = None,
              snapshot_route: Optional[str] = None,
-             source_registry: Any = None
+             source_registry: Any = None,
+             execution_population: Optional[str] = None
              ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One serving attempt. `(payload or None, reason)`; fills `body` as it goes."""
     from mi_agent.interpretation_v2.outcomes import (OUTCOME_CLARIFY, OUTCOME_PLAN,
@@ -531,6 +557,24 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # below edits the plan the compiler emitted.
     plan = compiled.plan.to_dict()
 
+    # WHICH POPULATION, BEFORE WHICH RUNTIME. Placed above the dispatch because
+    # it is true of both: the temporal runtime reads the same funded route the
+    # slice 1 executor reads a funded frame from, and neither may answer a
+    # question about a population it did not load. Placed above EXECUTION for
+    # the reason that matters — a refusal here means zero rows were touched, so
+    # a pipeline question cannot produce a funded number even transiently, in
+    # the evidence sink or anywhere else.
+    base_ok, base_why, base_detail = adapter.check_population_base(
+        plan, execution_population)
+    if not base_ok:
+        body["eligibility"] = {"eligible": False, "reason": base_why,
+                               "detail": base_detail,
+                               "perimeter": "population_base"}
+        body["execution"] = {"attempted": False,
+                             "why_not": f"{base_why}: {base_detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{base_why}"
+
     # THE DISPATCH. One structural read of the plan's own period form, made by
     # `plan_temporal_runtime.claims`, decides which runtime owns it. The two
     # perimeters are disjoint by construction — slice 1 accepts `current` and
@@ -544,7 +588,8 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
             body, plan=plan, question=question, semantics=semantics,
             store=snapshot_store, snapshot_client_id=snapshot_client_id,
             snapshot_route=snapshot_route,
-            render_portfolio_id=render_portfolio_id, as_of=as_of)
+            render_portfolio_id=render_portfolio_id, as_of=as_of,
+            execution_population=execution_population)
 
     eligible, why, detail = adapter.check_eligibility(plan)
     body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail}
@@ -588,7 +633,8 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     try:
         payload = render(spec, result, semantics, frame, question=question,
                          portfolio_id=render_portfolio_id, as_of=as_of,
-                         requested=body["execution"].get("requested_semantics"))
+                         requested=body["execution"].get("requested_semantics"),
+                         execution_population=execution_population)
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
         return None, RENDER_FAILED
