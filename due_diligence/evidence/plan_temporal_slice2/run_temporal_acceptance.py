@@ -544,9 +544,23 @@ def main(argv: Optional[List[str]] = None) -> int:
                                 "pre_existing_records": len(rows)}
 
     # -- 3. the bank, once each ---------------------------------------------- #
+    # AUTH IS ESTABLISHED BY THE FIRST QUESTION, AND A REJECTION STOPS THE RUN.
+    #
+    # There is no free positive probe: `/mi/query` is the only endpoint that
+    # enforces the bearer, and a request it accepts has already bought its
+    # interpretation. A request it REJECTS costs nothing, which is what makes
+    # the first question a sound gate — and why the remaining five must not be
+    # asked after it. Retrying semantics against an unusable credential would
+    # turn one free rejection into five.
     ask = _live_asker(args.base_url, args.path, [], args.portfolio_id)
     for case in BANK:
         envelope = ask(case["question"])
+        if envelope.get("__http_status__") in (401, 403):
+            return stop("auth", "AUTH / NOT_EXECUTABLE",
+                        f"{case['case_id']} was rejected with HTTP "
+                        f"{envelope.get('__http_status__')}; the remaining "
+                        f"{len(BANK) - BANK.index(case) - 1} questions were "
+                        f"not asked")
         record, matched = (None, "not polled")
         if not envelope.get("__transport_error__"):
             record, matched = ra.poll_for(
@@ -588,6 +602,41 @@ def main(argv: Optional[List[str]] = None) -> int:
 # provenance: which build is serving, for nothing
 # --------------------------------------------------------------------------- #
 
+def live_catalogue(base_url: str, client_id: str) -> Tuple[List[str], str]:
+    """The reporting periods production is actually offering, by GET. Free.
+
+    `/mi/snapshots` is the catalogue the dropdowns are built from and the very
+    index `GovernedFundedSnapshotStore` reads, so this is the temporal runtime's
+    own source of periods rather than a second opinion about them. Reading it
+    before the bank turns `PRODUCTION_CATALOGUE` from an assumption into a
+    checked fact — and the bank's snapshot assertions are only as good as that
+    constant.
+    """
+    import json as _json
+    import urllib.request
+
+    try:
+        request = urllib.request.Request(
+            base_url.rstrip("/") + "/mi/snapshots", method="GET")
+        bearer = os.environ.get("MI_BEARER", "").strip()
+        if bearer:
+            request.add_header(
+                "Authorization", "Bearer " + bearer.removeprefix("Bearer ").strip())
+        with urllib.request.urlopen(request, timeout=30) as response:
+            index = _json.loads(response.read().decode("utf-8") or "{}")
+    except Exception as exc:                                         # noqa: BLE001
+        return [], f"{type(exc).__name__}: {exc}"[:200]
+
+    dates: List[str] = []
+    for portfolio in (index.get("portfolios") or ()):
+        if str(portfolio.get("client_id")) != str(client_id):
+            continue
+        for run in (portfolio.get("runs") or ()):
+            if run.get("reporting_date"):
+                dates.append(str(run["reporting_date"]))
+    return sorted(set(dates)), "read"
+
+
 def provenance_only(args: Any) -> int:
     """Confirm the served build and STOP. No question is asked.
 
@@ -625,6 +674,16 @@ def provenance_only(args: Any) -> int:
             print(f"SERVED_SHA   = {reads[-1][1]}")
             print(f"PROVENANCE   = CONFIRMED "
                   f"({len(reads)} reads, >= {args.stable_gap}s apart)")
+            client_id = args.portfolio_id.split("/", 1)[0]
+            dates, detail = live_catalogue(args.base_url, client_id)
+            print(f"LIVE_CATALOGUE = {dates}  ({detail})")
+            print(f"BANK_ASSUMES   = {list(PRODUCTION_CATALOGUE)}")
+            if dates and dates != sorted(PRODUCTION_CATALOGUE):
+                print("::error::the bank asserts periods production does not "
+                      "offer; its snapshot assertions would be wrong")
+                return 2
+            print("CATALOGUE = CONFIRMED" if dates
+                  else "CATALOGUE = UNREAD (assertions stand on the constant)")
             return 0
         time.sleep(min(5.0, args.stable_gap))
     print(f"::error::provenance: only {len(reads)} of {args.stable_reads} "
