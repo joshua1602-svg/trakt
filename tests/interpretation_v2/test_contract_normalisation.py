@@ -38,6 +38,8 @@ from mi_agent.interpretation_v2.compiler import (
     _MULTI_PERIOD_OPERATIONS,
 )
 from mi_agent.interpretation_v2.intent import parse_candidate_intent
+from mi_agent.interpretation_v2.metadata import metadata_tool_schemas
+from mi_agent.interpretation_v2.opus_interpreter import SYSTEM_PROMPT
 from mi_agent.interpretation_v2.normalise import (
     BOUNDED,
     CANONICAL_PAIR_FORM,
@@ -452,13 +454,32 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
     strength of the word "changed". So the file moves, and a file-name check
     alone would now say nothing. The substance is asserted instead: the
     model-facing orientation block may differ from the pre-correction one by the
-    ONE new key and by nothing else. A second key, a changed enumeration or a
-    reworded existing entry fails here.
+    AUTHORISED new keys and by nothing else. Another key, a changed enumeration
+    or a reworded existing entry fails here.
+
+    THE PROMPT AND THE TOOL SURFACE MOVED TOO, ONCE, AND THE SAME TREATMENT IS
+    APPLIED. The slice 3 portfolio affordance was instructed to make
+    `source_reference` a first-class model-facing concept and to give the model
+    read-only access to the client's governed source names, after a live
+    boundary run measured four named-portfolio questions that the affordance
+    could not express — the schema field carried no description, the prompt
+    never mentioned it, and `get_allowed_values` told the model in terms to
+    record a blocking ambiguity instead. A file-name check on those two files
+    would now say nothing either, so both are asserted on substance:
+
+      * the SYSTEM_PROMPT may differ from the measured one by exactly the three
+        amended paragraphs below and by nothing else. Every other paragraph — 23
+        of 26 — must still be present word for word. A reworded rule, a dropped
+        rule or an extra one fails here, and that is what mechanically enforces
+        "no general retuning of interpretation_v2";
+      * the metadata tool surface may gain `get_source_portfolios` and nothing
+        else, and every pre-existing tool schema must be byte-identical.
+
+    `outcomes.py` and `banks/` stay pinned by file name. Reason codes and frozen
+    question banks were not in scope and are not in scope now.
     """
     diff = subprocess.run(
         ["git", "diff", "--name-only", _START, "--",
-         "mi_agent/interpretation_v2/opus_interpreter.py",
-         "mi_agent/interpretation_v2/metadata.py",
          "mi_agent/interpretation_v2/outcomes.py",
          "mi_agent/interpretation_v2/banks"],
         cwd=_REPO_ROOT, capture_output=True, text=True)
@@ -466,6 +487,68 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
         pytest.skip("start commit not reachable in this checkout")
     changed = [line for line in diff.stdout.splitlines() if line.strip()]
     assert changed == [], f"outside this sprint's boundary: {changed}"
+
+    # -- the prompt: additive, and only where it was authorised to be -------- #
+    import re as _re
+
+    was_source = subprocess.run(
+        ["git", "show", f"{_START}:mi_agent/interpretation_v2/opus_interpreter.py"],
+        cwd=_REPO_ROOT, capture_output=True, text=True)
+    if was_source.returncode != 0:
+        pytest.skip("start commit not reachable in this checkout")
+    was_prompt = _re.search(r'SYSTEM_PROMPT\s*=\s*"""(.*?)"""',
+                            was_source.stdout, _re.S).group(1).replace("\\\n", "")
+
+    def _paragraphs(text):
+        return [_re.sub(r"\s+", " ", block).strip()
+                for block in text.split("\n\n") if block.strip()]
+
+    was_paras, now_paras = _paragraphs(was_prompt), _paragraphs(SYSTEM_PROMPT)
+    amended = [p for p in was_paras if p not in now_paras]
+    #: The three paragraphs the slice 3 affordance was authorised to amend: the
+    #: tool list (one tool added), the RULES block (rules 3a-i and 9 added), and
+    #: preservation check A (the named source portfolio added to what must never
+    #: be dropped). Identified by their opening words so this reads as intent
+    #: rather than as a hash nobody can check.
+    assert len(amended) == 3, (
+        f"{len(amended)} paragraphs of the measured prompt changed; three were "
+        f"authorised")
+    assert amended[0].startswith("* `search_concepts`")
+    assert amended[1].startswith("1. Name governed concept identifiers")
+    assert amended[2].startswith("A. PRESERVATION.")
+    assert len(now_paras) == len(was_paras), (
+        "the prompt gained or lost a paragraph; the three authorised changes "
+        "are all amendments to existing ones")
+
+    # -- the tool surface: one tool added, the rest untouched ---------------- #
+    was_metadata = subprocess.run(
+        ["git", "show", f"{_START}:mi_agent/interpretation_v2/metadata.py"],
+        cwd=_REPO_ROOT, capture_output=True, text=True)
+    if was_metadata.returncode != 0:
+        pytest.skip("start commit not reachable in this checkout")
+
+    import importlib.util as _ilu
+    import sys as _sys
+    import tempfile as _tf
+
+    with _tf.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "metadata_before.py"
+        path.write_text(was_metadata.stdout, encoding="utf-8")
+        spec = _ilu.spec_from_file_location(
+            "mi_agent.interpretation_v2.metadata_before", path)
+        module = _ilu.module_from_spec(spec)
+        _sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+            was_tools = {t["name"]: t for t in module.metadata_tool_schemas()}
+        finally:
+            _sys.modules.pop(spec.name, None)
+
+    now_tools = {t["name"]: t for t in metadata_tool_schemas()}
+    assert set(now_tools) - set(was_tools) == {"get_source_portfolios"}
+    assert set(was_tools) - set(now_tools) == set(), "a metadata tool was removed"
+    for name, schema in was_tools.items():
+        assert now_tools[name] == schema, f"the {name!r} tool schema was reworded"
 
     # The substantive half: what the model is SHOWN moved by exactly one key.
     before = subprocess.run(
@@ -493,9 +576,10 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
 
     now = vocabulary.orientation_payload()
     added = set(now) - set(was)
-    assert added == {"capability_boundaries"}, (
+    assert added == {"capability_boundaries", "portfolio_scope_axes"}, (
         f"the orientation block gained {sorted(added)}; slice 2 was authorised "
-        f"to add capability_boundaries and nothing else")
+        f"to add capability_boundaries and slice 3 portfolio_scope_axes, and "
+        f"nothing else")
     assert set(was) - set(now) == set(), "the orientation block lost a key"
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":

@@ -837,14 +837,56 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
             "population": {
                 "type": "object", "additionalProperties": False,
                 "properties": {
-                    "base": {"type": "string", "enum": sorted(POPULATION_BASES)},
-                    "lens": {"type": "string", "enum": sorted(POPULATION_LENSES)},
-                    "seasoning": {"type": "string", "enum": sorted(SEASONING_SEGMENTS)},
+                    "base": {
+                        "type": "string", "enum": sorted(POPULATION_BASES),
+                        "description":
+                            "WHICH POPULATION — where a loan is in its life. "
+                            "'funded' is already advanced and on the book, and "
+                            "is what a reader means by THE BACK BOOK, the "
+                            "existing book, the funded book. 'pipeline' is not "
+                            "yet funded, and is what a reader means by THE "
+                            "FRONT BOOK, new originations, new lending. "
+                            "'forecast' is projected; 'whole_book' spans "
+                            "funded and pipeline. Empty resolves to 'funded'."},
+                    "lens": {
+                        "type": "string", "enum": sorted(POPULATION_LENSES),
+                        "description":
+                            "The ORIGINATION ROLE within that population: "
+                            "'direct' was originated by the lender (also "
+                            "originated, organic, own origination), 'acquired' "
+                            "was purchased from another originator (also "
+                            "purchased, bought). A role, not a lifecycle stage "
+                            "and not any particular book's name. Empty means "
+                            "no role restriction."},
+                    "seasoning": {
+                        "type": "string", "enum": sorted(SEASONING_SEGMENTS),
+                        "description":
+                            "HOW SEASONED the loans are, by months on book. "
+                            "Use ONLY when the question contrasts recent "
+                            "lending with older lending ('recent originations "
+                            "versus older vintages', 'are seasoned loans "
+                            "riskier'). This is NOT the lifecycle axis: a "
+                            "question that simply names the back book or the "
+                            "front book is naming a POPULATION and belongs in "
+                            "'base'. Empty means no seasoning restriction."},
                     # A NAME, never an id or a path. The deterministic layer
                     # binds it against the client's governed registry and
                     # refuses what it cannot resolve.
-                    "source_reference": {"type": ["string", "null"],
-                                         "maxLength": _MAX_SOURCE_REFERENCE},
+                    "source_reference": {
+                        "type": ["string", "null"],
+                        "maxLength": _MAX_SOURCE_REFERENCE,
+                        "description":
+                            "WHICH BOOK by name, when the question names one. "
+                            "Call get_source_portfolios for the governed names "
+                            "this client declares, and put the reader's own "
+                            "phrase here verbatim — never an id, a path, a "
+                            "dataset or a run. The deterministic registry "
+                            "resolves the phrase and refuses what it cannot. "
+                            "A governed name is ATOMIC: the words inside it "
+                            "are part of the name, so do not also read them as "
+                            "a role, a seasoning or a filter. State another "
+                            "axis only when the reader asks for it outside the "
+                            "name."},
                 },
             },
             "measures": {"type": "array", "items": measure},

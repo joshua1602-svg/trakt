@@ -111,7 +111,9 @@ do not guess a concept identifier from memory. A normal sequence is:
   * `search_capabilities` / `get_capability_metadata` when the question asks
     for a named analysis rather than a figure;
   * `get_asset_metadata` and `get_portfolio_semantic_context` when the question
-    depends on what this environment actually is.
+    depends on what this environment actually is;
+  * `get_source_portfolios` when the question appears to name a particular book
+    rather than describe one.
 
 Retrieve what you need, then call `emit_candidate_intent` exactly once.
 
@@ -187,6 +189,13 @@ RULES
 3a. A filter value must come from `get_allowed_values`. If that reports \
    `has_governed_values: false`, do NOT assert a value against it: record it in \
    `ambiguity` with blocking=true instead. A value you cannot check is a guess.
+3a-i. ONE THING IS NAMED RATHER THAN FILTERED: a source portfolio. A book has \
+   an identity, not a value, so it does not go in `filters` and no value list \
+   governs it. Call `get_source_portfolios` for the names this client declares; \
+   if the question names one, put the reader's phrase verbatim in \
+   `population.source_reference` and the deterministic registry resolves it. \
+   Only a name matching none of them, or more than one, is a blocking \
+   ambiguity. Never author an identifier, a path, a dataset or a run.
 3b. A figure the question names as a GOAL goes in `target`, never in `filters`. \
    "When will we reach one hundred million?" is a milestone whose target is the \
    governed balance concept and the figure named; it does not narrow the \
@@ -215,14 +224,30 @@ RULES
    DID take, which is recorded alongside the answer. Most notes are \
    non-blocking; a careful reader flags something on nearly every sentence, and \
    that must not turn every question into a refusal to answer.
+9. PORTFOLIO SCOPE IS FOUR INDEPENDENT AXES, set out under \
+   `portfolio_scope_axes` in the standing context: which POPULATION a question \
+   is about (`population.base`), which ORIGINATION ROLE within it \
+   (`population.lens`), which BOOK BY NAME (`population.source_reference`), and \
+   how SEASONED the loans are (`population.seasoning`). That block, not this \
+   one, says which business words sit on which axis — read it before deciding, \
+   because a single phrase often states two axes at once and each then applies \
+   on its own terms. Two collapses must not happen. A phrase naming WHICH \
+   POPULATION a question is about is not a seasoning restriction: seasoning is \
+   for questions that contrast recent lending with older lending, and reading \
+   it into a population silently drops part of the book. And a governed source \
+   portfolio name is ATOMIC — the words inside a book's proper name are part of \
+   the name, not separate axes — so naming a book does not also assert a role, \
+   a seasoning or a filter. Add a second axis only where the reader asks for it \
+   OUTSIDE the name.
 
 BEFORE YOU SUBMIT
 
 Check these in order. Act on them; do not narrate them.
 
 A. PRESERVATION. Every material semantic element the question states \
-   EXPLICITLY — measure, statistic, weight, population or portfolio lens, \
-   filter, grouping or dimension, geography basis or level, temporal \
+   EXPLICITLY — measure, statistic, weight, population, portfolio lens or \
+   named source portfolio, filter, grouping or dimension, geography basis or \
+   level, temporal \
    relationship, comparison, target or threshold, analytical operation — is \
    either represented in the intent, or recorded as a blocking ambiguity \
    because you could not bind it confidently. An element the user named is \
@@ -538,10 +563,19 @@ class OpusInterpreter:
         #: then refuse, which is worse than showing the model nothing.
         self.metadata = metadata or GovernedMetadataService(self.vocabulary)
 
-    def interpret(self, question: str) -> InterpretationOutcome:
+    def interpret(self, question: str, *,
+                  source_registry: Any = None) -> InterpretationOutcome:
+        """One question -> one intent.
+
+        `source_registry` is THIS request's client's governed source portfolios.
+        It is passed per call and reaches only the per-call metadata service, so
+        an interpreter held open across clients never remembers one — the same
+        request-scoping the compiler already has, and for the same reason.
+        """
         system = build_system_blocks(self.vocabulary)
         user = build_user_prompt(question)
-        service = GovernedMetadataService(self.vocabulary)
+        service = GovernedMetadataService(self.vocabulary,
+                                          source_registry=source_registry)
         response = self.client.emit_intent(
             system=system, user=user, tool_schema=build_tool_schema(),
             tool_name=INTENT_TOOL_NAME,

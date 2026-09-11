@@ -39,6 +39,28 @@ from mi_agent.interpretation_v2.metadata import (
 from .conftest import ScriptedClient, intent_payload
 
 
+def _loaded_registry():
+    """A registry whose records carry the things that must NOT reach the model.
+
+    Row counts, reporting dates and an opaque id all sit on a `PortfolioRecord`
+    beside its name, so the named-source tool is one careless `to_dict()` away
+    from handing over a snapshot handle and a population size. This fixture
+    exists so the sweep below is pointed at a registry that HAS them.
+    """
+    from trakt_core.portfolio import PortfolioRecord, PortfolioRegistry
+
+    return PortfolioRegistry(client_id="ere_funding_uk", portfolios=(
+        PortfolioRecord(portfolio_id="alp_acquired", portfolio_type="acquired",
+                        label="ALP Acquired Back Book",
+                        aliases=("ALP back book",),
+                        reporting_dates=("2025-11-30", "2026-06-30"),
+                        row_count=4821),
+        PortfolioRecord(portfolio_id="alp_origination", portfolio_type="direct",
+                        label="ALP Originations",
+                        reporting_dates=("2026-06-30",), row_count=1290),
+    ))
+
+
 def _every_tool_result(vocabulary) -> list:
     """Everything the metadata surface can hand back, in one list.
 
@@ -47,9 +69,11 @@ def _every_tool_result(vocabulary) -> list:
     the two environment tools. If a portfolio value can reach the model at all,
     it is in here.
     """
-    service = GovernedMetadataService(vocabulary)
+    service = GovernedMetadataService(vocabulary,
+                                      source_registry=_loaded_registry())
     results = [service.get_asset_metadata(),
                service.get_portfolio_semantic_context(),
+               service.get_source_portfolios(),
                service.search_capabilities(limit=40),
                service.search_concepts("", limit=40)]
     for query in ("balance", "ltv", "region", "borrower", "stage", "product",
@@ -122,7 +146,10 @@ def test_every_metadata_tool_is_read_only(vocabulary):
     assert names == {"search_concepts", "get_concept_metadata",
                      "get_allowed_values", "search_capabilities",
                      "get_capability_metadata", "get_asset_metadata",
-                     "get_portfolio_semantic_context"}
+                     "get_portfolio_semantic_context",
+                     # Governed NAMES of this client's source portfolios. Reads
+                     # a registry the caller supplies; fetches nothing itself.
+                     "get_source_portfolios"}
     for tool in metadata_tool_schemas():
         blob = json.dumps(tool).lower()
         for verb in ("write", "update", "delete", "execute", "run_", "query_data",
@@ -154,13 +181,49 @@ def test_a_dataframe_can_never_reach_the_interpreter(vocabulary):
     import inspect
 
     signature = inspect.signature(OpusInterpreter.interpret)
-    assert list(signature.parameters) == ["self", "question"]
+    # `source_registry` is the ONE addition, it is KEYWORD-ONLY, and it takes a
+    # governed portfolio registry — configuration naming this client's books.
+    # Positional data is still impossible, which is what this test is for.
+    assert list(signature.parameters) == ["self", "question", "source_registry"]
+    assert (signature.parameters["source_registry"].kind
+            is inspect.Parameter.KEYWORD_ONLY)
 
     frame = pd.DataFrame({"current_outstanding_balance": [1_000_000.0]})
     client = ScriptedClient(intent_payload())
     interpreter = OpusInterpreter(client, vocabulary=vocabulary)
     with pytest.raises(TypeError):
         interpreter.interpret("total balance", frame)  # type: ignore[call-arg]
+
+
+def test_a_named_portfolio_reaches_the_model_as_a_name_and_nothing_else(vocabulary):
+    """The named-source tool hands over names. Not ids, counts or dates.
+
+    An id is the sharpest of the three: showing one invites the model to author
+    it, and an authored id bypasses the registry that decides whether a book
+    exists at all.
+    """
+    service = GovernedMetadataService(vocabulary,
+                                      source_registry=_loaded_registry())
+    result = service.get_source_portfolios()
+    assert result["available"] is True
+    assert [row["name"] for row in result["portfolios"]] == [
+        "ALP Acquired Back Book", "ALP Originations"]
+    assert result["portfolios"][0]["also_known_as"] == ["ALP back book"]
+
+    blob = json.dumps(result)
+    assert "alp_acquired" not in blob and "alp_origination" not in blob
+    assert "4821" not in blob and "1290" not in blob
+    assert not re.search(r"\b\d{4}-\d{2}-\d{2}\b", blob)
+    for row in result["portfolios"]:
+        assert set(row) <= {"name", "also_known_as", "origination_role"}
+
+
+def test_without_a_registry_no_portfolio_is_named(vocabulary):
+    """Fail-closed, and never another client's books."""
+    result = GovernedMetadataService(vocabulary).get_source_portfolios()
+    assert result["available"] is False
+    assert result["portfolios"] == []
+    assert "blocking ambiguity" in result["guidance"]
 
 
 def test_the_user_message_is_the_question_and_nothing_else():

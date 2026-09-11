@@ -195,12 +195,22 @@ def test_the_plan_schema_did_not_change():
     assert PLAN_SCHEMA_VERSION == "governed_query_plan/1.0"
 
 
-def test_the_metadata_tool_surface_did_not_change():
+def test_the_metadata_tool_surface_is_the_authorised_one():
+    """Seven retrieval tools, plus the one slice 3 was authorised to add.
+
+    `get_source_portfolios` hands over the governed NAMES of the client's source
+    portfolios and nothing else — no identifier, no row count, no date — from a
+    registry the caller supplies per request. It reads; it fetches nothing.
+    `test_the_interpreter_policy_did_not_move` is the guard that every OTHER
+    tool's schema is still byte-identical, and
+    `test_a_named_portfolio_reaches_the_model_as_a_name_and_nothing_else` is the
+    guard on what this one may return.
+    """
     names = [t["name"] for t in metadata_tool_schemas()]
     assert names == ["search_concepts", "get_concept_metadata",
                      "get_allowed_values", "search_capabilities",
                      "get_capability_metadata", "get_asset_metadata",
-                     "get_portfolio_semantic_context"]
+                     "get_portfolio_semantic_context", "get_source_portfolios"]
 
 
 def test_the_governed_registries_did_not_change():

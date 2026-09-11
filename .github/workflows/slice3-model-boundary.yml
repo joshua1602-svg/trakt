@@ -46,9 +46,10 @@ on:
     inputs:
       mode:
         description: >-
-          `live` asks the twelve questions, once each. Anything else (and the
-          push path, where inputs are empty) runs the offline dry run and calls
-          nothing.
+          `live` asks the twelve BOUNDARY questions, once each. `affordance`
+          asks the ten questions of the repaired-contract bank, once each.
+          Anything else (and the push path, where inputs are empty) runs both
+          offline dry runs and calls nothing.
         default: ''
         required: false
       expect_manifest_sha256:
@@ -105,27 +106,35 @@ jobs:
           set -euo pipefail
           python due_diligence/evidence/plan_scope_slice3/model_boundary_run.py \
             --dry-run --json-out slice3-model-boundary-dryrun.json
+          python due_diligence/evidence/plan_scope_slice3/affordance_run.py \
+            --dry-run --json-out slice3-affordance-dryrun.json
 
       - name: Confirm the bank is the one that was pinned
-        if: ${{ inputs.mode == 'live' && inputs.expect_manifest_sha256 != '' }}
+        if: >-
+          ${{ (inputs.mode == 'live' || inputs.mode == 'affordance')
+              && inputs.expect_manifest_sha256 != '' }}
         env:
           EXPECT: ${{ inputs.expect_manifest_sha256 }}
+          MODE: ${{ inputs.mode }}
         run: |
           set -euo pipefail
+          BANK=model_bank_manifest.sha256
+          if [ "$MODE" = "affordance" ]; then BANK=affordance_bank_manifest.sha256; fi
           FOUND="$(cut -d' ' -f1 \
-            due_diligence/evidence/plan_scope_slice3/model_bank_manifest.sha256)"
+            "due_diligence/evidence/plan_scope_slice3/$BANK")"
           if [ "$FOUND" != "$EXPECT" ]; then
             echo "::error::bank mismatch: checked out $FOUND, dispatch pinned $EXPECT"
             exit 1
           fi
-          echo "Bank $FOUND is the one that was pinned."
+          echo "Bank $FOUND ($BANK) is the one that was pinned."
 
       # The twelve live interpretations, one call per question, no retries.
       # The credential is selected inside this single step so it is never
       # written to GITHUB_ENV and never outlives the process that needs it.
-      - name: Ask the twelve questions
-        if: ${{ inputs.mode == 'live' }}
+      - name: Ask the bank
+        if: ${{ inputs.mode == 'live' || inputs.mode == 'affordance' }}
         env:
+          MODE: ${{ inputs.mode }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
           ANTHROPIC_API_TOKEN: ${{ secrets.ANTHROPIC_API_TOKEN }}
@@ -147,21 +156,33 @@ jobs:
           fi
           echo "Credential from repository secret ${NAME} (${#KEY} characters)."
           export ANTHROPIC_API_KEY="$KEY"
-          python due_diligence/evidence/plan_scope_slice3/model_boundary_run.py \
-            --json-out slice3-model-boundary-result.json
+          if [ "$MODE" = "affordance" ]; then
+            python due_diligence/evidence/plan_scope_slice3/affordance_run.py \
+              --json-out slice3-affordance-result.json
+          else
+            python due_diligence/evidence/plan_scope_slice3/model_boundary_run.py \
+              --json-out slice3-model-boundary-result.json
+          fi
 
       # Into the LOG as well as the artifact. The report holds the twelve
       # payloads the model returned and nothing else — no credential, no bearer,
       # no book data — and reading it should not require downloading anything.
       - name: Print the report
-        if: ${{ always() && inputs.mode == 'live' }}
+        if: >-
+          ${{ always() && (inputs.mode == 'live' || inputs.mode == 'affordance') }}
         run: |
           set -euo pipefail
-          if [ -f slice3-model-boundary-result.json ]; then
-            echo '--- BEGIN slice3-model-boundary-result.json ---'
-            cat slice3-model-boundary-result.json
-            echo '--- END slice3-model-boundary-result.json ---'
-          else
+          FOUND=0
+          for FILE in slice3-model-boundary-result.json \
+                      slice3-affordance-result.json; do
+            if [ -f "$FILE" ]; then
+              FOUND=1
+              echo "--- BEGIN $FILE ---"
+              cat "$FILE"
+              echo "--- END $FILE ---"
+            fi
+          done
+          if [ "$FOUND" = "0" ]; then
             echo "::warning::no result file was written; the run did not reach \
           the end of the bank"
           fi
@@ -174,4 +195,6 @@ jobs:
           path: |
             slice3-model-boundary-result.json
             slice3-model-boundary-dryrun.json
+            slice3-affordance-result.json
+            slice3-affordance-dryrun.json
           if-no-files-found: warn

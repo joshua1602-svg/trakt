@@ -191,7 +191,12 @@ def build_plan(question: str, *, source_registry: Any = None) -> Tuple[Any, Any]
     # question naming a portfolio is refused — which is the fail-closed state,
     # and the state every caller is in until the production seam supplies one.
     compiler = _compiler(source_registry)
-    outcome = _interpreter().interpret(question)
+    # THE SAME registry reaches BOTH halves. The compiler needs it to resolve a
+    # name; the interpreter needs it to know which names exist at all, because a
+    # model that cannot see a client's governed books can only guess at one or
+    # refuse. It is passed per call and never held: `_interpreter()` is cached
+    # across requests and across clients, and the registry must not be.
+    outcome = _interpreter().interpret(question, source_registry=source_registry)
     compiled = (compiler.compile(outcome.intent) if outcome.ok
                 else refuse(outcome.reason, compiler_version=compiler.version))
     return outcome, compiled

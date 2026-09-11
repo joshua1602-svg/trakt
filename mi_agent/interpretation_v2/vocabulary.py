@@ -43,12 +43,14 @@ from .metadata import (
 from .metadata import _load as _load_source
 from .metadata import _slug
 
-#: 2.1.0 adds the capability-boundary block and nothing else. The version moves
-#: because `PlanProvenance.vocabulary_version` records what the model was SHOWN,
-#: and an interpretation made against a different orientation block is not
-#: comparable with one made against this. Every run recorded before this change
-#: was made at 2.0.0 and says so.
-VOCABULARY_VERSION = "2.1.0"
+#: 2.1.0 added the capability-boundary block. 2.2.0 adds the portfolio-scope
+#: axes block and the seasoning concept boundary — the four scope axes stated as
+#: independent, and the rule that a governed source portfolio's name is atomic.
+#: The version moves because `PlanProvenance.vocabulary_version` records what the
+#: model was SHOWN, and an interpretation made against a different orientation
+#: block is not comparable with one made against this. Every run recorded before
+#: this change was made at 2.0.0 or 2.1.0 and says so.
+VOCABULARY_VERSION = "2.2.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -137,6 +139,123 @@ POPULATION_BASES: FrozenSet[str] = frozenset({"funded", "pipeline", "forecast",
                                               "whole_book"})
 POPULATION_LENSES: FrozenSet[str] = frozenset({"direct", "acquired", "all"})
 SEASONING_SEGMENTS: FrozenSet[str] = frozenset({"front_book", "back_book", "any"})
+
+#: PORTFOLIO SCOPE IS FOUR AXES, NOT ONE. Declared here for the same reason
+#: ``CAPABILITY_BOUNDARIES`` is: these are things whose NAMES do not separate
+#: them, and a reader's sentence routinely touches two at once. A book's own
+#: proper name may contain the words of two other axes ("... Acquired Back
+#: Book"), and "back book" means one thing said on its own and another thing
+#: said against "recent originations".
+#:
+#: Left deliberately out: the legal vehicle / SPV that OWNS a book. It is a real
+#: fifth axis and it is not governed yet, so it is not offered here — naming it
+#: would invite a scope nothing downstream can resolve. A source portfolio is
+#: NOT its SPV.
+#:
+#: Nothing here is client data. It is the shape of the vocabulary, and it holds
+#: for a book called "Portfolio Phoenix" exactly as for any other.
+PORTFOLIO_SCOPE_AXES: Mapping[str, Any] = {
+    "axes": [
+        {
+            "axis": "population lifecycle",
+            "slot": "population.base",
+            "asks": "WHICH POPULATION — where a loan is in its life.",
+            "values": {
+                "funded": "already advanced and on the book. This is what a "
+                          "reader means by THE BACK BOOK, the existing book, "
+                          "the funded book, loans already written.",
+                "pipeline": "applications not yet funded — business in "
+                            "progress. This is what a reader means by THE "
+                            "FRONT BOOK, new originations, new lending, the "
+                            "new origination book.",
+                "forecast": "projected forward, not yet real.",
+                "whole_book": "spanning funded and pipeline together.",
+            },
+        },
+        {
+            "axis": "origination role",
+            "slot": "population.lens",
+            "asks": "WHO originated it — a role held WITHIN a population, not "
+                    "a stage of life and not a particular book's name.",
+            "values": {
+                "direct": "originated by the lender itself. Also: originated, "
+                          "organically originated, own origination.",
+                "acquired": "purchased or acquired from another originator. "
+                            "Also: purchased, bought, acquired book.",
+                "all": "no role restriction. The default.",
+            },
+        },
+        {
+            "axis": "named source identity",
+            "slot": "population.source_reference",
+            "asks": "WHICH BOOK by name — a governed identity, not a role and "
+                    "not a lifecycle stage. A client may hold several acquired "
+                    "books, and naming one is not the same as asking for the "
+                    "acquired role.",
+            "values": {
+                "the reader's phrase": "call get_source_portfolios for the "
+                                       "governed names this client declares, "
+                                       "and put the reader's phrase here. "
+                                       "Never an id, a path or a dataset.",
+            },
+        },
+        {
+            "axis": "seasoning / vintage",
+            "slot": "population.seasoning",
+            "asks": "HOW SEASONED — how long loans have been on book. A "
+                    "property of loans inside a population, measured on months "
+                    "on book.",
+            "values": {
+                "front_book": "recently written, by months on book.",
+                "back_book": "seasoned, by months on book.",
+                "any": "no seasoning restriction. The default.",
+            },
+        },
+    ],
+    "these_are_independent": (
+        "Any combination may be stated and each applies on its own terms. "
+        "'The acquired back book' is the funded population (lifecycle) with the "
+        "acquired role (role) — it is NOT a seasoning restriction. 'The direct "
+        "book' is the direct role. 'The back book' on its own is the funded "
+        "population."
+    ),
+    "seasoning_is_not_the_lifecycle_axis": (
+        "Use population.seasoning ONLY when the question CONTRASTS how seasoned "
+        "loans are — 'recent originations versus older vintages', 'are older "
+        "loans riskier than the ones we wrote recently', 'seasoned loans', "
+        "'months on book'. A question that simply names the back book or the "
+        "front book is naming a POPULATION, and belongs in population.base. "
+        "Reading a bare 'back book' as a seasoning restriction silently drops "
+        "part of the funded book from the answer."
+    ),
+    "a_governed_name_is_atomic": (
+        "Once a phrase matches a governed source portfolio name or an approved "
+        "alias, the WHOLE phrase is that book's identity and the words inside "
+        "it are part of its name. Do NOT also read those words as other axes: a "
+        "book called 'X Acquired Back Book' does not by itself imply the "
+        "acquired role or a back-book seasoning, any more than a person called "
+        "Baker is a baker. Put the phrase in population.source_reference and "
+        "stop — the identity alone is sufficient, and the deterministic "
+        "registry resolves it. Add another axis ONLY when the reader asks for "
+        "it OUTSIDE the name: 'the acquired loans in X Acquired Back Book' "
+        "states the role separately, 'drawdown loans in X Acquired Back Book' "
+        "states a filter separately."
+    ),
+}
+
+#: Concepts whose NAME invites a reading the governed model does not support.
+#: Surfaced on the concept's own metadata so the correction arrives at the
+#: moment the model looks the concept up, rather than only in the standing
+#: context it read many tool calls earlier.
+CONCEPT_BOUNDARIES: Mapping[str, str] = {
+    "seasoning_segment": (
+        "This is the VINTAGE axis — how long a loan has been on book. It is NOT "
+        "the funded/pipeline lifecycle axis and NOT direct/acquired provenance. "
+        "A question naming 'the back book' or 'the front book' as the "
+        "population it is about is naming population.base (funded / pipeline); "
+        "use this concept when the question contrasts how SEASONED loans are."
+    ),
+}
 
 #: A comparison names two POPULATIONS or two DIMENSION VALUES held against each
 #: other. It deliberately has no `period_pair` member: ``operation: movement``
@@ -356,6 +475,9 @@ class SemanticConcept:
         if self.is_specialist:
             view["note"] = ("Owned by a capability. Name it; do not impose a "
                             "statistic or weight and do not decompose it.")
+        boundary = CONCEPT_BOUNDARIES.get(self.concept_id)
+        if boundary:
+            view["axis_boundary"] = boundary
         return view
 
 
@@ -474,6 +596,10 @@ class GovernedVocabulary:
             "population_bases": sorted(POPULATION_BASES),
             "population_lenses": sorted(POPULATION_LENSES),
             "seasoning_segments": sorted(SEASONING_SEGMENTS),
+            # The four enums above are TOKENS. This says what they MEAN and
+            # which of them a reader's sentence is actually on — the same
+            # service `capability_boundaries` performs for the capability names.
+            "portfolio_scope_axes": dict(PORTFOLIO_SCOPE_AXES),
             "comparison_kinds": sorted(COMPARISON_KINDS),
             "governed_defaults": dict(GOVERNED_DEFAULTS),
             "concept_counts": {

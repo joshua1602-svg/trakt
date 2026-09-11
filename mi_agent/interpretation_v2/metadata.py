@@ -47,7 +47,8 @@ import re
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import (Any, Dict, FrozenSet, Iterable, List, Mapping, Optional,
+                    Sequence, Tuple)
 
 import yaml
 
@@ -364,9 +365,18 @@ def applies_to_asset_class(applicability: Sequence[str], asset_class: str) -> bo
 # --------------------------------------------------------------------------- #
 
 #: Metadata tools only. Nothing here reads a tape, runs an engine, or writes.
+#: Concepts that IDENTIFY a source portfolio rather than describe a loan. A
+#: value for one of these is a book's name, and names are governed by the
+#: client's portfolio registry rather than by a value list on the concept.
+_SOURCE_IDENTITY_CONCEPTS: FrozenSet[str] = frozenset({
+    "source_portfolio_id", "source_portfolio_label", "portfolio_cohort",
+    "originator_name", "seller_name",
+})
+
 TOOL_NAMES = ("search_concepts", "get_concept_metadata", "get_allowed_values",
               "search_capabilities", "get_capability_metadata",
-              "get_asset_metadata", "get_portfolio_semantic_context")
+              "get_asset_metadata", "get_portfolio_semantic_context",
+              "get_source_portfolios")
 
 
 def metadata_tool_schemas() -> List[Dict[str, Any]]:
@@ -462,6 +472,19 @@ def metadata_tool_schemas() -> List[Dict[str, Any]]:
             "input_schema": {"type": "object", "additionalProperties": False,
                              "properties": {}},
         },
+        {
+            "name": "get_source_portfolios",
+            "description": (
+                "The governed NAMES of this client's source portfolios — the "
+                "canonical label and any approved aliases, with each book's "
+                "origination role. Call it whenever a question appears to name "
+                "a particular book rather than describing one, and put the "
+                "reader's phrase in `population.source_reference`. Names only: "
+                "no identifier is shown and none may be authored. "
+                "Configuration, never loan data."),
+            "input_schema": {"type": "object", "additionalProperties": False,
+                             "properties": {}},
+        },
     ]
 
 
@@ -486,8 +509,15 @@ class GovernedMetadataService:
 
     version = METADATA_VERSION
 
-    def __init__(self, vocabulary) -> None:
+    def __init__(self, vocabulary, *, source_registry: Any = None) -> None:
         self.vocabulary = vocabulary
+        #: THIS REQUEST'S CLIENT's governed source portfolios, or None. Passed
+        #: per call and never cached on the service, for the same reason the
+        #: compiler takes it per request: a registry belongs to ONE client, and
+        #: an interpreter held open across clients that remembered one would be
+        #: a cross-client leak. `OpusInterpreter.interpret` builds a fresh
+        #: service for every question, so this cannot outlive the request.
+        self.source_registry = source_registry
         self.calls: List[ToolCallRecord] = []
 
     # -- dispatch ----------------------------------------------------------- #
@@ -502,6 +532,7 @@ class GovernedMetadataService:
             "get_capability_metadata": self.get_capability_metadata,
             "get_asset_metadata": self.get_asset_metadata,
             "get_portfolio_semantic_context": self.get_portfolio_semantic_context,
+            "get_source_portfolios": self.get_source_portfolios,
         }.get(name)
         if handler is None:
             return {"error": f"unknown metadata tool {name!r}",
@@ -564,13 +595,29 @@ class GovernedMetadataService:
                     "has_governed_values": True,
                     "values": list(concept.values),
                     "source": concept.values_source}
-        return {
+        row = {
             "concept_id": concept.concept_id, "found": True,
             "has_governed_values": False,
             "guidance": ("Trakt governs no value list for this concept. Do NOT "
                          "assert a filter value against it — record it in "
                          "`ambiguity` with blocking=true instead."),
         }
+        # THE ONE EXCEPTION, and it is not a loophole. A source portfolio is
+        # named, not filtered: the reader's phrase goes in
+        # `population.source_reference` and a request-scoped registry resolves
+        # it, refusing what it cannot. Without this the rule above is read as
+        # "a named book can never be asked for", which is how a governed,
+        # resolvable name became a blocking ambiguity in the live boundary run.
+        if concept.concept_id in _SOURCE_IDENTITY_CONCEPTS:
+            row["guidance"] += (
+                " This concept is a SOURCE PORTFOLIO IDENTITY, and there is a "
+                "governed route for it that is not a filter: call "
+                "get_source_portfolios for the names this client declares, and "
+                "if the question names one, put the reader's phrase in "
+                "`population.source_reference`. Only a name that matches no "
+                "governed portfolio is a blocking ambiguity.")
+            row["named_portfolio_route"] = "population.source_reference"
+        return row
 
     # -- capabilities ------------------------------------------------------- #
 
@@ -655,7 +702,61 @@ class GovernedMetadataService:
         context = dict(portfolio_semantic_context())
         context["registered_intent_capabilities"] = sorted(
             self.vocabulary.capabilities)
+        context["named_source_portfolios_available"] = bool(self.source_registry)
         return context
+
+    def get_source_portfolios(self) -> Dict[str, Any]:
+        """The governed NAMES of this client's source portfolios. Names only.
+
+        WHY NAMES AND NOT IDS. A production id is an opaque client string that
+        nobody says out loud, and showing one invites the model to author it —
+        which is the single thing the named-source axis forbids, because an
+        authored id bypasses the registry that decides whether a book exists.
+        The model states the reader's phrase; resolving a phrase to an id is the
+        deterministic layer's job and is measured there.
+
+        CLIENT SCOPE IS STRUCTURAL. A registry is built for ONE client and is
+        passed in per request, so there is no argument by which another client's
+        portfolios could appear here. With no registry the honest answer is that
+        none are available — never a guess, and never another client's.
+
+        This is configuration, not data: a name, a role and whether the book
+        writes new business. No balances, no row counts, no dates.
+        """
+        registry = self.source_registry
+        if not registry:
+            return {
+                "available": False,
+                "portfolios": [],
+                "guidance": ("No governed source portfolio registry is "
+                             "available for this request, so no book can be "
+                             "named. If the question names one, record a "
+                             "blocking ambiguity rather than guessing."),
+            }
+        rows: List[Dict[str, Any]] = []
+        for record in registry:
+            name = getattr(record, "display_label", None) or ""
+            aliases = [str(a) for a in (getattr(record, "aliases", ()) or ())]
+            row: Dict[str, Any] = {"name": str(name)}
+            if aliases:
+                row["also_known_as"] = aliases
+            role = getattr(record, "portfolio_type", None)
+            if role:
+                row["origination_role"] = str(role)
+            rows.append(row)
+        return {
+            "available": True,
+            "portfolios": rows,
+            "guidance": ("If the question names one of these books, put the "
+                         "reader's phrase verbatim in "
+                         "`population.source_reference` and treat the matched "
+                         "name as ATOMIC — the words inside it are part of the "
+                         "name, not separate axes. A name that matches none of "
+                         "these, or more than one, is a blocking ambiguity. "
+                         "`origination_role` is shown so you can see that a "
+                         "role and an identity are different axes; naming a "
+                         "book does NOT also require stating its role."),
+        }
 
 
 def _match_score(needle: str, concept) -> int:
