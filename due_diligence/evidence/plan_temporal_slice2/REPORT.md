@@ -959,3 +959,112 @@ Offline only. Nothing is deployed, nothing is served, no flag was added, and
 `mi_service` has no call site for any of this — `plan_temporal_runtime` is
 reachable only from a test or from this harness. Production canary and Slice 3
 were not started.
+
+---
+
+## PRODUCTION ACCEPTANCE TOOLING
+
+Built after the snapshot-store binding, and separately authorised. It changes no
+product file and asks production nothing until an operator dispatches it.
+
+### Why a new script was needed
+
+Neither existing harness can adjudicate a temporal answer, and neither was
+altered:
+
+| harness | why it cannot do this |
+|---|---|
+| `slice1b_serving_canary/run_serving_acceptance.py` | reads `serving.decision` correctly, but its bank is `[c for c in manifest["cases"] if c["expected_slice1_eligible"]][:6]` from a **sha256-pinned slice 1 manifest** with no bank parameter. It cannot ask a temporal question, and swapping the manifest would break the integrity gate that is the point of pinning it. |
+| `mi_api_certification/time_dimension_acceptance.py` | asks a different fixed matrix and contains **zero** references to `serving` or `snapshot`, so it can tell neither NEW from LEGACY nor which periods were selected. |
+
+Neither reconciles a per-period value, a grouped cell or a comparison against
+the execution receipt.
+
+### What the new script adds, and only this
+
+The six-question bank and the *reading* of a temporal answer. Everything else is
+imported from machinery already accepted in this estate:
+
+```
+transport / MI_BEARER    certify_mi_api._live_asker
+zero-cost provenance     run_serving_acceptance.served_commit  (GET /health)
+HTTP figure extraction   run_serving_acceptance.response_figures  (pinned to)
+Kudu evidence sink       run_acceptance.Sink
+correlation-aware poll   run_acceptance.poll_for
+publish-profile creds    run_acceptance.publish_profile_credentials
+model-id gate            run_acceptance.is_required_model
+secret hygiene           run_acceptance.scrub / _save / MIN_SECRET_LENGTH
+```
+
+`certify_mi_api.preflight` was deliberately **not** reused: it POSTs *"What is
+the total balance?"*, which against a switched-on canary costs a live Opus
+interpretation. Provenance must cost nothing, so it is established by `GET
+/health` and a mismatch stops the run with zero questions asked.
+
+### The execution receipt is the numeric oracle
+
+No portfolio figure is written down. Each case asserts that what the **caller
+received** equals what the deterministic runtime **recorded having computed**,
+period by period and cell by cell. A harness carrying its own expected balances
+would go stale the moment the book moved and would be testing its own memory
+rather than the service.
+
+### Two offline modes, neither of which calls anything
+
+`--self-test` — 32 rules, stdlib only (no pandas, no `mi_agent`), so it runs on
+a bare runner. Every reconciliation is proved twice: that it accepts a faithful
+response *and* that it **catches** its own failure — a drifted figure, a dropped
+period, a period the runtime never executed, a wrong grouped cell, a dropped
+cell, a change the comparison's own two values do not imply, a wrong percentage,
+a shortened series on the negative control. It also pins the restated
+`value_column` rule against `plan_runtime_adapter`'s source, so the harness
+cannot silently drift from the adapter that owns that naming.
+
+`--shape-check` — drives the **real** `plan_serving_canary.serve` offline
+(recorded Opus payloads, replayed through the sanctioned `set_interpreter_factory`
+seam) and feeds the records and envelopes the *product* writes through this
+file's own adjudicator. It answers the one question a synthetic self-test
+cannot: whether the harness reads the shape the product actually emits.
+
+```
+PASS T06  series      decision=NEW             periods=8 rows=8  reconciled=8
+PASS T07  grouped     decision=NEW             periods=8 rows=40 reconciled=40
+PASS T11  comparison  decision=NEW             periods=2 rows=2  reconciled=4
+PASS T13  negative    decision=LEGACY_FALLBACK periods=0 rows=0  reconciled=0
+4/4 kinds adjudicated against records the product wrote
+```
+
+Two defects were found this way and fixed before any live use:
+
+1. **Rows counted twice.** `response_figures` returns *copies* of the artefact
+   rows, so merging its output with a sweep of the artefacts could not tell its
+   rows from the originals and doubled every period. `http_rows` now sweeps the
+   artefacts once and is pinned to `response_figures` by a self-test rule
+   asserting the two agree on a single-grid envelope.
+2. **The negative control failed for the wrong reason.** It treated *any*
+   dated rows in the response as a defect. Once the decision is a fallback the
+   caller is holding the **legacy** answer, and whether that path ships dated
+   rows of its own is not a slice 2 property and was not changed by slice 2 —
+   failing on them would report a legacy behaviour as a temporal defect. The
+   row check is now gated on the decision being NEW; the control still turns on
+   the two facts that decide it (not served, and no period executed).
+
+### The push trigger asks nothing
+
+`slice1b-serving-acceptance.yml` uses a self-scoped `push` trigger because a
+dispatchable workflow must be registered on the default branch before the API
+will accept a dispatch. The same device is used here — but this push path runs
+the **offline self-test only**. Slice 2 is not deployed and the canary is off,
+so asking the bank now would spend six live Opus interpretations to prove that
+the legacy path still serves: a guaranteed and meaningless FAIL. The live bank
+requires an explicit dispatch with `mode: bank`, a deliberate operator act taken
+after the deployment and the canary are both in place. A bank run without a
+pinned `expect_commit` is refused before the first question.
+
+```
+SLICE_2_ACCEPTANCE_TOOL_READY = YES
+PRODUCT_FILES_CHANGED = 0
+```
+
+Nothing was deployed, `MI_AGENT_PLAN_SERVE` was not enabled, Opus was not
+called, Slice 2 was not modified and Slice 3 was not started.
