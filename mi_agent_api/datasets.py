@@ -740,6 +740,54 @@ def _stamp_book_columns(frame, book_df) -> None:
         pass
 
 
+def snapshot_index() -> Dict[str, Any]:
+    """Which funded reporting runs exist, per client. THE catalogue.
+
+    This is the index the portfolio / reporting-date dropdowns are built from,
+    the one `/mi/snapshots` serves, the one the evolution surfaces build their
+    periods from, and — as of the slice 2 binding — the one the governed
+    temporal runtime resolves snapshots against. One owner, so those surfaces
+    cannot disagree about which months a book has.
+
+    The ORDER was previously written out inside the `/mi/snapshots` route, which
+    made the route the only place that knew it. It is unchanged, only moved:
+
+        a ``blob://`` root   the dated platform canonicals (one run per cut)
+        an on-disk root      the onboarding central-tape walk
+        either, if empty     the loaded platform canonical (latest)
+
+    Never raises: discovery faults yield an empty index, which every caller
+    treats as "no history", never as "the current frame will do".
+    """
+    root = _onboarding_output_root()
+    if root and platform_blob_mod.is_blob_root(root):
+        index = _blob_platform_index(root)
+        if index and index.get("portfolios"):
+            return index
+        platform = _platform_snapshot_index()
+        if platform is not None:
+            return platform
+        return {"portfolios": [], "source": root}
+    if root:
+        try:
+            result = snapshots_mod.discover_snapshots(root)
+        except Exception as exc:  # noqa: BLE001 - discovery must never 500
+            logger.warning("snapshot discovery failed: %s", exc)
+            return {"portfolios": [], "source": "error", "error": str(exc)}
+        if result.get("portfolios"):
+            result["source"] = root
+            return result
+        platform = _platform_snapshot_index()
+        if platform is not None:
+            return platform
+        result["source"] = root
+        return result
+    platform = _platform_snapshot_index()
+    if platform is not None:
+        return platform
+    return {"portfolios": [], "source": "unavailable"}
+
+
 def _resolve_query_frame(view: str, portfolio_id: Optional[str]):
     """``(df, error)`` for a tab-aware query. Funded keeps the existing active
     dataset (unchanged); pipeline / forecast resolve the governed pipeline (and,

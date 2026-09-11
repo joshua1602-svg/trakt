@@ -123,6 +123,7 @@ from .datasets import (  # noqa: F401  (re-exported for backward compatibility)
     _resolve_pipeline_uri_local,
     _resolve_query_frame,
     _resolve_run_dataframe,
+    snapshot_index,
     _scan_any_date_column,
     _weekly_files_window,
 )
@@ -717,41 +718,14 @@ def snapshots() -> Dict[str, Any]:
     """Data-driven discovery of available funded portfolios and reporting runs.
 
     The portfolio / reporting-date dropdowns are built from THIS — only real
-    output appears (no hardcoded prototype options). A ``blob://`` onboarding
-    output root enumerates the dated platform canonicals (one run per funded cut);
-    an on-disk root uses the onboarding-tape walk; and either way, when nothing is
-    discovered, it falls back to the loaded platform canonical (latest).
+    output appears (no hardcoded prototype options).
+
+    The resolution order moved to `datasets.snapshot_index`, unchanged, when the
+    governed temporal runtime needed the same catalogue: two copies of it could
+    disagree about which months a book has, and a dropdown that offers a month
+    the temporal runtime cannot resolve is exactly that disagreement.
     """
-    root = _onboarding_output_root()
-    if root and platform_blob_mod.is_blob_root(root):
-        idx = _blob_platform_index(root)
-        if idx and idx.get("portfolios"):
-            return idx
-        # Nothing dated under the blob root → the loaded latest canonical.
-        platform = _platform_snapshot_index()
-        if platform is not None:
-            return platform
-        return {"portfolios": [], "source": root}
-    if root:
-        try:
-            result = snapshots_mod.discover_snapshots(root)
-        except Exception as exc:  # noqa: BLE001 - discovery must never 500
-            logger.warning("snapshot discovery failed: %s", exc)
-            return {"portfolios": [], "source": "error", "error": str(exc)}
-        if result.get("portfolios"):
-            result["source"] = root
-            return result
-        # On-disk root discovered nothing → loaded platform canonical, if any.
-        platform = _platform_snapshot_index()
-        if platform is not None:
-            return platform
-        result["source"] = root
-        return result
-    # No on-disk root: derive portfolios from the loaded platform canonical.
-    platform = _platform_snapshot_index()
-    if platform is not None:
-        return platform
-    return {"portfolios": [], "source": "unavailable"}
+    return snapshot_index()
 
 
 @app.get("/mi/snapshot")

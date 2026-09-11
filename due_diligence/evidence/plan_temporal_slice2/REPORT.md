@@ -756,6 +756,159 @@ SLICE_2_SERVING_INTEGRATION_OFFLINE = PASS
 
 ---
 
+## SLICE 2 PRODUCTION SNAPSHOT-STORE BINDING
+
+The blocker named at the end of the serving integration — `serve()` takes a
+`snapshot_store` and `mi_service` supplied none — is closed. This is dependency
+wiring: no new catalogue, no new dates, no new setting.
+
+### Phase 1 — the trace
+
+```
+PRODUCTION_FRAME_OWNER      = mi_agent_api/datasets.py
+                              _resolve_query_frame  (the active/latest frame)
+                              _resolve_run_dataframe (one dated run; blob + on-disk)
+PRODUCTION_CATALOGUE_OWNER  = the index {portfolios:[{client_id, label,
+                              runs:[{run_id, reporting_date, loan_count, …}]}]}
+AVAILABLE_SNAPSHOT_SOURCE   = blob dated platform canonicals
+                              -> on-disk onboarding central tapes
+                              -> the loaded platform canonical
+SNAPSHOT_IDENTITY           = client_id/run_id — the existing production
+                              portfolioId form; reporting_date is the period
+SNAPSHOT_STORE_BINDING_SEAM = mi_service -> serve(snapshot_store=…)
+```
+
+Production **does** have an authoritative catalogue, so the stop condition did
+not trigger. That index is what `/mi/snapshots` serves, what the portfolio and
+reporting-date dropdowns are built from, what `evolution.py` builds its periods
+from and what `_resolve_run_dataframe` loads a dated run against. It is real and
+it is already trusted; inventing a second list of a book's months would have been
+the defect.
+
+**One thing had to move.** The three sources all live in `datasets.py`, but the
+resolution ORDER between them lived only inside the `/mi/snapshots` route, so
+consuming it from anywhere else meant either importing a route or writing the
+order out twice. It is extracted verbatim to `datasets.snapshot_index()` and the
+route now delegates. That is a reduction in owners, not an addition: a dropdown
+that offers a month the temporal runtime cannot resolve is precisely the
+disagreement two copies would produce.
+
+### What was built
+
+```
+FILES_CHANGED              = 4 product (1 new), 1 test (new), 2 evidence (1 new)
+PRODUCT_NET_EXECUTABLE_LOC = +136
+    mi_agent_api/governed_snapshot_store.py  +129   NEW — the adapter
+    mi_agent_api/datasets.py                  +28   snapshot_index(), extracted
+    mi_agent_api/app.py                       −25   the route delegates
+    mi_agent_api/mi_service.py                 +4   the binding
+
+NEW_CATALOGUE_CREATED = NO
+NEW_ENV_VAR_ADDED     = NO
+HARDCODED_SNAPSHOTS   = 0
+```
+
+`GovernedFundedSnapshotStore` implements the four `SnapshotStore` primitives over
+the production catalogue and the production dated-run loader, injected rather
+than imported so it can be exercised against a production-shaped index. It
+contains no reporting date, no environment read and no directory walk of its own
+— a test asserts all three off the AST. Blob and onboarding-root knowledge stays
+in `datasets.py` where it already was; `plan_temporal_runtime` and
+`SnapshotSelector` learn nothing about storage and are byte-unchanged.
+
+### Scope is a property of the object — found by its own control
+
+A store built for a request is **bound** to that request's client. Any other
+client is refused by `list_snapshots`, `get_snapshot` and therefore `load_loans`,
+whatever id a caller supplies.
+
+That was not the first design. `get_snapshot` derived the client from the
+snapshot ID and then listed that client's runs, so a store built for one tenant
+would resolve and load another tenant's run if simply handed its id. Nothing on
+the temporal path does that — the runtime only ever asks for the request's own
+client — but "no caller happens to do it" is not a boundary, and the
+cross-portfolio control is what found it. Both the binding and the hole it closed
+are asserted in
+`mi_agent_api/tests/test_governed_snapshot_store.py`.
+
+### Approval semantics were not invented
+
+The catalogue records `run_id`, `reporting_date` and size per run and carries
+**no per-run approval or status field**; `evaluate_source_approval` governs the
+ACTIVE source, not each historical run. So the adapter applies the scoping that
+exists — client, funded route, a resolvable reporting date — and nothing else.
+A run the catalogue does not list is not selectable, and that is the only
+approval semantics the estate keeps today. Adding more would be new onboarding
+governance, which this task was told not to build.
+
+### Proved through `serve`, against a production-shaped catalogue
+
+`temporal_production_binding.py` builds the exact index contract
+`snapshot_index` returns, over the independent oracle's history, **with two
+clients in it** — a binding that scopes correctly against a single-client index
+has proved nothing about scoping.
+
+```
+CURRENT_SLICE1_CONTROL     = PASS  a current-period plan never reaches the
+                                   temporal runtime; its figure is unchanged
+TEMPORAL_SERIES_CONTROL    = PASS  6 snapshots, values reconciled
+FILTERED_TEMPORAL_CONTROL  = PASS  8 snapshots, predicate applied on every one
+GROUPED_TEMPORAL_CONTROL   = PASS  8 snapshots, 40 cells reconciled
+UNAVAILABLE_PERIOD_CONTROL = PASS  TEMPORAL_NOT_RESOLVED, zero points produced
+CROSS_PORTFOLIO_CONTROL    = PASS  another client, the pipeline route and an
+                                   unlisted run are all unreachable
+NO_CATALOGUE_CONTROL       = PASS  slice 1 keeps working; slice 2 fabricates
+                                   nothing from an empty index
+NO_STORE_CONTROL           = PASS  TEMPORAL_STORE_UNAVAILABLE — production today
+
+SERIES_VALUES_RECONCILED  = 14
+GROUPED_CELLS_RECONCILED  = 40
+SNAPSHOT_SELECTION_ERRORS = 0
+SILENT_PERIOD_SUBSTITUTIONS = 0
+```
+
+Figures are read off the **final API payload**, not the runtime's return value.
+
+### Regression
+
+```
+SLICE_1_REGRESSIONS_ATTRIBUTABLE = 0
+```
+
+186 tests across the serving canary, the adapter, the temporal runtime and the
+shadow wiring. Slice 2's offline acceptance is 31/31 and the serving integration
+is 11/11. On the API side, the whole `mi_agent_api` suite was run at
+`13ccac54` and with the binding: the failing node-id set is **identical**, 62
+entries either way, and every one is a missing optional dependency (`rapidfuzz`,
+`jwt`) rather than a behaviour. `test_snapshots.py` and `test_mi_service.py`
+pass — 38 tests over the route and the service this change touched.
+
+```
+INTERPRETATION_V2_CHANGED  = NO
+COMPILER_CHANGED           = NO
+TEMPORAL_RUNTIME_CHANGED   = NO   (plan_temporal_runtime.py byte-unchanged)
+SNAPSHOT_SELECTOR_CHANGED  = NO   (states/selectors.py, snapshot/store.py unchanged)
+LIVE_OPUS_CALLS            = 0
+
+SLICE_2_PRODUCTION_SNAPSHOT_BINDING = PASS
+```
+
+### What is still true about deployment
+
+Nothing was deployed and no flag was changed. `MI_AGENT_PLAN_SERVE` still
+defaults off and the principal allow-list is still empty, so the temporal path
+remains unreachable in production until someone deliberately enables the canary
+for a named principal. What has changed is that the catalogue is no longer the
+thing standing in the way.
+
+The proof runs against a production-**shaped** catalogue, not a production one:
+this environment has no blob root and no onboarding output, so what is
+demonstrated is the adapter's reading of the contract, not a live storage
+round-trip. That is the remaining gap, and it is a deployment-environment
+question rather than a code one.
+
+---
+
 ## KNOWN BOUNDARY: TIME × GEOGRAPHY IS INELIGIBLE
 
 "Show funded balance by region over the last three months" is listed as an

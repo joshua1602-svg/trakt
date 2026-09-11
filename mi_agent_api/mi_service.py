@@ -2092,11 +2092,22 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
     # exactly as the legacy path built it.
     from mi_agent import plan_serving_canary as _plan_serving
     if _plan_serving.handles(context):
+        # THE GOVERNED CATALOGUE, PASSED IN — the same shape as `frame` and
+        # `semantics`, which this call site has always supplied. A temporal plan
+        # resolves its snapshots against the catalogue production already owns
+        # (`datasets.snapshot_index`, the one `/mi/snapshots` and the dropdowns
+        # are built from), scoped to THIS client; `build_store` returns None on
+        # any fault, and None means the temporal path is unavailable and the
+        # legacy envelope serves. A slice 1 request never reads any of this.
+        from mi_agent_api import governed_snapshot_store as _snapshot_store
         served = _plan_serving.serve(
             question=req.question, context=context, client_id=client_id,
             run_id=run_id, legacy_result=result, frame=df, semantics=semantics,
             view=view, portfolio_id=authorised.portfolio_id,
-            render_portfolio_id=portfolio_id, as_of=req.as_of_date)
+            render_portfolio_id=portfolio_id, as_of=req.as_of_date,
+            snapshot_store=_snapshot_store.build_store(ds, client_id),
+            snapshot_client_id=client_id,
+            snapshot_route=_snapshot_store.FUNDED_ROUTE)
         if served is not None:
             result = served
     else:
