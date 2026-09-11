@@ -137,6 +137,19 @@ def main() -> int:
     reached, authorised, commit = preflight(
         args.base_url, args.path, [], args.portfolio_id)
 
+    # THE DEPLOYED BUILD IS ESTABLISHABLE WITHOUT A CREDENTIAL, and it must be.
+    # `preflight` asks a QUESTION first and returns early on 401 — so an expired
+    # `MI_BEARER` reported the build as NOT ESTABLISHED even though `/health` is
+    # in the API's OPEN_PATHS allowlist and answers unauthenticated. That
+    # conflated two independent facts: WHICH BUILD IS SERVING (a deployment
+    # fact) and WHETHER WE MAY ASK IT ANYTHING (a credential fact). Reading
+    # /health directly keeps them apart, so a stale token can no longer hide a
+    # deployment that did or did not land.
+    health = _get_json(args.base_url, "/health")
+    served = str(((health.get("build") or {}).get("commit") or "")).strip() or None
+    if served and not commit:
+        commit = served
+
     print("=" * 74)
     print("BORROWING BASE — LIVE ACCEPTANCE")
     print(f"target      : {args.base_url.rstrip('/')}{args.path}")
@@ -146,9 +159,53 @@ def main() -> int:
     print(f"deployed    : {commit or 'NOT ESTABLISHED'}")
     print(f"expected    : {args.expect_commit or '(not supplied)'}")
     match = bool(commit and args.expect_commit and commit == args.expect_commit)
+    print(f"served      : {served or 'NOT ESTABLISHED'}  "
+          f"(GET /health, unauthenticated — open path)")
     print(f"SHA match   : {'YES' if match else 'NO'}")
     print("=" * 74)
     if not str(authorised).startswith("YES"):
+        # The deployed build is still REPORTED, because it was established
+        # without the credential that failed.
+        print(f"deployed build established: {served or 'NO'}"
+              + (" — matches --expect-commit" if match else ""))
+        # WHICH SIDE OF THE CREDENTIAL FAILED. /health publishes the
+        # deployment's own bearer configuration precisely so a 401 can be told
+        # apart from "this deployment does not read bearers at all" without
+        # attempting a login. Printing it turns one indistinguishable 401 into
+        # an actionable one: `mode: swa` means no token can ever authenticate
+        # here, `bearerConfigured: false` means the deployment is missing its
+        # tenant/audience settings, and a configured bearer mode means the
+        # token itself (audience, tenant, scope or expiry) is the problem.
+        # Configuration STATES only — never a token, a key or a claim.
+        # NESTED UNDER `governance`, and read from there. The first cut of this
+        # read it at the top level, got {} because the key lives one level
+        # down, and fell through to the "the token is the problem" branch — an
+        # ABSENT field presented as a positive finding, which is the one thing
+        # a diagnostic must never do. Absence is now reported as absence.
+        governance = health.get("governance") or {}
+        dashboard_auth = governance.get("dashboardAuth") or {}
+        print(f"dashboardAuth: {json.dumps(dashboard_auth, sort_keys=True)}")
+        print(f"tenantId     : {governance.get('tenantId')}")
+        print(f"platformAuth : {json.dumps(governance.get('platformAuth'), sort_keys=True, default=str)}")
+        mode = str(dashboard_auth.get("mode") or "")
+        if not dashboard_auth:
+            print("DIAGNOSIS: UNAVAILABLE — /health carried no governance."
+                  "dashboardAuth block, so this run cannot say whether the "
+                  "deployment accepts bearer tokens. Not evidence either way.")
+        elif mode and mode not in ("bearer", "both"):
+            print(f"DIAGNOSIS: this deployment's dashboard auth mode is "
+                  f"{mode!r} — a bearer token is NOT read on this surface, so "
+                  "no token value can authenticate. Rotating the secret cannot "
+                  "fix this; the deployment setting TRAKT_MI_REACT_AUTH_MODE is "
+                  "what decides it.")
+        elif dashboard_auth.get("bearerConfigured") is False:
+            print("DIAGNOSIS: bearer auth is enabled but NOT CONFIGURED on this "
+                  "deployment (missing tenant and/or audience settings), so "
+                  "every token is refused regardless of its value.")
+        else:
+            print("DIAGNOSIS: the deployment reads and is configured for bearer "
+                  "tokens, so the refusal is a property of THIS token — "
+                  "audience, tenant, delegated scope or expiry.")
         print("VERDICT: NOT EXECUTABLE — auth")
         return 2
     if not match:
