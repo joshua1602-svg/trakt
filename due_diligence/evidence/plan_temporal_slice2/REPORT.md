@@ -289,116 +289,141 @@ and it is the first thing a Phase 5 run should answer.
 
 ---
 
-## PHASE 5 — THE OPUS → TEMPORAL BOUNDARY: PRE-REGISTERED, HARNESSED, NOT RUN
-
-The one open question Slice 2 ended on — *does Opus state temporal intent in a
-shape the deterministic layer can act on?* — now has a bank, a manifest and a
-harness. It does not yet have an answer, and the reason is a missing credential,
-not a missing test.
+## PHASE 5 — THE OPUS → TEMPORAL BOUNDARY, MEASURED LIVE
 
 ```
-LIVE_BANK_SIZE          = 15   (11 positives + 4 controls)
-AUTHORISED_LIVE_CALLS   = 15
-LIVE_CALLS_MADE         = 0
-BLOCKER                 = no ANTHROPIC_API_KEY in this environment
+LIVE_BANK_SIZE        = 15   (11 positives + 4 controls)
+AUTHORISED_LIVE_CALLS = 15
+LIVE_CALLS_MADE       = 15
+MODEL                 = claude-opus-5
+BOUNDARY_HELD         = 7 / 15
 ```
 
-The product's own interpreter says so, rather than this report asserting it:
+Tokens: 79,681 input · 16,563 output · 422,436 cache read · 8,988 cache write.
+One call per case, no retry, no reworded second try. The manifest sha256 was
+verified against the file committed before any call was made.
+
+`7/15` is the honest headline and it is also two different stories added
+together, which is not actionable. `temporal_live_findings.py` separates them
+from the recorded payloads, with no further calls.
+
+### What held
 
 ```
-AnthropicInterpreterClient().available  ->  False
-OpusInterpreter(...).interpret(q).reason ->
-    {'code': 'MODEL_UNAVAILABLE', 'subject': 'interpreter',
-     'detail': 'no ANTHROPIC_API_KEY in the environment'}
+TEMPORAL_INTENT_ABSENT                    = 0
+WRONG_SNAPSHOTS                           = 0
+MODEL_AUTHORED_PHYSICAL_SNAPSHOT_BINDINGS = 0
 ```
 
-`ANTHROPIC_BASE_URL` is set to the public `https://api.anthropic.com` and carries
-no credential; there is no `.env`, no key vault fallback, and every call site in
-the estate reads `os.environ["ANTHROPIC_API_KEY"]` directly. The harness detects
-this, prints `NOT RUN`, exits 2 and writes no result file — it does not fabricate
-one.
+Not one live interpretation dropped the time constraint, selected a wrong
+snapshot, or put a date or snapshot id anywhere in a plan. Every failure below is
+**fail-closed**: a refusal or a clarification, never a wrong answer.
 
-### The boundary under test, and where it stops
+Three positives held end to end, through capability, compiler, perimeter and
+snapshot selection:
 
-```
-raw question -> OpusInterpreter.interpret        (live, frozen interpreter)
-             -> CandidateIntent                   (the model's only output)
-             -> DeterministicCompiler.compile     (frozen)
-             -> GovernedQueryPlan
-             -> check_temporal_eligibility
-             -> resolve_temporal -> SnapshotSelector -> resolved snapshots
-             STOP
-```
+| case | question | what Opus emitted | snapshots |
+|---|---|---|---|
+| T02 | "…balance in each of the last three months?" | `generic_analysis/series`, `periods_back: 3` | 3, correct |
+| T08 | "…by LTV bucket and product type for the last two months." | `generic_analysis/series`, `periods_back: 2` | 2, correct |
+| T09 | "What was funded balance in April?" | `generic_analysis/point_in_time`, `explicit_period`, `labels: ["April"]` | 1, correct |
 
-No MI API call, no `MI_BEARER`, no execution against a book, no serving surface,
-and **no product module changed** — the whole of Phase 5 is new files under
-`due_diligence/evidence/plan_temporal_slice2/`.
+All four controls behaved, including one the pre-registration anticipated: T12
+("the next three months") was pre-registered expecting a compiler REFUSE, and the
+note said that if the model routed it to `forecast` instead, that would be a
+justified refusal at the perimeter. It did, and it was. T13 asked twenty-four
+months of an eight-month book — Opus supplied `periods_back: 24`, the resolver
+clarified `PERIOD_NOT_AVAILABLE`, and **no shorter series was substituted**.
 
-### What is pinned, and what deliberately is not
+### FINDING 1 — "How has X changed" is read as a MOVEMENT question (4 cases)
 
-A pre-registration that demanded a particular `time.form` or `operation` would be
-scoring Opus against this repository's guess at its wording. `series` and `range`
-are both span forms the perimeter admits; `series`, `breakdown` and
-`point_in_time` are all operations it admits.
+T01, T05, T10 and T11 were refused `CAPABILITY_NOT_GENERIC`. Opus routed every
+one of them to `period_movement`:
 
-| pinned | not pinned |
-|---|---|
-| slice 2 eligibility | which span form the model chose |
-| the resolved snapshot set | which operation it chose |
-| measure concept, statistic (from an allowed set), filters, dimensions, population base | its wording of the period label |
-| the absence of any physical date or snapshot id | |
-
-`expected_snapshots` is hand-written against the eight-month fixture and never
-read back from the product. Relative windows resolve against the **catalogue's**
-latest period, not wall-clock, so the expectation does not drift with the date.
-
-### The harness is proved before a penny is spent — both ways
-
-`--dry-run` replays authored stand-in payloads through the identical pipeline:
-**15/15 boundary held** (11 `TEMPORAL_BOUNDARY_HELD`, 2 `JUSTIFIED_INELIGIBLE`,
-1 `JUSTIFIED_REFUSE`, 1 `JUSTIFIED_CLARIFY`).
-
-A harness whose only demonstrated outcome is PASS has demonstrated nothing, so
-`--degraded` replays the same fifteen questions with four payloads deliberately
-broken. All four are caught, each named precisely:
-
-| injected fault | verdict | what the harness reported |
+| case | question | capability / operation |
 |---|---|---|
-| T01 window in words only, no `periods_back` | `PERIOD_UNRESOLVABLE` | `PERIOD_LABEL_UNRESOLVED: no governed period is named by ['the last six months']` |
-| T02 four periods where three were asked | `WRONG_SNAPSHOTS` | expected 3 dates, got 4 |
-| T05 time constraint dropped (`form: current`) | `TEMPORAL_INTENT_ABSENT` | "the time constraint did not survive the model boundary" |
-| T06 filter dropped | `SEMANTIC_DEVIATION` | `filters: [['erm_product_type','eq','drawdown']] -> []` |
+| T01 | "How has funded balance **changed** over the last six months?" | `period_movement` / `movement` |
+| T05 | "How has average LTV **changed** over the last four months?" | `period_movement` / `series` |
+| T10 | "How has funded balance **changed** since March?" | `period_movement` / `movement` |
+| T11 | "…this month **versus** last month?" | `period_movement` / `movement` |
 
-The degraded run found a real defect in the harness's own diagnostics, which is
-recorded rather than quietly fixed: a dropped time constraint was first reported
-as `UNEXPECTED_INELIGIBLE` with no detail, because the perimeter refuses
-`current` as `PERIOD_NOT_TEMPORAL` before any model-facing check ran. Those are
-the same event, and only one of them is a finding *about the model*. The
-`temporal_required` check now runs **before** eligibility so the finding is named
-as one.
+This is not obviously a model defect. "How has X changed" *is* more naturally a
+movement question, and `period_movement` is a real governed capability that owns
+its own arithmetic. The tension is in the brief: the Slice 2 contract lists "How
+has funded balance changed over the last 6 months?" as an in-scope example while
+also excluding movement attribution — and the vocabulary resolves that ambiguity
+the other way.
 
-### The single most likely live failure, named in advance
+**The temporal binding in these four was sound.** A counterfactual re-compile of
+the recorded payloads with `capability` forced to `generic_analysis` resolves all
+four to exactly the pre-registered snapshots — `periods_back: 6`,
+`periods_back: 4`, `labels: ["since March", "March"]`, and a `relative_pair`.
+So what failed was **which capability owns the question**, not whether Opus can
+state a window the resolver can act on.
 
-T01's pre-registration says it plainly: *"The resolver can only honour it if the
-model supplies `periods_back=6`; a labels-only interpretation clarifies, and that
-would be the finding."* The recorded corpus is not reassuring on this — NL1A came
-back with `labels: ["last few months"]` and `periods_back: null`. If the live run
-returns `PERIOD_UNRESOLVABLE` on the count-bearing cases, the fix is a prompt or
-vocabulary change in `interpretation_v2`, not a widening of the resolver, and it
-belongs to a slice that is authorised to reopen interpretation.
+> That counterfactual is a counterfactual. It re-compiles recorded payloads with
+> one field changed, it is not a re-run, and it is evidence about the temporal
+> binding only — never about routing. The headline stays 7/15.
 
-### To run it
+The fix is not in the resolver. It is either a question-phrasing matter, or a
+vocabulary change distinguishing "what was X in each period" (evaluation) from
+"how much did X move and why" (movement) — and that belongs to a slice
+authorised to reopen `interpretation_v2`.
+
+### FINDING 2 — the compiler and my resolver disagree about a bare-cadence span (4 cases)
+
+T03, T04, T06 and T07 ("…each month") were refused `PERIOD_LABEL_UNRESOLVED`.
+Opus emitted, for all four, exactly:
+
+```
+time: {form: "series", labels: [], grain: "monthly", periods_back: null}
+```
+
+It stated the **cadence** and left the **span** open — which is a fair reading of
+"each month". Then:
+
+* `compiler._bind_period` raises `AMBIGUOUS_PERIOD` only when a span has *none* of
+  labels, count or grain. A grain is present, so **the compiler emitted a plan**;
+* `plan_temporal_runtime._resolve_span` requires a count, a recognised
+  whole-series label, or an anchor. It has none, so **the resolver refused the
+  plan the compiler had just authorised**.
+
+**This is a defect Slice 2 introduced**, and the live run is what found it: two
+governed layers disagreeing about what constitutes a stated span. My
+`WHOLE_SERIES_LABELS` vocabulary was built for labels like "each month" — and it
+never fires, because the model puts nothing in `labels` at all.
+
+Measured: the whole-series reading would select all eight periods, matching the
+pre-registration in **4/4**.
+
+The prediction this report made before the run was *directionally* right and
+*specifically* wrong. It said the risk was a labels-only interpretation with no
+count. The reality is neither labels nor count — the window is carried by `grain`
+alone.
+
+**The fix is one branch in `_resolve_span`**: a span form carrying a grain that
+matches the catalogue's declared cadence, with no count and no label, is the
+whole available series — the same reading the compiler already took when it
+emitted the plan. That is a runtime change, which this turn was explicitly not
+authorised to make, so it is recorded and not done.
+
+### What this does and does not prove
+
+It proves that Opus, unprompted, states temporal intent the deterministic layer
+can act on — a count, an anchor month, or a period pair — in **every case where
+it routed to `generic_analysis`**, and that the governed layer never fabricated,
+substituted or silently shortened a period.
+
+It does not prove the boundary is production-ready. Two-thirds of the natural
+phrasings in this bank either land on a capability Slice 2 excludes, or land on a
+resolver branch that does not exist yet.
+
+### To reproduce
 
 ```bash
-python due_diligence/evidence/plan_temporal_slice2/temporal_live_run.py --dry-run    # harness, free
-python due_diligence/evidence/plan_temporal_slice2/temporal_live_run.py --degraded   # harness catches faults, free
+python due_diligence/evidence/plan_temporal_slice2/temporal_live_findings.py   # the two findings, no calls
 ANTHROPIC_API_KEY=... python due_diligence/evidence/plan_temporal_slice2/temporal_live_run.py
 ```
-
-The third command is the only one that spends anything: at most 15 calls, one
-per case, no retry and no reworded second try. It verifies
-`temporal_bank_manifest.sha256` against the committed manifest first and refuses
-to run if the expectations have moved since they were registered.
 
 ---
 
