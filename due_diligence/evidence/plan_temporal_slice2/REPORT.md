@@ -1254,3 +1254,45 @@ no rows on `9ab14b34`.
 SLICE_2_PRODUCTION_CANARY = PASS
 SLICE_2 = CLOSED
 ```
+
+---
+
+## BOUNDED RANGE — LIVE PRODUCTION CHECK
+
+One question, asked once, against the real `/mi/query`.
+Run [34593473083](https://github.com/joshua1602-svg/trakt/actions/runs/34593473083).
+
+```
+DEPLOYED_SHA = a2c36327   EXPECTED_SHA = a2c36327   SERVED_SHA = a2c36327
+PROVENANCE   = CONFIRMED before enablement (run 34592498043) and again after the
+               restart (run 34593309441) — 2 reads, >= 15s apart, each time
+CATALOGUE    = CONFIRMED live from /mi/snapshots
+
+"Show funded balance from October 2025 to June 2026."   portfolioId ERE/2026-06-30
+
+  PASS S2-P2   snapshots = 3   values_reconciled = 3
+  VERDICT PASS {"positive_questions": 1, "positive_pass": 1, "served_new": 1,
+                "legacy_fallbacks": 0, "values_reconciled": 3}
+```
+
+The adjudicator prints every assertion it fails and printed none, so all of them
+held: the required model answered, the principal matched, the perimeter was
+`slice2_temporal`, the decision and the served provenance were both NEW, the
+coverage gate did not refuse, every selected period carries a snapshot identity
+inside the authorised client, and the three served figures equal the three the
+deterministic runtime recorded having computed. No figure is written down here.
+
+**The selection was exactly the three governed periods.** The case asserts them
+by identity, so a fabricated December-to-May would have failed the run rather
+than reconciled against itself — which is the whole reason the identity
+assertion exists.
+
+This is the case that returned `PERIOD_LABEL_AMBIGUOUS` on `9ab14b34` with both
+bounds correctly interpreted and the catalogue holding every period inside them.
+The gap was never in the selection layer: `SnapshotStore.resolve_range` already
+was `select_between`, and the resolver simply discarded the second bound.
+
+```
+SLICE_2_BOUNDED_RANGE_LIVE = PASS
+SLICE_2 = CLOSED
+```
