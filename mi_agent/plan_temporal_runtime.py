@@ -116,6 +116,10 @@ CLARIFIABLE_REASONS = frozenset({
     INSUFFICIENT_SNAPSHOTS, UNSUPPORTED_CADENCE,
 })
 
+#: The column the assembled series is keyed by. The governed header's reporting
+#: date, never a row-level date field — naming it once keeps it that way.
+REPORTING_DATE = "reporting_date"
+
 # The three response shapes this slice may produce.
 SHAPE_SERIES = "time_series"
 SHAPE_POINT = "single_period"
@@ -685,6 +689,86 @@ class TemporalOutcome:
             "reconciled": self.reconciled,
             "error": self.error,
         }
+
+
+def claims(plan: Any) -> bool:
+    """Whether the TEMPORAL runtime owns this plan. One structural read.
+
+    The dispatch decision the serving path makes, and it is not a judgement:
+    slice 1's perimeter accepts `period.form == "current"` and nothing else, and
+    `SLICE_2_PERIOD_FORMS` excludes `current` and nothing else, so the two are
+    disjoint by construction and the PLAN says which runtime owns it. No new
+    semantic owner appears at the seam, and no question is read to reach this.
+
+    True does NOT mean eligible. A temporal plan outside the slice 2 contract is
+    claimed here and then refused by `check_temporal_eligibility`, which is the
+    point: it is refused with a TEMPORAL reason rather than falling through to
+    slice 1 and being refused for not being current.
+    """
+    period = adapter._as_mapping(plan).get("period") or {}
+    return period.get("form") in SLICE_2_PERIOD_FORMS
+
+
+def series_frame(outcome: "TemporalOutcome", spec: Any) -> Any:
+    """The whole temporal result as ONE frame: a period per row, plus any axes.
+
+    So the existing response contract can carry a series without a parallel
+    envelope. Every figure in it was produced by `execute_mi_query` on its own
+    snapshot; this only stacks them, and the reporting date it stacks them by is
+    the governed header's own, never a row-level date column.
+
+    The value column is named exactly as the executor names it
+    (`adapter.value_column`), so the display hints, the chart factory and the
+    renderer read it as they read any grouped result.
+    """
+    import pandas as pd
+
+    column = adapter.value_column(spec)
+    dimensions = list(getattr(spec, "dimensions", None) or ())
+    rows: List[Dict[str, Any]] = []
+    for point in outcome.points:
+        if dimensions:
+            for cell in point.cells:
+                row = {REPORTING_DATE: point.reporting_date}
+                row.update({axis: cell.get(axis) for axis in dimensions})
+                row[column] = cell.get("value")
+                rows.append(row)
+        else:
+            rows.append({REPORTING_DATE: point.reporting_date,
+                         column: point.value})
+    return pd.DataFrame(rows, columns=[REPORTING_DATE, *dimensions, column])
+
+
+def served_evidence(outcome: "TemporalOutcome") -> Dict[str, Any]:
+    """What was REQUESTED and what was EXECUTED, for post-execution governance.
+
+    The same two-sided shape slice 1B puts on `metadata.governedPlan`, widened
+    to say it per snapshot. A governance layer reading this can establish the
+    requested temporal semantics, the exact snapshots selected, the predicates
+    applied on each, the grouping, the measure and the resulting figures —
+    without re-reading the question, which is the whole point of carrying it.
+    """
+    resolution = outcome.resolution
+    return {
+        "shape": outcome.shape,
+        "basis": outcome.basis,
+        "selector_mode": (resolution.selector.mode
+                          if resolution is not None and resolution.selector
+                          else None),
+        "snapshot_count": len(outcome.points),
+        "snapshots": [{
+            "snapshot_id": point.snapshot_id,
+            "reporting_date": point.reporting_date,
+            "value": point.value,
+            "cells": [dict(cell) for cell in point.cells],
+            "applied_predicates": point.receipt.get("applied_predicates") or [],
+            "group_field_keys": list(point.receipt.get("group_field_keys") or ()),
+            "aggregation": point.receipt.get("aggregation"),
+            "filtered_row_count": point.receipt.get("filtered_row_count"),
+            "empty": point.empty,
+        } for point in outcome.points],
+        "comparison": dict(outcome.comparison) if outcome.comparison else None,
+    }
 
 
 def _receipt_of(result: Any) -> Dict[str, Any]:

@@ -36,6 +36,7 @@ from mi_agent import plan_runtime_adapter as adapter                  # noqa: E4
 from mi_agent import plan_serving_canary as canary                    # noqa: E402
 from mi_agent import plan_shadow_evidence as evidence                 # noqa: E402
 from mi_agent import plan_shadow_wiring as wiring                     # noqa: E402
+from mi_agent import plan_temporal_runtime as temporal                # noqa: E402
 from mi_agent.interpretation_v2.opus_interpreter import (              # noqa: E402
     OpusInterpreter, ReplayClient, UnavailableClient)
 from mi_agent.mi_query_validator import load_mi_semantics             # noqa: E402
@@ -962,6 +963,110 @@ class TestTheUnchangedCases(unittest.TestCase):
         self.assertEqual(ledger["unaccounted"], [])
         self.assertEqual(out["artifacts"], [{"type": "kpi"}])
         self.assertIsNotNone(mi_service._governed_plan_coverage(envelope))
+
+
+
+class TestKTemporalDispatch(unittest.TestCase):
+    """Slice 2's runtime is reachable from `serve`, and only from the plan.
+
+    The end-to-end reconciliation lives in
+    `due_diligence/evidence/plan_temporal_slice2/temporal_serving_integration.py`.
+    What is asserted here is the DISPATCH and the production state, which that
+    harness deliberately does not cover because it always supplies a catalogue.
+    """
+
+    def test_the_dispatch_reads_only_the_plans_period_form(self):
+        """The two perimeters are disjoint, so the plan decides. No question."""
+        current = {"period": {"form": "current"}}
+        for form in ("series", "range", "explicit_period",
+                     "previous_reporting_period", "relative_pair"):
+            self.assertTrue(temporal.claims({"period": {"form": form}}), form)
+        self.assertFalse(temporal.claims(current))
+        self.assertFalse(temporal.claims({}))
+        self.assertFalse(temporal.claims({"period": {"form": "forward_looking"}}))
+
+    def test_a_temporal_plan_without_a_catalogue_lets_legacy_serve(self):
+        """The production state today, and it must be a quiet fallback.
+
+        `mi_service` wires no `SnapshotStore`, so every production temporal plan
+        lands here. It is not an error and not a refusal — the legacy envelope
+        the caller is already holding is a complete answer, and choosing a
+        catalogue here would be this module deciding which book the question is
+        about.
+        """
+        body: dict = {}
+        payload, reason = canary._attempt_temporal(
+            body, plan={"capability": "generic_analysis", "operation": "series",
+                        "period": {"form": "series", "grain": "monthly"},
+                        "population": {"base": "funded", "lens": "all"},
+                        "outputs": [{"measures": [{"concept": "loan",
+                                                   "statistic": "count"}],
+                                     "dimensions": [], "filters": []}]},
+            question="unused", semantics=None, store=None,
+            snapshot_client_id=None, snapshot_route=None,
+            render_portfolio_id=None, as_of=None)
+        self.assertIsNone(payload)
+        self.assertEqual(reason, canary.TEMPORAL_STORE_UNAVAILABLE)
+        self.assertFalse(body["execution"]["attempted"])
+
+    def test_an_ineligible_temporal_plan_is_refused_with_a_temporal_reason(self):
+        """T10's shape: the right capability, an operation slice 2 does not serve.
+
+        It must be refused BY slice 2 — so the reason names the temporal
+        contract — rather than falling through to slice 1 and being refused for
+        not being current, which would describe the wrong thing.
+        """
+        body: dict = {}
+        payload, reason = canary._attempt_temporal(
+            body, plan={"capability": "generic_analysis", "operation": "movement",
+                        "period": {"form": "range", "grain": "monthly"},
+                        "population": {"base": "funded", "lens": "all"},
+                        "outputs": [{"measures": [{"concept": "loan",
+                                                   "statistic": "count"}],
+                                     "dimensions": [], "filters": []}]},
+            question="unused", semantics=None, store=object(),
+            snapshot_client_id="c", snapshot_route="funded",
+            render_portfolio_id=None, as_of=None)
+        self.assertIsNone(payload)
+        self.assertEqual(reason,
+                         f"{canary.INELIGIBLE}:{temporal.OPERATION_NOT_TEMPORAL}")
+        self.assertEqual(body["eligibility"]["perimeter"], "slice2_temporal")
+
+    def test_the_temporal_attempt_decides_nothing_from_the_question(self):
+        """`question` reaches the temporal attempt for the envelope echo only.
+
+        Asserted off the AST: within `_attempt_temporal` the `question` name may
+        appear only as a keyword argument passed to `render`, which echoes it
+        the way the legacy envelope does. Any other use would be a semantic
+        decision taken from the sentence after the plan existed.
+        """
+        source = Path(canary.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        function = next(node for node in ast.walk(tree)
+                        if isinstance(node, ast.FunctionDef)
+                        and node.name == "_attempt_temporal")
+        uses = [node for node in ast.walk(function)
+                if isinstance(node, ast.Name) and node.id == "question"]
+        renders = [keyword for node in ast.walk(function)
+                   if isinstance(node, ast.Call)
+                   for keyword in node.keywords
+                   if keyword.arg == "question"
+                   and isinstance(keyword.value, ast.Name)
+                   and keyword.value.id == "question"]
+        self.assertEqual(len(uses), len(renders),
+                         "the temporal attempt reads the question for something "
+                         "other than the envelope echo")
+
+    def test_slice_one_serving_is_untouched_by_the_new_parameters(self):
+        """A current-period plan never reaches the temporal attempt."""
+        plan = {"capability": "generic_analysis", "operation": "point_in_time",
+                "period": {"form": "current"},
+                "population": {"base": "funded", "lens": "all"},
+                "outputs": [{"measures": [{"concept": "loan",
+                                           "statistic": "count"}],
+                             "dimensions": [], "filters": []}]}
+        self.assertFalse(temporal.claims(plan))
+        self.assertTrue(adapter.check_eligibility(plan)[0])
 
 
 if __name__ == "__main__":

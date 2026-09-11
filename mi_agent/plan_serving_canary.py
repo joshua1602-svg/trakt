@@ -60,6 +60,7 @@ from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
+from mi_agent import plan_temporal_runtime as temporal
 
 logger = logging.getLogger("mi_agent.plan_serving_canary")
 
@@ -91,6 +92,13 @@ EXECUTION_FAILED = "EXECUTION_FAILED"
 RECONCILIATION_FAILED = "PLAN_RECEIPT_RECONCILIATION_FAILED"
 RENDER_FAILED = "RENDER_FAILED"
 UNEXPECTED_ERROR = "UNEXPECTED_ERROR"
+#: A temporal plan arrived and the caller supplied no governed snapshot
+#: catalogue. Not an error and not a refusal: the legacy path serves, exactly as
+#: it does for any plan this canary cannot take. Production supplies no store
+#: today, so this is the state every production temporal plan is in — and it is
+#: why wiring this seam changes nothing a production caller can observe.
+TEMPORAL_STORE_UNAVAILABLE = "TEMPORAL_STORE_UNAVAILABLE"
+TEMPORAL_NOT_RESOLVED = "TEMPORAL_NOT_RESOLVED"
 
 
 # --------------------------------------------------------------------------- #
@@ -202,7 +210,8 @@ def reconcile(spec: Any, result: Any) -> Tuple[bool, str]:
 
 def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
            portfolio_id: Optional[str], as_of: Optional[str],
-           requested: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+           requested: Optional[Mapping[str, Any]] = None,
+           executed: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
     """`(spec, MIQueryResult)` -> the existing React/API envelope.
 
     `mi_agent_api.adapters.adapt_workflow_result` is the contract every channel
@@ -267,9 +276,14 @@ def render(spec: Any, result: Any, semantics: Any, frame: Any, *, question: str,
     meta = payload.setdefault("metadata", {})
     if isinstance(meta, dict):
         receipt = dict(getattr(result, "metadata", None) or {})
+        # `executed` IS SUPPLIED BY THE TEMPORAL PATH and by nothing else. One
+        # snapshot's receipt cannot describe a series, so the temporal runtime
+        # hands its own per-snapshot evidence in here rather than growing a
+        # second renderer. A slice 1 answer passes None and is byte-identical to
+        # what it always was.
         meta["governedPlan"] = {
             "requested": dict(requested or {}),
-            "executed": {
+            "executed": dict(executed) if executed is not None else {
                 "applied_predicates": receipt.get("applied_predicates") or [],
                 "group_field_keys": list(receipt.get("group_field_keys") or ()),
                 "aggregation": receipt.get("aggregation"),
@@ -290,7 +304,10 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           semantics: Any, view: Optional[str] = None,
           portfolio_id: Optional[str] = None,
           render_portfolio_id: Optional[str] = None,
-          as_of: Optional[str] = None) -> Optional[Dict[str, Any]]:
+          as_of: Optional[str] = None,
+          snapshot_store: Any = None,
+          snapshot_client_id: Optional[str] = None,
+          snapshot_route: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
     Raises nothing: a serving canary that could fail a request would be worse
@@ -314,7 +331,10 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
         payload, reason = _attempt(
             body, question=question, frame=frame, semantics=semantics,
             render_portfolio_id=(render_portfolio_id if render_portfolio_id
-                                 is not None else portfolio_id), as_of=as_of)
+                                 is not None else portfolio_id), as_of=as_of,
+            snapshot_store=snapshot_store,
+            snapshot_client_id=snapshot_client_id,
+            snapshot_route=snapshot_route)
     except Exception as exc:                                         # noqa: BLE001
         payload, reason = None, UNEXPECTED_ERROR
         body["disposition"] = evidence.ORCHESTRATION_ERROR
@@ -354,8 +374,129 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
     return payload
 
 
+def _attempt_temporal(body: Dict[str, Any], *, plan: Mapping[str, Any],
+                      question: str, semantics: Any, store: Any,
+                      snapshot_client_id: Optional[str],
+                      snapshot_route: Optional[str],
+                      render_portfolio_id: Optional[str], as_of: Optional[str]
+                      ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One temporal serving attempt. Same contract as `_attempt`.
+
+    Mirrors the slice 1 attempt stage for stage — perimeter, execute,
+    reconcile, render, record — with the slice 2 perimeter and the slice 2
+    runtime in place of slice 1's, and the SAME renderer and the SAME evidence
+    recorder. It adds no calculation and no interpretation; every figure came
+    from `execute_mi_query`, once per snapshot, inside
+    `temporal.execute_temporal_plan`.
+
+    THE CATALOGUE IS THE CALLER'S TO SUPPLY, exactly as the frame is on the
+    slice 1 path. When none is supplied this returns None and the legacy
+    envelope serves — which is what every production request does today, since
+    `mi_service` wires no `SnapshotStore`. Choosing a catalogue here would be
+    this module deciding which book a question is about.
+    """
+    eligible, why, detail = temporal.check_temporal_eligibility(plan)
+    body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail,
+                           "perimeter": "slice2_temporal"}
+    if not eligible:
+        body["execution"] = {"attempted": False, "why_not": f"{why}: {detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{why}"
+
+    if store is None or not snapshot_client_id:
+        body["execution"] = {"attempted": False,
+                             "why_not": "no governed snapshot catalogue was "
+                                        "supplied for this request"}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, TEMPORAL_STORE_UNAVAILABLE
+
+    outcome = temporal.execute_temporal_plan(
+        plan, store=store, client_id=snapshot_client_id, semantics=semantics,
+        route=snapshot_route)
+    body["execution"] = {"attempted": True,
+                         "bound_spec": (outcome.spec.to_dict()
+                                        if outcome.spec is not None else None),
+                         "requested_semantics": dict(outcome.requested),
+                         "temporal": outcome.to_dict()}
+
+    if outcome.error:
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, EXECUTION_FAILED
+    if outcome.reason:
+        # A period the catalogue cannot honour, a label it cannot settle, a
+        # cadence it does not keep. Fail closed and let the legacy path answer;
+        # nothing here narrows the window or substitutes a period.
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{TEMPORAL_NOT_RESOLVED}:{outcome.reason}"
+    if not outcome.executed or not outcome.reconciled:
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, RECONCILIATION_FAILED
+    body["disposition"] = evidence.EXECUTED
+
+    try:
+        frame = temporal.series_frame(outcome, outcome.spec)
+        # THE DISPLAY HINTS COME FROM THE BOOK, not from the series. The
+        # renderer profiles a frame to learn that a balance is currency and an
+        # LTV a percentage, and the stacked series carries only the aggregated
+        # column. One selected snapshot is loaded for its SCHEMA; no figure in
+        # the answer comes from it, and every figure was computed already.
+        hints_frame = store.load_loans(outcome.points[-1].snapshot_id)
+        result = _temporal_result(outcome, frame)
+        payload = render(outcome.spec, result, semantics, hints_frame,
+                         question=question, portfolio_id=render_portfolio_id,
+                         as_of=as_of, requested=dict(outcome.requested),
+                         executed=temporal.served_evidence(outcome))
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    if not isinstance(payload, Mapping) or not payload.get("ok"):
+        body["execution"]["render_error"] = "the rendered envelope was not ok"
+        return None, RENDER_FAILED
+    return dict(payload), ""
+
+
+def _temporal_result(outcome: Any, frame: Any) -> Any:
+    """The stacked series, in the result type the response contract already takes.
+
+    A `MIQueryResult` is a dataclass, and every field here is read off the
+    governed outcome. The metadata is the UNION of what each snapshot applied,
+    so the envelope's receipt says what ran on the series rather than on one
+    period of it.
+    """
+    from mi_agent.mi_query_executor import MIQueryResult
+
+    predicates: List[Dict[str, Any]] = []
+    grouped: List[str] = []
+    for point in outcome.points:
+        for entry in (point.receipt.get("applied_predicates") or ()):
+            if entry not in predicates:
+                predicates.append(dict(entry))
+        for key in (point.receipt.get("group_field_keys") or ()):
+            if key not in grouped:
+                grouped.append(str(key))
+    first = outcome.points[0].receipt if outcome.points else {}
+    return MIQueryResult(
+        spec=outcome.spec,
+        result_type="table",
+        data=frame,
+        row_count=int(len(frame)),
+        metadata={
+            "aggregation": first.get("aggregation"),
+            "applied_predicates": predicates,
+            "group_field_keys": grouped,
+            "balance_field_used": first.get("balance_field_used"),
+            "filtered_row_count": sum(
+                int(p.receipt.get("filtered_row_count") or 0)
+                for p in outcome.points),
+            "temporal": temporal.served_evidence(outcome),
+        })
+
+
 def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
-             render_portfolio_id: Optional[str], as_of: Optional[str]
+             render_portfolio_id: Optional[str], as_of: Optional[str],
+             snapshot_store: Any = None,
+             snapshot_client_id: Optional[str] = None,
+             snapshot_route: Optional[str] = None
              ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One serving attempt. `(payload or None, reason)`; fills `body` as it goes."""
     from mi_agent.interpretation_v2.outcomes import (OUTCOME_CLARIFY, OUTCOME_PLAN,
@@ -380,6 +521,22 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # From here the accepted slice 1 perimeter owns every decision, and nothing
     # below edits the plan the compiler emitted.
     plan = compiled.plan.to_dict()
+
+    # THE DISPATCH. One structural read of the plan's own period form, made by
+    # `plan_temporal_runtime.claims`, decides which runtime owns it. The two
+    # perimeters are disjoint by construction — slice 1 accepts `current` and
+    # only `current`, slice 2 excludes it and only it — so this chooses between
+    # them without deciding anything semantic, and no question is read to reach
+    # it. A temporal plan the slice 2 contract does not admit is refused BY
+    # slice 2, with a temporal reason, rather than falling through to slice 1 to
+    # be refused for not being current.
+    if temporal.claims(plan):
+        return _attempt_temporal(
+            body, plan=plan, question=question, semantics=semantics,
+            store=snapshot_store, snapshot_client_id=snapshot_client_id,
+            snapshot_route=snapshot_route,
+            render_portfolio_id=render_portfolio_id, as_of=as_of)
+
     eligible, why, detail = adapter.check_eligibility(plan)
     body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail}
     if not eligible:

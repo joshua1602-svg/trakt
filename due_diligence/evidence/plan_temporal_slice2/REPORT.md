@@ -617,6 +617,145 @@ python .../temporal_boundary_regression.py temporal_live_retest_result.json  # r
 
 ---
 
+## SLICE 2 SERVING INTEGRATION — offline
+
+```
+INTEGRATION_BASE_SHA = f107022f   (Slice 2 with main merged in)
+COMMITS_RECONCILED   = 5 from main, 50 from Slice 2, zero conflicts of substance
+```
+
+### The lineage
+
+`main` carried five commits Slice 2 did not: three hardening
+`borrowing_base_acceptance.py` and two registering acceptance workflows. **None
+touches product code.** One file appears on both sides —
+`.github/workflows/deployed-shadow-acceptance.yml` — and it is byte-identical on
+each (blob `601ae007`), so the merge resolved without a judgement call. A merge
+was the right operation rather than a rebase: the branch carries fifty commits
+that are already pushed and reviewed, and rewriting them to absorb five
+evidence-only commits would trade real history for a tidier graph. Both lineages
+are ancestors of the result, `53a7b8f6` included.
+
+### The seam
+
+```
+SERVING_DISPATCH_SEAM = plan_serving_canary._attempt, immediately after
+                        `plan = compiled.plan.to_dict()` and before
+                        `adapter.check_eligibility(plan)`
+```
+
+One structural read — `plan_temporal_runtime.claims(plan)` — decides which
+runtime owns the plan, and it is not a judgement. Slice 1's perimeter accepts
+`period.form == "current"` and nothing else; `SLICE_2_PERIOD_FORMS` excludes
+`current` and nothing else. The two are **disjoint by construction**, so the plan
+says which runtime owns it and no new semantic owner appears at the seam.
+
+`claims()` returning True does not mean eligible. A temporal plan outside the
+Slice 2 contract is claimed and then refused *by Slice 2*, with a temporal
+reason — T10 comes back `OPERATION_NOT_TEMPORAL` rather than falling through to
+Slice 1 to be refused for not being current, which would describe the wrong
+thing.
+
+```
+FILES_CHANGED              = 2 product, 1 test, 2 evidence (1 new)
+PRODUCT_NET_EXECUTABLE_LOC = +140   (declared ~120)
+    mi_agent/plan_serving_canary.py    +98
+    mi_agent/plan_temporal_runtime.py  +42
+```
+
+### The catalogue is the caller's to supply — and production supplies none
+
+`serve()` gains `snapshot_store` / `snapshot_client_id` / `snapshot_route`,
+exactly as it already takes `frame` and `semantics` from its caller. When none is
+supplied the temporal path returns `TEMPORAL_STORE_UNAVAILABLE` and the legacy
+envelope serves.
+
+**`mi_service` is byte-unchanged and passes none.** Production has no
+`SnapshotStore` wired — none has ever existed in `mi_agent_api` — so no
+production request can take the temporal path, and nothing a production caller
+can observe has changed. Building a store over the onboarding run catalogue would
+be new production configuration, which is a declared stop condition; choosing a
+catalogue inside the canary would be that module deciding which book a question
+is about. So the seam is wired and provable, and the deployment decision stays
+where it belongs.
+
+### One response contract, not two
+
+A series is N results and `adapt_workflow_result` takes one, so the per-snapshot
+results are stacked into a single frame — `reporting_date` + any axes + the value
+column the executor itself names — wrapped in the existing `MIQueryResult` and
+rendered through the existing contract. No parallel temporal envelope.
+
+Governance evidence rides on the existing `metadata.governedPlan` block
+additively: `requested` carries the plan's temporal semantics, and `executed`
+carries per-snapshot identity, applied predicates, grouping, aggregation, row
+counts, values/cells and the comparison arithmetic. A Slice 1 answer passes
+nothing new and is byte-identical to what it always was.
+
+### Proved through the real serving path
+
+`temporal_serving_integration.py` calls `plan_serving_canary.serve` — the
+production entry point — with a canary principal, and lets the real path do the
+rest: the real allow-list, the real interpreter seam (replaying **recorded Opus
+payloads**, zero calls), the real compiler, the real dispatch, the real
+perimeter, the real runtime, the real renderer.
+
+Figures are read back off the **final API payload**, not off the runtime's return
+value — an answer that reconciles internally and loses its figures on the way out
+is exactly what a serving proof is for.
+
+```
+TEMPORAL_POSITIVE_CASES = 5      TEMPORAL_POSITIVE_PASS = 5
+SERIES_VALUES_RECONCILED       = 24
+GROUPED_CELLS_RECONCILED       = 40
+PERIOD_COMPARISONS_RECONCILED  = 1
+```
+
+| case | what | served |
+|---|---|---|
+| S2-1 | funded balance over last N months | NEW, 6 snapshots, 6 rows |
+| S2-2 | loan count each month | NEW, 8 snapshots, 8 rows |
+| S2-3 | filtered temporal series | NEW, 8 snapshots, predicate on every one |
+| S2-4 | time × one dimension | NEW, 8 snapshots, 40 cells |
+| S2-5 | current versus previous period | NEW, 2 snapshots, change reconciled |
+
+### Negative controls, through the same seam
+
+```
+T10_CONTROL                  = LEGACY_FALLBACK  INELIGIBLE:OPERATION_NOT_TEMPORAL
+MOVEMENT_ATTRIBUTION_CONTROL = LEGACY_FALLBACK  INELIGIBLE:CAPABILITY_NOT_GENERIC
+UNAVAILABLE_PERIOD_CONTROL   = LEGACY_FALLBACK  TEMPORAL_NOT_RESOLVED:PERIOD_NOT_AVAILABLE
+OVERLONG_PERIOD_CONTROL      = LEGACY_FALLBACK  no snapshots selected — not shortened
+MULTI_OUTPUT_CONTROL         = LEGACY_FALLBACK  INELIGIBLE:NOT_SINGLE_OUTPUT
+NON_CANARY_PRINCIPAL         = not handled, no record written, legacy unchanged
+```
+
+T10 remains exactly the safe refusal it was. Nothing converts it to a series.
+
+### Regression
+
+```
+SLICE_1_REGRESSIONS_ATTRIBUTABLE = 0
+LEGACY_REGRESSIONS_ATTRIBUTABLE  = 0
+```
+
+269 tests across the serving canary, the adapter, the shadow wiring, the
+evidence recorder, the replay and the deployed-acceptance harness. The Slice 1
+corpus replay reproduces **byte-identical**. Slice 2's offline acceptance is
+31/31 and the boundary regression is 7/7 + 4/4.
+
+```
+INTERPRETATION_V2_CHANGED   = NO   (0 files)
+COMPILER_CHANGED            = NO
+TEMPORAL_VOCABULARY_CHANGED = NO
+NEW_SERVING_FLAG_ADDED      = NO   (two env vars before, the same two after)
+LIVE_OPUS_CALLS             = 0
+
+SLICE_2_SERVING_INTEGRATION_OFFLINE = PASS
+```
+
+---
+
 ## KNOWN BOUNDARY: TIME × GEOGRAPHY IS INELIGIBLE
 
 "Show funded balance by region over the last three months" is listed as an
