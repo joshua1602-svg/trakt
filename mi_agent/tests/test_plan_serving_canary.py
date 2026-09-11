@@ -406,8 +406,13 @@ def _compiling_to(code):
 
     real = wiring.build_plan
 
-    def build(question):
-        outcome, _ = real(question)
+    # `**kwargs` rather than a fixed signature: `build_plan` grew a
+    # `source_registry` keyword when the production seam started supplying the
+    # client's governed portfolios, and a stub that pins the old signature turns
+    # a seam change into a fake test failure. The stub replaces the COMPILE
+    # half; it has no business asserting the caller's argument list.
+    def build(question, **kwargs):
+        outcome, _ = real(question, **kwargs)
         return outcome, _outcomes.refuse(
             _outcomes.CompileReason(code=code, subject="test",
                                     detail="forced by the slice 1B tests"),

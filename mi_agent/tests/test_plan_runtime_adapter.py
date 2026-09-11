@@ -1019,5 +1019,242 @@ class TestTheClientRegistryIsNeverCached(unittest.TestCase):
         self.assertIsNone(wiring._compiler().context.source_registry)
 
 
+# --------------------------------------------------------------------------- #
+# SLICE 3 — the client's source registry, bound at the production seam
+# --------------------------------------------------------------------------- #
+#
+# The named-source semantics shipped already; what was missing was the
+# dependency. `mi_service` supplied no registry, so every question naming a
+# portfolio refused in production — fail-closed and useless.
+#
+# `_source_registry` builds the registry `portfolio_scope` already builds for
+# every other surface, scoped to the AUTHORISED client, per request. It is never
+# cached: `build_plan` makes a request-scoped compiler for it precisely so one
+# client's books cannot answer the next client's question, and the process-wide
+# `_compiler_cache` stays registry-free.
+
+import pandas as _pd
+from unittest import mock as _mock
+
+_A_TYPES = {"alp_origination": "direct", "alp_acquired": "acquired",
+            "nbs_acquired": "acquired"}
+_B_TYPES = {"bank_direct": "direct", "bank_purchased": "acquired"}
+_METADATA = {
+    "ERE": {"alp_acquired": {"source_portfolio_label": "ALP Acquired Back Book",
+                             "aliases": ["ALP back book"]},
+            "nbs_acquired": {"source_portfolio_label": "NBS Acquired"},
+            "alp_origination": {"source_portfolio_label": "ALP Originations"}},
+    "BANKCO": {"bank_purchased": {
+        "source_portfolio_label": "BankCo Purchased Book",
+        "aliases": ["the purchased book"]}},
+}
+
+
+def _provenanced(types):
+    from mi_agent.tests import portfolio_truth_oracle as _truth
+    ids = sorted(types)
+    book = _truth.canonical_book().reset_index(drop=True)
+    book["source_portfolio_id"] = [ids[i % len(ids)] for i in range(len(book))]
+    book["source_portfolio_type"] = [types[x] for x in book["source_portfolio_id"]]
+    return book
+
+
+def _governed_metadata(client_id=None, **_kw):
+    return _METADATA.get(str(client_id), {})
+
+
+class TestTheProductionSeamBindsTheClientRegistry(unittest.TestCase):
+    """`mi_service._source_registry` — the one factory, at the one seam."""
+
+    def setUp(self):
+        self._patch = _mock.patch(
+            "mi_agent.portfolio_metadata.load_portfolio_metadata",
+            _governed_metadata)
+        self._patch.start()
+        self.addCleanup(self._patch.stop)
+        self.frame_a = _provenanced(_A_TYPES)
+        self.frame_b = _provenanced(_B_TYPES)
+
+    def registry(self, frame, client_id):
+        from mi_agent_api import mi_service
+        return mi_service._source_registry(frame, client_id)
+
+    def compile_via_seam(self, registry, population=None, **overrides):
+        """Exactly what `build_plan` does with the registry the seam supplies."""
+        from mi_agent import plan_shadow_wiring as wiring
+        from mi_agent.interpretation_v2.intent import parse_candidate_intent
+        payload = scoped_intent(**overrides)
+        payload["population"] = dict(payload["population"], **(population or {}))
+        return wiring._compiler(registry).compile(
+            parse_candidate_intent(payload))
+
+    @staticmethod
+    def scope_of(result):
+        return sorted((p.canonical_field, p.value)
+                      for p in result.plan.population.scope_predicates)
+
+    # -- the factory -------------------------------------------------------- #
+    def test_the_registry_holds_only_the_authorised_clients_books(self):
+        self.assertEqual(sorted(self.registry(self.frame_a, "ERE").ids()),
+                         sorted(_A_TYPES))
+        self.assertEqual(sorted(self.registry(self.frame_b, "BANKCO").ids()),
+                         sorted(_B_TYPES))
+
+    def test_no_client_means_no_registry_rather_than_every_book(self):
+        self.assertIsNone(self.registry(self.frame_a, None))
+
+    def test_the_factory_never_raises_into_a_request(self):
+        with _mock.patch("mi_agent.portfolio_scope.registry_for_frame",
+                         side_effect=RuntimeError("registry unavailable")):
+            self.assertIsNone(self.registry(self.frame_a, "ERE"))
+
+    # -- what the seam now makes answerable --------------------------------- #
+    def test_every_declared_name_binds_to_the_one_book(self):
+        registry = self.registry(self.frame_a, "ERE")
+        for reference in ("ALP Acquired Back Book", "ALP back book",
+                          "alp_acquired"):
+            with self.subTest(reference=reference):
+                result = self.compile_via_seam(
+                    registry, {"source_reference": reference})
+                self.assertTrue(result.is_plan, result.codes())
+                self.assertEqual(self.scope_of(result),
+                                 [("source_portfolio_id", "alp_acquired")])
+
+    def test_the_unscoped_default_is_still_the_whole_book(self):
+        result = self.compile_via_seam(self.registry(self.frame_a, "ERE"))
+        self.assertTrue(result.is_plan)
+        self.assertEqual(self.scope_of(result), [])
+
+    def test_the_role_axis_is_unchanged_by_the_binding(self):
+        registry = self.registry(self.frame_a, "ERE")
+        for role in ("direct", "acquired"):
+            with self.subTest(role=role):
+                result = self.compile_via_seam(registry, {"lens": role})
+                self.assertEqual(self.scope_of(result),
+                                 [("source_portfolio_type", role)])
+
+    def test_a_name_composes_with_an_ordinary_predicate(self):
+        result = self.compile_via_seam(
+            self.registry(self.frame_a, "ERE"),
+            {"source_reference": "ALP back book"},
+            measures=[{"concept": "loan", "statistic": "count"}],
+            filters=[{"concept": "erm_product_type", "comparator": "eq",
+                      "value": "drawdown"}])
+        self.assertTrue(result.is_plan, result.codes())
+        self.assertEqual(self.scope_of(result),
+                         [("source_portfolio_id", "alp_acquired")])
+        self.assertEqual([f.canonical_field for f in result.plan.filters]
+                         or [f.canonical_field for o in result.plan.outputs
+                             for f in o.filters], ["erm_product_type"])
+
+    def test_a_temporal_question_carries_the_same_binding(self):
+        for operation, time in (("series", {"form": "series",
+                                            "grain": "monthly"}),
+                                ("compare", {"form": "relative_pair"})):
+            with self.subTest(operation=operation):
+                result = self.compile_via_seam(
+                    self.registry(self.frame_a, "ERE"),
+                    {"source_reference": "ALP back book"},
+                    operation=operation, time=time)
+                self.assertTrue(result.is_plan, result.codes())
+                self.assertEqual(self.scope_of(result),
+                                 [("source_portfolio_id", "alp_acquired")])
+
+    # -- and what it must still refuse -------------------------------------- #
+    def test_an_unknown_name_refuses(self):
+        result = self.compile_via_seam(self.registry(self.frame_a, "ERE"),
+                                       {"source_reference": "Halifax"})
+        self.assertFalse(result.is_plan)
+        self.assertIn("CONCEPT_UNAVAILABLE", result.codes())
+
+    def test_with_no_registry_a_named_question_refuses_not_widens(self):
+        result = self.compile_via_seam(None,
+                                       {"source_reference": "ALP back book"})
+        self.assertFalse(result.is_plan, "a named book became the whole book")
+
+    def test_an_ambiguous_alias_clarifies(self):
+        from mi_agent import portfolio_scope
+        shared = portfolio_scope.registry_for_frame(
+            self.frame_a, client_id="ERE",
+            metadata={"alp_acquired": {"aliases": ["back book"]},
+                      "nbs_acquired": {"aliases": ["back book"]}})
+        result = self.compile_via_seam(shared, {"source_reference": "back book"})
+        self.assertFalse(result.is_plan)
+        self.assertEqual(result.outcome, "CLARIFY")
+
+
+class TestOneClientsBooksCannotAnswerAnothersQuestion(unittest.TestCase):
+    """The property the request-scoped compiler exists for."""
+
+    def setUp(self):
+        self._patch = _mock.patch(
+            "mi_agent.portfolio_metadata.load_portfolio_metadata",
+            _governed_metadata)
+        self._patch.start()
+        self.addCleanup(self._patch.stop)
+        from mi_agent_api import mi_service
+        self.a = mi_service._source_registry(_provenanced(_A_TYPES), "ERE")
+        self.b = mi_service._source_registry(_provenanced(_B_TYPES), "BANKCO")
+        self.seam = TestTheProductionSeamBindsTheClientRegistry()
+
+    def _compile(self, registry, reference):
+        return TestTheProductionSeamBindsTheClientRegistry.compile_via_seam(
+            self.seam, registry, {"source_reference": reference})
+
+    def test_a_name_from_another_client_does_not_resolve(self):
+        self.assertFalse(self._compile(self.b, "ALP back book").is_plan)
+        self.assertFalse(self._compile(self.a, "the purchased book").is_plan)
+
+    def test_sequential_requests_do_not_leak_a_registry(self):
+        """Client A, then B, then A again, in one process."""
+        for registry, reference, expected in (
+                (self.a, "ALP back book", "alp_acquired"),
+                (self.b, "the purchased book", "bank_purchased"),
+                (self.a, "ALP back book", "alp_acquired")):
+            result = self._compile(registry, reference)
+            self.assertTrue(result.is_plan, result.codes())
+            self.assertEqual(
+                [(p.canonical_field, p.value)
+                 for p in result.plan.population.scope_predicates],
+                [("source_portfolio_id", expected)])
+        # B still cannot see A's book after three interleaved compilations.
+        self.assertFalse(self._compile(self.b, "ALP back book").is_plan)
+
+    def test_the_process_wide_compiler_never_acquires_a_registry(self):
+        from mi_agent import plan_shadow_wiring as wiring
+        self._compile(self.a, "ALP back book")
+        self._compile(self.b, "the purchased book")
+        self.assertIsNone(wiring._compiler().context.source_registry)
+
+
+class TestTheSeamIsWiredOnBothPaths(unittest.TestCase):
+    """Serving AND shadow. A shadow that cannot resolve a name would record
+    REFUSE for exactly the questions serving can now answer."""
+
+    def test_the_serving_call_site_supplies_a_registry(self):
+        import inspect
+        from mi_agent_api import mi_service
+        source = inspect.getsource(mi_service._run_analysis)
+        self.assertIn("source_registry=_source_registry(", source)
+        self.assertEqual(source.count("_source_registry("), 2,
+                         "serving and shadow must both be bound")
+
+    def test_serve_threads_the_registry_to_the_compiler_seam(self):
+        import inspect
+        from mi_agent import plan_serving_canary as serving
+        self.assertIn("source_registry",
+                      inspect.signature(serving.serve).parameters)
+        self.assertIn("source_registry=source_registry",
+                      inspect.getsource(serving._attempt))
+
+    def test_the_shadow_threads_it_too(self):
+        import inspect
+        from mi_agent import plan_shadow_wiring as wiring
+        self.assertIn("source_registry",
+                      inspect.signature(wiring.observe_request).parameters)
+        self.assertIn("source_registry=source_registry",
+                      inspect.getsource(wiring._shadow))
+
+
 if __name__ == "__main__":
     unittest.main()

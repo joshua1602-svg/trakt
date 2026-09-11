@@ -307,7 +307,8 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           as_of: Optional[str] = None,
           snapshot_store: Any = None,
           snapshot_client_id: Optional[str] = None,
-          snapshot_route: Optional[str] = None) -> Optional[Dict[str, Any]]:
+          snapshot_route: Optional[str] = None,
+          source_registry: Any = None) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
     Raises nothing: a serving canary that could fail a request would be worse
@@ -334,7 +335,8 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
                                  is not None else portfolio_id), as_of=as_of,
             snapshot_store=snapshot_store,
             snapshot_client_id=snapshot_client_id,
-            snapshot_route=snapshot_route)
+            snapshot_route=snapshot_route,
+            source_registry=source_registry)
     except Exception as exc:                                         # noqa: BLE001
         payload, reason = None, UNEXPECTED_ERROR
         body["disposition"] = evidence.ORCHESTRATION_ERROR
@@ -496,13 +498,20 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              render_portfolio_id: Optional[str], as_of: Optional[str],
              snapshot_store: Any = None,
              snapshot_client_id: Optional[str] = None,
-             snapshot_route: Optional[str] = None
+             snapshot_route: Optional[str] = None,
+             source_registry: Any = None
              ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One serving attempt. `(payload or None, reason)`; fills `body` as it goes."""
     from mi_agent.interpretation_v2.outcomes import (OUTCOME_CLARIFY, OUTCOME_PLAN,
                                                      OUTCOME_REFUSE)
 
-    outcome, compiled = wiring.build_plan(question)
+    # THIS CLIENT'S GOVERNED SOURCE PORTFOLIOS, and no other client's. Supplied
+    # by the caller that authorised the request; `build_plan` uses it for one
+    # compilation and never caches it. With none supplied a question naming a
+    # portfolio is refused, which is where every caller was until the production
+    # seam started passing one.
+    outcome, compiled = wiring.build_plan(question,
+                                          source_registry=source_registry)
     wiring.record_plan_stages(body, outcome, compiled)
 
     if not outcome.ok:

@@ -186,6 +186,37 @@ def _governed_context(envelope: Dict[str, Any], *, req: MiQueryRequest,
     return _enforce_model_availability(_enforce_semantic_coverage(envelope))
 
 
+def _source_registry(frame: Any, client_id: Optional[str]) -> Any:
+    """THIS request's client's governed source portfolios, or None. Never raises.
+
+    The registry `portfolio_scope` already builds for every other surface —
+    canonical provenance in the request's own frame, overlaid with the governed
+    metadata `portfolio_metadata` resolves from the client registry file and the
+    source registry. No second catalogue, no second loader, and nothing read
+    from the question.
+
+    SCOPE IS THE AUTHORISED CLIENT. `client_id` comes from the authorised
+    portfolio, so a registry can only ever hold that client's books; a name from
+    another client is simply not in it and refuses like any other unknown name.
+
+    None means a named-source question REFUSES for this request rather than
+    widening to the whole book — the same fail-closed outcome as no registry
+    file at all. Built per request and never cached: `build_plan` makes a
+    request-scoped compiler for it precisely so one client's books cannot answer
+    the next client's question.
+    """
+    if not client_id:
+        return None
+    try:
+        from mi_agent import portfolio_scope as _portfolio_scope
+        return _portfolio_scope.registry_for_frame(frame, client_id=client_id)
+    except Exception:                                                # noqa: BLE001
+        logger.warning("the governed source registry could not be built; a "
+                       "question naming a portfolio will be refused for this "
+                       "request", exc_info=True)
+        return None
+
+
 def _stamp_semantic_coverage(envelope: Dict[str, Any], *, question: str,
                              semantics: Optional[Dict[str, Any]],
                              frame: Any, geography: Any = None) -> None:
@@ -1945,7 +1976,8 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             render_portfolio_id=portfolio_id, as_of=req.as_of_date,
             snapshot_store=_snapshot_store.build_store(ds, client_id),
             snapshot_client_id=client_id,
-            snapshot_route=_snapshot_store.FUNDED_ROUTE)
+            snapshot_route=_snapshot_store.FUNDED_ROUTE,
+            source_registry=_source_registry(df, client_id))
 
     routed = None
     try:
@@ -2199,7 +2231,9 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
         _plan_shadow.observe_request(question=req.question, client_id=client_id,
                                      run_id=run_id, result=result, frame=df,
                                      semantics=semantics, view=view,
-                                     portfolio_id=authorised.portfolio_id)
+                                     portfolio_id=authorised.portfolio_id,
+                                     source_registry=_source_registry(
+                                         df, client_id))
     # A point-in-time answer is run-scoped only when a run was explicitly selected.
     return _governed_context(result, req=req, client_id=client_id, run_id=run_id,
                              geography=geography,

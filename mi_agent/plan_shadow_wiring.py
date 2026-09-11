@@ -270,6 +270,7 @@ def record_plan_stages(body: Dict[str, Any], outcome: Any, compiled: Any) -> Non
 
 
 def _shadow(*, question: str, client_id: Optional[str], run_id: Optional[str],
+            source_registry: Any = None,
             result: Any, frame: Any, semantics: Any, view: Optional[str],
             portfolio_id: Optional[str], cid: str) -> Dict[str, Any]:
     """One shadowed request, start to finish. Always returns a record."""
@@ -280,7 +281,11 @@ def _shadow(*, question: str, client_id: Optional[str], run_id: Optional[str],
                                client_id=client_id, run_id=run_id, view=view,
                                portfolio_id=portfolio_id)
     try:
-        outcome, compiled = build_plan(question)
+        # The same client registry the serving path uses. Without it the shadow
+        # would record REFUSE for exactly the questions serving can now answer,
+        # and the shadow exists to predict what serving would decide.
+        outcome, compiled = build_plan(question,
+                                       source_registry=source_registry)
         record_plan_stages(body, outcome, compiled)
 
         if not outcome.ok:
@@ -395,7 +400,8 @@ def _finish(body: Dict[str, Any]) -> Dict[str, Any]:
 def observe_request(*, question: str, client_id: Optional[str],
                     run_id: Optional[str] = None, result: Any, frame: Any,
                     semantics: Any, view: Optional[str] = None,
-                    portfolio_id: Optional[str] = None
+                    portfolio_id: Optional[str] = None,
+                    source_registry: Any = None
                     ) -> Optional[Dict[str, Any]]:
     """The call `mi_service` makes. Returns a record only under inline dispatch.
 
@@ -438,7 +444,8 @@ def observe_request(*, question: str, client_id: Optional[str],
                 return _shadow(question=question, client_id=client_id,
                                run_id=run_id, result=result, frame=frame,
                                semantics=semantics, view=view,
-                               portfolio_id=portfolio_id, cid=cid)
+                               portfolio_id=portfolio_id, cid=cid,
+                               source_registry=source_registry)
             finally:
                 with _in_flight_lock:
                     _in_flight -= 1
