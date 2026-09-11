@@ -1,0 +1,660 @@
+{
+ "T01": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "the last six months"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T02": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "the last three months"
+   ],
+   "grain": "monthly",
+   "periods_back": 4
+  }
+ },
+ "T03": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "each month"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T04": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "loan",
+    "statistic": "count",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "each month"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T05": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "point_in_time",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_loan_to_value",
+    "statistic": "average",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "current",
+   "labels": [],
+   "grain": null,
+   "periods_back": null
+  }
+ },
+ "T06": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "loan",
+    "statistic": "count",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "each month"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T07": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "breakdown",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "loan",
+    "statistic": "count",
+    "weight": null
+   }
+  ],
+  "dimensions": [
+   "ltv_bucket"
+  ],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "each month"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T08": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "breakdown",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "loan",
+    "statistic": "count",
+    "weight": null
+   }
+  ],
+  "dimensions": [
+   "ltv_bucket",
+   "erm_product_type"
+  ],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "the last two months"
+   ],
+   "grain": "monthly",
+   "periods_back": 2
+  }
+ },
+ "T09": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "point_in_time",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "explicit_period",
+   "labels": [
+    "April"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T10": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "range",
+   "labels": [
+    "since March"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T11": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "compare",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "relative_pair",
+   "labels": [
+    "this month versus last month"
+   ],
+   "grain": "monthly",
+   "periods_back": 1
+  }
+ },
+ "T12": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "forward_looking",
+   "labels": [
+    "the next three months"
+   ],
+   "grain": "monthly",
+   "periods_back": null
+  }
+ },
+ "T13": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "the last twenty-four months"
+   ],
+   "grain": "monthly",
+   "periods_back": 24
+  }
+ },
+ "T14": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "period_movement",
+  "operation": "movement",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "relative_pair",
+   "labels": [
+    "last month"
+   ],
+   "grain": "monthly",
+   "periods_back": 1
+  }
+ },
+ "T15": {
+  "schema_version": "candidate_intent/1.0",
+  "capability": "generic_analysis",
+  "operation": "series",
+  "population": {
+   "base": "funded",
+   "lens": "all",
+   "seasoning": "any"
+  },
+  "measures": [
+   {
+    "concept": "current_outstanding_balance",
+    "statistic": "sum",
+    "weight": null
+   },
+   {
+    "concept": "loan",
+    "statistic": "count",
+    "weight": null
+   },
+   {
+    "concept": "current_loan_to_value",
+    "statistic": "average",
+    "weight": null
+   }
+  ],
+  "dimensions": [],
+  "filters": [],
+  "geography": {
+   "requested": false,
+   "basis": null,
+   "level": null,
+   "group_by": false,
+   "values": []
+  },
+  "comparison": {
+   "kind": "none",
+   "left": null,
+   "right": null
+  },
+  "target": null,
+  "outputs": [],
+  "ambiguity": [],
+  "evidence": [],
+  "time": {
+   "form": "series",
+   "labels": [
+    "the last three months"
+   ],
+   "grain": "monthly",
+   "periods_back": 3
+  }
+ }
+}

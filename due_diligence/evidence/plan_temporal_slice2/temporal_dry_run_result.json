@@ -1,0 +1,2155 @@
+{
+  "bank_id": "slice2_temporal_live_v1",
+  "manifest_sha256": "970488ff6803c5fb383daa1142584b71ddd4f99a7c65c0578b18fe03ba43d817",
+  "live": false,
+  "model": "claude-opus-5",
+  "authorised_live_calls": 15,
+  "live_calls_made": 0,
+  "fixture_catalogue": [
+    "2025-11-30",
+    "2025-12-31",
+    "2026-01-31",
+    "2026-02-28",
+    "2026-03-31",
+    "2026-04-30",
+    "2026-05-31",
+    "2026-06-30"
+  ],
+  "verdicts": {
+    "TEMPORAL_BOUNDARY_HELD": 11,
+    "JUSTIFIED_REFUSE": 1,
+    "JUSTIFIED_CLARIFY": 1,
+    "JUSTIFIED_INELIGIBLE": 2
+  },
+  "boundary_held": 15,
+  "of": 15,
+  "temporal_intent_absent": 0,
+  "period_unresolvable": 0,
+  "wrong_snapshots": 0,
+  "physical_bindings": 0,
+  "token_usage": {
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "cache_creation_input_tokens": 0
+  },
+  "results": [
+    {
+      "id": "T01",
+      "question": "How has funded balance changed over the last six months?",
+      "category": "last_n_months",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last six months"
+          ],
+          "grain": "monthly",
+          "periods_back": 6
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last six months"
+          ],
+          "grain": "monthly",
+          "periods_back": 6
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "How has funded balance changed over the last six months?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_508041ea3f2c5809",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "the last six months"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 6,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "count",
+      "selector_mode": "last_n",
+      "snapshots": [
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T02",
+      "question": "What was the funded book balance in each of the last three months?",
+      "category": "last_n_months",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last three months"
+          ],
+          "grain": "monthly",
+          "periods_back": 3
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last three months"
+          ],
+          "grain": "monthly",
+          "periods_back": 3
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "What was the funded book balance in each of the last three months?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_a147ddbf21e896f8",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "the last three months"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 3,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "count",
+      "selector_mode": "last_n",
+      "snapshots": [
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T03",
+      "question": "What was funded balance each month?",
+      "category": "each_month",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "What was funded balance each month?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_d0716f3b36e362d0",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "each month"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": null,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "whole_series",
+      "selector_mode": "range",
+      "snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T04",
+      "question": "How many loans were on the book each month?",
+      "category": "count_each_month",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "How many loans were on the book each month?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_df6d52ad9f7edbc2",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "loan",
+        "measure_field": null,
+        "statistic": "count",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "each month"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": null,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "whole_series",
+      "selector_mode": "range",
+      "snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T05",
+      "question": "How has average LTV changed over the last four months?",
+      "category": "average_over_time",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_loan_to_value",
+            "statistic": "average",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last four months"
+          ],
+          "grain": "monthly",
+          "periods_back": 4
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_loan_to_value",
+            "statistic": "average",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last four months"
+          ],
+          "grain": "monthly",
+          "periods_back": 4
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "How has average LTV changed over the last four months?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_7f21ada3f60aa981",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "current_loan_to_value",
+        "measure_field": "current_loan_to_value",
+        "statistic": "average",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "the last four months"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 4,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "count",
+      "selector_mode": "last_n",
+      "snapshots": [
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T06",
+      "question": "How many drawdown loans were there each month?",
+      "category": "filtered_evolution",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [
+          {
+            "concept": "erm_product_type",
+            "comparator": "eq",
+            "value": "drawdown"
+          }
+        ],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [
+          {
+            "concept": "erm_product_type",
+            "comparator": "eq",
+            "value": "drawdown"
+          }
+        ],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "How many drawdown loans were there each month?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_d0c0ffff6f251edb",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "loan",
+        "measure_field": null,
+        "statistic": "count",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [
+          [
+            "erm_product_type",
+            "eq",
+            "drawdown"
+          ]
+        ],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "each month"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": null,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "whole_series",
+      "selector_mode": "range",
+      "snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T07",
+      "question": "Show loan count by LTV bucket each month.",
+      "category": "time_by_one_dimension",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [
+          "ltv_bucket"
+        ],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [
+          "ltv_bucket"
+        ],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "each month"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "Show loan count by LTV bucket each month.",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_b79fae57c76fa75f",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "measure_concept": "loan",
+        "measure_field": null,
+        "statistic": "count",
+        "weight_field": null,
+        "dimensions": [
+          "ltv_bucket"
+        ],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "each month"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": null,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "whole_series",
+      "selector_mode": "range",
+      "snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T08",
+      "question": "Show loan count by LTV bucket and product type for the last two months.",
+      "category": "time_by_two_dimensions",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [
+          "ltv_bucket",
+          "erm_product_type"
+        ],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last two months"
+          ],
+          "grain": "monthly",
+          "periods_back": 2
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          }
+        ],
+        "dimensions": [
+          "ltv_bucket",
+          "erm_product_type"
+        ],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last two months"
+          ],
+          "grain": "monthly",
+          "periods_back": 2
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "Show loan count by LTV bucket and product type for the last two months.",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_8baea244292716c5",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "measure_concept": "loan",
+        "measure_field": null,
+        "statistic": "count",
+        "weight_field": null,
+        "dimensions": [
+          "erm_product_type",
+          "ltv_bucket"
+        ],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "the last two months"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 2,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "count",
+      "selector_mode": "last_n",
+      "snapshots": [
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T09",
+      "question": "What was funded balance in April?",
+      "category": "explicit_period",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "explicit_period",
+          "labels": [
+            "April"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "explicit_period",
+          "labels": [
+            "April"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "What was funded balance in April?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_f8d4a9f7444d8a39",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "explicit_period",
+        "period_labels": [
+          "April"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": null,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "single_period",
+      "basis": "anchor",
+      "selector_mode": "as_of",
+      "snapshots": [
+        "2026-04-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T10",
+      "question": "How has funded balance changed since March?",
+      "category": "since_period",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "range",
+          "labels": [
+            "since March"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "range",
+          "labels": [
+            "since March"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "How has funded balance changed since March?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_d4e6a8c08ed0dddd",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "range",
+        "period_labels": [
+          "since March"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": null,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "time_series",
+      "basis": "anchor",
+      "selector_mode": "range",
+      "snapshots": [
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T11",
+      "question": "What was funded balance this month versus last month?",
+      "category": "current_versus_prior",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "compare",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "relative_pair",
+          "labels": [
+            "this month versus last month"
+          ],
+          "grain": "monthly",
+          "periods_back": 1
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "compare",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "relative_pair",
+          "labels": [
+            "this month versus last month"
+          ],
+          "grain": "monthly",
+          "periods_back": 1
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "What was funded balance this month versus last month?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_2ab6a0421b34c068",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "compare",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "relative_pair",
+        "period_labels": [
+          "this month versus last month"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 1,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": true,
+      "resolution_reason": "",
+      "resolution_detail": "",
+      "shape": "period_comparison",
+      "basis": "pair",
+      "selector_mode": "last_n",
+      "snapshots": [
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "verdict": "TEMPORAL_BOUNDARY_HELD"
+    },
+    {
+      "id": "T12",
+      "question": "What will funded balance be over the next three months?",
+      "category": "future_period",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "forward_looking",
+          "labels": [
+            "the next three months"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "forward_looking",
+          "labels": [
+            "the next three months"
+          ],
+          "grain": "monthly",
+          "periods_back": null
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "What will funded balance be over the next three months?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "REFUSE",
+      "compile_reasons": [
+        "UNSUPPORTED_COMPOSITION",
+        "UNSUPPORTED_COMPOSITION"
+      ],
+      "verdict": "JUSTIFIED_REFUSE"
+    },
+    {
+      "id": "T13",
+      "question": "How has funded balance changed over the last twenty-four months?",
+      "category": "unavailable_period",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last twenty-four months"
+          ],
+          "grain": "monthly",
+          "periods_back": 24
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last twenty-four months"
+          ],
+          "grain": "monthly",
+          "periods_back": 24
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "How has funded balance changed over the last twenty-four months?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_8ce49f29c59ef799",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "the last twenty-four months"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 24,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": true,
+      "ineligible_reason": "",
+      "ineligible_detail": "",
+      "resolved": false,
+      "resolution_reason": "PERIOD_NOT_AVAILABLE",
+      "resolution_detail": "24 reporting period(s) requested; client='oracle_client' route='funded' carries 8",
+      "shape": "",
+      "basis": "",
+      "selector_mode": null,
+      "snapshots": [],
+      "verdict": "JUSTIFIED_CLARIFY"
+    },
+    {
+      "id": "T14",
+      "question": "Why did funded balance increase last month?",
+      "category": "movement_cause",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "period_movement",
+        "operation": "movement",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "relative_pair",
+          "labels": [
+            "last month"
+          ],
+          "grain": "monthly",
+          "periods_back": 1
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "period_movement",
+        "operation": "movement",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "relative_pair",
+          "labels": [
+            "last month"
+          ],
+          "grain": "monthly",
+          "periods_back": 1
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "Why did funded balance increase last month?",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_52c83fa8f52a753f",
+      "live_semantics": {
+        "capability": "period_movement",
+        "operation": "movement",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "relative_pair",
+        "period_labels": [
+          "last month"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 1,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": false,
+      "ineligible_reason": "CAPABILITY_NOT_GENERIC",
+      "ineligible_detail": "capability='period_movement' is specialist; it owns its own input contract and arithmetic",
+      "verdict": "JUSTIFIED_INELIGIBLE"
+    },
+    {
+      "id": "T15",
+      "question": "Give me balance, loan count and average LTV for each of the last three months.",
+      "category": "multi_output_temporal",
+      "problems": [],
+      "latency_ms": 0,
+      "model_id": "replay",
+      "usage": {},
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          },
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          },
+          {
+            "concept": "current_loan_to_value",
+            "statistic": "average",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last three months"
+          ],
+          "grain": "monthly",
+          "periods_back": 3
+        }
+      },
+      "candidate_intent": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "population": {
+          "base": "funded",
+          "lens": "all",
+          "seasoning": "any"
+        },
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "sum",
+            "weight": null
+          },
+          {
+            "concept": "loan",
+            "statistic": "count",
+            "weight": null
+          },
+          {
+            "concept": "current_loan_to_value",
+            "statistic": "average",
+            "weight": null
+          }
+        ],
+        "dimensions": [],
+        "filters": [],
+        "geography": {
+          "requested": false,
+          "basis": null,
+          "level": null,
+          "group_by": false,
+          "values": []
+        },
+        "time": {
+          "form": "series",
+          "labels": [
+            "the last three months"
+          ],
+          "grain": "monthly",
+          "periods_back": 3
+        },
+        "comparison": {
+          "kind": "none",
+          "left": null,
+          "right": null
+        },
+        "target": null,
+        "outputs": [],
+        "ambiguity": [],
+        "evidence": [],
+        "provenance": {
+          "question": "Give me balance, loan count and average LTV for each of the last three months.",
+          "model_id": "replay",
+          "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+          "vocabulary_version": "2.0.0",
+          "usage": {}
+        }
+      },
+      "compile_outcome": "PLAN",
+      "compile_reasons": [],
+      "plan_id": "plan_d7b0f0cb89e508b5",
+      "live_semantics": {
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measure_concept": "current_outstanding_balance",
+        "measure_field": "current_outstanding_balance",
+        "statistic": "sum",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "series",
+        "period_labels": [
+          "the last three months"
+        ],
+        "period_grain": "monthly",
+        "period_periods_back": 3,
+        "comparison_kind": "none"
+      },
+      "physical_binding": null,
+      "eligible": false,
+      "ineligible_reason": "NOT_SINGLE_OUTPUT",
+      "ineligible_detail": "3 measures in one output",
+      "verdict": "JUSTIFIED_INELIGIBLE"
+    }
+  ],
+  "payload_source": "plausible stand-ins"
+}

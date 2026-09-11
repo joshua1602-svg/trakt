@@ -1,0 +1,379 @@
+{
+  "bank_id": "slice2_temporal_live_v1",
+  "purpose": "prove the Opus -> temporal CandidateIntent -> GovernedQueryPlan -> slice 2 perimeter -> SnapshotSelector boundary on fresh live interpretations",
+  "boundary_under_test": [
+    "raw question",
+    "OpusInterpreter.interpret",
+    "CandidateIntent",
+    "DeterministicCompiler.compile",
+    "GovernedQueryPlan",
+    "plan_temporal_runtime.check_temporal_eligibility",
+    "plan_temporal_runtime.resolve_temporal",
+    "SnapshotSelector",
+    "resolved snapshot headers"
+  ],
+  "stops_before": [
+    "execute_mi_query",
+    "any MI API call",
+    "any serving surface",
+    "any deployment"
+  ],
+  "model": "claude-opus-5",
+  "authorised_live_calls": 15,
+  "retry_policy": "exactly one call per case; a failure is RECORDED, never retried, reworded or probed",
+  "fixture_catalogue": [
+    "2025-11-30",
+    "2025-12-31",
+    "2026-01-31",
+    "2026-02-28",
+    "2026-03-31",
+    "2026-04-30",
+    "2026-05-31",
+    "2026-06-30"
+  ],
+  "fixture_cadence": "monthly",
+  "relative_windows_resolve_against": "the catalogue's latest reporting period, never wall-clock",
+  "what_is_pinned": [
+    "slice 2 eligibility",
+    "the resolved snapshot set",
+    "measure concept",
+    "statistic (from the allowed set)",
+    "filters",
+    "dimensions",
+    "population base",
+    "the absence of any physical date or snapshot id"
+  ],
+  "what_is_not_pinned": [
+    "which span form the model chose (series or range)",
+    "which operation the model chose (series, breakdown or point_in_time)",
+    "the model's own wording of the period label"
+  ],
+  "cases": [
+    {
+      "id": "T01",
+      "question": "How has funded balance changed over the last six months?",
+      "category": "last_n_months",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "current_outstanding_balance",
+      "expected_statistics": [
+        "sum"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": "The span is stated as a COUNT of months. The resolver can only honour it if the model supplies periods_back=6; a labels-only interpretation clarifies, and that would be the finding."
+    },
+    {
+      "id": "T02",
+      "question": "What was the funded book balance in each of the last three months?",
+      "category": "last_n_months",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "current_outstanding_balance",
+      "expected_statistics": [
+        "sum"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T03",
+      "question": "What was funded balance each month?",
+      "category": "each_month",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "current_outstanding_balance",
+      "expected_statistics": [
+        "sum"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": "No count and no anchor: the whole available series. Needs a label the governed span vocabulary recognises."
+    },
+    {
+      "id": "T04",
+      "question": "How many loans were on the book each month?",
+      "category": "count_each_month",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "loan",
+      "expected_statistics": [
+        "count"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T05",
+      "question": "How has average LTV changed over the last four months?",
+      "category": "average_over_time",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "current_loan_to_value",
+      "expected_statistics": [
+        "average",
+        "weighted_average"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T06",
+      "question": "How many drawdown loans were there each month?",
+      "category": "filtered_evolution",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "loan",
+      "expected_statistics": [
+        "count"
+      ],
+      "expected_filters": [
+        [
+          "erm_product_type",
+          "eq",
+          "drawdown"
+        ]
+      ],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T07",
+      "question": "Show loan count by LTV bucket each month.",
+      "category": "time_by_one_dimension",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2025-11-30",
+        "2025-12-31",
+        "2026-01-31",
+        "2026-02-28",
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "loan",
+      "expected_statistics": [
+        "count"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [
+        "ltv_bucket"
+      ],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T08",
+      "question": "Show loan count by LTV bucket and product type for the last two months.",
+      "category": "time_by_two_dimensions",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "loan",
+      "expected_statistics": [
+        "count"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [
+        "erm_product_type",
+        "ltv_bucket"
+      ],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T09",
+      "question": "What was funded balance in April?",
+      "category": "explicit_period",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2026-04-30"
+      ],
+      "expected_measure_concept": "current_outstanding_balance",
+      "expected_statistics": [
+        "sum"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": "A named month with no year. The catalogue carries exactly one April, so it resolves; a book with two would clarify."
+    },
+    {
+      "id": "T10",
+      "question": "How has funded balance changed since March?",
+      "category": "since_period",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2026-03-31",
+        "2026-04-30",
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "current_outstanding_balance",
+      "expected_statistics": [
+        "sum"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T11",
+      "question": "What was funded balance this month versus last month?",
+      "category": "current_versus_prior",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [
+        "2026-05-31",
+        "2026-06-30"
+      ],
+      "expected_measure_concept": "current_outstanding_balance",
+      "expected_statistics": [
+        "sum"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": ""
+    },
+    {
+      "id": "T12",
+      "question": "What will funded balance be over the next three months?",
+      "category": "future_period",
+      "expected_interpretation_disposition": "REFUSE",
+      "temporal_required": false,
+      "expected_eligibility": "NOT_REACHED",
+      "expected_snapshots": null,
+      "expected_measure_concept": null,
+      "expected_statistics": [],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": "A forward-looking period on a capability that owns no forward methodology. Expected to refuse at the compiler; if the model instead routes it to the forecast capability, that is a JUSTIFIED_REFUSE at the perimeter and is recorded as such."
+    },
+    {
+      "id": "T13",
+      "question": "How has funded balance changed over the last twenty-four months?",
+      "category": "unavailable_period",
+      "expected_interpretation_disposition": "PLAN",
+      "temporal_required": true,
+      "expected_eligibility": "ELIGIBLE",
+      "expected_snapshots": [],
+      "expected_measure_concept": "current_outstanding_balance",
+      "expected_statistics": [
+        "sum"
+      ],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": "The book carries eight periods. The resolver must clarify with PERIOD_NOT_AVAILABLE and must not return a shorter series."
+    },
+    {
+      "id": "T14",
+      "question": "Why did funded balance increase last month?",
+      "category": "movement_cause",
+      "expected_interpretation_disposition": "ANY",
+      "temporal_required": false,
+      "expected_eligibility": "INELIGIBLE",
+      "expected_snapshots": null,
+      "expected_measure_concept": null,
+      "expected_statistics": [],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": "Movement attribution is out of the slice 2 contract. Whether it arrives as period_movement (CAPABILITY_NOT_GENERIC) or as a generic movement operation (OPERATION_NOT_TEMPORAL), it must not be answered as an evaluation across snapshots."
+    },
+    {
+      "id": "T15",
+      "question": "Give me balance, loan count and average LTV for each of the last three months.",
+      "category": "multi_output_temporal",
+      "expected_interpretation_disposition": "ANY",
+      "temporal_required": true,
+      "expected_eligibility": "INELIGIBLE",
+      "expected_snapshots": null,
+      "expected_measure_concept": null,
+      "expected_statistics": [],
+      "expected_filters": [],
+      "expected_dimensions": [],
+      "expected_population_base": "funded",
+      "note": "Three independent measures in one request. Must not be silently simplified to one."
+    }
+  ]
+}

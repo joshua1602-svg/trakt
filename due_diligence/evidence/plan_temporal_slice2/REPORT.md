@@ -289,6 +289,119 @@ and it is the first thing a Phase 5 run should answer.
 
 ---
 
+## PHASE 5 — THE OPUS → TEMPORAL BOUNDARY: PRE-REGISTERED, HARNESSED, NOT RUN
+
+The one open question Slice 2 ended on — *does Opus state temporal intent in a
+shape the deterministic layer can act on?* — now has a bank, a manifest and a
+harness. It does not yet have an answer, and the reason is a missing credential,
+not a missing test.
+
+```
+LIVE_BANK_SIZE          = 15   (11 positives + 4 controls)
+AUTHORISED_LIVE_CALLS   = 15
+LIVE_CALLS_MADE         = 0
+BLOCKER                 = no ANTHROPIC_API_KEY in this environment
+```
+
+The product's own interpreter says so, rather than this report asserting it:
+
+```
+AnthropicInterpreterClient().available  ->  False
+OpusInterpreter(...).interpret(q).reason ->
+    {'code': 'MODEL_UNAVAILABLE', 'subject': 'interpreter',
+     'detail': 'no ANTHROPIC_API_KEY in the environment'}
+```
+
+`ANTHROPIC_BASE_URL` is set to the public `https://api.anthropic.com` and carries
+no credential; there is no `.env`, no key vault fallback, and every call site in
+the estate reads `os.environ["ANTHROPIC_API_KEY"]` directly. The harness detects
+this, prints `NOT RUN`, exits 2 and writes no result file — it does not fabricate
+one.
+
+### The boundary under test, and where it stops
+
+```
+raw question -> OpusInterpreter.interpret        (live, frozen interpreter)
+             -> CandidateIntent                   (the model's only output)
+             -> DeterministicCompiler.compile     (frozen)
+             -> GovernedQueryPlan
+             -> check_temporal_eligibility
+             -> resolve_temporal -> SnapshotSelector -> resolved snapshots
+             STOP
+```
+
+No MI API call, no `MI_BEARER`, no execution against a book, no serving surface,
+and **no product module changed** — the whole of Phase 5 is new files under
+`due_diligence/evidence/plan_temporal_slice2/`.
+
+### What is pinned, and what deliberately is not
+
+A pre-registration that demanded a particular `time.form` or `operation` would be
+scoring Opus against this repository's guess at its wording. `series` and `range`
+are both span forms the perimeter admits; `series`, `breakdown` and
+`point_in_time` are all operations it admits.
+
+| pinned | not pinned |
+|---|---|
+| slice 2 eligibility | which span form the model chose |
+| the resolved snapshot set | which operation it chose |
+| measure concept, statistic (from an allowed set), filters, dimensions, population base | its wording of the period label |
+| the absence of any physical date or snapshot id | |
+
+`expected_snapshots` is hand-written against the eight-month fixture and never
+read back from the product. Relative windows resolve against the **catalogue's**
+latest period, not wall-clock, so the expectation does not drift with the date.
+
+### The harness is proved before a penny is spent — both ways
+
+`--dry-run` replays authored stand-in payloads through the identical pipeline:
+**15/15 boundary held** (11 `TEMPORAL_BOUNDARY_HELD`, 2 `JUSTIFIED_INELIGIBLE`,
+1 `JUSTIFIED_REFUSE`, 1 `JUSTIFIED_CLARIFY`).
+
+A harness whose only demonstrated outcome is PASS has demonstrated nothing, so
+`--degraded` replays the same fifteen questions with four payloads deliberately
+broken. All four are caught, each named precisely:
+
+| injected fault | verdict | what the harness reported |
+|---|---|---|
+| T01 window in words only, no `periods_back` | `PERIOD_UNRESOLVABLE` | `PERIOD_LABEL_UNRESOLVED: no governed period is named by ['the last six months']` |
+| T02 four periods where three were asked | `WRONG_SNAPSHOTS` | expected 3 dates, got 4 |
+| T05 time constraint dropped (`form: current`) | `TEMPORAL_INTENT_ABSENT` | "the time constraint did not survive the model boundary" |
+| T06 filter dropped | `SEMANTIC_DEVIATION` | `filters: [['erm_product_type','eq','drawdown']] -> []` |
+
+The degraded run found a real defect in the harness's own diagnostics, which is
+recorded rather than quietly fixed: a dropped time constraint was first reported
+as `UNEXPECTED_INELIGIBLE` with no detail, because the perimeter refuses
+`current` as `PERIOD_NOT_TEMPORAL` before any model-facing check ran. Those are
+the same event, and only one of them is a finding *about the model*. The
+`temporal_required` check now runs **before** eligibility so the finding is named
+as one.
+
+### The single most likely live failure, named in advance
+
+T01's pre-registration says it plainly: *"The resolver can only honour it if the
+model supplies `periods_back=6`; a labels-only interpretation clarifies, and that
+would be the finding."* The recorded corpus is not reassuring on this — NL1A came
+back with `labels: ["last few months"]` and `periods_back: null`. If the live run
+returns `PERIOD_UNRESOLVABLE` on the count-bearing cases, the fix is a prompt or
+vocabulary change in `interpretation_v2`, not a widening of the resolver, and it
+belongs to a slice that is authorised to reopen interpretation.
+
+### To run it
+
+```bash
+python due_diligence/evidence/plan_temporal_slice2/temporal_live_run.py --dry-run    # harness, free
+python due_diligence/evidence/plan_temporal_slice2/temporal_live_run.py --degraded   # harness catches faults, free
+ANTHROPIC_API_KEY=... python due_diligence/evidence/plan_temporal_slice2/temporal_live_run.py
+```
+
+The third command is the only one that spends anything: at most 15 calls, one
+per case, no retry and no reworded second try. It verifies
+`temporal_bank_manifest.sha256` against the committed manifest first and refuses
+to run if the expectations have moved since they were registered.
+
+---
+
 ## KNOWN BOUNDARY: TIME × GEOGRAPHY IS INELIGIBLE
 
 "Show funded balance by region over the last three months" is listed as an
