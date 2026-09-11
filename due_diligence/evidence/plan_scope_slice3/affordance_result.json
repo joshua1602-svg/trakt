@@ -1,0 +1,965 @@
+{
+  "bank_id": "slice3_affordance_v1",
+  "manifest_sha256": "1acec6780f15a9f2e92371d86e2689a639bdcb73b995d7bc390e0aee811d18bc",
+  "model": "claude-opus-5",
+  "dry_run": false,
+  "authorised_live_calls": 10,
+  "live_calls": 10,
+  "cases": [
+    {
+      "id": "M1",
+      "question": "What is the back book balance?",
+      "axis": "lifecycle",
+      "why": "the generic phrase, alone. It names the funded population; reading it as a seasoning silently drops the front book",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": null,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": null,
+      "base": "funded",
+      "lens": null,
+      "seasoning": null,
+      "source_reference": null,
+      "capability": "generic_analysis",
+      "operation": "point_in_time",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": null,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded"
+        },
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "The requested figure is the outstanding balance measure.",
+            "text": "balance"
+          },
+          {
+            "claim": "'back book' names the funded population (loans already advanced and on the book), not a seasoning restriction.",
+            "text": "back book"
+          },
+          {
+            "claim": "No period is named, so the level is read at the current governed reporting period.",
+            "text": "What is the back book balance?"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.source_reference",
+            "note": "The bare phrase 'back book' was read as the funded population, not as the governed book 'ALP Acquired Back Book' (alias 'ALP back book'), which the question does not name.",
+            "options": [
+              "funded population",
+              "ALP Acquired Back Book"
+            ],
+            "blocking": false
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 3
+    },
+    {
+      "id": "M2",
+      "question": "What is in the front book?",
+      "axis": "lifecycle",
+      "why": "the mirror. New originations are the pipeline population, not a vintage of the funded one",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": null,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": null,
+      "base": "pipeline",
+      "lens": null,
+      "seasoning": null,
+      "source_reference": null,
+      "capability": "pipeline",
+      "operation": "summary",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": null,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "pipeline",
+        "operation": "summary",
+        "population": {
+          "base": "pipeline"
+        },
+        "measures": [
+          {
+            "concept": "pipeline_amount"
+          }
+        ],
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "The question is about the pipeline population \u2014 'front book' is the reader's term for applications not yet funded.",
+            "text": "the front book"
+          },
+          {
+            "claim": "An open 'what is in' request is a summary of that population as it currently stands, not a movement, comparison or ranking.",
+            "text": "What is in the front book?"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.base",
+            "note": "'Front book' read as the pipeline population (business in progress, not yet funded), per the governed scope axes. It matches no governed source portfolio name, so it is not read as a named book, and it is not read as a seasoning restriction since no contrast with older lending is drawn.",
+            "blocking": false,
+            "options": [
+              "pipeline population",
+              "front_book seasoning of the funded book"
+            ]
+          },
+          {
+            "slot": "measures",
+            "note": "The question names no figure. Read as a summary of the pipeline's size, so the pipeline capability's own pipeline amount is named; case count and any stage breakdown were left out as optional companions rather than requested elements.",
+            "blocking": false,
+            "options": [
+              "pipeline_amount",
+              "pipeline_amount plus pipeline_case_count",
+              "breakdown by pipeline stage"
+            ]
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 6
+    },
+    {
+      "id": "M3",
+      "question": "What is the acquired back book balance?",
+      "axis": "role",
+      "why": "two axes in one phrase: lifecycle AND role. Both, and no third",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": null,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": null,
+      "base": "funded",
+      "lens": "acquired",
+      "seasoning": null,
+      "source_reference": null,
+      "capability": "generic_analysis",
+      "operation": "point_in_time",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": true,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "lens": "acquired"
+        },
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "The figure requested is the outstanding balance",
+            "text": "balance"
+          },
+          {
+            "claim": "'back book' names the funded population (loans already advanced), not a seasoning restriction",
+            "text": "back book"
+          },
+          {
+            "claim": "'acquired' states the origination role within that population",
+            "text": "acquired"
+          },
+          {
+            "claim": "No period is named, so the current reporting period applies",
+            "text": "What is the ... balance?"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.source_reference",
+            "note": "Read 'acquired back book' as a description (funded population, acquired origination role) rather than as a named book. The client does declare 'ALP Acquired Back Book' (alias 'ALP back book') and 'NBS Acquired', but the reader named neither originator, so no single named book is asserted and both acquired books are in scope.",
+            "blocking": false,
+            "options": [
+              "funded population with acquired origination role (taken)",
+              "the named book 'ALP Acquired Back Book'"
+            ]
+          },
+          {
+            "slot": "measures[0].statistic",
+            "note": "No statistic stated; the governed default for balance (sum) applies.",
+            "blocking": false
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 3
+    },
+    {
+      "id": "M4",
+      "question": "What is the direct back book balance?",
+      "axis": "role",
+      "why": "the same, the other role. 'back book' must not drag in 'acquired'",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": null,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": null,
+      "base": "funded",
+      "lens": "direct",
+      "seasoning": null,
+      "source_reference": null,
+      "capability": "generic_analysis",
+      "operation": "point_in_time",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": true,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "lens": "direct"
+        },
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "The requested figure is the outstanding balance",
+            "text": "balance"
+          },
+          {
+            "claim": "'back book' names the funded population (loans already advanced), not a seasoning restriction",
+            "text": "back book"
+          },
+          {
+            "claim": "'direct' is the origination role: originated by the lender itself",
+            "text": "direct"
+          },
+          {
+            "claim": "No period is named, so the current governed reporting period applies",
+            "text": "What is the ... balance?"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.seasoning",
+            "note": "Read 'back book' as the funded population on the lifecycle axis, not as a seasoning restriction; no seasoning filter applied. 'direct back book' matches no governed source portfolio name, so it is read as role + population rather than a named book.",
+            "blocking": false,
+            "options": [
+              "funded population (taken)",
+              "seasoning = back_book"
+            ]
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 2
+    },
+    {
+      "id": "M5",
+      "question": "What is the balance of purchased loans?",
+      "axis": "role",
+      "why": "role language without the word 'acquired'",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": null,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": null,
+      "base": "funded",
+      "lens": "acquired",
+      "seasoning": null,
+      "source_reference": null,
+      "capability": "generic_analysis",
+      "operation": "point_in_time",
+      "blocking": [],
+      "BASE_CORRECT": null,
+      "ROLE_CORRECT": true,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "lens": "acquired"
+        },
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "The figure asked for is the governed current outstanding balance.",
+            "text": "What is the balance"
+          },
+          {
+            "claim": "'purchased' is the acquired origination role, not a named book.",
+            "text": "purchased loans"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.base",
+            "note": "The question does not state a lifecycle population; read as the funded book per the governed default.",
+            "blocking": false,
+            "options": [
+              "funded",
+              "whole_book"
+            ]
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 3
+    },
+    {
+      "id": "M6",
+      "question": "What is the balance of originated loans?",
+      "axis": "role",
+      "why": "role language without the word 'direct'",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": null,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": null,
+      "base": "funded",
+      "lens": "direct",
+      "seasoning": null,
+      "source_reference": null,
+      "capability": "generic_analysis",
+      "operation": "point_in_time",
+      "blocking": [],
+      "BASE_CORRECT": null,
+      "ROLE_CORRECT": true,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "lens": "direct"
+        },
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "The requested measure is the governed outstanding balance concept.",
+            "text": "What is the balance"
+          },
+          {
+            "claim": "'originated loans' describes the direct origination role (loans originated by the lender itself), not a named book.",
+            "text": "originated loans"
+          },
+          {
+            "claim": "No period stated, so the current governed reporting period applies; no lifecycle phrase stated, so the funded population applies.",
+            "text": "What is the balance of originated loans?"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.lens",
+            "note": "Read 'originated loans' as the direct origination role. It was not read as the governed source portfolio 'ALP Originations', since the question describes a role rather than naming that book.",
+            "options": [
+              "direct origination role",
+              "named book 'ALP Originations'"
+            ],
+            "blocking": false
+          },
+          {
+            "slot": "population.base",
+            "note": "No lifecycle phrase given; resolved to the funded population per governed default.",
+            "blocking": false
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 3
+    },
+    {
+      "id": "M7",
+      "question": "What is funded balance for ALP Acquired Back Book?",
+      "axis": "named",
+      "why": "the canonical label. Its words are its NAME \u2014 not a role and not a seasoning. This is the case that would have served wrong",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": true,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": true,
+      "base": "funded",
+      "lens": null,
+      "seasoning": null,
+      "source_reference": "ALP Acquired Back Book",
+      "capability": "generic_analysis",
+      "operation": "point_in_time",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": null,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "source_reference": "ALP Acquired Back Book"
+        },
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "Requests the outstanding balance measure",
+            "text": "What is funded balance"
+          },
+          {
+            "claim": "Population is the funded (already advanced) book",
+            "text": "funded balance"
+          },
+          {
+            "claim": "Names a governed source portfolio by name",
+            "text": "ALP Acquired Back Book"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.source_reference",
+            "note": "'ALP Acquired Back Book' matches a governed source portfolio name exactly; treated as an atomic identity, so no acquired lens or back-book seasoning restriction was asserted from the words inside the name.",
+            "blocking": false
+          },
+          {
+            "slot": "measures",
+            "note": "'funded balance' read as the governed Balance (current outstanding balance) concept measured over the funded population; no standalone 'funded balance' concept exists outside the capability-owned forecast/bridge variants.",
+            "blocking": false
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 3
+    },
+    {
+      "id": "M8",
+      "question": "What is funded balance for the ALP back book?",
+      "axis": "named",
+      "why": "a declared alias, which the model can now read. 'back book' here is part of a name, not the lifecycle phrase",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": true,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": true,
+      "base": "funded",
+      "lens": null,
+      "seasoning": null,
+      "source_reference": "ALP back book",
+      "capability": "generic_analysis",
+      "operation": "point_in_time",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": null,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "source_reference": "ALP back book"
+        },
+        "time": {
+          "form": "current"
+        },
+        "evidence": [
+          {
+            "claim": "The figure asked for is outstanding balance on the funded population",
+            "text": "funded balance"
+          },
+          {
+            "claim": "The question names a governed source portfolio by an approved alias, treated as an atomic identity (no role or seasoning implied)",
+            "text": "the ALP back book"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.source_reference",
+            "note": "'ALP back book' matches the approved alias of the governed book 'ALP Acquired Back Book'; taken as a name, so no acquired role and no back-book seasoning restriction were asserted separately.",
+            "blocking": false,
+            "options": [
+              "ALP Acquired Back Book"
+            ]
+          },
+          {
+            "slot": "measures",
+            "note": "'funded balance' read as the governed Balance (current outstanding exposure) measured over the funded population, not a capability-owned balance such as forecast funded balance or funded balance movement.",
+            "blocking": false,
+            "options": [
+              "current_outstanding_balance on funded population",
+              "forecast_funded_balance",
+              "funded_balance_movement"
+            ]
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 3
+    },
+    {
+      "id": "M9",
+      "question": "Show ALP Acquired Back Book funded balance each month.",
+      "axis": "named",
+      "why": "a named source must cost neither the series nor its grain",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": true,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": true,
+      "base": "funded",
+      "lens": null,
+      "seasoning": null,
+      "source_reference": "ALP Acquired Back Book",
+      "capability": "generic_analysis",
+      "operation": "series",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": null,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "generic_analysis",
+        "operation": "series",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "source_reference": "ALP Acquired Back Book"
+        },
+        "time": {
+          "form": "series",
+          "grain": "monthly"
+        },
+        "evidence": [
+          {
+            "claim": "Named source portfolio matching a governed book name, treated as atomic identity",
+            "text": "ALP Acquired Back Book"
+          },
+          {
+            "claim": "Funded population, reported as a balance measure",
+            "text": "funded balance"
+          },
+          {
+            "claim": "A monthly series of the level over governed periods",
+            "text": "each month"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "population.lens",
+            "note": "The phrase 'ALP Acquired Back Book' is read as a governed book name (atomic identity); no origination role or seasoning restriction was asserted from the words inside the name.",
+            "blocking": false
+          },
+          {
+            "slot": "measures[0].statistic",
+            "note": "No statistic stated; governed default for balance (sum) will apply.",
+            "blocking": false
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 3
+    },
+    {
+      "id": "M10",
+      "question": "How much of this month's increase came from the acquired back book?",
+      "axis": "attribution",
+      "why": "THE control. Now that three axes are readable in one phrase, the question must still be an attribution and not a scoped balance",
+      "error": "",
+      "interpreted": true,
+      "problems": [],
+      "clarified_slots": [],
+      "SILENT_SCOPE_DROP": false,
+      "SILENT_SCOPE_WIDENING": false,
+      "SILENT_SCOPE_NARROWING": false,
+      "TEMPORAL_DROP": false,
+      "SEASONING_INFERRED": false,
+      "PHYSICAL_SOURCE_BINDING_AUTHORED": false,
+      "ATTRIBUTION_CAPABILITY_DROP": false,
+      "AXIS_CORRECT": true,
+      "NAMED_SOURCE_ATOMIC": null,
+      "NAMED_SOURCE_REFERENCE_PRESERVED": null,
+      "base": "funded",
+      "lens": "acquired",
+      "seasoning": null,
+      "source_reference": null,
+      "capability": "period_movement",
+      "operation": "movement",
+      "blocking": [],
+      "BASE_CORRECT": true,
+      "ROLE_CORRECT": true,
+      "MEASURE_PRESERVED": true,
+      "verdict": "PASS",
+      "raw_payload": {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "period_movement",
+        "operation": "movement",
+        "measures": [
+          {
+            "concept": "current_outstanding_balance",
+            "statistic": "contribution"
+          }
+        ],
+        "population": {
+          "base": "funded",
+          "lens": "acquired"
+        },
+        "time": {
+          "form": "relative_pair",
+          "grain": "monthly",
+          "labels": [
+            "this month"
+          ]
+        },
+        "comparison": {
+          "kind": "none"
+        },
+        "evidence": [
+          {
+            "claim": "Asks how much of a movement was driven by one part of the book \u2014 attribution/contribution, not just the level or size of the change.",
+            "text": "How much of this month's increase came from"
+          },
+          {
+            "claim": "The movement is month-on-month, the current month against the preceding one.",
+            "text": "this month's increase"
+          },
+          {
+            "claim": "Origination role restricted to purchased loans.",
+            "text": "acquired"
+          },
+          {
+            "claim": "Names the funded population (loans already on the book).",
+            "text": "back book"
+          },
+          {
+            "claim": "The quantity said to have increased is the portfolio balance (exposure).",
+            "text": "increase"
+          }
+        ],
+        "ambiguity": [
+          {
+            "slot": "measures",
+            "note": "The question does not say what increased. Read as the outstanding balance, the portfolio quantity a bare 'increase' denotes in this environment. If the reader meant loan count or another measure, this should be restated.",
+            "blocking": false,
+            "options": [
+              "current_outstanding_balance",
+              "loan count"
+            ]
+          },
+          {
+            "slot": "population",
+            "note": "'the acquired back book' read per governed scope axes as the funded population with the acquired origination role, not a seasoning restriction. It was not read as the governed source portfolio 'ALP Acquired Back Book', since the reader did not name that book and the client holds more than one acquired book.",
+            "blocking": false,
+            "options": [
+              "funded population + acquired role",
+              "the named book 'ALP Acquired Back Book'"
+            ]
+          }
+        ]
+      },
+      "served_model": "claude-opus-5",
+      "metadata_retrievals": 6
+    }
+  ],
+  "compile_checks": [
+    {
+      "id": "M1",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [],
+      "base": "funded",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M2",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [],
+      "base": "pipeline",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M3",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [
+        [
+          "source_portfolio_type",
+          "acquired"
+        ]
+      ],
+      "base": "funded",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M4",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [
+        [
+          "source_portfolio_type",
+          "direct"
+        ]
+      ],
+      "base": "funded",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M5",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [
+        [
+          "source_portfolio_type",
+          "acquired"
+        ]
+      ],
+      "base": "funded",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M6",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [
+        [
+          "source_portfolio_type",
+          "direct"
+        ]
+      ],
+      "base": "funded",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M7",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [
+        [
+          "source_portfolio_id",
+          "alp_acquired"
+        ]
+      ],
+      "base": "funded",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M8",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [
+        [
+          "source_portfolio_id",
+          "alp_acquired"
+        ]
+      ],
+      "base": "funded",
+      "verdict": "PASS"
+    },
+    {
+      "id": "M9",
+      "problems": [],
+      "outcome": "PLAN",
+      "codes": [],
+      "compiled": true,
+      "scope": [
+        [
+          "source_portfolio_id",
+          "alp_acquired"
+        ]
+      ],
+      "base": "funded",
+      "verdict": "PASS"
+    }
+  ],
+  "adjudication": {
+    "BACK_BOOK_TO_FUNDED": "2/2",
+    "FRONT_BOOK_TO_PIPELINE": "1/1",
+    "DIRECT_ROLE_PRESERVED": "2/2",
+    "ACQUIRED_ROLE_PRESERVED": "2/2",
+    "NAMED_SOURCE_ATOMIC": "3/3",
+    "NAMED_SOURCE_REFERENCE_PRESERVED": "3/3",
+    "SEASONING_INFERRED_FROM_BACK_BOOK": 0,
+    "PHYSICAL_SOURCE_BINDINGS_AUTHORED_BY_MODEL": 0,
+    "ATTRIBUTION_CAPABILITY_DROPS": 0,
+    "SILENT_SCOPE_DROPS": 0,
+    "SILENT_SCOPE_WIDENINGS": 0,
+    "SILENT_SCOPE_NARROWINGS": 0,
+    "TEMPORAL_DROPS": 0
+  },
+  "totals": {
+    "cases": 10,
+    "interpreted": 10,
+    "passed": 10,
+    "clarified": 0,
+    "failed": 0,
+    "compile_pass": 9,
+    "compile_checked": 9
+  },
+  "served_models": [
+    "claude-opus-5"
+  ]
+}
