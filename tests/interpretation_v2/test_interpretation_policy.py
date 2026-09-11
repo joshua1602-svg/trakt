@@ -242,7 +242,13 @@ def test_the_measured_policy_has_not_moved_since_it_was_measured():
     """
     import subprocess
 
-    measured_at = "5ae1f73"
+    # Repointed once, at the slice 3 portfolio affordance. The interpreter moved
+    # to describe the portfolio axes, so the 57-question probe at 5ae1f73 stopped
+    # describing this code and the guard would otherwise let the NEXT change ride
+    # in unmeasured beside it. `test_the_interpreter_policy_did_not_move` is what
+    # constrains WHAT moved: 23 of the prompt's 26 paragraphs word for word, and
+    # every pre-existing metadata tool schema byte-identical.
+    measured_at = "88fdf7f9"
     diff = subprocess.run(
         ["git", "diff", "--name-only", measured_at, "--",
          "mi_agent/interpretation_v2/opus_interpreter.py"],
