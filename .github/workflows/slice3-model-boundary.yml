@@ -1,0 +1,177 @@
+name: Slice 3 model boundary probe
+
+# Measures ONE thing: whether a frozen claude-opus-5 states governed portfolio
+# scope — total / Direct-Acquired role / a named source portfolio — in the
+# fields the governed layer actually reads, and whether the rest of the question
+# survives alongside it.
+#
+# WHAT THIS IS NOT. It is not an acceptance run. It deploys nothing, configures
+# nothing, calls no MI API, needs no bearer, and executes nothing against a
+# book. The boundary it measures ends at the compiled plan's scope predicates.
+# Nothing in `mi_agent/interpretation_v2` may be changed while a run is in
+# flight or in response to what a run finds: the point is to read the boundary
+# as it stands today, not the boundary as it would be after tuning.
+#
+# THE BANK IS PRE-REGISTERED. `model_bank_manifest.json` and its sha256 were
+# committed BEFORE the first call. The runner re-hashes the manifest on every
+# run and aborts on a mismatch, so twelve questions cannot quietly become
+# twelve different questions once their answers are known. `preregister.py`
+# rewrites both files and is deliberately never invoked from here.
+#
+# THE KEY. The Anthropic credential reaches the runner through `env:` only —
+# never an argv value, which lands in process listings and job logs. Only the
+# NAME of the repository secret that resolved and the LENGTH of its value are
+# printed. The workflow does not know which name the operator used, so it
+# probes the plausible ones and says which answered.
+#
+# ONE CALL PER QUESTION, NO RETRIES. A refusal, a malformed payload, a timeout
+# or an exhausted credit balance is RECORDED as that case's failure. Asking a
+# failed question a second time — or a second way — would measure the harness's
+# persistence rather than the model's boundary.
+
+# HOW THIS IS TRIGGERED, AND WHY THE PUSH PATH SPENDS NOTHING.
+#
+# A dispatchable workflow must exist on the default branch before the API will
+# accept a dispatch; an unregistered file 404s. Writing to `main` for a probe is
+# not something to do, so a `push` trigger scoped to THIS FILE stands in — and
+# on that path the run is the OFFLINE DRY RUN only, which replays authored
+# stand-in payloads through the same adjudication and the same compile check and
+# makes no model call. The twelve live interpretations require an explicit
+# dispatch with `mode: live`, which is a deliberate, budgeted operator act.
+on:
+  push:
+    branches: [ 'claude/funded-book-temporal-slice-2-d568jg' ]
+    paths: [ '.github/workflows/slice3-model-boundary.yml' ]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >-
+          `live` asks the twelve questions, once each. Anything else (and the
+          push path, where inputs are empty) runs the offline dry run and calls
+          nothing.
+        default: ''
+        required: false
+      expect_manifest_sha256:
+        description: >-
+          The bank this run is measuring, pinned at dispatch. The runner also
+          checks the manifest against the sha256 committed beside it; this is
+          the operator saying WHICH bank they meant, so a run cannot certify a
+          bank nobody chose.
+        default: ''
+        required: false
+      ref:
+        description: Repo ref to take the probe from.
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+# Never two at once. Two concurrent runs would spend two budgets against one
+# pre-registration and produce two reports claiming to be the measurement.
+concurrency:
+  group: slice3-model-boundary
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      # `mi_agent/__init__.py` imports the chart and query stack, so reaching
+      # `mi_agent.interpretation_v2.compiler` needs the product's own
+      # dependencies. Installed from the repository's requirements so the probe
+      # runs against the same library versions the product does.
+      - name: Install the product's dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
+
+      # ALWAYS, and always FIRST. It costs nothing and calls nothing, and a
+      # harness whose own adjudication does not hold has no business being
+      # pointed at a paid model. On the push path it is the whole run.
+      - name: Prove the adjudication before anything is asked
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/plan_scope_slice3/model_boundary_run.py \
+            --dry-run --json-out slice3-model-boundary-dryrun.json
+
+      - name: Confirm the bank is the one that was pinned
+        if: ${{ inputs.mode == 'live' && inputs.expect_manifest_sha256 != '' }}
+        env:
+          EXPECT: ${{ inputs.expect_manifest_sha256 }}
+        run: |
+          set -euo pipefail
+          FOUND="$(cut -d' ' -f1 \
+            due_diligence/evidence/plan_scope_slice3/model_bank_manifest.sha256)"
+          if [ "$FOUND" != "$EXPECT" ]; then
+            echo "::error::bank mismatch: checked out $FOUND, dispatch pinned $EXPECT"
+            exit 1
+          fi
+          echo "Bank $FOUND is the one that was pinned."
+
+      # The twelve live interpretations, one call per question, no retries.
+      # The credential is selected inside this single step so it is never
+      # written to GITHUB_ENV and never outlives the process that needs it.
+      - name: Ask the twelve questions
+        if: ${{ inputs.mode == 'live' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_KEY: ${{ secrets.ANTHROPIC_KEY }}
+          ANTHROPIC_API_TOKEN: ${{ secrets.ANTHROPIC_API_TOKEN }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+        run: |
+          set -euo pipefail
+          KEY=""; NAME=""
+          for CANDIDATE in ANTHROPIC_API_KEY ANTHROPIC_KEY ANTHROPIC_API_TOKEN \
+                           ANTHROPIC_AUTH_TOKEN CLAUDE_API_KEY; do
+            VALUE="$(printenv "$CANDIDATE" || true)"
+            if [ -n "$VALUE" ]; then KEY="$VALUE"; NAME="$CANDIDATE"; break; fi
+          done
+          if [ -z "$KEY" ]; then
+            echo "::error::no Anthropic credential found. Set repository secret \
+          ANTHROPIC_API_KEY (or one of ANTHROPIC_KEY, ANTHROPIC_API_TOKEN, \
+          ANTHROPIC_AUTH_TOKEN, CLAUDE_API_KEY)."
+            exit 1
+          fi
+          echo "Credential from repository secret ${NAME} (${#KEY} characters)."
+          export ANTHROPIC_API_KEY="$KEY"
+          python due_diligence/evidence/plan_scope_slice3/model_boundary_run.py \
+            --json-out slice3-model-boundary-result.json
+
+      # Into the LOG as well as the artifact. The report holds the twelve
+      # payloads the model returned and nothing else — no credential, no bearer,
+      # no book data — and reading it should not require downloading anything.
+      - name: Print the report
+        if: ${{ always() && inputs.mode == 'live' }}
+        run: |
+          set -euo pipefail
+          if [ -f slice3-model-boundary-result.json ]; then
+            echo '--- BEGIN slice3-model-boundary-result.json ---'
+            cat slice3-model-boundary-result.json
+            echo '--- END slice3-model-boundary-result.json ---'
+          else
+            echo "::warning::no result file was written; the run did not reach \
+          the end of the bank"
+          fi
+
+      - name: Keep the evidence whatever the verdict
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: slice3-model-boundary
+          path: |
+            slice3-model-boundary-result.json
+            slice3-model-boundary-dryrun.json
+          if-no-files-found: warn
