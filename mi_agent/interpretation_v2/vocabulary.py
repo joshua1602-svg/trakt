@@ -43,7 +43,12 @@ from .metadata import (
 from .metadata import _load as _load_source
 from .metadata import _slug
 
-VOCABULARY_VERSION = "2.0.0"
+#: 2.1.0 adds the capability-boundary block and nothing else. The version moves
+#: because `PlanProvenance.vocabulary_version` records what the model was SHOWN,
+#: and an interpretation made against a different orientation block is not
+#: comparable with one made against this. Every run recorded before this change
+#: was made at 2.0.0 and says so.
+VOCABULARY_VERSION = "2.1.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -142,6 +147,50 @@ SEASONING_SEGMENTS: FrozenSet[str] = frozenset({"front_book", "back_book", "any"
 #: the inconsistency.
 COMPARISON_KINDS: FrozenSet[str] = frozenset({
     "none", "population_pair", "dimension_pair"})
+
+#: WHERE A CAPABILITY NAME IS NOT ENOUGH TO SEPARATE TWO CAPABILITIES, the
+#: boundary is STATED rather than left to be inferred from the word.
+#:
+#: The orientation block gives the model capability names and no descriptions —
+#: deliberately, because the registry is retrieved rather than dumped. That works
+#: while the names are self-separating, and the live temporal run measured where
+#: they are not: four questions of the form "how has <measure> changed over
+#: <N periods>" were read as `period_movement`, on the strength of the word
+#: "changed". Their temporal semantics were correct; only the owner was wrong.
+#:
+#: Both capabilities are real and neither is preferred here. Each entry states
+#: what the two OWN, which is a fact about the governed estate, and leaves the
+#: reading of any particular question to the model. Scoped to the one pair that
+#: was measured to need it: a pair with no evidence behind it does not belong.
+CAPABILITY_BOUNDARIES: Tuple[Dict[str, Any], ...] = (
+    {
+        "between": ["generic_analysis", "period_movement"],
+        "generic_analysis": [
+            "the LEVEL of a measure at one governed reporting period",
+            "a series or evolution of that level across governed periods",
+            "the current period against the previous one",
+            "the absolute or percentage change BETWEEN two governed snapshot "
+            "results",
+            "'how has X changed over N periods' where no cause, decomposition "
+            "or transition is asked for",
+        ],
+        "period_movement": [
+            "what CAUSED a movement",
+            "movement attribution",
+            "the contribution or decomposition of a change",
+            "inflow and outflow",
+            "transition analysis",
+            "which populations drove the movement",
+        ],
+        "decide_by": (
+            "WHAT a measure was, or BY HOW MUCH it changed, is "
+            "generic_analysis. WHY it changed, or WHICH parts of the book "
+            "drove it, is period_movement. The word 'changed' does not decide "
+            "it on its own."
+        ),
+    },
+)
+
 
 #: Specialist measures OWNED by a capability, not composed from fields. Opus may
 #: name them; it is never shown how they are built.
@@ -410,6 +459,11 @@ class GovernedVocabulary:
             "capability_operations": {k: sorted(v) for k, v in
                                       sorted(CAPABILITY_OPERATIONS.items())
                                       if k in self.capabilities},
+            # Stated ownership for the capability pairs whose NAMES do not
+            # separate them. Carried only for pairs this book actually offers.
+            "capability_boundaries": [
+                dict(boundary) for boundary in CAPABILITY_BOUNDARIES
+                if set(boundary["between"]) <= set(self.capabilities)],
             "operations": sorted(OPERATIONS),
             "statistics": sorted(STATISTICS),
             "comparators": sorted(COMPARATORS),

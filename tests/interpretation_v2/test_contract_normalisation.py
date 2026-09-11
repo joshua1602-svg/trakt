@@ -437,12 +437,28 @@ def test_only_contract_modules_moved(vocabulary):
 
 
 def test_the_interpreter_policy_did_not_move(vocabulary):
-    """Opus policy unchanged is a success condition, not an assumption."""
+    """Opus policy unchanged is a success condition, not an assumption.
+
+    THE PROMPT OWNER IS STILL PINNED HARD. `SYSTEM_PROMPT` lives in
+    `opus_interpreter.py`, the metadata service in `metadata.py`, the reason
+    codes in `outcomes.py` and the frozen question banks under `banks/`. None of
+    those may move, and this still fails if any of them does — which is what
+    mechanically enforces "do not broadly retune interpretation_v2".
+
+    `vocabulary.py` IS ALLOWED, AND ONLY FOR WHAT IT WAS ALLOWED FOR. The slice
+    2 boundary correction was instructed to state the generic_analysis /
+    period_movement ownership explicitly, after a live run measured four "how
+    has X changed over N months" questions routed to `period_movement` on the
+    strength of the word "changed". So the file moves, and a file-name check
+    alone would now say nothing. The substance is asserted instead: the
+    model-facing orientation block may differ from the pre-correction one by the
+    ONE new key and by nothing else. A second key, a changed enumeration or a
+    reworded existing entry fails here.
+    """
     diff = subprocess.run(
         ["git", "diff", "--name-only", _START, "--",
          "mi_agent/interpretation_v2/opus_interpreter.py",
          "mi_agent/interpretation_v2/metadata.py",
-         "mi_agent/interpretation_v2/vocabulary.py",
          "mi_agent/interpretation_v2/outcomes.py",
          "mi_agent/interpretation_v2/banks"],
         cwd=_REPO_ROOT, capture_output=True, text=True)
@@ -450,6 +466,41 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
         pytest.skip("start commit not reachable in this checkout")
     changed = [line for line in diff.stdout.splitlines() if line.strip()]
     assert changed == [], f"outside this sprint's boundary: {changed}"
+
+    # The substantive half: what the model is SHOWN moved by exactly one key.
+    before = subprocess.run(
+        ["git", "show", f"{_START}:mi_agent/interpretation_v2/vocabulary.py"],
+        cwd=_REPO_ROOT, capture_output=True, text=True)
+    if before.returncode != 0:
+        pytest.skip("start commit not reachable in this checkout")
+
+    import importlib.util
+    import sys
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "vocabulary_before.py"
+        path.write_text(before.stdout, encoding="utf-8")
+        spec = importlib.util.spec_from_file_location(
+            "mi_agent.interpretation_v2.vocabulary_before", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        try:
+            spec.loader.exec_module(module)
+            was = module.load_governed_vocabulary().orientation_payload()
+        finally:
+            sys.modules.pop(spec.name, None)
+
+    now = vocabulary.orientation_payload()
+    added = set(now) - set(was)
+    assert added == {"capability_boundaries"}, (
+        f"the orientation block gained {sorted(added)}; slice 2 was authorised "
+        f"to add capability_boundaries and nothing else")
+    assert set(was) - set(now) == set(), "the orientation block lost a key"
+    for key in sorted(set(was) & set(now)):
+        if key == "vocabulary_version":
+            continue                       # moves with the block, by design
+        assert was[key] == now[key], f"orientation key {key!r} was reworded"
 
 
 def test_the_model_still_cannot_author_an_executable_binding():

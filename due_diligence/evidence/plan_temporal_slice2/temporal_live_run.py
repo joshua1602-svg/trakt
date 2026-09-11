@@ -73,6 +73,7 @@ DRY_PAYLOADS = HERE / "temporal_dry_run_payloads.json"
 #: only demonstrated outcome is PASS has demonstrated nothing.
 DEGRADED_PAYLOADS = HERE / "temporal_dry_run_payloads_degraded.json"
 OUT = HERE / "temporal_live_run_result.json"
+RETEST_OUT = HERE / "temporal_live_retest_result.json"
 DRY_OUT = HERE / "temporal_dry_run_result.json"
 DEGRADED_OUT = HERE / "temporal_dry_run_degraded_result.json"
 
@@ -356,6 +357,24 @@ def main(argv: Sequence[str]) -> int:
     degraded = "--degraded" in argv
     dry_run = degraded or "--dry-run" in argv
 
+    # `--only T01,T05` asks a NAMED SUBSET and nothing else. It exists so a
+    # correction can be re-measured on the cases it was meant to correct,
+    # without re-buying the cases that already passed — re-asking those would
+    # cost money to learn nothing and would quietly re-roll a result already
+    # recorded. The budget falls to the size of the subset.
+    only: Optional[List[str]] = None
+    for index, token in enumerate(argv):
+        if token == "--only" and index + 1 < len(argv):
+            only = [part.strip() for part in argv[index + 1].split(",")
+                    if part.strip()]
+    if only is not None:
+        unknown = sorted(set(only) - {c["id"] for c in cases})
+        if unknown:
+            raise SystemExit(f"--only names cases the manifest does not carry: "
+                             f"{unknown}")
+        cases = [c for c in cases if c["id"] in only]
+        budget = len(cases)
+
     if dry_run:
         source = DEGRADED_PAYLOADS if degraded else DRY_PAYLOADS
         payloads = json.loads(source.read_text(encoding="utf-8"))
@@ -413,7 +432,14 @@ def main(argv: Sequence[str]) -> int:
     }
     report["payload_source"] = ("degraded stand-ins" if degraded else
                                 "plausible stand-ins" if dry_run else "live model")
+    report["subset"] = only
+    # A SUBSET NEVER WRITES OVER THE FULL RUN'S FILE. A `--dry-run --only`
+    # rehearsal of four cases would otherwise land on top of the committed
+    # fifteen-case dry run and silently shrink the evidence — which it did once,
+    # here, before this line existed.
     out = (DEGRADED_OUT if degraded else DRY_OUT) if dry_run else OUT
+    if only:
+        out = out.with_name(f"{out.stem}_subset.json") if dry_run else RETEST_OUT
     out.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
 
     print(f"=== SLICE 2 TEMPORAL "

@@ -340,6 +340,19 @@ def _catalogue(store: Any, client_id: str, route: Optional[str]) -> List[Any]:
                                           str(h.upload_timestamp or "")))
 
 
+def declared_cadence(headers: Sequence[Any]) -> Optional[str]:
+    """The one cadence this catalogue declares, or None if it declares 0 or 2.
+
+    One owner for the question, because two callers now ask it: the guard below,
+    which refuses a grain the catalogue cannot honour, and `_resolve_span`, which
+    reads a bare grain as a statement of the whole series only when the
+    catalogue is actually keeping that rhythm.
+    """
+    found = {_cadence(h.cadence) for h in headers}
+    found.discard("")
+    return next(iter(found)) if len(found) == 1 else None
+
+
 def _cadence_check(period: Mapping[str, Any], headers: Sequence[Any],
                    requested: Mapping[str, Any]) -> Optional[TemporalResolution]:
     """The plan's grain against the cadence the CATALOGUE declares.
@@ -353,13 +366,12 @@ def _cadence_check(period: Mapping[str, Any], headers: Sequence[Any],
     grain = _cadence(period.get("grain"))
     if not grain:
         return None
-    declared = {_cadence(h.cadence) for h in headers}
-    declared.discard("")
-    if declared == {grain}:
+    if declared_cadence(headers) == grain:
         return None
+    declared = sorted({_cadence(h.cadence) for h in headers} - {""})
     return _fail(UNSUPPORTED_CADENCE,
                  f"the plan states grain={grain!r}; the catalogue declares "
-                 f"cadence {sorted(declared) or ['none']}", requested)
+                 f"cadence {declared or ['none']}", requested)
 
 
 def _match_anchor(anchor: PeriodAnchor, headers: Sequence[Any]) -> List[Any]:
@@ -468,9 +480,11 @@ def resolve_temporal(plan: Any, store: Any, *, client_id: str,
                                             route=route),
             headers=(header,), requested=requested)
     if form in _SPAN_FORMS:
-        return _resolve_span(labels, periods_back, headers, requested,
+        return _resolve_span(form, labels, periods_back, headers, requested,
                              client_id=client_id, route=route, store=store,
-                             operation=operation)
+                             operation=operation,
+                             grain=_cadence(period.get("grain")),
+                             catalogue_cadence=declared_cadence(headers))
     return _fail(PERIOD_NOT_TEMPORAL, f"period.form={form!r}", requested)
 
 
@@ -513,18 +527,36 @@ def _resolve_pair(form: str, operation: str, periods_back: Any,
         headers=(chosen[0], chosen[-1]), requested=requested)
 
 
-def _resolve_span(labels: Sequence[str], periods_back: Any,
+def _resolve_span(form: str, labels: Sequence[str], periods_back: Any,
                   headers: Sequence[Any], requested: Mapping[str, Any], *,
                   client_id: str, route: Optional[str], store: Any,
-                  operation: str) -> TemporalResolution:
-    """A span of governed reporting periods: a count, an anchor, or all of them.
+                  operation: str, grain: str = "",
+                  catalogue_cadence: Optional[str] = None) -> TemporalResolution:
+    """A span of governed reporting periods: a count, an anchor, a cadence, or none.
 
     A STATED COUNT WINS OVER A LABEL, and the labels are then not read at all.
     "the last six months" carries both the count and the words for it, and
     reading the words as a second statement of span would let one paraphrase
-    override another for a window they both describe. A span with NEITHER a
-    count nor a recognised label clarifies; it never widens to the whole book,
+    override another for a window they both describe. A span whose label is
+    present but unreadable still clarifies; it never widens to the whole book,
     because a widened window is an answer to a question nobody asked.
+
+    A BARE CADENCE IS A STATED SPAN, and that was this module's defect. The live
+    run measured Opus emitting, for all four "each month" questions,
+    `{form: series, grain: monthly, labels: [], periods_back: null}` — the
+    rhythm stated and the window left open, which is what "each month" means.
+    `compiler._bind_period` accepts exactly that and emits a plan: it raises
+    AMBIGUOUS_PERIOD only when a span has NONE of labels, count or grain. This
+    function then refused the plan the compiler had just authorised, so two
+    governed layers disagreed about what a stated span is. The disagreement was
+    slice 2's, and it is resolved here in the compiler's favour.
+
+    It is not a widening. There is no narrower window being passed over: the
+    request names a rhythm and no bound, and "every governed period at that
+    rhythm" is the only window that answers it. The guards stay:
+    `_cadence_check` has already refused a grain the catalogue cannot honour,
+    and this branch independently requires the grain to equal the cadence the
+    catalogue DECLARES, so a rhythm the book is not keeping still fails closed.
     """
     if isinstance(periods_back, int) and not isinstance(periods_back, bool) \
             and periods_back >= 1:
@@ -556,9 +588,22 @@ def _resolve_span(labels: Sequence[str], periods_back: Any,
                                   selector=selector, headers=tuple(chosen),
                                   requested=requested)
 
+    # No count, and no label at all. A `series` that nevertheless names the
+    # catalogue's OWN cadence has stated its window: every period the book keeps
+    # at that rhythm. `range` is deliberately excluded — a range states bounds,
+    # and one with neither bound and no label is an incomplete request rather
+    # than an open-ended one.
+    if form == "series" and grain and grain == catalogue_cadence:
+        selector = SnapshotSelector.range(client_id, None, None, route=route)
+        chosen = selector.resolve(store)
+        return TemporalResolution(ok=True, shape=SHAPE_SERIES,
+                                  basis="cadence", selector=selector,
+                                  headers=tuple(chosen), requested=requested)
+
     return _fail(PERIOD_LABEL_UNRESOLVED,
-                 "the plan states a span with no period count and no period "
-                 "label; the window it names cannot be settled", requested)
+                 "the plan states a span with no period count, no period label "
+                 "and no cadence the catalogue keeps; the window it names "
+                 "cannot be settled", requested)
 
 
 # --------------------------------------------------------------------------- #

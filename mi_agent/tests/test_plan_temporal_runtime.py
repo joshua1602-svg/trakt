@@ -315,6 +315,89 @@ def test_a_catalogue_that_declares_no_cadence_cannot_honour_a_grain(
     assert outcome.reason == temporal.UNSUPPORTED_CADENCE
 
 
+def test_a_bare_cadence_is_a_stated_span(compiler, store, history):
+    """`{form: series, grain: monthly, labels: [], periods_back: null}`.
+
+    The exact shape the live run measured Opus emitting for all four "each
+    month" questions. The compiler accepts it and emits a plan; this asserts the
+    resolver now agrees with the compiler instead of refusing what it authorised.
+    """
+    plan = plan_for(compiler, intent(
+        operation="series",
+        time={"form": "series", "grain": "monthly", "labels": [],
+              "periods_back": None}))
+    resolution = temporal.resolve_temporal(plan, store,
+                                           client_id=fixture.CLIENT_ID,
+                                           route=fixture.ROUTE)
+    assert resolution.ok, resolution.detail
+    assert resolution.basis == "cadence"
+    assert list(resolution.reporting_dates) == [d for d, _ in history]
+
+
+def test_a_bare_cadence_the_catalogue_does_not_keep_still_fails_closed(
+        compiler, tmp_path, history):
+    """The branch reads the CATALOGUE's cadence, not the plan's word for it.
+
+    A weekly series against a monthly book must not come back monthly. The
+    cadence guard catches it first; this asserts the new branch cannot rescue it
+    afterwards.
+    """
+    monthly = fixture.build_store(tmp_path / "monthly", history)
+    outcome = temporal.execute_temporal_plan(
+        plan_for(compiler, intent(operation="series",
+                                  time={"form": "series", "grain": "weekly",
+                                        "labels": [], "periods_back": None})),
+        store=monthly, client_id=fixture.CLIENT_ID, semantics=None,
+        route=fixture.ROUTE)
+    assert outcome.reason == temporal.UNSUPPORTED_CADENCE
+
+
+def test_a_catalogue_declaring_no_cadence_does_not_get_the_bare_span(
+        compiler, tmp_path, history):
+    """A book that records no rhythm cannot have one read back out of it."""
+    silent = fixture.build_store(tmp_path / "silent", history, cadence=None)
+    resolution = temporal.resolve_temporal(
+        plan_for(compiler, intent(operation="series",
+                                  time={"form": "series", "grain": "monthly",
+                                        "labels": [], "periods_back": None})),
+        silent, client_id=fixture.CLIENT_ID, route=fixture.ROUTE)
+    assert not resolution.ok
+    assert resolution.reason == temporal.UNSUPPORTED_CADENCE
+
+
+def test_a_bare_range_is_still_an_incomplete_request(compiler, store):
+    """`range` states bounds. One with neither bound and no label is not a span.
+
+    Only `series` carries the "every period at this rhythm" reading; widening
+    `range` the same way would answer an incomplete request instead of asking
+    about it.
+    """
+    resolution = temporal.resolve_temporal(
+        plan_for(compiler, intent(operation="series",
+                                  time={"form": "range", "grain": "monthly",
+                                        "labels": [], "periods_back": None})),
+        store, client_id=fixture.CLIENT_ID, route=fixture.ROUTE)
+    assert not resolution.ok
+    assert resolution.reason == temporal.PERIOD_LABEL_UNRESOLVED
+
+
+def test_an_unreadable_label_still_clarifies_even_with_a_grain(compiler, store):
+    """The bare-cadence branch requires NO label, not merely no usable one.
+
+    "the last few months" names a narrower window than the whole series. Reading
+    the grain instead would answer a question the reader did not ask, which is
+    the substitution the whole contract exists to stop.
+    """
+    resolution = temporal.resolve_temporal(
+        plan_for(compiler, intent(
+            operation="series",
+            time={"form": "series", "grain": "monthly",
+                  "labels": ["the last few months"]})),
+        store, client_id=fixture.CLIENT_ID, route=fixture.ROUTE)
+    assert not resolution.ok
+    assert resolution.reason == temporal.PERIOD_LABEL_UNRESOLVED
+
+
 def test_a_vague_recency_clarifies_rather_than_choosing_a_window(compiler,
                                                                  store):
     outcome = run(compiler, store, None, intent(

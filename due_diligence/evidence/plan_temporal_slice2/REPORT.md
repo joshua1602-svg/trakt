@@ -427,6 +427,146 @@ ANTHROPIC_API_KEY=... python due_diligence/evidence/plan_temporal_slice2/tempora
 
 ---
 
+## SLICE 2 BOUNDARY CORRECTION — the two issues the live run found
+
+Base for this correction: `515d6c48`. Scope: the two isolated issues and nothing
+else. Slice 2 was not broadened, nothing was deployed, `mi_service` was not
+wired, Slice 3 was not started, and no second fifteen-question bank was bought.
+
+```
+FILES_CHANGED               = 2 product, 2 test, 2 evidence (1 new)
+PRODUCT_NET_EXECUTABLE_LOC  = +44
+    mi_agent/plan_temporal_runtime.py          +13
+    mi_agent/interpretation_v2/vocabulary.py   +31
+```
+
+### ISSUE 1 — a bare cadence is a stated span (deterministic, no calls)
+
+`_resolve_span` now reads `{form: series, grain: <catalogue's cadence>,
+labels: [], periods_back: null}` as the whole available governed series.
+
+It is not a widening. There is no narrower window being passed over: the request
+names a rhythm and no bound, and "every governed period at that rhythm" is the
+only window that answers it. It also ends a disagreement Slice 2 itself
+introduced — `compiler._bind_period` raises `AMBIGUOUS_PERIOD` only when a span
+has *none* of labels, count or grain, so the compiler was emitting plans this
+resolver then refused. The correction settles it in the compiler's favour.
+
+The guards that matter are untouched, and each has a test:
+
+| still fails closed | test |
+|---|---|
+| a grain the catalogue does not keep (weekly against a monthly book) | `test_a_bare_cadence_the_catalogue_does_not_keep_still_fails_closed` |
+| a catalogue that declares no cadence at all | `test_a_catalogue_declaring_no_cadence_does_not_get_the_bare_span` |
+| a bare `range` — a range states bounds, and one with neither is incomplete | `test_a_bare_range_is_still_an_incomplete_request` |
+| a label that is present but unreadable ("the last few months") | `test_an_unreadable_label_still_clarifies_even_with_a_grain` |
+
+The last one is the important one: the branch requires **no label**, not merely
+no usable one. "The last few months" names a narrower window than the whole
+series, and reading the grain instead would be exactly the substitution this
+contract exists to stop.
+
+```
+GRAIN_ONLY_REPLAY = 4/4
+```
+
+T03, T04, T06 and T07 replayed from their **captured Opus payloads** — the same
+bytes the model emitted in the fifteen-call run — now resolve on `basis=cadence`
+to all eight governed periods, execute through `execute_temporal_plan`, and
+reconcile against `portfolio_truth_oracle`.
+
+### ISSUE 2 — the capability boundary is now stated, not inferred
+
+The orientation block gave the model capability NAMES and no descriptions. That
+works while the names are self-separating; the live run measured where they are
+not. `vocabulary.CAPABILITY_BOUNDARIES` now states what `generic_analysis` and
+`period_movement` each own, and `orientation_payload` carries it.
+
+Both capabilities are real and neither is preferred. The entry is a statement of
+governed ownership — level, series, current-versus-previous and the change
+*between* snapshot results to `generic_analysis`; cause, attribution,
+decomposition, inflow/outflow, transition and which populations drove it to
+`period_movement` — closing with "the word 'changed' does not decide it on its
+own". Scoped to the one pair the live run measured; a pair with no evidence
+behind it does not belong there.
+
+`VOCABULARY_VERSION` moves `2.0.0 -> 2.1.0`, because `PlanProvenance` records what
+the model was SHOWN and an interpretation made against a different orientation
+block is not comparable with one made against this. Every recorded run before
+this change was made at 2.0.0 and says so.
+
+**What was deliberately NOT done.** `interpretation_v2` was not broadly retuned:
+`opus_interpreter.py` (which owns `SYSTEM_PROMPT`), `metadata.py`, `outcomes.py`
+and the frozen `banks/` are byte-unchanged, and
+`test_the_interpreter_policy_did_not_move` still pins all four. No downstream
+raw-text routing was created. The compiler does **not** silently replace
+`period_movement` with `generic_analysis` — a `period_movement` plan is still
+refused at the perimeter, exactly as before. The model is expected to emit the
+right capability from the clarified vocabulary, which is why this issue can only
+be settled by a live re-ask.
+
+That guard was green before this change and my edit turned it red, so it is
+rebuilt rather than deleted, and it now asserts more than it did: the four
+policy owners stay pinned by name, and the model-facing orientation block is
+compared key-by-key against the pre-correction one — it may gain
+`capability_boundaries` and nothing else, lose nothing, and reword no existing
+entry.
+
+### Regression, on recorded payloads only
+
+```
+ORIGINAL_PASS_REPLAY          = 7/7
+GRAIN_ONLY_REPLAY             = 4/4
+MOVEMENT_ATTRIBUTION_CONTROLS = T14 INELIGIBLE:CAPABILITY_NOT_GENERIC (funded_bridge)
+                                T12 INELIGIBLE:CAPABILITY_NOT_GENERIC (forecast)
+UNAVAILABLE_PERIOD_CONTROL    = T13 CLARIFY:PERIOD_NOT_AVAILABLE
+OVERLONG_PERIOD_CONTROL       = T13 selected NOTHING — no shortened series
+MULTI_OUTPUT_CONTROL          = T15 INELIGIBLE:NOT_SINGLE_OUTPUT
+SCALARS_RECONCILED            = 28
+CELLS_RECONCILED              = 60
+PHYSICAL_BINDINGS             = 0
+```
+
+Slice 2 offline acceptance: **31/31 CORRECT**, unchanged, including the
+"last few months" clarify control and the weekly-cadence control.
+
+```
+SLICE_1_REGRESSIONS_ATTRIBUTABLE = 0
+```
+
+`corpus_replay.json` reproduces **byte-identical** to the committed file (945
+recorded plans, 115 eligible, same histogram, same 73 ledger rows). The Slice 1
+and 1B suites pass: 197 tests across the adapter, the serving canary, the shadow
+wiring, the evidence recorder and the replay.
+
+### The live retest is built and has not been run
+
+The four capability cases need a live re-ask, because a replay of payloads
+emitted at vocabulary 2.0.0 cannot tell you what a model shown 2.1.0 would say.
+
+```
+LIVE_OPUS_CALLS = 0        (4 authorised, 0 made)
+BLOCKER         = no rotated ANTHROPIC_API_KEY in this environment
+```
+
+`temporal_live_run.py --only T01,T05,T10,T11` asks exactly those four, one call
+each, no retry, no paraphrase — the budget falls to the size of the subset, and
+a subset result is written to its own file so it can never overwrite the
+fifteen-case run. Rehearsed offline: 4/4 through the identical pipeline.
+`temporal_boundary_regression.py <result>` then executes and reconciles them
+against the independent oracle.
+
+```bash
+ANTHROPIC_API_KEY=... python .../temporal_live_run.py --only T01,T05,T10,T11
+python .../temporal_boundary_regression.py temporal_live_retest_result.json
+```
+
+```
+SLICE_2_TEMPORAL_BOUNDARY = 11/15 settled deterministically; 4 pending the live re-ask
+```
+
+---
+
 ## KNOWN BOUNDARY: TIME × GEOGRAPHY IS INELIGIBLE
 
 "Show funded balance by region over the last three months" is listed as an
