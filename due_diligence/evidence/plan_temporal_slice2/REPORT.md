@@ -1061,9 +1061,27 @@ requires an explicit dispatch with `mode: bank`, a deliberate operator act taken
 after the deployment and the canary are both in place. A bank run without a
 pinned `expect_commit` is refused before the first question.
 
+Confirmed on the runner. The push that published this fired run
+[34582097118](https://github.com/joshua1602-svg/trakt/actions/runs/34582097118):
+
+```
+success  Prove the harness before it is pointed at anything   (1s)
+skipped  Refuse to run the bank without the credentials it needs
+skipped  Run the six-question temporal acceptance
+skipped  Keep the evidence whatever the verdict
+skipped  Turn the serving canary back off
+```
+
+Which settles two things at once: every live step stayed skipped, and the
+self-test really does run on a bare runner — the job has no `pip install` and
+finished the harness proof in a second, so nothing in the acceptance path
+reaches pandas or `mi_agent`.
+
 ```
 SLICE_2_ACCEPTANCE_TOOL_READY = YES
 PRODUCT_FILES_CHANGED = 0
+ACCEPTANCE_TOOL_LOC = 808 (script) + 178 (workflow); 556 of the script is code,
+                      179 of that the self-test and 64 the shape check
 ```
 
 Nothing was deployed, `MI_AGENT_PLAN_SERVE` was not enabled, Opus was not
