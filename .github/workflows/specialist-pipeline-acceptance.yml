@@ -61,6 +61,14 @@ on:
         description: Per request. A timeout is INCONCLUSIVE, never a pass.
         default: '120'
         required: false
+      only:
+        description: >-
+          Comma-separated case ids to ask, e.g. `F2,P5`. Empty asks the whole
+          bank. Every case costs one fresh live interpretation, so a targeted
+          re-check should name only the cases it is re-checking. An unknown id
+          stops the run rather than quietly asking nothing.
+        default: ''
+        required: false
       ref:
         description: Repo ref to take the acceptance tooling from.
         default: ''
@@ -159,9 +167,11 @@ jobs:
           EXPECT_COMMIT: ${{ inputs.expect_commit }}
           EVIDENCE_PATH: ${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}
           POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds || '120' }}
+          ONLY: ${{ inputs.only }}
         run: |
           set -euo pipefail
           python due_diligence/evidence/specialist_pipeline/run_pipeline_acceptance.py \
+            --only "$ONLY" \
             --base-url "$BASE_URL" \
             --path "$API_PATH" \
             --portfolio-id "$PORTFOLIO_ID" \

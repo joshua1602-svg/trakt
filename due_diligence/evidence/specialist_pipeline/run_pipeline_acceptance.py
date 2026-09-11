@@ -68,6 +68,13 @@ BANK: Tuple[Dict[str, Any], ...] = (
      "capability": PIPELINE, "base": PIPELINE, "shape": "grouped",
      "runtime": "pipeline_current", "dimension": "pipeline_stage",
      "why": "the governed stage grouping, proved by the receipt"},
+    {"case_id": "P5", "question": "Show pipeline amount by stage.",
+     "capability": PIPELINE, "base": PIPELINE, "shape": "grouped",
+     "runtime": "pipeline_current", "dimension": "pipeline_stage",
+     "measure": "pipeline_amount",
+     "why": "the AMOUNT by stage explicitly, so the figure grouped is named "
+            "rather than inferred: P3's wording leaves the model free to read "
+            "it as the case count, and both readings are governed"},
     {"case_id": "P4", "question": "Show pipeline evolution by stage.",
      "capability": PIPELINE, "base": PIPELINE, "shape": "grouped_series",
      "runtime": "pipeline_temporal", "dimension": "pipeline_stage",
@@ -109,6 +116,52 @@ def rows_of(envelope: Mapping[str, Any]) -> List[Dict[str, Any]]:
 
     _figures, rows = s1b.response_figures(envelope)
     return rows
+
+
+def grouped_cells_of(execution: Mapping[str, Any]) -> Tuple[List[Any], str]:
+    """The non-scalar figures a runtime recorded, and WHICH SHAPE they came from.
+
+    THE TWO RUNTIMES DO NOT RECORD ALIKE, and this reader exists because the
+    first version of it assumed they did. It read `grouped_cells` for every
+    non-scalar case, which is what the PIPELINE runtime and the funded CURRENT
+    path write — and the funded TEMPORAL runtime writes nothing of the sort. It
+    records `execution["temporal"]`, the slice 2 outcome, whose per-period
+    figures live under `points`. So "Show funded balance each month" was served
+    correctly, reconciled by the runtime, and marked FAIL here for carrying no
+    cells. The evidence was there; this function was looking in one place.
+
+    The self-test's own fixture hid it: it was written with `grouped_cells` on a
+    funded series, so it asserted the assumption rather than the runtime. The
+    fixtures below are now built from the real `to_dict()` shapes.
+
+    Returns `(cells, source)`. The SOURCE is returned rather than logged, so a
+    future shape this does not know shows up in the evidence as the place that
+    was searched instead of as a bare empty list.
+    """
+    grouped = execution.get("grouped_cells")
+    if grouped:
+        return list(grouped), "execution.grouped_cells"
+
+    temporal = execution.get("temporal")
+    if isinstance(temporal, Mapping):
+        points = [p for p in (temporal.get("points") or ())
+                  if isinstance(p, Mapping)]
+        # A GROUPED series carries its breakdown inside each period; a plain
+        # series carries one figure per period. Both are cells to reconcile, and
+        # flattening the grouped form keeps one count for one comparison.
+        flattened: List[Any] = []
+        for point in points:
+            period = point.get("reporting_date") or point.get("snapshot_id")
+            inner = [c for c in (point.get("cells") or ()) if isinstance(c, Mapping)]
+            if inner:
+                flattened.extend({**dict(c), "period": period} for c in inner)
+            elif point.get("value") is not None:
+                flattened.append({"period": period, "value": point.get("value")})
+        if flattened:
+            return flattened, "execution.temporal.points"
+        return [], "execution.temporal.points (empty)"
+
+    return [], "execution.grouped_cells (absent)"
 
 
 def adjudicate(case: Mapping[str, Any], envelope: Mapping[str, Any],
@@ -240,11 +293,28 @@ def adjudicate(case: Mapping[str, Any], envelope: Mapping[str, Any],
         else:
             out["values_reconciled"] = 1
     else:
-        cells = execution.get("grouped_cells") or []
+        # THE MEASURE THE RECEIPT NAMES, on a grouped answer too. This was read
+        # on the scalar branch only, and the omission cost a real assertion:
+        # "Show the pipeline by stage" compiles to the amount or the case count
+        # depending on how the model reads it, and both are governed — so a
+        # grouped PASS said a pipeline plan grouped by stage and could not say
+        # WHICH FIGURE was grouped, nor which of the two lower-level owners
+        # produced it. A case may now state the measure it expects.
+        out["measure_concept"] = str(receipt.get("measure_concept") or "") or None
+        out["execution_owner"] = str(receipt.get("execution_owner") or "") or None
+        wanted_measure = case.get("measure")
+        if wanted_measure and out["measure_concept"] != wanted_measure:
+            out["silent_measure_drop"] = True
+            problems.append(f"measure_concept={out['measure_concept']!r}, "
+                            f"expected {wanted_measure!r}")
+
+        cells, source = grouped_cells_of(execution)
         rows = rows_of(envelope)
         out["cells"], out["http_rows"] = len(cells), len(rows)
+        out["cells_read_from"] = source
         if not cells:
-            problems.append("the record carries no executed cells")
+            problems.append(f"the record carries no executed cells "
+                            f"(looked in {source})")
         elif not rows:
             problems.append("the response carries no grid to reconcile")
         else:
@@ -273,6 +343,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--provenance-only", action="store_true")
     parser.add_argument("--stable-reads", type=int, default=1)
     parser.add_argument("--stable-gap", type=float, default=15.0)
+    parser.add_argument("--only", default="",
+                        help="comma-separated case ids to ask (default: all). "
+                             "Every live question costs a fresh interpretation, "
+                             "so a re-check of two cases asks two.")
     args = parser.parse_args(argv)
 
     if args.self_test:
@@ -281,6 +355,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     import run_acceptance as ra
     import run_serving_acceptance as s1b
     from certify_mi_api import _live_asker
+
+    # WHICH CASES THIS RUN ASKS. An unknown id is an error rather than a silent
+    # empty run: a typo that quietly asked nothing would report a clean sheet.
+    wanted = [t.strip() for t in args.only.split(",") if t.strip()]
+    known = {c["case_id"] for c in BANK}
+    unknown = [t for t in wanted if t not in known]
+    if unknown:
+        parser.error(f"unknown case id(s) {unknown}; the bank is {sorted(known)}")
+    selected = [c for c in BANK if not wanted or c["case_id"] in wanted]
 
     if args.provenance_only:
         import run_temporal_acceptance as t2
@@ -294,7 +377,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         "what_this_is": "specialist runtime live acceptance — did a pipeline "
                         "plan serve from the existing Pipeline owners, and did "
                         "funded stay exactly as it was",
-        "bank": [c["case_id"] for c in BANK],
+        "bank": [c["case_id"] for c in selected],
+        "bank_full": [c["case_id"] for c in BANK],
         "portfolio_id": args.portfolio_id, "expect_commit": args.expect_commit,
         "stages": {}, "cases": [],
     }
@@ -333,7 +417,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                                 "pre_existing_records": len(rows)}
 
     ask = _live_asker(args.base_url, args.path, [], args.portfolio_id)
-    for case in BANK:
+    for case in selected:
         envelope = ask(case["question"])
         if envelope.get("__http_status__") in (401, 403):
             return stop("auth", "AUTH / NOT_EXECUTABLE",
@@ -435,11 +519,13 @@ def self_test() -> int:
     p1 = next(c for c in BANK if c["case_id"] == "P1")
     p3 = next(c for c in BANK if c["case_id"] == "P3")
     p4 = next(c for c in BANK if c["case_id"] == "P4")
+    p5 = next(c for c in BANK if c["case_id"] == "P5")
     f1 = next(c for c in BANK if c["case_id"] == "F1")
+    f2 = next(c for c in BANK if c["case_id"] == "F2")
 
-    check("the bank is six questions, four pipeline and two funded",
-          len(BANK) == 6
-          and sum(1 for c in BANK if c["base"] == PIPELINE) == 4)
+    check("the bank is seven questions, five pipeline and two funded",
+          len(BANK) == 7
+          and sum(1 for c in BANK if c["base"] == PIPELINE) == 5)
     check("no portfolio figure is written into the bank",
           not any(isinstance(v, float) for c in BANK for v in c.values()))
 
@@ -526,6 +612,103 @@ def self_test() -> int:
                                    value=37900000.0), leaked)
     check("F1 FAILS on a funded-to-pipeline misroute",
           out["verdict"] == "FAIL" and out["funded_to_pipeline_misroute"])
+
+    # ----------------------------------------------------------------- #
+    # THE SHAPES, TAKEN FROM THE RUNTIMES THEMSELVES
+    # ----------------------------------------------------------------- #
+    # The reason F2 failed in production was not that the adjudicator was
+    # wrong about the funded temporal shape — it was that NOTHING HERE HAD
+    # EVER ASKED. There was no F2 fixture, and the shapes that did exist were
+    # hand-written from memory. So the fixtures below are built from the real
+    # objects, and these two rules fail the moment a runtime's record changes
+    # shape — which is the only way a bank can keep telling the truth about
+    # production rather than about its author's recollection.
+
+    from mi_agent import plan_pipeline_runtime as pipeline_rt
+    from mi_agent import plan_temporal_runtime as temporal_rt
+
+    real_temporal = temporal_rt.TemporalOutcome(eligible=True).to_dict()
+    real_receipt = pipeline_rt._receipt(
+        {}, measure="pipeline_amount", kind="amount",
+        dimensions=["pipeline_stage"], dataset={}, result_shape="grouped",
+        owner=pipeline_rt.OWNER_GENERIC_EXECUTOR)
+
+    check("the funded series is read from the key the temporal runtime writes",
+          "points" in real_temporal and "grouped_cells" not in real_temporal)
+    check("the receipt fields this bank asserts are the ones the runtime writes",
+          {"measure_concept", "group_field_keys", "population_base",
+           "capability", "execution_owner"} <= set(real_receipt))
+
+    # F2 — a funded SERIES, recorded exactly as `_attempt_temporal` records it:
+    # `execution["temporal"]`, one point per snapshot, and NO `grouped_cells`.
+    series = dict(real_temporal)
+    series["reconciled"] = True
+    series["points"] = [
+        {"snapshot_id": "s1", "reporting_date": "2026-05-31", "value": 37_900_000.0,
+         "cells": [], "cells_note": None, "empty": False, "receipt": {},
+         "warnings": []},
+        {"snapshot_id": "s2", "reporting_date": "2026-06-30", "value": 38_100_000.0,
+         "cells": [], "cells_note": None, "empty": False, "receipt": {},
+         "warnings": []}]
+    funded_series = _record(
+        compiler={"plan": {"capability": "generic_analysis",
+                           "population": {"base": FUNDED}}},
+        execution={"attempted": True, "runtime": "", "value": None,
+                   "temporal": series, "receipt": {}})
+    grid = [{"period": "2026-05-31"}, {"period": "2026-06-30"}]
+    out = adjudicate(f2, _envelope(value=None, rows=grid), funded_series)
+    check("F2 passes when the funded series is under execution['temporal']",
+          out["verdict"] == "PASS" and out["values_reconciled"] == 2)
+    check("F2 says WHERE the cells were read from",
+          out["cells_read_from"] == "execution.temporal.points")
+
+    empty = json.loads(json.dumps(funded_series))
+    empty["execution"]["temporal"]["points"] = []
+    out = adjudicate(f2, _envelope(value=None, rows=grid), empty)
+    check("F2 still FAILS when the runtime genuinely recorded no periods",
+          out["verdict"] == "FAIL")
+
+    banned = json.loads(json.dumps(funded_series))
+    del banned["execution"]["temporal"]
+    out = adjudicate(f2, _envelope(value=None, rows=grid), banned)
+    check("F2 FAILS, naming the key it searched, when neither shape is present",
+          out["verdict"] == "FAIL"
+          and "execution.grouped_cells (absent)" in out["cells_read_from"])
+
+    # A GROUPED funded series keeps its breakdown inside each period.
+    nested = json.loads(json.dumps(funded_series))
+    for point in nested["execution"]["temporal"]["points"]:
+        point["cells"] = [{"region": "North", "value": 1.0},
+                          {"region": "South", "value": 2.0}]
+    out = adjudicate(f2, _envelope(value=None, rows=grid), nested)
+    check("a grouped funded series flattens to one cell per period per group",
+          out["verdict"] == "PASS" and out["cells"] == 4)
+
+    # P5 — the AMOUNT by stage, named. The receipt is the runtime's own.
+    amount = _record(execution={
+        "runtime": "pipeline_current", "value": None,
+        "grouped_cells": [{"pipeline_stage": "OFFER", "value": 450000.0},
+                          {"pipeline_stage": "KFI", "value": 390000.0}],
+        "receipt": dict(real_receipt, population_base=PIPELINE,
+                        capability=PIPELINE)})
+    rows = [{"pipeline_stage": "OFFER"}, {"pipeline_stage": "KFI"}]
+    out = adjudicate(p5, _envelope(value=None, rows=rows), amount)
+    check("P5 passes when the receipt names the AMOUNT and the stage axis",
+          out["verdict"] == "PASS" and out["measure_concept"] == "pipeline_amount")
+    check("P5 records which lower-level owner produced the figures",
+          out["execution_owner"] == pipeline_rt.OWNER_GENERIC_EXECUTOR)
+
+    counted = json.loads(json.dumps(amount))
+    counted["execution"]["receipt"]["measure_concept"] = "pipeline_case_count"
+    out = adjudicate(p5, _envelope(value=None, rows=rows), counted)
+    check("P5 records a silent MEASURE drop when the count answered instead",
+          out["verdict"] == "FAIL" and out["silent_measure_drop"])
+
+    # P3 states no measure, so either governed reading passes — and that is
+    # exactly why P5 exists rather than P3 being tightened.
+    check("P3 stays agnostic about which measure was grouped",
+          adjudicate(p3, _envelope(value=None, rows=rows),
+                     counted)["verdict"] == "PASS")
 
     check("a transport error is INCONCLUSIVE, never PASS",
           adjudicate(p1, {"__transport_error__": "boom"}, None)["verdict"]
