@@ -611,9 +611,37 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
         f"to add capability_boundaries and slice 3 portfolio_scope_axes, and "
         f"nothing else")
     assert set(was) - set(now) == set(), "the orientation block lost a key"
+
+    #: ONE AUTHORISED WIDENING, WRITTEN OUT RATHER THAN WAIVED. The funded
+    #: material-change sprint was instructed to connect `change_form =
+    #: material_summary` to a governed owner. That owner is `period_movement` —
+    #: `period_change.workflow` run in MODE_PORTFOLIO_OVERVIEW, the same owner
+    #: `metric_delta` already used, distinguished from it by the MODE and not by
+    #: a new capability. The operation that form carries is `summary`, which
+    #: `period_movement` did not list while nothing composed that output into
+    #: findings; `mi_agent_api.insight_funded` now does. Without this the form is
+    #: unreachable: `movement` and `compare` both require a named measure, and a
+    #: named measure is a metric delta, so the composition could never be
+    #: entered. Nothing else about what the model is shown may move — a second
+    #: added operation, a removed one, or any other reworded key still fails.
+    AUTHORISED_OPERATION_ADDITIONS = {"period_movement": {"summary"}}
+
     for key in sorted(set(was) & set(now)):
         if key == "vocabulary_version":
             continue                       # moves with the block, by design
+        if key == "capability_operations":
+            for capability in sorted(set(was[key]) | set(now[key])):
+                before_ops = set(was[key].get(capability, ()))
+                after_ops = set(now[key].get(capability, ()))
+                authorised = AUTHORISED_OPERATION_ADDITIONS.get(capability, set())
+                assert after_ops - before_ops == (authorised & after_ops), (
+                    f"capability {capability!r} was shown operations "
+                    f"{sorted(after_ops - before_ops)}; only "
+                    f"{sorted(authorised)} were authorised")
+                assert before_ops - after_ops == set(), (
+                    f"capability {capability!r} lost operations "
+                    f"{sorted(before_ops - after_ops)}")
+            continue
         assert was[key] == now[key], f"orientation key {key!r} was reworded"
 
 

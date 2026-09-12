@@ -51,11 +51,48 @@ CONVERSION_CONTEXT = "CONVERSION_CONTEXT"
 CONCENTRATION_PROXIMITY = "CONCENTRATION_PROXIMITY"
 DATA_QUALITY = "DATA_QUALITY"
 
+# --------------------------------------------------------------------------- #
+# Funded material change
+# --------------------------------------------------------------------------- #
+# The nine types above describe one week of the PIPELINE extract. The six below
+# describe the movement between two governed FUNDED snapshots. They are new
+# types, not a new contract: same ``Insight``, same ``Omission``, same selector,
+# same configuration loader. A funded finding and a pipeline finding differ in
+# what they are about, never in what they are.
+#
+#: The book's balance moved. Separated from the other measures because its
+#: movement is the one a bridge can decompose, and because a reader looks for it
+#: first.
+FUNDED_BALANCE_MOVEMENT = "FUNDED_BALANCE_MOVEMENT"
+#: Any other governed measure's movement — loan count, weighted-average LTV,
+#: weighted-average rate, weighted-average term. One type rather than one per
+#: measure, because the set of eligible measures is decided by the governed
+#: field-selection policy at runtime and is not knowable here.
+FUNDED_METRIC_MOVEMENT = "FUNDED_METRIC_MOVEMENT"
+#: A dimension's composition shifted — more of the book in one category, less in
+#: another, with the balance unchanged or moving separately.
+FUNDED_COMPOSITION_SHIFT = "FUNDED_COMPOSITION_SHIFT"
+#: What the balance movement decomposes into: new lending, exits, and movement
+#: on loans present at both dates.
+FUNDED_BALANCE_ATTRIBUTION = "FUNDED_BALANCE_ATTRIBUTION"
+#: A configured limit or concentration test changed governed status between the
+#: two reporting dates. A contractual fact, which is why it outranks everything.
+LIMIT_STATUS_TRANSITION = "LIMIT_STATUS_TRANSITION"
+#: Nothing crossed a configured threshold. Emitted so that a quiet period is a
+#: statement the reader can rely on rather than an empty page they must
+#: interpret — the same rule ``data_quality.emit_when_clean`` already applies.
+FUNDED_QUIET_PERIOD = "FUNDED_QUIET_PERIOD"
+
+FUNDED_INSIGHT_TYPES = (
+    FUNDED_BALANCE_MOVEMENT, FUNDED_METRIC_MOVEMENT, FUNDED_COMPOSITION_SHIFT,
+    FUNDED_BALANCE_ATTRIBUTION, LIMIT_STATUS_TRANSITION, FUNDED_QUIET_PERIOD,
+)
+
 INSIGHT_TYPES = (
     PIPELINE_MOVEMENT, TICKET_SIZE, WEIGHTED_LTV, TICKET_MIX_SHIFT,
     LTV_MIX_SHIFT, COMPLETIONS_MOVEMENT, CONVERSION_CONTEXT,
     CONCENTRATION_PROXIMITY, DATA_QUALITY,
-)
+) + FUNDED_INSIGHT_TYPES
 
 # --------------------------------------------------------------------------- #
 # Severity
@@ -72,14 +109,28 @@ SEVERITY_RANK = {SEVERITY_CONCERN: 3, SEVERITY_ATTENTION: 2, SEVERITY_INFO: 1}
 #: whether the rest of the brief can be believed.
 TYPE_PRIORITY = {
     CONCENTRATION_PROXIMITY: 100,
+    # Deliberately the same tier as CONCENTRATION_PROXIMITY: both are the
+    # contractual exposure, one as proximity to a limit and one as a limit's
+    # status actually changing. ``rank_key`` breaks the tie on type name and
+    # discriminator, so the order is still total and still reproducible.
+    LIMIT_STATUS_TRANSITION: 100,
     DATA_QUALITY: 90,
+    FUNDED_BALANCE_MOVEMENT: 75,
+    # Attribution sits immediately below the movement it explains, so the two
+    # read as a pair wherever both qualify.
+    FUNDED_BALANCE_ATTRIBUTION: 72,
     PIPELINE_MOVEMENT: 70,
+    FUNDED_METRIC_MOVEMENT: 68,
     COMPLETIONS_MOVEMENT: 65,
     CONVERSION_CONTEXT: 60,
+    FUNDED_COMPOSITION_SHIFT: 50,
     TICKET_SIZE: 40,
     WEIGHTED_LTV: 38,
     TICKET_MIX_SHIFT: 30,
     LTV_MIX_SHIFT: 28,
+    # Below everything: a quiet-period statement is only ever emitted when
+    # nothing else qualified, and must never displace something that did.
+    FUNDED_QUIET_PERIOD: 5,
 }
 
 

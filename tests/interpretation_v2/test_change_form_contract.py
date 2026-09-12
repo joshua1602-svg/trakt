@@ -158,30 +158,93 @@ def test_an_owner_is_never_bound_to_an_operation_it_does_not_support():
 # --------------------------------------------------------------------------- #
 # a form with no owner refuses; it does not borrow one
 # --------------------------------------------------------------------------- #
+# THIS RULE IS THE POINT OF THE TABLE, AND IT OUTLIVES ANY PARTICULAR FORM.
+# These controls were originally written against `material_summary`, which was
+# the one form mapping to nothing while the funded material-change composition
+# did not exist. It exists now and the form is connected — so pinning the rule
+# to that NAME would have pinned a temporary fact, and the controls would have
+# had to be deleted rather than kept. They are pinned to the TABLE instead:
+# whichever form maps to nothing is refused, is told what was understood, and is
+# not offered a rephrase. A future unconnected form inherits them unchanged.
 
-def test_an_unimplemented_form_refuses_rather_than_substituting():
-    result = _compile(change_form="material_summary", operation="compare")
+
+@pytest.fixture
+def unconnected(monkeypatch):
+    """One form, temporarily mapped to no owner, whatever the table says today.
+
+    `monkeypatch.setitem` against the real mapping rather than a stub, so the
+    guard under test is the production one reading its production table.
+    """
+    form = sorted(CHANGE_FORMS)[0]
+    monkeypatch.setitem(CHANGE_FORM_CAPABILITY, form, None)
+    return form
+
+
+def test_an_unimplemented_form_refuses_rather_than_substituting(unconnected):
+    result = _compile(change_form=unconnected, operation="compare")
     assert result.outcome == OUTCOME_REFUSE
-    assert [r.code for r in result.reasons] == [CHANGE_FORM_NOT_CONNECTED]
+    assert CHANGE_FORM_NOT_CONNECTED in [r.code for r in result.reasons]
     assert result.plan is None
 
 
-def test_the_refusal_says_what_was_understood():
-    result = _compile(change_form="material_summary", operation="compare")
-    assert "material_summary" in result.reasons[0].subject
+def test_the_refusal_says_what_was_understood(unconnected):
+    result = _compile(change_form=unconnected, operation="compare")
+    reason = next(r for r in result.reasons
+                  if r.code == CHANGE_FORM_NOT_CONNECTED)
+    assert unconnected in reason.subject
 
 
-def test_the_unimplemented_form_is_not_clarifiable():
+def test_the_unimplemented_form_is_not_clarifiable(unconnected):
     # Asking the reader to rephrase cannot build an owner.
-    result = _compile(change_form="material_summary", operation="compare")
-    assert not result.reasons[0].clarifiable
+    result = _compile(change_form=unconnected, operation="compare")
+    reason = next(r for r in result.reasons
+                  if r.code == CHANGE_FORM_NOT_CONNECTED)
+    assert not reason.clarifiable
 
 
 @pytest.mark.parametrize("substitute", ["period_movement", "funded_bridge",
                                         "portfolio_summary", "generic_analysis"])
-def test_it_is_never_answered_by_a_neighbouring_owner(substitute):
-    result = _compile(change_form="material_summary", operation="compare")
+def test_it_is_never_answered_by_a_neighbouring_owner(unconnected, substitute):
+    result = _compile(change_form=unconnected, operation="compare")
     assert result.plan is None, substitute
+
+
+# --------------------------------------------------------------------------- #
+# connecting a form connects it to ONE owner, and records which
+# --------------------------------------------------------------------------- #
+
+def test_no_form_is_unconnected_today():
+    # Not a claim that every form must always be connected — a future form may
+    # legitimately arrive before its owner. It records that none is unconnected
+    # TODAY, so the refusal controls above are exercised by the fixture rather
+    # than by accident, and a regression that disconnects one is visible here.
+    assert [f for f in sorted(CHANGE_FORMS)
+            if CHANGE_FORM_CAPABILITY.get(f) is None] == []
+
+
+def test_the_compilers_reading_of_the_form_is_on_the_plan_not_the_claim():
+    # A runtime dispatches on the COMPILER's reading. If the form reached a
+    # runtime only as the model's raw claim, a serving decision would be taken
+    # from what the model said, which is the line the provenance split exists to
+    # hold. Both sides are recorded, and they are recorded separately.
+    result = _compile(change_form="material_summary", operation="summary",
+                      capability="period_movement", measures=[])
+    assert result.plan is not None
+    provenance = result.plan.provenance
+    assert provenance.intent_claims["change_form"] == "material_summary"
+    binding = provenance.compiler_bindings["change_form"]
+    assert binding["form"] == "material_summary"
+    assert binding["capability"] == CHANGE_FORM_CAPABILITY["material_summary"]
+    # The mode is what separates two forms sharing one owner, so it is recorded
+    # beside the capability rather than re-derived by whoever executes the plan.
+    assert binding["mode"] == "portfolio_overview"
+
+
+def test_a_plan_with_no_form_records_no_form_binding():
+    result = _compile(operation="movement")
+    assert result.plan is not None
+    assert result.plan.provenance.intent_claims["change_form"] is None
+    assert result.plan.provenance.compiler_bindings["change_form"] is None
 
 
 # --------------------------------------------------------------------------- #

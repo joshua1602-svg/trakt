@@ -85,6 +85,7 @@ from .plan import (
 )
 from .vocabulary import (
     CHANGE_FORM_CAPABILITY,
+    CHANGE_FORM_MODE,
     CAPABILITY_OPERATIONS,
     STATISTICS_FORBIDDING_WEIGHT,
     STATISTICS_REQUIRING_WEIGHT,
@@ -1002,6 +1003,7 @@ class DeterministicCompiler:
             "time": list(intent.time.key()),
             "comparison": list(intent.comparison.key()),
             "target": list(intent.target.key()) if intent.target else None,
+            "change_form": intent.change_form,
             "evidence": [{"claim": e.claim, "text": e.text} for e in intent.evidence],
         }
         bindings: Dict[str, Any] = {
@@ -1027,6 +1029,18 @@ class DeterministicCompiler:
                 "normal_form_version": NORMAL_FORM_VERSION,
                 "applied": list(getattr(normalised, "applied", ()) or ()),
             },
+            # THE COMPILER'S READING OF THE ANALYTICAL FORM, not the model's.
+            # The form itself is a claim and sits above in ``intent_claims``;
+            # the owner and the mode it implies are this module's decision, from
+            # its own mapping, and belong on the compiler's side of the line.
+            # A runtime that dispatches on the form reads THIS — never the
+            # claim — so no serving decision is ever taken from the model's raw
+            # reading.
+            "change_form": {
+                "form": intent.change_form,
+                "capability": CHANGE_FORM_CAPABILITY.get(intent.change_form),
+                "mode": CHANGE_FORM_MODE.get(intent.change_form or ""),
+            } if intent.change_form else None,
         }
         return PlanProvenance(
             question=intent.provenance.question,

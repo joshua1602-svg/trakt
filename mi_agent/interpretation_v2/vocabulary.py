@@ -87,8 +87,14 @@ CAPABILITY_OPERATIONS: Mapping[str, FrozenSet[str]] = {
     "concentration": frozenset({"summary", "rank", "breakdown", "point_in_time"}),
     "limit_assessment": frozenset({"summary", "rank", "point_in_time",
                                    "forecast_projection", "headroom"}),
+    # `summary` was added when the funded material-change composition was built.
+    # It is "summarise this period's movements" — the operation
+    # `period_change` has always implemented as MODE_PORTFOLIO_OVERVIEW, over
+    # every governed measure and dimension rather than one named measure. It was
+    # absent while nothing composed that output into findings; it is present now
+    # that `mi_agent_api.insight_funded` does.
     "period_movement": frozenset({"movement", "rank", "breakdown", "compare",
-                                  "series"}),
+                                  "series", "summary"}),
     "borrowing_base": frozenset({"point_in_time", "headroom", "utilisation",
                                  "eligibility", "breakdown", "movement",
                                  "bridge", "series"}),
@@ -307,17 +313,33 @@ CHANGE_FORMS: FrozenSet[str] = frozenset({
 #: THE OWNER OF EACH FORM. The compiler's mapping, stated once here so the model
 #: never has to predict an internal owner correctly.
 #:
-#: `material_summary` maps to NOTHING, deliberately and temporarily. The funded
-#: material-change composition does not exist yet — the existing insight engine
-#: is bound to the weekly pipeline extract — and the honest answer to a question
-#: whose owner is not built is a refusal that says so, not the nearest available
-#: analysis. Substituting a balance delta, a portfolio overview or a bridge for
-#: "what changed?" is precisely the defect this slot exists to end.
+#: A FORM WHOSE ENTRY IS ``None`` IS REFUSED, NOT SUBSTITUTED. The compiler
+#: applies that rule to this table generically; it is the reason the table exists
+#: rather than being inlined, and it is what stops "what changed?" being answered
+#: with the nearest available analysis when its owner is not built.
+#:
+#: `material_summary` was such an entry until the funded material-change
+#: composition was built. It now maps to `period_movement`, which is the same
+#: owner `metric_delta` maps to — `period_change.workflow`. The two forms are not
+#: the same question and are not served the same way: `metric_delta` names one
+#: measure and runs MODE_REQUESTED_METRIC, `material_summary` names none and runs
+#: MODE_PORTFOLIO_OVERVIEW over every governed measure and dimension, whose
+#: output `mi_agent_api.insight_funded` composes into findings. The distinction
+#: between them is the MODE, which is a first-class governed concept of that
+#: workflow — so connecting the form needed no new capability and no new owner.
 CHANGE_FORM_CAPABILITY: Mapping[str, Optional[str]] = {
     "metric_delta": "period_movement",
     "attribution": "funded_bridge",
     "level_comparison": "generic_analysis",
-    "material_summary": None,
+    "material_summary": "period_movement",
+}
+
+#: THE MODE EACH FORM RUNS THE SHARED OWNER IN, where the capability alone does
+#: not separate two forms. Only `period_change` has such a pair today.
+#: A form absent from this table states no mode and the owner's default applies.
+CHANGE_FORM_MODE: Mapping[str, str] = {
+    "metric_delta": "requested_metric",
+    "material_summary": "portfolio_overview",
 }
 
 #: WHERE A CAPABILITY NAME IS NOT ENOUGH TO SEPARATE TWO CAPABILITIES, the

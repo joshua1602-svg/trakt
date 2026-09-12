@@ -92,12 +92,85 @@ insights:
     # object instead of silence, so the absence of a warning is a statement.
     emit_when_clean: false
 
+  # =======================================================================
+  # Funded material change
+  # =======================================================================
+  # Everything above describes one week of the PIPELINE extract. Everything
+  # below describes the movement between two governed FUNDED snapshots.
+  #
+  # The period-change workflow states, in its own output, that it has no
+  # materiality rule: "No governed materiality threshold is configured for this
+  # portfolio, so movements are ranked by observed size only ... No movement is
+  # described as material, significant, a breach or high risk." The keys below
+  # ARE that configured rule. They are the only reason a funded movement is
+  # ever called material, and they live here so that reason is auditable and
+  # tunable without a code change — exactly as for the pipeline sections.
+  #
+  # The no-absolute-currency rule above applies here unchanged. A funded book
+  # spans a wider range than a pipeline does, not a narrower one, so a currency
+  # floor would be worse here, not more defensible.
+
+  # ---- Funded measure movement -------------------------------------------
+  # Two gates, chosen by the measure's own unit of measurement rather than by
+  # its name. A currency or count measure is gated on its relative move; a
+  # percentage-point measure is gated on the points it moved, because 2% of a
+  # 62% weighted-average LTV is 1.2 points and reads as a far smaller change
+  # than it is.
+  funded_metric_movement:
+    min_relative_change_pct: 2.0
+    min_change_pp: 1.0
+    # A movement the governed directionality calls a deterioration is raised
+    # from "attention" to "concern" above these. An improvement is never
+    # escalated: a book improving quickly is not a concern.
+    concern_relative_change_pct: 10.0
+    concern_change_pp: 5.0
+
+  # ---- Funded composition -------------------------------------------------
+  # Only the categories the workflow itself ranked as the largest increase and
+  # the largest decrease are considered; this gate then decides whether either
+  # is worth reporting. The ranking is the workflow's, not this file's.
+  funded_composition:
+    min_share_change_pp: 5.0
+    max_categories_reported: 2
+
+  # ---- Funded attribution -------------------------------------------------
+  # The balance bridge is an explanation of a movement, so it is reported only
+  # where the movement it explains was itself material — there is no separate
+  # size gate, because an immaterial movement's decomposition is immaterial by
+  # construction.
+  funded_attribution:
+    # A bridge that does not reconcile to its own closing balance within its
+    # documented rounding tolerance is reported as a limitation, never as an
+    # explanation.
+    require_reconciliation: true
+
+  # ---- Limit and concentration status transitions -------------------------
+  # A status transition needs no size gate: the threshold was already applied
+  # by the configured test, and the status changing IS the finding.
+  funded_limits:
+    # A test that recovered is still a governed status change. Reported at
+    # "info" so a recovery is visible, not only a deterioration.
+    report_improvements: true
+
+  # ---- Funded brief behaviour ---------------------------------------------
+  funded_brief:
+    # When true, a period in which nothing crossed a threshold produces one
+    # explicit statement saying so, naming what was examined and against which
+    # thresholds. Silence and "nothing happened" must not look the same.
+    emit_quiet_period: true
+
 # ---- Brief-level limits ---------------------------------------------------
 brief:
   max_insights: 8
   max_per_type:
     CONCENTRATION_PROXIMITY: 2
+    LIMIT_STATUS_TRANSITION: 3
     DATA_QUALITY: 1
+    FUNDED_BALANCE_MOVEMENT: 1
+    FUNDED_BALANCE_ATTRIBUTION: 1
+    FUNDED_METRIC_MOVEMENT: 3
+    FUNDED_COMPOSITION_SHIFT: 2
+    FUNDED_QUIET_PERIOD: 1
     TICKET_SIZE: 1
     WEIGHTED_LTV: 1
     TICKET_MIX_SHIFT: 1

@@ -17,7 +17,9 @@ import pytest
 from mi_agent.interpretation_v2.compiler import CompilerContext, DeterministicCompiler
 from mi_agent.interpretation_v2.intent import parse_candidate_intent
 from mi_agent.interpretation_v2.outcomes import (CHANGE_FORM_NOT_CONNECTED,
-                                                 OUTCOME_PLAN, OUTCOME_REFUSE)
+                                                 MISSING_REQUIRED_SLOT,
+                                                 OUTCOME_CLARIFY, OUTCOME_PLAN,
+                                                 OUTCOME_REFUSE)
 
 #: One governed measure per lender context. They are different concepts on
 #: different books; the form-of-change decision must not depend on which.
@@ -94,21 +96,82 @@ def test_a_level_comparison_is_not_turned_into_movement():
 
 
 # --------------------------------------------------------------------------- #
-# 8. the broad request is understood and declined, not substituted
+# 8. the broad request reaches its owner, and a narrowed one does not
 # --------------------------------------------------------------------------- #
+# This section used to assert that the broad request was DECLINED, because the
+# funded material-change composition did not exist. It does now and the form is
+# connected — so what these controls pin is the thing that had to stay true
+# either way: a broad request is never answered by a NARROWER analysis, and a
+# narrowed one is never answered by the broad composition. Before, both were
+# enforced by refusing everything. Now the first is enforced by the compiler
+# binding the form to one owner, and the second by that owner's own perimeter.
+
 
 @pytest.mark.parametrize("operation", ["compare", "movement", "summary"])
-def test_a_material_summary_refuses_whatever_operation_accompanies_it(operation):
+def test_a_material_summary_reaches_one_owner_whatever_operation_accompanies_it(
+        operation):
+    # ONE owner and ONE mode, whichever operation the reader's sentence carried.
+    # The operation states the result SHAPE; it never re-decides the owner.
     result = _compile(change_form="material_summary", operation=operation)
-    assert result.outcome == OUTCOME_REFUSE
-    assert CHANGE_FORM_NOT_CONNECTED in [r.code for r in result.reasons]
+    assert result.outcome == OUTCOME_PLAN
+    binding = result.plan.provenance.compiler_bindings["change_form"]
+    assert binding["capability"] == "period_movement"
+    assert binding["mode"] == "portfolio_overview"
+
+
+def test_the_broad_form_alone_does_not_excuse_a_measure_bearing_operation():
+    # A PERIMETER, RECORDED RATHER THAN WORKED AROUND. `summary` is the one
+    # operation that composes a material summary without a measure; `movement`
+    # and `compare` state a shape that is ABOUT a measure, so with none named the
+    # compiler asks which — it does not quietly widen to every governed measure
+    # because the form was broad. The consequence is real and is not fixed here:
+    # a bare "what changed?" read as `movement` clarifies instead of composing.
+    # Making the measure optional for this form is a compiler change with its own
+    # evidence, not something to slip in behind a test.
+    for operation in ("movement", "compare"):
+        result = _compile(change_form="material_summary", operation=operation,
+                          measures=[])
+        assert result.outcome == OUTCOME_CLARIFY, operation
+        assert MISSING_REQUIRED_SLOT in [r.code for r in result.reasons], operation
+
+    result = _compile(change_form="material_summary", operation="summary",
+                      measures=[])
+    assert result.outcome == OUTCOME_PLAN
 
 
 def test_the_broad_request_does_not_borrow_the_overview_measure():
+    # `portfolio_summary` is a LEVEL summary of one period. Answering "what
+    # changed" with it would substitute a neighbouring owner, which is the defect
+    # this slot exists to end. The disagreement between the form's owner and the
+    # nominated specialist measure is RECORDED and left unresolved rather than
+    # silently settled in the measure's favour, and the plan that results is
+    # refused by the material-summary perimeter rather than served by it.
+    from mi_agent import plan_material_summary as runtime
+
     result = _compile(change_form="material_summary", operation="compare",
                       measures=[{"concept": "portfolio_overview"}],
                       capability="portfolio_summary")
-    assert result.plan is None
+    if result.plan is None:
+        return
+    assert any("change_form" in note for note in result.plan.provenance.notes)
+    eligible, _why, _detail = runtime.check_eligibility(result.plan)
+    assert not eligible
+
+
+def test_a_named_measure_is_refused_by_the_owners_perimeter_not_flattened():
+    # The compiler binds the form to its owner; the OWNER decides whether this
+    # particular plan is one it can answer. A plan naming a measure is a metric
+    # delta — a different question, run in a different governed mode — and the
+    # perimeter says so rather than running a portfolio overview over everything
+    # and reporting it as the reader's.
+    from mi_agent import plan_material_summary as runtime
+
+    result = _compile(change_form="material_summary", operation="summary")
+    assert result.outcome == OUTCOME_PLAN
+    assert runtime.claims(result.plan)
+    eligible, why, _detail = runtime.check_eligibility(result.plan)
+    assert not eligible
+    assert why == runtime.MEASURE_NARROWS_THE_SUMMARY
 
 
 # --------------------------------------------------------------------------- #
