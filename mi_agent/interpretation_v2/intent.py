@@ -848,8 +848,13 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
             "change_form": {
                 "type": "string", "enum": sorted(CHANGE_FORMS),
                 "description":
-                    "ONLY when the question is about a CHANGE between reporting "
-                    "states. Which analytical question is being asked — not "
+                    "REQUIRED whenever the question is about a CHANGE between "
+                    "reporting states: state the analytical form the reader "
+                    "asked for, and do not omit it. A change request that "
+                    "leaves this empty is INCOMPLETE and will not be executed, "
+                    "because nothing else in the request says which analytical "
+                    "question was asked. Which analytical question is being "
+                    "asked — not "
                     "which metric, and not which part of the system answers it. "
                     "'material_summary': the reader asks what changed, or what "
                     "moved, without naming one metric, without asking what "
@@ -860,8 +865,9 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
                     "or ask for it to be broken into its parts — never assume "
                     "this merely because something changed. 'level_comparison': "
                     "they want the values at two states set side by side, not "
-                    "the movement between them. Leave empty when the question "
-                    "is not about a change."},
+                    "the movement between them. Leave empty ONLY when the "
+                    "question is not about a change between reporting "
+                    "states."},
             "population": {
                 "type": "object", "additionalProperties": False,
                 "properties": {

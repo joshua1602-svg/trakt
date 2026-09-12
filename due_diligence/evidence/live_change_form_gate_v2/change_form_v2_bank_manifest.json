@@ -1,0 +1,399 @@
+{
+ "authorised_live_calls": 18,
+ "bank_id": "live_change_form_gate_v2",
+ "baseline_sha": "665176864d2f5dbceedc277e351c5d2cd978777f",
+ "boundary": "AnthropicInterpreterClient directly. No /mi/query, no MI_BEARER, no App Service, no plan_serving_canary, no MI_AGENT_PLAN_SERVE, not the 135 benchmark CLI. Nothing runs against a book.",
+ "calls_per_case": 1,
+ "cases": [
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "V01",
+   "measure": null,
+   "question": "Walk me through what has moved in the funded book since the last report.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "V02",
+   "measure": null,
+   "question": "Is there anything I should be aware of in how the portfolio has shifted this period?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "V03",
+   "measure": null,
+   "question": "Summarise the notable movements in the acquired funded book against the prior reporting date.",
+   "scope": "acquired",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters": [],
+   "id": "V04",
+   "measure": null,
+   "question": "What stands out as having changed across the book between the two most recent reporting dates?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "V05",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "By how much did outstanding balance shift between the last two reporting dates?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "V06",
+   "measure": {
+    "concepts": [
+     "loan"
+    ],
+    "family": "loan_count",
+    "statistics": [
+     "count",
+     "count_distinct"
+    ]
+   },
+   "question": "What is the change in the number of live funded loans since the prior report?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "V07",
+   "measure": {
+    "concepts": [
+     "arrears_balance"
+    ],
+    "family": "arrears_balance",
+    "statistics": []
+   },
+   "question": "How much did arrears balance move over the latest reporting period?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "V08",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value"
+    ],
+    "family": "weighted_average_current_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "Did weighted average LTV rise or fall against the previous reporting date?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "V09",
+   "measure": {
+    "concepts": [
+     "indexed_loan_to_value"
+    ],
+    "family": "weighted_average_indexed_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "How has weighted average indexed LTV changed since the last report?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters": [],
+   "id": "V10",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "How much did funded balance move in the direct book over the latest period?",
+   "scope": "direct",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "V11",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "What accounts for the movement in funded balance between the last two reporting dates?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "V12",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Break the change in funded balance into its drivers for the latest period.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "V13",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Which components explain why the funded balance ended where it did this period?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters": [],
+   "id": "V14",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Give me the drivers behind the acquired book's funded balance movement since the prior report.",
+   "scope": "acquired",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "V15",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Put outstanding balance at the latest reporting date alongside the previous one.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "V16",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value"
+    ],
+    "family": "weighted_average_current_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "What were the weighted average LTV figures at the current and the prior reporting dates?",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "V17",
+   "measure": {
+    "concepts": [
+     "loan"
+    ],
+    "family": "loan_count",
+    "statistics": [
+     "count",
+     "count_distinct"
+    ]
+   },
+   "question": "Show funded loan counts for the two most recent reporting dates side by side.",
+   "scope": null,
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters": [],
+   "id": "V18",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Set the direct book's funded balance at the current reporting date against the prior one.",
+   "scope": "direct",
+   "temporal_forms": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ]
+  }
+ ],
+ "compile_outcome_is_evidence": "With the completeness gate in place, an intent omitting change_form on a change request CLARIFIES rather than planning. Each case carries its compile outcome: PLAN proves the reading was complete; CLARIFY naming change_form proves the gate caught an incomplete reading instead of letting it through.",
+ "metric_spread": "Six metric deltas over five distinct governed quantities (outstanding balance, loan count, arrears balance, current LTV, indexed LTV) so a pass cannot come from one learned metric. v1's only metric_delta miss was an LTV question.",
+ "model": "claude-opus-5",
+ "not_pinned": [
+  "capability",
+  "operation",
+  "the statistic on a measure (recorded, reported, not a gate)",
+  "time.grain",
+  "THE TEMPORAL FORM \u2014 recorded and reported, explicitly NOT gated: the deterministic owners do not currently honour a `current` anchor for material_summary or attribution, which is an independent temporal-contract defect reported separately and not repaired in this sprint. Gating on it would make a temporal failure read as a change_form failure."
+ ],
+ "primary_gate": "change_form == expected, 18/18",
+ "registry_is_visible_to_the_model": false,
+ "retries": 0,
+ "secondary_gates": {
+  "explicit_measure_preserved": "14 of 14 (V05-V18)",
+  "invented_dimensions": 0,
+  "invented_filters": 0,
+  "material_summary_specific_measure_invented": "0 of 4",
+  "scope_preserved": "4 of 4 (V03, V10, V14, V18)",
+  "unnecessary_clarifications": 0
+ },
+ "supersedes": "live_change_form_gate_v1 (immutable, 17/18)",
+ "what_this_is": "NATURAL LANGUAGE -> OPUS -> CandidateIntent, re-measured on fresh paraphrases after the change_form completeness repair. It does NOT test deterministic execution and computes no answer."
+}

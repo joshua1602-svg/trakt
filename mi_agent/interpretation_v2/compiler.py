@@ -168,6 +168,73 @@ _CAPABILITY_OWNED_PERIOD_OPERATIONS = frozenset({
     "bridge",
 })
 
+#: THE COMPLETENESS PERIMETER FOR `change_form`.
+#:
+#: A `CandidateIntent` is probabilistic; a `GovernedQueryPlan` may not be
+#: semantically incomplete. The live gate measured one reading that named its
+#: measure, its statistic and its period pair correctly and left `change_form`
+#: empty — and still compiled to an executable plan, because the legacy
+#: capability/operation pair was enough on its own. That is the hole: the plan
+#: that came out was indistinguishable from a change-form plan, while nothing in
+#: it said WHICH analytical question had been asked, and therefore which mode and
+#: which candidate-set owner applied.
+#:
+#: So the three conditions below are a COMPLETENESS test, not an inference. They
+#: decide whether the form is REQUIRED. They never decide what it would have
+#: been: an absent form is asked about, never filled in. Specifically, this must
+#: not become "movement + a period pair + a metric => metric_delta", which would
+#: put semantic inference back into the compiler and invert the authority model
+#: `change_form` exists to state.
+#:
+#: Operations whose RESULT IS a difference between two governed reporting states.
+#: These are the operations the four forms use as their own action: `movement`
+#: for a metric delta, `bridge` for an attribution, `compare` for a level
+#: comparison. `summary` is deliberately ABSENT even though `material_summary`
+#: canonicalises to it — `concentration`, `pipeline`, `limit_assessment` and
+#: `portfolio_summary` all admit `summary` as a point-in-time shape, so requiring
+#: a form on it would refuse ordinary MI that was never about a change.
+_CHANGE_ORIENTED_OPERATIONS = frozenset({"movement", "bridge", "compare"})
+
+#: Period forms that denote MORE THAN ONE governed reporting state. `current`
+#: names one and `series` names many; neither is a pair. `current` still reaches
+#: the perimeter where the operation's window is capability-owned, because there
+#: the capability supplies the second state — which is the existing rule in
+#: `_CAPABILITY_OWNED_PERIOD_OPERATIONS`, reused rather than restated.
+_MULTI_STATE_PERIOD_FORMS = frozenset({
+    "relative_pair", "previous_reporting_period", "range"})
+
+#: The capabilities the change-form family owns, read off the existing owner
+#: table rather than listed again. This is what keeps the perimeter off every
+#: other family: `pipeline_stage_movement` transitions, `borrowing_base`
+#: movements, `forecast` projections and `concentration` summaries are all
+#: change-shaped in their own way and NONE of them is one of these four forms, so
+#: none of them may be asked for a `change_form` it has no value for.
+_CHANGE_FORM_CAPABILITIES = frozenset(
+    capability for capability in CHANGE_FORM_CAPABILITY.values() if capability)
+
+
+def requires_change_form(intent: CandidateIntent) -> bool:
+    """Whether this intent is a temporal change request, from STRUCTURE alone.
+
+    Reads four structured slots — capability, operation, comparison kind and
+    period form — and nothing else. It does not read the question, provenance,
+    any measure name or any wording; there is no text in this function and no
+    benchmark id anywhere near it.
+    """
+    if intent.capability not in _CHANGE_FORM_CAPABILITIES:
+        return False
+    if intent.operation not in _CHANGE_ORIENTED_OPERATIONS:
+        return False
+    # A comparison of two POPULATIONS or two DIMENSION VALUES is not a change
+    # between reporting states, however much it uses `compare`.
+    if intent.comparison.kind != "none":
+        return False
+    time = intent.time
+    return (time.form in _MULTI_STATE_PERIOD_FORMS
+            or (time.form == "explicit_period" and len(time.labels) >= 2)
+            or intent.operation in _CAPABILITY_OWNED_PERIOD_OPERATIONS)
+
+
 #: Operations for which a grouping changes the question into a different one.
 _GROUPING_FORBIDDEN = frozenset({"point_in_time"})
 
@@ -434,6 +501,20 @@ class DeterministicCompiler:
             reasons.append(CompileReason(
                 CONFLICTING_CLAIMS, "comparison",
                 "a pair was named but no comparison was requested"))
+
+        # COMPLETENESS, NOT INFERENCE. A temporal change request whose analytical
+        # form is absent is incomplete, and an incomplete request does not become
+        # an executable plan on the strength of its capability and operation
+        # alone. MISSING_REQUIRED_SLOT is clarifiable, so the honest outcome is
+        # the one the reader gets: ask which of the four was meant. The compiler
+        # does NOT pick one — whether a bare movement is a metric delta or the
+        # start of an attribution is the reader's question to settle.
+        if intent.change_form is None and requires_change_form(intent):
+            reasons.append(CompileReason(
+                MISSING_REQUIRED_SLOT, "change_form",
+                f"operation {intent.operation!r} over more than one reporting "
+                f"state is a change request, and which analytical form was "
+                f"asked for is not stated"))
 
         # A measure needs to exist somewhere unless the operation owns its own.
         if intent.operation not in _MEASURE_OPTIONAL:
