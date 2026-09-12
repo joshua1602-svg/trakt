@@ -62,13 +62,18 @@ WORKFLOW_MODE = "portfolio_overview"
 #: with a different owner and its own weekly brief.
 POPULATION_BASES = frozenset({"funded"})
 
-#: Operations this form admits. `summary` is the form's own operation; `movement`
-#: and `compare` are admitted because a reader who says "what changed" and a
-#: reader who says "compare these two periods for anything material" are asking
-#: this question, and the compiler records which they said. Everything else —
-#: `rank`, `breakdown`, `series`, `distribution` — states a SHAPE this
-#: composition does not produce, and is refused rather than flattened into one.
-OPERATIONS = frozenset({"summary", "movement", "compare"})
+#: THE ONE OPERATION THIS FORM EXECUTES AS. A reader asking "what changed" says
+#: it as `movement`, `compare` or `summary` — one analytical form, three
+#: spellings of its action — and the canonicalisation seam
+#: (`normalise.py` rule 5, over `vocabulary.CHANGE_FORM_OPERATION_VARIANTS`)
+#: collapses them to `summary` BEFORE the plan exists. So this perimeter sees
+#: exactly one shape and admits exactly one.
+#:
+#: A non-canonical operation reaching here means the plan was built without that
+#: seam. It is refused rather than re-canonicalised: a second place that rewrites
+#: an operation is a second place the two could disagree, and fail-closed is the
+#: right answer to a plan that skipped a governed step.
+OPERATIONS = frozenset({"summary"})
 
 # Ineligibility reasons. Stable strings: a bank groups on them and a report
 # counts them.
@@ -85,17 +90,36 @@ PERIOD_GRAIN_UNTRANSLATABLE = "PERIOD_GRAIN_UNTRANSLATABLE"
 PAIR_PERIOD_FORMS = frozenset({
     "explicit_period", "range", "previous_reporting_period", "relative_pair"})
 
-#: A `relative_pair` states a GRAIN, and the resolver states the same idea as a
-#: relative METHOD. The two vocabularies are both governed; this is the whole
-#: translation between them, written out rather than derived, so a grain that has
-#: no method is refused instead of being rounded to the nearest one. `daily` and
-#: `weekly` are absent because the resolver publishes no such method — a funded
-#: book's governed snapshots are month-end.
-RELATIVE_MODE_BY_GRAIN: Mapping[str, str] = {
+#: A `relative_pair` states a GRAIN and a DISTANCE; the resolver states the same
+#: idea as a relative METHOD. Both vocabularies are governed, and this is the
+#: whole translation between them — written out rather than derived, so a
+#: combination with no method is refused instead of being rounded to the nearest
+#: one.
+#:
+#: THE ABSENT GRAIN IS NOT A GAP. The compiler's own normal form produces
+#: `relative_pair` + `periods_back=1` with no grain for the commonest request in
+#: this family, and states what it means: "a pair with no distance IS the
+#: adjacent pair". The resolver has a method for exactly that, and it is not a
+#: calendar month — `current_vs_previous` compares the two adjacent GOVERNED
+#: SNAPSHOTS, whatever cadence the book reports on. Mapping an absent grain to
+#: `month_on_month` would assume a monthly book; mapping it to nothing would
+#: refuse the question this contract was built for.
+#:
+#: `daily` and `weekly` are absent because the resolver publishes no such method.
+RELATIVE_MODE_BY_GRAIN: Mapping[Optional[str], str] = {
+    None: "current_vs_previous",
     "monthly": "month_on_month",
     "quarterly": "quarter_on_quarter",
     "annual": "year_on_year",
 }
+
+#: Distances a relative method can express. Each method above IS "one period
+#: back" at its own grain; the resolver publishes no method for "three periods
+#: back", and this module may not synthesise one — computing the dates itself
+#: would be exactly the period arithmetic the resolver owns. So a longer
+#: distance is refused and says why, rather than being approximated by the
+#: nearest method that happens to span a similar number of months.
+RELATIVE_DISTANCES = frozenset({None, 1})
 
 
 def _change_form_binding(plan: Any) -> Mapping[str, Any]:
@@ -154,12 +178,19 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
             f"period form {form!r} does not resolve to two governed snapshots, "
             f"and a movement cannot be stated without a pair")
 
-    grain = period.get("grain")
-    if form == "relative_pair" and grain not in RELATIVE_MODE_BY_GRAIN:
-        return False, PERIOD_GRAIN_UNTRANSLATABLE, (
-            f"grain {grain!r} has no governed relative method on the period "
-            f"resolver, and rounding it to the nearest one would answer a "
-            f"different question than the reader asked")
+    if form == "relative_pair":
+        grain = period.get("grain")
+        if grain not in RELATIVE_MODE_BY_GRAIN:
+            return False, PERIOD_GRAIN_UNTRANSLATABLE, (
+                f"grain {grain!r} has no governed relative method on the period "
+                f"resolver, and rounding it to the nearest one would answer a "
+                f"different question than the reader asked")
+        distance = period.get("periods_back")
+        if distance not in RELATIVE_DISTANCES:
+            return False, PERIOD_GRAIN_UNTRANSLATABLE, (
+                f"a distance of {distance!r} periods has no governed relative "
+                f"method; computing the two dates here would be the period "
+                f"arithmetic the resolver owns")
 
     return True, "", ""
 
@@ -187,8 +218,9 @@ def period_request(plan: Any) -> Any:
     if form == "previous_reporting_period":
         return PeriodRequest(relative_mode="current_vs_previous")
     if form == "relative_pair":
-        return PeriodRequest(
-            relative_mode=RELATIVE_MODE_BY_GRAIN[str(period.get("grain"))])
+        grain = period.get("grain")
+        return PeriodRequest(relative_mode=RELATIVE_MODE_BY_GRAIN[
+            str(grain) if grain is not None else None])
     if len(labels) >= 2:
         return PeriodRequest(requested_start=labels[0], requested_end=labels[-1])
     if labels:

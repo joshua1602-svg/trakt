@@ -51,7 +51,10 @@ from typing import List, Mapping, Optional, Sequence, Tuple
 
 from .intent import CandidateIntent, SemanticTime
 from .plan import LABELS_ARE_WORDING_ONLY, identity_labels
-from .vocabulary import CHANGE_FORM_CAPABILITY, GovernedVocabulary
+from .vocabulary import (CHANGE_FORM_CANONICAL_OPERATION,
+                         CHANGE_FORM_CAPABILITY,
+                         CHANGE_FORM_OPERATION_VARIANTS,
+                         GovernedVocabulary)
 
 __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
            "CANONICAL_PAIR_FORM", "CANONICAL_PAIR_PERIODS_BACK", "BOUNDED",
@@ -247,10 +250,12 @@ def canonical_intent(intent: CandidateIntent,
     # reader's behalf, whether they asked for a decomposition or a delta — which
     # is the substitution this slot exists to end.
     form = getattr(intent, "change_form", None)
+    form_conflict = False
     if form:
         implied = CHANGE_FORM_CAPABILITY.get(form)
-        conflict = (owner is not None and implied is not None and owner != implied)
-        if conflict:
+        form_conflict = (owner is not None and implied is not None
+                         and owner != implied)
+        if form_conflict:
             applied.append(
                 f"change_form: {form!r} implies {implied!r} but the measure is "
                 f"owned by {owner!r} — left unresolved for the compiler")
@@ -261,5 +266,44 @@ def canonical_intent(intent: CandidateIntent,
                     f"change_form: capability {intent.capability!r} -> "
                     f"{implied!r} (derived from change_form {form!r})")
                 intent = replace(intent, capability=implied)
+
+    # -- 5. one analytical form, one canonical operation -------------------- #
+    #
+    # WHY THIS IS A NORMALISATION AND NOT A DECISION, AGAIN. `change_form`
+    # defines the analytical form; `operation` expresses the requested action
+    # WITHIN that form. Where the two overlap, the form is authoritative over
+    # ownership and over who decides the candidate set, and the operation is
+    # authoritative over the result shape. A form whose action has several
+    # equally correct spellings therefore has ONE canonical operation, and the
+    # other spellings collapse to it. Like rules 3 and 4 this removes freedom
+    # rather than adding meaning: after it, one analytical form has exactly one
+    # executable shape, and a runtime cannot be handed two.
+    #
+    # STRUCTURED SLOTS ONLY. The form and the operation are read; the question,
+    # the provenance text and the evidence are not — this module imports no
+    # parser and no `re`, and could not inspect wording if it wanted to.
+    #
+    # THIS IS NOT A DEFAULT FROM `movement` TO `material_summary`. It fires only
+    # where the form was ALREADY STATED by the interpreter. An intent with no
+    # `change_form` is untouched here and refused or clarified by the ordinary
+    # contract: whether a bare "what changed" IS a material summary is an
+    # interpretation question, and the compiler does not guess it.
+    #
+    # AND NOT WHERE RULE 4 LEFT A CONFLICT. If a named specialist measure
+    # disagrees with the form about the owner, rule 4 deliberately left the
+    # intent as it stands so the compiler can see the disagreement. Rewriting
+    # the operation on top of that would half-resolve it, which is worse than
+    # either resolution.
+    canonical = CHANGE_FORM_CANONICAL_OPERATION.get(form or "")
+    if canonical and not form_conflict and intent.operation != canonical:
+        if intent.operation in CHANGE_FORM_OPERATION_VARIANTS.get(form, frozenset()):
+            applied.append(
+                f"change_form: operation {intent.operation!r} -> {canonical!r} "
+                f"(a linguistic variant of the action {form!r} names)")
+            intent = replace(intent, operation=canonical)
+        # An operation OUTSIDE the variant set states a shape this form's owner
+        # does not produce. It is left exactly as it is, so the compiler refuses
+        # it against the capability's own operation set rather than this module
+        # silently flattening it into a summary.
 
     return NormalisationResult(intent=intent, applied=tuple(applied))

@@ -143,16 +143,32 @@ _BRIDGE_CONTEXT = frozenset({
 _BRIDGE_QUALITY = frozenset({"evidence", "limitation"})
 
 
-def _split(published: Mapping[str, Any], keys: "frozenset[str]"
-           ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """``(without, with)`` — one governed dict partitioned on a key set.
+_EMPTY: "frozenset[str]" = frozenset()
 
-    Used so every block of a funded insight is a PROJECTION of its owner's own
+
+def _blocks(owner: Any, *, context: "frozenset[str]" = _EMPTY,
+            quality: "frozenset[str]" = _EMPTY
+            ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """``(figures, context, quality)`` — ONE governed dict, partitioned ONCE.
+
+    Every block of a funded insight is a projection of its owner's own
     ``to_dict()``. Nothing is renamed, rescaled or reconstructed on the way
     through, and a field the owner adds later arrives here without a change.
+
+    The owner is read once and partitioned once, so the three blocks provably
+    come from a single snapshot of a single contract. Calling ``to_dict()`` per
+    block, as this did, made "one projection of one owner" a claim in a comment
+    rather than a property of the code.
+
+    Every key lands in exactly one block: whatever is not context and not
+    quality is a figure.
     """
-    return ({k: v for k, v in published.items() if k not in keys},
-            {k: v for k, v in published.items() if k in keys})
+    published = owner.to_dict()
+    return ({k: v for k, v in published.items()
+             if k not in context and k not in quality},
+            {k: v for k, v in published.items()
+             if k in context and k not in quality},
+            {k: v for k, v in published.items() if k in quality})
 
 
 def _dates(ctx: Mapping[str, Any]) -> Dict[str, Any]:
@@ -291,17 +307,28 @@ def limit_status_transitions(ctx: Dict[str, Any],
                           "funded_comparison": envelope.get("priorReportingDate")},
             **gen._base(ctx)))
 
-    if out:
-        return out, []
-
-    reason = (f"All {unchanged} configured limit test(s) held the same governed "
-              f"status at both reporting dates.") if unchanged else (
-        "No configured limit test changed governed status between the two "
-        "reporting dates.")
+    # A SUPPRESSED IMPROVEMENT IS STILL AN OMISSION. This reported nothing when
+    # findings had also been produced, so a configuration that hides recoveries
+    # hid the fact that it was hiding them — the one failure mode this contract
+    # exists to prevent. It is reported whether or not anything else qualified.
+    omissions: List[Omission] = []
     if suppressed:
-        reason += (f" {suppressed} test(s) improved and improvements are "
-                   f"switched off in configuration.")
-    return [], [Omission(LIMIT_STATUS_TRANSITION, reason, OMITTED_IMMATERIAL)]
+        omissions.append(Omission(
+            LIMIT_STATUS_TRANSITION,
+            f"{suppressed} configured limit test(s) improved and are not shown: "
+            f"improvements are switched off in configuration.",
+            OMITTED_IMMATERIAL))
+    if out:
+        return out, omissions
+
+    omissions.append(Omission(
+        LIMIT_STATUS_TRANSITION,
+        (f"All {unchanged} configured limit test(s) held the same governed "
+         f"status at both reporting dates.") if unchanged else
+        ("No configured limit test changed governed status between the two "
+         "reporting dates."),
+        OMITTED_IMMATERIAL))
+    return [], omissions
 
 
 # --------------------------------------------------------------------------- #
@@ -367,6 +394,8 @@ def _movement_text(change: Any) -> str:
 def _metric_insight(ctx: Dict[str, Any], change: Any, result: Any, *,
                     insight_type: str, severity: str,
                     gate_key: str, gate_value: Any) -> Insight:
+    figures, context, quality = _blocks(
+        change, context=_METRIC_CONTEXT, quality=_METRIC_QUALITY)
     moved = _movement_text(change)
     relative = (f" ({fraction_as_pct(change.relative_change)})"
                 if change.relative_change is not None else "")
@@ -388,8 +417,15 @@ def _metric_insight(ctx: Dict[str, Any], change: Any, result: Any, *,
         # ``relative_change`` therefore stays a fraction and ``movement_value``
         # stays in its own unit — a consumer is told which unit rather than
         # being handed a silently converted number.
-        metrics=_split(change.to_dict(), _METRIC_CONTEXT | _METRIC_QUALITY)[0],
-        components=_split(change.to_dict(), _METRIC_CONTEXT)[1],
+        metrics=dict(
+            figures,
+            # ONE KEY ADDED TO THE VERBATIM PROJECTION, and it is a label rather
+            # than a number. `relative_change` is a FRACTION of the starting
+            # value; a consumer reading 0.05 as five percentage points would be
+            # wrong by a factor of twenty. The alternative — publishing a
+            # rescaled number — is the thing this module must not do.
+            relative_change_is="a fraction of the starting value"),
+        components=context,
         methodology={
             "owner": OWNER_PERIOD_CHANGE,
             "calculation_version": (result.audit or {}).get("calculation_version"),
@@ -397,7 +433,7 @@ def _metric_insight(ctx: Dict[str, Any], change: Any, result: Any, *,
             "materiality": _materiality("funded_metric_movement",
                                         gate_key, gate_value),
         },
-        data_quality=_split(change.to_dict(), _METRIC_QUALITY)[1],
+        data_quality=quality,
         source_dates=_dates(ctx),
         **gen._base(ctx))
 
@@ -522,6 +558,8 @@ def composition_shifts(ctx: Dict[str, Any], result: Optional[Any]) -> Result:
             continue
 
         lead, lead_move, lead_basis = qualifying[0]
+        dist_figures, dist_context, _ = _blocks(
+            dist, context=_DISTRIBUTION_CONTEXT)
         parts = [f"{s.category} {fraction_as_points(m)} of {b}"
                  for s, m, b in qualifying]
         out.append(Insight(
@@ -538,11 +576,11 @@ def composition_shifts(ctx: Dict[str, Any], result: Optional[Any]) -> Result:
             # the insight carries what it actually reported. ``basis`` is the
             # one key added, and it names which of the workflow's two share
             # measures the gate was applied to.
-            metrics=dict(_split(dist.to_dict(), _DISTRIBUTION_CONTEXT)[0],
+            metrics=dict(dist_figures,
                          basis=lead_basis,
                          shares_are="fractions of each snapshot's own total"),
             contributors={"categories": [c.to_dict() for c, _m, _b in qualifying]},
-            components=_split(dist.to_dict(), _DISTRIBUTION_CONTEXT)[1],
+            components=dist_context,
             methodology={
                 "owner": OWNER_PERIOD_CHANGE,
                 "ranked_by": ("the period-change workflow's own "
@@ -610,6 +648,8 @@ def balance_attribution(ctx: Dict[str, Any], result: Optional[Any], *,
             "decomposition is not reported: an immaterial movement's attribution "
             "is immaterial by construction.", OMITTED_IMMATERIAL)]
 
+    bridge_figures, bridge_context, bridge_quality = _blocks(
+        bridge, context=_BRIDGE_CONTEXT, quality=_BRIDGE_QUALITY)
     summary = (
         f"New lending contributed {gen.money(bridge.new_loan_balance)} across "
         f"{bridge.new_loan_count} loan(s); exits removed "
@@ -630,8 +670,8 @@ def balance_attribution(ctx: Dict[str, Any], result: Optional[Any], *,
         discriminator=str(bridge.balance_field or "balance"),
         # The bridge's own published shape, split into the figures and the
         # identity of the key they were computed over.
-        metrics=_split(bridge.to_dict(), _BRIDGE_CONTEXT | _BRIDGE_QUALITY)[0],
-        components=_split(bridge.to_dict(), _BRIDGE_CONTEXT)[1],
+        metrics=bridge_figures,
+        components=bridge_context,
         methodology={
             "owner": f"{OWNER_PERIOD_CHANGE} (mi_agent.period_change.bridge)",
             "basis": ("opening → closing reconciliation over a stable loan "
@@ -640,7 +680,7 @@ def balance_attribution(ctx: Dict[str, Any], result: Optional[Any], *,
                 "funded_attribution", "reported with the balance movement it "
                                       "explains", balance_is_material),
         },
-        data_quality=_split(bridge.to_dict(), _BRIDGE_QUALITY)[1],
+        data_quality=bridge_quality,
         source_dates=_dates(ctx),
         **gen._base(ctx))], []
 

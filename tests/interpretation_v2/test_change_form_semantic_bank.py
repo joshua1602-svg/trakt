@@ -119,24 +119,89 @@ def test_a_material_summary_reaches_one_owner_whatever_operation_accompanies_it(
     assert binding["mode"] == "portfolio_overview"
 
 
-def test_the_broad_form_alone_does_not_excuse_a_measure_bearing_operation():
-    # A PERIMETER, RECORDED RATHER THAN WORKED AROUND. `summary` is the one
-    # operation that composes a material summary without a measure; `movement`
-    # and `compare` state a shape that is ABOUT a measure, so with none named the
-    # compiler asks which — it does not quietly widen to every governed measure
-    # because the form was broad. The consequence is real and is not fixed here:
-    # a bare "what changed?" read as `movement` clarifies instead of composing.
-    # Making the measure optional for this form is a compiler change with its own
-    # evidence, not something to slip in behind a test.
-    for operation in ("movement", "compare"):
-        result = _compile(change_form="material_summary", operation=operation,
-                          measures=[])
-        assert result.outcome == OUTCOME_CLARIFY, operation
-        assert MISSING_REQUIRED_SLOT in [r.code for r in result.reasons], operation
+# --------------------------------------------------------------------------- #
+# 8b. who owns the candidate set — the four structured invariants
+# --------------------------------------------------------------------------- #
+# WHERE `change_form` AND `operation` OVERLAP, THE FORM WINS ON OWNERSHIP.
+# `material_summary` MEANS "determine which governed changes are materially
+# relevant", so the composition owns the candidate set BY DEFINITION and no
+# measure need be named. `operation` stays authoritative over the result SHAPE.
+#
+# Everything below is built from structured intent. No sentence is parsed, no
+# wording is matched and no recogniser is involved — which is the point: these
+# are properties of the contract, not of any phrasing that reaches it.
 
+
+def test_A_a_bare_material_summary_executes_without_a_named_measure():
     result = _compile(change_form="material_summary", operation="summary",
                       measures=[])
     assert result.outcome == OUTCOME_PLAN
+    assert result.plan.capability == "period_movement"
+    assert all(not output.measures for output in result.plan.outputs)
+
+
+@pytest.mark.parametrize("operation", ["movement", "compare", "summary"])
+def test_B_every_spelling_of_the_action_reaches_one_execution_contract(operation):
+    # One analytical form, three equally correct spellings of its action, ONE
+    # executable shape. The model is not made to emit an implementation's
+    # spelling to make its plan runnable.
+    result = _compile(change_form="material_summary", operation=operation,
+                      measures=[])
+    assert result.outcome == OUTCOME_PLAN
+    assert result.plan.operation == "summary", operation
+    binding = result.plan.provenance.compiler_bindings["change_form"]
+    assert binding["capability"] == "period_movement"
+    assert binding["mode"] == "portfolio_overview"
+    # What the model actually said is still recoverable; only the EXECUTION was
+    # canonicalised, and the rewrite says so in the provenance notes.
+    assert result.plan.provenance.intent_claims["change_form"] == "material_summary"
+    if operation != "summary":
+        assert any("operation" in note and "change_form" in note
+                   for note in result.plan.provenance.notes), operation
+
+
+@pytest.mark.parametrize("operation", ["movement", "compare"])
+def test_C_metric_delta_still_requires_a_named_measure(operation):
+    # The correction is scoped to ONE form. A metric delta names its metric, and
+    # a metric delta that does not is still a clarification.
+    result = _compile(change_form="metric_delta", operation=operation,
+                      measures=[])
+    assert result.outcome == OUTCOME_CLARIFY, operation
+    assert MISSING_REQUIRED_SLOT in [r.code for r in result.reasons], operation
+
+
+@pytest.mark.parametrize("operation", ["movement", "compare"])
+def test_D_no_change_form_is_never_read_as_a_material_summary(operation):
+    # THE INFERENCE THAT WAS NOT ADDED. Whether a bare "what changed" IS a
+    # material summary is an interpretation question. With the slot empty the
+    # compiler does not guess it, and the pre-existing contract answers.
+    result = _compile(operation=operation, measures=[])
+    assert result.outcome == OUTCOME_CLARIFY, operation
+    assert MISSING_REQUIRED_SLOT in [r.code for r in result.reasons], operation
+    assert result.plan is None
+
+
+@pytest.mark.parametrize("form,operation", [("attribution", "movement"),
+                                            ("level_comparison", "compare"),
+                                            ("level_comparison", "movement")])
+def test_the_other_forms_measure_requirements_are_untouched(form, operation):
+    result = _compile(change_form=form, operation=operation, measures=[])
+    assert result.outcome == OUTCOME_CLARIFY, (form, operation)
+    assert MISSING_REQUIRED_SLOT in [r.code for r in result.reasons]
+
+
+@pytest.mark.parametrize("operation", ["rank", "breakdown", "series",
+                                       "distribution"])
+def test_an_operation_stating_a_shape_the_form_cannot_produce_is_not_flattened(
+        operation):
+    # A compatible linguistic variant is canonicalised; an incompatible SHAPE is
+    # not. `rank` and `breakdown` ask for an ordering and a grouping this
+    # composition does not produce, and turning them into a summary would answer
+    # a different question while reporting the one that was asked.
+    result = _compile(change_form="material_summary", operation=operation,
+                      measures=[])
+    assert result.outcome != OUTCOME_PLAN, operation
+    assert result.plan is None
 
 
 def test_the_broad_request_does_not_borrow_the_overview_measure():

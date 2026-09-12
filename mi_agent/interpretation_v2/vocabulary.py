@@ -342,6 +342,47 @@ CHANGE_FORM_MODE: Mapping[str, str] = {
     "material_summary": "portfolio_overview",
 }
 
+#: WHERE `change_form` AND `operation` OVERLAP, AND WHICH ONE WINS.
+#:
+#: `change_form` is authoritative over the analytical FORM: which owner
+#: implements the question, which governed mode that owner runs in, and
+#: therefore WHO DECIDES THE CANDIDATE SET OF MEASURES. `operation` is
+#: authoritative over the result SHAPE requested within that form, and is
+#: checked for compatibility against `CAPABILITY_OPERATIONS` for the form's
+#: capability. The form wins on ownership; the operation wins on shape.
+#:
+#: The consequence for a broad request. `material_summary` MEANS "determine
+#: which governed changes are materially relevant", so the composition owns the
+#: candidate set by definition and no measure need be named. A reader asking
+#: that question will say it as "what changed", "what moved", or "compare these
+#: two periods for anything material" — one analytical form, three linguistic
+#: spellings of its action. Requiring the model to emit the implementation's
+#: spelling in order to make the plan executable would make the contract depend
+#: on an implementation detail the model is not shown.
+#:
+#: So a variant is CANONICALISED to the form's own operation, deterministically
+#: and from the structured slots alone — no wording is read to reach this.
+#: Everything else that the form's capability admits (`rank`, `breakdown`,
+#: `series`) states a SHAPE this composition does not produce and is refused
+#: rather than flattened into a summary.
+#:
+#: This is not a default from `movement` to `material_summary`. It applies ONLY
+#: where the form was already stated. An intent with no `change_form` is
+#: untouched: whether a bare "what changed" IS a material summary is an
+#: interpretation question, and the compiler does not guess it.
+CHANGE_FORM_CANONICAL_OPERATION: Mapping[str, str] = {
+    "material_summary": "summary",
+}
+
+#: The operations that are linguistic variants of each form's own action, and so
+#: canonicalise to it. A form absent from this table canonicalises nothing, and
+#: its operation is checked against its capability in the ordinary way — which
+#: is why `metric_delta`, `attribution` and `level_comparison` are absent: their
+#: measure and target requirements are unchanged by any of this.
+CHANGE_FORM_OPERATION_VARIANTS: Mapping[str, FrozenSet[str]] = {
+    "material_summary": frozenset({"summary", "movement", "compare"}),
+}
+
 #: WHERE A CAPABILITY NAME IS NOT ENOUGH TO SEPARATE TWO CAPABILITIES, the
 #: boundary is STATED rather than left to be inferred from the word.
 #:
