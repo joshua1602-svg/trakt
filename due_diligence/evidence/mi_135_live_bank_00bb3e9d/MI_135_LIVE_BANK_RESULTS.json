@@ -6916,7 +6916,7 @@
    "silent_population_drop": "N/A",
    "silent_scope_drop": "N/A",
    "silent_comparison_drop": "N/A",
-   "silent_widening": true,
+   "silent_widening": false,
    "legacy_integrity": {
     "filter_invariant_ok": null,
     "dimension_invariant_ok": null,
@@ -7836,7 +7836,7 @@
    "silent_population_drop": "N/A",
    "silent_scope_drop": "N/A",
    "silent_comparison_drop": "N/A",
-   "silent_widening": true,
+   "silent_widening": false,
    "legacy_integrity": {
     "filter_invariant_ok": null,
     "dimension_invariant_ok": null,
@@ -8526,10 +8526,10 @@
   "expected_value": null,
   "numeric_parity": "N/A",
   "drops": {
-   "silent_measure_drop": true,
+   "silent_measure_drop": false,
    "silent_dimension_drop": "N/A",
    "silent_filter_drop": "N/A",
-   "silent_period_drop": true,
+   "silent_period_drop": false,
    "silent_capability_drop": false,
    "silent_population_drop": "N/A",
    "silent_scope_drop": "N/A",
@@ -8545,8 +8545,8 @@
   },
   "controlled_refusal": false,
   "refusal_stated_reason": "",
-  "user_outcome": "WRONG",
-  "user_outcome_why": "served with semantic loss: silent_measure_drop, silent_period_drop"
+  "user_outcome": "PARTIALLY_CORRECT",
+  "user_outcome_why": "the reading differs from the fixture on: capability, operation"
  },
  {
   "question_id": "Q18B",
@@ -10003,7 +10003,7 @@
    "silent_population_drop": "N/A",
    "silent_scope_drop": "N/A",
    "silent_comparison_drop": "N/A",
-   "silent_widening": true,
+   "silent_widening": false,
    "legacy_integrity": {
     "filter_invariant_ok": null,
     "dimension_invariant_ok": null,
@@ -14820,97 +14820,43 @@
   "shape": "How has the profile of new originations changed in the last few months?",
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Are we originating different types of loans now compared with a few months ago?",
-  "model_id": "claude-opus-5",
-  "infrastructure_failure": true,
+  "model_id": "",
+  "infrastructure_failure": false,
   "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "PLAN",
-  "interpretation_scored": {
-   "capability": null,
-   "operation": null,
-   "measures": null,
-   "statistic": null,
-   "weight": null,
-   "population": null,
-   "filters": null,
-   "dimensions": null,
-   "geography_basis": null,
-   "geography_level": null,
-   "temporal": null,
-   "comparison": true,
-   "output_structure": null
-  },
-  "interpretation_unscoreable_because": "",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
+  "interpretation_scored": {},
+  "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
    "comparison": "none"
   },
-  "capability": "pipeline",
-  "operation": "breakdown",
-  "population_base": "pipeline",
-  "population_lens": "all",
+  "capability": null,
+  "operation": null,
+  "population_base": null,
+  "population_lens": null,
   "source_reference": null,
-  "measures": [
-   "pipeline_amount"
-  ],
-  "dimensions": [
-   "erm_product_type"
-  ],
+  "measures": [],
+  "dimensions": [],
   "filters": [],
-  "period": {
-   "form": "relative_pair",
-   "labels": [
-    "now",
-    "a few months ago"
-   ],
-   "grain": "monthly",
-   "periods_back": 3,
-   "contract": "governed_reporting_period_pair",
-   "resolved": true,
-   "owned_by_capability": false
-  },
-  "comparison_kind": "none",
-  "plan_id": "plan_a54576c57b4fb1e6",
-  "clarify_reasons": [],
-  "reason_codes": [],
-  "ambiguities": [
+  "period": null,
+  "comparison_kind": null,
+  "plan_id": null,
+  "clarify_reasons": [
    {
-    "slot": "time.periods_back",
-    "note": "'A few months ago' names no precise period. Read as three monthly reporting periods back against the current one; if the reader meant a different lookback this should be restated.",
-    "options": [
-     "3 months back",
-     "2 months back",
-     "6 months back"
-    ],
-    "blocking": false
-   },
-   {
-    "slot": "population.base",
-    "note": "'Originating' read as the new-origination (pipeline) population — business currently being written. It could alternatively have meant recently completed fundings on the funded book.",
-    "options": [
-     "pipeline (new originations)",
-     "funded completions"
-    ],
-    "blocking": false
-   },
-   {
-    "slot": "measures",
-    "note": "The question names no quantity for the mix; the governed pipeline volume measure owned by the pipeline capability is used, so the mix is expressed by pipeline amount rather than case count.",
-    "options": [
-     "pipeline_amount",
-     "pipeline_case_count"
-    ],
-    "blocking": false
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVkPd79GPeZfbPLBmzh'}",
+    "spans": []
    }
   ],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
+  "ambiguities": [],
+  "migration_outcome": "LEGACY_FALLBACK",
   "served_from": "LEGACY_FALLBACK",
-  "fallback_reason": "INELIGIBLE:DIMENSION_NOT_SUPPORTED",
-  "eligibility": {
-   "eligible": false,
-   "reason": "DIMENSION_NOT_SUPPORTED",
-   "detail": "dimension 'erm_product_type' is not a governed pipeline grouping (served: ['pipeline_stage'])",
-   "perimeter": "pipeline_specialist"
-  },
+  "fallback_reason": "INTERPRETER_FAILURE",
+  "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
   "expected_capability_migrated": null,
@@ -14934,10 +14880,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q1.3",
@@ -15108,10 +15054,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "When do we expect the funded book to reach £100m?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15131,12 +15077,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVkwbxZaaqW4qauMpPf'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15161,10 +15116,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q2.2",
@@ -15175,10 +15130,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "At the current run rate, when should we get to £100m of loans?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15198,12 +15153,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVmV4ZKWiL7G8RwRbVR'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15228,10 +15192,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q2.3",
@@ -15242,10 +15206,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "When are we forecast to cross £100m of funded balances?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15265,12 +15229,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVn99GkPmCjymZ7VopH'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15295,10 +15268,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q3.1",
@@ -15309,10 +15282,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "How much do we currently have at offer and how much of it is likely to complete?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15333,12 +15306,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVnhvVmrt9fTg7gqSnX'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15363,10 +15345,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q3.2",
@@ -15377,10 +15359,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "What's the value of outstanding offers, and when do we expect them to fund?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15401,12 +15383,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVoPdC6Ls3V75VEUskA'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15431,10 +15422,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q3.3",
@@ -15445,10 +15436,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Of the current offer pipeline, how much should convert and over what timeframe?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15469,12 +15460,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVp6pg4t1xwYKV3No7g'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15499,10 +15499,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q4.1",
@@ -15513,10 +15513,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "What completion rate are we currently running at?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15533,12 +15533,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVpqvm5q86mVnRoHcUo'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15563,10 +15572,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q4.2",
@@ -15577,10 +15586,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "How many loans are we completing at the moment?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15597,12 +15606,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVqUFJhhHh4xZKAKpKB'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15627,10 +15645,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I understood this as a pipeline question, but I have not answered it: this asks about the pipeline (applications, offers or completions), which is a different governed dataset from the funded book; and this asks how something changed, which needs two governed reporting snapshots to compare. I have NOT substituted a current-position figure, because that would answer a different question from the one you asked. Ask for the governed analytic directly — for example the concentration limit tests, the completion run-rate, the pipeline at a named stage, or a named measure compared across two reporting periods — and I will compute it.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q4.3",
@@ -15641,10 +15659,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "What's our recent run rate for completions?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15661,12 +15679,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVr1P4GPvm4StNLTGrc'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15691,10 +15718,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q5.1",
@@ -15705,10 +15732,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Are any of our concentration limits likely to breach over the next three months?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15728,12 +15755,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVrTKmTYLRGYUSp9Whw'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15758,10 +15794,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I understood this as a limits concentration, forecast projection question, but I have not answered it: this asks about concentration limits, which are governed by the portfolio's limit schedule rather than by the loan tape; and this asks for a forward-looking figure, which needs a governed forecast rather than a current position. I have NOT substituted a current-position figure, because that would answer a different question from the one you asked. Ask for the governed analytic directly — for example the concentration limit tests, the completion run-rate, the pipeline at a named stage, or a named measure compared across two reporting periods — and I will compute it.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q5.2",
@@ -15772,10 +15808,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Do we expect to hit any concentration limits in the next quarter?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15795,12 +15831,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVrvZNgKoQikfVYX4U8'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15825,10 +15870,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I understood this as a limits concentration, forecast projection question, but I have not answered it: this asks about concentration limits, which are governed by the portfolio's limit schedule rather than by the loan tape; and this asks for a forward-looking figure, which needs a governed forecast rather than a current position. I have NOT substituted a current-position figure, because that would answer a different question from the one you asked. Ask for the governed analytic directly — for example the concentration limit tests, the completion run-rate, the pipeline at a named stage, or a named measure compared across two reporting periods — and I will compute it.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q5.3",
@@ -15839,10 +15884,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Which concentration limits are at risk of being breached over the next three months?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15862,12 +15907,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVsYFU3xtM2LEZuMfke'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15892,10 +15946,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q6.1",
@@ -15906,10 +15960,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Which concentration limits have the least headroom?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15929,12 +15983,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVtCzs9oVZYAu6y5NQ9'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -15959,10 +16022,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q6.2",
@@ -15973,10 +16036,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Where are we closest to our limits?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -15996,12 +16059,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVtq2o2czu9yDDQ2i9r'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16026,10 +16098,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q6.3",
@@ -16040,10 +16112,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Which of our limits are currently most at risk?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16063,12 +16135,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVuUEvFNxjTU8XZFXau'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16093,10 +16174,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q7.1",
@@ -16107,10 +16188,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "How does the front book compare with our older lending from a risk perspective?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16129,12 +16210,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVv54RdRGnYbEMCLSDi'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16159,10 +16249,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q7.2",
@@ -16173,10 +16263,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Are older loans riskier than the loans we've originated recently?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16195,12 +16285,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVvaWjMkHJci5TG1ZfC'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16225,10 +16324,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q7.3",
@@ -16239,10 +16338,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "How different is the risk profile of recent originations versus the back book?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16261,12 +16360,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVwHEgqQ6KPicYnsbDd'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16291,10 +16399,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q9.1",
@@ -16305,10 +16413,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "What do we expect the funded book to grow to based on the current pipeline?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16328,12 +16436,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVwzJUzsyqnnL4ySjM3'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16358,10 +16475,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I understood that you asked for comparison period (change over time), but that could not be applied to the calculation (comparison period (change over time) — this analytical plan measured one point in time; no period comparison was calculated). I have not substituted a broader figure.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q9.2",
@@ -16372,10 +16489,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Where is the funded balance forecast to get to from today's pipeline?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16395,12 +16512,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVxiiQDmy8Q2yjnx3Uo'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16425,10 +16551,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q9.3",
@@ -16439,10 +16565,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "If the current pipeline converts as expected, what will our funded balance be?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16462,12 +16588,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVyWdtz2WmbHvWWkLva'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16492,10 +16627,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q8.provenance.1",
@@ -16506,10 +16641,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "How has lending to direct changed compared with acquired?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16527,12 +16662,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVz3gwTdPEWY8u8LHjf'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16557,10 +16701,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q8.provenance.2",
@@ -16571,10 +16715,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "How has the balance of direct loans moved relative to acquired loans?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16592,12 +16736,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVzYNbvYnoFK8Ky3Si5'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16622,10 +16775,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "Q8.provenance.3",
@@ -16636,10 +16789,10 @@
   "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
   "question": "Are direct and acquired balances developing differently over time?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16657,12 +16810,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyVzyn4xF6BfkwUVjTwD'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16687,10 +16849,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "C03",
@@ -16701,10 +16863,10 @@
   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
   "question": "What is the borrowing-base headroom?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16725,12 +16887,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyW1dxjh7V76fLXdTDvi'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16755,10 +16926,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "No funding facility is configured for this portfolio. Borrowing-base monitoring begins when an approved facility configuration is recorded through OCC onboarding.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "C04",
@@ -16769,10 +16940,10 @@
   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
   "question": "How much headroom do we have under the borrowing base?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16793,12 +16964,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyW2FhJa9HPdGpFDyJ7U'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16823,10 +17003,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "No funding facility is configured for this portfolio. Borrowing-base monitoring begins when an approved facility configuration is recorded through OCC onboarding.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "S05",
@@ -16837,10 +17017,10 @@
   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
   "question": "What is the headroom?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16861,12 +17041,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyW2tPRhfrwFNTMNuDar'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16891,10 +17080,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "I could not complete the language-understanding step for this question, so I have not answered it. Answering from the partial reading alone risks answering a narrower question than the one you asked. Please try again.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "B01",
@@ -16905,10 +17094,10 @@
   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
   "question": "Show me the borrowing-base bridge.",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16927,12 +17116,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyW3YZqtaFBvpZdFJp7F'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -16957,10 +17155,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "No funding facility is configured for this portfolio. Borrowing-base monitoring begins when an approved facility configuration is recorded through OCC onboarding.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "B03",
@@ -16971,10 +17169,10 @@
   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
   "question": "Why did the borrowing base change?",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -16993,12 +17191,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyW4EWfpsHVdTsW8JduJ'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -17023,10 +17230,10 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "No funding facility is configured for this portfolio. Borrowing-base monitoring begins when an approved facility configuration is recorded through OCC onboarding.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  },
  {
   "question_id": "B04",
@@ -17037,10 +17244,10 @@
   "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
   "question": "Show the borrowing-base movement as a waterfall.",
   "model_id": "",
-  "infrastructure_failure": true,
-  "record": null,
+  "infrastructure_failure": false,
+  "record": true,
   "envelope_ok": false,
-  "interpretation_outcome": "NO_RECORD",
+  "interpretation_outcome": "INTERPRETER_FAILURE",
   "interpretation_scored": {},
   "interpretation_unscoreable_because": "no candidate intent was recorded",
   "expected_intent": {
@@ -17059,12 +17266,21 @@
   "period": null,
   "comparison_kind": null,
   "plan_id": null,
-  "clarify_reasons": [],
-  "reason_codes": [],
+  "clarify_reasons": [
+   {
+    "code": "MODEL_UNAVAILABLE",
+    "subject": "interpreter",
+    "detail": "BadRequestError: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'You have reached your specified API usage limits. You will regain access on 2026-10-01 at 00:00 UTC.'}, 'request_id': 'req_011CeyW4zf1mRDX2DbCPKoSD'}",
+    "spans": []
+   }
+  ],
+  "reason_codes": [
+   "MODEL_UNAVAILABLE"
+  ],
   "ambiguities": [],
-  "migration_outcome": "INFRASTRUCTURE_FAILURE",
-  "served_from": "",
-  "fallback_reason": "",
+  "migration_outcome": "LEGACY_FALLBACK",
+  "served_from": "LEGACY_FALLBACK",
+  "fallback_reason": "INTERPRETER_FAILURE",
   "eligibility": null,
   "execution_runtime": null,
   "receipt": null,
@@ -17089,9 +17305,9 @@
     "unavailable_filters": []
    }
   },
-  "controlled_refusal": false,
-  "refusal_stated_reason": "",
+  "controlled_refusal": true,
+  "refusal_stated_reason": "No funding facility is configured for this portfolio. Borrowing-base monitoring begins when an approved facility configuration is recorded through OCC onboarding.",
   "user_outcome": "INFRASTRUCTURE_FAILURE",
-  "user_outcome_why": "the request did not reach the service"
+  "user_outcome_why": "the interpreter did not return a reading"
  }
 ]

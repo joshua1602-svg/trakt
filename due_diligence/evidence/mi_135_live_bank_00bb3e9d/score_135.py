@@ -126,8 +126,33 @@ def _silent_drops(record: Mapping[str, Any],
     """
     execution = record.get("execution") or {}
     requested = execution.get("requested_semantics") or {}
-    receipt = execution.get("receipt") or {}
     legacy = _legacy_integrity(envelope)
+
+    # THE TWO RUNTIMES DO NOT RECORD ALIKE, AND THIS SCORER FORGOT IT AGAIN.
+    # The generic and pipeline runtimes write `execution.receipt`; the funded
+    # TEMPORAL runtime writes `execution.temporal`, whose per-snapshot receipts
+    # and selected periods live inside it. Reading only `receipt` made a
+    # correctly served period comparison — `shape: period_comparison`,
+    # `reconciled: true`, two points — look as though it had dropped its measure
+    # and its period, and it was the single WRONG in the bank. The identical
+    # mistake was found and fixed in the pipeline acceptance harness days
+    # earlier; one reader for two shapes is the defect, so both are read here.
+    receipt = dict(execution.get("receipt") or {})
+    temporal = execution.get("temporal")
+    if not receipt and isinstance(temporal, Mapping):
+        points = [p for p in (temporal.get("points") or ()) if isinstance(p, Mapping)]
+        merged: Dict[str, Any] = {}
+        for point in points:
+            merged.update(dict(point.get("receipt") or {}))
+        spec = execution.get("bound_spec") or {}
+        receipt = {
+            **merged,
+            "measure_field": merged.get("measure_field") or spec.get("metric"),
+            "aggregation": merged.get("aggregation") or spec.get("aggregation"),
+            "selected_periods": [p.get("reporting_date") for p in points],
+            "comparison": temporal.get("comparison"),
+            "result_shape": temporal.get("shape"),
+        }
 
     def asked(value: Any) -> bool:
         return bool(value)
@@ -169,7 +194,16 @@ def _silent_drops(record: Mapping[str, Any],
         "silent_comparison_drop": drop(
             str(requested.get("comparison_kind") or "none") != "none",
             bool(receipt.get("comparison") or receipt.get("result_shape"))),
-        "silent_widening": legacy["unavailable_filters"] and True or False,
+        # WIDENING IS ONLY SILENT IF AN ANSWER WAS ACTUALLY GIVEN. Three
+        # questions carried `unavailable_filters` and were scored as silent
+        # wideners; all three were REFUSED (`ok: false`). `unavailable_filters`
+        # is the disclosure mechanism — the product naming what it could not
+        # bind — and declining afterwards is the opposite of answering a wider
+        # question quietly. (The underlying parser defect is real and recorded
+        # separately: the connectives "both" and "among" are being read as
+        # category values. It surfaces as an honest refusal, not a silent one.)
+        "silent_widening": bool(legacy["unavailable_filters"]
+                                and envelope.get("ok")),
         "legacy_integrity": legacy,
     }
 
