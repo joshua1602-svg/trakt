@@ -1,0 +1,818 @@
+{
+ "what_this_is": "expected capability per question, cut from expected_intents.yaml so the stdlib-only runner can apply the migrated-capability gate without importing the product. Not authored here.",
+ "source": "mi_agent/interpretation_v2/banks/expected_intents.yaml",
+ "source_sha256": "d613e6d113f2c5e2e58bec1c6fa5e44efdaed6a32a69beae53c495b9cbd27239",
+ "bank_sha256": "1f71e8444dc4bc149bc8028527c5fe077ce49690a95d27d2a2273a20813fdab2",
+ "expected": {
+  "Q01A": {
+   "canonical_id": "Q01",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q01B": {
+   "canonical_id": "Q01",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q01C": {
+   "canonical_id": "Q01",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q02A": {
+   "canonical_id": "Q02",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q02B": {
+   "canonical_id": "Q02",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q02C": {
+   "canonical_id": "Q02",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q03A": {
+   "canonical_id": "Q03",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q03B": {
+   "canonical_id": "Q03",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q03C": {
+   "canonical_id": "Q03",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q04A": {
+   "canonical_id": "Q04",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q04B": {
+   "canonical_id": "Q04",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q04C": {
+   "canonical_id": "Q04",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q05A": {
+   "canonical_id": "Q05",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q05B": {
+   "canonical_id": "Q05",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q05C": {
+   "canonical_id": "Q05",
+   "capability": "generic_analysis",
+   "operation": "point_in_time",
+   "temporal": "current"
+  },
+  "Q06A": {
+   "canonical_id": "Q06",
+   "capability": "portfolio_summary",
+   "operation": "summary",
+   "temporal": "current"
+  },
+  "Q06B": {
+   "canonical_id": "Q06",
+   "capability": "portfolio_summary",
+   "operation": "summary",
+   "temporal": "current"
+  },
+  "Q06C": {
+   "canonical_id": "Q06",
+   "capability": "portfolio_summary",
+   "operation": "summary",
+   "temporal": "current"
+  },
+  "Q07A": {
+   "canonical_id": "Q07",
+   "capability": "portfolio_summary",
+   "operation": "compare",
+   "temporal": "current"
+  },
+  "Q07B": {
+   "canonical_id": "Q07",
+   "capability": "portfolio_summary",
+   "operation": "compare",
+   "temporal": "current"
+  },
+  "Q07C": {
+   "canonical_id": "Q07",
+   "capability": "portfolio_summary",
+   "operation": "compare",
+   "temporal": "current"
+  },
+  "Q08A": {
+   "canonical_id": "Q08",
+   "capability": "concentration",
+   "operation": null,
+   "temporal": "current"
+  },
+  "Q08B": {
+   "canonical_id": "Q08",
+   "capability": "concentration",
+   "operation": null,
+   "temporal": "current"
+  },
+  "Q08C": {
+   "canonical_id": "Q08",
+   "capability": "concentration",
+   "operation": null,
+   "temporal": "current"
+  },
+  "Q09A": {
+   "canonical_id": "Q09",
+   "capability": "limit_assessment",
+   "operation": null,
+   "temporal": "current"
+  },
+  "Q09B": {
+   "canonical_id": "Q09",
+   "capability": "limit_assessment",
+   "operation": null,
+   "temporal": "current"
+  },
+  "Q09C": {
+   "canonical_id": "Q09",
+   "capability": "limit_assessment",
+   "operation": null,
+   "temporal": "current"
+  },
+  "Q10A": {
+   "canonical_id": "Q10",
+   "capability": "pipeline",
+   "operation": "summary",
+   "temporal": "current"
+  },
+  "Q10B": {
+   "canonical_id": "Q10",
+   "capability": "pipeline",
+   "operation": "summary",
+   "temporal": "current"
+  },
+  "Q10C": {
+   "canonical_id": "Q10",
+   "capability": "pipeline",
+   "operation": "summary",
+   "temporal": "current"
+  },
+  "Q11A": {
+   "canonical_id": "Q11",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q11B": {
+   "canonical_id": "Q11",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q11C": {
+   "canonical_id": "Q11",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q12A": {
+   "canonical_id": "Q12",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q12B": {
+   "canonical_id": "Q12",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q12C": {
+   "canonical_id": "Q12",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q13A": {
+   "canonical_id": "Q13",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q13B": {
+   "canonical_id": "Q13",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q13C": {
+   "canonical_id": "Q13",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q14A": {
+   "canonical_id": "Q14",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q14B": {
+   "canonical_id": "Q14",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q14C": {
+   "canonical_id": "Q14",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q15A": {
+   "canonical_id": "Q15",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q15B": {
+   "canonical_id": "Q15",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q15C": {
+   "canonical_id": "Q15",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q16A": {
+   "canonical_id": "Q16",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q16B": {
+   "canonical_id": "Q16",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q16C": {
+   "canonical_id": "Q16",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q17A": {
+   "canonical_id": "Q17",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q17B": {
+   "canonical_id": "Q17",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q17C": {
+   "canonical_id": "Q17",
+   "capability": "generic_analysis",
+   "operation": "breakdown",
+   "temporal": "current"
+  },
+  "Q18A": {
+   "canonical_id": "Q18",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q18B": {
+   "canonical_id": "Q18",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q18C": {
+   "canonical_id": "Q18",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q19A": {
+   "canonical_id": "Q19",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q19B": {
+   "canonical_id": "Q19",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q19C": {
+   "canonical_id": "Q19",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q20A": {
+   "canonical_id": "Q20",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q20B": {
+   "canonical_id": "Q20",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q20C": {
+   "canonical_id": "Q20",
+   "capability": "period_movement",
+   "operation": "movement",
+   "temporal": "relative_pair"
+  },
+  "Q21A": {
+   "canonical_id": "Q21",
+   "capability": "period_movement",
+   "operation": "rank",
+   "temporal": "relative_pair"
+  },
+  "Q21B": {
+   "canonical_id": "Q21",
+   "capability": "period_movement",
+   "operation": "rank",
+   "temporal": "relative_pair"
+  },
+  "Q21C": {
+   "canonical_id": "Q21",
+   "capability": "period_movement",
+   "operation": "rank",
+   "temporal": "relative_pair"
+  },
+  "Q22A": {
+   "canonical_id": "Q22",
+   "capability": "period_movement",
+   "operation": "rank",
+   "temporal": "relative_pair"
+  },
+  "Q22B": {
+   "canonical_id": "Q22",
+   "capability": "period_movement",
+   "operation": "rank",
+   "temporal": "relative_pair"
+  },
+  "Q22C": {
+   "canonical_id": "Q22",
+   "capability": "period_movement",
+   "operation": "rank",
+   "temporal": "relative_pair"
+  },
+  "Q23A": {
+   "canonical_id": "Q23",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q23B": {
+   "canonical_id": "Q23",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q23C": {
+   "canonical_id": "Q23",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q24A": {
+   "canonical_id": "Q24",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q24B": {
+   "canonical_id": "Q24",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q24C": {
+   "canonical_id": "Q24",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q25A": {
+   "canonical_id": "Q25",
+   "capability": "limit_assessment",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q25B": {
+   "canonical_id": "Q25",
+   "capability": "limit_assessment",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q25C": {
+   "canonical_id": "Q25",
+   "capability": "limit_assessment",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "SM01A": {
+   "canonical_id": "SM01",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM01B": {
+   "canonical_id": "SM01",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM01C": {
+   "canonical_id": "SM01",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM02A": {
+   "canonical_id": "SM02",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM02B": {
+   "canonical_id": "SM02",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM02C": {
+   "canonical_id": "SM02",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM03A": {
+   "canonical_id": "SM03",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM03B": {
+   "canonical_id": "SM03",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM03C": {
+   "canonical_id": "SM03",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM04A": {
+   "canonical_id": "SM04",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM04B": {
+   "canonical_id": "SM04",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM04C": {
+   "canonical_id": "SM04",
+   "capability": "pipeline_stage_movement",
+   "operation": "transition",
+   "temporal": null
+  },
+  "SM05A": {
+   "canonical_id": "SM05",
+   "capability": "pipeline_stage_movement",
+   "operation": "arrivals",
+   "temporal": null
+  },
+  "SM05B": {
+   "canonical_id": "SM05",
+   "capability": "pipeline_stage_movement",
+   "operation": "arrivals",
+   "temporal": null
+  },
+  "SM05C": {
+   "canonical_id": "SM05",
+   "capability": "pipeline_stage_movement",
+   "operation": "arrivals",
+   "temporal": null
+  },
+  "SM06A": {
+   "canonical_id": "SM06",
+   "capability": "pipeline_stage_movement",
+   "operation": "stayers",
+   "temporal": null
+  },
+  "SM06B": {
+   "canonical_id": "SM06",
+   "capability": "pipeline_stage_movement",
+   "operation": "stayers",
+   "temporal": null
+  },
+  "SM06C": {
+   "canonical_id": "SM06",
+   "capability": "pipeline_stage_movement",
+   "operation": "stayers",
+   "temporal": null
+  },
+  "SM07A": {
+   "canonical_id": "SM07",
+   "capability": "pipeline_stage_movement",
+   "operation": "stayers",
+   "temporal": null
+  },
+  "SM07B": {
+   "canonical_id": "SM07",
+   "capability": "pipeline_stage_movement",
+   "operation": "stayers",
+   "temporal": null
+  },
+  "SM07C": {
+   "canonical_id": "SM07",
+   "capability": "pipeline_stage_movement",
+   "operation": "stayers",
+   "temporal": null
+  },
+  "SM08A": {
+   "canonical_id": "SM08",
+   "capability": "pipeline_stage_movement",
+   "operation": "departures",
+   "temporal": null
+  },
+  "SM08B": {
+   "canonical_id": "SM08",
+   "capability": "pipeline_stage_movement",
+   "operation": "departures",
+   "temporal": null
+  },
+  "SM08C": {
+   "canonical_id": "SM08",
+   "capability": "pipeline_stage_movement",
+   "operation": "departures",
+   "temporal": null
+  },
+  "SM09A": {
+   "canonical_id": "SM09",
+   "capability": "pipeline_stage_movement",
+   "operation": "reconciliation",
+   "temporal": null
+  },
+  "SM09B": {
+   "canonical_id": "SM09",
+   "capability": "pipeline_stage_movement",
+   "operation": "reconciliation",
+   "temporal": null
+  },
+  "SM09C": {
+   "canonical_id": "SM09",
+   "capability": "pipeline_stage_movement",
+   "operation": "reconciliation",
+   "temporal": null
+  },
+  "Q1.1": {
+   "canonical_id": "NL1",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q1.2": {
+   "canonical_id": "NL1",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q1.3": {
+   "canonical_id": "NL1",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q2.1": {
+   "canonical_id": "NL2",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q2.2": {
+   "canonical_id": "NL2",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q2.3": {
+   "canonical_id": "NL2",
+   "capability": "forecast",
+   "operation": "forecast_milestone",
+   "temporal": "forward_looking"
+  },
+  "Q3.1": {
+   "canonical_id": "NL3",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q3.2": {
+   "canonical_id": "NL3",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q3.3": {
+   "canonical_id": "NL3",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q4.1": {
+   "canonical_id": "NL4",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q4.2": {
+   "canonical_id": "NL4",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q4.3": {
+   "canonical_id": "NL4",
+   "capability": null,
+   "operation": null,
+   "temporal": null
+  },
+  "Q5.1": {
+   "canonical_id": "NL5",
+   "capability": "limit_assessment",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q5.2": {
+   "canonical_id": "NL5",
+   "capability": "limit_assessment",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q5.3": {
+   "canonical_id": "NL5",
+   "capability": "limit_assessment",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q6.1": {
+   "canonical_id": "NL6",
+   "capability": "limit_assessment",
+   "operation": "rank",
+   "temporal": "current"
+  },
+  "Q6.2": {
+   "canonical_id": "NL6",
+   "capability": "limit_assessment",
+   "operation": "rank",
+   "temporal": "current"
+  },
+  "Q6.3": {
+   "canonical_id": "NL6",
+   "capability": "limit_assessment",
+   "operation": "rank",
+   "temporal": "current"
+  },
+  "Q7.1": {
+   "canonical_id": "NL7",
+   "capability": null,
+   "operation": "compare",
+   "temporal": "current"
+  },
+  "Q7.2": {
+   "canonical_id": "NL7",
+   "capability": null,
+   "operation": "compare",
+   "temporal": "current"
+  },
+  "Q7.3": {
+   "canonical_id": "NL7",
+   "capability": null,
+   "operation": "compare",
+   "temporal": "current"
+  },
+  "Q9.1": {
+   "canonical_id": "NL9",
+   "capability": "forecast",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q9.2": {
+   "canonical_id": "NL9",
+   "capability": "forecast",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q9.3": {
+   "canonical_id": "NL9",
+   "capability": "forecast",
+   "operation": "forecast_projection",
+   "temporal": "forward_looking"
+  },
+  "Q8.provenance.1": {
+   "canonical_id": "NL8",
+   "capability": null,
+   "operation": null,
+   "temporal": "relative_pair"
+  },
+  "Q8.provenance.2": {
+   "canonical_id": "NL8",
+   "capability": null,
+   "operation": null,
+   "temporal": "relative_pair"
+  },
+  "Q8.provenance.3": {
+   "canonical_id": "NL8",
+   "capability": null,
+   "operation": null,
+   "temporal": "relative_pair"
+  },
+  "C03": {
+   "canonical_id": "BB01",
+   "capability": "borrowing_base",
+   "operation": "headroom",
+   "temporal": "current"
+  },
+  "C04": {
+   "canonical_id": "BB01",
+   "capability": "borrowing_base",
+   "operation": "headroom",
+   "temporal": "current"
+  },
+  "S05": {
+   "canonical_id": "BB01",
+   "capability": "borrowing_base",
+   "operation": "headroom",
+   "temporal": "current"
+  },
+  "B01": {
+   "canonical_id": "BB02",
+   "capability": "borrowing_base",
+   "operation": "bridge",
+   "temporal": null
+  },
+  "B03": {
+   "canonical_id": "BB02",
+   "capability": "borrowing_base",
+   "operation": "bridge",
+   "temporal": null
+  },
+  "B04": {
+   "canonical_id": "BB02",
+   "capability": "borrowing_base",
+   "operation": "bridge",
+   "temporal": null
+  }
+ }
+}

@@ -33,6 +33,14 @@ on:
           and calls nothing.
         default: ''
         required: false
+      complete_legacy_only:
+        description: >-
+          `yes` asks ONLY the outstanding questions through the ordinary
+          production path with the governed canary OFF. It polls no evidence
+          sink, stops dead on HTTP 401, and proves the bearer first with an
+          authenticated non-model catalogue read. Use when `mode: collect`.
+        default: ''
+        required: false
       only:
         description: >-
           Comma-separated question ids (e.g. `Q01A,Q02B`) for a targeted rerun
@@ -77,6 +85,8 @@ jobs:
           set -euo pipefail
           python due_diligence/evidence/mi_135_live_bank_00bb3e9d/collect_135.py \
             --self-test
+          python due_diligence/evidence/mi_135_live_bank_00bb3e9d/complete_legacy_only.py \
+            --self-test
 
       - name: Refuse to run the bank without the credentials it needs
         if: ${{ inputs.mode == 'collect' }}
@@ -91,8 +101,23 @@ jobs:
           echo "MI_BEARER present (${#MI_BEARER} characters)."
           echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
 
+      - name: Finish the bank — outstanding questions, canary off
+        if: ${{ inputs.mode == 'collect' && inputs.complete_legacy_only == 'yes' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id || 'ERE/2026-06-30' }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit || '00bb3e9d8175a395b6643772379866d6bc6169eb' }}
+        run: |
+          set -euo pipefail
+          cd due_diligence/evidence/mi_135_live_bank_00bb3e9d
+          python complete_legacy_only.py \
+            --base-url "$BASE_URL" \
+            --portfolio-id "$PORTFOLIO_ID" \
+            --expect-commit "$EXPECT_COMMIT"
+
       - name: Ask the 135 questions, once each
-        if: ${{ inputs.mode == 'collect' }}
+        if: ${{ inputs.mode == 'collect' && inputs.complete_legacy_only != 'yes' }}
         env:
           MI_BEARER: ${{ secrets.MI_BEARER }}
           AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
