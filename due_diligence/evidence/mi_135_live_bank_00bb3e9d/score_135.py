@@ -77,12 +77,23 @@ def _score_interpretation(intent_body: Optional[Mapping[str, Any]],
     if not intent_body:
         return {}, "no candidate intent was recorded"
     from mi_agent.interpretation_v2.equivalence import score_intent
-    from mi_agent.interpretation_v2.intent import parse_candidate_intent
+    from mi_agent.interpretation_v2.intent import (_INTENT_KEYS,
+                                                   parse_candidate_intent)
     from mi_agent.interpretation_v2.vocabulary import load_governed_vocabulary
+
+    # THE RECORD HOLDS `CandidateIntent.to_dict()`, WHICH IS NOT MODEL OUTPUT.
+    # `to_dict` is an asdict and carries `provenance`, which the parser rejects
+    # outright — it fails closed on any key its contract does not define,
+    # because an unknown key is how a physical binding would arrive. Both sides
+    # are right; the round trip is what needs the projection. The intent is
+    # therefore narrowed to the parser's OWN key tuple rather than to a list of
+    # exclusions written here, so a field added to either side cannot silently
+    # start being dropped.
+    body = {k: v for k, v in dict(intent_body).items() if k in _INTENT_KEYS}
     try:
-        intent = parse_candidate_intent(dict(intent_body))
+        intent = parse_candidate_intent(body)
     except Exception as exc:                                         # noqa: BLE001
-        return {}, f"the recorded intent did not parse: {type(exc).__name__}"
+        return {}, f"the recorded intent did not parse: {type(exc).__name__}: {exc}"
     return score_intent(intent, expected,
                         vocabulary=load_governed_vocabulary()), ""
 
@@ -199,7 +210,17 @@ def _user_outcome(row: Dict[str, Any]) -> Tuple[str, str]:
            integrity["dimension_invariant_ok"] is False:
             return WRONG, "the legacy path reports it dropped part of the question"
         if not row["envelope_ok"]:
-            return BAD_REFUSAL, "the reading was right and no answer was returned"
+            # A REFUSAL IS HONEST WHEN THE PRODUCT SAYS WHY. Measured: every
+            # `ok: false` in this bank carries a product-authored sentence
+            # naming a governed obstacle — an empty governed population with an
+            # explicit "I have not returned a whole-book figure in its place",
+            # or a dimension it would not silently drop. Calling those BAD
+            # inverted the safety property they exist to provide, which is the
+            # first thing this scorer got wrong. BAD is reserved for a refusal
+            # with no stated reason: a failure, not a governed decline.
+            if row["refusal_stated_reason"]:
+                return HONEST_REFUSAL, row["refusal_stated_reason"][:160]
+            return BAD_REFUSAL, "no answer and no stated governed reason"
         return FULLY_CORRECT, "answered by the legacy path, semantics intact"
     if any(checked):
         return PARTIALLY_CORRECT, (
@@ -297,6 +318,13 @@ def build_rows() -> List[Dict[str, Any]]:
             "numeric_parity": "N/A",
         }
         row["drops"] = _silent_drops(record or {}, envelope)
+        # The product's own account of a decline, read rather than inferred.
+        # `controlledRefusal` / `controlledUnsupported` are the marks a route
+        # sets for itself; the `error` sentence is what it wrote for the reader.
+        row["controlled_refusal"] = bool(envelope.get("controlledRefusal")
+                                         or envelope.get("controlledUnsupported"))
+        row["refusal_stated_reason"] = (
+            str(envelope.get("error") or "") if not envelope.get("ok") else "")
         row["user_outcome"], row["user_outcome_why"] = _user_outcome(row)
         rows.append(row)
     return rows
