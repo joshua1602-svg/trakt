@@ -35,7 +35,24 @@ name: Live change_form interpretation gate
 # MEASUREMENT ONLY. The gate's verdict must not be used to tune interpretation in
 # the same change that measured it.
 
+# HOW THIS IS TRIGGERED, AND WHY THE PUSH PATH SPENDS NOTHING.
+#
+# A dispatchable workflow must exist on the DEFAULT branch before the API will
+# accept a dispatch; a file that lives only on a feature branch 404s, which is
+# exactly what happened when this gate was first pushed and dispatched. Writing
+# to `main` for a measurement is not something to do, so the convention already
+# established by `slice3-model-boundary.yml` stands in: a `push` trigger scoped to
+# THIS FILE on THIS branch, which registers the workflow by running it once.
+#
+# On that push path the run is the PRE-RUN ASSERTIONS AND THE OFFLINE DRY RUN
+# ONLY. It makes no model call and spends nothing. The eighteen live
+# interpretations require an explicit `workflow_dispatch`, which is a deliberate,
+# budgeted operator act — so the intent behind "dispatch only" is preserved
+# exactly: nothing costs anything until a human asks for it.
 on:
+  push:
+    branches: [ 'claude/live-change-form-gate' ]
+    paths: [ '.github/workflows/live-change-form-gate.yml' ]
   workflow_dispatch:
     inputs:
       ref:
@@ -177,6 +194,7 @@ jobs:
       # The eighteen live interpretations, one call per question, no retries.
       # The credential reaches Python through env: and is never handled by bash.
       - name: Ask the eighteen questions
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
@@ -194,7 +212,8 @@ jobs:
       # payloads the model returned and nothing else — no credential, no bearer,
       # no book data — so reading it should not require downloading anything.
       - name: Print the raw report
-        if: ${{ always() }}
+        if: >-
+          ${{ always() && github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           if [ -f live-change-form-gate-result.json ]; then
@@ -209,7 +228,8 @@ jobs:
       # THE VERDICT, and the step whose exit status fails the job. Separate from
       # the runner so a tripped gate cannot truncate the evidence explaining why.
       - name: Assert the gate
-        if: ${{ always() }}
+        if: >-
+          ${{ always() && github.event_name == 'workflow_dispatch' }}
         run: |
           set -euo pipefail
           python "${GATE_DIR}/assert_gate.py" live-change-form-gate-result.json
