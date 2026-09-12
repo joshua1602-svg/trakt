@@ -267,6 +267,59 @@ CONCEPT_BOUNDARIES: Mapping[str, str] = {
 COMPARISON_KINDS: FrozenSet[str] = frozenset({
     "none", "population_pair", "dimension_pair"})
 
+#: WHAT ANALYTICAL QUESTION IS BEING ASKED ABOUT A CHANGE — as its own slot.
+#:
+#: Measured on the signed-off 135 corpus: one business question, "how did the
+#: book change last month?", reached the compiler as three different contracts
+#: because the reading was spread across three slots that can disagree —
+#: `capability`, `operation`, and the MEASURE. Three paraphrases chose
+#: `current_outstanding_balance`, `portfolio_overview` and
+#: `funded_balance_movement`, and since a specialist measure determines its
+#: owner, the owner followed the measure rather than the question.
+#:
+#: `operation` cannot carry this distinction: `movement` is an operation of five
+#: capabilities and `summary` of four, so the same word means "the movement of a
+#: governed metric" under one owner and "the funded bridge" under another.
+#:
+#: So the form of the change is stated separately from WHAT is measured
+#: (`measures`) and from WHO executes it (`capability`). The model answers what
+#: the reader asked for; the compiler decides the owner.
+#:
+#: These four are analytical forms, not business vocabulary. They carry no
+#: lender's words and no asset class: a residential mortgage book, an
+#: equity-release book and an asset-finance book each ask "what changed", "by
+#: how much did X move", "what drove it" and "compare these two periods", and
+#: the distinction between those four is the same in every one.
+CHANGE_FORMS: FrozenSet[str] = frozenset({
+    #: "Tell me what materially changed that I should care about." No single
+    #: metric named, no decomposition asked for, no two levels to compare.
+    "material_summary",
+    #: "By how much did <governed metric> move?" The metric is stated.
+    "metric_delta",
+    #: "What drove it?" / "bridge the movement" — a decomposition is asked for.
+    #: Never inferred from the mere fact that something changed.
+    "attribution",
+    #: "What was it in March and in June?" Two states, compared as levels,
+    #: without movement intelligence or drivers.
+    "level_comparison",
+})
+
+#: THE OWNER OF EACH FORM. The compiler's mapping, stated once here so the model
+#: never has to predict an internal owner correctly.
+#:
+#: `material_summary` maps to NOTHING, deliberately and temporarily. The funded
+#: material-change composition does not exist yet — the existing insight engine
+#: is bound to the weekly pipeline extract — and the honest answer to a question
+#: whose owner is not built is a refusal that says so, not the nearest available
+#: analysis. Substituting a balance delta, a portfolio overview or a bridge for
+#: "what changed?" is precisely the defect this slot exists to end.
+CHANGE_FORM_CAPABILITY: Mapping[str, Optional[str]] = {
+    "metric_delta": "period_movement",
+    "attribution": "funded_bridge",
+    "level_comparison": "generic_analysis",
+    "material_summary": None,
+}
+
 #: WHERE A CAPABILITY NAME IS NOT ENOUGH TO SEPARATE TWO CAPABILITIES, the
 #: boundary is STATED rather than left to be inferred from the word.
 #:

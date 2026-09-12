@@ -40,7 +40,7 @@ from dataclasses import asdict, dataclass, field, fields as dataclass_fields
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from .vocabulary import (
-    COMPARATORS,
+    COMPARATORS, CHANGE_FORMS,
     COMPARISON_KINDS,
     GEOGRAPHY_BASES,
     GEOGRAPHY_LEVELS,
@@ -430,6 +430,12 @@ class CandidateIntent:
     schema_version: str
     capability: str
     operation: str
+    #: WHAT ANALYTICAL QUESTION IS BEING ASKED ABOUT A CHANGE, stated on its own
+    #: rather than spread across `capability`, `operation` and the measure. See
+    #: `vocabulary.CHANGE_FORMS`. Optional: a question that is not about change
+    #: leaves it unset, and so does every intent recorded before this slot
+    #: existed — which is why nothing downstream may require it.
+    change_form: Optional[str] = None
     population: SemanticPopulation = field(default_factory=SemanticPopulation)
     measures: Tuple[SemanticMeasure, ...] = ()
     dimensions: Tuple[str, ...] = ()
@@ -488,9 +494,10 @@ class CandidateIntent:
 # Fail-closed parsing
 # --------------------------------------------------------------------------- #
 
-_INTENT_KEYS = ("schema_version", "capability", "operation", "population",
-                "measures", "dimensions", "filters", "geography", "time",
-                "comparison", "target", "outputs", "ambiguity", "evidence")
+_INTENT_KEYS = ("schema_version", "capability", "operation", "change_form",
+                "population", "measures", "dimensions", "filters", "geography",
+                "time", "comparison", "target", "outputs", "ambiguity",
+                "evidence")
 _TARGET_KEYS = ("concept", "value", "comparator")
 _MEASURE_KEYS = ("concept", "statistic", "weight")
 _FILTER_KEYS = ("concept", "comparator", "value")
@@ -754,6 +761,10 @@ def parse_candidate_intent(payload: Any, *,
         schema_version=INTENT_SCHEMA_VERSION,
         capability=_enum(payload.get("capability"), CAPABILITIES, slot="capability"),
         operation=_enum(payload.get("operation"), OPERATIONS, slot="operation"),
+        # Optional by contract: absent on every question that is not about a
+        # change, and on every intent recorded before the slot existed.
+        change_form=_enum(payload.get("change_form"), CHANGE_FORMS,
+                          slot="change_form", optional=True),
         population=_parse_population(payload.get("population"), slot="population"),
         measures=tuple(_parse_measure(m, slot=f"measures[{i}]")
                        for i, m in enumerate(payload.get("measures") or ())),
@@ -834,6 +845,23 @@ def candidate_intent_json_schema() -> Dict[str, Any]:
             "schema_version": {"type": "string", "const": INTENT_SCHEMA_VERSION},
             "capability": {"type": "string", "enum": sorted(CAPABILITIES)},
             "operation": {"type": "string", "enum": sorted(OPERATIONS)},
+            "change_form": {
+                "type": "string", "enum": sorted(CHANGE_FORMS),
+                "description":
+                    "ONLY when the question is about a CHANGE between reporting "
+                    "states. Which analytical question is being asked — not "
+                    "which metric, and not which part of the system answers it. "
+                    "'material_summary': the reader asks what changed, or what "
+                    "moved, without naming one metric, without asking what "
+                    "caused it, and without naming two periods to compare — "
+                    "they want the changes that matter. 'metric_delta': they "
+                    "name a governed quantity and ask how much it moved. "
+                    "'attribution': they ask what DROVE or CAUSED a movement, "
+                    "or ask for it to be broken into its parts — never assume "
+                    "this merely because something changed. 'level_comparison': "
+                    "they want the values at two states set side by side, not "
+                    "the movement between them. Leave empty when the question "
+                    "is not about a change."},
             "population": {
                 "type": "object", "additionalProperties": False,
                 "properties": {

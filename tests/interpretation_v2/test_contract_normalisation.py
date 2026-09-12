@@ -475,18 +475,48 @@ def test_the_interpreter_policy_did_not_move(vocabulary):
       * the metadata tool surface may gain `get_source_portfolios` and nothing
         else, and every pre-existing tool schema must be byte-identical.
 
-    `outcomes.py` and `banks/` stay pinned by file name. Reason codes and frozen
-    question banks were not in scope and are not in scope now.
+    `outcomes.py` MOVED ONCE MORE, for one reason code, and is asserted on
+    substance rather than by file name. The change-form sprint was instructed to
+    represent a broad "what changed?" request as a first-class semantic AND to
+    refuse it safely until the funded composition owner exists — "return a
+    governed NOT_CONNECTED / REFUSE outcome ... do not optimise the benchmark by
+    selecting a substitute analysis". A refusal with no code of its own would
+    have had to borrow CAPABILITY_UNAVAILABLE, which says something different:
+    that a capability is not registered on this book, rather than that an
+    analytical form has no implementation anywhere. So the file may gain exactly
+    that one code and nothing else; a second new code, or a changed or removed
+    existing one, still fails here.
+
+    `banks/` stays pinned by file name. The frozen question banks were not in
+    scope and are not in scope now.
     """
     diff = subprocess.run(
         ["git", "diff", "--name-only", _START, "--",
-         "mi_agent/interpretation_v2/outcomes.py",
          "mi_agent/interpretation_v2/banks"],
         cwd=_REPO_ROOT, capture_output=True, text=True)
     if diff.returncode != 0:
         pytest.skip("start commit not reachable in this checkout")
     changed = [line for line in diff.stdout.splitlines() if line.strip()]
     assert changed == [], f"outside this sprint's boundary: {changed}"
+
+    # -- reason codes: one added, every other one untouched ------------------ #
+    was_outcomes = subprocess.run(
+        ["git", "show", f"{_START}:mi_agent/interpretation_v2/outcomes.py"],
+        cwd=_REPO_ROOT, capture_output=True, text=True)
+    if was_outcomes.returncode != 0:
+        pytest.skip("start commit not reachable in this checkout")
+    import re as _re_codes
+    was_codes = set(_re_codes.findall(r'^([A-Z][A-Z0-9_]+)\s*=\s*"',
+                                      was_outcomes.stdout, _re_codes.M))
+    from mi_agent.interpretation_v2 import outcomes as _outcomes
+    now_codes = set(_re_codes.findall(
+        r'^([A-Z][A-Z0-9_]+)\s*=\s*"',
+        __import__("inspect").getsource(_outcomes), _re_codes.M))
+    assert now_codes - was_codes == {"CHANGE_FORM_NOT_CONNECTED"}, (
+        f"reason codes gained {sorted(now_codes - was_codes)}; exactly one was "
+        f"authorised")
+    assert was_codes - now_codes == set(), (
+        f"reason codes lost {sorted(was_codes - now_codes)}")
 
     # -- the prompt: additive, and only where it was authorised to be -------- #
     import re as _re
@@ -597,7 +627,14 @@ def test_the_model_still_cannot_author_an_executable_binding():
 
     schema = candidate_intent_json_schema()
     assert schema["additionalProperties"] is False
+    # `change_form` is the one slot the change-form sprint was authorised to
+    # add: which analytical question a change request is asking, stated
+    # separately from what is measured and from who executes it. It is an
+    # ENUM of governed analytical forms, so it cannot carry a column, a
+    # snapshot or an expression — which is the invariant this test is
+    # actually about, asserted below rather than left to the set.
     assert set(schema["properties"]) == {
-        "schema_version", "capability", "operation", "population", "measures",
-        "dimensions", "filters", "geography", "time", "comparison", "target",
-        "outputs", "ambiguity", "evidence"}
+        "schema_version", "capability", "operation", "change_form",
+        "population", "measures", "dimensions", "filters", "geography",
+        "time", "comparison", "target", "outputs", "ambiguity", "evidence"}
+    assert schema["properties"]["change_form"]["enum"]

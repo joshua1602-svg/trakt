@@ -52,6 +52,7 @@ from .outcomes import (
     AMBIGUOUS_PERIOD,
     AMBIGUOUS_POPULATION,
     CAPABILITY_UNAVAILABLE,
+    CHANGE_FORM_NOT_CONNECTED,
     CONCEPT_UNAVAILABLE,
     CONFLICTING_CLAIMS,
     INVALID_GEOGRAPHY_BASIS,
@@ -83,6 +84,7 @@ from .plan import (
     TargetBinding,
 )
 from .vocabulary import (
+    CHANGE_FORM_CAPABILITY,
     CAPABILITY_OPERATIONS,
     STATISTICS_FORBIDDING_WEIGHT,
     STATISTICS_REQUIRING_WEIGHT,
@@ -315,6 +317,22 @@ class DeterministicCompiler:
             reasons.append(CompileReason(
                 UNSUPPORTED_OPERATION, intent.operation,
                 f"not an operation of capability {capability!r}"))
+
+        # AN ANALYTICAL FORM WITH NO OWNER IS REFUSED, NOT SUBSTITUTED.
+        # `CHANGE_FORM_CAPABILITY` maps every form to the capability that
+        # implements it, and one of them maps to nothing: the funded
+        # material-change composition is not built. The reader asked what
+        # changed; answering with a balance delta, a portfolio overview or a
+        # bridge would be answering a different question, which is precisely
+        # what the change_form slot exists to stop. So the question is
+        # understood, recorded, and declined.
+        form = getattr(intent, "change_form", None)
+        if form and form in CHANGE_FORM_CAPABILITY \
+                and CHANGE_FORM_CAPABILITY[form] is None:
+            reasons.append(CompileReason(
+                CHANGE_FORM_NOT_CONNECTED, form,
+                f"the question was read as {form!r}, and no governed owner "
+                f"implements that analytical form yet"))
 
         for disclosed in intent.ambiguity:
             if not disclosed.blocking:

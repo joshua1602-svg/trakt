@@ -182,13 +182,31 @@ def test_the_policy_reaches_the_model():
 # --------------------------------------------------------------------------- #
 
 def test_the_candidate_intent_schema_did_not_change():
+    """One slot added, by instruction; everything else still pinned.
+
+    `change_form` says which analytical question a change request is asking —
+    material summary, metric delta, attribution or level comparison — and it
+    exists because that distinction previously had no home. It was being spread
+    across `capability`, `operation` and the MEASURE, three slots that can
+    disagree, and on the signed-off corpus they did: one business question
+    reached the compiler as three different contracts because three paraphrases
+    chose three different governed measures and a specialist measure determines
+    its owner.
+
+    The slot is OPTIONAL, so every intent recorded before it still parses, and
+    it is an ENUM, so it can no more carry a column or a snapshot than any other
+    slot here. The schema version is unchanged for the same reason: an optional
+    additive enum is backward compatible with every existing reading.
+    """
     assert INTENT_SCHEMA_VERSION == "candidate_intent/1.0"
     schema = candidate_intent_json_schema()
     assert set(schema["properties"]) == {
-        "schema_version", "capability", "operation", "population", "measures",
-        "dimensions", "filters", "geography", "time", "comparison", "target",
-        "outputs", "ambiguity", "evidence"}
+        "schema_version", "capability", "operation", "change_form",
+        "population", "measures", "dimensions", "filters", "geography", "time",
+        "comparison", "target", "outputs", "ambiguity", "evidence"}
     assert schema["additionalProperties"] is False
+    assert "change_form" not in schema["required"]
+    assert schema["properties"]["change_form"]["enum"]
 
 
 def test_the_plan_schema_did_not_change():

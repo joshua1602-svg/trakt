@@ -83,6 +83,14 @@ UNSUPPORTED_COMPOSITION = "UNSUPPORTED_COMPOSITION"
 UNSUPPORTED_FILTER = "UNSUPPORTED_FILTER"
 WEIGHT_NOT_PERMITTED = "WEIGHT_NOT_PERMITTED"
 CAPABILITY_UNAVAILABLE = "CAPABILITY_UNAVAILABLE"
+#: The reader's question was understood, and the owner that would answer it is
+#: not built yet. Distinct from CAPABILITY_UNAVAILABLE, which says a capability
+#: is not registered on this book: this says the ANALYTICAL FORM has no
+#: implementation anywhere. Kept separate because the two call for different
+#: things — one is an onboarding fact, the other is a roadmap fact — and because
+#: answering either with the nearest available analysis is the substitution the
+#: change_form slot exists to end.
+CHANGE_FORM_NOT_CONNECTED = "CHANGE_FORM_NOT_CONNECTED"
 INVALID_GEOGRAPHY_BASIS = "INVALID_GEOGRAPHY_BASIS"
 PERIOD_UNRESOLVED = "PERIOD_UNRESOLVED"
 
@@ -111,6 +119,7 @@ REASON_CODES = frozenset({
     UNSUPPORTED_FILTER,
     WEIGHT_NOT_PERMITTED,
     CAPABILITY_UNAVAILABLE,
+    CHANGE_FORM_NOT_CONNECTED,
     INVALID_GEOGRAPHY_BASIS,
     PERIOD_UNRESOLVED,
 })

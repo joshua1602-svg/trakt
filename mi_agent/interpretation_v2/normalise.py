@@ -51,7 +51,7 @@ from typing import List, Mapping, Optional, Sequence, Tuple
 
 from .intent import CandidateIntent, SemanticTime
 from .plan import LABELS_ARE_WORDING_ONLY, identity_labels
-from .vocabulary import GovernedVocabulary
+from .vocabulary import CHANGE_FORM_CAPABILITY, GovernedVocabulary
 
 __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
            "CANONICAL_PAIR_FORM", "CANONICAL_PAIR_PERIODS_BACK", "BOUNDED",
@@ -230,5 +230,36 @@ def canonical_intent(intent: CandidateIntent,
                 f"implementation_owner: capability {intent.capability!r} -> "
                 f"{owner!r} (derived from measure ownership)")
             intent = replace(intent, capability=owner)
+
+    # -- 4. the form of a change names its owner ---------------------------- #
+    #
+    # WHY THIS IS A NORMALISATION AND NOT A DECISION. `change_form` states which
+    # analytical question was asked; `CHANGE_FORM_CAPABILITY` states which owner
+    # implements that question. Neither is the model's to choose, and putting
+    # them together removes freedom rather than adding meaning — the same thing
+    # normalisation 3 does for a specialist measure.
+    #
+    # PRECEDENCE. An explicitly named specialist measure still wins: rule 3 has
+    # already bound its owner above, and that owner is an explicit semantic
+    # requirement rather than a structural implication. Where the two DISAGREE
+    # the intent is left exactly as it is, so the compiler sees the conflict and
+    # can refuse or clarify. Silently preferring either one would decide, on the
+    # reader's behalf, whether they asked for a decomposition or a delta — which
+    # is the substitution this slot exists to end.
+    form = getattr(intent, "change_form", None)
+    if form:
+        implied = CHANGE_FORM_CAPABILITY.get(form)
+        conflict = (owner is not None and implied is not None and owner != implied)
+        if conflict:
+            applied.append(
+                f"change_form: {form!r} implies {implied!r} but the measure is "
+                f"owned by {owner!r} — left unresolved for the compiler")
+        elif implied is not None and implied != intent.capability:
+            supported = (capability_operations or {}).get(implied)
+            if supported is None or intent.operation in supported:
+                applied.append(
+                    f"change_form: capability {intent.capability!r} -> "
+                    f"{implied!r} (derived from change_form {form!r})")
+                intent = replace(intent, capability=implied)
 
     return NormalisationResult(intent=intent, applied=tuple(applied))
