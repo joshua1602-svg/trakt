@@ -1,0 +1,950 @@
+{
+  "what_this_is": "raw live evidence for the frozen 135 bank; unscored",
+  "product_sha_under_test": "00bb3e9d8175a395b6643772379866d6bc6169eb",
+  "bank_path": "mi_agent/interpretation_v2/banks/interpretation_bank_135.yaml",
+  "bank_sha256": "1f71e8444dc4bc149bc8028527c5fe077ce49690a95d27d2a2273a20813fdab2",
+  "question_count": 31,
+  "portfolio_id": "ERE/2026-06-30",
+  "stages": {
+    "provenance": {
+      "served_commit": "00bb3e9d8175a395b6643772379866d6bc6169eb",
+      "expected": "00bb3e9d8175a395b6643772379866d6bc6169eb"
+    }
+  },
+  "records": [
+    {
+      "question_id": "Q1.2",
+      "canonical_id": "NL1",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "How has the profile of new originations changed in the last few months?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Are we originating different types of loans now compared with a few months ago?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q2.1",
+      "canonical_id": "NL2",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "When are we likely to reach \u00a3100m of loans?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "When do we expect the funded book to reach \u00a3100m?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q2.2",
+      "canonical_id": "NL2",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "When are we likely to reach \u00a3100m of loans?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "At the current run rate, when should we get to \u00a3100m of loans?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q2.3",
+      "canonical_id": "NL2",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "When are we likely to reach \u00a3100m of loans?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "When are we forecast to cross \u00a3100m of funded balances?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q3.1",
+      "canonical_id": "NL3",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "How much do we currently have at offer and how much of it is likely to complete?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q3.2",
+      "canonical_id": "NL3",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "What's the value of outstanding offers, and when do we expect them to fund?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q3.3",
+      "canonical_id": "NL3",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "What is the current value of outstanding offers in the pipeline, how much do we expect to complete, and when?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Of the current offer pipeline, how much should convert and over what timeframe?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q4.1",
+      "canonical_id": "NL4",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "What is the current completion run rate?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "What completion rate are we currently running at?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q4.2",
+      "canonical_id": "NL4",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "What is the current completion run rate?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "How many loans are we completing at the moment?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q4.3",
+      "canonical_id": "NL4",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "What is the current completion run rate?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "What's our recent run rate for completions?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q5.1",
+      "canonical_id": "NL5",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "Are we likely to breach any concentration limits in the next three months?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Are any of our concentration limits likely to breach over the next three months?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q5.2",
+      "canonical_id": "NL5",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "Are we likely to breach any concentration limits in the next three months?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Do we expect to hit any concentration limits in the next quarter?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q5.3",
+      "canonical_id": "NL5",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "Are we likely to breach any concentration limits in the next three months?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Which concentration limits are at risk of being breached over the next three months?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q6.1",
+      "canonical_id": "NL6",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "Which limits are closest to breaching?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Which concentration limits have the least headroom?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q6.2",
+      "canonical_id": "NL6",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "Which limits are closest to breaching?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Where are we closest to our limits?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q6.3",
+      "canonical_id": "NL6",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "Which limits are closest to breaching?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Which of our limits are currently most at risk?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q7.1",
+      "canonical_id": "NL7",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "How does the risk profile of older vintages compare with the front book?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "How does the front book compare with our older lending from a risk perspective?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q7.2",
+      "canonical_id": "NL7",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "How does the risk profile of older vintages compare with the front book?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Are older loans riskier than the loans we've originated recently?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q7.3",
+      "canonical_id": "NL7",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "How does the risk profile of older vintages compare with the front book?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "How different is the risk profile of recent originations versus the back book?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q9.1",
+      "canonical_id": "NL9",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "Based on the current pipeline, what is the forecast funded balance?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "What do we expect the funded book to grow to based on the current pipeline?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q9.2",
+      "canonical_id": "NL9",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "Based on the current pipeline, what is the forecast funded balance?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Where is the funded balance forecast to get to from today's pipeline?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q9.3",
+      "canonical_id": "NL9",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "Based on the current pipeline, what is the forecast funded balance?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "If the current pipeline converts as expected, what will our funded balance be?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q8.provenance.1",
+      "canonical_id": "NL8",
+      "variant": "A",
+      "original_category": "analytical_intent",
+      "shape": "How has the balance from dimension X changed relative to dimension Y?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "How has lending to direct changed compared with acquired?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q8.provenance.2",
+      "canonical_id": "NL8",
+      "variant": "B",
+      "original_category": "analytical_intent",
+      "shape": "How has the balance from dimension X changed relative to dimension Y?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "How has the balance of direct loans moved relative to acquired loans?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "Q8.provenance.3",
+      "canonical_id": "NL8",
+      "variant": "C",
+      "original_category": "analytical_intent",
+      "shape": "How has the balance from dimension X changed relative to dimension Y?",
+      "origin_bank": "due_diligence/evidence/analytical_intent_v1/nl_bank.py",
+      "question": "Are direct and acquired balances developing differently over time?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "C03",
+      "canonical_id": "BB01",
+      "variant": "A",
+      "original_category": "borrowing_base",
+      "shape": "borrowing-base headroom",
+      "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+      "question": "What is the borrowing-base headroom?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "C04",
+      "canonical_id": "BB01",
+      "variant": "B",
+      "original_category": "borrowing_base",
+      "shape": "borrowing-base headroom",
+      "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+      "question": "How much headroom do we have under the borrowing base?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "S05",
+      "canonical_id": "BB01",
+      "variant": "C",
+      "original_category": "borrowing_base",
+      "shape": "borrowing-base headroom",
+      "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+      "question": "What is the headroom?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "B01",
+      "canonical_id": "BB02",
+      "variant": "A",
+      "original_category": "borrowing_base",
+      "shape": "borrowing-base bridge",
+      "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+      "question": "Show me the borrowing-base bridge.",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "B03",
+      "canonical_id": "BB02",
+      "variant": "B",
+      "original_category": "borrowing_base",
+      "shape": "borrowing-base bridge",
+      "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+      "question": "Why did the borrowing base change?",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    },
+    {
+      "question_id": "B04",
+      "canonical_id": "BB02",
+      "variant": "C",
+      "original_category": "borrowing_base",
+      "shape": "borrowing-base bridge",
+      "origin_bank": "migration_phase0/BORROWING_BASE_MI_BANK.yaml",
+      "question": "Show the borrowing-base movement as a waterfall.",
+      "retry_of_infrastructure_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      },
+      "envelope": {
+        "ok": false,
+        "answer": "HTTP 401",
+        "__transport_error__": true,
+        "__http_status__": 401
+      },
+      "record": null,
+      "record_matched": "timed out after 90s (read)"
+    }
+  ],
+  "live_model_calls": 62,
+  "infra_retries": [
+    {
+      "question_id": "Q1.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q2.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q2.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q2.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q3.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q3.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q3.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q4.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q4.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q4.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q5.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q5.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q5.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q6.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q6.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q6.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q7.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q7.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q7.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q9.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q9.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q9.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q8.provenance.1",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q8.provenance.2",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "Q8.provenance.3",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "C03",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "C04",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "S05",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "B01",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "B03",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    },
+    {
+      "question_id": "B04",
+      "original_failure": {
+        "transport_error": true,
+        "http_status": 401,
+        "answer": "HTTP 401"
+      }
+    }
+  ],
+  "verdict": "COLLECTED"
+}

@@ -111,8 +111,7 @@ jobs:
             --expect-commit "$EXPECT_COMMIT" \
             --poll-timeout "$POLL_TIMEOUT" \
             --abort-after "$ABORT_AFTER" \
-            --only "$ONLY" \
-            --out raw_records.json
+            --only "$ONLY"
 
       # KEPT WHATEVER HAPPENED. An aborted or failed run has evidence worth
       # reading — the abort reason above all — so this is not conditional on
@@ -124,11 +123,17 @@ jobs:
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"
-          F=due_diligence/evidence/mi_135_live_bank_00bb3e9d/raw_records.json
-          test -f "$F" || { echo "no evidence file was written"; exit 0; }
+          D=due_diligence/evidence/mi_135_live_bank_00bb3e9d
+          # BOTH FILENAMES, AND THE COLLECTOR DECIDES WHICH IT WROTE. This step
+          # used to name `raw_records.json` and pass it to the collector as
+          # `--out`, which defeated the collector's own rule that a targeted
+          # rerun writes its own file — and overwrote a 135-record collection
+          # with 31 records. The workflow no longer names an output at all.
+          ls "$D"/raw_records*.json >/dev/null 2>&1 || {
+            echo "no evidence file was written"; exit 0; }
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "$F"
+          git add "$D"/raw_records*.json
           git diff --cached --quiet && { echo "evidence unchanged"; exit 0; }
           {
             echo "MI 135 live bank: raw evidence from the frozen build"

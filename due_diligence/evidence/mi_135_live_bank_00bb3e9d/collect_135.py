@@ -187,9 +187,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             infra_retries.append({"question_id": case["question_id"],
                                   "original_failure": attempt})
 
-        record, matched = ra.poll_for(sink, question, client_id,
-                                      interval=args.poll_interval,
-                                      timeout=args.poll_timeout, already=already)
+        if envelope.get("__transport_error__"):
+            # NOTHING TO WAIT FOR. A request rejected in the transport never
+            # reached the interpreter, so no governed record will ever be
+            # written for it. Polling anyway spent the full timeout on every
+            # one of them: thirty-one questions rejected at authentication took
+            # fifty-one minutes to fail instead of two.
+            record, matched = None, ("no record is possible: the request failed "
+                                     "in the transport")
+        else:
+            record, matched = ra.poll_for(sink, question, client_id,
+                                          interval=args.poll_interval,
+                                          timeout=args.poll_timeout,
+                                          already=already)
         report["records"].append({
             "question_id": case["question_id"],
             "canonical_id": case["canonical_id"], "variant": case["variant"],
