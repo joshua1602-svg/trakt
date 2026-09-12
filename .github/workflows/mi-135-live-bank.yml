@@ -1,0 +1,155 @@
+name: MI 135 live bank (frozen product)
+
+# The ORIGINAL 45 x 3 acceptance bank, asked once each against ONE frozen build.
+#
+# WHAT THIS WORKFLOW DOES AND DOES NOT DO. It COLLECTS: it asks the 135
+# questions, waits for each governed evidence record, and commits the raw
+# evidence back to the branch. It SCORES NOTHING. Judgement happens offline
+# against `interpretation_v2.equivalence` — the same scorer that produced the
+# committed run1..run8 baselines — because a second rubric written inside a
+# harness cannot be compared with the first.
+#
+# WHY THE EVIDENCE IS COMMITTED RATHER THAN UPLOADED. An artifact cannot be read
+# back by the session that has to score it; a commit can, and the brief wants the
+# evidence in the repository under a frozen-bank directory in any case.
+#
+# THE CANARY MUST ALREADY BE ON. This workflow holds a publish profile (Kudu),
+# not ARM access, so it cannot set MI_AGENT_PLAN_SERVE and does not pretend to.
+# The collector asks three questions first and stops if the governed path served
+# none of them, so a misconfigured canary costs three live interpretations
+# instead of a hundred and thirty-five.
+#
+# The push path runs the OFFLINE SELF-TEST ONLY.
+
+on:
+  push:
+    branches: [ 'claude/funded-book-temporal-slice-2-d568jg' ]
+    paths: [ '.github/workflows/mi-135-live-bank.yml' ]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >-
+          `collect` asks the bank. Anything else runs the offline self-test only
+          and calls nothing.
+        default: ''
+        required: false
+      only:
+        description: >-
+          Comma-separated question ids (e.g. `Q01A,Q02B`) for a targeted rerun
+          after a harness fix. Empty asks all 135.
+        default: ''
+        required: false
+      expect_commit:
+        description: The frozen build this bank is pinned to.
+        default: 00bb3e9d8175a395b6643772379866d6bc6169eb
+        required: false
+      abort_after:
+        description: >-
+          Stop if none of the first N questions was served by the governed path
+          and none matched the canary principal.
+        default: '3'
+        required: false
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: false
+      portfolio_id:
+        default: ERE/2026-06-30
+        required: false
+      poll_timeout_seconds:
+        default: '180'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+
+      # The harness is proved before it is pointed at anything that costs money.
+      - name: Prove the harness before it is pointed at anything
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/mi_135_live_bank_00bb3e9d/collect_135.py \
+            --self-test
+
+      - name: Refuse to run the bank without the credentials it needs
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          test -n "$MI_BEARER" || { echo "::error::MI_BEARER is empty"; exit 1; }
+          test -n "$AZURE_MI_API_PUBLISH_PROFILE" || {
+            echo "::error::publish profile is empty"; exit 1; }
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      - name: Ask the 135 questions, once each
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id || 'ERE/2026-06-30' }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit || '00bb3e9d8175a395b6643772379866d6bc6169eb' }}
+          POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds || '180' }}
+          ABORT_AFTER: ${{ inputs.abort_after || '3' }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -euo pipefail
+          cd due_diligence/evidence/mi_135_live_bank_00bb3e9d
+          python collect_135.py \
+            --base-url "$BASE_URL" \
+            --portfolio-id "$PORTFOLIO_ID" \
+            --expect-commit "$EXPECT_COMMIT" \
+            --poll-timeout "$POLL_TIMEOUT" \
+            --abort-after "$ABORT_AFTER" \
+            --only "$ONLY" \
+            --out raw_records.json
+
+      # KEPT WHATEVER HAPPENED. An aborted or failed run has evidence worth
+      # reading — the abort reason above all — so this is not conditional on
+      # success.
+      - name: Commit the raw evidence
+        if: ${{ always() && inputs.mode == 'collect' }}
+        env:
+          EXPECT_COMMIT: ${{ inputs.expect_commit || '00bb3e9d8175a395b6643772379866d6bc6169eb' }}
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          F=due_diligence/evidence/mi_135_live_bank_00bb3e9d/raw_records.json
+          test -f "$F" || { echo "no evidence file was written"; exit 0; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$F"
+          git diff --cached --quiet && { echo "evidence unchanged"; exit 0; }
+          {
+            echo "MI 135 live bank: raw evidence from the frozen build"
+            echo
+            echo "Collected by .github/workflows/mi-135-live-bank.yml against"
+            echo "${EXPECT_COMMIT}."
+            echo "Unscored: this is what the service returned and what the"
+            echo "governed evidence sink recorded, kept so the scoring is done"
+            echo "by the signed-off owner and not by the harness that asked."
+          } > /tmp/evidence_commit_msg
+          git commit -F /tmp/evidence_commit_msg
+          for i in 1 2 3 4; do
+            git pull --rebase origin "$GITHUB_REF_NAME" && git push origin HEAD:"$GITHUB_REF_NAME" && exit 0
+            sleep $((2 ** i))
+          done
+          echo "::error::could not push the evidence"; exit 1
+
+      - name: The canary is the operator's to turn off
+        if: ${{ always() && inputs.mode == 'collect' }}
+        run: |
+          echo "::warning::This workflow cannot change App Service settings — it \
+          holds a publish profile (Kudu), not ARM access. Set \
+          MI_AGENT_PLAN_SERVE back to off on trakt-mi-api now. The bank is not \
+          finished until that is done, whatever the result above."
