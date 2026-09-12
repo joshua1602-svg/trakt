@@ -1,0 +1,1260 @@
+{
+ "bank_id": "live_change_form_gate_v1",
+ "model": "claude-opus-5",
+ "baseline_sha": "665176864d2f5dbceedc277e351c5d2cd978777f",
+ "bank_sha256": "4e6fca5920ea07b8c5e56321657ae47de9f2953c3c639184ab910570afd87c59",
+ "mode": "live",
+ "live_calls": 18,
+ "provider_failures": 0,
+ "cases": [
+  {
+   "id": "CF01",
+   "question": "What are the main changes in the funded portfolio since the previous reporting period?",
+   "expected_change_form": "material_summary",
+   "expected_measure": null,
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "material_summary",
+   "capability": "period_movement",
+   "operation": "summary",
+   "measures": [],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "previous_reporting_period",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "measures",
+     "note": "No governed quantity is named; the material-change summary is owned by the period_movement capability, which determines which movements are material. No measure is asserted."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF02",
+   "question": "Give me the material changes in the book over the latest month.",
+   "expected_change_form": "material_summary",
+   "expected_measure": null,
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "material_summary",
+   "capability": "period_movement",
+   "operation": "summary",
+   "measures": [],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": "monthly",
+   "periods_back": 1,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "population.base",
+     "note": "'The book' is read as the funded portfolio (the governed default), not as the whole book including pipeline."
+    },
+    {
+     "slot": "measures",
+     "note": "No specific metric is named \u2014 the material_summary form leaves the choice of which movements are material to the period_movement capability."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF03",
+   "question": "What should I know about how the portfolio has changed since last month?",
+   "expected_change_form": "material_summary",
+   "expected_measure": null,
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "material_summary",
+   "capability": "period_movement",
+   "operation": "summary",
+   "measures": [],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "previous_reporting_period",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "population.base",
+     "note": "'the portfolio' was read as the funded book (the governed default). It was not read as spanning the pipeline."
+    },
+    {
+     "slot": "time.form",
+     "note": "'since last month' was read as the current reporting period against the previous one, rather than an explicitly named calendar month."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF04",
+   "question": "Have there been any important changes in the funded book since the last reporting date?",
+   "expected_change_form": "material_summary",
+   "expected_measure": null,
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "material_summary",
+   "capability": "period_movement",
+   "operation": "summary",
+   "measures": [],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "previous_reporting_period",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "measures",
+     "note": "No governed quantity is named; the material change summary is owned by the period_movement capability, which determines which movements are material. No measure asserted."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF05",
+   "question": "What materially changed in the direct funded portfolio over the latest reporting period?",
+   "expected_change_form": "material_summary",
+   "expected_measure": null,
+   "expected_scope": "direct",
+   "interpreted": true,
+   "error": "",
+   "problems": [
+    "temporal: expected one of ['relative_pair', 'previous_reporting_period', 'explicit_period'], got 'current' - the two-state relationship the question states is not preserved"
+   ],
+   "failure_classes": [
+    "C"
+   ],
+   "change_form": "material_summary",
+   "capability": "period_movement",
+   "operation": "summary",
+   "measures": [],
+   "base": "funded",
+   "lens": "direct",
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "current",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "measures",
+     "note": "No metric is named; read as a governed material-change summary where the capability selects which movements are material. No measure asserted."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "temporal_ok": false,
+   "period_result": "SINGLE_STATE",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [
+    "temporal_pair"
+   ],
+   "verdict": "FAIL",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF06",
+   "question": "How much did funded balance change since last month?",
+   "expected_change_form": "metric_delta",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "metric_delta",
+   "capability": "generic_analysis",
+   "operation": "movement",
+   "measures": [
+    {
+     "concept": "current_outstanding_balance",
+     "canonical": "current_outstanding_balance",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": "monthly",
+   "periods_back": 1,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "capability",
+     "note": "Read as a sizing of the change between the current period and the prior month ('how much did it change'), not a request for what caused or decomposed it, so generic_analysis rather than a funded bridge / movement attribution."
+    },
+    {
+     "slot": "population.base",
+     "note": "'funded balance' read as the balance of the funded population, i.e. the governed balance concept on the funded book, rather than a separately named capability-owned measure."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_outstanding_balance"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF07",
+   "question": "How did weighted average LTV move over the latest reporting period?",
+   "expected_change_form": "metric_delta",
+   "expected_measure": "weighted_average_ltv",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [
+    "change_form expected 'metric_delta', got None"
+   ],
+   "failure_classes": [
+    "A"
+   ],
+   "change_form": null,
+   "capability": "generic_analysis",
+   "operation": "movement",
+   "measures": [
+    {
+     "concept": "current_loan_to_value",
+     "canonical": "current_loan_to_value",
+     "statistic": "weighted_average",
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "measures[0].concept",
+     "note": "'LTV' bound to the governed Current LTV concept, for which 'ltv'/'loan_to_value' are approved aliases; the registry also carries Indexed LTV and Original LTV, which the question did not name."
+    },
+    {
+     "slot": "measures[0].weight",
+     "note": "The reader said 'weighted average' without naming the weight; left empty so the governed default weight (current outstanding balance) applies."
+    },
+    {
+     "slot": "capability",
+     "note": "Read as the size of the change in the level between the current and prior reporting period, not an attribution of what drove it; no cause or decomposition was requested."
+    },
+    {
+     "slot": "population.base",
+     "note": "No population stated; resolved to the funded book per the governed default."
+    }
+   ],
+   "change_form_ok": false,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_loan_to_value"
+   ],
+   "statistic_as_expected": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "FAIL",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF08",
+   "question": "How much has the number of funded loans changed since the previous report?",
+   "expected_change_form": "metric_delta",
+   "expected_measure": "loan_count",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "metric_delta",
+   "capability": "generic_analysis",
+   "operation": "movement",
+   "measures": [
+    {
+     "concept": "loan",
+     "canonical": "loan",
+     "statistic": "count",
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": null,
+   "periods_back": 1,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "capability",
+     "note": "Read as a plain magnitude of change between the current governed reporting period and the previous one (generic_analysis), not an attribution of what drove it."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "loan"
+   ],
+   "statistic_as_expected": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF09",
+   "question": "What was the change in outstanding balance between this month and last month?",
+   "expected_change_form": "metric_delta",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "metric_delta",
+   "capability": "generic_analysis",
+   "operation": "movement",
+   "measures": [
+    {
+     "concept": "current_outstanding_balance",
+     "canonical": "current_outstanding_balance",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "population.base",
+     "note": "No population stated; resolved to the funded book per the governed default."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_outstanding_balance"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF10",
+   "question": "How did funded balance change in the acquired portfolio over the latest month?",
+   "expected_change_form": "metric_delta",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": "acquired",
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "metric_delta",
+   "capability": "generic_analysis",
+   "operation": "movement",
+   "measures": [
+    {
+     "concept": "current_outstanding_balance",
+     "canonical": "current_outstanding_balance",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": "acquired",
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": "monthly",
+   "periods_back": null,
+   "comparison_kind": "none",
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "measures",
+     "note": "Read 'funded balance' as the governed Balance concept (current outstanding exposure) measured on the funded population, rather than the funded_bridge capability's owned Funded Balance Movement measure, because the question asks how much it changed and does not ask what caused or drove the movement."
+    },
+    {
+     "slot": "population.lens",
+     "note": "No governed source-portfolio name registry is available in this environment, so 'the acquired portfolio' is read as the acquired origination role, not as a named book."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_outstanding_balance"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF11",
+   "question": "What drove the change in funded balance this month?",
+   "expected_change_form": "attribution",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [
+    "temporal: expected one of ['relative_pair', 'previous_reporting_period', 'explicit_period'], got 'current' - the two-state relationship the question states is not preserved"
+   ],
+   "failure_classes": [
+    "C"
+   ],
+   "change_form": "attribution",
+   "capability": "funded_bridge",
+   "operation": "bridge",
+   "measures": [
+    {
+     "concept": "funded_balance_movement",
+     "canonical": "funded_balance_movement",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "current",
+   "time_grain": "monthly",
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "capability",
+     "note": "Read as the governed funded balance bridge, since the reader names the funded balance specifically and asks what drove its change; a generic period_movement attribution over an unowned balance measure was the alternative reading. The bridge capability owns the decomposition, so no components, statistic or weight are proposed."
+    },
+    {
+     "slot": "time",
+     "note": "'this month' read as the current governed monthly reporting period; the bridge defines its own comparison period."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "funded_balance_movement"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": false,
+   "period_result": "SINGLE_STATE",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [
+    "temporal_pair"
+   ],
+   "verdict": "FAIL",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF12",
+   "question": "Explain the main contributors to the movement in funded balance since the previous reporting period.",
+   "expected_change_form": "attribution",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "attribution",
+   "capability": "funded_bridge",
+   "operation": "bridge",
+   "measures": [
+    {
+     "concept": "funded_balance_movement",
+     "canonical": "funded_balance_movement",
+     "statistic": null,
+     "weight": null
+    },
+    {
+     "concept": "bridge_component",
+     "canonical": "bridge_component",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "previous_reporting_period",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "capability",
+     "note": "Read as a funded balance bridge: the question names the funded balance movement and asks for its contributing components, which the funded_bridge capability owns and decomposes. A generic period_movement attribution was the alternative reading."
+    },
+    {
+     "slot": "time",
+     "note": "Recorded the stated prior-period basis explicitly; the bridge capability defines its own comparison periods, so this is disclosure only and imposes no methodology."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "funded_balance_movement"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF13",
+   "question": "Bridge the funded balance movement from the previous month to the current month.",
+   "expected_change_form": "attribution",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "attribution",
+   "capability": "funded_bridge",
+   "operation": "bridge",
+   "measures": [
+    {
+     "concept": "funded_balance_movement",
+     "canonical": "funded_balance_movement",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": "monthly",
+   "periods_back": null,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "time",
+     "note": "The funded_bridge capability defines its own movement period; the reader's explicit 'previous month to current month' is recorded as a monthly relative pair and does not override the capability's governed period basis."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "funded_balance_movement"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF14",
+   "question": "Why did the direct funded book balance move over the latest reporting period?",
+   "expected_change_form": "attribution",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": "direct",
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "attribution",
+   "capability": "period_movement",
+   "operation": "movement",
+   "measures": [
+    {
+     "concept": "current_outstanding_balance",
+     "canonical": "current_outstanding_balance",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": "direct",
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": null,
+   "periods_back": 1,
+   "comparison_kind": null,
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "time",
+     "note": "Read 'over the latest reporting period' as the movement from the previous governed reporting period to the current one."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_outstanding_balance"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF15",
+   "question": "Compare funded balance this month with the previous month.",
+   "expected_change_form": "level_comparison",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "level_comparison",
+   "capability": "generic_analysis",
+   "operation": "compare",
+   "measures": [
+    {
+     "concept": "current_outstanding_balance",
+     "canonical": "current_outstanding_balance",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": "monthly",
+   "periods_back": null,
+   "comparison_kind": "none",
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "measures[0].concept",
+     "note": "Read 'funded balance' as the governed current outstanding balance measure taken over the funded population, rather than a capability-owned balance concept (eligible balance, forecast funded balance, funded balance movement), none of which the question invokes."
+    },
+    {
+     "slot": "change_form",
+     "note": "Read as a side-by-side comparison of the two monthly levels; no cause or decomposition of the movement was requested."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_outstanding_balance"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF16",
+   "question": "What was weighted average LTV in the current reporting period versus the previous one?",
+   "expected_change_form": "level_comparison",
+   "expected_measure": "weighted_average_ltv",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "level_comparison",
+   "capability": "generic_analysis",
+   "operation": "compare",
+   "measures": [
+    {
+     "concept": "current_loan_to_value",
+     "canonical": "current_loan_to_value",
+     "statistic": "weighted_average",
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": "none",
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "measures[0].concept",
+     "note": "Read 'LTV' as the governed Current LTV concept (current position), rather than Original LTV or Indexed LTV, since the question asks about the value in the current and previous reporting periods."
+    },
+    {
+     "slot": "measures[0].weight",
+     "note": "The question says 'weighted average' without naming the weight; left empty so the governed registry weight (current outstanding balance) applies."
+    },
+    {
+     "slot": "population.base",
+     "note": "No population named; read as the funded book per the governed default."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_loan_to_value"
+   ],
+   "statistic_as_expected": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF17",
+   "question": "Show me the funded loan count at the current reporting date and at the prior reporting date.",
+   "expected_change_form": "level_comparison",
+   "expected_measure": "loan_count",
+   "expected_scope": null,
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "level_comparison",
+   "capability": "generic_analysis",
+   "operation": "compare",
+   "measures": [
+    {
+     "concept": "loan",
+     "canonical": "loan",
+     "statistic": "count",
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": null,
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": "none",
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "change_form",
+     "note": "Read as a side-by-side comparison of the loan count at the two reporting states, not as a movement or attribution \u2014 the question asks for both levels, not for the change or its cause."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "loan"
+   ],
+   "statistic_as_expected": true,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  },
+  {
+   "id": "CF18",
+   "question": "Compare the acquired book's funded balance at the latest reporting date with the previous reporting date.",
+   "expected_change_form": "level_comparison",
+   "expected_measure": "funded_or_outstanding_balance",
+   "expected_scope": "acquired",
+   "interpreted": true,
+   "error": "",
+   "problems": [],
+   "failure_classes": [],
+   "change_form": "level_comparison",
+   "capability": "generic_analysis",
+   "operation": "compare",
+   "measures": [
+    {
+     "concept": "current_outstanding_balance",
+     "canonical": "current_outstanding_balance",
+     "statistic": null,
+     "weight": null
+    }
+   ],
+   "base": "funded",
+   "lens": "acquired",
+   "seasoning": null,
+   "source_reference": null,
+   "time_form": "relative_pair",
+   "time_grain": null,
+   "periods_back": null,
+   "comparison_kind": "none",
+   "dimensions": [],
+   "filters": [],
+   "blocking_ambiguities": [],
+   "disclosed_ambiguities": [
+    {
+     "slot": "population.lens",
+     "note": "Read 'the acquired book' as the acquired origination role, not as a named source portfolio: no governed source portfolio registry is available for this client, and 'acquired book' is a governed alias for the acquired role."
+    },
+    {
+     "slot": "measures[0].statistic",
+     "note": "No statistic stated; the governed default for balance (sum) applies."
+    }
+   ],
+   "change_form_ok": true,
+   "measure_invented": false,
+   "measure_ok": true,
+   "measure_matched": [
+    "current_outstanding_balance"
+   ],
+   "statistic_as_expected": null,
+   "temporal_ok": true,
+   "period_result": "PAIR_PRESERVED",
+   "scope_ok": true,
+   "invented_filters": [],
+   "invented_dimensions": [],
+   "unnecessary_clarification": false,
+   "silent_semantic_drops": [],
+   "verdict": "PASS",
+   "served_model": "claude-opus-5"
+  }
+ ],
+ "compile_checks": [
+  {
+   "id": "CF01",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "summary",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF02",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "summary",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF03",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "summary",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF04",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "summary",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF05",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "summary",
+   "plan_base": "funded",
+   "plan_scope": [
+    [
+     "source_portfolio_type",
+     "direct"
+    ]
+   ]
+  },
+  {
+   "id": "CF06",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "movement",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF07",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "generic_analysis",
+   "plan_operation": "movement",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF08",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "movement",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF09",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "movement",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF10",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "period_movement",
+   "plan_operation": "movement",
+   "plan_base": "funded",
+   "plan_scope": [
+    [
+     "source_portfolio_type",
+     "acquired"
+    ]
+   ]
+  },
+  {
+   "id": "CF11",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "funded_bridge",
+   "plan_operation": "bridge",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF12",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "funded_bridge",
+   "plan_operation": "bridge",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF13",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "funded_bridge",
+   "plan_operation": "bridge",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF14",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "funded_bridge",
+   "plan_operation": "movement",
+   "plan_base": "funded",
+   "plan_scope": [
+    [
+     "source_portfolio_type",
+     "direct"
+    ]
+   ]
+  },
+  {
+   "id": "CF15",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "generic_analysis",
+   "plan_operation": "compare",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF16",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "generic_analysis",
+   "plan_operation": "compare",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF17",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "generic_analysis",
+   "plan_operation": "compare",
+   "plan_base": "funded",
+   "plan_scope": []
+  },
+  {
+   "id": "CF18",
+   "outcome": "PLAN",
+   "codes": [],
+   "compiled": true,
+   "verdict": "COMPILED",
+   "plan_capability": "generic_analysis",
+   "plan_operation": "compare",
+   "plan_base": "funded",
+   "plan_scope": [
+    [
+     "source_portfolio_type",
+     "acquired"
+    ]
+   ]
+  }
+ ],
+ "totals": {
+  "attempted": 18,
+  "interpreted": 18,
+  "change_form_total": "17 / 18",
+  "by_change_form": {
+   "attribution": "4 / 4",
+   "level_comparison": "4 / 4",
+   "material_summary": "5 / 5",
+   "metric_delta": "4 / 5"
+  },
+  "explicit_measure_preserved": "13 / 13",
+  "material_summary_specific_measure_invented": "0 / 5",
+  "scope_preserved": "4 / 4",
+  "temporal_pair_preserved": "16 / 18",
+  "unnecessary_clarifications": 0,
+  "invented_filters": 0,
+  "invented_dimensions": 0,
+  "silent_semantic_drops": 2,
+  "passed": 15
+ }
+}
