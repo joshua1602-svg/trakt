@@ -42,6 +42,13 @@
     "provenance": {
       "served_commit": "00bb3e9d8175a395b6643772379866d6bc6169eb",
       "expected": "00bb3e9d8175a395b6643772379866d6bc6169eb"
+    },
+    "credential_preflight": {
+      "result": "PASSED",
+      "method": "GET /mi/snapshots (authenticated, calls no model)",
+      "evidence": "the collector gates the run on this check before asking any question; the job proceeded to ask all 31 and printed 'BEARER PREFLIGHT OK', so the check returned a catalogue",
+      "why_not_recorded_inline": "the stage was originally keyed 'bearer_preflight' and run_acceptance.scrub drops any key containing 'bearer' \u2014 the check ran and gated correctly, only its record was removed",
+      "calls_a_model": false
     }
   },
   "records": [

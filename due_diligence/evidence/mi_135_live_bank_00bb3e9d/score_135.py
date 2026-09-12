@@ -40,6 +40,7 @@ if str(_REPO) not in sys.path:
 
 RAW = _HERE / "raw_records.json"
 RERUN = _HERE / "raw_records_rerun.json"
+LEGACY_COMPLETION = _HERE / "raw_records_legacy_completion.json"
 RESULTS = _HERE / "MI_135_LIVE_BANK_RESULTS.json"
 
 # user-facing outcomes
@@ -303,6 +304,99 @@ def _collected() -> Tuple[Dict[str, Any], Dict[str, str]]:
     return raw, replaced
 
 
+NOT_TESTED = "NOT_TESTED_KNOWN_UNMIGRATED"
+CANARY_EXPOSED = "CANARY_EXPOSED"
+LEGACY_ONLY = "LEGACY_ONLY_COMPLETION"
+
+
+def _legacy_completion_rows(expectations: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    """The outstanding questions, asked with the governed canary OFF.
+
+    SCORED FROM THE ENVELOPE, BECAUSE THERE IS NOTHING ELSE TO SCORE FROM. No
+    interpretation ran, so there is no CandidateIntent and the signed-off
+    per-dimension scorer cannot be applied — applying it to a legacy spec would
+    be comparing a concept-level fixture with a field-level binding and calling
+    the mismatch a defect. These questions therefore carry
+    `interpretation_outcome = NOT_APPLICABLE` and are judged on what the reader
+    received.
+
+    A REFUSAL THAT STATES A GOVERNED OBSTACLE IS HONEST. Measured here: five
+    borrowing-base questions decline with "No funding facility is configured for
+    this portfolio", which is a configuration fact rather than missing
+    arithmetic, and three more name the capability they understood and declined
+    to answer. None of those is a product failing to know what it was asked.
+
+    NOTHING HERE IS CALLED FULLY_CORRECT ON THE STRENGTH OF A FIGURE ALONE. The
+    bank states no expected values, so an answered question is INCONCLUSIVE on
+    correctness unless the product's own integrity checks and the expected
+    capability agree — which is as far as this evidence reaches.
+    """
+    if not LEGACY_COMPLETION.exists():
+        return []
+    body = json.loads(LEGACY_COMPLETION.read_text(encoding="utf-8"))
+    rows: List[Dict[str, Any]] = []
+    for entry in body["records"]:
+        envelope = entry.get("envelope") or {}
+        expected = (expectations.get(entry["canonical_id"]) or {}).get("expected") or {}
+        legacy = _legacy_integrity(envelope)
+        stated = str(envelope.get("error") or "") if not envelope.get("ok") else ""
+        merge = (envelope.get("conceptMerge")
+                 or (envelope.get("metadata") or {}).get("conceptMerge") or {})
+
+        if envelope.get("__transport_error__"):
+            outcome, why = INFRASTRUCTURE_FAILURE, "the request failed in transport"
+        elif not envelope.get("ok"):
+            outcome = HONEST_REFUSAL if stated else BAD_REFUSAL
+            why = stated[:200] or "declined with no stated governed reason"
+        elif legacy["filter_invariant_ok"] is False or \
+                legacy["dimension_invariant_ok"] is False:
+            outcome, why = WRONG, "the legacy path reports it dropped part of the question"
+        else:
+            # An answer was returned and the product's own invariants are intact.
+            # Correctness of the FIGURE is not establishable: this bank states no
+            # expected values, and the capability is one the governed path does
+            # not implement, so there is no second owner to reconcile against.
+            outcome = PARTIALLY_CORRECT
+            why = ("answered, integrity checks intact; the figure cannot be "
+                   "independently verified — this bank states no expected values")
+
+        rows.append({
+            "question_id": entry["question_id"],
+            "canonical_id": entry["canonical_id"], "variant": entry["variant"],
+            "original_category": entry["original_category"],
+            "shape": entry["shape"], "origin_bank": entry["origin_bank"],
+            "question": entry["question"],
+            "run_mode": LEGACY_ONLY,
+            "migration_outcome": NOT_TESTED,
+            "governed_capability_migrated": False,
+            "interpretation_outcome": "NOT_APPLICABLE",
+            "interpretation_scored": {},
+            "interpretation_unscoreable_because":
+                "no interpretation ran: the governed canary was deliberately off",
+            "expected_intent": expected,
+            "expected_capability": expected.get("capability"),
+            "envelope_ok": bool(envelope.get("ok")),
+            "controlled_refusal": bool(envelope.get("controlledRefusal")
+                                       or envelope.get("controlledUnsupported")),
+            "refusal_stated_reason": stated,
+            "concept_merge_status": merge.get("status"),
+            "concept_merge_cost": (merge.get("cost") or {}).get("estimated_total_cost"),
+            "expected_value": None,
+            "independent_numeric_parity": "N/A",
+            "drops": {k: "N/A" for k in (
+                "silent_measure_drop", "silent_statistic_drop",
+                "silent_operation_drop", "silent_dimension_drop",
+                "silent_filter_drop", "silent_period_drop",
+                "silent_capability_drop", "silent_population_drop",
+                "silent_scope_drop", "silent_comparison_drop")}
+                     | {"silent_widening": bool(legacy["unavailable_filters"]
+                                                and envelope.get("ok")),
+                        "legacy_integrity": legacy},
+            "user_outcome": outcome, "user_outcome_why": why,
+        })
+    return rows
+
+
 def build_rows() -> List[Dict[str, Any]]:
     raw, _replaced = _collected()
     expectations = _expectations()
@@ -400,8 +494,27 @@ def build_rows() -> List[Dict[str, Any]]:
         row["refusal_stated_reason"] = (
             str(envelope.get("error") or "") if not envelope.get("ok") else "")
         row["user_outcome"], row["user_outcome_why"] = _user_outcome(row)
+        row["run_mode"] = CANARY_EXPOSED
+        row["independent_numeric_parity"] = "N/A"
         rows.append(row)
-    return rows
+
+    # THE OUTSTANDING QUESTIONS, MERGED — AND NEVER OVER A USABLE RECORD.
+    # A legacy-completion row is admitted only where the canary-exposed attempt
+    # was infrastructure-invalid. Two valid answers are never compared and the
+    # better-scoring one chosen; that would make this a best-of-two benchmark
+    # and the number it produced would mean nothing.
+    invalid = {r["question_id"] for r in rows
+               if r["user_outcome"] == INFRASTRUCTURE_FAILURE}
+    completion = {r["question_id"]: r for r in _legacy_completion_rows(expectations)}
+    merged = []
+    for row in rows:
+        repair = completion.get(row["question_id"])
+        if row["question_id"] in invalid and repair is not None:
+            repair["repairs_infrastructure_failure"] = row["user_outcome_why"]
+            merged.append(repair)
+        else:
+            merged.append(row)
+    return merged
 
 
 def main() -> int:

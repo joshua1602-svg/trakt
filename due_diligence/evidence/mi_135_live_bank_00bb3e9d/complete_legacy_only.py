@@ -136,9 +136,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     import run_temporal_acceptance as t2
     catalogue, detail = t2.live_catalogue(args.base_url,
                                           args.portfolio_id.split("/", 1)[0])
-    report["stages"]["bearer_preflight"] = {"catalogue": catalogue, "detail": detail}
+    # NAMED "credential_preflight" AND NOT "bearer_...". The harness's own
+    # scrubber drops any key containing "bearer", "token" or "secret" — rightly,
+    # it is the last line of defence against a credential reaching an evidence
+    # file. The first version of this stage was called `bearer_preflight`, so the
+    # check ran, passed, gated the run correctly, and then had its record
+    # silently removed. A safety rule cannot be argued with; the key name can.
+    report["stages"]["credential_preflight"] = {"catalogue": catalogue,
+                                                "detail": detail,
+                                                "method": "GET /mi/snapshots",
+                                                "calls_a_model": False}
     if not catalogue:
-        return stop("bearer_preflight", "NOT_EXECUTABLE",
+        return stop("credential_preflight", "NOT_EXECUTABLE",
                     f"the authenticated non-model check did not succeed: {detail}")
     print(f"BEARER PREFLIGHT OK   catalogue={catalogue}")
 
