@@ -23,7 +23,8 @@ from mi_agent.interpretation_v2.intent import (candidate_intent_json_schema,
                                                parse_candidate_intent)
 from mi_agent.interpretation_v2.normalise import canonical_intent
 from mi_agent.interpretation_v2.outcomes import (OUTCOME_PLAN, OUTCOME_REFUSE,
-                                                 CHANGE_FORM_NOT_CONNECTED)
+                                                 CHANGE_FORM_NOT_CONNECTED,
+                                                 MISSING_REQUIRED_SLOT)
 from mi_agent.interpretation_v2.vocabulary import (CAPABILITY_OPERATIONS,
                                                    CHANGE_FORM_CAPABILITY,
                                                    CHANGE_FORMS,
@@ -241,10 +242,37 @@ def test_the_compilers_reading_of_the_form_is_on_the_plan_not_the_claim():
 
 
 def test_a_plan_with_no_form_records_no_form_binding():
-    result = _compile(operation="movement")
+    """The original assertion, on a request that legitimately has no form.
+
+    `_BASE` is a period-on-period movement, which since the completeness gate is
+    a change request that must say which form it is — so it is no longer a plan
+    at all, and the case below covers that. What is still worth asserting is this:
+    where a plan legitimately carries NO form, neither side of provenance invents
+    one. A point-in-time balance is not a change, so the slot stays empty.
+    """
+    result = _compile(operation="point_in_time", time={"form": "current"})
     assert result.plan is not None
     assert result.plan.provenance.intent_claims["change_form"] is None
     assert result.plan.provenance.compiler_bindings["change_form"] is None
+
+
+def test_an_incomplete_change_request_does_not_reach_a_plan_at_all():
+    """THE MIGRATED ASSERTION. This case used to expect a plan.
+
+    OLD CONTRACT   movement + a period pair + a measure + no form -> PLAN
+    NEW CONTRACT   the same request -> CLARIFY, MISSING_REQUIRED_SLOT change_form
+
+    This is the authorised semantic-contract migration, not a relaxation: the
+    whole point of the slot is that nothing else in the request says which
+    analytical question was asked, so a plan built without it is incomplete. The
+    compiler asks; it does not choose.
+    """
+    result = _compile(operation="movement")
+    assert result.plan is None
+    reasons = [(r.code, r.subject) for r in result.reasons]
+    assert (MISSING_REQUIRED_SLOT, "change_form") in reasons
+    # and it still does not manufacture the missing form
+    assert result.intent.change_form is None
 
 
 # --------------------------------------------------------------------------- #

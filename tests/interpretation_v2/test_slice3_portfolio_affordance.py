@@ -18,6 +18,7 @@ named in the test names so a reader can find each one.
 from __future__ import annotations
 
 import json
+from typing import Mapping
 
 import pytest
 
@@ -25,6 +26,8 @@ from mi_agent.interpretation_v2.compiler import CompilerContext, DeterministicCo
 from mi_agent.interpretation_v2.intent import (candidate_intent_json_schema,
                                                parse_candidate_intent)
 from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+from mi_agent.interpretation_v2.outcomes import (MISSING_REQUIRED_SLOT,
+                                                 OUTCOME_CLARIFY)
 from mi_agent.interpretation_v2.opus_interpreter import SYSTEM_PROMPT
 from mi_agent.interpretation_v2.vocabulary import (CAPABILITY_OPERATIONS,
                                                    PORTFOLIO_SCOPE_AXES,
@@ -101,11 +104,52 @@ def test_proof_1_payloads_without_a_source_reference_are_unchanged():
 # PROOF 2 — the 135-case signed-off corpus replays byte-identically
 # --------------------------------------------------------------------------- #
 
-def test_proof_2_the_signed_off_135_replays_identically():
+#: THE AUTHORISED CONTRACT MIGRATION, pinned case by case.
+#:
+#: The signed-off corpus was recorded BEFORE `change_form` existed, so every one
+#: of its payloads omits the slot. The completeness gate added afterwards requires
+#: that slot for a change-oriented temporal request, and these ten recordings are
+#: change-oriented temporal requests. They therefore no longer compile to a plan,
+#: and that is the repair working rather than a regression.
+#:
+#: The EVIDENCE IS NOT TOUCHED. `run8_135_signoff_2b00172.json` still holds what
+#: the model actually returned and what the compiler of the day did with it.
+#: Rewriting those payloads to insert a `change_form` the model never emitted
+#: would be forging the measurement. What changes is this guard's expectation, and
+#: only for ids listed here.
+#:
+#: Nine are the change-intelligence family the Sprint B evidence already recorded
+#: as predating the semantic. NL1B is the tenth — "are we originating different
+#: types of loans now compared with a few months ago?" — a period-over-period
+#: comparison whose analytical form is genuinely unstated, so asking is correct.
+_MIGRATED_BY_CHANGE_FORM_COMPLETENESS: Mapping[str, str] = {
+    "Q18A": "PLAN", "Q18B": "PLAN", "Q18C": "PLAN",
+    "Q19A": "PLAN", "Q19B": "PLAN", "Q19C": "PLAN",
+    "Q20A": "PLAN", "Q20B": "PLAN", "Q20C": "PLAN",
+    "NL1B": "PLAN",
+}
+
+#: The one reason a migrated case is allowed to have moved. Anything else — a
+#: different code, a different slot, a refusal instead of a clarification — is an
+#: unexpected move and fails, so this is not a blanket "output may change".
+_MIGRATION_CODE = MISSING_REQUIRED_SLOT
+_MIGRATION_SUBJECT = "change_form"
+
+
+def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
     """Every recorded payload, re-parsed and re-compiled by this code.
 
-    Outcome AND plan identity, not a sample: if the contract edit had disturbed
-    parsing or binding anywhere in the signed-off corpus, one of 135 would move.
+    OLD CONTRACT (at sign-off, no completeness gate)
+        an incomplete change intent -> PLAN
+
+    NEW CONTRACT (change_form completeness)
+        an incomplete change intent -> CLARIFY / MISSING_REQUIRED_SLOT change_form
+
+    So this is no longer "nothing moved". It is "the 125 that are not part of the
+    authorised migration are byte-identical, and the 10 that are moved for exactly
+    one pinned reason". Outcome AND plan identity are still compared, so a
+    disturbance to parsing or binding anywhere else still fails here.
+
     Zero model calls — the payloads have been on disk since the sign-off run.
     """
     with open(_EVIDENCE, "r", encoding="utf-8") as handle:
@@ -113,15 +157,61 @@ def test_proof_2_the_signed_off_135_replays_identically():
     assert len(recorded) == 135
 
     compiler = DeterministicCompiler(CompilerContext())
-    moved = []
+    unexpected, migrated = [], {}
     for row in recorded:
+        question_id = row["question_id"]
         result = compiler.compile(parse_candidate_intent(row["raw_payload"]))
         plan = getattr(result, "plan", None)
         now = (str(result.outcome), getattr(plan, "plan_id", "") or "")
         was = (str(row["outcome"]), row.get("plan_id") or "")
-        if now != was:
-            moved.append((row["question_id"], was, now))
-    assert moved == [], f"{len(moved)} of 135 signed-off cases moved: {moved[:5]}"
+        if now == was:
+            # A case on the migration list that did NOT move is also wrong: it
+            # would mean the gate stopped covering a request it is meant to.
+            if question_id in _MIGRATED_BY_CHANGE_FORM_COMPLETENESS:
+                unexpected.append((question_id, "expected to migrate, did not",
+                                   was, now))
+            continue
+
+        expected_was = _MIGRATED_BY_CHANGE_FORM_COMPLETENESS.get(question_id)
+        if expected_was is None:
+            unexpected.append((question_id, "moved but is not an authorised "
+                                            "migration", was, now))
+            continue
+
+        codes = [r.code for r in (result.reasons or ())]
+        subjects = [r.subject for r in (result.reasons or ())]
+        if was[0] != expected_was:
+            unexpected.append((question_id, f"was {was[0]}, migration list "
+                                            f"says {expected_was}", was, now))
+        elif now[0] != OUTCOME_CLARIFY:
+            unexpected.append((question_id, f"migrated to {now[0]}, not "
+                                            f"{OUTCOME_CLARIFY}", was, now))
+        elif _MIGRATION_CODE not in codes or _MIGRATION_SUBJECT not in subjects:
+            unexpected.append((question_id, f"migrated for {codes}/{subjects}, "
+                                            f"not {_MIGRATION_CODE}/"
+                                            f"{_MIGRATION_SUBJECT}", was, now))
+        else:
+            migrated[question_id] = (was[0], now[0])
+
+    assert unexpected == [], f"UNEXPECTED_MOVES: {unexpected}"
+    assert set(migrated) == set(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS), (
+        f"expected {sorted(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS)}, "
+        f"migrated {sorted(migrated)}")
+
+
+def test_the_signed_off_evidence_itself_is_never_rewritten():
+    """The corpus records what the model said, and no payload gained a form.
+
+    The migration above changes an EXPECTATION. If it ever changed the EVIDENCE
+    instead — inserting a `change_form` the model never emitted — the measurement
+    would be forged, and this is the assertion that would catch it.
+    """
+    with open(_EVIDENCE, "r", encoding="utf-8") as handle:
+        recorded = json.load(handle)["results"]
+    with_form = [row["question_id"] for row in recorded
+                 if (row["raw_payload"] or {}).get("change_form") is not None]
+    assert with_form == [], (
+        f"signed-off payloads now carry a change_form: {with_form}")
 
 
 # --------------------------------------------------------------------------- #
@@ -219,8 +309,14 @@ def test_proof_6_temporal_forms_survive_a_portfolio_scope(time_block, registry):
 def test_proof_7_attribution_stays_separate_from_generic_analysis():
     assert "movement" in CAPABILITY_OPERATIONS["period_movement"]
     assert "movement" in CAPABILITY_OPERATIONS["generic_analysis"]
+    # `change_form` completes the authored fixture: a period-on-period movement
+    # of one named measure IS a metric delta, and since the completeness gate a
+    # change request that does not say which form it is does not compile. The
+    # subject here is unchanged — which OWNER the plan gets, and whether the
+    # acquired lens survives — and neither depends on the form being present.
     result = _compile({"base": "funded", "lens": "acquired"},
                       capability="period_movement", operation="movement",
+                      change_form="metric_delta",
                       time={"form": "relative_pair", "labels": ["this month"],
                             "periods_back": 1})
     assert str(result.outcome) == "PLAN"

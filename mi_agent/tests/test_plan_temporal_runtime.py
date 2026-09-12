@@ -38,6 +38,14 @@ BASE_INTENT = {
 
 
 def intent(**overrides):
+    """The authored payload. Change-oriented calls state their `change_form`.
+
+    Since the completeness gate, a change-oriented temporal request that does not
+    say which analytical form it is no longer compiles — so the `compare` and
+    `movement` call sites below state theirs. The subject of this file is
+    unchanged: which SNAPSHOTS a plan's period resolves to, and what the runtime
+    does with them.
+    """
     payload = dict(BASE_INTENT)
     payload.update(overrides)
     return payload
@@ -108,8 +116,18 @@ def test_a_temporal_plan_is_still_refused_by_slice_one(compiler):
           measures=[{"concept": "borrowing_base"}],
           time={"form": "series", "grain": "monthly", "periods_back": 6}),
      adapter.CAPABILITY_NOT_GENERIC),
-    # a movement is an attribution, not an evaluation per snapshot
-    (dict(operation="movement",
+    # A movement is an attribution, not an evaluation per snapshot — and since
+    # the completeness gate it must also state its form, which makes it a
+    # COMPLETE metric delta. A complete metric delta derives its specialist owner
+    # (`period_movement`), so the capability guard is now what refuses it, one
+    # step before the operation guard. Still refused, by the earlier of two
+    # reasons rather than the later.
+    (dict(operation="movement", change_form="metric_delta",
+          time={"form": "relative_pair", "grain": "monthly", "periods_back": 1}),
+     adapter.CAPABILITY_NOT_GENERIC),
+    # ...and the operation guard stays covered by a generic operation that is not
+    # temporal and is not change-oriented, so it reaches the perimeter as before.
+    (dict(operation="distribution", dimensions=["ltv_bucket"],
           time={"form": "relative_pair", "grain": "monthly", "periods_back": 1}),
      temporal.OPERATION_NOT_TEMPORAL),
     # a series over a period PAIR states two windows at once
@@ -229,6 +247,7 @@ def test_the_previous_reporting_period_is_one_period_not_a_pair(compiler, store,
 
     pair = temporal.resolve_temporal(
         plan_for(compiler, intent(operation="compare",
+                                  change_form="level_comparison",
                                   time={"form": "previous_reporting_period",
                                         "grain": "monthly",
                                         "labels": ["last month"]})),
@@ -240,6 +259,7 @@ def test_the_previous_reporting_period_is_one_period_not_a_pair(compiler, store,
 def test_a_relative_pair_two_back_reaches_two_back(compiler, store, history):
     resolution = temporal.resolve_temporal(
         plan_for(compiler, intent(operation="compare",
+                                  change_form="level_comparison",
                                   time={"form": "relative_pair",
                                         "grain": "monthly", "periods_back": 2,
                                         "labels": ["two months ago"]})),
@@ -265,7 +285,7 @@ def test_every_date_on_a_selector_came_from_the_catalogue(compiler, store,
                      "labels": ["April"]}),
         intent(operation="series",
                time={"form": "series", "grain": "monthly", "periods_back": 4}),
-        intent(operation="compare",
+        intent(operation="compare", change_form="level_comparison",
                time={"form": "relative_pair", "grain": "monthly",
                      "periods_back": 1}),
     ]
@@ -529,7 +549,7 @@ def test_a_two_dimension_grid_reconciles_cell_by_cell(compiler, store,
 def test_a_period_comparison_computes_its_own_change(compiler, store, semantics,
                                                      history):
     outcome = run(compiler, store, semantics, intent(
-        operation="compare",
+        operation="compare", change_form="level_comparison",
         time={"form": "relative_pair", "grain": "monthly", "periods_back": 1,
               "labels": ["this month versus last month"]}))
     assert outcome.executed and outcome.shape == temporal.SHAPE_COMPARISON
@@ -1016,7 +1036,7 @@ class TestTheRoleScopeHoldsAcrossEverySnapshot:
                                                      tmp_path_factory):
         outcome = temporal.execute_temporal_plan(
             plan_for(compiler, intent(
-                operation="compare",
+                operation="compare", change_form="level_comparison",
                 population={"base": "funded", "lens": "acquired",
                             "seasoning": "any"},
                 time={"form": "relative_pair"})),

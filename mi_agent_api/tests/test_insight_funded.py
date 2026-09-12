@@ -535,16 +535,48 @@ def test_an_unresolvable_period_pair_produces_an_unavailable_brief():
     assert brief["insight_count"] == 0
 
 
-@pytest.mark.parametrize("form", ["current", "series", "forward_looking"])
-def test_a_period_form_that_is_not_a_pair_is_refused_by_the_plan_perimeter(form):
-    from mi_agent import plan_material_summary as runtime
-    plan = {"operation": "summary", "population": {"base": "funded"},
+def _summary_plan(form):
+    return {"operation": "summary", "population": {"base": "funded"},
             "outputs": [{"id": "o", "measures": []}], "period": {"form": form},
             "provenance": {"compiler_bindings": {
                 "change_form": {"form": "material_summary"}}}}
-    eligible, why, _detail = runtime.check_eligibility(plan)
+
+
+@pytest.mark.parametrize("form", ["series", "forward_looking"])
+def test_a_period_form_that_is_not_a_pair_is_refused_by_the_plan_perimeter(form):
+    """`current` is no longer in this list — see the next control.
+
+    OLD CONTRACT  current / series / forward_looking -> PERIOD_NOT_A_PAIR
+    NEW CONTRACT  series / forward_looking           -> PERIOD_NOT_A_PAIR
+                  current                            -> an ANCHOR this form
+                                                        completes via the
+                                                        resolver's own
+                                                        current_vs_previous
+
+    `series` names many states and `forward_looking` names none that have
+    happened; neither is an endpoint of a comparison, so both still refuse.
+    """
+    from mi_agent import plan_material_summary as runtime
+    eligible, why, _detail = runtime.check_eligibility(_summary_plan(form))
     assert not eligible
     assert why == runtime.PERIOD_NOT_A_PAIR
+
+
+def test_a_current_anchor_is_completed_by_the_form_not_refused():
+    """THE MIGRATED CONTROL. A material summary intrinsically compares.
+
+    So the reader naming only the current reporting state has asked a complete
+    question, and the comparison state is the deterministic owner's to supply —
+    `current_vs_previous`, which is the two adjacent GOVERNED snapshots. The
+    interpreted form stays `current`; nothing is rewritten to claim a pair.
+    """
+    from mi_agent import plan_material_summary as runtime
+    plan = _summary_plan("current")
+    eligible, why, detail = runtime.check_eligibility(plan)
+    assert eligible, f"{why}: {detail}"
+    assert runtime.period_request(plan).relative_mode == "current_vs_previous"
+    assert "current" in runtime.ANCHOR_PERIOD_FORMS
+    assert "current" not in runtime.PAIR_PERIOD_FORMS
 
 
 @pytest.mark.parametrize("grain", ["weekly", "daily"])

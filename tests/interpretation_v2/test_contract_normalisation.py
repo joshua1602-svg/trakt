@@ -66,11 +66,25 @@ def compiler():
 
 
 def movement_intent(**over):
-    """The Q19/Q20 shape: a period-on-period movement of a generic measure."""
+    """The Q19/Q20 shape: a period-on-period movement of a generic measure.
+
+    `change_form` is STATED because since the completeness gate a change-oriented
+    temporal request that does not say which analytical form it is no longer
+    compiles, and a period-on-period movement of one named generic measure is a
+    metric delta. This completes an AUTHORED fixture; it does not move the
+    subject, which is normalisation — labels, the relative period, and the derived
+    implementation owner. Call sites naming a SPECIALIST measure override it with
+    the form that measure's owner belongs to.
+
+    The RECORDED Q19/Q20 payloads are not edited. They stay exactly as the model
+    emitted them, and their authorised migration is pinned case by case in
+    `test_slice3_portfolio_affordance`.
+    """
     payload = {
         "schema_version": "candidate_intent/1.0",
         "capability": "period_movement",
         "operation": "movement",
+        "change_form": "metric_delta",
         "measures": [{"concept": "current_outstanding_balance"}],
         "time": {"form": "relative_pair", "grain": "monthly",
                  "periods_back": 1, "labels": ["last month"]},
@@ -268,6 +282,7 @@ def test_the_implementation_owner_is_derived_from_the_measure(compiler, vocabula
     the model names, the owner of the measure it asked for is the owner.
     """
     intent = movement_intent(capability="period_movement",
+                             change_form="attribution",
                              measures=[{"concept": "funded_balance_movement"}])
     result = canonical_intent(intent, vocabulary,
                               capability_operations=CAPABILITY_OPERATIONS)
@@ -296,6 +311,7 @@ def test_an_owner_that_cannot_do_the_operation_is_not_bound(vocabulary):
     intent = movement_intent(
         capability="period_movement", operation=impossible,
         dimensions=["erm_product_type"],
+        change_form="attribution",
         measures=[{"concept": "funded_balance_movement"}])
     result = canonical_intent(intent, vocabulary,
                               capability_operations=CAPABILITY_OPERATIONS)
@@ -319,6 +335,7 @@ def test_two_different_measures_remain_two_different_plans(compiler):
     """Because the bound above is real, not decorative."""
     generic = compiler.compile(movement_intent())
     specialist = compiler.compile(movement_intent(
+        change_form="attribution",
         measures=[{"concept": "funded_balance_movement"}]))
     assert generic.plan is not None and specialist.plan is not None
     assert generic.plan.plan_id != specialist.plan.plan_id
@@ -337,7 +354,8 @@ def test_normalisation_is_idempotent(vocabulary):
     for intent in (movement_intent(),
                    movement_intent(time={"form": "previous_reporting_period",
                                          "grain": "monthly"}),
-                   movement_intent(measures=[{"concept": "funded_balance_movement"}])):
+                   movement_intent(change_form="attribution",
+                                   measures=[{"concept": "funded_balance_movement"}])):
         once = canonical_intent(intent, vocabulary,
                                 capability_operations=CAPABILITY_OPERATIONS).intent
         twice = canonical_intent(once, vocabulary,
@@ -362,6 +380,7 @@ def test_the_model_s_own_claim_survives_every_rewrite(compiler):
     """
     intent = movement_intent(
         capability="period_movement",
+        change_form="attribution",
         measures=[{"concept": "funded_balance_movement"}],
         time={"form": "previous_reporting_period", "grain": "monthly"})
     plan = compiler.compile(intent).plan

@@ -95,7 +95,12 @@ def test_period_pair_is_not_a_comparison_kind():
 
 def test_a_period_on_period_movement_needs_no_comparison_flag(compiler):
     """"How did the Direct book change last month?" states the pair completely."""
+    # The authored fixture states its form: a period-on-period movement of one
+    # named measure is a metric delta. The subject is unchanged — that such a
+    # request needs no separate comparison flag, because the operation and the
+    # time form already state the pair.
     intent = build_intent(capability="period_movement", operation="movement",
+                          change_form="metric_delta",
                           population={"base": "funded", "lens": "direct",
                                       "seasoning": "any"},
                           time={"form": "relative_pair"})

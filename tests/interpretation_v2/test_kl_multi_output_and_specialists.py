@@ -189,7 +189,14 @@ def test_every_shipped_specialist_capability_is_representable(
             if operation in ("bridge", "transition") else
             {"form": "forward_looking"} if capability == "forecast" else
             {"form": "current"})
+    # A `funded_bridge` bridge is the ATTRIBUTION form, and since the
+    # completeness gate a change request must say so. Stated only for the
+    # capability that is one of the four forms; every other specialist here is
+    # change-shaped in its own right and owns no `change_form`, so asking it for
+    # one would be wrong.
+    change_form = "attribution" if capability == "funded_bridge" else None
     intent = build_intent(capability=capability, operation=operation,
+                          change_form=change_form,
                           measures=[{"concept": measure}], time=time,
                           population={"base": "pipeline", "lens": "all",
                                       "seasoning": "any"}

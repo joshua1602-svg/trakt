@@ -84,11 +84,36 @@ MEASURE_NARROWS_THE_SUMMARY = "MEASURE_NARROWS_THE_SUMMARY"
 PERIOD_NOT_A_PAIR = "PERIOD_NOT_A_PAIR"
 PERIOD_GRAIN_UNTRANSLATABLE = "PERIOD_GRAIN_UNTRANSLATABLE"
 
-#: Period forms that resolve to TWO snapshots. A material summary is a statement
-#: about a movement, so it needs a pair. `current` names one period and `series`
-#: names many; neither is a pair, and neither is silently turned into one.
+#: Period forms that resolve to TWO snapshots on their own. A material summary is
+#: a statement about a movement, so it needs a pair. `series` names many periods
+#: and is not a pair, and is not silently turned into one.
 PAIR_PERIOD_FORMS = frozenset({
     "explicit_period", "range", "previous_reporting_period", "relative_pair"})
+
+#: Period forms that name ONE ANCHOR, which THIS FORM completes into a pair.
+#:
+#: THE TEMPORAL AUTHORITY RULE. The reader supplies the anchor or an explicit
+#: pair; the analytical owner supplies any comparison state the FORM itself
+#: intrinsically requires. `material_summary` means "which governed changes are
+#: materially relevant", so a comparison state is part of what the form IS — the
+#: reader naming only "this period" has asked a complete question, and making the
+#: interpreter also author the other end would be the compiler demanding an
+#: implementation detail the model was deliberately never shown.
+#:
+#: The live v1 gate measured exactly that: a reading anchored at `current` was
+#: refused here as PERIOD_NOT_A_PAIR even though its form was right, its scope
+#: survived and the owner already has a method for the adjacent pair.
+#:
+#: `current` is therefore admitted as an ANCHOR and NOT added to
+#: `PAIR_PERIOD_FORMS` — it still does not denote two snapshots, and the
+#: distinction is what keeps the provenance honest: the INTERPRETED form stays
+#: `current`, and the RESOLUTION METHOD is the owner's. Nothing rewrites the
+#: intent to pretend the model emitted a pair.
+ANCHOR_PERIOD_FORMS = frozenset({"current"})
+
+#: The forms this composition can start from at all: a pair, or an anchor it
+#: completes. Kept as the union so the two reasons stay distinguishable above.
+ADMITTED_PERIOD_FORMS = PAIR_PERIOD_FORMS | ANCHOR_PERIOD_FORMS
 
 #: A `relative_pair` states a GRAIN and a DISTANCE; the resolver states the same
 #: idea as a relative METHOD. Both vocabularies are governed, and this is the
@@ -173,10 +198,11 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
 
     period = body.get("period") or {}
     form = period.get("form")
-    if form not in PAIR_PERIOD_FORMS:
+    if form not in ADMITTED_PERIOD_FORMS:
         return False, PERIOD_NOT_A_PAIR, (
-            f"period form {form!r} does not resolve to two governed snapshots, "
-            f"and a movement cannot be stated without a pair")
+            f"period form {form!r} neither resolves to two governed snapshots "
+            f"nor anchors a pair this form completes, and a movement cannot be "
+            f"stated without a pair")
 
     if form == "relative_pair":
         grain = period.get("grain")
@@ -215,7 +241,13 @@ def period_request(plan: Any) -> Any:
     form = period.get("form")
     labels = [str(x) for x in (period.get("labels") or ())]
 
-    if form == "previous_reporting_period":
+    # ONE ANCHOR, AND THE OWNER SUPPLIES THE OTHER END. `previous_reporting_period`
+    # names the earlier state and `current` the later one; either way the reader
+    # has named one end of a comparison this form intrinsically requires, and
+    # `current_vs_previous` is the resolver's own method for the two adjacent
+    # GOVERNED snapshots — not a calendar month, and not a date computed here.
+    # Which state the comparison runs against is never selected by the model.
+    if form in ("previous_reporting_period",) or form in ANCHOR_PERIOD_FORMS:
         return PeriodRequest(relative_mode="current_vs_previous")
     if form == "relative_pair":
         grain = period.get("grain")
@@ -241,6 +273,15 @@ def receipt(plan: Any, result: Any, brief: Mapping[str, Any]) -> Dict[str, Any]:
         "workflow_owner": getattr(result, "workflow_id", None),
         "workflow_mode": (dict(getattr(result, "request_interpretation", None)
                                or {}).get("mode")),
+        # WHO DECIDED THE PERIOD, kept as two separate facts. The INTERPRETED form
+        # is what the reader's request carried — `current` stays `current`, and
+        # nothing rewrote the intent to claim a pair was asked for. The
+        # RESOLUTION is the owner's: its method, and the two governed snapshots
+        # it actually read. An audit that cannot tell these apart cannot answer
+        # whether the model selected the comparison state. It did not.
+        "interpreted_period_form": (body.get("period") or {}).get("form"),
+        "period_completed_by_form": (
+            (body.get("period") or {}).get("form") in ANCHOR_PERIOD_FORMS),
         "period_resolution": result.period_resolution.to_dict(),
         "composition_owner": "mi_agent_api.insight_funded.compose",
         "materiality_config": brief.get("config_source"),

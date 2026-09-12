@@ -168,6 +168,25 @@ _CAPABILITY_OWNED_PERIOD_OPERATIONS = frozenset({
     "bridge",
 })
 
+#: Operations for which a grouping changes the question into a different one.
+_GROUPING_FORBIDDEN = frozenset({"point_in_time"})
+
+#: Operations that need no measure — the capability decides what it reports.
+_MEASURE_OPTIONAL = frozenset({
+    "summary", "reconciliation", "eligibility", "bridge", "departures",
+    "forecast_milestone", "utilisation", "headroom",
+})
+
+#: Operations that need a period richer than a single point.
+_MULTI_PERIOD_OPERATIONS = frozenset({
+    "series", "movement", "bridge", "transition", "arrivals", "departures",
+    "stayers", "reconciliation",
+})
+_MULTI_PERIOD_FORMS = frozenset({
+    "previous_reporting_period", "relative_pair", "explicit_period", "range",
+    "series",
+})
+
 #: THE COMPLETENESS PERIMETER FOR `change_form`.
 #:
 #: A `CandidateIntent` is probabilistic; a `GovernedQueryPlan` may not be
@@ -195,13 +214,20 @@ _CAPABILITY_OWNED_PERIOD_OPERATIONS = frozenset({
 #: a form on it would refuse ordinary MI that was never about a change.
 _CHANGE_ORIENTED_OPERATIONS = frozenset({"movement", "bridge", "compare"})
 
-#: Period forms that denote MORE THAN ONE governed reporting state. `current`
-#: names one and `series` names many; neither is a pair. `current` still reaches
-#: the perimeter where the operation's window is capability-owned, because there
-#: the capability supplies the second state — which is the existing rule in
+#: Period forms that denote MORE THAN ONE governed reporting state, DERIVED from
+#: the existing `_MULTI_PERIOD_FORMS` rather than listed again, so a form added
+#: there reaches this perimeter automatically instead of the two drifting apart.
+#:
+#: Two subtractions. `series` names MANY states, and a series is not a
+#: change between two of them — `period_movement` and `generic_analysis` both
+#: admit a `series` operation that is an ordinary MI shape. `explicit_period` is
+#: subtracted because ONE named period is one state: it is admitted below only
+#: when the request actually names two. `current` is absent
+#: because it names one state; it still reaches the perimeter where the
+#: operation's window is capability-owned, because there the capability supplies
+#: the second state, which is the existing rule in
 #: `_CAPABILITY_OWNED_PERIOD_OPERATIONS`, reused rather than restated.
-_MULTI_STATE_PERIOD_FORMS = frozenset({
-    "relative_pair", "previous_reporting_period", "range"})
+_MULTI_STATE_PERIOD_FORMS = _MULTI_PERIOD_FORMS - {"series", "explicit_period"}
 
 #: The capabilities the change-form family owns, read off the existing owner
 #: table rather than listed again. This is what keeps the perimeter off every
@@ -235,24 +261,6 @@ def requires_change_form(intent: CandidateIntent) -> bool:
             or intent.operation in _CAPABILITY_OWNED_PERIOD_OPERATIONS)
 
 
-#: Operations for which a grouping changes the question into a different one.
-_GROUPING_FORBIDDEN = frozenset({"point_in_time"})
-
-#: Operations that need no measure — the capability decides what it reports.
-_MEASURE_OPTIONAL = frozenset({
-    "summary", "reconciliation", "eligibility", "bridge", "departures",
-    "forecast_milestone", "utilisation", "headroom",
-})
-
-#: Operations that need a period richer than a single point.
-_MULTI_PERIOD_OPERATIONS = frozenset({
-    "series", "movement", "bridge", "transition", "arrivals", "departures",
-    "stayers", "reconciliation",
-})
-_MULTI_PERIOD_FORMS = frozenset({
-    "previous_reporting_period", "relative_pair", "explicit_period", "range",
-    "series",
-})
 
 #: Comparator -> the shape its value must have. A comparator whose value is the
 #: wrong shape is an unsupported filter, never a coerced one.
