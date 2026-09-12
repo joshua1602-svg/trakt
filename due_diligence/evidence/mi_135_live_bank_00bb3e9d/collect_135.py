@@ -80,7 +80,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                         default="/home/LogFiles/mi-plan-shadow/evidence.jsonl")
     parser.add_argument("--poll-interval", type=float, default=3.0)
     parser.add_argument("--poll-timeout", type=float, default=180.0)
-    parser.add_argument("--out", default="raw_records.json")
+    parser.add_argument("--out", default="",
+                        help="default: raw_records.json for a full run, and "
+                             "raw_records_rerun.json for a targeted one")
     parser.add_argument("--only", default="", help="comma-separated question ids")
     parser.add_argument("--abort-after", type=int, default=3,
                         help="stop if none of the first N was served NEW and none "
@@ -104,6 +106,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     cases = [r for r in bank["questions"]
              if not wanted or r["question_id"] in wanted]
 
+    # A TARGETED RERUN MUST NOT OVERWRITE THE FULL COLLECTION. Both write an
+    # evidence file and the workflow commits it, so a 31-question rerun sharing
+    # the full run's filename would replace 135 records with 31 — destroying the
+    # evidence it was meant to complete. Caught before it happened, by cancelling
+    # a dispatched run; the filename is now decided by what was asked, not by a
+    # flag the caller has to remember.
+    out_path = args.out or ("raw_records_rerun.json" if wanted
+                            else "raw_records.json")
+
     bearer = os.environ.get("MI_BEARER", "").strip()
     profile = os.environ.get("AZURE_MI_API_PUBLISH_PROFILE", "").strip()
     secrets = [s for s in (bearer, profile) if len(s) >= ra.MIN_SECRET_LENGTH]
@@ -120,7 +131,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     def stop(stage: str, verdict: str, message: str) -> int:
         report["verdict"], report["stopped_at"] = verdict, stage
         report["stages"][stage] = message
-        ra._save(report, args.out, secrets)
+        ra._save(report, out_path, secrets)
         print(f"::error::{stage}: {message}")
         return 2
 
@@ -213,13 +224,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     report["live_model_calls"] = live_calls
     report["infra_retries"] = infra_retries
     report["verdict"] = "COLLECTED"
-    ra._save(report, args.out, secrets)
+    ra._save(report, out_path, secrets)
     served_count = sum(1 for r in report["records"] if served_new(r["record"]))
     missing = sum(1 for r in report["records"] if r["record"] is None)
     print(f"\n  COLLECTED  questions={len(cases)}  live_calls={live_calls}  "
           f"infra_retries={len(infra_retries)}  served_new={served_count}  "
           f"records_missing={missing}")
-    print(f"  written {args.out}")
+    print(f"  written {out_path}")
     return 0
 
 

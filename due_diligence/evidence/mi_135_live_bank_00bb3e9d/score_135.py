@@ -39,6 +39,7 @@ if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
 RAW = _HERE / "raw_records.json"
+RERUN = _HERE / "raw_records_rerun.json"
 RESULTS = _HERE / "MI_135_LIVE_BANK_RESULTS.json"
 
 # user-facing outcomes
@@ -229,8 +230,47 @@ def _user_outcome(row: Dict[str, Any]) -> Tuple[str, str]:
     return WRONG, "the reading does not match the fixture on any stated dimension"
 
 
-def build_rows() -> List[Dict[str, Any]]:
+def _collected() -> Tuple[Dict[str, Any], Dict[str, str]]:
+    """The full collection, with infrastructure failures repaired by a rerun.
+
+    A RERUN REPLACES ONLY WHAT IT REPAIRS. A question is taken from the rerun
+    file only if the original attempt failed in the transport — never because
+    the rerun's answer is preferable. Re-asking a question whose first answer
+    was merely undesirable would make this a best-of-two benchmark, which is a
+    different and much weaker claim than the one the bank makes.
+
+    The original failure stays in the evidence beside the repair, and every
+    replacement is listed in the report.
+    """
     raw = json.loads(RAW.read_text(encoding="utf-8"))
+    if not RERUN.exists():
+        return raw, {}
+    rerun = {e["question_id"]: e
+             for e in json.loads(RERUN.read_text(encoding="utf-8"))["records"]}
+    replaced: Dict[str, str] = {}
+    records = []
+    for entry in raw["records"]:
+        qid = entry["question_id"]
+        failed = bool((entry.get("envelope") or {}).get("__transport_error__"))
+        repair = rerun.get(qid)
+        if failed and repair is not None:
+            status = (entry.get("envelope") or {}).get("__http_status__")
+            replaced[qid] = f"HTTP {status} on the original attempt"
+            repair = dict(repair)
+            repair["repairs_infrastructure_failure"] = {
+                "original_envelope": entry.get("envelope"),
+                "original_retry": entry.get("retry_of_infrastructure_failure"),
+            }
+            records.append(repair)
+            continue
+        records.append(entry)
+    raw = dict(raw, records=records)
+    raw["reran_after_infrastructure_failure"] = replaced
+    return raw, replaced
+
+
+def build_rows() -> List[Dict[str, Any]]:
+    raw, _replaced = _collected()
     expectations = _expectations()
     rows: List[Dict[str, Any]] = []
 
@@ -331,6 +371,10 @@ def build_rows() -> List[Dict[str, Any]]:
 
 
 def main() -> int:
+    _raw, replaced = _collected()
+    if replaced:
+        print(f"repaired {len(replaced)} infrastructure failure(s) from the "
+              f"rerun file; originals kept in the evidence\n")
     rows = build_rows()
     RESULTS.write_text(json.dumps(rows, indent=1, ensure_ascii=False, default=str)
                        + "\n", encoding="utf-8")
