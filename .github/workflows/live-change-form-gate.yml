@@ -1,0 +1,225 @@
+name: Live change_form interpretation gate
+
+# Measures ONE thing: whether live claude-opus-5 assigns the Sprint A first-class
+# `change_form` slot correctly to eighteen natural-language change questions.
+#
+#     NATURAL LANGUAGE  ->  OPUS  ->  CandidateIntent
+#
+# WHAT THIS IS NOT. It is not a serving or end-to-end run. It deploys nothing,
+# configures nothing, calls no MI API, needs no MI_BEARER, touches no App Service
+# and executes nothing against a book. No answer is computed. The boundary ends
+# at the structured intent, plus a compile of that intent recorded for evidence.
+# Nothing in `mi_agent/interpretation_v2` may be changed while a run is in flight
+# or in response to what a run finds: the point is to read the boundary as it
+# stands at the pinned baseline, not as it would be after tuning.
+#
+# THE BANK IS PRE-REGISTERED. `change_form_bank_manifest.json` and its sha256 were
+# committed BEFORE the first call, in 480f491c. The runner re-hashes the manifest
+# on every run and aborts on a mismatch, and this workflow ALSO checks the hash
+# against a literal written here — so eighteen questions cannot quietly become
+# eighteen different questions once their answers are known. `preregister.py`
+# rewrites both files and is deliberately never invoked from here.
+#
+# THE KEY NEVER TOUCHES A SHELL. `secrets.ANTHROPIC_API_KEY` is injected into the
+# runner's own `env:` and read by the Python process directly. It is never copied
+# into a shell variable, never passed as an argv value (which lands in process
+# listings), never written to GITHUB_ENV, and never printed. The only thing said
+# about it is whether it is non-empty.
+#
+# ONE CALL PER QUESTION, NO RETRIES. A refusal, a malformed payload, a timeout or
+# an exhausted credit balance is RECORDED as that case's failure. Asking a failed
+# question a second time — or a second way — would measure the harness's
+# persistence rather than the model's reading. The runner stops the whole run on a
+# provider auth/quota wall rather than continuing to collect a partial sample.
+#
+# MEASUREMENT ONLY. The gate's verdict must not be used to tune interpretation in
+# the same change that measured it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: >-
+          Repo ref to take the gate from. Defaults to the ref the dispatch was
+          made against.
+        default: ''
+        required: false
+      expect_bank_sha256:
+        description: >-
+          The bank this run is measuring, pinned at dispatch. The workflow also
+          checks the manifest against a literal committed here; this is the
+          operator saying WHICH bank they meant, so a run cannot certify a bank
+          nobody chose. Leave empty to rely on the committed literal alone.
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+# Never two at once. Two concurrent runs would spend two budgets against one
+# pre-registration and produce two reports each claiming to be the measurement.
+concurrency:
+  group: live-change-form-gate
+  cancel-in-progress: false
+
+env:
+  # The pinned bank, and the product baseline the measurement stands against.
+  BANK_SHA256: 4e6fca5920ea07b8c5e56321657ae47de9f2953c3c639184ab910570afd87c59
+  BASELINE_SHA: 665176864d2f5dbceedc277e351c5d2cd978777f
+  GATE_DIR: due_diligence/evidence/live_change_form_gate
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # Full history: the pre-run assertions below compare the checked-out tree
+      # against the Sprint A+B baseline commit, which a shallow clone lacks.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      # `mi_agent/__init__.py` imports the chart and query stack, so reaching
+      # `mi_agent.interpretation_v2.compiler` needs the product's own
+      # dependencies. Installed from the repository's requirements so the gate
+      # runs against the same library versions the product does.
+      - name: Install the product's dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
+
+      # EVERY ONE OF THESE FAILS BEFORE THE FIRST MODEL CALL. A run that cannot
+      # say what code and which bank it measured is not evidence.
+      - name: Pre-run assertions
+        env:
+          EXPECT_DISPATCH: ${{ inputs.expect_bank_sha256 }}
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          echo "git rev-parse HEAD = ${HEAD_SHA}"
+          echo "BASELINE_SHA       = ${BASELINE_SHA}"
+
+          # 1. the tested tree must CONTAIN the authoritative baseline
+          if ! git merge-base --is-ancestor "${BASELINE_SHA}" HEAD; then
+            echo "::error::${BASELINE_SHA} is not an ancestor of ${HEAD_SHA}: \
+          this tree is not the Sprint A+B baseline plus gate infrastructure"
+            exit 1
+          fi
+          echo "baseline is an ancestor of HEAD: ok"
+
+          # 2. and must add NOTHING but the pre-registered gate infrastructure.
+          #    This is the automatic PRODUCT_CODE_CHANGED = NO proof.
+          CHANGED="$(git diff --name-only "${BASELINE_SHA}..HEAD")"
+          echo "--- files added on top of the baseline ---"
+          echo "${CHANGED}"
+          STRAY="$(echo "${CHANGED}" | grep -v -e "^${GATE_DIR}/" \
+            -e '^\.github/workflows/live-change-form-gate\.yml$' || true)"
+          if [ -n "${STRAY}" ]; then
+            echo "::error::product code changed relative to the baseline:"
+            echo "${STRAY}"
+            exit 1
+          fi
+          echo "PRODUCT_CODE_CHANGED = NO"
+
+          # 3. the bank must be the one that was pinned
+          FOUND="$(cut -d' ' -f1 "${GATE_DIR}/change_form_bank_manifest.sha256")"
+          RECOMPUTED="$(sha256sum "${GATE_DIR}/change_form_bank_manifest.json" \
+            | cut -d' ' -f1)"
+          echo "bank sha256 committed  = ${FOUND}"
+          echo "bank sha256 recomputed = ${RECOMPUTED}"
+          if [ "${FOUND}" != "${BANK_SHA256}" ] \
+             || [ "${RECOMPUTED}" != "${BANK_SHA256}" ]; then
+            echo "::error::bank mismatch: expected ${BANK_SHA256}"
+            exit 1
+          fi
+          if [ -n "${EXPECT_DISPATCH}" ] \
+             && [ "${EXPECT_DISPATCH}" != "${BANK_SHA256}" ]; then
+            echo "::error::dispatch pinned ${EXPECT_DISPATCH}, this bank is \
+          ${BANK_SHA256}"
+            exit 1
+          fi
+          echo "bank ${BANK_SHA256} is the one that was pinned: ok"
+
+          # 4. the bank must still be eighteen questions, 5/5/4/4
+          python - <<'PY'
+          import json, os, collections
+          m = json.load(open(os.path.join(os.environ["GATE_DIR"],
+                                          "change_form_bank_manifest.json")))
+          cases = m["cases"]
+          counts = collections.Counter(c["change_form"] for c in cases)
+          want = {"material_summary": 5, "metric_delta": 5,
+                  "attribution": 4, "level_comparison": 4}
+          assert len(cases) == 18, f"{len(cases)} cases, expected 18"
+          assert dict(counts) == want, f"{dict(counts)} != {want}"
+          assert m["model"] == "claude-opus-5", m["model"]
+          assert m["authorised_live_calls"] == 18
+          assert m["calls_per_case"] == 1 and m["retries"] == 0
+          print(f"bank {m['bank_id']}: 18 cases, {dict(counts)}, "
+                f"model {m['model']}, 1 call/case, 0 retries: ok")
+          PY
+
+      # ALWAYS, and always FIRST. It costs nothing and calls nothing, and a
+      # harness whose own adjudication does not hold has no business being
+      # pointed at a paid model.
+      - name: Prove the harness before anything is asked
+        run: |
+          set -euo pipefail
+          python "${GATE_DIR}/change_form_run.py" \
+            --dry-run --json-out live-change-form-gate-dryrun.json
+
+      # The eighteen live interpretations, one call per question, no retries.
+      # The credential reaches Python through env: and is never handled by bash.
+      - name: Ask the eighteen questions
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::repository secret ANTHROPIC_API_KEY is empty or not \
+          set. PROVIDER_BLOCKED, zero model calls."
+            exit 1
+          fi
+          echo "Anthropic credential is present (value never printed)."
+          python "${GATE_DIR}/change_form_run.py" \
+            --json-out live-change-form-gate-result.json
+
+      # Into the LOG as well as the artifact. The report holds the eighteen
+      # payloads the model returned and nothing else — no credential, no bearer,
+      # no book data — so reading it should not require downloading anything.
+      - name: Print the raw report
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [ -f live-change-form-gate-result.json ]; then
+            echo "--- BEGIN live-change-form-gate-result.json ---"
+            cat live-change-form-gate-result.json
+            echo "--- END live-change-form-gate-result.json ---"
+          else
+            echo "::warning::no result file was written; the run did not reach \
+          the end of the bank"
+          fi
+
+      # THE VERDICT, and the step whose exit status fails the job. Separate from
+      # the runner so a tripped gate cannot truncate the evidence explaining why.
+      - name: Assert the gate
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          python "${GATE_DIR}/assert_gate.py" live-change-form-gate-result.json
+
+      - name: Keep the evidence whatever the verdict
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-change-form-gate
+          path: |
+            live-change-form-gate-result.json
+            live-change-form-gate-dryrun.json
+          if-no-files-found: warn
