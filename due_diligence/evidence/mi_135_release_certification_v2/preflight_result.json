@@ -1,0 +1,84 @@
+{
+  "base_url": "https://app.traktinfra.io/api",
+  "build_read_attempts": [
+    {
+      "commit": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+      "path": "/",
+      "status": 200
+    }
+  ],
+  "checks": {
+    "MI_BEARER present": {
+      "detail": "1834 characters",
+      "ok": true
+    },
+    "authenticated preflight": {
+      "detail": "HTTP 200",
+      "ok": true
+    },
+    "certification manifest": {
+      "detail": "0fbc4229730cee885eaca0a6ed969dde",
+      "ok": true
+    },
+    "deployed SHA": {
+      "detail": "serving 5c436961ebe279bc0820ab006867b9f8a869bde2",
+      "ok": true
+    },
+    "evidence sink readable": {
+      "detail": "read; 218 existing records",
+      "ok": true
+    },
+    "historical results present": {
+      "detail": "MI_135_LIVE_BANK_RESULTS.json",
+      "ok": true
+    },
+    "liveness twice in succession": {
+      "detail": "2 healthy of 2 reads",
+      "ok": true
+    },
+    "publish profile present": {
+      "detail": "1512 characters",
+      "ok": true
+    },
+    "question count": {
+      "detail": "135",
+      "ok": true
+    },
+    "unmodified: collector": {
+      "detail": "2ba0535381c0c3cab045ab0051f7f66b",
+      "ok": true
+    },
+    "unmodified: expectation_overlay": {
+      "detail": "a842479642ec2202a61e303df44eeb95",
+      "ok": true
+    },
+    "unmodified: questions": {
+      "detail": "9624a0a8f2e7d1c3e59ccf88ad2698be",
+      "ok": true
+    },
+    "unmodified: scoring_contract": {
+      "detail": "f15ba5331cf00aff3617659f15d98302",
+      "ok": true
+    }
+  },
+  "deployed_sha": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+  "expect_commit": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+  "failed_checks": [],
+  "live_mi_query_calls": 0,
+  "live_model_calls": 0,
+  "liveness_reads": [
+    {
+      "at": "2026-09-13T15:20:33.640533+00:00",
+      "healthy": true,
+      "status": 200
+    },
+    {
+      "at": "2026-09-13T15:20:49.064653+00:00",
+      "healthy": true,
+      "status": 200
+    }
+  ],
+  "pre_existing_sink_records": 218,
+  "recorded_at": "2026-09-13T15:20:29.307933+00:00",
+  "verdict": "PASS"
+}
