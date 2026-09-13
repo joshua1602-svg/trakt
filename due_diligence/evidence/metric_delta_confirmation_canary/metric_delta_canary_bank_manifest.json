@@ -1,0 +1,216 @@
+{
+ "authorised_live_calls": 5,
+ "bank_id": "metric_delta_confirmation_canary",
+ "calls_per_case": 1,
+ "cases": [
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "M01",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": [
+     "sum"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": null,
+    "mode": "requested_metric",
+    "plan_adapter": "mi_agent.plan_metric_delta",
+    "route": "governed_plan_metric_delta",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Compare outstanding balance across the two most recent reporting dates and tell me the size of the shift.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "M02",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value"
+    ],
+    "family": "weighted_average_current_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": null,
+    "mode": "requested_metric",
+    "plan_adapter": "mi_agent.plan_metric_delta",
+    "route": "governed_plan_metric_delta",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Weighted average LTV \u2014 what is the difference between the latest reporting date and the one before?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "M03",
+   "measure": {
+    "concepts": [
+     "current_interest_rate"
+    ],
+    "family": "weighted_average_interest_rate",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": null,
+    "mode": "requested_metric",
+    "plan_adapter": "mi_agent.plan_metric_delta",
+    "route": "governed_plan_metric_delta",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Has the weighted average interest rate on the funded book gone up or down since the previous reporting date, and by how much?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "M04",
+   "measure": null,
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "composition_owner": "mi_agent_api.insight_funded.compose",
+    "mode": "portfolio_overview",
+    "plan_adapter": "mi_agent.plan_material_summary",
+    "route": "governed_plan_material_summary",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Give me the material movements in the funded portfolio.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT"
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "M05",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement",
+     "bridge_component"
+    ],
+    "family": "funded_balance_or_its_governed_components",
+    "statistics": []
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.bridge.balance_bridge",
+    "composition_owner": null,
+    "mode": null,
+    "plan_adapter": "mi_agent.plan_attribution",
+    "route": "governed_plan_attribution",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Across the last two reporting dates, what makes up the change in funded balance?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  }
+ ],
+ "closes": "S03 of change_intelligence_serving_canary \u2014 a flawless reading that reached no owner because no adapter claimed the form.",
+ "deliberate_omissions": {
+  "no_loan_count": "MEASURED, not assumed: `loan` carries no governed field and requested_metric mode selects registry FIELDS, so the adapter refuses it. Pinning a question the architecture correctly declines would repeat the v4/W06 authoring defect.",
+  "no_s09_retest": "S09 was refused because the acquired portfolio does not exist in both selected snapshots. That is data history. It returns only when separate factual evidence shows the portfolio present at both, and no such evidence exists.",
+  "no_scoped_case": "Direct/Acquired survival is proved offline and its live behaviour is blocked on the same data-history fact as S09."
+ },
+ "model": "claude-opus-5",
+ "not_pinned": [
+  "capability",
+  "operation",
+  "any numeric value",
+  "time.grain",
+  "the statistic actually applied \u2014 the owner follows the registry's default_aggregation and the receipt records both sides",
+  "WHICH of the valid temporal routes M04 takes, since its form owns a default and all three are correct readings"
+ ],
+ "numbers_are_not_pinned": {
+  "how_numeric_truth_is_established": "AFTER each live call, run_period_change_analysis is invoked independently over the same governed snapshots, in the mode the case pins and with the receipt's own period request and requested_fields, and every published figure must match.",
+  "required": {
+   "numerical_differences": 0,
+   "owner_differences": 0,
+   "period_differences": 0,
+   "scope_differences": 0
+  },
+  "why": "A figure taken from a model's output and then used to score the same model certifies nothing."
+ },
+ "primary_gates": {
+  "change_form": "5 of 5",
+  "mode": "5 of 5 \u2014 requested_metric, portfolio_overview, and the owner default for attribution",
+  "outcome_type": "5 of 5 ANSWER",
+  "owner_parity": "0 numerical, 0 period, 0 scope, 0 owner differences",
+  "route_and_calculation_owner": "5 of 5 \u2014 each case must record the route AND the calculation_owner its owner block pins. A correct reading that reaches no owner is the failure this bank exists to catch."
+ },
+ "product_baseline": "88cf5fde759c29f1cff29b9adbf003a2d6ebd530",
+ "registry_is_visible_to_the_model": false,
+ "retries": 0,
+ "secondary_gates": {
+  "explicit_measure_preserved": "4 of 4 (M01, M02, M03, M05)",
+  "invented_dimensions": 0,
+  "invented_filters": 0,
+  "material_summary_measure_invented": "0 of 1 (M04)",
+  "requested_field_analysed": "3 of 3 \u2014 for each metric delta the field the plan named must appear in the owner's selected_measures, and no excluded candidate may stand in for it",
+  "unnecessary_clarifications": 0
+ },
+ "stop_conditions": [
+  "the deployed build is not the product baseline \u2014 STOP, zero calls",
+  "MI_BEARER does not authenticate the free preflight \u2014 STOP",
+  "a provider quota, credit or authentication failure \u2014 STOP and report the partial result",
+  "any case asked twice \u2014 the run is void"
+ ],
+ "supersedes": "Nothing. change_intelligence_serving_canary is SPENT, immutable and adjudicated (8 PASS, 1 safe fail-closed, 1 product gap). v1-v4 remain immutable interpretation banks.",
+ "what_this_is": "A narrow confirmation that metric_delta now serves through its governed plan adapter, and that connecting it disturbed neither form already serving. Five fresh questions; no wording from any earlier bank is reused, verified programmatically before any call."
+}

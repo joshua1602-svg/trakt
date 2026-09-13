@@ -64,6 +64,7 @@ from mi_agent import plan_pipeline_runtime as pipeline_rt
 from mi_agent import plan_temporal_runtime as temporal
 from mi_agent import plan_material_summary as material_summary
 from mi_agent import plan_attribution as attribution
+from mi_agent import plan_metric_delta as metric_delta
 
 logger = logging.getLogger("mi_agent.plan_serving_canary")
 
@@ -771,12 +772,17 @@ def _change_form_owner(plan: Mapping[str, Any]) -> Any:
     because one plan carries one form, so this chooses between them without
     deciding anything semantic.
 
-    `metric_delta` and `level_comparison` are deliberately absent. This sprint
-    connects the two forms whose plan connectivity did not exist; the other two
-    reach the runtimes they already reached, and adding them here for symmetry
-    would reorganise a working path.
+    `level_comparison` is deliberately absent, and stays absent. It is already
+    served by `plan_temporal_runtime`, which the live canary confirmed on two
+    questions; claiming it here for symmetry would reorganise a working path.
+
+    `metric_delta` was absent for one sprint and is present now. The live canary
+    measured what its absence cost: a flawless reading — the form, the capability,
+    the measure and a stated pair — compiled to a plan, claimed by the temporal
+    runtime on period form alone, and refused CAPABILITY_NOT_GENERIC by a runtime
+    that speaks for generic single-measure evaluation and never for its owner.
     """
-    for owner in (material_summary, attribution):
+    for owner in (material_summary, attribution, metric_delta):
         if owner.claims(plan):
             return owner
     return None

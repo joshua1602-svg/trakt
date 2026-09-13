@@ -132,18 +132,53 @@ def _receipt(envelope: dict) -> dict:
 
 
 def _temporal_route(record: dict, receipt: dict) -> str:
-    """EXPLICIT_PAIR / EXPLICIT_ANCHOR / ABSENT, from structure not wording."""
-    if receipt:
-        if not receipt.get("interpreted_time_present"):
+    """The temporal route, from structure and never from wording.
+
+    TWO DEFECTS FIXED HERE, BOTH MEASURED ON THE FIRST LIVE CANARY, where they
+    scored S07 and S08 as temporal failures on readings that were correct.
+
+    1. A TRUTHY RECEIPT IS NOT A CHANGE-FORM RECEIPT. `plan_serving_canary.render`
+       builds `metadata.governedPlan.executed` for the slice 1 and slice 2 paths
+       out of the EXECUTOR's receipt — applied predicates, group field keys,
+       aggregation, `population_base` — and it carries no temporal keys at all.
+       Testing `if receipt:` therefore matched a slice 2 answer, `.get(...)`
+       returned None, and the scorer answered ABSENT without ever reading the
+       intent. Membership of the key is the test, not truthiness of the block.
+
+    2. KEY PRESENCE IS THE WRONG READ FOR A PARSED INTENT. The record carries
+       `CandidateIntent.to_dict()`, a dataclass `asdict`, so `time` is ALWAYS
+       present with a `form` — a reading that stated nothing serialises as
+       `{"form": "current", …, "stated": false}`. Presence is `stated`, which is
+       exactly what the temporal presence repair made it. Key presence is right
+       for the model's RAW payload and wrong here.
+
+    The raw payload is read too, but only as corroboration: the PARSED intent's
+    `stated` remains the governed presence signal, because it is the one the
+    compiler and the receipt both act on.
+    """
+    if "interpreted_time_present" in receipt:
+        if not receipt["interpreted_time_present"]:
             return "ABSENT"
-        form = receipt.get("interpreted_period_form")
-        return "current" if form == "current" else str(form or "")
+        return str(receipt.get("interpreted_period_form") or "")
     intent = ((record or {}).get("interpretation") or {}).get(
         "candidate_intent") or {}
     time_block = intent.get("time")
-    if not isinstance(time_block, dict) or "form" not in time_block:
+    if not isinstance(time_block, dict) or not time_block.get("stated"):
         return "ABSENT"
     return str(time_block.get("form") or "")
+
+
+def _raw_states_time(record: dict):
+    """Corroboration only: did the MODEL's own payload carry a `time` block?
+
+    Key presence IS authoritative here — the raw payload is what the interpreter
+    emitted and carries no construction default. Recorded beside the governed
+    signal so a future disagreement between them is visible rather than silent.
+    """
+    raw = ((record or {}).get("model") or {}).get("raw_payload")
+    if not isinstance(raw, dict):
+        return None
+    return "time" in raw and isinstance(raw.get("time"), dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -230,6 +265,7 @@ def score(case: dict, record: dict, envelope: dict, status) -> dict:
             "route": route,
             "outcome": outcome,
             "temporal_route": taken,
+            "raw_payload_states_time": _raw_states_time(record),
             "measures": measures,
         },
         # Everything a reader with data access needs to reconcile the numbers

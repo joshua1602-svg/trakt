@@ -34,6 +34,7 @@ import pytest
 
 from mi_agent import plan_attribution as attribution
 from mi_agent import plan_material_summary as material_summary
+from mi_agent import plan_metric_delta as metric_delta
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_serving_canary as canary
 from mi_agent import plan_temporal_runtime as temporal
@@ -419,15 +420,25 @@ def test_B9c_a_measure_the_bridge_does_not_publish_is_refused():
 # C — CONTROLS
 # --------------------------------------------------------------------------- #
 
-def test_C10_metric_delta_reaches_the_path_it_already_reached():
-    """UNCHANGED, and that is the assertion.
+#: MIGRATED BY THE METRIC-DELTA CONNECTIVITY CLOSEOUT. The control below asserted
+#: that no adapter claimed `metric_delta` and that it was refused
+#: CAPABILITY_NOT_GENERIC. That WAS this form's behaviour, and the live serving
+#: canary measured what it cost: a flawless reading of S03 — the form, the
+#: capability, the measure and a stated pair — compiled to a plan and then served
+#: nothing, because the temporal runtime claims a plan on period form alone and
+#: speaks for generic single-measure evaluation, never for this owner. The
+#: refusal is now connected, on authority, and the control states the target.
+_MIGRATED_BY_METRIC_DELTA_CONNECTIVITY = True
 
-    `metric_delta` is `period_movement`/`movement`. No change-form adapter claims
-    it, so the dispatch added by this sprint does not see it, and it arrives at
-    the perimeters it arrived at before — claimed by the temporal runtime on its
-    period form and refused there as a specialist capability. That refusal is
-    this form's existing behaviour; connecting it was not in this sprint, and
-    refactoring it for symmetry would reorganise a working path.
+
+def test_C10_metric_delta_now_reaches_its_governed_owner():
+    """THE ARROW THE LIVE CANARY PROVED MISSING, and the refusal it replaced.
+
+    Both halves are asserted: the plan is claimed by the metric-delta adapter,
+    AND the refusal that used to happen is still what would happen without one —
+    `plan_temporal_runtime` still claims a plan on its period form alone and
+    still refuses this capability, which is why the adapter has to be consulted
+    first rather than the temporal perimeter being widened.
     """
     plan = _plan("metric_delta", capability="generic_analysis",
                  operation="movement",
@@ -435,7 +446,14 @@ def test_C10_metric_delta_reaches_the_path_it_already_reached():
                             "statistic": "sum"}], time=dict(PAIR))
     assert plan["capability"] == "period_movement"
     assert plan["operation"] == "movement"
-    assert canary._change_form_owner(plan) is None
+    assert canary._change_form_owner(plan) is metric_delta
+
+    binding = _form_binding(plan) if False else (
+        (plan["provenance"]["compiler_bindings"]["change_form"]))
+    assert binding["mode"] == "requested_metric"
+    assert metric_delta.WORKFLOW_MODE == "requested_metric"
+
+    # The perimeter that would still refuse it, unwidened.
     assert temporal.claims(plan) is True
     eligible, why, _ = temporal.check_temporal_eligibility(plan)
     assert not eligible and why == adapter.CAPABILITY_NOT_GENERIC
@@ -595,7 +613,7 @@ def test_the_dispatch_reads_the_compilers_reading_and_not_the_models():
 # OWNER PARITY GATE
 # --------------------------------------------------------------------------- #
 def _owner_direct(*, mode, period_request, lens=None, client_id="client",
-                  tenant_id="tenant_a"):
+                  tenant_id="tenant_a", requested_fields=()):
     """The deterministic owner, invoked INDEPENDENTLY of the serving path.
 
     The period request is stated by this file rather than taken from the
@@ -607,7 +625,7 @@ def _owner_direct(*, mode, period_request, lens=None, client_id="client",
     return analyse_period_change(
         client_id=client_id, output_root="blob://x", mode=mode,
         period_request=period_request, scope=lens, tenant_id=tenant_id,
-        include_bridge=True)
+        requested_fields=tuple(requested_fields), include_bridge=True)
 
 
 def _governed_request(relative_mode="current_vs_previous"):
@@ -756,3 +774,333 @@ def test_the_served_envelope_publishes_the_governed_plan_receipt(frames):
         material_summary.CALCULATION_OWNER)
     assert payload["metadata"]["route"] == "governed_plan_material_summary"
     assert payload["metadata"]["parserMode"] == "governed_plan"
+
+
+# --------------------------------------------------------------------------- #
+# D — METRIC DELTA, the last arrow
+#
+# Every control here is built from structured intent. No question is parsed, no
+# model is called, and the owner is the one that already computes every governed
+# period-change figure. `LIVE_MODEL_CALLS = 0`.
+# --------------------------------------------------------------------------- #
+def _delta(**over):
+    body = dict(capability="generic_analysis", operation="movement",
+                measures=[{"concept": "current_outstanding_balance",
+                           "statistic": "sum"}], time=dict(PAIR))
+    body.update(over)
+    return _plan("metric_delta", **body)
+
+
+#: The three measures the closeout must prove, as (concept, statistic).
+_SUPPORTED = [("current_outstanding_balance", "sum"),
+              ("current_loan_to_value", "weighted_average"),
+              ("current_interest_rate", "weighted_average")]
+
+
+@pytest.mark.parametrize("concept,statistic", _SUPPORTED,
+                         ids=[c for c, _ in _SUPPORTED])
+def test_D1_a_named_measure_reaches_the_requested_metric_owner(frames, concept,
+                                                               statistic):
+    plan = _delta(measures=[{"concept": concept, "statistic": statistic}])
+    assert canary._change_form_owner(plan) is metric_delta
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    receipt = _receipt(record)
+    assert receipt["change_form"] == "metric_delta"
+    assert receipt["capability"] == "period_movement"
+    assert receipt["operation"] == "movement"
+    assert receipt["mode"] == "requested_metric"
+    assert receipt["calculation_owner"] == metric_delta.CALCULATION_OWNER
+    assert receipt["composition_owner"] is None
+    assert (receipt["period_from"], receipt["period_to"]) == ("2026-05-31",
+                                                             "2026-06-30")
+    # The owner analysed exactly the field the plan named, and said which
+    # aggregation it applied.
+    assert receipt["requested_fields"] == [concept]
+    assert concept in (receipt["selected_measures"] or [])
+    assert [m["field"] for m in receipt["metric_movements"]] == [concept]
+
+
+def test_D3_a_measure_with_no_governed_field_is_refused_not_approximated(frames):
+    """`loan` is the row itself and carries no field, and this owner selects
+    registry FIELDS. There is nothing for it to analyse, so the slot is named
+    and refused rather than substituted with something countable."""
+    plan = _delta(measures=[{"concept": "loan", "statistic": "count"}])
+    eligible, why, detail = metric_delta.check_eligibility(plan)
+    assert not eligible
+    assert why == metric_delta.MEASURE_HAS_NO_GOVERNED_FIELD, detail
+    payload, reason, _record = _serve(plan)
+    assert payload is None
+    assert reason == (f"{canary.INELIGIBLE}:"
+                      f"{metric_delta.MEASURE_HAS_NO_GOVERNED_FIELD}")
+
+
+def test_D4_an_absent_window_is_refused_because_this_owner_owns_no_default():
+    """`CHANGE_FORM_ABSENT_PERIOD_DEFAULT` withholds a default for this form, so
+    the compiler refuses before a plan exists. Proved at the compiler, which is
+    where the refusal belongs."""
+    result = _compile("metric_delta", capability="generic_analysis",
+                      operation="movement",
+                      measures=[{"concept": "current_outstanding_balance",
+                                 "statistic": "sum"}])
+    assert result.outcome != OUTCOME_PLAN
+    assert result.plan is None
+
+
+def test_D4b_a_lone_current_anchor_is_refused_at_both_layers(frames):
+    """AND THE ANCHOR IS NOT COMPLETED EITHER.
+
+    The COMPILER is the operative refusal and refuses first — a lone `current`
+    with this capability and operation is an UNSUPPORTED_COMPOSITION, so no plan
+    exists for an adapter to see. The adapter's own refusal is defence in depth,
+    for a plan built without that seam, and is asserted on a hand-built one.
+
+    `material_summary` and `attribution` complete a lone `current` because their
+    owner supplies the comparison state; this one does not, so admitting the
+    anchor would invent the state `CHANGE_FORM_ABSENT_PERIOD_DEFAULT`
+    deliberately withholds.
+    """
+    result = _compile("metric_delta", capability="generic_analysis",
+                      operation="movement",
+                      measures=[{"concept": "current_outstanding_balance",
+                                 "statistic": "sum"}],
+                      time={"form": "current"})
+    assert result.outcome != OUTCOME_PLAN
+    assert "UNSUPPORTED_COMPOSITION" in [r.code for r in result.reasons]
+
+    hand_built = {
+        "capability": "period_movement", "operation": "movement",
+        "population": {"base": "funded", "lens": "all"},
+        "outputs": [{"id": "o", "dimensions": [], "filters": [], "measures": [
+            {"concept": "current_outstanding_balance",
+             "canonical_field": "current_outstanding_balance",
+             "statistic": "sum", "statistic_defaulted": True}]}],
+        "period": {"form": "current", "stated": True},
+        "comparison_kind": "none", "filters": [],
+        "provenance": {"compiler_bindings": {
+            "change_form": {"form": "metric_delta"}}}}
+    eligible, why, detail = metric_delta.check_eligibility(hand_built)
+    assert not eligible
+    assert why == metric_delta.PERIOD_NOT_A_PAIR, detail
+
+    # ...while the two forms that DO own a default still complete it.
+    ok, _why, _detail = material_summary.check_eligibility(
+        _summary(time={"form": "current"}))
+    assert ok
+
+
+@pytest.mark.parametrize("over,expected", [
+    ({"filters": [{"concept": "account_status", "comparator": "eq",
+                   "value": "Performing"}]}, "FILTER_NOT_SUPPORTED"),
+    ({"dimensions": ["account_status"]}, "DIMENSION_NOT_SUPPORTED"),
+    ({"population": {"base": "pipeline"}}, "POPULATION_NOT_FUNDED"),
+])
+def test_D8_an_unsupported_slot_is_refused_and_never_widened(frames, over,
+                                                             expected):
+    plan = _delta(**over)
+    eligible, why, detail = metric_delta.check_eligibility(plan)
+    assert not eligible
+    assert why == getattr(metric_delta, expected), detail
+
+
+def test_D8b_a_statistic_the_governed_vocabulary_forbids_never_reaches_an_owner():
+    """THE VOCABULARY REFUSES FIRST, and that is the better answer.
+
+    `current_loan_to_value` with `sum` is an UNSUPPORTED_STATISTIC: the concept
+    publishes its allowed statistics and the compiler enforces them, so the
+    divergence this form guards against cannot arise from a compiled plan.
+    """
+    result = _compile("metric_delta", capability="generic_analysis",
+                      operation="movement",
+                      measures=[{"concept": "current_loan_to_value",
+                                 "statistic": "sum"}], time=dict(PAIR))
+    assert result.outcome != OUTCOME_PLAN
+    assert "UNSUPPORTED_STATISTIC" in [r.code for r in result.reasons]
+
+
+def test_D8c_an_explicit_statistic_the_owner_contradicts_refuses_after_execution():
+    """DEFENCE IN DEPTH, for the plan the compiler did not write.
+
+    The owner takes no caller-supplied aggregation — `calculations` reads
+    `entry.default_aggregation` and follows it exactly — so a statistic the
+    READER stated can only be reconciled against the one actually applied.
+    Publishing a weighted average under the word "sum" is a different number
+    wearing the same label, so it refuses.
+    """
+    class _Change:
+        field, aggregation = "current_loan_to_value", "weighted_average"
+
+    class _Selection:
+        @staticmethod
+        def to_dict():
+            return {"selected_measures": ["current_loan_to_value"],
+                    "excluded_candidates": []}
+
+    class _Result:
+        field_selection = _Selection()
+        metric_changes = (_Change(),)
+
+    stated = {
+        "capability": "period_movement", "operation": "movement",
+        "population": {"base": "funded", "lens": "all"},
+        "outputs": [{"id": "o", "dimensions": [], "filters": [], "measures": [
+            {"concept": "current_loan_to_value",
+             "canonical_field": "current_loan_to_value",
+             "statistic": "sum", "statistic_defaulted": False}]}],
+        "period": {"form": "relative_pair", "periods_back": 1, "stated": True},
+        "comparison_kind": "none", "filters": [],
+        "provenance": {"compiler_bindings": {
+            "change_form": {"form": "metric_delta"}}}}
+    ok, why, detail = metric_delta.check_owner_honoured(stated, _Result())
+    assert not ok
+    assert why == metric_delta.STATISTIC_NOT_HONOURED, detail
+
+    # And where the compiler DEFAULTED the statistic there is no reader intent to
+    # violate, so the registry's own aggregation stands.
+    defaulted = json.loads(json.dumps(stated))
+    defaulted["outputs"][0]["measures"][0]["statistic_defaulted"] = True
+    ok, _why, _detail = metric_delta.check_owner_honoured(defaulted, _Result())
+    assert ok
+
+
+def test_D8d_a_field_the_owner_excluded_is_never_served_as_the_answer():
+    """`_select_requested` excludes a field the registry will not admit and
+    carries on. Serving what survived would answer about a different field under
+    the name the reader used."""
+    class _Selection:
+        @staticmethod
+        def to_dict():
+            return {"selected_measures": ["current_interest_rate"],
+                    "excluded_candidates": [
+                        {"field": "current_outstanding_balance",
+                         "reason": "not_in_registry"}]}
+
+    class _Result:
+        field_selection = _Selection()
+        metric_changes = ()
+
+    plan = {
+        "capability": "period_movement", "operation": "movement",
+        "population": {"base": "funded", "lens": "all"},
+        "outputs": [{"id": "o", "dimensions": [], "filters": [], "measures": [
+            {"concept": "current_outstanding_balance",
+             "canonical_field": "current_outstanding_balance",
+             "statistic": "sum", "statistic_defaulted": True}]}],
+        "period": {"form": "relative_pair", "periods_back": 1, "stated": True},
+        "comparison_kind": "none", "filters": [],
+        "provenance": {"compiler_bindings": {
+            "change_form": {"form": "metric_delta"}}}}
+    ok, why, detail = metric_delta.check_owner_honoured(plan, _Result())
+    assert not ok
+    assert why == metric_delta.MEASURE_NOT_ELIGIBLE, detail
+    assert "not_in_registry" in detail
+
+
+@pytest.mark.parametrize("path", ["mi_agent/plan_metric_delta.py"])
+def test_D9_the_metric_delta_adapter_reads_no_question(path):
+    tree = ast.parse((_REPO_ROOT / path).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            takes = {a.arg for a in node.args.args} | {
+                a.arg for a in node.args.kwonlyargs}
+            if "question" in takes:
+                assert node.name == "envelope", (
+                    f"{path}:{node.name} takes a question and is not the "
+                    f"envelope builder")
+        names = []
+        if isinstance(node, ast.Import):
+            names = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names = [node.module]
+        for name in names:
+            assert name.split(".")[0] != "re", f"{path} imports the regex module"
+            assert not any(banned in name for banned in (
+                "llm_query_parser", "parsed_question", "recogniser",
+                "question_interpretation", "chat_routing")), (
+                    f"{path} imports {name}")
+
+
+# --------------------------------------------------------------------------- #
+# OWNER PARITY — metric delta
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("concept,statistic", _SUPPORTED,
+                         ids=[c for c, _ in _SUPPORTED])
+def test_D_owner_parity(frames, concept, statistic):
+    """The served movement must equal the owner's own, run independently.
+
+    The period request is stated by this file rather than taken from the
+    adapter, so the comparison is between two independent expressions of the
+    same structured question.
+    """
+    from mi_agent.period_change.models import MODE_REQUESTED_METRIC
+
+    plan = _delta(measures=[{"concept": concept, "statistic": statistic}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    receipt = _receipt(record)
+
+    direct = _owner_direct(mode=MODE_REQUESTED_METRIC,
+                           period_request=_governed_request(),
+                           requested_fields=(concept,))
+    # OWNER, PERIOD, SCOPE
+    assert receipt["calculation_owner"] == metric_delta.CALCULATION_OWNER
+    expected = _comparable(direct)
+    assert receipt["period_from"] == expected["from"]["reporting_date"]
+    assert receipt["period_to"] == expected["to"]["reporting_date"]
+    assert receipt["period_resolution"]["resolution_method"] == expected["period"]
+    assert receipt["executed_scope"] == direct.portfolio_scope.to_dict()
+    # NUMBERS — the published table against the owner's own row builder.
+    from mi_agent_api import period_change_route as pcr
+    titles = {a["title"]: a for a in payload["artifacts"]}
+    assert titles["Metric movements"]["rows"] == pcr._metric_rows(direct)
+    # ...and the receipt's own copy of the movement against the owner's object.
+    by_field = {c.field: c for c in direct.metric_changes}
+    for movement in receipt["metric_movements"]:
+        owner_change = by_field[movement["field"]]
+        assert movement["start_value"] == owner_change.start_value
+        assert movement["end_value"] == owner_change.end_value
+        assert movement["movement_value"] == owner_change.movement_value
+        assert movement["aggregation"] == owner_change.aggregation
+
+
+def test_D_the_three_connected_forms_stay_disjoint(frames):
+    """One plan, one owner. No form may be claimed by two adapters."""
+    plans = {"material_summary": _summary(), "attribution": _attribution(),
+             "metric_delta": _delta()}
+    owners = {"material_summary": material_summary, "attribution": attribution,
+              "metric_delta": metric_delta}
+    for form, plan in plans.items():
+        claiming = [name for name, owner in owners.items() if owner.claims(plan)]
+        assert claiming == [form], f"{form} claimed by {claiming}"
+        assert canary._change_form_owner(plan) is owners[form]
+
+
+#: THE MEASURE PERIMETER, stated as a matrix so it can be read at a glance.
+#: `True` means the ADAPTER binds it and hands the field to the owner; whether
+#: the owner's registry then admits it on a given book is the owner's to decide,
+#: and `check_owner_honoured` refuses rather than substituting when it does not.
+_MEASURE_PERIMETER = [
+    ("current_outstanding_balance", "sum", True),
+    ("current_principal_balance", "sum", True),
+    ("current_loan_to_value", "weighted_average", True),
+    ("indexed_loan_to_value", "weighted_average", True),
+    ("current_interest_rate", "weighted_average", True),
+    ("arrears_balance", "sum", True),
+    # The row itself. No governed field, so nothing for a field selector to
+    # select — refused, never approximated with something else countable.
+    ("loan", "count", False),
+]
+
+
+@pytest.mark.parametrize("concept,statistic,bound", _MEASURE_PERIMETER,
+                         ids=[c for c, _s, _b in _MEASURE_PERIMETER])
+def test_D2_the_measure_perimeter_is_exactly_what_the_owner_can_select(
+        concept, statistic, bound):
+    plan = _delta(measures=[{"concept": concept, "statistic": statistic}])
+    eligible, why, detail = metric_delta.check_eligibility(plan)
+    assert eligible is bound, f"{concept}: {why}: {detail}"
+    if bound:
+        assert metric_delta.requested_fields(plan) == (concept,)
+    else:
+        assert why == metric_delta.MEASURE_HAS_NO_GOVERNED_FIELD
+        assert metric_delta.requested_fields(plan) == ()

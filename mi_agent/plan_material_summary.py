@@ -316,17 +316,27 @@ def check_slots_honoured(plan: Any) -> Tuple[bool, str, str]:
     return True, "", ""
 
 
-def check_period(plan: Any, *, owner: str) -> Tuple[bool, str, str]:
+def check_period(plan: Any, *, owner: str,
+                 admit_anchor: bool = True) -> Tuple[bool, str, str]:
     """The TEMPORAL half of the perimeter, for any form that shares it.
 
-    Called by this form and by `plan_attribution`, which admits the same three
-    temporal states for the same reason: a pair the reader named, an anchor the
-    form completes, or an absent window the compiler defaulted on the form's
-    behalf. The reason codes are this module's and stay this module's, so the
-    two forms refuse an untranslatable window under one name.
+    Called by this form, by `plan_attribution` and by `plan_metric_delta`. The
+    first two admit the same three temporal states for the same reason: a pair
+    the reader named, an anchor the form completes, or an absent window the
+    compiler defaulted on the form's behalf. The reason codes are this module's
+    and stay this module's, so every form refuses an untranslatable window under
+    one name.
+
+    `admit_anchor` IS NOT A PREFERENCE. A lone `current` is completed into a pair
+    only by a form whose OWNER supplies the comparison state, and those are
+    exactly the forms `vocabulary.CHANGE_FORM_ABSENT_PERIOD_DEFAULT` authorises a
+    default for. `metric_delta` is not one of them — its owner requires the pair
+    to be named — so admitting an anchor for it would be this module inventing
+    the comparison state that table withholds.
     """
     period = adapter._as_mapping(plan).get("period") or {}
     form = period.get("form")
+    admitted = ADMITTED_PERIOD_FORMS if admit_anchor else PAIR_PERIOD_FORMS
     # AN UNSTATED WINDOW THIS FORM OWNS. The compiler marks the binding
     # `defaulted` when the reading stated no temporal form and `change_form` owns
     # an authorised default; `form` then still carries its construction value, so
@@ -335,7 +345,7 @@ def check_period(plan: Any, *, owner: str) -> Tuple[bool, str, str]:
     # supplied the window.
     if period_defaulted_to(plan, owner):
         return True, "", ""
-    if form not in ADMITTED_PERIOD_FORMS:
+    if form not in admitted:
         return False, PERIOD_NOT_A_PAIR, (
             f"period form {form!r} neither resolves to two governed snapshots "
             f"nor anchors a pair this form completes, and a movement cannot be "
@@ -537,6 +547,8 @@ def receipt(plan: Any, result: Any, brief: Mapping[str, Any]) -> Dict[str, Any]:
 
 def analyse(plan: Any, *, client_id: str, output_root: Optional[str],
             tenant_id: str, mode: Optional[str],
+            requested_fields: Tuple[str, ...] = (),
+            requested_concepts: Tuple[str, ...] = (),
             authorised_portfolio_ids: Tuple[str, ...] = ()) -> Any:
     """ONE call to the deterministic owner, for any form in this family.
 
@@ -563,6 +575,12 @@ def analyse(plan: Any, *, client_id: str, output_root: Optional[str],
         client_id=client_id, output_root=output_root,
         mode=mode, period_request=period_request_for(
             plan, owner=_change_form_binding(plan).get("form") or CHANGE_FORM),
+        # WHICH GOVERNED FIELDS, when the form names them. `requested_metric`
+        # mode analyses exactly these and excludes anything else with a reason;
+        # the overview modes select their own and are passed none. The fields are
+        # the PLAN's `canonical_field` bindings, so no concept is resolved twice.
+        requested_fields=tuple(requested_fields),
+        requested_concepts=tuple(requested_concepts),
         scope=lens, tenant_id=tenant_id,
         authorised_portfolio_ids=tuple(authorised_portfolio_ids),
         include_bridge=True)
