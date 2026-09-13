@@ -54,8 +54,8 @@ sys.path.insert(0, str(_REPO_ROOT))
 
 from due_diligence.evidence.deployed_acceptance_0399a315 import (  # noqa: E402
     run_acceptance as ra)
-from due_diligence.evidence.slice1b_serving_canary import (  # noqa: E402
-    run_serving_acceptance as sa)
+from due_diligence.evidence.change_intelligence_serving_canary import (  # noqa: E402
+    provenance as pv)
 
 MANIFEST = HERE / "serving_canary_bank_manifest.json"
 HASH = HERE / "serving_canary_bank_manifest.sha256"
@@ -305,7 +305,14 @@ def main() -> int:
                     f"authorised calls")
 
     # -- 2. the deployed commit -------------------------------------------- #
-    served = sa.served_commit(args.base_url)
+    # THE SAME READER THE PREFLIGHT USES, and deliberately not
+    # `run_serving_acceptance.served_commit`, which tries `/health` only. That
+    # route resolves the governed tape and can come back unusable on a cold
+    # process while the service is perfectly able to answer questions — a
+    # provenance failure that says nothing about which commit is deployed.
+    build, attempts = pv.read_build(args.base_url.rstrip("/"))
+    served = str(build.get("commit") or "").strip() or None
+    report["build_attempts"] = attempts
     report["served_commit"] = served
     if (served or "").lower() != args.expect_commit.strip().lower():
         return stop("deployment provenance",

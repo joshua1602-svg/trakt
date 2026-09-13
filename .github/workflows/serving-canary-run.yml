@@ -7,7 +7,8 @@ name: Serving canary — the pre-registered ten, once
 #
 #     1. the approved tree            product code unchanged since the tested head
 #     2. the bank hash                and all four historical manifests
-#     3. the deployed commit          GET /health, from the artefact stamp
+#     3. the deployed commit          GET / (the app's own liveness probe),
+#                                        from the artefact stamp
 #     4. the bearer                   an authenticated GET that resolves no question
 #     5. THEN the ten                 once each, no retries, no rephrasing
 #
@@ -37,6 +38,15 @@ name: Serving canary — the pre-registered ten, once
 # operator in the Portal; this workflow neither reads nor writes them. It verifies
 # the flag BEHAVIOURALLY instead, from `serving.mode` and `principal_matched` on
 # each evidence record — which is what the flag being on actually means.
+#
+# WHICH ROUTE THE BUILD STAMP IS READ FROM, and why it is not `/health`. Both
+# carry it, but `/` is the app's OWN designated liveness probe — "this route
+# touches no data: it answers as soon as the process is up" — while `/health` is
+# a readiness route that RESOLVES the governed tape. The first attempt at this
+# run read `/health` on a cold process, got nothing usable back, and stopped on a
+# provenance failure that said nothing about which commit was deployed: the same
+# service answered `/mi/catalogue` 200 in the same job. `/` is read first and
+# `/health` kept as a fallback, since a stamp from either is the same evidence.
 #
 # SECRETS. `MI_BEARER` and the publish profile reach the scripts through `env:`
 # only, never argv. Only their lengths are printed, and the report is rescanned

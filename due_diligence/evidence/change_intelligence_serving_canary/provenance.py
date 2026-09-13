@@ -103,6 +103,45 @@ def _get(url: str, *, bearer: str = "") -> tuple:
         return 0, f"{type(exc).__name__}: {exc}"
 
 
+#: WHERE THE BUILD STAMP IS READ FROM, in this order, and the order is the point.
+#:
+#: `/` is the app's OWN designated liveness probe and its docstring says why:
+#: "This route touches no data: it answers as soon as the process is up. `/health`
+#: is a READINESS and diagnostic route — it reports the resolved data source,
+#: which means it RESOLVES the data source, which on a cold process is a governed
+#: tape download." Both carry `build`, so provenance costs nothing on `/` and can
+#: fail on `/health` for a reason that has nothing to do with which commit is
+#: deployed. That is exactly what happened here: `/health` came back unusable on
+#: a cold process while `/mi/catalogue` answered 200, and the run stopped on a
+#: provenance failure that was an instrument fault, not a deployment fact.
+#:
+#: `/health` is kept as a fallback because it carries the same stamp, and a
+#: reading from either is the same evidence.
+BUILD_PATHS = ("/", "/health")
+
+
+def read_build(base: str) -> tuple:
+    """``(build, attempts)`` — the deployed build stamp, from the first route
+    that answers with one."""
+    attempts = []
+    for path in BUILD_PATHS:
+        status, body = _get(f"{base}{path}" if path != "/" else base)
+        attempt = {"path": path, "status": status}
+        build = {}
+        if status == 200:
+            try:
+                build = dict((json.loads(body).get("build") or {}))
+            except Exception as exc:                                 # noqa: BLE001
+                attempt["parse_error"] = f"{type(exc).__name__}: {exc}"
+        else:
+            attempt["error"] = body[:300]
+        attempt["commit"] = build.get("commit")
+        attempts.append(attempt)
+        if build.get("commit"):
+            return build, attempts
+    return {}, attempts
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
@@ -124,16 +163,8 @@ def main() -> int:
     }
 
     # ---- step 3: WHICH COMMIT IS SERVING -------------------------------- #
-    status, body = _get(f"{base}/health")
-    record["health_status"] = status
-    build = {}
-    if status == 200:
-        try:
-            build = dict((json.loads(body).get("build") or {}))
-        except Exception as exc:                                     # noqa: BLE001
-            record["health_parse_error"] = f"{type(exc).__name__}: {exc}"
-    else:
-        record["health_error"] = body[:400]
+    build, attempts = read_build(base)
+    record["build_attempts"] = attempts
     served = str(build.get("commit") or "").strip().lower()
     record["build"] = build
     record["served_commit"] = served or None
@@ -141,8 +172,9 @@ def main() -> int:
     if not served:
         record["provenance"] = "FAIL"
         record["provenance_detail"] = (
-            f"the running service reports no commit (source="
-            f"{build.get('source')!r}); the deployed build cannot be established")
+            f"no route reported a commit: "
+            + "; ".join(f"{a['path']} -> {a['status']}" for a in attempts)
+            + "; the deployed build cannot be established")
     elif served != expected:
         record["provenance"] = "FAIL"
         record["provenance_detail"] = (
@@ -151,7 +183,8 @@ def main() -> int:
         record["provenance"] = "PASS"
         record["provenance_detail"] = (
             f"the running service reports {served}, stamped from the artefact "
-            f"(source={build.get('source')!r})")
+            f"(source={build.get('source')!r}, read from "
+            f"{attempts[-1]['path']})")
 
     # ---- step 7: THE MINIMUM AUTHENTICATED PREFLIGHT --------------------- #
     # Run whatever provenance said, so one report answers both questions and a
