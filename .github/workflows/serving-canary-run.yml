@@ -1,0 +1,215 @@
+name: Serving canary — the pre-registered ten, once
+
+# THE OPERATOR'S STEPS 5-8, now that the two App Service settings are in place.
+#
+# ORDER, AND WHY IT IS THIS ORDER. Everything that can fail for free fails first,
+# so a run that could not be adjudicated never buys an interpretation:
+#
+#     1. the approved tree            product code unchanged since the tested head
+#     2. the bank hash                and all four historical manifests
+#     3. the deployed commit          GET /health, from the artefact stamp
+#     4. the bearer                   an authenticated GET that resolves no question
+#     5. THEN the ten                 once each, no retries, no rephrasing
+#
+# Steps 1-4 cost nothing. Step 4 is the one that protects the bank: the previous
+# run found MI_BEARER fifteen hours past expiry, and had the ten been asked anyway
+# they would have spent the single authorised attempt on ten 401s.
+#
+# THE ORACLE IS THE EVIDENCE RECORD, NOT THE ANSWER. `plan_serving_canary` writes
+# a record per request for an allow-listed principal, carrying the CandidateIntent
+# and the compiled plan. The served envelope carries a `governedPlan` block only
+# where the governed plan path served, so for the two forms this sprint
+# deliberately did not connect the envelope says nothing about what was
+# interpreted. The sink is read BEFORE the first question and every pre-existing
+# correlation id recorded, so no old record can satisfy a case.
+#
+# ONE ATTEMPT. The runner refuses to start if `serving_canary_result.json` already
+# exists. This file is push-triggered, so without that guard a later edit to it
+# would ask the ten a second time.
+#
+# WHAT THIS RUN CANNOT DO. The bank establishes numeric truth by running the
+# deterministic owner independently over the same governed snapshots — which CI
+# cannot do, having no governed book. Each case therefore records the fields a
+# reader with data access needs to reconcile it, and the run claims NO independent
+# numeric parity. Offline parity against fixtures is the separate, passing gate.
+#
+# IT CONFIGURES NOTHING. `MI_AGENT_PLAN_SERVE` and its allow-list were set by an
+# operator in the Portal; this workflow neither reads nor writes them. It verifies
+# the flag BEHAVIOURALLY instead, from `serving.mode` and `principal_matched` on
+# each evidence record — which is what the flag being on actually means.
+#
+# SECRETS. `MI_BEARER` and the publish profile reach the scripts through `env:`
+# only, never argv. Only their lengths are printed, and the report is rescanned
+# for both before it is written.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/serving-canary-run.yml' ]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      portfolio_id:
+        default: ERE/2026-06-30
+        required: true
+      ref:
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: serving-canary-run
+  cancel-in-progress: false
+
+env:
+  PRODUCT_HEAD: 88cf5fde759c29f1cff29b9adbf003a2d6ebd530
+  BANK_SHA256: 27b7d825a1b3f88e631c5931826fa0b0fdab331205ca7b4ea7d318c43aa627b1
+  CANARY_DIR: due_diligence/evidence/change_intelligence_serving_canary
+  BASE_URL: https://app.traktinfra.io/api
+  PORTFOLIO_ID: ERE/2026-06-30
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Pre-run assertions
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          echo "git rev-parse HEAD = ${HEAD_SHA}"
+          echo "PRODUCT_HEAD       = ${PRODUCT_HEAD}"
+          if ! git merge-base --is-ancestor "${PRODUCT_HEAD}" HEAD; then
+            echo "::error::product head ${PRODUCT_HEAD} is not an ancestor"
+            exit 1
+          fi
+          SINCE="$(git diff --name-only "${PRODUCT_HEAD}..HEAD")"
+          echo "--- changed since the product head ---"; echo "${SINCE}"
+          STRAY="$(echo "${SINCE}" | grep -v \
+            -e "^${CANARY_DIR}/" \
+            -e '^\.github/workflows/serving-canary-provenance\.yml$' \
+            -e '^\.github/workflows/serving-canary-run\.yml$' || true)"
+          if [ -n "${STRAY}" ]; then
+            echo "::error::changed beyond the evidence directory and these workflows:"
+            echo "${STRAY}"; exit 1
+          fi
+          echo "PRODUCT_CODE_CHANGED_SINCE_THE_TESTED_HEAD = NO"
+
+          RECOMPUTED="$(sha256sum "${CANARY_DIR}/serving_canary_bank_manifest.json" | cut -d' ' -f1)"
+          FOUND="$(cut -d' ' -f1 "${CANARY_DIR}/serving_canary_bank_manifest.sha256")"
+          if [ "${FOUND}" != "${BANK_SHA256}" ] || [ "${RECOMPUTED}" != "${BANK_SHA256}" ]; then
+            echo "::error::bank mismatch: expected ${BANK_SHA256}"; exit 1
+          fi
+          echo "bank ${BANK_SHA256} is the one that was pre-registered: ok"
+
+          python - <<'PY'
+          import hashlib, pathlib, sys
+          for directory, manifest in (
+                  ("live_change_form_gate", "change_form_bank_manifest"),
+                  ("live_change_form_gate_v2", "change_form_v2_bank_manifest"),
+                  ("live_change_form_gate_v3", "change_form_v3_bank_manifest"),
+                  ("live_change_form_gate_v4", "change_form_v4_bank_manifest")):
+              base = pathlib.Path("due_diligence/evidence") / directory
+              body = (base / f"{manifest}.json").read_bytes()
+              pinned = (base / f"{manifest}.sha256").read_text().split()[0].strip()
+              digest = hashlib.sha256(body).hexdigest()
+              if digest != pinned:
+                  sys.exit(f"{directory} was edited after hashing")
+              print(f"{directory}: intact")
+          PY
+
+      - name: Refuse to run without the credentials
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"; exit 1
+          fi
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::AZURE_MI_API_PUBLISH_PROFILE is not set; which path"
+            echo "::error::served could not be proved, so the run must not start"
+            exit 1
+          fi
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      # THE GATE THAT PROTECTS THE BANK. Free, and it fails the job before the
+      # runner is ever invoked if the deployed commit is wrong or the bearer has
+      # aged out again.
+      - name: Provenance and authenticated preflight
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          python "${CANARY_DIR}/provenance.py" \
+            --base-url "${{ inputs.base_url || env.BASE_URL }}" \
+            --expect-commit "${PRODUCT_HEAD}" \
+            --preflight-path /mi/catalogue \
+            --out provenance_result.json
+
+      - name: The pre-registered ten, once each
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          # The runner writes its report before returning a non-zero verdict, so
+          # the exit code is captured and re-raised after the artefact exists —
+          # a gate that fails without saying why is a gate nobody can act on.
+          set +e
+          python "${CANARY_DIR}/serving_canary_run.py" \
+            --base-url "${{ inputs.base_url || env.BASE_URL }}" \
+            --path /mi/query \
+            --portfolio-id "${{ inputs.portfolio_id || env.PORTFOLIO_ID }}" \
+            --expect-commit "${PRODUCT_HEAD}" \
+            --out "${CANARY_DIR}/serving_canary_result.json"
+          echo "RUNNER_EXIT=$?" >> "${GITHUB_ENV}"
+          set -e
+
+      - name: Publish the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serving-canary
+          path: |
+            provenance_result.json
+            due_diligence/evidence/change_intelligence_serving_canary/serving_canary_result.json
+          if-no-files-found: warn
+
+      - name: The verdict
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, pathlib
+          path = pathlib.Path(os.environ["CANARY_DIR"]) / "serving_canary_result.json"
+          if not path.exists():
+              print("no result was written — the run stopped before the ten")
+              raise SystemExit(1)
+          report = json.load(open(path))
+          print(f"bank      {report.get('bank_id')}")
+          print(f"verdict   {report.get('verdict')}")
+          print(f"asked     {report.get('questions_asked')} of 10")
+          for case in report.get("cases") or []:
+              flag = "PASS" if case["pass"] else "FAIL"
+              print(f"  {case['case_id']}  {flag}  "
+                    f"{case['read']['change_form_claimed']}  "
+                    f"route={case['read']['route']}  "
+                    f"{'; '.join(case['failures'])[:160]}")
+          raise SystemExit(0 if report.get("verdict") == "PASS" else 1)
+          PY
