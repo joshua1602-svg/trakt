@@ -2066,6 +2066,22 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             snapshot_client_id=client_id,
             snapshot_route=_snapshot_store.FUNDED_ROUTE,
             source_registry=_source_registry(df, client_id),
+            # THE CHANGE-INTELLIGENCE OWNERS' INPUTS. The governed source root is
+            # `ds._onboarding_output_root()` — the same one this function already
+            # passes to `chat_routing.try_route`, so a plan-served material
+            # summary and a legacy-routed one read the same snapshots from the
+            # same place. The tenant comes from the AUTHORISATION, never from
+            # request data, which is the rule `_run_analysis` states for
+            # `context.tenant_id` and `authorise_portfolio_access` enforces.
+            #
+            # `authorised_portfolio_ids` is deliberately NOT supplied, exactly as
+            # the legacy period-change route does not supply it: it is a
+            # caller-side NARROWING of an already-authorised scope, and the
+            # tenancy boundary here is `client_id`, which
+            # `authorise_portfolio_access` has already proved and which is the
+            # only book `build_snapshots` will read.
+            output_root=ds._onboarding_output_root(),
+            tenant_id=authorised.tenant_id,
             # THE PIPELINE OWNERS' INPUTS, resolved by the dataset module that
             # already owns discovery. A pipeline PLAN is served from these
             # regardless of which view the legacy router picked, which is what

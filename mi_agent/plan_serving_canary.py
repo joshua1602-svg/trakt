@@ -62,6 +62,8 @@ from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
 from mi_agent import plan_pipeline_runtime as pipeline_rt
 from mi_agent import plan_temporal_runtime as temporal
+from mi_agent import plan_material_summary as material_summary
+from mi_agent import plan_attribution as attribution
 
 logger = logging.getLogger("mi_agent.plan_serving_canary")
 
@@ -100,6 +102,12 @@ UNEXPECTED_ERROR = "UNEXPECTED_ERROR"
 #: why wiring this seam changes nothing a production caller can observe.
 TEMPORAL_STORE_UNAVAILABLE = "TEMPORAL_STORE_UNAVAILABLE"
 TEMPORAL_NOT_RESOLVED = "TEMPORAL_NOT_RESOLVED"
+#: A change-intelligence plan arrived and the caller supplied no governed source
+#: root or no tenant. Not an error and not a refusal: the legacy path serves,
+#: exactly as it does for a temporal plan with no catalogue. This module
+#: discovers nothing — choosing an output root here would be it deciding which
+#: client's book a question is about.
+CHANGE_OWNER_INPUTS_UNAVAILABLE = "CHANGE_OWNER_INPUTS_UNAVAILABLE"
 
 
 # --------------------------------------------------------------------------- #
@@ -333,7 +341,18 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           # frame and the funded snapshot catalogue.
           pipeline_source: Any = None, pipeline_root: Any = None,
           pipeline_client_id: Optional[str] = None,
-          pipeline_history: Any = None) -> Optional[Dict[str, Any]]:
+          pipeline_history: Any = None,
+          # THE CHANGE-INTELLIGENCE OWNERS' INPUTS, resolved by the caller that
+          # already owns discovery and authorisation. `output_root` is the
+          # governed source root `mi_service` already resolves for its routed
+          # branch; `tenant_id` comes from the execution context and never from
+          # request data; `authorised_portfolio_ids` is what the caller
+          # authorised. This module discovers none of them and substitutes none
+          # of them — with any of them missing the legacy envelope serves.
+          output_root: Optional[str] = None,
+          tenant_id: Optional[str] = None,
+          authorised_portfolio_ids: Tuple[str, ...] = (),
+          ) -> Optional[Dict[str, Any]]:
     """The new envelope to serve, or None meaning "legacy serves".
 
     Raises nothing: a serving canary that could fail a request would be worse
@@ -364,6 +383,8 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
             pipeline_history=pipeline_history, pipeline_run_id=run_id,
+            client_id=client_id, output_root=output_root, tenant_id=tenant_id,
+            authorised_portfolio_ids=tuple(authorised_portfolio_ids),
             # `view` IS THE EXECUTED POPULATION, and it is load-bearing here
             # rather than decorative. It is the governed dataset identity the
             # caller resolved `frame` with — `mi_service` passes the same string
@@ -741,6 +762,129 @@ def _temporal_result(outcome: Any, frame: Any) -> Any:
         })
 
 
+def _change_form_owner(plan: Mapping[str, Any]) -> Any:
+    """The adapter that CLAIMS this plan's analytical form, or None.
+
+    Each adapter's `claims` reads `provenance.compiler_bindings["change_form"]`
+    and nothing else — the COMPILER's derived reading, never the model's raw
+    claim and never the question. The two forms are disjoint by construction
+    because one plan carries one form, so this chooses between them without
+    deciding anything semantic.
+
+    `metric_delta` and `level_comparison` are deliberately absent. This sprint
+    connects the two forms whose plan connectivity did not exist; the other two
+    reach the runtimes they already reached, and adding them here for symmetry
+    would reorganise a working path.
+    """
+    for owner in (material_summary, attribution):
+        if owner.claims(plan):
+            return owner
+    return None
+
+
+def _attempt_change_form(body: Dict[str, Any], *, plan: Mapping[str, Any],
+                         owner: Any, question: str,
+                         client_id: Optional[str], output_root: Optional[str],
+                         tenant_id: Optional[str],
+                         authorised_portfolio_ids: Tuple[str, ...],
+                         run_id: Optional[str],
+                         render_portfolio_id: Optional[str],
+                         as_of: Optional[str]
+                         ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One CHANGE-INTELLIGENCE serving attempt. Same contract as `_attempt`.
+
+    Stage for stage the other two attempts: perimeter, execute, render, record.
+    What differs is whose perimeter and whose owner — the adapter declares its
+    own, and every figure comes back from
+    `period_change.workflow.run_period_change_analysis`, which is where every
+    other governed period-change figure in this estate comes from.
+
+    NOTHING IS CALCULATED, COMPOSED OR RENDERED HERE. The adapter owns the
+    translation, the deterministic owner the arithmetic, `insight_funded` the
+    composition where there is one, and `period_change_route._render` the
+    envelope. This function chooses between two adapters and records what
+    happened.
+
+    THE OWNER'S INPUTS ARE THE CALLER'S TO SUPPLY, exactly as the funded frame
+    and the snapshot catalogue are. With no governed source root or no tenant
+    this returns None and the legacy envelope serves.
+    """
+    eligible, why, detail = owner.check_eligibility(plan)
+    body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail,
+                           "perimeter": f"change_form_{owner.CHANGE_FORM}"}
+    if not eligible:
+        body["execution"] = {"attempted": False, "why_not": f"{why}: {detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{why}"
+
+    if not client_id or not tenant_id:
+        body["execution"] = {"attempted": False,
+                             "why_not": "no governed source root or tenant was "
+                                        "supplied for this request"}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, CHANGE_OWNER_INPUTS_UNAVAILABLE
+
+    body["execution"] = {"attempted": True, "runtime": owner.CHANGE_FORM,
+                         "requested_semantics": material_summary.plan_provenance(
+                             plan)}
+    try:
+        if owner is material_summary:
+            outcome = owner.execute(
+                plan, client_id=client_id, output_root=output_root,
+                tenant_id=tenant_id, run_id=run_id,
+                authorised_portfolio_ids=tuple(authorised_portfolio_ids))
+        else:
+            # `run_id` is not passed because this form composes nothing: it
+            # tags a finding with the run it was generated from, and an
+            # attribution answer IS the governed decomposition. Accepting it here
+            # to make one call serve both forms would mean an input that
+            # silently does nothing.
+            outcome = owner.execute(
+                plan, client_id=client_id, output_root=output_root,
+                tenant_id=tenant_id,
+                authorised_portfolio_ids=tuple(authorised_portfolio_ids))
+    except Exception as exc:                                         # noqa: BLE001
+        # EVERY GOVERNED REFUSAL THE OWNER RAISES LANDS HERE, classified by the
+        # exception it raised: `PeriodChangeFailure` for a book with fewer than
+        # two snapshots or no eligible field, `LensNotApplied` for a scope that
+        # could not be applied to every snapshot compared. The legacy envelope
+        # then serves, which is where those refusals are already worded. Nothing
+        # is widened and no date is invented in either case.
+        body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, EXECUTION_FAILED
+
+    if not outcome.get("ok"):
+        body["execution"].update({
+            "attempted": False,
+            "why_not": f"{outcome.get('reason')}: {outcome.get('detail')}"[:300]})
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{outcome.get('reason')}"
+
+    receipt = dict(outcome.get("receipt") or {})
+    body["execution"].update({"receipt": receipt,
+                              "value": receipt.get("period_to")})
+    body["disposition"] = evidence.EXECUTED
+
+    try:
+        if owner is material_summary:
+            payload = owner.envelope(plan, outcome["result"], outcome["brief"],
+                                     question=question,
+                                     portfolio_id=render_portfolio_id,
+                                     as_of=as_of)
+        else:
+            payload = owner.envelope(plan, outcome["result"], question=question,
+                                     portfolio_id=render_portfolio_id,
+                                     as_of=as_of)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    if not isinstance(payload, Mapping) or not payload.get("ok"):
+        body["execution"]["render_error"] = "the rendered envelope was not ok"
+        return None, RENDER_FAILED
+    return dict(payload), ""
+
+
 def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              render_portfolio_id: Optional[str], as_of: Optional[str],
              snapshot_store: Any = None,
@@ -751,7 +895,11 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              pipeline_source: Any = None, pipeline_root: Any = None,
              pipeline_client_id: Optional[str] = None,
              pipeline_history: Any = None,
-             pipeline_run_id: Optional[str] = None
+             pipeline_run_id: Optional[str] = None,
+             client_id: Optional[str] = None,
+             output_root: Optional[str] = None,
+             tenant_id: Optional[str] = None,
+             authorised_portfolio_ids: Tuple[str, ...] = (),
              ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One serving attempt. `(payload or None, reason)`; fills `body` as it goes."""
     from mi_agent.interpretation_v2.outcomes import (OUTCOME_CLARIFY, OUTCOME_PLAN,
@@ -818,6 +966,27 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
                              "why_not": f"{base_why}: {base_detail}"[:300]}
         body["disposition"] = evidence.INELIGIBLE
         return None, f"{INELIGIBLE}:{base_why}"
+
+    # CHANGE-INTELLIGENCE DISPATCH, from the plan's own analytical form.
+    #
+    # Placed AFTER the population gate because both forms are funded-book forms
+    # and the gate speaks for exactly that — a plan asking about the pipeline
+    # extract must not reach a funded snapshot comparison. Placed BEFORE the
+    # temporal dispatch because a `material_summary` or `attribution` plan
+    # stating a relative pair IS claimed by `plan_temporal_runtime.claims`, which
+    # reads the period form alone; reaching it first, both forms were refused
+    # CAPABILITY_NOT_GENERIC by a runtime that speaks for single-measure generic
+    # evaluation and never for these owners. That refusal is what this sprint
+    # closes, and it is the whole behavioural change here: a plan that served
+    # nothing now reaches the owner that already computes it.
+    change_owner = _change_form_owner(plan)
+    if change_owner is not None:
+        return _attempt_change_form(
+            body, plan=plan, owner=change_owner, question=question,
+            client_id=client_id, output_root=output_root, tenant_id=tenant_id,
+            authorised_portfolio_ids=authorised_portfolio_ids,
+            run_id=pipeline_run_id, render_portfolio_id=render_portfolio_id,
+            as_of=as_of)
 
     # THE DISPATCH. One structural read of the plan's own period form, made by
     # `plan_temporal_runtime.claims`, decides which runtime owns it. The two

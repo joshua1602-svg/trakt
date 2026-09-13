@@ -83,6 +83,16 @@ POPULATION_NOT_FUNDED = "POPULATION_NOT_FUNDED"
 MEASURE_NARROWS_THE_SUMMARY = "MEASURE_NARROWS_THE_SUMMARY"
 PERIOD_NOT_A_PAIR = "PERIOD_NOT_A_PAIR"
 PERIOD_GRAIN_UNTRANSLATABLE = "PERIOD_GRAIN_UNTRANSLATABLE"
+# Slots the deterministic owner cannot honour. Refused, never dropped: a
+# governed narrowing the reader stated and the analysis did not apply is the
+# whole-book answer published under the narrow label, and it is
+# indistinguishable from a correct one once rendered.
+DIMENSION_NARROWS_THE_SUMMARY = "DIMENSION_NARROWS_THE_SUMMARY"
+FILTER_NOT_SUPPORTED = "FILTER_NOT_SUPPORTED"
+GEOGRAPHY_NOT_SUPPORTED = "GEOGRAPHY_NOT_SUPPORTED"
+TARGET_NOT_SUPPORTED = "TARGET_NOT_SUPPORTED"
+COMPARISON_NOT_SUPPORTED = "COMPARISON_NOT_SUPPORTED"
+SCOPE_NOT_EXPRESSIBLE = "SCOPE_NOT_EXPRESSIBLE"
 
 #: Period forms that resolve to TWO snapshots on their own. A material summary is
 #: a statement about a movement, so it needs a pair. `series` names many periods
@@ -147,17 +157,29 @@ RELATIVE_MODE_BY_GRAIN: Mapping[Optional[str], str] = {
 RELATIVE_DISTANCES = frozenset({None, 1})
 
 
-def _period_defaulted_to_owner(plan: Any) -> bool:
-    """Whether the DETERMINISTIC layer supplied a window this form owns.
+def period_defaulted_to(plan: Any, owner: str) -> bool:
+    """Whether the DETERMINISTIC layer supplied a window ``owner`` owns.
 
     One structural read of the plan's period provenance. True means the reading
     stated no temporal form and `change_form` authorised the default; it never
     means the reader asked for the current state.
+
+    ``owner`` IS A PARAMETER BECAUSE TWO FORMS SHARE THE CONTRACT, not because
+    this module decides which. `vocabulary.CHANGE_FORM_ABSENT_PERIOD_DEFAULT`
+    authorises `current_vs_previous` for `material_summary` AND for
+    `attribution`, and the compiler stamps which form it applied; a second copy
+    of this read in the attribution adapter would be a second place the two
+    could come to disagree about what the compiler wrote.
     """
     period = adapter._as_mapping(plan).get("period") or {}
     return (bool(period.get("defaulted"))
             and period.get("default_method") == "current_vs_previous"
-            and period.get("default_owner") == CHANGE_FORM)
+            and period.get("default_owner") == owner)
+
+
+def _period_defaulted_to_owner(plan: Any) -> bool:
+    """This form's own face on :func:`period_defaulted_to`."""
+    return period_defaulted_to(plan, CHANGE_FORM)
 
 
 def _change_form_binding(plan: Any) -> Mapping[str, Any]:
@@ -209,7 +231,101 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
             f"the plan names measure(s) {sorted(str(n) for n in named)}; a named "
             f"measure is a metric delta, which has its own owner and its own mode")
 
-    period = body.get("period") or {}
+    # A DIMENSION IS A NARROWER QUESTION, like a measure. `portfolio_overview`
+    # selects every governed dimension the registry admits and reports the
+    # composition shifts it finds; running it for a plan that asked about ONE
+    # dimension would answer more than the reader asked and publish it as theirs.
+    grouped = [d.get("concept")
+               for output in (body.get("outputs") or ())
+               for d in (output.get("dimensions") or ())]
+    if grouped:
+        return False, DIMENSION_NARROWS_THE_SUMMARY, (
+            f"the plan groups by {sorted(str(g) for g in grouped)}; this "
+            f"composition selects its own dimensions and a named one is a "
+            f"different question with a different owner")
+
+    ok, why, detail = check_slots_honoured(plan)
+    if not ok:
+        return ok, why, detail
+
+    return check_period(plan, owner=CHANGE_FORM)
+
+
+def check_slots_honoured(plan: Any) -> Tuple[bool, str, str]:
+    """Every plan slot `analyse_period_change` CANNOT honour, refused by name.
+
+    WHY THIS EXISTS AT ALL. The entry point this family executes through takes a
+    client, an output root, a mode, a period request and a LENS. It takes no row
+    predicates: `period_change_route.build_snapshots` has a `population=`
+    parameter and `analyse_period_change` does not pass one, so a governed filter
+    on the plan would reach neither snapshot. Left unchecked, a plan saying "what
+    changed in the back book" would have been answered over the whole book and
+    labelled with the reader's words — the defect class the population ledger was
+    built to close, arriving through a different door.
+
+    So the perimeter is drawn at what the owner can honour, and everything else
+    REFUSES with the slot named. Widening is never the fallback, and neither is
+    silently dropping the slot: both publish a different question's answer.
+
+    Shared by `material_summary` and by `plan_attribution`, which execute through
+    the same entry point and therefore have exactly the same limits. The SCOPE
+    half is delegated to `mi_agent_api.contract_scope.lens_from_plan`, which is
+    already the estate's only mapping from a transcribed request to a
+    `portfolio_lens`; resolving a role here would make this a second owner of
+    what "acquired" means.
+    """
+    from mi_agent_api import contract_scope
+
+    body = adapter._as_mapping(plan)
+    outputs = tuple(body.get("outputs") or ())
+
+    # THE TWO FILTER SLOTS, AND NOT THE THIRD. `plan_runtime_adapter.
+    # plan_predicates` reads three — plan `filters`, output `filters` and
+    # `population.scope_predicates` — and the third is where an explicit
+    # Direct/Acquired role and a named book land. Those two ARE honoured, as the
+    # owner's lens; the other two are row predicates and are not.
+    restrictions = (tuple(body.get("filters") or ())
+                    + tuple(f for output in outputs
+                            for f in (output.get("filters") or ())))
+    if restrictions:
+        fields = sorted({str(f.get("canonical_field") or f.get("concept") or "")
+                         for f in restrictions})
+        return False, FILTER_NOT_SUPPORTED, (
+            f"the plan restricts on {fields}; this owner applies no row "
+            f"predicates, so the restriction would reach neither snapshot and "
+            f"the movement reported would be the whole book's")
+
+    if body.get("geography") or any(output.get("geography") for output in outputs):
+        return False, GEOGRAPHY_NOT_SUPPORTED, (
+            "the plan carries a governed geography contract; this owner selects "
+            "its own dimensions and binds no geography axis")
+
+    if body.get("target"):
+        return False, TARGET_NOT_SUPPORTED, (
+            f"the plan states target {body.get('target')!r}; this owner "
+            f"publishes no threshold assessment")
+
+    if str(body.get("comparison_kind") or "none") != "none":
+        return False, COMPARISON_NOT_SUPPORTED, (
+            f"the plan compares populations ({body.get('comparison_kind')!r}); "
+            f"this owner compares two reporting states of ONE population")
+
+    ok, _lens, detail = contract_scope.lens_from_plan(plan)
+    if not ok:
+        return False, SCOPE_NOT_EXPRESSIBLE, detail
+    return True, "", ""
+
+
+def check_period(plan: Any, *, owner: str) -> Tuple[bool, str, str]:
+    """The TEMPORAL half of the perimeter, for any form that shares it.
+
+    Called by this form and by `plan_attribution`, which admits the same three
+    temporal states for the same reason: a pair the reader named, an anchor the
+    form completes, or an absent window the compiler defaulted on the form's
+    behalf. The reason codes are this module's and stay this module's, so the
+    two forms refuse an untranslatable window under one name.
+    """
+    period = adapter._as_mapping(plan).get("period") or {}
     form = period.get("form")
     # AN UNSTATED WINDOW THIS FORM OWNS. The compiler marks the binding
     # `defaulted` when the reading stated no temporal form and `change_form` owns
@@ -217,7 +333,7 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
     # admitting it on `form` alone would be reading the masquerade. Admit it on
     # the PROVENANCE instead, which is the thing that actually says the owner
     # supplied the window.
-    if _period_defaulted_to_owner(plan):
+    if period_defaulted_to(plan, owner):
         return True, "", ""
     if form not in ADMITTED_PERIOD_FORMS:
         return False, PERIOD_NOT_A_PAIR, (
@@ -243,6 +359,11 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
 
 
 def period_request(plan: Any) -> Any:
+    """This form's own face on :func:`period_request_for`."""
+    return period_request_for(plan, owner=CHANGE_FORM)
+
+
+def period_request_for(plan: Any, *, owner: str) -> Any:
     """The plan's period binding, as the resolver's own request object.
 
     TRANSLATION ONLY, between two governed vocabularies. Every date this puts on
@@ -271,7 +392,7 @@ def period_request(plan: Any) -> Any:
     # The authorised default comes first: an unstated window this form owns
     # resolves through the same governed method an anchor does, and for the same
     # reason — the form, not the reader, owns the comparison state.
-    if _period_defaulted_to_owner(plan):
+    if period_defaulted_to(plan, owner):
         return PeriodRequest(relative_mode="current_vs_previous")
     if form in ("previous_reporting_period",) or form in ANCHOR_PERIOD_FORMS:
         return PeriodRequest(relative_mode="current_vs_previous")
@@ -289,10 +410,91 @@ def period_request(plan: Any) -> Any:
     return PeriodRequest()
 
 
+#: THE DETERMINISTIC OWNER EVERY FIGURE IN THIS FAMILY COMES FROM. Recorded as a
+#: string in the receipt so a reader of the evidence can name the owner without
+#: re-deriving it from a workflow id, and stated once so two forms cannot record
+#: two different answers to "who calculated this".
+CALCULATION_OWNER = "mi_agent.period_change.workflow.run_period_change_analysis"
+
+
+def change_receipt(plan: Any, result: Any, *, change_form: str,
+                   calculation_owner: str = CALCULATION_OWNER) -> Dict[str, Any]:
+    """The evidence EVERY connected change form must record. Shared, so one
+    form cannot come to receipt less than another.
+
+    Read from the plan (what was REQUESTED) and from the governed result (what
+    actually RAN); nothing is re-derived and no figure is recomputed. The period
+    pair is the resolver's own, the scope is the workflow's own reference, and
+    the owner is named rather than implied.
+    """
+    body = adapter._as_mapping(plan)
+    population = body.get("population") or {}
+    period = body.get("period") or {}
+    resolution = result.period_resolution.to_dict()
+    # THE EXECUTED SCOPE, FROM THE RESOLUTION THAT WAS ALREADY READ. The
+    # workflow hands one `PortfolioScopeRef` to `resolve_periods` and records
+    # the same object on its result, so the resolution already carries the
+    # registry's explicit portfolio-id list. Reading it from there rather than
+    # from a second attribute keeps one fact with one reader.
+    scope = dict(resolution.get("portfolio_scope") or {})
+    return {
+        "plan_id": body.get("plan_id"),
+        "change_form": change_form,
+        "capability": body.get("capability"),
+        "operation": body.get("operation"),
+        "mode": (dict(getattr(result, "request_interpretation", None)
+                      or {}).get("mode")),
+        "population_base": population.get("base"),
+        # THE SCOPE, REQUESTED AND EXECUTED, SIDE BY SIDE. The requested side is
+        # the plan's own transcription; the executed side is the portfolio ids
+        # `build_snapshots` actually narrowed every compared snapshot to. An
+        # audit that held only one of them could not answer whether the book the
+        # reader named is the book the numbers came from.
+        "direct_acquired_scope": population.get("lens"),
+        "source_scope": population.get("source_reference"),
+        "source_portfolio_id": population.get("source_portfolio_id"),
+        "executed_scope": scope,
+        # WHO DECIDED THE PERIOD, kept as two separate facts. The INTERPRETED form
+        # is what the reader's request carried — `current` stays `current`, and
+        # nothing rewrote the intent to claim a pair was asked for. The
+        # RESOLUTION is the owner's: its method, and the two governed snapshots
+        # it actually read. An audit that cannot tell these apart cannot answer
+        # whether the model selected the comparison state. It did not.
+        # THREE STATES, KEPT APART. A reading that STATED a form; a reading that
+        # stated an ANCHOR the form completes; and a reading that stated NOTHING,
+        # where the deterministic layer applied the form's authorised default.
+        # The first two are the reader's words; the third is this system's policy,
+        # and an audit that could not tell them apart could not answer who chose
+        # the comparison state.
+        "interpreted_time_present": bool(period.get("stated")),
+        "interpreted_period_form": (period.get("form")
+                                    if period.get("stated") else None),
+        "temporal_default_applied": period_defaulted_to(plan, change_form),
+        "temporal_default_method": period.get("default_method") or None,
+        "temporal_default_owner": period.get("default_owner") or None,
+        "period_completed_by_form": (
+            period.get("stated", False)
+            and period.get("form") in ANCHOR_PERIOD_FORMS),
+        # THE TWO SNAPSHOTS, AS THE RESOLVER NAMED THEM. Lifted to the top of the
+        # receipt because FROM/TO is the first question asked of any movement,
+        # and read out of the resolution rather than recomputed from dates.
+        "period_from": (resolution.get("resolved_start_snapshot") or {}
+                        ).get("reporting_date"),
+        "period_to": (resolution.get("resolved_end_snapshot") or {}
+                      ).get("reporting_date"),
+        "snapshot_references": [resolution.get("resolved_start_snapshot"),
+                                resolution.get("resolved_end_snapshot")],
+        "period_resolution": resolution,
+        "calculation_owner": calculation_owner,
+        "workflow_owner": getattr(result, "workflow_id", None),
+    }
+
+
 def receipt(plan: Any, result: Any, brief: Mapping[str, Any]) -> Dict[str, Any]:
     """What actually ran, from the governed outputs rather than from intent."""
     body = adapter._as_mapping(plan)
     return {
+        **change_receipt(plan, result, change_form=CHANGE_FORM),
         "change_form": CHANGE_FORM,
         "operation": body.get("operation"),
         "population_base": (body.get("population") or {}).get("base"),
@@ -333,10 +535,138 @@ def receipt(plan: Any, result: Any, brief: Mapping[str, Any]) -> Dict[str, Any]:
     }
 
 
+def analyse(plan: Any, *, client_id: str, output_root: Optional[str],
+            tenant_id: str, mode: Optional[str],
+            authorised_portfolio_ids: Tuple[str, ...] = ()) -> Any:
+    """ONE call to the deterministic owner, for any form in this family.
+
+    Shared by `material_summary` and `plan_attribution` so there is exactly one
+    place a change-form plan becomes a period-change request. The SCOPE comes
+    from the plan and from nowhere else — no caller may supply a lens, because a
+    caller-supplied scope is a second transcription of the reader's request and
+    the two could disagree about which book the numbers are from.
+
+    Raises `PeriodChangeFailure` and `chat_routing.LensNotApplied` unchanged:
+    both are the owner's own governed refusals, and swallowing either here would
+    replace a classified failure with an unclassified one.
+    """
+    from mi_agent_api import contract_scope
+    from mi_agent_api.period_change_route import analyse_period_change
+
+    ok, lens, detail = contract_scope.lens_from_plan(plan)
+    if not ok:                                                  # pragma: no cover
+        # Unreachable through `check_slots_honoured`, which refuses first. Kept
+        # because "the perimeter already checked" is how an unchecked path gets
+        # added later, and widening here would be silent.
+        raise ValueError(f"scope not expressible: {detail}")
+    return analyse_period_change(
+        client_id=client_id, output_root=output_root,
+        mode=mode, period_request=period_request_for(
+            plan, owner=_change_form_binding(plan).get("form") or CHANGE_FORM),
+        scope=lens, tenant_id=tenant_id,
+        authorised_portfolio_ids=tuple(authorised_portfolio_ids),
+        include_bridge=True)
+
+
+def plan_provenance(plan: Any) -> Dict[str, Any]:
+    """What the PLAN asked for, in the `spec` slot every artefact already carries.
+
+    PROVENANCE, NOT A SPEC. The legacy route passes its parsed `spec` dict here
+    and the artefact builders only stamp it into `source.spec` for display; there
+    is no parsed spec on this path and none is synthesised. These five fields are
+    the plan's own, so an artefact says which governed request produced it.
+    """
+    body = adapter._as_mapping(plan)
+    binding = _change_form_binding(plan)
+    return {"change_form": binding.get("form"),
+            "capability": body.get("capability"),
+            "operation": body.get("operation"),
+            "population": (body.get("population") or {}).get("base"),
+            "lens": (body.get("population") or {}).get("lens"),
+            "plan_id": body.get("plan_id")}
+
+
+def governed_envelope(plan: Any, result: Any, receipt_block: Mapping[str, Any], *,
+                      question: str, portfolio_id: Optional[str],
+                      as_of: Optional[str]) -> Dict[str, Any]:
+    """The governed period-change envelope, FROM THE ROUTE THAT ALREADY OWNS IT.
+
+    NO SECOND PRESENTER. `period_change_route._render` builds the KPI block, the
+    metric-movement table, the composition-shift table and the balance-bridge
+    table from a `PeriodChangeResult`, and `build_answer` states the summary from
+    `result.summary` alone. Rebuilding any of that here would put a second
+    renderer downstream of one calculation, and the two would drift. So the
+    existing renderer is called, and this adds exactly one thing: the governed
+    plan's own receipt, in the `metadata.governedPlan` slot the slice 1 and
+    pipeline paths already publish it in.
+
+    `question` IS NOT READ, it is ECHOED. The renderer puts it in the envelope's
+    `question` field, which is what every channel displays back to the reader;
+    no branch anywhere below depends on its content.
+    """
+    from mi_agent_api.period_change_route import _render
+
+    payload = _render(result, question, plan_provenance(plan), portfolio_id,
+                      as_of)
+    meta = payload.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        meta["parserMode"] = "governed_plan"
+        meta["route"] = f"governed_plan_{receipt_block.get('change_form')}"
+        meta["governedPlan"] = {"requested": plan_provenance(plan),
+                                "executed": dict(receipt_block)}
+    return payload
+
+
+def envelope(plan: Any, result: Any, brief: Mapping[str, Any], *, question: str,
+             portfolio_id: Optional[str], as_of: Optional[str]
+             ) -> Dict[str, Any]:
+    """The material-change answer: the governed tables, and the COMPOSITION's
+    own findings as the answer.
+
+    WHY THE ANSWER IS THE BRIEF'S AND NOT THE RENDERER'S. This form exists
+    because `insight_funded.compose` decides which governed changes are
+    materially relevant — B10 proved the composition owns that candidate set.
+    Publishing the renderer's portfolio narrative instead would mean the
+    composition ran and was discarded, and the reader who asked "what changed
+    materially" would get "here is everything that changed".
+
+    No sentence is written here. Each finding's own `summary` is the prose its
+    generator produced, and they are joined in the order `insight_engine.select`
+    put them in. With no material finding the deterministic narrative stands and
+    `insight_count` records the zero, rather than this module asserting that
+    nothing mattered.
+
+    The brief travels WHOLE, in the envelope `insight_contract.build_brief`
+    already publishes on `/mi/insights/weekly-brief`, so no channel learns a new
+    shape and the omissions and thresholds reach the reader with the findings.
+    """
+    payload = governed_envelope(plan, result, receipt(plan, result, brief),
+                               question=question, portfolio_id=portfolio_id,
+                               as_of=as_of)
+    findings = list(brief.get("insights") or ())
+    if findings:
+        payload["answer"] = " ".join(
+            _as_sentence(str(finding.get("summary")
+                             or finding.get("headline") or ""))
+            for finding in findings).strip()
+    meta = payload.setdefault("metadata", {})
+    if isinstance(meta, dict):
+        meta["materialChangeBrief"] = dict(brief)
+    return payload
+
+
+def _as_sentence(text: str) -> str:
+    """One finding's own prose, terminated. Presentation only."""
+    stripped = text.strip()
+    if not stripped or stripped.endswith((".", "!", "?")):
+        return stripped
+    return stripped + "."
+
+
 def execute(plan: Any, *, client_id: str, output_root: Optional[str],
-            tenant_id: str, portfolio_context: str = "total",
+            tenant_id: str,
             limit_envelope: Optional[Mapping[str, Any]] = None,
-            scope: Any = None, run_id: Optional[str] = None,
+            run_id: Optional[str] = None,
             authorised_portfolio_ids: Tuple[str, ...] = (),
             ) -> Dict[str, Any]:
     """One governed analysis, composed into findings. Raises nothing it hides.
@@ -344,25 +674,29 @@ def execute(plan: Any, *, client_id: str, output_root: Optional[str],
     ``question`` is absent from this signature deliberately: the owner defaults
     it to ``""`` and the only read of it inside `period_change` echoes it into
     provenance, so a material-change summary needs no sentence to produce.
+
+    ``scope`` is absent for the reason :func:`analyse` states: the plan is the
+    transcription of what was asked, so it is the only place a scope may come
+    from. ``portfolio_context`` is absent for the same reason with one more step:
+    it is part of an insight's identity hash, so a caller-supplied one could give
+    two briefs over two different books the same finding ids. It is read below
+    off the scope the analysis ACTUALLY RAN FOR — `scope_ref_from_lens`'s own
+    `context_id`, which is `portfolio_lens.context_id` and not a second opinion.
     """
     from mi_agent_api import insight_funded
-    from mi_agent_api.period_change_route import analyse_period_change
 
     eligible, why, detail = check_eligibility(plan)
     if not eligible:
         return {"ok": False, "eligible": False, "reason": why, "detail": detail}
 
-    result = analyse_period_change(
-        client_id=client_id, output_root=output_root,
-        mode=WORKFLOW_MODE, period_request=period_request(plan),
-        scope=scope, tenant_id=tenant_id,
-        authorised_portfolio_ids=tuple(authorised_portfolio_ids),
-        include_bridge=True)
+    result = analyse(plan, client_id=client_id, output_root=output_root,
+                     tenant_id=tenant_id, mode=WORKFLOW_MODE,
+                     authorised_portfolio_ids=authorised_portfolio_ids)
 
     brief = insight_funded.compose(
         result, tenant_id=tenant_id, portfolio_id=client_id,
-        portfolio_context=portfolio_context, limit_envelope=limit_envelope,
-        run_id=run_id)
+        portfolio_context=(result.portfolio_scope.context_id or "total"),
+        limit_envelope=limit_envelope, run_id=run_id)
 
-    return {"ok": True, "eligible": True, "brief": brief,
+    return {"ok": True, "eligible": True, "result": result, "brief": brief,
             "receipt": receipt(plan, result, brief)}
