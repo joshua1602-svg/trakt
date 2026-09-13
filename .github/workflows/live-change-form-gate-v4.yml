@@ -1,0 +1,281 @@
+name: Live change_form interpretation gate v4
+
+# THE FINAL FRESH MEASUREMENT. Whether live claude-opus-5 reads SEVENTEEN fresh
+# paraphrases into both the Sprint A `change_form` AND a valid temporal route, after
+# the temporal PRESENCE repair. v3 already accepted the analytical form at 18/18; v4
+# adds the thing v3 exposed — that an ABSENT temporal slot must stay distinguishable
+# from an explicit `current`, and that only the forms whose owner owns the comparison
+# window may have it defaulted.
+#
+# THREE TEMPORAL ROUTES, gated PER FORM from the pinned manifest:
+#     EXPLICIT_PAIR     the wording names two reporting states
+#     EXPLICIT_ANCHOR   the wording names only the current endpoint
+#     OWNER_DEFAULT     no temporal relation stated, and the FORM owns the window
+# `material_summary` and `attribution` accept all three; `metric_delta` and
+# `level_comparison` accept only a stated pair. The route is read from KEY PRESENCE
+# in the payload — if no `form` key was sent, the reading is recorded as having
+# stated none, never as an explicit `current`.
+#
+# TWO v3 AUTHORING DEFECTS ARE CORRECTED IN THE BANK, not argued with: a governed
+# filter the question's own wording asks for is the reader's and not an invention
+# (`filters_permitted`, per case), and an attribution may name the governed
+# component concept as well as the quantity being decomposed.
+#
+#     NATURAL LANGUAGE  ->  OPUS  ->  CandidateIntent
+#
+# WHAT THIS IS NOT. Not a serving or end-to-end run. It deploys nothing, calls no
+# MI API, needs no MI_BEARER, touches no App Service, enables no
+# MI_AGENT_PLAN_SERVE, connects neither funded_bridge nor material_summary
+# serving, and executes nothing against a book. No answer is computed, so this run
+# claims NO actual FROM/TO snapshot values — period resolution is deterministic
+# runtime evidence, covered separately and offline.
+#
+# THE BANK IS PRE-REGISTERED AND HASHED. v3's manifest and sha256 were committed
+# before any call. The runner re-hashes on every run, and this workflow also checks
+# the hash against a literal written here, so eighteen questions cannot quietly
+# become eighteen different ones once their answers are known. `preregister.py`
+# is the only thing that writes either and is never invoked from here.
+#
+# v1 AND v2 ARE IMMUTABLE. v1 is the historical 17/18 measurement; v2 was retired
+# UNRUN because its temporal pre-registration was invalidated by the contract
+# change. Both manifests and hashes are asserted unchanged below, because the
+# integrity of this measurement rests on never having edited a hashed bank.
+#
+# TEMPORAL IS GATED PER FORM, from the manifest. `current` is a VALID anchor for
+# `material_summary` and `attribution`, whose owners supply the comparison state,
+# and is NOT valid for `metric_delta` or `level_comparison`, whose owners require
+# the pair to be named. An accepted anchor is reported as ANCHOR_ACCEPTED, kept
+# distinct from PAIR_PRESERVED.
+#
+# THE KEY NEVER TOUCHES A SHELL. `secrets.ANTHROPIC_API_KEY` is injected into the
+# runner's own `env:` and read by Python directly — never copied into a shell
+# variable, never an argv value, never written to GITHUB_ENV, never printed.
+#
+# ONE CALL PER QUESTION, NO RETRIES, NO SPECIAL CASES. A refusal, a malformed
+# payload or an exhausted balance is RECORDED as that case's failure. No question
+# is asked twice or asked a second way, and no case is re-run because it missed.
+
+# A dispatchable workflow must exist on the default branch before the API will
+# resolve it; a file that lives only on a feature branch 404s. So the convention
+# `slice3-model-boundary.yml` established stands in: a `push` trigger scoped to
+# THIS FILE on THIS branch registers the workflow by running it once, and on that
+# path the run is the PRE-RUN ASSERTIONS AND THE OFFLINE DRY RUN ONLY — no model
+# call, nothing spent. The eighteen live interpretations require an explicit
+# dispatch.
+on:
+  push:
+    branches: [ 'claude/live-change-form-gate' ]
+    paths: [ '.github/workflows/live-change-form-gate-v4.yml' ]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Repo ref to take the gate from.
+        default: ''
+        required: false
+      expect_bank_sha256:
+        description: >-
+          The bank this run is measuring, pinned at dispatch, so a run cannot
+          certify a bank nobody chose. Leave empty to rely on the committed
+          literal alone.
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-change-form-gate-v4
+  cancel-in-progress: false
+
+env:
+  BANK_SHA256: 26345762e04537246183d3218b82f787669c844c157ad4f1df9f1d0ee4762dce
+  BASELINE_SHA: 665176864d2f5dbceedc277e351c5d2cd978777f
+  APPROVED_HEAD: f22d0e467bec66daa2cd3177d7e5c260d847c4e7
+  GATE_DIR: due_diligence/evidence/live_change_form_gate_v4
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install the product's dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --quiet --upgrade pip
+          python -m pip install --quiet -r requirements.txt
+
+      # EVERY ONE OF THESE FAILS BEFORE THE FIRST MODEL CALL.
+      - name: Pre-run assertions
+        env:
+          EXPECT_DISPATCH: ${{ inputs.expect_bank_sha256 }}
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          echo "git rev-parse HEAD = ${HEAD_SHA}"
+          echo "APPROVED_HEAD      = ${APPROVED_HEAD}"
+          echo "BASELINE_SHA       = ${BASELINE_SHA}"
+
+          # 1. the measurement must be taken at the APPROVED head, with nothing
+          #    changed since it but THIS WORKFLOW FILE — which had to be added to
+          #    run the gate at all, and which is CI plumbing, not product code,
+          #    not the bank, not an expectation and not semantic policy. This is
+          #    what makes PRODUCT_CODE_CHANGED_DURING_RUN = NO a checked fact
+          #    rather than a claim.
+          if ! git merge-base --is-ancestor "${APPROVED_HEAD}" HEAD; then
+            echo "::error::approved head ${APPROVED_HEAD} is not an ancestor of \
+          ${HEAD_SHA}: this is not the approved tree"
+            exit 1
+          fi
+          SINCE_APPROVAL="$(git diff --name-only "${APPROVED_HEAD}..HEAD")"
+          echo "--- changed since the approved head ---"
+          echo "${SINCE_APPROVAL}"
+          STRAY="$(echo "${SINCE_APPROVAL}" | grep -v \
+            -e '^\.github/workflows/live-change-form-gate-v3\.yml$' || true)"
+          if [ -n "${STRAY}" ]; then
+            echo "::error::changed since approval, beyond this workflow:"
+            echo "${STRAY}"
+            exit 1
+          fi
+          echo "PRODUCT_CODE_CHANGED_DURING_RUN = NO"
+
+          # 2. and it must still contain the authoritative offline baseline
+          if ! git merge-base --is-ancestor "${BASELINE_SHA}" HEAD; then
+            echo "::error::${BASELINE_SHA} is not an ancestor of ${HEAD_SHA}"
+            exit 1
+          fi
+          echo "baseline is an ancestor: ok"
+
+          # 3. the v3 bank must be the one that was pinned
+          FOUND="$(cut -d' ' -f1 "${GATE_DIR}/change_form_v4_bank_manifest.sha256")"
+          RECOMPUTED="$(sha256sum "${GATE_DIR}/change_form_v4_bank_manifest.json" \
+            | cut -d' ' -f1)"
+          echo "bank committed  = ${FOUND}"
+          echo "bank recomputed = ${RECOMPUTED}"
+          if [ "${FOUND}" != "${BANK_SHA256}" ] \
+             || [ "${RECOMPUTED}" != "${BANK_SHA256}" ]; then
+            echo "::error::bank mismatch: expected ${BANK_SHA256}"
+            exit 1
+          fi
+          if [ -n "${EXPECT_DISPATCH}" ] \
+             && [ "${EXPECT_DISPATCH}" != "${BANK_SHA256}" ]; then
+            echo "::error::dispatch pinned ${EXPECT_DISPATCH}"
+            exit 1
+          fi
+          echo "bank ${BANK_SHA256} is the one that was pinned: ok"
+
+          # 4. v1 and v2 hashed banks must be untouched since they were written
+          python - <<'PY'
+          import hashlib, pathlib, sys
+          for directory, manifest in (
+                  ("live_change_form_gate", "change_form_bank_manifest"),
+                  ("live_change_form_gate_v2", "change_form_v2_bank_manifest"),
+                  ("live_change_form_gate_v3", "change_form_v3_bank_manifest")):
+              base = pathlib.Path("due_diligence/evidence") / directory
+              body = (base / f"{manifest}.json").read_bytes()
+              pinned = (base / f"{manifest}.sha256").read_text().split()[0].strip()
+              digest = hashlib.sha256(body).hexdigest()
+              if digest != pinned:
+                  sys.exit(f"{directory} was edited after hashing: "
+                           f"{digest} != {pinned}")
+              print(f"{directory}: {digest} intact")
+          PY
+
+          # 5. the bank must still be the pre-registered question set AND the
+          #    pre-registered PER-FORM temporal accept policy
+          python - <<'PY'
+          import collections, json, os
+          bank = json.load(open(os.path.join(
+              os.environ["GATE_DIR"], "change_form_v4_bank_manifest.json")))
+          cases = bank["cases"]
+          counts = collections.Counter(c["change_form"] for c in cases)
+          want = {"material_summary": 4, "metric_delta": 5,
+                  "attribution": 4, "level_comparison": 4}
+          assert len(cases) == 17, f"{len(cases)} cases"
+          assert dict(counts) == want, f"{dict(counts)} != {want}"
+          assert bank["model"] == "claude-opus-5", bank["model"]
+          assert bank["authorised_live_calls"] == 17
+          assert bank["calls_per_case"] == 1 and bank["retries"] == 0
+          assert sum(1 for c in cases if c["measure"]) == 13
+          assert sum(1 for c in cases if c["scope"]) == 4
+
+          owns_default = {"material_summary", "attribution"}
+          for case in cases:
+              accepts_absent = "ABSENT" in case["temporal_accept"]
+              accepts_anchor = "current" in case["temporal_accept"]
+              expected = case["change_form"] in owns_default
+              assert accepts_absent is expected and accepts_anchor is expected, (
+                  f"{case['id']} {case['change_form']}: absent={accepts_absent} "
+                  f"anchor={accepts_anchor}, policy says {expected}")
+              assert "relative_pair" in case["temporal_accept"], case["id"]
+
+          routes = collections.Counter(c["temporal_intent"] for c in cases)
+          assert dict(routes) == {"EXPLICIT_PAIR": 11, "EXPLICIT_ANCHOR": 2,
+                                 "OWNER_DEFAULT": 4}, dict(routes)
+          permitting = [c["id"] for c in cases if c["filters_permitted"]]
+          assert permitting == ["W06"], permitting
+          print(f"bank {bank['bank_id']}: 17 cases {dict(counts)}, 13 measures, "
+                f"4 scopes, routes {dict(routes)}, filters permitted on "
+                f"{permitting}, per-form temporal policy intact")
+          PY
+
+      # ALWAYS FIRST, AND IT COSTS NOTHING.
+      - name: Prove the harness before anything is asked
+        run: |
+          set -euo pipefail
+          python "${GATE_DIR}/change_form_run.py" \
+            --dry-run --json-out live-change-form-gate-v4-dryrun.json
+
+      - name: Ask the seventeen questions
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::repository secret ANTHROPIC_API_KEY is empty or not \
+          set. PROVIDER_BLOCKED, zero model calls."
+            exit 1
+          fi
+          echo "Anthropic credential is present (value never printed)."
+          python "${GATE_DIR}/change_form_run.py" \
+            --json-out live-change-form-gate-v4-result.json
+
+      - name: Print the raw report
+        if: >-
+          ${{ always() && github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          if [ -f live-change-form-gate-v4-result.json ]; then
+            echo "--- BEGIN live-change-form-gate-v4-result.json ---"
+            cat live-change-form-gate-v4-result.json
+            echo "--- END live-change-form-gate-v4-result.json ---"
+          else
+            echo "::warning::no result file; the run did not reach the end"
+          fi
+
+      - name: Assert the gate
+        if: >-
+          ${{ always() && github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          python "${GATE_DIR}/assert_gate.py" live-change-form-gate-v4-result.json
+
+      - name: Keep the evidence whatever the verdict
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-change-form-gate-v4
+          path: |
+            live-change-form-gate-v4-result.json
+            live-change-form-gate-v4-dryrun.json
+          if-no-files-found: warn
