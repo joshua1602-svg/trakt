@@ -296,16 +296,36 @@ def test_identical_arrivals_are_byte_identical_contracts():
     assert len(prints) == 1
 
 
-def test_the_operation_is_not_normalised_by_the_form():
-    """A stated limit of this sprint, pinned so it is not mistaken for a bug.
+def test_a_variant_spelling_of_the_form_s_action_is_normalised_to_it():
+    """THIS CONTROL PINNED THE OPPOSITE, AND THE LIVE CANARY FALSIFIED IT.
 
-    `change_form` decides WHO executes. It does not rewrite `operation`, because
-    an operation is part of what was asked — `compare` and `movement` are two
-    different requests of the same owner, and collapsing them would be deciding
-    for the reader rather than routing what they said. A form arriving with an
-    operation its owner supports keeps that operation.
+    It used to assert that `metric_delta` keeps whatever operation arrived, on
+    the reasoning that "`compare` and `movement` are two different requests of
+    the same owner, and collapsing them would be deciding for the reader". The
+    estate does not contain two such requests. `run_period_change_analysis` in
+    `requested_metric` mode has ONE shape for a named metric over a governed
+    pair — a start, an end and the movement between them — and no adapter,
+    runtime or renderer anywhere executes a `compare` differently. So a reader
+    who said "compare outstanding balance across the two most recent reporting
+    dates and tell me the size of the shift" was not making a second kind of
+    request; they were spelling the one request with the verb they had. The live
+    canary's M01 read every slot of it correctly, compiled a plan, and served
+    nothing.
+
+    WHAT THE OLD CONTROL WAS RIGHT ABOUT IS KEPT BELOW. An operation outside the
+    form's own variant set is still not rewritten: `series` and `summary` state
+    shapes this owner does not produce and are left exactly as stated, to be
+    refused rather than flattened. Collapsing THOSE would be deciding for the
+    reader; collapsing a spelling of the form's own action is not.
     """
     movement = _compile(change_form="metric_delta", operation="movement")
     compared = _compile(change_form="metric_delta", operation="compare")
     assert movement.plan.capability == compared.plan.capability
-    assert movement.plan.operation != compared.plan.operation
+    assert movement.plan.operation == compared.plan.operation == "movement"
+
+    # And the perimeter that still holds: a shape the owner does not produce is
+    # carried through unchanged, not collapsed into the form's own action.
+    for stated in ("series", "summary"):
+        result = _compile(change_form="metric_delta", operation=stated)
+        assert result.plan is not None, stated
+        assert result.plan.operation == stated

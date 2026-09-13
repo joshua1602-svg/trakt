@@ -1104,3 +1104,415 @@ def test_D2_the_measure_perimeter_is_exactly_what_the_owner_can_select(
     else:
         assert why == metric_delta.MEASURE_HAS_NO_GOVERNED_FIELD
         assert metric_delta.requested_fields(plan) == ()
+
+
+# --------------------------------------------------------------------------- #
+# E. THE OUTPUT CONTRACT — a route that executes correctly must also ANSWER
+# --------------------------------------------------------------------------- #
+# The live confirmation canary passed four of five and the fifth failure was not
+# the interesting one. M03 satisfied every gate the bank pinned — governed route,
+# right owner, right mode, the requested field selected — and its published
+# answer did not contain the movement it had just computed. These controls exist
+# so a future release certification cannot repeat that.
+# --------------------------------------------------------------------------- #
+
+def _partial_book(*, missing_at_end: int = 0, absent_at_end: bool = False):
+    """The governed book with `current_interest_rate` degraded at the CLOSING
+    date only, so a requested-metric question about it exercises the owner's own
+    availability policy rather than a policy invented here.
+    """
+    opening = _frame(n=100, balance=1_000_000.0, ltv=0.40)
+    closing = _frame(n=110, balance=1_200_000.0, ltv=0.43)
+    if absent_at_end:
+        closing["current_interest_rate"] = [None] * len(closing)
+    elif missing_at_end:
+        closing.loc[:missing_at_end - 1, "current_interest_rate"] = None
+    return [
+        {"run_id": "2026-05-31", "reporting_date": "2026-05-31", "df": opening,
+         "source": "blob://x/2026-05-31/platform_canonical_typed.csv"},
+        {"run_id": "2026-06-30", "reporting_date": "2026-06-30", "df": closing,
+         "source": "blob://x/2026-06-30/platform_canonical_typed.csv"},
+    ]
+
+
+@pytest.fixture
+def degraded_frames(monkeypatch):
+    """A book where the rate is partly missing at the closing date."""
+    built = _partial_book(missing_at_end=10)
+    from mi_agent_api import evolution as evolution_mod
+    monkeypatch.setattr(evolution_mod, "funded_frames",
+                        lambda *a, **k: [dict(f) for f in built])
+    return built
+
+
+@pytest.fixture
+def absent_frames(monkeypatch):
+    """A book where the rate is populated at one date only."""
+    built = _partial_book(absent_at_end=True)
+    from mi_agent_api import evolution as evolution_mod
+    monkeypatch.setattr(evolution_mod, "funded_frames",
+                        lambda *a, **k: [dict(f) for f in built])
+    return built
+
+
+def _answer(payload):
+    return str(payload.get("answer") or "")
+
+
+# --- 1 and 2. the operation contract, at the layer that owns it ------------- #
+
+def test_E1_the_canonical_operation_reaches_the_requested_metric_owner(frames):
+    plan = _delta(operation="movement")
+    assert plan["operation"] == "movement"
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    receipt = _receipt(record)
+    assert receipt["mode"] == "requested_metric"
+    assert receipt["calculation_owner"] == metric_delta.CALCULATION_OWNER
+
+
+def test_E2_the_variant_M01_actually_sent_is_canonicalised_centrally(frames):
+    """M01's slots, as the sink record shows the model emitted them.
+
+    THE CANONICALISATION IS THE COMPILER'S, NOT THE ADAPTER'S. `_plan` runs the
+    real compiler, so `operation` is already `movement` by the time any adapter
+    sees the plan — which is the whole point of fixing this at the central
+    contract. The adapter is not asked to interpret anything.
+    """
+    plan = _delta(operation="compare",
+                  measures=[{"concept": "current_outstanding_balance"}])
+    assert plan["operation"] == "movement"
+    applied = plan["provenance"]["compiler_bindings"]["normalisation"]["applied"]
+    assert any("operation 'compare' -> 'movement'" in line for line in applied), applied
+
+    assert metric_delta.claims(plan)
+    eligible, why, detail = metric_delta.check_eligibility(plan)
+    assert eligible, f"{why}: {detail}"
+
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    receipt = _receipt(record)
+    assert receipt["mode"] == "requested_metric"
+    assert receipt["calculation_owner"] == metric_delta.CALCULATION_OWNER
+    assert receipt["requested_fields"] == ["current_outstanding_balance"]
+
+
+# --- 3. a shape this owner does not produce is refused, not admitted -------- #
+
+@pytest.mark.parametrize("operation", ["series", "summary"])
+def test_E3_an_incompatible_operation_is_refused(operation):
+    plan = _delta(operation=operation)
+    assert plan["operation"] == operation, "it must not have been collapsed"
+    eligible, why, _ = metric_delta.check_eligibility(plan)
+    assert not eligible and why == metric_delta.OPERATION_NOT_ADMITTED
+
+
+@pytest.mark.parametrize("operation", ["rank", "breakdown"])
+def test_E3b_a_shape_the_capability_itself_declines_never_reaches_an_adapter(
+        operation):
+    """Refused EARLIER than the adapter, by the compiler's own composition rule.
+    Recorded so the perimeter is not credited to the adapter it never reaches."""
+    result = _compile("metric_delta", capability="generic_analysis",
+                      operation=operation,
+                      measures=[{"concept": "current_outstanding_balance"}],
+                      time=dict(PAIR))
+    assert result.outcome != OUTCOME_PLAN
+    assert "UNSUPPORTED_COMPOSITION" in [r.code for r in result.reasons]
+
+
+# --- 4, 5, 6. the requested metric must actually be served ------------------ #
+
+def test_E4_a_fully_available_requested_metric_is_stated_in_the_answer(frames):
+    plan = _delta(measures=[{"concept": "current_loan_to_value",
+                             "statistic": "weighted_average"}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+
+    rows = payload["metadata"]["governedPlan"]["executed"]["metric_movements"]
+    assert [r["field"] for r in rows] == ["current_loan_to_value"]
+    assert rows[0]["status"] == "available"
+
+    disposition = payload["metadata"]["governedPlan"]["executed"][
+        "requested_metric_disposition"]
+    assert disposition == [{"canonical_field": "current_loan_to_value",
+                            "disposition": "ANSWERED", "status": "available"}]
+
+    # THE ANSWER ITSELF names the metric and both of its values. Read off the
+    # rendered envelope, not off the receipt — the defect this catches is one
+    # where the receipt was right and the answer was not.
+    answer = _answer(payload)
+    assert "Current Loan To Value" in answer
+    assert "moved" in answer
+
+
+def test_E5_a_partially_available_requested_metric_is_published_with_its_caveat(
+        degraded_frames):
+    """The EXISTING availability policy, not a new one.
+
+    `AggregateOutcome.ok` admits `partially_available`, `metric_change` keeps the
+    movement it computed, and `_metric_rows` publishes every status — so the
+    governed contract already says a partially available figure is publishable.
+    What it does NOT do is count toward `metrics_comparable`, which is
+    `available` only. Both halves are asserted here.
+    """
+    plan = _delta(measures=[{"concept": "current_interest_rate",
+                             "statistic": "weighted_average"}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+
+    executed = payload["metadata"]["governedPlan"]["executed"]
+    movement = executed["metric_movements"][0]
+    assert movement["field"] == "current_interest_rate"
+    assert movement["status"] == "partially_available"
+    assert movement["movement_value"] is not None, "the owner computed it"
+    assert movement["excluded_population"]["end"] == 10
+    assert movement["valid_population"]["end"] == 100
+    assert executed["requested_metric_disposition"] == [
+        {"canonical_field": "current_interest_rate",
+         "disposition": "QUALIFIED", "status": "partially_available"}]
+
+    answer = _answer(payload)
+    assert "Current Interest Rate" in answer
+    assert "partially available" in answer
+    # The counts are stated per date, in the order the comparison runs.
+    assert "0 row(s) were excluded at 31 May 2026 and 10 at 30 June 2026" in answer
+    assert "leaving 100 and 100 in the compared population" in answer
+    # ...and the overview clause it is correctly excluded from is still true.
+    assert "0 of 1 governed metrics could be compared" in answer
+
+
+def test_E6_an_unavailable_requested_metric_substitutes_nothing(absent_frames):
+    """A metric present at one date only. The owner states no movement, and the
+    answer says so about THAT metric rather than describing another one."""
+    plan = _delta(measures=[{"concept": "current_interest_rate",
+                             "statistic": "weighted_average"}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+
+    executed = payload["metadata"]["governedPlan"]["executed"]
+    assert executed["requested_fields"] == ["current_interest_rate"]
+    movement = executed["metric_movements"][0]
+    assert movement["field"] == "current_interest_rate"
+    assert movement["movement_value"] is None
+    assert executed["requested_metric_disposition"] == [
+        {"canonical_field": "current_interest_rate",
+         "disposition": "GOVERNED_REFUSAL",
+         "status": movement["status"]}]
+
+    answer = _answer(payload)
+    assert "Current Interest Rate" in answer
+    assert "could not be compared" in answer
+    # NO OTHER METRIC STANDS IN FOR IT. Only the requested field is analysed at
+    # all in this mode, so a second display name in the answer would mean a
+    # substitution.
+    for other in ("Current Loan To Value", "Current Outstanding Balance"):
+        assert other not in answer, f"{other} was substituted"
+
+
+# --- 7, 8, 9. the three other forms are untouched --------------------------- #
+
+def test_E7_material_summary_is_unchanged(frames):
+    plan = _summary()
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    receipt = _receipt(record)
+    assert receipt["change_form"] == "material_summary"
+    assert receipt["mode"] == "portfolio_overview"
+    assert receipt["composition_owner"] == "mi_agent_api.insight_funded.compose"
+    # The composition owns the answer for this form, so no requested-metric block
+    # may appear: nobody named a metric.
+    assert "requested_metric_disposition" not in receipt
+
+
+def test_E7b_the_overview_answer_is_byte_identical_to_the_pre_change_shape(
+        frames):
+    """The requested-metric lead must not have edited the overview narrative."""
+    from mi_agent_api import period_change_route as pcr
+    from mi_agent.period_change.models import MODE_PORTFOLIO_OVERVIEW
+
+    direct = _owner_direct(mode=MODE_PORTFOLIO_OVERVIEW,
+                           period_request=_governed_request())
+    assert direct.summary["requested_metrics"] == []
+    answer = pcr.build_answer(direct)
+    assert answer.startswith("Between ")
+    assert "governed metrics could be compared across both snapshots." in answer
+
+
+def test_E8_attribution_is_unchanged(frames):
+    plan = _attribution()
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    receipt = _receipt(record)
+    assert receipt["change_form"] == "attribution"
+    assert receipt["calculation_owner"] == attribution.CALCULATION_OWNER
+
+
+def test_E9_level_comparison_is_still_claimed_by_no_change_form_adapter():
+    """Its capability is `generic_analysis`, so a `compare` under it is NOT the
+    variant this sprint canonicalised. That separation is the reason `compare`
+    could be given to `metric_delta` without taking anything from this form."""
+    from mi_agent.interpretation_v2 import vocabulary as vocab
+
+    assert vocab.CHANGE_FORM_CAPABILITY["level_comparison"] == "generic_analysis"
+    assert "level_comparison" not in vocab.CHANGE_FORM_OPERATION_VARIANTS
+
+    plan = _plan("level_comparison", capability="generic_analysis",
+                 operation="compare",
+                 measures=[{"concept": "current_outstanding_balance",
+                            "statistic": "sum"}], time=dict(PAIR))
+    assert plan["operation"] == "compare", "not collapsed"
+    assert canary._change_form_owner(plan) is None
+
+
+# --- 10. nothing reads the question ----------------------------------------- #
+
+def test_E10_the_output_contract_reads_no_raw_question():
+    """`build_answer` takes a result and nothing else, and the summary block it
+    now leads with is built from `MetricChange` objects. Asserted structurally
+    rather than promised."""
+    import inspect
+
+    from mi_agent.period_change import workflow as wf
+    from mi_agent_api import period_change_route as pcr
+
+    assert list(inspect.signature(pcr.build_answer).parameters) == ["result"]
+    for func in (pcr._requested_metric_answer, pcr._aggregation_clause,
+                 wf._requested_metrics):
+        source = inspect.getsource(func)
+        tree = ast.parse(source.lstrip())
+        names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        assert "question" not in names, func.__name__
+        assert "re" not in names, func.__name__
+
+
+# --- owner parity for the new block ----------------------------------------- #
+
+@pytest.mark.parametrize("concept,statistic", _SUPPORTED,
+                         ids=[c for c, _ in _SUPPORTED])
+def test_E_owner_parity_of_the_requested_metric_block(frames, concept,
+                                                      statistic):
+    """The block the answer now leads with must equal the owner's own.
+
+    Presentation may QUALIFY a value according to its status; it may not alter
+    one. So every figure in the served requested-metric block is compared with
+    the same figure on the independently-run owner's `MetricChange`.
+    """
+    from mi_agent.period_change.models import MODE_REQUESTED_METRIC
+
+    plan = _delta(measures=[{"concept": concept, "statistic": statistic}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+
+    direct = _owner_direct(mode=MODE_REQUESTED_METRIC,
+                           period_request=_governed_request(),
+                           requested_fields=(concept,))
+    served = direct.summary["requested_metrics"]
+    assert served, "the owner produced no requested-metric block"
+
+    # THE SERVED ANSWER IS THE OWNER'S OWN, word for word. One presenter over one
+    # calculation: if the serving path had rendered the block a second time, or
+    # from a second set of figures, these two strings would differ.
+    from mi_agent_api import period_change_route as pcr
+    assert _answer(payload) == pcr.build_answer(direct)
+
+    # ...and the receipt's copy of the movement is the owner's too.
+    executed = payload["metadata"]["governedPlan"]["executed"]
+    by_field = {c.field: c for c in direct.metric_changes}
+    for movement in executed["metric_movements"]:
+        owner_change = by_field[movement["field"]]
+        assert movement["start_value"] == owner_change.start_value
+        assert movement["end_value"] == owner_change.end_value
+        assert movement["movement_value"] == owner_change.movement_value
+        assert movement["excluded_population"] == {
+            "start": owner_change.start.excluded_population,
+            "end": owner_change.end.excluded_population}
+
+    for row in served:
+        owner_change = by_field[row["canonical_field"]]
+        assert row["start_value"] == owner_change.start_value
+        assert row["end_value"] == owner_change.end_value
+        assert row["movement_value"] == owner_change.movement_value
+        assert row["aggregation"] == owner_change.aggregation
+        assert row["status"] == owner_change.status
+        assert row["excluded_population"] == {
+            "start": owner_change.start.excluded_population,
+            "end": owner_change.end.excluded_population}
+
+
+# --------------------------------------------------------------------------- #
+# E11. the CERTIFICATION gate, exercised against real served output
+# --------------------------------------------------------------------------- #
+# The scorer's own `--self-test` proves it rejects the M03 answer and accepts a
+# corrected one, from fixtures. These prove it against envelopes this product
+# actually produces — so a scorer that passed its fixtures and could not read a
+# real receipt would be caught here rather than in a live run.
+# --------------------------------------------------------------------------- #
+
+def _certification():
+    import importlib.util
+
+    path = (Path(__file__).resolve().parents[2] / "due_diligence" / "evidence"
+            / "metric_delta_output_contract" / "certification.py")
+    spec = importlib.util.spec_from_file_location("_certification", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("concept,statistic,disposition", [
+    ("current_loan_to_value", "weighted_average", "ANSWERED"),
+    ("current_outstanding_balance", "sum", "ANSWERED"),
+])
+def test_E11_the_certification_gate_passes_a_real_served_answer(
+        frames, concept, statistic, disposition):
+    cert = _certification()
+    plan = _delta(measures=[{"concept": concept, "statistic": statistic}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    verdict = cert.score_requested_metric(
+        {"requested_fields": [concept], "expected_disposition": disposition},
+        payload, _receipt(record))
+    assert verdict["pass"], verdict["failures"]
+    assert verdict["requested_field"] == [concept]
+    assert verdict["executed_field"] == [concept]
+    assert concept in verdict["served_metric_field"]
+    assert verdict["requested_metric_disposition"] == {concept: disposition}
+
+
+def test_E11b_the_certification_gate_passes_a_real_qualified_answer(
+        degraded_frames):
+    cert = _certification()
+    plan = _delta(measures=[{"concept": "current_interest_rate",
+                             "statistic": "weighted_average"}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+    verdict = cert.score_requested_metric(
+        {"requested_fields": ["current_interest_rate"],
+         "expected_disposition": "QUALIFIED"}, payload, _receipt(record))
+    assert verdict["pass"], verdict["failures"]
+
+
+def test_E11c_the_certification_gate_rejects_the_answer_M03_actually_got(frames):
+    """The regression that matters: the gate must fail the OLD behaviour.
+
+    The served envelope is real; only its `answer` is replaced with the overview
+    narrative `build_answer` used to produce for a requested metric — which is
+    what M03 was published with. Everything else, receipt included, is exactly
+    what the product produces today, so this isolates the prose.
+    """
+    cert = _certification()
+    plan = _delta(measures=[{"concept": "current_interest_rate",
+                             "statistic": "weighted_average"}])
+    payload, reason, record = _serve(plan)
+    assert payload is not None, reason
+
+    as_m03 = dict(payload)
+    as_m03["answer"] = (
+        "Between 31 May 2026 and 30 June 2026, 0 of 1 governed metrics could be "
+        "compared across both snapshots. The balance bridge reconciles.")
+    verdict = cert.score_requested_metric(
+        {"requested_fields": ["current_interest_rate"]}, as_m03,
+        _receipt(record))
+    assert not verdict["pass"]
+    assert any("never names" in f or "states no such figure" in f
+               for f in verdict["failures"]), verdict["failures"]

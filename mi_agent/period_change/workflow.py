@@ -37,6 +37,9 @@ from .distribution import distribution_change
 from .models import (
     BRIDGE_STATUS_AVAILABLE,
     CALCULATION_VERSION,
+    DISPOSITION_ANSWERED,
+    DISPOSITION_GOVERNED_REFUSAL,
+    DISPOSITION_QUALIFIED,
     FAIL_CROSS_TENANT_ACCESS,
     FAIL_NO_ELIGIBLE_FIELDS,
     FAIL_REGISTRY_UNAVAILABLE,
@@ -45,12 +48,14 @@ from .models import (
     MATERIALITY_DISCLAIMER,
     RANK_SCOPE_NOTE,
     MODE_PORTFOLIO_OVERVIEW,
+    MODE_REQUESTED_METRIC,
     RESULT_SCHEMA_VERSION,
     SIGNIFICANCE_LARGEST_DECREASE,
     SIGNIFICANCE_LARGEST_INCREASE,
     SIGNIFICANCE_NO_BASIS,
     SIGNIFICANCE_NOTABLE_BY_RANK,
     SIGNIFICANCE_RELATIVELY_STABLE,
+    STATUS_AVAILABLE,
     STATUS_NOT_COMPARABLE_DUE_TO_AVAILABILITY,
     STATUS_SOURCE_CONVENTION_UNCERTAIN,
     UNIT_CURRENCY,
@@ -205,7 +210,8 @@ def run_period_change_analysis(
     _collect_period_warnings(resolution, warnings)
     _collect_limitations(selection, metrics, limitations)
 
-    summary = build_summary(metrics, distributions, bridge, resolution)
+    summary = build_summary(metrics, distributions, bridge, resolution,
+                            selection=selection)
     evidence = _evidence(metrics, distributions, bridge)
     audit = _audit(registry, policy, selection, resolution, request,
                    metrics, distributions, bridge)
@@ -395,8 +401,18 @@ def _collect_limitations(selection, metrics: Sequence[MetricChange],
 def build_summary(metrics: Sequence[MetricChange],
                   distributions: Sequence[DistributionChange],
                   bridge: Optional[BalanceBridge],
-                  resolution: PeriodResolution) -> Dict[str, Any]:
-    """The structured summary. Every value here also appears in a table above."""
+                  resolution: PeriodResolution,
+                  selection: Any = None) -> Dict[str, Any]:
+    """The structured summary. Every value here also appears in a table above.
+
+    `selection` IS READ FOR ITS MODE AND FOR NOTHING ELSE. A reader who named a
+    metric asked about THAT metric, and every other block here is built from
+    `comparable` — which is `available` only. A partially available metric
+    therefore falls out of the top movements, out of the improvements and
+    deteriorations, and out of the comparable count, and a summary made only of
+    those blocks has nothing left to say about the one metric that was asked
+    for. `requested_metrics` is the block that always does.
+    """
     comparable = [m for m in metrics if m.comparable]
     improvements = [m.field for m in comparable
                     if m.interpretation == INTERPRETATION_IMPROVEMENT]
@@ -483,7 +499,57 @@ def build_summary(metrics: Sequence[MetricChange],
              "reconciles": bridge.reconciles}
             if bridge else None),
         "materiality": MATERIALITY_DISCLAIMER,
+        # THE METRICS THE READER NAMED, whatever their availability. Present only
+        # in requested-metric mode, because only there did a reader name one; in
+        # portfolio-overview mode the composition owns the candidate set and a
+        # "requested" block would be this function inventing a request.
+        #
+        # NOTHING IS RECOMPUTED. Every value is copied off the `MetricChange` the
+        # owner already produced, including the availability evidence, so a
+        # renderer can qualify a figure without deriving one.
+        "requested_metrics": _requested_metrics(metrics, selection),
     }
+
+
+def _requested_metrics(metrics: Sequence[MetricChange],
+                       selection: Any) -> List[Dict[str, Any]]:
+    """Each named metric with its own availability evidence, or `[]`.
+
+    THE DISPOSITION IS THE OWNER'S STATUS, NAMED. `ANSWERED` where the movement
+    stands unqualified, `QUALIFIED` where it stands with an exclusion behind it,
+    `GOVERNED_REFUSAL` where the owner produced no movement at all. It states
+    what the status already means; it does not decide publishability, which
+    `AggregateOutcome.ok` and the route's own status gate already own.
+    """
+    if getattr(selection, "mode", None) != MODE_REQUESTED_METRIC:
+        return []
+    rows: List[Dict[str, Any]] = []
+    for metric in metrics:
+        if metric.movement_value is None:
+            disposition = DISPOSITION_GOVERNED_REFUSAL
+        elif metric.status == STATUS_AVAILABLE:
+            disposition = DISPOSITION_ANSWERED
+        else:
+            disposition = DISPOSITION_QUALIFIED
+        rows.append({
+            "canonical_field": metric.field,
+            "display_name": metric.display_name,
+            "aggregation": metric.aggregation,
+            "weight_field": metric.weight_field,
+            "start_value": metric.start_value,
+            "end_value": metric.end_value,
+            "movement_value": metric.movement_value,
+            "movement_unit": metric.movement_unit,
+            "relative_change": metric.relative_change,
+            "status": metric.status,
+            "disposition": disposition,
+            "valid_population": {"start": metric.start.valid_population,
+                                 "end": metric.end.valid_population},
+            "excluded_population": {"start": metric.start.excluded_population,
+                                    "end": metric.end.excluded_population},
+            "notes": list(metric.notes),
+        })
+    return rows
 
 
 # --------------------------------------------------------------------------- #

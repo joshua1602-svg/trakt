@@ -68,9 +68,20 @@ WORKFLOW_MODE: Optional[str] = CHANGE_FORM_MODE.get(CHANGE_FORM)
 #: The funded book, and only the funded book.
 POPULATION_BASES = frozenset({"funded"})
 
-#: The one result shape this form executes as. `period_movement` also admits
-#: `summary`, which is `material_summary`'s, and the canonicalisation seam has
-#: already collapsed a reader's spelling before a plan exists.
+#: The one result shape this form executes as.
+#:
+#: THIS COMMENT USED TO SAY THE CANONICALISATION SEAM HAD ALREADY COLLAPSED A
+#: READER'S SPELLING BEFORE A PLAN EXISTS, AND IT WAS NOT TRUE OF THIS FORM.
+#: `CHANGE_FORM_OPERATION_VARIANTS` carried `material_summary` alone, so a
+#: metric delta stated as `compare` arrived here intact and was refused. It is
+#: true now: `metric_delta` canonicalises `compare` to `movement` in
+#: `normalise.py` rule 5, over the central table, and this set is what it always
+#: should have been — the defence in depth for a plan built without that seam,
+#: exactly as `material_summary`'s single-operation set is.
+#:
+#: `period_movement` also admits `rank`, `breakdown`, `series` and `summary`.
+#: Each states a shape the requested-metric mode does not produce, so each is
+#: refused here rather than flattened into a movement.
 OPERATIONS = frozenset({"movement"})
 
 #: The deterministic owner of every figure this form publishes.
@@ -145,10 +156,18 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
 
     operation = body.get("operation")
     if operation not in OPERATIONS:
+        # THE SECOND CLAUSE OF THIS MESSAGE USED TO SAY THE OPERATION BELONGED TO
+        # "a different form with a different mode", AND FOR `compare` THAT WAS
+        # WRONG. `level_comparison` owns level-against-level comparison and runs
+        # `generic_analysis`; no form owns a `compare` over `period_movement`
+        # with a named measure, which is why `compare` is now a variant that
+        # canonicalises to `movement` upstream instead of arriving here. What is
+        # left here genuinely states a shape this owner does not produce.
         return False, OPERATION_NOT_ADMITTED, (
-            f"{operation!r} states a result shape this form does not produce; "
-            f"a {operation!r} over the same capability is a different form with "
-            f"a different mode")
+            f"{operation!r} states a result shape the requested-metric mode does "
+            f"not produce; only the shapes in "
+            f"vocabulary.CHANGE_FORM_OPERATION_VARIANTS[{CHANGE_FORM!r}] "
+            f"canonicalise to {sorted(OPERATIONS)[0]!r}")
 
     base = (body.get("population") or {}).get("base")
     if base not in POPULATION_BASES:
@@ -253,12 +272,35 @@ def receipt(plan: Any, result: Any) -> Dict[str, Any]:
         # THE MOVEMENT ITSELF, as the owner stated it. Copied, never recomputed:
         # which aggregation was applied is the registry's answer and the receipt's
         # job is to carry it so a reader can see it beside what was asked.
+        #
+        # AND THE AVAILABILITY EVIDENCE BESIDE IT. `status` alone says a figure
+        # was qualified and not why: the live canary published
+        # `partially_available` on an interest-rate movement and this receipt
+        # could not say how many rows were excluded or against which weight, so
+        # neither a reader nor a certification test could tell a sound
+        # qualification from a defect. The counts, the weight field and the
+        # owner's own notes are its answer; nothing here derives them.
         "metric_movements": [
             {"field": change.field, "aggregation": change.aggregation,
+             "weight_field": change.weight_field,
              "start_value": change.start_value, "end_value": change.end_value,
              "movement_value": change.movement_value,
-             "movement_unit": change.movement_unit, "status": change.status}
+             "movement_unit": change.movement_unit, "status": change.status,
+             "valid_population": {"start": change.start.valid_population,
+                                  "end": change.end.valid_population},
+             "excluded_population": {"start": change.start.excluded_population,
+                                     "end": change.end.excluded_population},
+             "notes": list(change.notes)}
             for change in result.metric_changes],
+        # WHAT THE READER ACTUALLY GOT, named by the owner's summary rather than
+        # re-derived here. A certification test that reads only the route and the
+        # owner cannot tell a served answer from a served silence; this is the
+        # fact that separates them.
+        "requested_metric_disposition": [
+            {"canonical_field": row.get("canonical_field"),
+             "disposition": row.get("disposition"),
+             "status": row.get("status")}
+            for row in (result.summary.get("requested_metrics") or ())],
     }
 
 

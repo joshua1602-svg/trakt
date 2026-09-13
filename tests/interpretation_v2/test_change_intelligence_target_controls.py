@@ -201,13 +201,36 @@ def test_Q20_metric_delta_routing_is_unchanged(operation):
     plan = _plan(change_form="metric_delta", operation=operation,
                  measures=[{"concept": "current_outstanding_balance"}])
     assert plan.capability == "period_movement"
-    # NOT canonicalised to `summary`. The operation the reader's request implied
-    # is the operation that executes, because this form has no canonical
-    # operation of its own to collapse into.
-    assert plan.operation == operation
+    # STILL NOT canonicalised to `summary` — that was and remains the thing this
+    # line guards, and `summary` is absent from this form's variant set.
+    #
+    # WHAT CHANGED, AND WHY. This used to assert `plan.operation == operation`,
+    # on the reasoning that "this form has no canonical operation of its own to
+    # collapse into". It has one: `movement`, the action the form names. The
+    # absence was what made the live canary's M01 refuse a question every slot of
+    # which had been read correctly, so the form was added to
+    # `CHANGE_FORM_CANONICAL_OPERATION` and `compare` to its variants.
+    assert plan.operation == "movement"
     assert _form_binding(plan)["mode"] == "requested_metric"
     assert [m.concept for o in plan.outputs for m in o.measures] == \
         ["current_outstanding_balance"]
+
+
+def test_Q20_a_shape_this_owner_does_not_produce_is_still_not_collapsed():
+    """The other half of the same rule, so widening one does not widen both.
+
+    `period_movement` admits `series` and `summary` too. Neither is a spelling of
+    "how much did this move"; each states a different result shape, so each is
+    carried through as stated and refused rather than rewritten into a movement.
+    """
+    from mi_agent import plan_metric_delta as metric_delta
+
+    for stated in ("series", "summary"):
+        plan = _plan(change_form="metric_delta", operation=stated,
+                     measures=[{"concept": "current_outstanding_balance"}])
+        assert plan.operation == stated
+        eligible, why, _ = metric_delta.check_eligibility(plan.to_dict())
+        assert not eligible and why == metric_delta.OPERATION_NOT_ADMITTED
 
 
 def test_Q20_is_not_claimed_by_the_material_summary_runtime():

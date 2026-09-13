@@ -372,6 +372,7 @@ CHANGE_FORM_MODE: Mapping[str, str] = {
 #: interpretation question, and the compiler does not guess it.
 CHANGE_FORM_CANONICAL_OPERATION: Mapping[str, str] = {
     "material_summary": "summary",
+    "metric_delta": "movement",
 }
 
 #: WHICH FORMS OWN AN AUTHORISED DEFAULT COMPARISON WINDOW when the reading states
@@ -419,11 +420,37 @@ CHANGE_FORM_ABSENT_PERIOD_DEFAULT: Mapping[str, Optional[str]] = {
 
 #: The operations that are linguistic variants of each form's own action, and so
 #: canonicalise to it. A form absent from this table canonicalises nothing, and
-#: its operation is checked against its capability in the ordinary way — which
-#: is why `metric_delta`, `attribution` and `level_comparison` are absent: their
-#: measure and target requirements are unchanged by any of this.
+#: its operation is checked against its capability in the ordinary way.
+#:
+#: `metric_delta` WAS ABSENT, AND THE LIVE CANARY PROVED THAT WRONG. A reader who
+#: says "compare outstanding balance across the two most recent reporting dates
+#: and tell me the size of the shift" is asking one analytical question, and the
+#: interpreter read every slot of it correctly: form `metric_delta`, measure
+#: `current_outstanding_balance`, a stated relative pair, operation `compare` —
+#: the verb the reader used. The compiler validated `compare` against
+#: `CAPABILITY_OPERATIONS["period_movement"]`, which admits it, and emitted a
+#: plan. Nothing canonicalised it, so the form's owner was handed the one shape
+#: it does not name and refused. That is this table's absence, not a defect
+#: downstream of it.
+#:
+#: WHY `compare` IS A VARIANT OF THIS FORM AND NOT ANOTHER FORM'S ACTION. It is
+#: `level_comparison` that owns "two states, compared as levels, without movement
+#: intelligence" — and it runs `generic_analysis`, a DIFFERENT capability. A
+#: `compare` that reached `period_movement` did so because the form it was stated
+#: with owns that capability, which is `CHANGE_FORM_CAPABILITY`'s own rule
+#: applying. There is no second form that owns `compare` over `period_movement`
+#: with a named measure, so collapsing it here takes nothing from anyone.
+#:
+#: AND WHY THE SET STOPS THERE. `period_movement` also admits `rank`, `breakdown`,
+#: `series` and `summary`. Each states a result SHAPE the requested-metric mode
+#: does not produce — an ordering, a dimensional split, a many-period line, a
+#: portfolio composition — so each is left exactly as it is and refused against
+#: the capability or by the owner's perimeter, rather than flattened into a
+#: movement. `attribution` and `level_comparison` remain absent: their measure and
+#: target requirements are unchanged by any of this.
 CHANGE_FORM_OPERATION_VARIANTS: Mapping[str, FrozenSet[str]] = {
     "material_summary": frozenset({"summary", "movement", "compare"}),
+    "metric_delta": frozenset({"movement", "compare"}),
 }
 
 #: WHERE A CAPABILITY NAME IS NOT ENOUGH TO SEPARATE TWO CAPABILITIES, the
