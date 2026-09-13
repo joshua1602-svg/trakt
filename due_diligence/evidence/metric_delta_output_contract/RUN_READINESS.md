@@ -101,3 +101,41 @@ post-run verification of `MI_AGENT_PLAN_SERVE = off` is the operator's Portal
 reading, recorded as theirs. During the run itself the flag is verified
 behaviourally and for free, from `serving.mode` and `principal_matched` on every
 evidence record the run produces.
+
+---
+
+# Phase 2 — DEPLOYMENT CONFIRMED, 2026-09-13T14:00:16Z
+
+Operator reading, Portal, before the deploy:
+
+    MI_AGENT_PLAN_SERVE_PRE_DEPLOY = off
+
+Deploy: run 34761151472, `deploy-mi-api.yml` dispatched on branch
+`deploy/mi-api-5c436961`, whose head is the certified SHA and nothing else.
+Succeeded 13:58 with no SCM-restart retry.
+
+    DEPLOYMENT_REQUESTED_SHA = 5c436961ebe279bc0820ab006867b9f8a869bde2
+    DEPLOYMENT_CONFIRMED_SHA = 5c436961ebe279bc0820ab006867b9f8a869bde2
+    AUTH_STATUS              = PASS
+    read                     = run 34761383364, step 8, FIRST attempt
+
+HOW BOTH ARE PROVED WITHOUT QUOTING A LOG LINE. On a `workflow_dispatch` the
+provenance step is fatal, and `provenance.py` returns 0 only when
+`provenance == "PASS" and auth == "PASS"`; its provenance check is an equality
+between the artefact stamp read from the running process and `--expect-commit`.
+The step's exit code is therefore the comparison's own result, not a reading of
+it. Step 8 succeeded, so the running service IS the certified SHA and the bearer
+authenticated.
+
+    SPEND SO FAR   model calls 0, /mi/query calls 0
+    BANK_STATE     UNSPENT
+
+## Still outstanding: Phase 3
+
+    MI_AGENT_PLAN_SERVE = off  ->  canary
+
+The bearer authenticated at 14:00:16Z and an Entra access token lives about an
+hour, so the flag flip and the run should follow promptly. If more than about
+forty-five minutes pass, `MI_BEARER` should be re-minted at the same time —
+three of this programme's runs have been stopped by a token that aged out
+between preparation and execution.
