@@ -275,3 +275,89 @@ NEW_ANALYTICAL_CALCULATION_OWNERS = 0
 RAW_QUESTION_ROUTING_ADDED        = 0
 PRODUCT_EXECUTABLE_LOC            = +126 / −10   (budget ~150)
 ```
+
+---
+
+# Regression
+
+Every baseline below was taken by stashing this change and re-running the same
+command in the same container, so the comparison is against this environment
+rather than against a number recorded in an earlier sprint.
+
+| suite | before | after | failing ids |
+|---|---|---|---|
+| `tests/interpretation_v2/test_change_intelligence_serving.py` | 65 passed | **86 passed** | 0 → 0 |
+| `tests/interpretation_v2/` | 565 passed, 3 failed | **586 passed, 3 failed** | **identical 3**, all pre-existing |
+| `mi_agent_api/tests/` | 1907 passed, 26 failed | **1907 passed, 26 failed** | **identical 17 ids** |
+| `mi_agent/tests/` | 1768 passed, 22 failed | **1768 passed, 22 failed** | **identical 19 ids** |
+
+The three pre-existing `interpretation_v2` failures — `test_bank_and_shadow_boundary`,
+`test_contract_normalisation::test_only_contract_modules_moved`,
+`test_interpretation_policy::test_production_surfaces_are_untouched` — fail
+identically on the pristine tree and are untouched by this change.
+
+```
+NEW_UNEXPLAINED_FAILURES = 0
+```
+
+Two controls DID change, and they are not counted as "unexplained" because they
+are the subject of the sprint rather than collateral: both asserted that
+`metric_delta` has no canonical operation, and both were rewritten with their
+reasoning replaced rather than their assertions merely flipped. They are set out
+in full under Objective A above.
+
+Forms explicitly re-proved unchanged: `material_summary` (E7, E7b),
+`attribution` (E8), `level_comparison` (E9).
+
+---
+
+# Fresh canary — prepared, NOT run
+
+    FRESH_CANARY_PREPARED = YES
+    FRESH_CANARY_BANK_ID  = metric_delta_output_contract_canary
+    FRESH_CANARY_SHA256   = 6465f4ed962f058d9c9e9f63ecb941cb19dcf60a218e27339cf60d92e39a6996
+    authorised_live_calls = 5, calls_per_case = 1, retries = 0
+
+| case | form | canonical op | measure | temporal | owner | disposition | user-facing outcome |
+|---|---|---|---|---|---|---|---|
+| N01 | metric_delta | `movement` | funded/outstanding balance | EXPLICIT_PAIR | `run_period_change_analysis`, requested_metric | ANSWERED | names the metric, states the movement |
+| N02 | metric_delta | `movement` | weighted-average LTV | EXPLICIT_PAIR | same | ANSWERED | same |
+| N03 | metric_delta | `movement` | weighted-average interest rate | EXPLICIT_PAIR | same | QUALIFIED *or* ANSWERED | same, plus exclusion counts when QUALIFIED |
+| N04 | metric_delta | `movement` | principal balance | EXPLICIT_PAIR | same | ANSWERED | same |
+| N05 | material_summary | `summary` | none named | OWNER_DEFAULT | + `insight_funded.compose` | none | the overview narrative, no requested-metric block |
+
+N01 and N04 are the live proof of the M01 repair, in wording M01 did not use;
+N03 replaces M03 and is the live proof of the output contract. Wording
+uniqueness was verified programmatically against all six historical manifests,
+each of which was re-hashed against its pin in the same pass, before the file was
+written.
+
+**The operation is pinned as the CANONICAL value the compiled plan must carry,
+not as the spelling the model emits.** The contract collapses `compare` and
+`movement`; pinning which one Opus produces would be pinning a coin toss.
+
+**N03's disposition is an accept-set, deliberately.** Its metric returned
+`partially_available` on this book in the last live run, which is why it is in
+the bank — but availability is a fact about the data on the day, not about the
+code, and a book that improves between runs would turn a correct `ANSWERED` into
+a false FAIL. Pinning a data condition as though it were a contract is the
+v4/W06 authoring defect, and it is not repeated. What is pinned is the invariant
+that belongs to this sprint: the figure reaches the reader either way.
+
+**What is deliberately absent.** No unavailable-metric case: the
+anti-substitution rule is proved offline against a fixture built for it, and no
+field is KNOWN to be single-dated on this book, so a live case would pin a guess.
+No S09 retest — unchanged data history. No attribution case — nothing in this
+sprint touches its adapter, owner or envelope, whereas `material_summary` shares
+the presenter that changed, which is why it is the regression case.
+
+**The runner is not built.** The bank is hashed and unspent; wiring
+`certification.score_requested_metric` into a canary runner and a workflow is the
+first step of any live run and is not done here, because this sprint was told not
+to run one.
+
+One authoring hazard caught and recorded: `.gitignore` carries `*out*.json`,
+which silently matched the manifest's first filename. The hash file would have
+been committed and the manifest it pins would not, so no CI checkout could have
+verified the bank. Caught before anything was spent; every other evidence file in
+the programme was then audited and none is affected.
