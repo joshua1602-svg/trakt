@@ -37,6 +37,9 @@ sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_REPO / "due_diligence" / "evidence"
                       / "deployed_acceptance_0399a315"))
 
+from due_diligence.evidence.change_intelligence_serving_canary import (  # noqa: E402
+    provenance as pv)
+
 MANIFEST = HERE / "certification_manifest.json"
 HASH = HERE / "certification_manifest.sha256"
 
@@ -58,16 +61,13 @@ def liveness(base: str, *, attempts: int, gap: float, timeout: float):
     """Healthy TWICE in a row, separated by a wait. Returns (ok, reads)."""
     reads, consecutive = [], 0
     for index in range(attempts):
-        status, body = _get(f"{base}/", timeout=timeout)
+        status, _body = _get(f"{base}/", timeout=timeout)
         stamp = datetime.now(timezone.utc).isoformat()
-        commit = ""
-        try:
-            commit = str((json.loads(body) or {}).get("commit") or "")
-        except Exception:                                            # noqa: BLE001
-            pass
+        # HTTP 200 is the whole question here: `/` is the app's own liveness
+        # probe and answers as soon as the process is up. WHICH build is running
+        # is a separate check above, with its own reader.
         healthy = status == 200
-        reads.append({"at": stamp, "status": status, "healthy": healthy,
-                      "commit": commit[:40]})
+        reads.append({"at": stamp, "status": status, "healthy": healthy})
         consecutive = consecutive + 1 if healthy else 0
         print(f"  liveness {index + 1}/{attempts}: HTTP {status} "
               f"{'healthy' if healthy else 'NOT healthy'} "
@@ -124,17 +124,22 @@ def main() -> int:
     check("MI_BEARER present", bool(bearer), f"{len(bearer)} characters")
     check("publish profile present", bool(profile), f"{len(profile)} characters")
 
-    # 4. the deployed build.
-    status, body = _get(f"{base}/")
-    served = ""
-    try:
-        served = str((json.loads(body) or {}).get("commit") or "")
-    except Exception:                                                # noqa: BLE001
-        pass
+    # 4. THE DEPLOYED BUILD, READ BY THE ESTATE'S OWN READER.
+    #
+    #    This used to parse the body here and look for a top-level `commit`.
+    #    The stamp lives at `build.commit`, so the read came back empty against a
+    #    perfectly healthy HTTP 200 and the gate failed with "serving HTTP 200" —
+    #    a harness defect wearing a deployment failure's clothes.
+    #    `provenance.read_build` already knows the shape, already tries `/` then
+    #    `/health`, and is stdlib-only like everything else here. Reimplementing
+    #    it was the mistake; using it is the fix.
+    build, attempts = pv.read_build(base)
+    served = str(build.get("commit") or "")
     out["deployed_sha"] = served
+    out["build_read_attempts"] = attempts
     check("deployed SHA",
           bool(args.expect_commit) and served.lower() == args.expect_commit.lower(),
-          f"serving {served or f'HTTP {status}'}")
+          f"serving {served or 'no stamp'}")
 
     # 5. the bearer, against an endpoint that resolves no question.
     if bearer:
