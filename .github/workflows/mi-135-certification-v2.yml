@@ -220,6 +220,11 @@ jobs:
             due_diligence/evidence/mi_135_release_certification_v2/raw_records*.json
           if-no-files-found: warn
 
+      - name: What the operator must still do
+        if: always()
+        run: |
+          echo "::warning::MI_AGENT_PLAN_SERVE is an App Service application setting; this workflow holds a publish profile and cannot change it. Set it back to off on trakt-mi-api once the evidence is committed."
+
       # THE PREFLIGHT VERDICT, LAST, SO IT IS READABLE. The Actions log API
       # returns only the final few kilobytes of a job, and the artifact upload
       # and warning steps are verbose enough to push a mid-job failure out of
@@ -245,12 +250,3 @@ jobs:
           print(f"failed: {report.get('failed_checks')}")
           PY
 
-      - name: What the operator must still do
-        if: always()
-        run: |
-          echo "::warning::MI_AGENT_PLAN_SERVE is NOT touched by this workflow \
-          and cannot be — it is an App Service application setting needing ARM \
-          access and this repository holds a publish profile. Set \
-          MI_AGENT_PLAN_SERVE = off on trakt-mi-api once the evidence above is \
-          committed. The certification is not finished until that is done, \
-          whatever the result."
