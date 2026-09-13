@@ -48,38 +48,60 @@ WANTED = ("M01", "M03")
 
 
 def project(record):
-    """The operation chain, the perimeter that refused, and what ran."""
-    plan = record.get("governed_plan") or {}
+    """The operation chain, the perimeter that refused, and what ran.
+
+    THE KEY NAMES ARE THE RECORD'S OWN, not the post-mortem reader's. That
+    reader renames the three stages as it projects them; reading a raw sink
+    record through those names returns null for every one — which is exactly
+    what the first attempt at this did, and a null is not an answer.
+    `plan_shadow_wiring.record_plan_stages` is the single owner of the record
+    shape and it writes `model.raw_payload`, `interpretation.candidate_intent`
+    and `compiler` (a `CompileResult.to_dict`, whose plan is under `plan`).
+    """
+    model = record.get("model") or {}
+    raw = model.get("raw_payload") or {}
+    interpretation = record.get("interpretation") or {}
+    intent = interpretation.get("candidate_intent") or {}
+    compiler = record.get("compiler") or {}
+    plan = compiler.get("plan") or {}
     prov = plan.get("provenance") or {}
     bindings = prov.get("compiler_bindings") or {}
     claims = prov.get("intent_claims") or {}
-    intent = record.get("candidate_intent") or {}
-    raw = record.get("raw_model_payload") or {}
     execution = record.get("execution") or {}
     receipt = execution.get("receipt") or {}
     return {
         "correlation_id": record.get("correlation_id"),
         "disposition": record.get("disposition"),
-        # THE OPERATION CHAIN, three separate facts kept apart.
+        # THE OPERATION CHAIN, four separate facts kept apart. `intent_claims`
+        # is the CLAIMED intent as it stood BEFORE normalisation; the compiled
+        # plan is what rule 5 left. A difference between them IS the rule
+        # firing, and their being equal is the rule not firing.
         "operation_chain": {
             "candidate_raw_model_payload": raw.get("operation"),
-            "intent_claims_at_compile": claims.get("operation"),
-            "candidate_intent_after_normalise": intent.get("operation"),
+            "candidate_intent": intent.get("operation"),
+            "intent_claims_before_normalise": claims.get("operation"),
             "compiled_plan": plan.get("operation"),
+            "receipt": receipt.get("operation"),
         },
         "normalisation_applied": bindings.get("normalisation"),
         "change_form": {
             "raw_model_payload": raw.get("change_form"),
             "candidate_intent": intent.get("change_form"),
             "compiler_binding": bindings.get("change_form"),
+            "receipt": receipt.get("change_form"),
         },
         "capability": {
             "raw_model_payload": raw.get("capability"),
             "candidate_intent": intent.get("capability"),
             "compiled_plan": plan.get("capability"),
         },
-        "compile": {k: (record.get("compile_result") or {}).get(k)
-                    for k in ("outcome", "plan_id", "reason_codes")},
+        "measures": {
+            "candidate_intent": pr.redact(intent.get("measures")),
+            "compiled_outputs": pr.redact(plan.get("outputs")),
+        },
+        "compile": {"outcome": compiler.get("outcome"),
+                    "plan_id": compiler.get("plan_id"),
+                    "reason_codes": compiler.get("reason_codes")},
         "period": pr.redact(plan.get("period")),
         "eligibility": record.get("eligibility"),
         "serving": record.get("serving"),
