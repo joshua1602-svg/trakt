@@ -1,0 +1,456 @@
+{
+ "authorised_live_calls": 17,
+ "bank_id": "live_change_form_gate_v4",
+ "baseline_sha": "665176864d2f5dbceedc277e351c5d2cd978777f",
+ "boundary": "AnthropicInterpreterClient directly. No /mi/query, no MI_BEARER, no App Service, no plan_serving_canary, no MI_AGENT_PLAN_SERVE, neither funded_bridge nor material_summary serving connected, not the 135 benchmark CLI. Nothing runs against a book.",
+ "calls_per_case": 1,
+ "cases": [
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W01",
+   "measure": null,
+   "question": "Compare the funded book across the last two reporting dates and tell me what moved materially.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W02",
+   "measure": null,
+   "question": "As things stand this reporting period, what has materially shifted in the book?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "EXPLICIT_ANCHOR"
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W03",
+   "measure": null,
+   "question": "Summarise the material changes in the funded portfolio.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT"
+  },
+  {
+   "change_form": "material_summary",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W04",
+   "measure": null,
+   "question": "What has materially changed in the acquired book?",
+   "scope": "acquired",
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W05",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "How much did outstanding balance change between the two most recent reporting dates?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [
+    "arrears_balance",
+    "arrears_bucket",
+    "number_of_days_in_arrears",
+    "account_status",
+    "principal_arrears_amount",
+    "interest_in_arrears"
+   ],
+   "id": "W06",
+   "measure": {
+    "concepts": [
+     "loan"
+    ],
+    "family": "loan_count",
+    "statistics": [
+     "count",
+     "count_distinct"
+    ]
+   },
+   "question": "What is the movement in the number of loans in arrears since the prior reporting date?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W07",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value"
+    ],
+    "family": "weighted_average_current_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "How did weighted average LTV shift against the previous reporting date?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W08",
+   "measure": {
+    "concepts": [
+     "arrears_balance"
+    ],
+    "family": "arrears_balance",
+    "statistics": []
+   },
+   "question": "How much did arrears balance move in the direct book since the last report?",
+   "scope": "direct",
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "metric_delta",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W09",
+   "measure": {
+    "concepts": [
+     "indexed_loan_to_value"
+    ],
+    "family": "weighted_average_indexed_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "How did weighted average indexed LTV change from the prior reporting date to the current one?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W10",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement",
+     "bridge_component"
+    ],
+    "family": "funded_balance_or_its_governed_components",
+    "statistics": []
+   },
+   "question": "What drove the funded balance movement between the last two reporting dates?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W11",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement",
+     "bridge_component"
+    ],
+    "family": "funded_balance_or_its_governed_components",
+    "statistics": []
+   },
+   "question": "For this reporting period, what explains the movement in funded balance?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "EXPLICIT_ANCHOR"
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W12",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement",
+     "bridge_component"
+    ],
+    "family": "funded_balance_or_its_governed_components",
+    "statistics": []
+   },
+   "question": "Break the funded balance movement into its components.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT"
+  },
+  {
+   "change_form": "attribution",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W13",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement",
+     "bridge_component"
+    ],
+    "family": "funded_balance_or_its_governed_components",
+    "statistics": []
+   },
+   "question": "What are the drivers behind the direct book's funded balance movement?",
+   "scope": "direct",
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT"
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W14",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Show outstanding balance at the two most recent reporting dates side by side.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W15",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value"
+    ],
+    "family": "weighted_average_current_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "question": "What was weighted average LTV at the current reporting date and at the previous one?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W16",
+   "measure": {
+    "concepts": [
+     "loan"
+    ],
+    "family": "loan_count",
+    "statistics": [
+     "count",
+     "count_distinct"
+    ]
+   },
+   "question": "Give me funded loan counts for the current and the prior reporting dates.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  },
+  {
+   "change_form": "level_comparison",
+   "dimensions": [],
+   "filters_permitted": [],
+   "id": "W17",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance",
+     "funded_balance_movement"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": []
+   },
+   "question": "Put the acquired book's funded balance at the latest reporting date next to the previous one.",
+   "scope": "acquired",
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR"
+  }
+ ],
+ "model": "claude-opus-5",
+ "not_pinned": [
+  "capability",
+  "operation",
+  "the statistic on a measure (recorded, reported, not a gate)",
+  "time.grain",
+  "WHICH of the three valid temporal routes a form that owns a default takes \u2014 all three are correct readings, so the gate scores validity rather than preference, and reports which route each case took"
+ ],
+ "primary_gate": "change_form == expected, 17/17",
+ "registry_is_visible_to_the_model": false,
+ "retries": 0,
+ "secondary_gates": {
+  "explicit_measure_preserved": "13 of 13 (W05-W17)",
+  "invented_dimensions": 0,
+  "invented_filters": "0 \u2014 a filter outside filters_permitted",
+  "material_summary_specific_measure_invented": "0 of 4",
+  "scope_preserved": "4 of 4 (W04, W08, W13, W17)",
+  "temporal_route_valid": "17 of 17, per temporal_accept_by_form",
+  "unnecessary_clarifications": 0
+ },
+ "supersedes": "live_change_form_gate_v3 (immutable; change_form 18/18 ACCEPTED, three temporal failures). v1 and v2 remain immutable; v2 remains unrun.",
+ "temporal_accept_by_form": {
+  "attribution": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period",
+   "current",
+   "ABSENT"
+  ],
+  "level_comparison": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period"
+  ],
+  "material_summary": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period",
+   "current",
+   "ABSENT"
+  ],
+  "metric_delta": [
+   "relative_pair",
+   "previous_reporting_period",
+   "explicit_period"
+  ]
+ },
+ "temporal_routes": {
+  "EXPLICIT_ANCHOR": "the wording names only the current endpoint",
+  "EXPLICIT_PAIR": "the wording names two reporting states",
+  "OWNER_DEFAULT": "the wording names no temporal relation, and the form owns the comparison window; absent, anchor and pair are all valid",
+  "scored_from": "key presence in the payload (`form` in `time`), never wording"
+ },
+ "v3_authoring_defects_corrected": {
+  "attribution_measure": "v3 scored V13 as a miss for naming bridge_component on a question about components. v4 accepts the decomposed quantity OR the governed component concept, and includes W12.",
+  "filters": "v3 pinned filters=[] on every case and then scored V06 as inventing one, though its question said 'live funded loans'. v4 pins filters_permitted PER CASE and includes W06 ('loans in arrears') so the corrected rule is exercised."
+ },
+ "what_this_is": "NATURAL LANGUAGE -> OPUS -> CandidateIntent, measuring the TEMPORAL contract after the presence repair. Seventeen FRESH paraphrases; none of v3's questions is reused. It does NOT test deterministic execution and computes no answer."
+}
