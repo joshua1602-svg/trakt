@@ -1,0 +1,482 @@
+{
+ "bank_id": "metric_delta_output_contract_canary",
+ "bank_sha256": "6465f4ed962f058d9c9e9f63ecb941cb19dcf60a218e27339cf60d92e39a6996",
+ "base_url": "https://app.traktinfra.io/api",
+ "build_attempts": [
+  {
+   "commit": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+   "path": "/",
+   "status": 200
+  }
+ ],
+ "cases": [
+  {
+   "answer": "",
+   "case_id": "N01",
+   "evidence_lookup": "timed out after 120s (read)",
+   "failures": [
+    "change_form: read None, pinned 'metric_delta'",
+    "outcome: REFUSE, pinned ANSWER",
+    "served from None, not the governed plan \u2014 reason None",
+    "route: None, pinned 'governed_plan_metric_delta'",
+    "calculation_owner: None, pinned 'mi_agent.period_change.workflow.run_period_change_analysis'",
+    "mode: None, pinned 'requested_metric'",
+    "canonical operation None, pinned 'movement'",
+    "temporal route 'ABSENT' is not in ['relative_pair', 'previous_reporting_period', 'explicit_period']",
+    "no measure read; pinned family funded_or_outstanding_balance",
+    "the receipt records no requested field",
+    "the receipt records no requested_metric_disposition; a requested-metric answer that cannot say how it came out cannot be certified"
+   ],
+   "http_status": 500,
+   "non_blocking": [],
+   "pass": false,
+   "question": "Set the funded book's outstanding balance at the newest reporting date against the one before it and tell me how far it has moved.",
+   "read": {
+    "calculation_owner": null,
+    "candidate_operation": null,
+    "capability": null,
+    "change_form_claimed": null,
+    "change_form_compiled": null,
+    "compiled_operation": null,
+    "composition_owner": null,
+    "executed_field": [],
+    "measures": [],
+    "mode": null,
+    "outcome": "REFUSE",
+    "owner_availability_status": [],
+    "period_form": null,
+    "period_from": null,
+    "period_to": null,
+    "raw_payload_states_time": null,
+    "requested_field": [],
+    "requested_metric_disposition": {},
+    "scope": null,
+    "served_metric_field": [],
+    "serving_provenance": null,
+    "serving_route": null,
+    "temporal_route": "ABSENT",
+    "time_stated": null
+   },
+   "receipt": {},
+   "record_found": false,
+   "seconds": 33.5,
+   "serving": {}
+  },
+  {
+   "answer": "Here is the result for your query, covering 2 groups.",
+   "case_id": "N02",
+   "evidence_lookup": "matched on question + client",
+   "failures": [
+    "change_form: read 'level_comparison', pinned 'metric_delta'",
+    "route: None, pinned 'governed_plan_metric_delta'",
+    "calculation_owner: None, pinned 'mi_agent.period_change.workflow.run_period_change_analysis'",
+    "mode: None, pinned 'requested_metric'",
+    "canonical operation None, pinned 'movement'",
+    "the receipt records no requested field",
+    "the receipt records no requested_metric_disposition; a requested-metric answer that cannot say how it came out cannot be certified"
+   ],
+   "http_status": 200,
+   "non_blocking": [],
+   "pass": false,
+   "question": "Where does the funded book's weighted average loan-to-value stand now compared with the prior reporting date?",
+   "read": {
+    "calculation_owner": null,
+    "candidate_operation": "compare",
+    "capability": null,
+    "change_form_claimed": "level_comparison",
+    "change_form_compiled": "level_comparison",
+    "compiled_operation": null,
+    "composition_owner": null,
+    "executed_field": [],
+    "measures": [
+     "current_loan_to_value"
+    ],
+    "mode": null,
+    "outcome": "ANSWER",
+    "owner_availability_status": [],
+    "period_form": null,
+    "period_from": null,
+    "period_to": null,
+    "raw_payload_states_time": true,
+    "requested_field": [],
+    "requested_metric_disposition": {},
+    "scope": null,
+    "served_metric_field": [],
+    "serving_provenance": "NEW",
+    "serving_route": null,
+    "temporal_route": "relative_pair",
+    "time_stated": null
+   },
+   "receipt": {
+    "population_base": "funded"
+   },
+   "record_found": true,
+   "seconds": 35.7,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": null,
+    "plan_id": "plan_602f485b781a1f36",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  {
+   "answer": "Current Interest Rate moved \u22123.21 pp between 30 November 2025 and 30 June 2026, from 9.53% to 6.32% (weighted average weighted by current_outstanding_balance). This is a partially available comparison: 0 row(s) were excluded at 30 November 2025 and 1 at 30 June 2026, leaving 73 and 957 in the compared population. It is reported with that qualification and is excluded from the governed comparability count below. Between 30 November 2025 and 30 June 2026, 0 of 1 governed metrics could be compared across both snapshots. The balance bridge reconciles: opening \u00a38.9m +\u00a3150.2m new lending, \u2212\u00a30 exits, +\u00a30 on continuing loans, closing \u00a3159.1m. No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk.",
+   "case_id": "N03",
+   "evidence_lookup": "matched on question + client",
+   "failures": [],
+   "http_status": 200,
+   "non_blocking": [],
+   "pass": true,
+   "question": "Tell me where the funded book's weighted average interest rate sat at each of the two most recent reporting dates and what the change between them was.",
+   "read": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "candidate_operation": "compare",
+    "capability": "period_movement",
+    "change_form_claimed": "metric_delta",
+    "change_form_compiled": "metric_delta",
+    "compiled_operation": "movement",
+    "composition_owner": null,
+    "executed_field": [
+     "current_interest_rate"
+    ],
+    "measures": [
+     "current_interest_rate"
+    ],
+    "mode": "requested_metric",
+    "outcome": "ANSWER",
+    "owner_availability_status": [
+     "partially_available"
+    ],
+    "period_form": "relative_pair",
+    "period_from": "2025-11-30",
+    "period_to": "2026-06-30",
+    "raw_payload_states_time": true,
+    "requested_field": [
+     "current_interest_rate"
+    ],
+    "requested_metric_disposition": {
+     "current_interest_rate": "QUALIFIED"
+    },
+    "scope": "all",
+    "served_metric_field": [
+     "current_interest_rate"
+    ],
+    "serving_provenance": "NEW",
+    "serving_route": "governed_plan_metric_delta",
+    "temporal_route": "relative_pair",
+    "time_stated": true
+   },
+   "receipt": {
+    "excluded_candidates": [],
+    "executed_scope": {
+     "asset_classes": [],
+     "context_id": null,
+     "label": null,
+     "portfolio_ids": [],
+     "tenant_id": "ERE"
+    },
+    "field_selection_policy": "period_change_overview v1.0.0",
+    "metric_movements": [
+     {
+      "aggregation": "weighted_average",
+      "end_value": 6.318682679209931,
+      "excluded_population": {
+       "end": 1,
+       "start": 0
+      },
+      "field": "current_interest_rate",
+      "movement_unit": "percentage_point",
+      "movement_value": -3.2147396826825796,
+      "notes": [],
+      "start_value": 9.53342236189251,
+      "status": "partially_available",
+      "valid_population": {
+       "end": 957,
+       "start": 73
+      },
+      "weight_field": "current_outstanding_balance"
+     }
+    ],
+    "operation": "movement",
+    "period_resolution": {
+     "adjustment_notes": [
+      "The two snapshots cover reporting periods of different length (30 and 212 days). Period-flow fields are reported but not compared."
+     ],
+     "available_snapshots": [
+      "2025-10-31",
+      "2025-11-30",
+      "2026-06-30"
+     ],
+     "end_adjusted_to_available_snapshot": false,
+     "end_gap_days": null,
+     "flow_basis": {
+      "comparable": false,
+      "end_period_days": 212,
+      "start_period_days": 30,
+      "tolerance_days": 5
+     },
+     "interval_days": 212,
+     "max_snapshot_gap_days": 45,
+     "portfolio_scope": {
+      "asset_classes": [],
+      "context_id": null,
+      "label": null,
+      "portfolio_ids": [],
+      "tenant_id": "ERE"
+     },
+     "requested_end_period": null,
+     "requested_start_period": null,
+     "resolution_method": "current_vs_previous",
+     "resolved_end_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2026-06-30",
+      "reporting_date": "2026-06-30",
+      "row_count": 958,
+      "snapshot_id": "2026-06-30"
+     },
+     "resolved_start_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2025-11-30",
+      "reporting_date": "2025-11-30",
+      "row_count": 73,
+      "snapshot_id": "2025-11-30"
+     },
+     "start_adjusted_to_available_snapshot": false,
+     "start_gap_days": null
+    },
+    "plan_id": "plan_25306c545fabf340",
+    "population_base": "funded",
+    "requested_fields": [
+     "current_interest_rate"
+    ],
+    "requested_metric_disposition": [
+     {
+      "canonical_field": "current_interest_rate",
+      "disposition": "QUALIFIED",
+      "status": "partially_available"
+     }
+    ],
+    "selected_measures": [
+     "current_interest_rate"
+    ],
+    "temporal_default_applied": false,
+    "temporal_default_method": null
+   },
+   "record_found": true,
+   "seconds": 31.5,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": "2026-06-30",
+    "plan_id": "plan_25306c545fabf340",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  {
+   "answer": "Here is the result for your query, covering 2 groups.",
+   "case_id": "N04",
+   "evidence_lookup": "matched on question + client",
+   "failures": [
+    "change_form: read 'level_comparison', pinned 'metric_delta'",
+    "route: None, pinned 'governed_plan_metric_delta'",
+    "calculation_owner: None, pinned 'mi_agent.period_change.workflow.run_period_change_analysis'",
+    "mode: None, pinned 'requested_metric'",
+    "canonical operation None, pinned 'movement'",
+    "the receipt records no requested field",
+    "the receipt records no requested_metric_disposition; a requested-metric answer that cannot say how it came out cannot be certified"
+   ],
+   "http_status": 200,
+   "non_blocking": [],
+   "pass": false,
+   "question": "Contrast the principal balance on the funded book between the two latest reporting dates.",
+   "read": {
+    "calculation_owner": null,
+    "candidate_operation": "compare",
+    "capability": null,
+    "change_form_claimed": "level_comparison",
+    "change_form_compiled": "level_comparison",
+    "compiled_operation": null,
+    "composition_owner": null,
+    "executed_field": [],
+    "measures": [
+     "current_principal_balance"
+    ],
+    "mode": null,
+    "outcome": "ANSWER",
+    "owner_availability_status": [],
+    "period_form": null,
+    "period_from": null,
+    "period_to": null,
+    "raw_payload_states_time": true,
+    "requested_field": [],
+    "requested_metric_disposition": {},
+    "scope": null,
+    "served_metric_field": [],
+    "serving_provenance": "NEW",
+    "serving_route": null,
+    "temporal_route": "relative_pair",
+    "time_stated": null
+   },
+   "receipt": {
+    "population_base": "funded"
+   },
+   "record_found": true,
+   "seconds": 34.9,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": true,
+    "legacy_result_available": true,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": null,
+    "plan_id": "plan_afa43ff6b03149e6",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  {
+   "answer": "Current Loan To Value moved +7.5pp, from 39.51176497664346 to 47.03834781170972. Current Outstanding Balance moved +\u00a3150.2m (1687.0%), from 8903225.069999998 to 159097304.07. New lending contributed \u00a3150.2m across 885 loan(s); exits removed \u00a30 across 0 loan(s); loans present at both dates moved +\u00a30 across 73 loan(s). Current Valuation Amount moved +\u00a3370.2m (1576.5%), from 23480500.0 to 393641067.0. Composition by Collateral Geography shifted \u2014 SOUTH EAST +22.3pp of balance share; SOUTH WEST +13.4pp of balance share. Shares are measured against each snapshot's own total. Composition by Origination Channel shifted \u2014 Unknown +94.4pp of balance share; Key Whole Of Market \u221214.8pp of balance share. Shares are measured against each snapshot's own total.",
+   "case_id": "N05",
+   "evidence_lookup": "matched on question + client",
+   "failures": [],
+   "http_status": 200,
+   "non_blocking": [],
+   "pass": true,
+   "question": "Which movements in the funded book stand out this period?",
+   "read": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "candidate_operation": "summary",
+    "capability": "period_movement",
+    "change_form_claimed": "material_summary",
+    "change_form_compiled": "material_summary",
+    "compiled_operation": "summary",
+    "composition_owner": "mi_agent_api.insight_funded.compose",
+    "executed_field": null,
+    "measures": [],
+    "mode": "portfolio_overview",
+    "outcome": "ANSWER",
+    "owner_availability_status": [],
+    "period_form": "current",
+    "period_from": "2025-11-30",
+    "period_to": "2026-06-30",
+    "raw_payload_states_time": true,
+    "requested_field": null,
+    "requested_metric_disposition": {},
+    "scope": "all",
+    "served_metric_field": null,
+    "serving_provenance": "NEW",
+    "serving_route": "governed_plan_material_summary",
+    "temporal_route": "current",
+    "time_stated": true
+   },
+   "receipt": {
+    "executed_scope": {
+     "asset_classes": [],
+     "context_id": null,
+     "label": null,
+     "portfolio_ids": [],
+     "tenant_id": "ERE"
+    },
+    "finding_count": 6,
+    "operation": "summary",
+    "period_resolution": {
+     "adjustment_notes": [
+      "The two snapshots cover reporting periods of different length (30 and 212 days). Period-flow fields are reported but not compared."
+     ],
+     "available_snapshots": [
+      "2025-10-31",
+      "2025-11-30",
+      "2026-06-30"
+     ],
+     "end_adjusted_to_available_snapshot": false,
+     "end_gap_days": null,
+     "flow_basis": {
+      "comparable": false,
+      "end_period_days": 212,
+      "start_period_days": 30,
+      "tolerance_days": 5
+     },
+     "interval_days": 212,
+     "max_snapshot_gap_days": 45,
+     "portfolio_scope": {
+      "asset_classes": [],
+      "context_id": null,
+      "label": null,
+      "portfolio_ids": [],
+      "tenant_id": "ERE"
+     },
+     "requested_end_period": null,
+     "requested_start_period": null,
+     "resolution_method": "current_vs_previous",
+     "resolved_end_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2026-06-30",
+      "reporting_date": "2026-06-30",
+      "row_count": 958,
+      "snapshot_id": "2026-06-30"
+     },
+     "resolved_start_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2025-11-30",
+      "reporting_date": "2025-11-30",
+      "row_count": 73,
+      "snapshot_id": "2025-11-30"
+     },
+     "start_adjusted_to_available_snapshot": false,
+     "start_gap_days": null
+    },
+    "plan_id": "plan_aa05c37bde1e4e70",
+    "population_base": "funded",
+    "temporal_default_applied": false,
+    "temporal_default_method": null
+   },
+   "record_found": true,
+   "seconds": 28.6,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": "2026-06-30",
+    "plan_id": "plan_aa05c37bde1e4e70",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  }
+ ],
+ "expect_commit": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+ "numeric_parity": {
+  "measured": false,
+  "why": "CI has no governed book, so the owner cannot be run independently here. Offline parity against fixtures is separate, passing evidence (3/3, zero differences)."
+ },
+ "passed": 2,
+ "portfolio_id": "ERE/2026-06-30",
+ "pre_existing_records": 214,
+ "questions_asked": 5,
+ "recorded_at": "2026-09-13T14:23:26.127756+00:00",
+ "served_commit": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+ "sink_detail": "read",
+ "verdict": "FAIL"
+}
