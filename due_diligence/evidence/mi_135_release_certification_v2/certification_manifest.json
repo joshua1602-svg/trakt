@@ -1,0 +1,76 @@
+{
+ "bank_id": "MI_135_RELEASE_CERTIFICATION_V2",
+ "dimensions_recorded_separately": [
+  "SERVING_PROVENANCE: GOVERNED_PLAN | LEGACY_FALLBACK | REFUSAL | NONE",
+  "INTERPRETATION: CORRECT | PARTIAL | WRONG | NOT_REACHED",
+  "EXECUTION: CORRECT_OWNER | WRONG_OWNER | NOT_EXECUTED",
+  "OUTPUT_CONTRACT: SATISFIED | PARTIAL | FAILED | NOT_APPLICABLE"
+ ],
+ "expectation_overlay_changes": [],
+ "expectation_overlay_note": "EMPTY, DELIBERATELY. The brief permits an overlay for already-authorised target-state migrations. None is applied: every migration this programme authorised (material_summary, attribution, metric_delta, the requested-metric output contract) changes WHICH OWNER serves a question, not what the question means, and the overlay expresses meaning. Adding entries here would move the goalposts before the run rather than after it.",
+ "expected_deployed_sha": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+ "historical_baseline": {
+  "immutable": true,
+  "product_sha": "00bb3e9d8175a395b6643772379866d6bc6169eb",
+  "results": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/MI_135_LIVE_BANK_RESULTS.json"
+ },
+ "numeric_truth": "No independent LIVE numeric parity is claimed. The bank is an interpretation benchmark and carries expected SEMANTICS, not expected numbers; the scorer reports numeric_parity as N/A everywhere. Deterministic owner receipts are used to assess owner, requested field, period and scope. Offline owner parity remains valid supporting evidence and is not relabelled as live parity.",
+ "product_sha": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+ "question_count": 135,
+ "reuses_unmodified": {
+  "collector": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/collect_135.py",
+   "sha256": "2ba0535381c0c3cab045ab0051f7f66bdead3347845d893ec5e413464457ef5b"
+  },
+  "expectation_overlay": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/expected_capability.json",
+   "sha256": "a842479642ec2202a61e303df44eeb952fccac5c0fed0d8fbd54f472111cc072"
+  },
+  "questions": {
+   "inner_bank_sha256": "1f71e8444dc4bc149bc8028527c5fe077ce49690a95d27d2a2273a20813fdab2",
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/questions.json",
+   "sha256": "9624a0a8f2e7d1c3e59ccf88ad2698be01950fce6e03c111bc428f8272b52122"
+  },
+  "scoring_contract": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/score_135.py",
+   "sha256": "f15ba5331cf00aff3617659f15d98302664751c97eab2012750e74bc045409af"
+  }
+ },
+ "run_rules": [
+  "135 questions, once each",
+  "no retries on a semantic result; a transport/HTTP failure is classified INFRASTRUCTURE and not re-asked",
+  "no rephrasing, substitution, expectation change, prompt tuning or model switch",
+  "no product or configuration fix during the run",
+  "evidence persisted and committed before the workflow exits"
+ ],
+ "serving_provenance_map": {
+  "INFRASTRUCTURE_FAILURE": "NONE",
+  "LEGACY_FALLBACK": "LEGACY_FALLBACK",
+  "NEW": "GOVERNED_PLAN",
+  "NOT_REACHED": "NONE",
+  "NOT_TESTED_KNOWN_UNMIGRATED": "LEGACY_FALLBACK"
+ },
+ "user_outcome_map": {
+  "APPROPRIATE_CLARIFICATION": "APPROPRIATE_CLARIFICATION",
+  "BAD_REFUSAL": "BAD_REFUSAL",
+  "FULLY_CORRECT": "FULLY_CORRECT",
+  "HONEST_REFUSAL": "HONEST_REFUSAL",
+  "INCONCLUSIVE": "INCONCLUSIVE",
+  "INFRASTRUCTURE_FAILURE": "INFRASTRUCTURE",
+  "PARTIALLY_CORRECT": "PARTIALLY_CORRECT",
+  "PLAN_OR_CONNECTIVITY_GAP_MASQUERADING_AS_CLARIFY": "BAD_REFUSAL",
+  "UNNECESSARY_CLARIFICATION": "BAD_REFUSAL",
+  "WRONG": "WRONG"
+ },
+ "verdicts": {
+  "APPROPRIATE_CLARIFICATION": "ambiguity genuinely prevents one governed interpretation and the existing contract requires the clarification",
+  "BAD_REFUSAL": "capability and data exist and the governed system should have answered; the refusal is caused by routing, connectivity or semantic failure",
+  "FULLY_CORRECT": "correct interpretation; correct population/scope; correct period; correct requested metric/dimension/filter; correct deterministic owner; the answer actually communicates the requested result; no silent semantic loss",
+  "HONEST_REFUSAL": "the system cannot safely answer under current governed capability or data; the refusal states the genuine limitation; nothing is fabricated or silently widened",
+  "INCONCLUSIVE": "the evidence is insufficient to classify the product answer; the missing evidence must be stated",
+  "INFRASTRUCTURE": "the request does not reach or complete through the application because of transport, platform, auth or service infrastructure; no product conclusion may be inferred from it",
+  "PARTIALLY_CORRECT": "materially useful and directionally/categorically correct, but an explicit requested component is missing, qualified or incomplete; no wrong figure and no silent widening",
+  "WRONG": "wrong number, population, period, measure, filter or dimension; wrong deterministic owner producing the wrong answer; an unsupported confident answer; a materially misleading answer"
+ },
+ "what_this_is": "The release certification of the existing 135-question MI estate against the current candidate. The questions are the SAME 135 in the SAME file the historical run used; no wording is rewritten and no expectation is changed. Only the product under test and the output directory differ."
+}
