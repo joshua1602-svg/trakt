@@ -1,0 +1,257 @@
+{
+ "authorised_live_calls": 5,
+ "bank_id": "metric_delta_output_contract_canary",
+ "calls_per_case": 1,
+ "cases": [
+  {
+   "change_form": "metric_delta",
+   "expected_disposition": [
+    "ANSWERED"
+   ],
+   "expected_user_facing_outcome": "the served answer must name the requested metric and state the movement the receipt records, formatted by the estate's own formatter",
+   "filters_permitted": [],
+   "id": "N01",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": [
+     "sum"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "candidate_operation_accept": [
+     "movement",
+     "compare"
+    ],
+    "canonical_operation": "movement",
+    "composition_owner": null,
+    "mode": "requested_metric",
+    "plan_adapter": "mi_agent.plan_metric_delta",
+    "route": "governed_plan_metric_delta",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Set the funded book's outstanding balance at the newest reporting date against the one before it and tell me how far it has moved.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR",
+   "why": "M01 was read perfectly, compiled to a plan, and served nothing because `compare` was not a governed variant of this form. This is the same shape of request in words M01 did not use."
+  },
+  {
+   "change_form": "metric_delta",
+   "expected_disposition": [
+    "ANSWERED"
+   ],
+   "expected_user_facing_outcome": "the served answer must name the requested metric and state the movement the receipt records, formatted by the estate's own formatter",
+   "filters_permitted": [],
+   "id": "N02",
+   "measure": {
+    "concepts": [
+     "current_loan_to_value"
+    ],
+    "family": "weighted_average_current_ltv",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "candidate_operation_accept": [
+     "movement",
+     "compare"
+    ],
+    "canonical_operation": "movement",
+    "composition_owner": null,
+    "mode": "requested_metric",
+    "plan_adapter": "mi_agent.plan_metric_delta",
+    "route": "governed_plan_metric_delta",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Where does the funded book's weighted average loan-to-value stand now compared with the prior reporting date?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR",
+   "why": "The control case for the output contract: an unqualified metric must be stated plainly, with no caveat invented for it."
+  },
+  {
+   "change_form": "metric_delta",
+   "expected_disposition": [
+    "QUALIFIED",
+    "ANSWERED"
+   ],
+   "expected_user_facing_outcome": "the served answer must name the requested metric and state the movement the receipt records, formatted by the estate's own formatter; and where the disposition is QUALIFIED the answer must also carry the owner's exclusion counts",
+   "filters_permitted": [],
+   "id": "N03",
+   "measure": {
+    "concepts": [
+     "current_interest_rate"
+    ],
+    "family": "weighted_average_interest_rate",
+    "statistics": [
+     "weighted_average",
+     "average"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "candidate_operation_accept": [
+     "movement",
+     "compare"
+    ],
+    "canonical_operation": "movement",
+    "composition_owner": null,
+    "mode": "requested_metric",
+    "plan_adapter": "mi_agent.plan_metric_delta",
+    "route": "governed_plan_metric_delta",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Tell me where the funded book's weighted average interest rate sat at each of the two most recent reporting dates and what the change between them was.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR",
+   "why": "This metric returned `partially_available` on this book in the last live run, which is why it is here. The disposition is an accept-set because availability is a fact about the data on the day; the invariant pinned is that the figure reaches the reader either way. M03 is the case this replaces."
+  },
+  {
+   "change_form": "metric_delta",
+   "expected_disposition": [
+    "ANSWERED"
+   ],
+   "expected_user_facing_outcome": "the served answer must name the requested metric and state the movement the receipt records, formatted by the estate's own formatter",
+   "filters_permitted": [],
+   "id": "N04",
+   "measure": {
+    "concepts": [
+     "current_outstanding_balance",
+     "current_principal_balance"
+    ],
+    "family": "funded_or_outstanding_balance",
+    "statistics": [
+     "sum"
+    ]
+   },
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "candidate_operation_accept": [
+     "movement",
+     "compare"
+    ],
+    "canonical_operation": "movement",
+    "composition_owner": null,
+    "mode": "requested_metric",
+    "plan_adapter": "mi_agent.plan_metric_delta",
+    "route": "governed_plan_metric_delta",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Contrast the principal balance on the funded book between the two latest reporting dates.",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period"
+   ],
+   "temporal_intent": "EXPLICIT_PAIR",
+   "why": "A second, independent sample of the canonicalisation on a different measure and a different verb, so N01 passing is not one lucky reading."
+  },
+  {
+   "change_form": "material_summary",
+   "expected_disposition": [],
+   "expected_user_facing_outcome": "the governed overview narrative; no requested-metric block, because no metric was named",
+   "filters_permitted": [],
+   "id": "N05",
+   "measure": null,
+   "outcome": "ANSWER",
+   "owner": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "candidate_operation_accept": [
+     "summary",
+     "movement",
+     "compare"
+    ],
+    "canonical_operation": "summary",
+    "composition_owner": "mi_agent_api.insight_funded.compose",
+    "mode": "portfolio_overview",
+    "plan_adapter": "mi_agent.plan_material_summary",
+    "route": "governed_plan_material_summary",
+    "serving_provenance": "GOVERNED_PLAN"
+   },
+   "question": "Which movements in the funded book stand out this period?",
+   "scope": null,
+   "temporal_accept": [
+    "relative_pair",
+    "previous_reporting_period",
+    "explicit_period",
+    "current",
+    "ABSENT"
+   ],
+   "temporal_intent": "OWNER_DEFAULT",
+   "why": "The requested-metric lead was added to the one presenter both forms share. This proves it did not edit the overview a reader who named no metric still gets."
+  }
+ ],
+ "closes": [
+  "M01 \u2014 OPERATION_NOT_ADMITTED on a correctly read metric delta",
+  "M03 \u2014 a requested metric computed, published in the table, and absent from the answer"
+ ],
+ "deliberate_omissions": {
+  "no_attribution_case": "Attribution passed live in the previous bank and nothing in this sprint touches its adapter, its owner or its envelope. material_summary is the regression case because it SHARES the presenter this sprint changed; attribution does not.",
+  "no_s09_retest": "Unchanged: the acquired portfolio is absent from one of the two selected snapshots. Data history, not a defect, and no new factual evidence has appeared.",
+  "no_unavailable_metric_case": "The anti-substitution rule for a metric present at only one date is proved offline against a fixture built for it. No field is KNOWN to be single-dated on this book, and pinning a live case on a guess about the data would be pinning a condition rather than a contract."
+ },
+ "model": "claude-opus-5",
+ "not_pinned": [
+  "capability",
+  "WHICH spelling of the action the model emits \u2014 the contract collapses `compare` and `movement`, and pinning the model's choice would pin a coin toss",
+  "any numeric value",
+  "time.grain",
+  "the statistic actually applied \u2014 the owner follows the registry's default_aggregation and the receipt records both sides",
+  "N03's availability, which is a fact about the book on the day",
+  "WHICH of the valid temporal routes N05 takes, since its form owns a default and all of them are correct readings"
+ ],
+ "primary_gates": {
+  "canonical_operation": "4 of 4 metric deltas must carry `movement` in the compiled plan, whichever spelling the model emitted",
+  "change_form": "5 of 5",
+  "mode": "5 of 5",
+  "outcome_type": "5 of 5 ANSWER",
+  "requested_metric_answered": "4 of 4 \u2014 the served answer must name the requested metric and state the figure the receipt records. THIS IS THE GATE THE PREVIOUS BANK LACKED.",
+  "route_and_calculation_owner": "5 of 5 \u2014 a correct reading that reaches no owner is a FAIL"
+ },
+ "product_baseline": "5d84a6a31ccf0f255c6c9170de97b01532fa35da",
+ "registry_is_visible_to_the_model": false,
+ "retries": 0,
+ "secondary_gates": {
+  "disposition_recorded": "4 of 4 \u2014 every requested metric must carry a disposition in ANSWERED / QUALIFIED / GOVERNED_REFUSAL",
+  "invented_dimensions": 0,
+  "invented_filters": 0,
+  "no_bridge_substitution": "0 \u2014 no requested-metric answer may consist of the balance bridge without its own metric",
+  "overview_unchanged": "N05 must carry no requested-metric block at all",
+  "requested_field_analysed": "4 of 4 \u2014 the field the plan named must appear in the owner's selected_measures AND in the served metric table",
+  "unnecessary_clarifications": 0
+ },
+ "stop_conditions": [
+  "the deployed build is not the product baseline \u2014 STOP, zero calls",
+  "MI_BEARER does not authenticate the free preflight \u2014 STOP",
+  "a provider quota, credit or authentication failure \u2014 STOP and report the partial result",
+  "any case asked twice \u2014 the run is void"
+ ],
+ "supersedes": "Nothing. metric_delta_confirmation_canary is SPENT, immutable and adjudicated (4 PASS, 1 FAIL on M01). This bank closes M01 and the M03 output-contract gap that bank's scorer could not see.",
+ "what_this_is": "A confirmation that a comparison-shaped metric delta now reaches its owner through the central change-form operation contract, and that a requested metric is ANSWERED rather than merely executed. Five fresh questions; no wording from any earlier bank is reused, verified programmatically against every historical manifest before this file was written."
+}
