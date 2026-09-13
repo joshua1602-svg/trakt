@@ -140,7 +140,7 @@ jobs:
           echo "--- changed since the approved head ---"
           echo "${SINCE_APPROVAL}"
           STRAY="$(echo "${SINCE_APPROVAL}" | grep -v \
-            -e '^\.github/workflows/live-change-form-gate-v3\.yml$' || true)"
+            -e '^\.github/workflows/live-change-form-gate-v4\.yml$' || true)"
           if [ -n "${STRAY}" ]; then
             echo "::error::changed since approval, beyond this workflow:"
             echo "${STRAY}"
