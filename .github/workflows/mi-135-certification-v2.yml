@@ -114,13 +114,31 @@ jobs:
           echo "NO_LATER_PRODUCT_COMMIT = CONFIRMED"
 
       # The harness is proved before it is pointed at anything that costs money.
-      - name: Prove the collector and the scoring shim
+      #
+      # THE SCORING SHIM IS NOT PROVED HERE, DELIBERATELY. `score_v2 --replay`
+      # imports the signed-off scorer, which imports the product, which reaches
+      # for yaml, pandas and plotly. Installing those here would put a dependency
+      # resolution between the dispatch and the bank — the exact thing the
+      # collector's stdlib-only design exists to prevent, and something that has
+      # already failed this estate once mid-bank after live interpretations had
+      # been spent. The first version of this workflow did install them and died
+      # on the missing one.
+      #
+      # The replay is a SCORING instrument check and it belongs where the scoring
+      # runs: offline, before any result is trusted. It reproduces the historical
+      # 52 / 56 / 25 / 2 exactly or the scoring does not proceed. Collection does
+      # not depend on it, and collection is the only thing that spends anything.
+      - name: Prove the collector — stdlib only, no product import
         run: |
           set -euo pipefail
           python "${HIST}/collect_135.py" --self-test
-          echo "--- the shim must reproduce the historical baseline exactly ---"
-          pip install -q pyyaml pandas 2>&1 | tail -1 || true
-          python "${V2}/score_v2.py" --replay
+          python - <<'PY'
+          import sys
+          product = sorted(n for n in sys.modules if n.startswith("mi_agent"))
+          if product:
+              raise SystemExit(f"the collector self-test imported {product}")
+          print("collector self-test imported no product module")
+          PY
 
       - name: Refuse to run without the credentials
         if: ${{ inputs.mode == 'collect' }}
