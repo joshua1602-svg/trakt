@@ -55,3 +55,58 @@ and 4 are not reachable from CI and are not inferred.
 as OFF by `plan_serving_canary.handles()`, and a service that reads the flag as
 OFF answers every question by the legacy path — which this bank scores as FAIL on
 all five, spending it for nothing.
+
+---
+
+# Deployment confirmed, 2026-09-13T11:59:36Z
+
+Operator reading, Portal, before the deploy:
+
+    MI_AGENT_PLAN_SERVE_PRE_DEPLOY = off
+
+Deploy: run 34755660827, `deploy-mi-api.yml` dispatched on branch
+`deploy/mi-api-5d84a6a3`, whose head is the authoritative SHA and nothing else.
+Succeeded 11:57:35 with no SCM-restart retry.
+
+    DEPLOYMENT_CONFIRMED_SHA = 5d84a6a31ccf0f255c6c9170de97b01532fa35da
+    source                   = artefact stamp, read from GET / on the running
+                               process (build_info.json, stamped by
+                               deploy-mi-api.yml from GITHUB_SHA and asserted
+                               forty characters before upload)
+    read                     = run 34755853682, FIRST attempt, no re-read
+
+The operator's gate 3 is satisfied: the running service IS the SHA the offline
+gates passed on, established from the artefact rather than from a hand-written
+version string.
+
+## And a second credential expiry — the bank is still unspent
+
+    AUTH   FAIL  GET /mi/catalogue returned 401
+    TOKEN  expires 2026-09-13T11:55:48+00:00  expired=True  228s past expiry
+
+The same token authenticated 200 at 11:50:33 during the registration push and
+expired five minutes later, so this is an ordinary Entra access-token lifetime
+running out mid-sequence, not an authentication defect. The gate did its job:
+
+    step 10  the pre-registered five, once each   SKIPPED
+    step 11  commit the result immediately        SKIPPED
+    step 13  the verdict                          SKIPPED
+    SPEND    model calls 0, /mi/query calls 0
+    BANK     UNSPENT
+
+Had the five been asked anyway they would have spent the single authorised
+attempt on five 401s. This is the second time a stored bearer has aged out
+between preparation and execution, and both times the free preflight caught it
+before the bank.
+
+## What the last two steps now need, in one operator visit
+
+The token's life is roughly an hour, so the two settings should be changed
+together and the run dispatched immediately after:
+
+    re-mint    MI_BEARER                      repository secret
+    set        MI_AGENT_PLAN_SERVE = canary   the literal word
+    leave      MI_AGENT_PLAN_SERVE_PRINCIPALS unchanged — the exact oid, no
+                                              wildcard
+
+Then the five, once, and the result committed by the job itself.
