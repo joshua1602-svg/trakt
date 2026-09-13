@@ -319,6 +319,20 @@ class SemanticTime:
     labels: Tuple[str, ...] = ()
     grain: Optional[str] = None
     periods_back: Optional[int] = None
+    #: WHETHER THE READING ACTUALLY STATED A TEMPORAL FORM. Provenance, not
+    #: semantics — deliberately absent from `key()`, so it cannot change a plan's
+    #: identity or make two readings of one question look divergent.
+    #:
+    #: `form` carries a construction default of `current`, which meant an ABSENT
+    #: temporal slot and an EXPLICIT `current` arrived downstream identical. The
+    #: live v3 gate measured three readings that correctly named their analytical
+    #: form and deliberately stated no period — "no period is stated on the intent
+    #: because the funded_bridge capability defines the movement period itself" —
+    #: and the governed boundary could not tell them from a reader who asked about
+    #: the current state. A CONSTRUCTION DEFAULT IS NOT A BUSINESS DEFAULT; this
+    #: flag is what keeps the two apart, so the deterministic layer can decide
+    #: whether an analytical form owns the missing window.
+    stated: bool = False
 
     def key(self) -> Tuple[Any, ...]:
         return (self.form, tuple(self.labels), self.grain, self.periods_back)
@@ -584,6 +598,10 @@ def _parse_geography(raw: Any, *, slot: str) -> SemanticGeography:
 
 
 def _parse_time(raw: Any, *, slot: str) -> SemanticTime:
+    # ABSENCE IS PRESERVED, NOT MATERIALISED. `stated` stays False here and on the
+    # no-`form` branch below, so the construction default of `current` remains a
+    # working value rather than becoming a claim the reading never made. Read from
+    # KEY PRESENCE in the payload — no wording, no source span, no phrase rule.
     if raw is None:
         return SemanticTime()
     if not isinstance(raw, Mapping):
@@ -616,6 +634,9 @@ def _parse_time(raw: Any, *, slot: str) -> SemanticTime:
         grain=_enum(raw.get("grain"), TIME_GRAINS, slot=f"{slot}.grain",
                     optional=True),
         periods_back=periods_back,
+        # A `time` block that states a grain or a label but no FORM has not stated
+        # the temporal semantic either, so presence turns on the form key alone.
+        stated="form" in raw,
     )
 
 

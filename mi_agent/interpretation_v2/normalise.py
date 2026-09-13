@@ -205,7 +205,13 @@ def canonical_intent(intent: CandidateIntent,
                         else CANONICAL_PAIR_PERIODS_BACK)
         intent = replace(intent, time=SemanticTime(
             form=CANONICAL_PAIR_FORM, labels=time.labels, grain=time.grain,
-            periods_back=periods_back))
+            periods_back=periods_back,
+            # A rewrite changes the SPELLING of a temporal form the reading
+            # stated; it cannot unstate it. Dropping this would make a
+            # normalised explicit pair look like a reading that said nothing,
+            # and the deterministic layer would then apply a default over the
+            # top of the reader's own words.
+            stated=time.stated))
         applied.append(
             f"relative_period: previous_reporting_period -> "
             f"{CANONICAL_PAIR_FORM}+periods_back={periods_back} "
@@ -219,7 +225,7 @@ def canonical_intent(intent: CandidateIntent,
             and time.periods_back is None):
         intent = replace(intent, time=SemanticTime(
             form=time.form, labels=time.labels, grain=time.grain,
-            periods_back=CANONICAL_PAIR_PERIODS_BACK))
+            periods_back=CANONICAL_PAIR_PERIODS_BACK, stated=time.stated))
         applied.append(
             f"relative_period: {CANONICAL_PAIR_FORM} with no distance -> "
             f"periods_back={CANONICAL_PAIR_PERIODS_BACK} (the adjacent pair)")

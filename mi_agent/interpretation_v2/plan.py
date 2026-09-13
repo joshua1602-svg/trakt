@@ -146,6 +146,18 @@ class PeriodBinding:
     labels: Tuple[str, ...] = ()
     grain: Optional[str] = None
     periods_back: Optional[int] = None
+    #: WHETHER THE READING STATED A TEMPORAL FORM AT ALL. Carried from
+    #: `SemanticTime.stated`, so an ABSENT slot and an EXPLICIT `current` stay
+    #: distinguishable at the governed boundary even though `form` reads the same.
+    stated: bool = False
+    #: Set where the DETERMINISTIC layer supplied the window the reading left out,
+    #: because the analytical form owns that default. The same `defaulted` /
+    #: `default_reason` pair `GeographyBinding` already uses for a registry
+    #: default, plus which METHOD was applied and which FORM authorised it.
+    defaulted: bool = False
+    default_reason: str = ""
+    default_method: str = ""
+    default_owner: str = ""
     #: The governed contract that will resolve it, named so the caller knows
     #: which deterministic owner to hand the plan to.
     contract: str = ""
@@ -254,7 +266,8 @@ class GovernedQueryPlan:
     #: balance" authorise the same sum, and one of them reached it through the
     #: registry default. A hash that noticed would report two paraphrases as
     #: divergent for a difference that changes no computation.
-    _DERIVATION_KEYS = ("statistic_defaulted", "defaulted", "default_reason")
+    _DERIVATION_KEYS = ("statistic_defaulted", "defaulted", "default_reason",
+                        "default_method", "default_owner", "stated")
 
     def _authorised_content(self) -> Dict[str, Any]:
         """The authorised work, canonicalised so ORDER is not part of identity.

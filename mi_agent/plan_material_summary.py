@@ -147,6 +147,19 @@ RELATIVE_MODE_BY_GRAIN: Mapping[Optional[str], str] = {
 RELATIVE_DISTANCES = frozenset({None, 1})
 
 
+def _period_defaulted_to_owner(plan: Any) -> bool:
+    """Whether the DETERMINISTIC layer supplied a window this form owns.
+
+    One structural read of the plan's period provenance. True means the reading
+    stated no temporal form and `change_form` authorised the default; it never
+    means the reader asked for the current state.
+    """
+    period = adapter._as_mapping(plan).get("period") or {}
+    return (bool(period.get("defaulted"))
+            and period.get("default_method") == "current_vs_previous"
+            and period.get("default_owner") == CHANGE_FORM)
+
+
 def _change_form_binding(plan: Any) -> Mapping[str, Any]:
     """The COMPILER's reading of the analytical form, from the plan itself."""
     provenance = adapter._as_mapping(plan).get("provenance") or {}
@@ -198,6 +211,14 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
 
     period = body.get("period") or {}
     form = period.get("form")
+    # AN UNSTATED WINDOW THIS FORM OWNS. The compiler marks the binding
+    # `defaulted` when the reading stated no temporal form and `change_form` owns
+    # an authorised default; `form` then still carries its construction value, so
+    # admitting it on `form` alone would be reading the masquerade. Admit it on
+    # the PROVENANCE instead, which is the thing that actually says the owner
+    # supplied the window.
+    if _period_defaulted_to_owner(plan):
+        return True, "", ""
     if form not in ADMITTED_PERIOD_FORMS:
         return False, PERIOD_NOT_A_PAIR, (
             f"period form {form!r} neither resolves to two governed snapshots "
@@ -247,6 +268,11 @@ def period_request(plan: Any) -> Any:
     # `current_vs_previous` is the resolver's own method for the two adjacent
     # GOVERNED snapshots — not a calendar month, and not a date computed here.
     # Which state the comparison runs against is never selected by the model.
+    # The authorised default comes first: an unstated window this form owns
+    # resolves through the same governed method an anchor does, and for the same
+    # reason — the form, not the reader, owns the comparison state.
+    if _period_defaulted_to_owner(plan):
+        return PeriodRequest(relative_mode="current_vs_previous")
     if form in ("previous_reporting_period",) or form in ANCHOR_PERIOD_FORMS:
         return PeriodRequest(relative_mode="current_vs_previous")
     if form == "relative_pair":
@@ -279,9 +305,25 @@ def receipt(plan: Any, result: Any, brief: Mapping[str, Any]) -> Dict[str, Any]:
         # RESOLUTION is the owner's: its method, and the two governed snapshots
         # it actually read. An audit that cannot tell these apart cannot answer
         # whether the model selected the comparison state. It did not.
-        "interpreted_period_form": (body.get("period") or {}).get("form"),
+        # THREE STATES, KEPT APART. A reading that STATED a form; a reading that
+        # stated an ANCHOR the form completes; and a reading that stated NOTHING,
+        # where the deterministic layer applied the form's authorised default.
+        # The first two are the reader's words; the third is this system's policy,
+        # and an audit that could not tell them apart could not answer who chose
+        # the comparison state.
+        "interpreted_time_present": bool(
+            (body.get("period") or {}).get("stated")),
+        "interpreted_period_form": (
+            (body.get("period") or {}).get("form")
+            if (body.get("period") or {}).get("stated") else None),
+        "temporal_default_applied": _period_defaulted_to_owner(plan),
+        "temporal_default_method": (
+            (body.get("period") or {}).get("default_method") or None),
+        "temporal_default_owner": (
+            (body.get("period") or {}).get("default_owner") or None),
         "period_completed_by_form": (
-            (body.get("period") or {}).get("form") in ANCHOR_PERIOD_FORMS),
+            (body.get("period") or {}).get("stated", False)
+            and (body.get("period") or {}).get("form") in ANCHOR_PERIOD_FORMS),
         "period_resolution": result.period_resolution.to_dict(),
         "composition_owner": "mi_agent_api.insight_funded.compose",
         "materiality_config": brief.get("config_source"),

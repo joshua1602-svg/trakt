@@ -374,6 +374,49 @@ CHANGE_FORM_CANONICAL_OPERATION: Mapping[str, str] = {
     "material_summary": "summary",
 }
 
+#: WHICH FORMS OWN AN AUTHORISED DEFAULT COMPARISON WINDOW when the reading states
+#: no temporal semantic at all.
+#:
+#: THE DISTINCTION THIS TABLE EXISTS TO MAKE. A construction default is not a
+#: business default. `SemanticTime.form` carries `current` whether the reader asked
+#: about the current state or said nothing about time, and the live v3 gate
+#: measured three readings that deliberately said nothing — "no period is stated on
+#: the intent because the funded_bridge capability defines the movement period
+#: itself". The interpreter is right not to restate deterministic execution policy.
+#: So where the FORM owns the window, the deterministic layer supplies it, and says
+#: in the receipt that it did.
+#:
+#: EACH ENTRY IS DERIVED FROM AN OWNER CONTRACT THAT ALREADY EXISTS, not from
+#: wording and not from the measure:
+#:
+#:   material_summary   its runtime already completes a `current` anchor through
+#:                      `current_vs_previous`, the resolver's own method for the
+#:                      two adjacent GOVERNED snapshots. A comparison state is part
+#:                      of what the form IS, so an unstated one is the form's.
+#:   attribution        `period_change.workflow` resolves the bridge's pair with the
+#:                      same `resolve_periods` call as every other figure, so the
+#:                      calculation owner already accepts `current_vs_previous`.
+#:                      Governed-plan connectivity is a separate, pending item and
+#:                      does not change what the form owns.
+#:   metric_delta       names ONE quantity and asks how much it moved. Its owner
+#:                      requires a period richer than a single point, and no
+#:                      existing policy gives it a default. `None` means INCOMPLETE,
+#:                      never "substitute the nearest thing".
+#:   level_comparison   asks for two states the reader has in mind. Its owner wants
+#:                      the pair named, so an unstated window is incomplete.
+#:
+#: A form absent from this table, or mapped to `None`, gets NO implicit default.
+#: The string is the resolver's `METHOD_CURRENT_VS_PREVIOUS`; it is written as a
+#: literal because this module may not import the execution layer, and
+#: `tests/interpretation_v2/test_temporal_presence_and_defaults.py` asserts the two
+#: cannot drift apart.
+CHANGE_FORM_ABSENT_PERIOD_DEFAULT: Mapping[str, Optional[str]] = {
+    "material_summary": "current_vs_previous",
+    "attribution": "current_vs_previous",
+    "metric_delta": None,
+    "level_comparison": None,
+}
+
 #: The operations that are linguistic variants of each form's own action, and so
 #: canonicalise to it. A form absent from this table canonicalises nothing, and
 #: its operation is checked against its capability in the ordinary way — which

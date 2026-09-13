@@ -84,6 +84,7 @@ from .plan import (
     TargetBinding,
 )
 from .vocabulary import (
+    CHANGE_FORM_ABSENT_PERIOD_DEFAULT,
     CHANGE_FORM_CAPABILITY,
     CHANGE_FORM_MODE,
     CAPABILITY_OPERATIONS,
@@ -712,9 +713,41 @@ class DeterministicCompiler:
                 f"capability {intent.capability!r} owns no forward methodology"))
 
         owned = intent.operation in _CAPABILITY_OWNED_PERIOD_OPERATIONS
+
+        # THE AUTHORISED DEFAULT, and the two things it is careful about.
+        #
+        # FIRST, it fires only where the reading stated NO temporal form — the
+        # `stated` flag, read from key presence in the payload, never from wording.
+        # An explicit `current` is left exactly as it was stated, so the two routes
+        # stay distinguishable in evidence even when they resolve the same pair.
+        #
+        # SECOND, it fires only where the analytical FORM owns that default, from
+        # `CHANGE_FORM_ABSENT_PERIOD_DEFAULT`. `metric_delta` and
+        # `level_comparison` map to None and are therefore left INCOMPLETE, which
+        # is the behaviour they already had; nothing inherits a sibling's default.
+        # The compiler records the method and the owner and supplies no DATE: which
+        # snapshots `current_vs_previous` lands on stays the resolver's to decide.
+        default_method = ""
+        if not time.stated and intent.change_form:
+            default_method = CHANGE_FORM_ABSENT_PERIOD_DEFAULT.get(
+                intent.change_form) or ""
+        # The record lives ON THE BINDING — `defaulted`, `default_reason`,
+        # `default_method`, `default_owner` — which is where `GeographyBinding`
+        # keeps the same fact and which travels with the plan. This function owns
+        # no provenance-notes list, and widening its signature to reach one would
+        # add a second place the same thing is written.
         return (PeriodBinding(form=time.form, labels=time.labels, grain=time.grain,
                               periods_back=time.periods_back, contract=contract,
-                              resolved=settled, owned_by_capability=owned),
+                              resolved=settled, owned_by_capability=owned,
+                              stated=time.stated,
+                              defaulted=bool(default_method),
+                              default_reason=(
+                                  "no temporal form was stated; the analytical "
+                                  "form owns the comparison window"
+                                  if default_method else ""),
+                              default_method=default_method,
+                              default_owner=(intent.change_form or ""
+                                             if default_method else "")),
                 reasons)
 
     def _bind_target(self, intent: CandidateIntent
