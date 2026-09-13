@@ -1,0 +1,545 @@
+{
+ "bank_id": "metric_delta_confirmation_canary",
+ "bank_sha256": "9705705c7c66a605ccd3f16a08275b33f1b05b201c5f09f99bcd24386eb7d065",
+ "base_url": "https://app.traktinfra.io/api",
+ "build_attempts": [
+  {
+   "commit": "5d84a6a31ccf0f255c6c9170de97b01532fa35da",
+   "path": "/",
+   "status": 200
+  }
+ ],
+ "cases": [
+  {
+   "answer": "You asked about the last 3 months, which spans 3 reporting period(s). This book carries 3 governed reporting period(s), so the furthest back I can compare is 2 period(s). I have not answered over a shorter window in its place \u2014 tell me which period you want, or ask again once more history is loaded.",
+   "case_id": "M01",
+   "evidence_lookup": "matched on question + client",
+   "failures": [
+    "outcome: REFUSE, pinned ANSWER",
+    "served from 'LEGACY_FALLBACK', not the governed plan \u2014 reason 'INELIGIBLE:OPERATION_NOT_ADMITTED'",
+    "route: 'period_change', pinned 'governed_plan_metric_delta'",
+    "calculation_owner: None, pinned 'mi_agent.period_change.workflow.run_period_change_analysis'",
+    "mode: None, pinned 'requested_metric'",
+    "the receipt records no requested field"
+   ],
+   "http_status": 200,
+   "pass": false,
+   "question": "Compare outstanding balance across the two most recent reporting dates and tell me the size of the shift.",
+   "read": {
+    "calculation_owner": null,
+    "capability": null,
+    "change_form_claimed": "metric_delta",
+    "change_form_compiled": "metric_delta",
+    "composition_owner": null,
+    "measures": [
+     "current_outstanding_balance"
+    ],
+    "mode": null,
+    "operation": null,
+    "outcome": "REFUSE",
+    "period_form": null,
+    "period_from": null,
+    "period_to": null,
+    "raw_payload_states_time": true,
+    "scope": null,
+    "serving_provenance": "LEGACY_FALLBACK",
+    "serving_route": "period_change",
+    "temporal_route": "relative_pair",
+    "time_stated": null
+   },
+   "receipt": {},
+   "record_found": true,
+   "seconds": 32.6,
+   "serving": {
+    "decision": "LEGACY_FALLBACK",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": false,
+    "new_value": null,
+    "plan_id": "plan_51409348570cbd58",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "INELIGIBLE:OPERATION_NOT_ADMITTED",
+    "response_served_from": "LEGACY_FALLBACK"
+   }
+  },
+  {
+   "answer": "Between 30 November 2025 and 30 June 2026, 1 of 1 governed metrics could be compared across both snapshots. Largest observed movements measured in percentage points: Current Loan To Value +7.53 pp (39.51% \u2192 47.04%). Against the registry's directionality, 0 metric(s) moved in the improving direction and 1 in the deteriorating direction. The balance bridge reconciles: opening \u00a38.9m +\u00a3150.2m new lending, \u2212\u00a30 exits, +\u00a30 on continuing loans, closing \u00a3159.1m. No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measure",
+   "case_id": "M02",
+   "evidence_lookup": "matched on question + client",
+   "failures": [],
+   "http_status": 200,
+   "pass": true,
+   "question": "Weighted average LTV \u2014 what is the difference between the latest reporting date and the one before?",
+   "read": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "capability": "period_movement",
+    "change_form_claimed": "metric_delta",
+    "change_form_compiled": "metric_delta",
+    "composition_owner": null,
+    "measures": [
+     "current_loan_to_value"
+    ],
+    "mode": "requested_metric",
+    "operation": "movement",
+    "outcome": "ANSWER",
+    "period_form": "relative_pair",
+    "period_from": "2025-11-30",
+    "period_to": "2026-06-30",
+    "raw_payload_states_time": true,
+    "scope": "all",
+    "serving_provenance": "NEW",
+    "serving_route": "governed_plan_metric_delta",
+    "temporal_route": "relative_pair",
+    "time_stated": true
+   },
+   "receipt": {
+    "excluded_candidates": [],
+    "executed_scope": {
+     "asset_classes": [],
+     "context_id": null,
+     "label": null,
+     "portfolio_ids": [],
+     "tenant_id": "ERE"
+    },
+    "field_selection_policy": "period_change_overview v1.0.0",
+    "metric_movements": [
+     {
+      "aggregation": "weighted_average",
+      "end_value": 47.03834781170972,
+      "field": "current_loan_to_value",
+      "movement_unit": "percentage_point",
+      "movement_value": 7.526582835066257,
+      "start_value": 39.51176497664346,
+      "status": "available"
+     }
+    ],
+    "period_resolution": {
+     "adjustment_notes": [
+      "The two snapshots cover reporting periods of different length (30 and 212 days). Period-flow fields are reported but not compared."
+     ],
+     "available_snapshots": [
+      "2025-10-31",
+      "2025-11-30",
+      "2026-06-30"
+     ],
+     "end_adjusted_to_available_snapshot": false,
+     "end_gap_days": null,
+     "flow_basis": {
+      "comparable": false,
+      "end_period_days": 212,
+      "start_period_days": 30,
+      "tolerance_days": 5
+     },
+     "interval_days": 212,
+     "max_snapshot_gap_days": 45,
+     "portfolio_scope": {
+      "asset_classes": [],
+      "context_id": null,
+      "label": null,
+      "portfolio_ids": [],
+      "tenant_id": "ERE"
+     },
+     "requested_end_period": null,
+     "requested_start_period": null,
+     "resolution_method": "current_vs_previous",
+     "resolved_end_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2026-06-30",
+      "reporting_date": "2026-06-30",
+      "row_count": 958,
+      "snapshot_id": "2026-06-30"
+     },
+     "resolved_start_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2025-11-30",
+      "reporting_date": "2025-11-30",
+      "row_count": 73,
+      "snapshot_id": "2025-11-30"
+     },
+     "start_adjusted_to_available_snapshot": false,
+     "start_gap_days": null
+    },
+    "plan_id": "plan_ca1307e138113fee",
+    "population_base": "funded",
+    "requested_fields": [
+     "current_loan_to_value"
+    ],
+    "selected_measures": [
+     "current_loan_to_value"
+    ],
+    "temporal_default_applied": false,
+    "temporal_default_method": null
+   },
+   "record_found": true,
+   "seconds": 30.2,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": "2026-06-30",
+    "plan_id": "plan_ca1307e138113fee",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  {
+   "answer": "Between 30 November 2025 and 30 June 2026, 0 of 1 governed metrics could be compared across both snapshots. The balance bridge reconciles: opening \u00a38.9m +\u00a3150.2m new lending, \u2212\u00a30 exits, +\u00a30 on continuing loans, closing \u00a3159.1m. No governed materiality threshold is configured for this portfolio, so movements are ranked by observed size only, within each unit of measurement. No movement is described as material, significant, a breach or high risk.",
+   "case_id": "M03",
+   "evidence_lookup": "matched on question + client",
+   "failures": [],
+   "http_status": 200,
+   "pass": true,
+   "question": "Has the weighted average interest rate on the funded book gone up or down since the previous reporting date, and by how much?",
+   "read": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "capability": "period_movement",
+    "change_form_claimed": "metric_delta",
+    "change_form_compiled": "metric_delta",
+    "composition_owner": null,
+    "measures": [
+     "current_interest_rate"
+    ],
+    "mode": "requested_metric",
+    "operation": "movement",
+    "outcome": "ANSWER",
+    "period_form": "relative_pair",
+    "period_from": "2025-11-30",
+    "period_to": "2026-06-30",
+    "raw_payload_states_time": true,
+    "scope": "all",
+    "serving_provenance": "NEW",
+    "serving_route": "governed_plan_metric_delta",
+    "temporal_route": "relative_pair",
+    "time_stated": true
+   },
+   "receipt": {
+    "excluded_candidates": [],
+    "executed_scope": {
+     "asset_classes": [],
+     "context_id": null,
+     "label": null,
+     "portfolio_ids": [],
+     "tenant_id": "ERE"
+    },
+    "field_selection_policy": "period_change_overview v1.0.0",
+    "metric_movements": [
+     {
+      "aggregation": "weighted_average",
+      "end_value": 6.318682679209931,
+      "field": "current_interest_rate",
+      "movement_unit": "percentage_point",
+      "movement_value": -3.2147396826825796,
+      "start_value": 9.53342236189251,
+      "status": "partially_available"
+     }
+    ],
+    "period_resolution": {
+     "adjustment_notes": [
+      "The two snapshots cover reporting periods of different length (30 and 212 days). Period-flow fields are reported but not compared."
+     ],
+     "available_snapshots": [
+      "2025-10-31",
+      "2025-11-30",
+      "2026-06-30"
+     ],
+     "end_adjusted_to_available_snapshot": false,
+     "end_gap_days": null,
+     "flow_basis": {
+      "comparable": false,
+      "end_period_days": 212,
+      "start_period_days": 30,
+      "tolerance_days": 5
+     },
+     "interval_days": 212,
+     "max_snapshot_gap_days": 45,
+     "portfolio_scope": {
+      "asset_classes": [],
+      "context_id": null,
+      "label": null,
+      "portfolio_ids": [],
+      "tenant_id": "ERE"
+     },
+     "requested_end_period": null,
+     "requested_start_period": null,
+     "resolution_method": "current_vs_previous",
+     "resolved_end_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2026-06-30",
+      "reporting_date": "2026-06-30",
+      "row_count": 958,
+      "snapshot_id": "2026-06-30"
+     },
+     "resolved_start_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2025-11-30",
+      "reporting_date": "2025-11-30",
+      "row_count": 73,
+      "snapshot_id": "2025-11-30"
+     },
+     "start_adjusted_to_available_snapshot": false,
+     "start_gap_days": null
+    },
+    "plan_id": "plan_25306c545fabf340",
+    "population_base": "funded",
+    "requested_fields": [
+     "current_interest_rate"
+    ],
+    "selected_measures": [
+     "current_interest_rate"
+    ],
+    "temporal_default_applied": false,
+    "temporal_default_method": null
+   },
+   "record_found": true,
+   "seconds": 38.9,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": true,
+    "legacy_result_available": true,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": "2026-06-30",
+    "plan_id": "plan_25306c545fabf340",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  {
+   "answer": "Current Loan To Value moved +7.5pp, from 39.51176497664346 to 47.03834781170972. Current Outstanding Balance moved +\u00a3150.2m (1687.0%), from 8903225.069999998 to 159097304.07. New lending contributed \u00a3150.2m across 885 loan(s); exits removed \u00a30 across 0 loan(s); loans present at both dates moved +\u00a30 across 73 loan(s). Current Valuation Amount moved +\u00a3370.2m (1576.5%), from 23480500.0 to 393641067.0. Composition by Collateral Geography shifted \u2014 SOUTH EAST +22.3pp of balance share; SOUTH WEST +13.4pp of balance share. Shares are measured against each snapshot's own total. Composition by Originat",
+   "case_id": "M04",
+   "evidence_lookup": "matched on question + client",
+   "failures": [],
+   "http_status": 200,
+   "pass": true,
+   "question": "Give me the material movements in the funded portfolio.",
+   "read": {
+    "calculation_owner": "mi_agent.period_change.workflow.run_period_change_analysis",
+    "capability": "period_movement",
+    "change_form_claimed": "material_summary",
+    "change_form_compiled": "material_summary",
+    "composition_owner": "mi_agent_api.insight_funded.compose",
+    "measures": [],
+    "mode": "portfolio_overview",
+    "operation": "summary",
+    "outcome": "ANSWER",
+    "period_form": null,
+    "period_from": "2025-11-30",
+    "period_to": "2026-06-30",
+    "raw_payload_states_time": false,
+    "scope": "all",
+    "serving_provenance": "NEW",
+    "serving_route": "governed_plan_material_summary",
+    "temporal_route": "ABSENT",
+    "time_stated": false
+   },
+   "receipt": {
+    "executed_scope": {
+     "asset_classes": [],
+     "context_id": null,
+     "label": null,
+     "portfolio_ids": [],
+     "tenant_id": "ERE"
+    },
+    "finding_count": 6,
+    "period_resolution": {
+     "adjustment_notes": [
+      "The two snapshots cover reporting periods of different length (30 and 212 days). Period-flow fields are reported but not compared."
+     ],
+     "available_snapshots": [
+      "2025-10-31",
+      "2025-11-30",
+      "2026-06-30"
+     ],
+     "end_adjusted_to_available_snapshot": false,
+     "end_gap_days": null,
+     "flow_basis": {
+      "comparable": false,
+      "end_period_days": 212,
+      "start_period_days": 30,
+      "tolerance_days": 5
+     },
+     "interval_days": 212,
+     "max_snapshot_gap_days": 45,
+     "portfolio_scope": {
+      "asset_classes": [],
+      "context_id": null,
+      "label": null,
+      "portfolio_ids": [],
+      "tenant_id": "ERE"
+     },
+     "requested_end_period": null,
+     "requested_start_period": null,
+     "resolution_method": "current_vs_previous",
+     "resolved_end_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2026-06-30",
+      "reporting_date": "2026-06-30",
+      "row_count": 958,
+      "snapshot_id": "2026-06-30"
+     },
+     "resolved_start_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2025-11-30",
+      "reporting_date": "2025-11-30",
+      "row_count": 73,
+      "snapshot_id": "2025-11-30"
+     },
+     "start_adjusted_to_available_snapshot": false,
+     "start_gap_days": null
+    },
+    "plan_id": "plan_aa05c37bde1e4e70",
+    "population_base": "funded",
+    "temporal_default_applied": true,
+    "temporal_default_method": "current_vs_previous"
+   },
+   "record_found": true,
+   "seconds": 28.9,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": "2026-06-30",
+    "plan_id": "plan_aa05c37bde1e4e70",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  },
+  {
+   "answer": "Between 30 November 2025 and 30 June 2026, 3 of 6 governed metrics could be compared across both snapshots. Largest observed movements measured in currency: Current Outstanding Balance +\u00a3150.2m (\u00a38.9m \u2192 \u00a3159.1m); Current Valuation Amount +\u00a3370.2m (\u00a323.5m \u2192 \u00a3393.6m). Largest observed movements measured in percentage points: Current Loan To Value +7.53 pp (39.51% \u2192 47.04%). Against the registry's directionality, 1 metric(s) moved in the improving direction and 1 in the deteriorating direction. The largest observed composition shifts were Origination Channel \u2014 Unknown +92.38 pp of count share; Co",
+   "case_id": "M05",
+   "evidence_lookup": "matched on question + client",
+   "failures": [],
+   "http_status": 200,
+   "pass": true,
+   "question": "Across the last two reporting dates, what makes up the change in funded balance?",
+   "read": {
+    "calculation_owner": "mi_agent.period_change.bridge.balance_bridge",
+    "capability": "funded_bridge",
+    "change_form_claimed": "attribution",
+    "change_form_compiled": "attribution",
+    "composition_owner": null,
+    "measures": [
+     "bridge_component"
+    ],
+    "mode": "portfolio_overview",
+    "operation": "bridge",
+    "outcome": "ANSWER",
+    "period_form": "relative_pair",
+    "period_from": "2025-11-30",
+    "period_to": "2026-06-30",
+    "raw_payload_states_time": true,
+    "scope": "all",
+    "serving_provenance": "NEW",
+    "serving_route": "governed_plan_attribution",
+    "temporal_route": "relative_pair",
+    "time_stated": true
+   },
+   "receipt": {
+    "bridge_reconciles": true,
+    "bridge_status": "available",
+    "executed_scope": {
+     "asset_classes": [],
+     "context_id": null,
+     "label": null,
+     "portfolio_ids": [],
+     "tenant_id": "ERE"
+    },
+    "period_resolution": {
+     "adjustment_notes": [
+      "The two snapshots cover reporting periods of different length (30 and 212 days). Period-flow fields are reported but not compared."
+     ],
+     "available_snapshots": [
+      "2025-10-31",
+      "2025-11-30",
+      "2026-06-30"
+     ],
+     "end_adjusted_to_available_snapshot": false,
+     "end_gap_days": null,
+     "flow_basis": {
+      "comparable": false,
+      "end_period_days": 212,
+      "start_period_days": 30,
+      "tolerance_days": 5
+     },
+     "interval_days": 212,
+     "max_snapshot_gap_days": 45,
+     "portfolio_scope": {
+      "asset_classes": [],
+      "context_id": null,
+      "label": null,
+      "portfolio_ids": [],
+      "tenant_id": "ERE"
+     },
+     "requested_end_period": null,
+     "requested_start_period": null,
+     "resolution_method": "current_vs_previous",
+     "resolved_end_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2026-06-30",
+      "reporting_date": "2026-06-30",
+      "row_count": 958,
+      "snapshot_id": "2026-06-30"
+     },
+     "resolved_start_snapshot": {
+      "dataset_label": "platform_canonical_typed.csv",
+      "dataset_reference": "2025-11-30",
+      "reporting_date": "2025-11-30",
+      "row_count": 73,
+      "snapshot_id": "2025-11-30"
+     },
+     "start_adjusted_to_available_snapshot": false,
+     "start_gap_days": null
+    },
+    "plan_id": "plan_5de8ed381a7aa71e",
+    "population_base": "funded",
+    "temporal_default_applied": false,
+    "temporal_default_method": null
+   },
+   "record_found": true,
+   "seconds": 34.0,
+   "serving": {
+    "decision": "NEW",
+    "legacy_ok": false,
+    "legacy_result_available": false,
+    "legacy_value": null,
+    "mode": "canary",
+    "new_path_eligible": true,
+    "new_value": "2026-06-30",
+    "plan_id": "plan_5de8ed381a7aa71e",
+    "principal_id": "d8ef839d-d394-40cd-97fe-d1b90ed20ed0",
+    "principal_matched": true,
+    "reason": "",
+    "response_served_from": "NEW"
+   }
+  }
+ ],
+ "expect_commit": "5d84a6a31ccf0f255c6c9170de97b01532fa35da",
+ "numeric_parity": {
+  "measured": false,
+  "why": "CI has no governed book, so the independent owner run cannot happen here. Offline parity against fixtures is separate, passing evidence."
+ },
+ "passed": 4,
+ "portfolio_id": "ERE/2026-06-30",
+ "pre_existing_records": 209,
+ "questions_asked": 5,
+ "recorded_at": "2026-09-13T12:14:43.241944+00:00",
+ "served_commit": "5d84a6a31ccf0f255c6c9170de97b01532fa35da",
+ "sink_detail": "read",
+ "verdict": "FAIL"
+}
