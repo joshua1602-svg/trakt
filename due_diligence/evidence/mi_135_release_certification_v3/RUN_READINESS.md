@@ -66,3 +66,69 @@ certification then wants the token's full life ahead of it, not behind it.
 
 Nothing else is outstanding. Everything the preflight can check without the
 operator already passes.
+
+---
+
+# Second stop, 18:27:48Z — the secret in CI is the SAME token
+
+    TOKEN_REMAINING_MINUTES_AT_Q1 = 30.9   (required >= 60)
+    STOPPED BEFORE Q1. Zero live questions. Zero model calls.
+
+Two independent readings, fourteen minutes apart:
+
+| read at | remaining | total lifetime | secret length |
+| --- | --- | --- | --- |
+| 18:13:42Z | 44.6 min | 82.5 min | 1831 chars |
+| 18:27:48Z | 30.9 min | 82.5 min | 1831 chars |
+
+    elapsed wall clock      14.1 min
+    decrease in remaining   13.7 min
+    change in total life     0.0 min
+    change in secret length    0 chars
+
+The remaining time fell by exactly the wall clock that passed, the total lifetime
+is identical and so is the secret's length. **This is one token ageing, not two
+tokens.** Its claims imply it was issued around 17:36Z and expires around 18:58Z.
+
+A genuinely new token would show `remaining` close to `total`, and would almost
+certainly differ in length.
+
+## The most likely cause, and it is not carelessness
+
+**Entra and MSAL return a CACHED access token.** `az account get-access-token`
+and the MSAL silent-acquire path both hand back the token already in the cache
+until it is within a few minutes of expiry. Asking for a token is therefore not
+the same as being issued one: the command succeeds, prints a token, and it is the
+same JWT as last time. That is precisely the trap this gate exists to catch, and
+it is why "MI_BEARER has been freshly minted" and "MI_BEARER is a fresh token"
+can both be said in good faith and still be different things.
+
+Two other possibilities, neither excluded by this evidence: the secret was
+updated somewhere other than this repository's Actions secrets, or the paste did
+not save.
+
+## To get a genuinely new token
+
+Force the cache to be bypassed rather than asking again:
+
+    az account get-access-token --scope <the API scope> --force-refresh
+      (or `az account clear` / `az logout` then sign in again)
+
+then confirm before pasting: decode the JWT at jwt.ms or with
+
+    python -c "import base64,json,sys,time; p=sys.argv[1].split('.')[1]; \
+      p+='='*(-len(p)%4); c=json.loads(base64.urlsafe_b64decode(p)); \
+      print('minutes left', round((c['exp']-time.time())/60,1))" "<token>"
+
+and check it reads close to the full lifetime, not thirty minutes.
+
+The current token expires around 18:58Z. After that the cache will have no valid
+token to return and the next acquire will genuinely mint one.
+
+## Everything else still passes
+
+Deployed SHA `5c436961…`, auth HTTP 200, sink readable (271 records), liveness
+healthy twice in succession, question count 135, all four hash pins including
+both repaired instruments, and the historical replay at 52 / 56 / 25 / 2.
+
+The bank remains unspent and V2's evidence remains untouched.
