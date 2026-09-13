@@ -1,0 +1,48 @@
+{
+ "completion_bank_id": "MI_135_RELEASE_CERTIFICATION_V2_COMPLETION_32",
+ "completion_case_count": 32,
+ "completion_case_list_sha256": "9c6ce083e2a21149114db794ea6c5e1a433cf6bada013222ce14fb4f96425df9",
+ "expected_deployed_sha": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+ "measured_103_case_count": 103,
+ "original_103_modified": "NO",
+ "original_partial_evidence_modified": "NO",
+ "pins": {
+  "collector": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/collect_135.py",
+   "sha256": "ebb17776db847bb0402a930bf9fbf994a5d9090beb59200eea7b0ece2712f143"
+  },
+  "expectation_overlay": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/expected_capability.json",
+   "sha256": "a842479642ec2202a61e303df44eeb952fccac5c0fed0d8fbd54f472111cc072"
+  },
+  "historical_results": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/MI_135_LIVE_BANK_RESULTS.json",
+   "sha256": "48aa35c2e2a722c4958dcb40921e170b67f256e3a25e7586b15ae608281cb825"
+  },
+  "questions": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/questions.json",
+   "sha256": "9624a0a8f2e7d1c3e59ccf88ad2698be01950fce6e03c111bc428f8272b52122"
+  },
+  "scoring_contract": {
+   "path": "due_diligence/evidence/mi_135_live_bank_00bb3e9d/score_135.py",
+   "sha256": "bdec83f9f7ad86de3343de72677e672a33b3a40c825b8c7f0afe9360ff3e7be2"
+  },
+  "scoring_shim": {
+   "path": "due_diligence/evidence/mi_135_release_certification_v3/score_v3.py",
+   "sha256": "d40ad2eec922ffda5f7b516315b99b729d472112f40cd0e0575894d3873e5d25"
+  },
+  "source_raw_records": {
+   "path": "due_diligence/evidence/mi_135_release_certification_v3/raw_records.json",
+   "sha256": "84067da400bff8fdacf94a433429c7e27b21e48034f642ee0a783ca365dc4747"
+  },
+  "source_scored": {
+   "path": "due_diligence/evidence/mi_135_release_certification_v3/scored_v3.json",
+   "sha256": "e67fd1d5e05f921034d81a13c3312fb3dd98269067a38c7e042e2b9ed9af9859"
+  }
+ },
+ "product_sha": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+ "provider_failure_rule": "A tranche is asked in batches with a gate between them, because the frozen collector's abort guards cover consecutive 401/403 and a misconfigured canary, not a provider quota exhaustion, which returns HTTP 200 carrying a legacy fallback. Batching stops the spend without altering the collector.",
+ "scoring_note": "The 32 are scored by the SAME shim that scored the immutable 103 (score_v3.py over the signed-off score_135.py). The completion brief quoted f15ba533... as SCORING_CONTRACT_SHA256; that is the PRE-REPAIR scorer from commit c783d2b1, which cannot parse an intent carrying the derived `time.stated` and scored 53 of them INCONCLUSIVE in V2. Using it would both reintroduce that defect and break like-for-like with the 103. The repaired scorer is pinned above and its replay reproduces the historical 52 / 56 / 25 / 2 exactly.",
+ "source_partial_certification_commit": "b57889bf",
+ "source_temporal_adjudication_commit": "553107f3"
+}

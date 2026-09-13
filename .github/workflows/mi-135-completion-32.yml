@@ -1,0 +1,330 @@
+name: MI 135 completion tranche (the 32)
+
+# THE THIRTY-TWO THE PROVIDER TOOK, AND NOTHING ELSE.
+#
+# The V3 run measured 103 of 135 and lost the last thirty to an exhausted
+# Anthropic credit balance, plus two to HTTP 500s that survived their retry. This
+# asks exactly those 32, once each, and composes the result with the immutable
+# 103. It NEVER re-asks the 103: the tranche list is read out of the V3 scorecard
+# by `freeze_completion.py` and pinned, and the collector is given `--only`.
+#
+# NOTHING IS ALTERED TO MAKE THIS WORK. The collector, the scorer, the bank, the
+# expectation overlay and the product are the same files and the same SHA as the
+# run being completed, all hash-pinned, and `--only` is a flag the frozen
+# collector already had. The one instrument added is a read-only gate.
+#
+# THE GATE, AND WHY IT IS BATCHES RATHER THAN A COLLECTOR CHANGE. A provider quota
+# exhaustion returns HTTP 200 carrying a legacy fallback, so it is neither an auth
+# failure nor a transport error and the collector's abort guards cannot see it —
+# which is how thirty questions were spent against a dead upstream. The collector
+# is frozen for this task, so the tranche is asked in four batches of eight with
+# `provider_gate.py` between them. A second exhaustion costs at most eight cases.
+#
+# CREDIT CANNOT BE PRE-CHECKED. There is no provider endpoint this repository can
+# authoritatively ask about a credit balance, and the key lives on App Service,
+# not here. The first batch IS the check, and it is eight cases, not a hundred.
+#
+# THE BEARER MUST OUTLIVE THE TRANCHE, at 45 minutes for 32 questions where 60 was
+# required for 135. Same gate, same reader, lower threshold for a shorter run.
+#
+# MI_AGENT_PLAN_SERVE IS NOT TOUCHED HERE AND CANNOT BE: it is an App Service
+# application setting needing ARM access and this repository holds a publish
+# profile. Returning it to `off` afterwards is the operator's step.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/mi-135-completion-32.yml' ]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '`collect` asks the 32. Anything else runs the free gates only.'
+        default: ''
+        required: false
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: false
+      portfolio_id:
+        default: ERE/2026-06-30
+        required: false
+      poll_timeout_seconds:
+        default: '180'
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mi-135-completion-32
+  cancel-in-progress: false
+
+env:
+  PRODUCT_SHA: 5c436961ebe279bc0820ab006867b9f8a869bde2
+  C32: due_diligence/evidence/mi_135_completion_32
+  V3: due_diligence/evidence/mi_135_release_certification_v3
+  HIST: due_diligence/evidence/mi_135_live_bank_00bb3e9d
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+
+      - name: The tranche must not already have been run
+        run: |
+          set -euo pipefail
+          if [ -f "${C32}/raw_records.json" ]; then
+            echo "::error::${C32}/raw_records.json is already committed — this"
+            echo "::error::tranche has been run. Read the committed evidence."
+            exit 1
+          fi
+          echo "TRANCHE_STATE = NOT_YET_RUN"
+
+      - name: The product must be the certified SHA
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "${PRODUCT_SHA}" HEAD; then
+            echo "::error::the certified SHA is not an ancestor of this tree"; exit 1
+          fi
+          DELTA="$(git diff --name-only "${PRODUCT_SHA}..HEAD" \
+            | grep -v -e '^due_diligence/' -e '^\.github/' -e '^tests/' || true)"
+          echo "--- product files changed since ${PRODUCT_SHA} ---"
+          echo "${DELTA:-(none)}"
+          if [ -n "${DELTA}" ]; then
+            echo "::error::product code changed since ${PRODUCT_SHA}"; exit 1
+          fi
+          echo "NO_LATER_PRODUCT_COMMIT = CONFIRMED"
+
+      - name: The frozen tranche must still describe its own inputs
+        run: |
+          set -euo pipefail
+          python "${C32}/freeze_completion.py" --check
+          python - <<'PY'
+          import json, hashlib, pathlib
+          m = json.loads(pathlib.Path("due_diligence/evidence/mi_135_completion_32/completion_manifest.json").read_text())
+          for name, pin in m["pins"].items():
+              got = hashlib.sha256(pathlib.Path(pin["path"]).read_bytes()).hexdigest()
+              assert got == pin["sha256"], f"{name} changed since the freeze"
+              print(f"  pinned {name:22} OK")
+          assert m["completion_case_count"] == 32
+          print("COMPLETION_CASE_COUNT = 32")
+          PY
+
+      - name: Prove the collector — stdlib only, no product import
+        run: |
+          set -euo pipefail
+          python "${HIST}/collect_135.py" --self-test
+          python - <<'PY'
+          import sys
+          product = sorted(n for n in sys.modules if n.startswith("mi_agent"))
+          if product:
+              raise SystemExit(f"the collector self-test imported {product}")
+          print("collector self-test imported no product module")
+          PY
+
+      - name: Refuse to run without the credentials
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          test -n "$MI_BEARER" || { echo "::error::MI_BEARER is empty"; exit 1; }
+          test -n "$AZURE_MI_API_PUBLISH_PROFILE" || {
+            echo "::error::publish profile is empty"; exit 1; }
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+
+      # The V3 preflight, unmodified, at the tranche's own bearer threshold.
+      - name: Pre-run infrastructure gate (bearer >= 45 minutes)
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          python "${V3}/preflight.py" \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --expect-commit "${PRODUCT_SHA}" \
+            --min-token-minutes 45 \
+            --out "${GITHUB_WORKSPACE}/${C32}/preflight_result.json"
+
+      # ---- batch 1 of 4 -------------------------------------------- #
+      - name: "Ask batch 1 (8 cases)"
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/${HIST}"
+          python collect_135.py \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --portfolio-id "${{ inputs.portfolio_id || 'ERE/2026-06-30' }}" \
+            --expect-commit "${PRODUCT_SHA}" \
+            --poll-timeout "${{ inputs.poll_timeout_seconds || '180' }}" \
+            --abort-on-auth-failures 3 \
+            --only 'Q21C,Q1.2,Q2.1,Q2.2,Q2.3,Q3.1,Q3.2,Q3.3' \
+            --out "${GITHUB_WORKSPACE}/${C32}/batch_1.json"
+
+      - name: "Provider gate after batch 1"
+        if: ${{ inputs.mode == 'collect' }}
+        run: |
+          set -euo pipefail
+          python "${C32}/provider_gate.py" --require-canary "${C32}"/batch_*.json
+
+      # ---- batch 2 of 4 -------------------------------------------- #
+      - name: "Ask batch 2 (8 cases)"
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/${HIST}"
+          python collect_135.py \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --portfolio-id "${{ inputs.portfolio_id || 'ERE/2026-06-30' }}" \
+            --expect-commit "${PRODUCT_SHA}" \
+            --poll-timeout "${{ inputs.poll_timeout_seconds || '180' }}" \
+            --abort-on-auth-failures 3 \
+            --only 'Q4.1,Q4.2,Q4.3,Q5.1,Q5.2,Q5.3,Q6.1,Q6.2' \
+            --out "${GITHUB_WORKSPACE}/${C32}/batch_2.json"
+
+      - name: "Provider gate after batch 2"
+        if: ${{ inputs.mode == 'collect' }}
+        run: |
+          set -euo pipefail
+          python "${C32}/provider_gate.py" "${C32}"/batch_*.json
+
+      # ---- batch 3 of 4 -------------------------------------------- #
+      - name: "Ask batch 3 (8 cases)"
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/${HIST}"
+          python collect_135.py \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --portfolio-id "${{ inputs.portfolio_id || 'ERE/2026-06-30' }}" \
+            --expect-commit "${PRODUCT_SHA}" \
+            --poll-timeout "${{ inputs.poll_timeout_seconds || '180' }}" \
+            --abort-on-auth-failures 3 \
+            --only 'Q6.3,Q7.1,Q7.2,Q7.3,Q9.1,Q9.2,Q9.3,Q8.provenance.1' \
+            --out "${GITHUB_WORKSPACE}/${C32}/batch_3.json"
+
+      - name: "Provider gate after batch 3"
+        if: ${{ inputs.mode == 'collect' }}
+        run: |
+          set -euo pipefail
+          python "${C32}/provider_gate.py" "${C32}"/batch_*.json
+
+      # ---- batch 4 of 4 -------------------------------------------- #
+      - name: "Ask batch 4 (8 cases)"
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/${HIST}"
+          python collect_135.py \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --portfolio-id "${{ inputs.portfolio_id || 'ERE/2026-06-30' }}" \
+            --expect-commit "${PRODUCT_SHA}" \
+            --poll-timeout "${{ inputs.poll_timeout_seconds || '180' }}" \
+            --abort-on-auth-failures 3 \
+            --only 'Q8.provenance.2,Q8.provenance.3,C03,C04,S05,B01,B03,B04' \
+            --out "${GITHUB_WORKSPACE}/${C32}/batch_4.json"
+
+      - name: "Provider gate after batch 4"
+        if: ${{ inputs.mode == 'collect' }}
+        run: |
+          set -euo pipefail
+          python "${C32}/provider_gate.py" "${C32}"/batch_*.json
+
+      # ---- merge, compose, score ------------------------------------------ #
+      - name: Merge the batches into the tranche evidence
+        if: ${{ always() && inputs.mode == 'collect' }}
+        run: |
+          set -euo pipefail
+          ls "${C32}"/batch_*.json >/dev/null 2>&1 || {
+            echo "no batch was written"; exit 0; }
+          python "${C32}/merge_batches.py" "${C32}"/batch_*.json \
+            --out "${GITHUB_WORKSPACE}/${C32}/raw_records.json" --partial-ok
+
+      # KEPT WHATEVER HAPPENED. A tranche that stopped on the provider is the
+      # most informative evidence there is, and it is the thing the operator
+      # needs in order to decide whether to top up and try again.
+      - name: Commit the evidence before the job exits
+        if: ${{ always() && inputs.mode == 'collect' }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          ls "${C32}"/batch_*.json >/dev/null 2>&1 || {
+            echo "no evidence was written"; exit 0; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${C32}"/batch_*.json "${C32}"/raw_records.json \
+                  "${C32}"/preflight_result.json || true
+          git diff --cached --quiet && { echo "evidence unchanged"; exit 0; }
+          git commit -m "MI 135 completion tranche: raw evidence, unscored
+
+          The 32 the V3 run left unmeasured, asked once each against
+          ${PRODUCT_SHA} by .github/workflows/mi-135-completion-32.yml.
+          Judgement happens offline against the same scorer that scored the
+          immutable 103. Run ${GITHUB_RUN_ID}."
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" \
+              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** attempt))
+          done
+          echo "::error::could not push the evidence"; exit 1
+
+      - name: Publish the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-135-completion-32
+          path: |
+            due_diligence/evidence/mi_135_completion_32/preflight_result.json
+            due_diligence/evidence/mi_135_completion_32/batch_*.json
+            due_diligence/evidence/mi_135_completion_32/raw_records.json
+          if-no-files-found: warn
+
+      - name: What the operator must still do
+        if: always()
+        run: |
+          echo "::warning::MI_AGENT_PLAN_SERVE is an App Service application setting; this workflow holds a publish profile and cannot change it. Set it back to off on trakt-mi-api once the evidence is committed."
+
+      # LAST, SO IT IS READABLE. The Actions log API returns only the final few
+      # kilobytes of a job, and the artifact upload is verbose enough to push a
+      # mid-job failure out of that window.
+      - name: The verdict
+        if: always()
+        run: |
+          set -euo pipefail
+          F="${GITHUB_WORKSPACE}/${C32}/preflight_result.json"
+          if [ -f "$F" ]; then
+            python - "$F" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          print(f"PREFLIGHT {report.get('verdict')}")
+          for name, check in (report.get("checks") or {}).items():
+              print(f"  {'PASS' if check['ok'] else 'FAIL'}  {name:34} {check['detail']}")
+          PY
+          fi
+          for f in "${C32}"/batch_*.json; do
+            [ -f "$f" ] || continue
+            python - "$f" <<'PY'
+          import json, sys
+          body = json.load(open(sys.argv[1]))
+          rows = body.get("records") or []
+          print(f"{sys.argv[1].split('/')[-1]}: {len(rows)} asked")
+          PY
+          done
