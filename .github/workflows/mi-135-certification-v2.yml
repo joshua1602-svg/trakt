@@ -220,6 +220,31 @@ jobs:
             due_diligence/evidence/mi_135_release_certification_v2/raw_records*.json
           if-no-files-found: warn
 
+      # THE PREFLIGHT VERDICT, LAST, SO IT IS READABLE. The Actions log API
+      # returns only the final few kilobytes of a job, and the artifact upload
+      # and warning steps are verbose enough to push a mid-job failure out of
+      # that window — which is exactly what happened to the first two runs of
+      # this workflow. A gate whose reason cannot be read is a gate nobody can
+      # act on.
+      - name: The preflight verdict
+        if: always()
+        run: |
+          set -euo pipefail
+          F="${GITHUB_WORKSPACE}/${V2}/preflight_result.json"
+          if [ ! -f "$F" ]; then
+            echo "no preflight report was written"; exit 0
+          fi
+          python - "$F" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          print(f"PREFLIGHT {report.get('verdict')}")
+          print(f"deployed_sha {report.get('deployed_sha')}")
+          for name, check in (report.get("checks") or {}).items():
+              print(f"  {'PASS' if check['ok'] else 'FAIL'}  {name:34} "
+                    f"{check['detail']}")
+          print(f"failed: {report.get('failed_checks')}")
+          PY
+
       - name: What the operator must still do
         if: always()
         run: |
