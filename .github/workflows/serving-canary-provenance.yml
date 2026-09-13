@@ -1,0 +1,212 @@
+name: Serving canary — deployment provenance and preflight
+
+# THE OPERATOR'S GATES 3 AND 7, AND NOTHING ELSE.
+#
+#     step 3  independently prove the running service IS 88cf5fde
+#     step 7  the minimum authenticated preflight, using the existing MI_BEARER
+#
+# IT SPENDS NOTHING. Both checks are GETs against endpoints that resolve no
+# question — `/health` reports the deployed build and the catalogue reports the
+# governed field registry — so neither reaches `interpretation_v2` and neither
+# buys an Opus interpretation. The ten authorised canary calls stay unspent.
+#
+# WHY A VERSION STRING IS NOT PROVENANCE. `app.version` is hand-written and was
+# identical across every deploy this year, so it cannot tell one build from
+# another. `deploy-mi-api.yml` stamps `build_info.json` with `GITHUB_SHA` inside
+# the artefact and asserts it is forty characters before uploading; this reads
+# that stamp back out of the RUNNING process. `source: "unstamped"` fails the
+# gate rather than being tolerated: a service that cannot say what it is cannot
+# be certified, and the operator's step 4 says STOP in exactly that case.
+#
+# IT DEPLOYS NOTHING AND CONFIGURES NOTHING. In particular it does NOT read, set
+# or infer `MI_AGENT_PLAN_SERVE`. That setting and
+# `MI_AGENT_PLAN_SERVE_PRINCIPALS` are Azure App Service APPLICATION SETTINGS
+# requiring ARM access; this repository's mi-api automation holds a publish
+# profile, which grants Kudu and nothing else. Four existing acceptance
+# workflows say so. Guessing at the flag is the one thing the operator's
+# sequencing forbids, so this workflow does not pretend to know it.
+#
+# THE CANARY ITSELF IS NOT HERE. The ten pre-registered questions need the flag
+# ON and the canary principal allow-listed, and neither is reachable from CI. A
+# runner that could fire against a service certain to refuse every request would
+# burn the bank's one authorised attempt, so it does not exist yet.
+#
+# THE TOKEN. `MI_BEARER` reaches the script through `env:` only — never an argv
+# value, which lands in process listings and logs. Only its length is printed,
+# and the script rescans its own report for it and refuses to write the file if
+# it survived.
+
+# A dispatchable workflow must exist on the default branch before the API will
+# resolve it; a file that lives only on a feature branch 404s. So the convention
+# `slice3-model-boundary.yml` established stands in: a `push` trigger scoped to
+# THIS FILE on THIS branch registers the workflow by running it once. Because
+# this workflow spends nothing, the push path runs the real checks rather than a
+# dry run — there is no spend to withhold.
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/serving-canary-provenance.yml' ]
+  workflow_dispatch:
+    inputs:
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      expect_commit:
+        description: >-
+          The deployed SHA this run is certifying. Defaults to the product head
+          the offline gates passed on.
+        default: 88cf5fde759c29f1cff29b9adbf003a2d6ebd530
+        required: true
+      preflight_path:
+        description: >-
+          A bearer-protected endpoint that resolves no question, so the auth
+          check costs no interpretation.
+        default: /mi/catalogue
+        required: true
+      ref:
+        description: Repo ref to take the harness from.
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: serving-canary-provenance
+  cancel-in-progress: false
+
+env:
+  PRODUCT_HEAD: 88cf5fde759c29f1cff29b9adbf003a2d6ebd530
+  BANK_SHA256: 27b7d825a1b3f88e631c5931826fa0b0fdab331205ca7b4ea7d318c43aa627b1
+  CANARY_DIR: due_diligence/evidence/change_intelligence_serving_canary
+
+jobs:
+  provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The harness is stdlib only — urllib and json — so no dependency install
+      # stands between the dispatch and the two checks.
+
+      - name: Pre-run assertions
+        run: |
+          set -euo pipefail
+          HEAD_SHA="$(git rev-parse HEAD)"
+          echo "git rev-parse HEAD = ${HEAD_SHA}"
+          echo "PRODUCT_HEAD       = ${PRODUCT_HEAD}"
+
+          # 1. THE PRODUCT HEAD MUST BE AN ANCESTOR, and nothing may have changed
+          #    since it except this sprint's own evidence directory and this
+          #    workflow. That is what makes "the deployed commit is the commit the
+          #    offline gates passed on" a checked fact rather than a claim.
+          if ! git merge-base --is-ancestor "${PRODUCT_HEAD}" HEAD; then
+            echo "::error::product head ${PRODUCT_HEAD} is not an ancestor of \
+          ${HEAD_SHA}: this is not the tested tree"
+            exit 1
+          fi
+          SINCE="$(git diff --name-only "${PRODUCT_HEAD}..HEAD")"
+          echo "--- changed since the product head ---"
+          echo "${SINCE}"
+          STRAY="$(echo "${SINCE}" | grep -v \
+            -e "^${CANARY_DIR}/" \
+            -e '^\.github/workflows/serving-canary-provenance\.yml$' || true)"
+          if [ -n "${STRAY}" ]; then
+            echo "::error::changed since the product head, beyond the evidence \
+          directory and this workflow:"
+            echo "${STRAY}"
+            exit 1
+          fi
+          echo "PRODUCT_CODE_CHANGED_SINCE_THE_TESTED_HEAD = NO"
+
+          # 2. the canary bank must be the one that was pre-registered. Checked
+          #    here even though this run asks none of its questions, because a
+          #    bank that can drift between pre-registration and the run it
+          #    licenses is not pre-registered at all.
+          FOUND="$(cut -d' ' -f1 "${CANARY_DIR}/serving_canary_bank_manifest.sha256")"
+          RECOMPUTED="$(sha256sum "${CANARY_DIR}/serving_canary_bank_manifest.json" \
+            | cut -d' ' -f1)"
+          echo "bank committed  = ${FOUND}"
+          echo "bank recomputed = ${RECOMPUTED}"
+          if [ "${FOUND}" != "${BANK_SHA256}" ] \
+             || [ "${RECOMPUTED}" != "${BANK_SHA256}" ]; then
+            echo "::error::bank mismatch: expected ${BANK_SHA256}"
+            exit 1
+          fi
+          echo "bank ${BANK_SHA256} is the one that was pre-registered: ok"
+
+          # 3. and the four historical interpretation banks must still hash to
+          #    their own pins. The integrity of this programme rests on never
+          #    having edited a hashed bank, and that is re-proved on every run
+          #    rather than assumed.
+          python - <<'PY'
+          import hashlib, pathlib, sys
+          for directory, manifest in (
+                  ("live_change_form_gate", "change_form_bank_manifest"),
+                  ("live_change_form_gate_v2", "change_form_v2_bank_manifest"),
+                  ("live_change_form_gate_v3", "change_form_v3_bank_manifest"),
+                  ("live_change_form_gate_v4", "change_form_v4_bank_manifest")):
+              base = pathlib.Path("due_diligence/evidence") / directory
+              body = (base / f"{manifest}.json").read_bytes()
+              pinned = (base / f"{manifest}.sha256").read_text().split()[0].strip()
+              digest = hashlib.sha256(body).hexdigest()
+              if digest != pinned:
+                  sys.exit(f"{directory} was edited after hashing: "
+                           f"{digest} != {pinned}")
+              print(f"{directory}: {digest} intact")
+          PY
+
+      - name: Refuse to run without a token
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          # Checked here rather than left to the client, so the failure names the
+          # missing SECRET instead of surfacing as a 401 that reads like a
+          # production auth defect.
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set — the"
+            echo "::error::authenticated preflight cannot run. Set it in"
+            echo "::error::Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "MI_BEARER is present (${#MI_BEARER} characters)."
+
+      - name: Provenance and authenticated preflight
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+        run: |
+          set -euo pipefail
+          python "${CANARY_DIR}/provenance.py" \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --expect-commit "${{ inputs.expect_commit || env.PRODUCT_HEAD }}" \
+            --preflight-path "${{ inputs.preflight_path || '/mi/catalogue' }}" \
+            --out provenance_result.json
+
+      - name: Publish the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serving-canary-provenance
+          path: provenance_result.json
+          if-no-files-found: warn
+
+      - name: What an operator must still do
+        if: always()
+        run: |
+          echo "MI_AGENT_PLAN_SERVE is NOT touched by this workflow and cannot be."
+          echo "To enable the canary, an operator with ARM access to trakt-mi-api"
+          echo "must set TWO application settings, not one:"
+          echo "  MI_AGENT_PLAN_SERVE            = canary   (the literal word;"
+          echo "                                            'on' and 'true' read"
+          echo "                                            as OFF)"
+          echo "  MI_AGENT_PLAN_SERVE_PRINCIPALS = the oid MI_BEARER authenticates"
+          echo "                                   as; no wildcards, exact match"
