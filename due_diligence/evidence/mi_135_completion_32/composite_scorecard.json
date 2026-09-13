@@ -1,0 +1,68 @@
+{
+ "bank_id": "MI_135_RELEASE_CERTIFICATION_V3",
+ "baseline": {
+  "product_sha": "00bb3e9d8175a395b6643772379866d6bc6169eb",
+  "serving_provenance": {
+   "GOVERNED_PLAN": 22,
+   "LEGACY_FALLBACK": 113
+  },
+  "verdicts": {
+   "FULLY_CORRECT": 52,
+   "HONEST_REFUSAL": 25,
+   "INCONCLUSIVE": 2,
+   "PARTIALLY_CORRECT": 56
+  }
+ },
+ "execution": {
+  "CORRECT_OWNER": 5,
+  "NOT_EXECUTED": 130
+ },
+ "governed_plan_completion_rate": 0.1866,
+ "governed_plan_completions": 25,
+ "interpretation": {
+  "CORRECT": 90,
+  "NOT_REACHED": 1,
+  "PARTIAL": 44
+ },
+ "legacy_fallback_completions": 109,
+ "misroutes": 0,
+ "movement": {
+  "APPROPRIATE_CLARIFICATION": 0,
+  "BAD_REFUSAL": 0,
+  "FULLY_CORRECT": 14,
+  "HONEST_REFUSAL": -1,
+  "INCONCLUSIVE": 6,
+  "INFRASTRUCTURE": 1,
+  "PARTIALLY_CORRECT": -20,
+  "WRONG": 0
+ },
+ "non_infrastructure_denominator": 134,
+ "numeric_parity": {
+  "independent_live_parity_measured": false,
+  "why": "No independent LIVE numeric parity is claimed. The bank is an interpretation benchmark and carries expected SEMANTICS, not expected numbers; the scorer reports numeric_parity as N/A everywhere. Deterministic owner receipts are used to assess owner, requested field, period and scope. Offline owner parity remains valid supporting evidence and is not relabelled as live parity."
+ },
+ "output_contract": {
+  "NOT_APPLICABLE": 135
+ },
+ "product_sha": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+ "rates": {
+  "answered_usefully": 0.7612,
+  "fully_correct": 0.4925,
+  "user_safe": 0.9403,
+  "wrong": 0.0
+ },
+ "serving_provenance": {
+  "GOVERNED_PLAN": 25,
+  "LEGACY_FALLBACK": 109,
+  "NONE": 1
+ },
+ "silent_semantic_errors": {},
+ "total": 135,
+ "verdicts": {
+  "FULLY_CORRECT": 66,
+  "HONEST_REFUSAL": 24,
+  "INCONCLUSIVE": 8,
+  "INFRASTRUCTURE": 1,
+  "PARTIALLY_CORRECT": 36
+ }
+}
