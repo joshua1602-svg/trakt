@@ -62,6 +62,17 @@ def load_bank() -> Dict[str, Any]:
     return body
 
 
+#: HTTP statuses that mean the CREDENTIAL is the problem, not the question.
+AUTH_STATUSES = (401, 403)
+
+
+def auth_failure(envelope: Optional[Mapping[str, Any]]) -> bool:
+    """Was this request rejected at authentication?"""
+    envelope = envelope or {}
+    return bool(envelope.get("__transport_error__")) and \
+        envelope.get("__http_status__") in AUTH_STATUSES
+
+
 def served_new(record: Optional[Mapping[str, Any]]) -> bool:
     return bool(((record or {}).get("serving") or {}).get("decision") == "NEW")
 
@@ -84,6 +95,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="default: raw_records.json for a full run, and "
                              "raw_records_rerun.json for a targeted one")
     parser.add_argument("--only", default="", help="comma-separated question ids")
+    parser.add_argument("--abort-on-auth-failures", type=int, default=3,
+                        help="stop after this many CONSECUTIVE 401/403 responses")
     parser.add_argument("--abort-after", type=int, default=3,
                         help="stop if none of the first N was served NEW and none "
                              "matched the canary principal")
@@ -164,6 +177,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     ask = _live_asker(args.base_url, args.path, portfolio_id=args.portfolio_id)
     live_calls = 0
+    consecutive_auth = 0
     infra_retries: List[Dict[str, Any]] = []
 
     for index, case in enumerate(cases, start=1):
@@ -171,7 +185,13 @@ def main(argv: Optional[List[str]] = None) -> int:
         envelope = ask(question)
         live_calls += 1
         attempt: Dict[str, Any] = {}
-        if envelope.get("__transport_error__"):
+        # AN EXPIRED CREDENTIAL IS NOT A FLAKE AND IS NOT RETRIED. A second call
+        # with the same dead token buys a second 401, and this programme has
+        # already ruled that repeatedly retrying an expired token is exactly what
+        # a harness must not do.
+        if auth_failure(envelope):
+            consecutive_auth += 1
+        elif envelope.get("__transport_error__"):
             # AN EVIDENCED INFRASTRUCTURE FAILURE, and the only thing that earns a
             # second call. The original is kept beside the retry, never replaced:
             # a harness that overwrites its own failures reports a cleaner run
@@ -186,6 +206,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             live_calls += 1
             infra_retries.append({"question_id": case["question_id"],
                                   "original_failure": attempt})
+
+        if not auth_failure(envelope):
+            consecutive_auth = 0
 
         if envelope.get("__transport_error__"):
             # NOTHING TO WAIT FOR. A request rejected in the transport never
@@ -215,6 +238,27 @@ def main(argv: Optional[List[str]] = None) -> int:
         disposition = (record or {}).get("disposition") or ""
         print(f"  [{index:3d}/{len(cases)}] {case['question_id']:6s} "
               f"{decision:16s} {disposition:22s} {question[:46]}")
+
+        # THE GUARD THIS BANK LACKED. `--abort-after` inspects only the FIRST N
+        # questions, for a misconfigured canary. It has no rule for a run that
+        # starts healthy and loses its credential half way, and on 2026-09-13 a
+        # release certification asked EIGHTY-TWO questions into a 401 one after
+        # another because nothing was watching. The cost is not money — a 401
+        # buys no interpretation — it is that the run LOOKS complete and is not.
+        if consecutive_auth >= args.abort_on_auth_failures:
+            report["live_model_calls"] = live_calls
+            report["infra_retries"] = infra_retries
+            report["consecutive_auth_failures"] = consecutive_auth
+            return stop(
+                "authentication", "NOT_EXECUTABLE",
+                f"{consecutive_auth} consecutive 401/403 responses ending at "
+                f"{case['question_id']} (question {index} of {len(cases)}). The "
+                f"bearer authenticated at the start of this run and no longer "
+                f"does, so every remaining question would be rejected before it "
+                f"reached the interpreter. Stopped with {index} asked rather "
+                f"than reporting {len(cases)} attempts as a completed bank. "
+                f"Re-mint MI_BEARER and start a fresh run; the questions already "
+                f"asked are in the evidence.")
 
         if index == args.abort_after and not wanted:
             head = report["records"]
@@ -293,6 +337,20 @@ def self_test() -> int:
           not served_new({"serving": {"decision": "LEGACY_FALLBACK"}}))
     check("NEW is recognised",
           served_new({"serving": {"decision": "NEW"}}))
+    # THE AUTH GUARD, proved rather than asserted. It exists because a release
+    # certification asked eighty-two questions into a 401 and reported a
+    # completed bank.
+    check("a 401 is an auth failure",
+          auth_failure({"__transport_error__": True, "__http_status__": 401}))
+    check("a 403 is an auth failure",
+          auth_failure({"__transport_error__": True, "__http_status__": 403}))
+    check("a 500 is NOT an auth failure — it is retried like any transport fault",
+          not auth_failure({"__transport_error__": True, "__http_status__": 500}))
+    check("a healthy envelope is not an auth failure",
+          not auth_failure({"ok": True, "answer": "..."}))
+    check("an empty envelope is not an auth failure", not auth_failure({}))
+    check("no envelope at all is not an auth failure", not auth_failure(None))
+
     check("principal_matched is true only when it is literally true",
           principal_matched({"serving": {"principal_matched": True}})
           and not principal_matched({"serving": {"principal_matched": "yes"}})

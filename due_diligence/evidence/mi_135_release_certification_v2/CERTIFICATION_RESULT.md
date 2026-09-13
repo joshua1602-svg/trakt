@@ -121,3 +121,101 @@ No comparison of movement is offered, because there is nothing valid to compare.
 
 No product code, no bank, no scorecard, no expectation, no configuration. The
 bank was asked once. No second 135 was run.
+
+---
+
+# ADDENDUM — both instrument defects fixed, and what the salvaged evidence shows
+
+The two BANK_OR_TEST_DEFECTS above are repaired. The run itself is unchanged and
+is not re-run; what follows is the SAME evidence re-read by a scorer that can now
+read it.
+
+## Fix 1 — the scorer's projection was one level too shallow
+
+`_score_interpretation` already narrowed the recorded intent to the parser's own
+key tuple, with a comment saying exactly why: a recorded intent is
+`CandidateIntent.to_dict()`, not model output, and `to_dict` carries fields the
+model-facing parser refuses. That narrowing applied to the TOP LEVEL only, and
+`stated` lives one level down inside `time`.
+
+**The parser is right and was never the problem.** `_parse_time` DERIVES
+`stated` as `"form" in raw`. Admitting it from a payload would let a model assert
+that a temporal form was stated when it was not — the exact distinction three
+sprints of temporal-presence work established. Adding `stated` to `_TIME_KEYS`
+would have been a semantic regression dressed as a fix. **No product code was
+changed.**
+
+The projection now narrows every nested block to that slot's own key tuple, read
+from the parser rather than listed here, so a derived field added to any slot is
+handled automatically and a genuinely unknown key still fails closed.
+
+    score_135.py   f15ba533… -> bdec83f9f7ad86de3343de72677e672a33b3a40c825b8c7f0afe9360ff3e7be2
+
+**The gate that makes this trustworthy:** the historical evidence, re-scored
+through the changed scorer, still produces 52 / 56 / 25 / 2 exactly. A scorer
+edited after seeing a result it produced is only safe if the run whose answer is
+already known still gets that answer.
+
+## Fix 2 — the collector now stops when the credential dies
+
+`--abort-after` inspects only the first N questions, for a misconfigured canary.
+Nothing watched a run that starts healthy and loses its credential half way, so
+eighty-two questions were asked into a 401 one after another. The cost is not
+money — a 401 buys no interpretation — it is that the run LOOKS complete.
+
+    --abort-on-auth-failures  N consecutive 401/403 responses (default 3)
+
+An expired credential is also no longer retried. A second call with the same dead
+token buys a second 401, and this programme had already ruled that repeatedly
+retrying an expired token is what a harness must not do.
+
+Six self-test rules now prove the predicate, including that a 500 is NOT an auth
+failure and is still retried like any transport fault.
+
+    collect_135.py  2ba05353… -> ebb17776db847bb0402a930bf9fbf994a5d9090beb59200eea7b0ece2712f143
+
+## The salvaged 53, re-scored — NOT a certification
+
+    FULLY_CORRECT              18
+    PARTIALLY_CORRECT          26
+    HONEST_REFUSAL              9
+    BAD_REFUSAL                 0
+    WRONG                       0
+    APPROPRIATE_CLARIFICATION   0
+    INCONCLUSIVE                0
+    INFRASTRUCTURE             82
+
+    over the 53 that reached the application:
+      user safe          1.00
+      answered usefully  0.83
+      fully correct      0.34
+      wrong              0.00
+
+    GOVERNED_PLAN 23   LEGACY_FALLBACK 30
+    silent semantic losses none   misroutes 0   silent scope widenings none
+
+**These 53 are the first 53 questions of the bank in its own order.** They are a
+PREFIX, not a sample, and the bank is ordered by canonical id — so this covers
+roughly the first eighteen canonicals and their three variants, not a spread
+across the estate. No rate here is projected to 135 and no movement against the
+135-question baseline is computed, because 53 questions and 135 questions are not
+comparable sets. The movement column the scorer prints is meaningless for this
+run and is deliberately not reproduced.
+
+What can fairly be said: across the 53 that ran, nothing was WRONG, nothing was
+silently dropped or widened, nothing was misrouted, and every case was
+user-safe. Twenty-three of them completed through the governed plan; the whole
+previous bank produced twenty-two.
+
+## Before the next run
+
+The frozen manifest pins the OLD hashes of both files, so its preflight will now
+fail the `unmodified: scoring_contract` and `unmodified: collector` checks. That
+is correct — the files did change — and it is left failing on purpose: the
+manifest is the immutable record of the spent run and is not edited after the
+fact. A new run re-freezes the contract first:
+
+    python due_diligence/evidence/mi_135_release_certification_v2/freeze_contract.py --force
+
+and a fresh `MI_BEARER` should be minted immediately before it, because the bank
+takes about half an hour and the last token did not survive one.

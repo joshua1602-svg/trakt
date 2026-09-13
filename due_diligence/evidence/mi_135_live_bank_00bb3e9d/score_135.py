@@ -72,6 +72,50 @@ def _expectations() -> Mapping[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8"))["expectations"]
 
 
+
+def _project_recorded_intent(intent_body: Mapping[str, Any]) -> Dict[str, Any]:
+    """A recorded `to_dict` intent, narrowed to what the parser will accept.
+
+    DRIVEN BY THE PARSER'S OWN KEY TUPLES, at every level. Nothing is listed
+    here by name: a derived field added to any slot is dropped automatically on
+    the way back in, and a genuinely unknown key still reaches the parser and
+    still fails closed, which is what that fail-closed rule is for.
+    """
+    from mi_agent.interpretation_v2 import intent as _intent
+
+    #: slot -> the parser's key tuple, for the blocks that are objects.
+    objects = {
+        "time": _intent._TIME_KEYS,
+        "population": _intent._POP_KEYS,
+        "comparison": _intent._CMP_KEYS,
+        "target": _intent._TARGET_KEYS,
+        "geography": _intent._GEO_KEYS,
+    }
+    #: slot -> the parser's key tuple, for the blocks that are lists of objects.
+    lists = {
+        "measures": _intent._MEASURE_KEYS,
+        "filters": _intent._FILTER_KEYS,
+        "ambiguity": _intent._AMBIG_KEYS,
+        "evidence": _intent._EVIDENCE_KEYS,
+        "outputs": _intent._OUTPUT_KEYS,
+    }
+
+    def narrow(node: Any, keys) -> Any:
+        if not isinstance(node, Mapping):
+            return node
+        out = {k: v for k, v in dict(node).items() if k in keys}
+        # An output carries the same nested blocks the top level does.
+        for slot, slot_keys in objects.items():
+            if slot in out:
+                out[slot] = narrow(out[slot], slot_keys)
+        for slot, slot_keys in lists.items():
+            if slot in out and isinstance(out[slot], (list, tuple)):
+                out[slot] = [narrow(item, slot_keys) for item in out[slot]]
+        return out
+
+    return narrow(intent_body, _intent._INTENT_KEYS)
+
+
 def _score_interpretation(intent_body: Optional[Mapping[str, Any]],
                           expected: Mapping[str, Any]
                           ) -> Tuple[Dict[str, Optional[bool]], str]:
@@ -79,8 +123,7 @@ def _score_interpretation(intent_body: Optional[Mapping[str, Any]],
     if not intent_body:
         return {}, "no candidate intent was recorded"
     from mi_agent.interpretation_v2.equivalence import score_intent
-    from mi_agent.interpretation_v2.intent import (_INTENT_KEYS,
-                                                   parse_candidate_intent)
+    from mi_agent.interpretation_v2.intent import parse_candidate_intent
     from mi_agent.interpretation_v2.vocabulary import load_governed_vocabulary
 
     # THE RECORD HOLDS `CandidateIntent.to_dict()`, WHICH IS NOT MODEL OUTPUT.
@@ -88,10 +131,22 @@ def _score_interpretation(intent_body: Optional[Mapping[str, Any]],
     # outright — it fails closed on any key its contract does not define,
     # because an unknown key is how a physical binding would arrive. Both sides
     # are right; the round trip is what needs the projection. The intent is
-    # therefore narrowed to the parser's OWN key tuple rather than to a list of
+    # therefore narrowed to the parser's OWN key tuples rather than to a list of
     # exclusions written here, so a field added to either side cannot silently
     # start being dropped.
-    body = {k: v for k, v in dict(intent_body).items() if k in _INTENT_KEYS}
+    #
+    # THIS USED TO NARROW THE TOP LEVEL ONLY, AND THE NESTED BLOCKS SLIPPED
+    # THROUGH. `SemanticTime` gained `stated` during the temporal-presence work,
+    # `to_dict` emits it, and `_TIME_KEYS` does not admit it — deliberately, and
+    # correctly: `_parse_time` DERIVES `stated` as `"form" in raw`, so admitting
+    # it from a payload would let a model assert that a temporal form was stated
+    # when it was not, which is the exact distinction three sprints were spent
+    # establishing. The parser is right. The projection was one level too
+    # shallow, so every recorded intent on a build that emits `stated` failed to
+    # parse and every question on it scored INCONCLUSIVE — a whole release
+    # certification reading as an estate collapse. Caught by the 135 run of
+    # 2026-09-13 against 5c436961.
+    body = _project_recorded_intent(intent_body)
     try:
         intent = parse_candidate_intent(body)
     except Exception as exc:                                         # noqa: BLE001
