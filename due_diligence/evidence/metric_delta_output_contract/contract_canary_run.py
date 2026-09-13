@@ -223,7 +223,8 @@ def self_test() -> int:
                    "metrics could be compared. The balance bridge reconciles.",
          "artifacts": [{"title": "Metric movements",
                         "rows": [{"canonical_field": "current_interest_rate",
-                                  "metric": "Current Interest Rate"}]}]},
+                                  "metric": "Current Interest Rate",
+                                  "movement": "\u22123.21 pp"}]}]},
         {"requested_fields": ["current_interest_rate"],
          "selected_measures": ["current_interest_rate"],
          "metric_movements": [{"field": "current_interest_rate",
@@ -244,7 +245,8 @@ def self_test() -> int:
                    "the opening date and 12 at the closing date.",
          "artifacts": [{"title": "Metric movements",
                         "rows": [{"canonical_field": "current_interest_rate",
-                                  "metric": "Current Interest Rate"}]}]},
+                                  "metric": "Current Interest Rate",
+                                  "movement": "\u22123.21 pp"}]}]},
         {"requested_fields": ["current_interest_rate"],
          "selected_measures": ["current_interest_rate"],
          "metric_movements": [{"field": "current_interest_rate",
@@ -295,6 +297,16 @@ def self_test() -> int:
     checks.append(("6 the one-attempt guard names the committed result file",
                    RESULT_NAME.endswith(".json") and not committed.exists(),
                    f"{RESULT_NAME} absent = unspent"))
+
+    # 7. THE HARNESS MUST STAY STDLIB-ONLY. The first version of the scorer
+    #    imported the product's formatter to render a movement, which drags in
+    #    pandas, yaml and plotly; it passed on a workstation that had them and
+    #    died on the runner. A live check, not a text scan: after everything
+    #    above has run, no product module may have been imported.
+    product = sorted(name for name in sys.modules
+                     if name == "mi_agent" or name.startswith("mi_agent"))
+    checks.append(("7 the harness imported no product module", not product,
+                   ", ".join(product) or "none"))
 
     failed = 0
     for label, ok, detail in checks:

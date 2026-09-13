@@ -56,17 +56,26 @@ def _artifact_rows(envelope: Mapping[str, Any], title: str) -> List[Dict[str, An
     return []
 
 
-def _movement_tokens(value: Optional[float], unit: Optional[str]) -> List[str]:
-    """How the estate's own formatter would render this movement.
+def _movement_tokens(row: Mapping[str, Any]) -> List[str]:
+    """The rendered movement, TAKEN FROM THE SERVED TABLE ITSELF.
 
-    Imported from the renderer rather than reimplemented: a second formatter here
-    would let the two disagree and this gate would pass a mis-stated figure.
+    THIS USED TO IMPORT THE PRODUCT'S FORMATTER, AND THAT WAS WRONG TWICE OVER.
+    `mi_agent_api.period_change_route` drags in the whole `mi_agent` package —
+    pandas, yaml, plotly — and this harness is stdlib-only on purpose, so no
+    dependency install stands between a dispatch and the gate. It passed on a
+    workstation that happened to have them and died on the runner. Reimplementing
+    the formatter here would have been worse: a second renderer that can disagree
+    with the first is exactly what this gate exists to catch.
+
+    The served envelope already carries the answer. `_metric_rows` builds the
+    "Metric movements" table with `_format_movement`, the same function and the
+    same inputs the answer clause uses, in the same response. So the token comes
+    from the product, rendered by the product, in the very request being scored —
+    with no import and no second formatter anywhere.
     """
-    if value is None:
-        return []
-    from mi_agent_api.period_change_route import _format_movement
-
-    return [_format_movement(value, unit)]
+    rendered = str(row.get("movement") or "").strip()
+    # "—" is the table's own placeholder for "no movement was computed".
+    return [rendered] if rendered and rendered != "\u2014" else []
 
 
 def score_requested_metric(case: Mapping[str, Any], envelope: Mapping[str, Any],
@@ -124,8 +133,7 @@ def score_requested_metric(case: Mapping[str, Any], envelope: Mapping[str, Any],
             continue
         movement = next((m for m in (receipt.get("metric_movements") or ())
                          if str(m.get("field")) == field), {})
-        tokens = _movement_tokens(movement.get("movement_value"),
-                                  movement.get("movement_unit"))
+        tokens = _movement_tokens(row)
         if tokens and not any(token in answer for token in tokens):
             failures.append(
                 f"{field}: the owner computed {movement.get('movement_value')!r} "
@@ -164,7 +172,11 @@ def _fixture(*, answer: str, disposition: str = QUALIFIED,
         "answer": answer,
         "artifacts": [{"title": "Metric movements",
                        "rows": [{"canonical_field": "current_interest_rate",
-                                 "metric": "Current Interest Rate"}]}],
+                                 "metric": "Current Interest Rate",
+                                 # As `_metric_rows` renders it. Not typed by
+                                 # hand anywhere the product can be asked.
+                                 "movement": ("\u2014" if movement is None
+                                              else "\u22123.21 pp")}]}],
     }
     return receipt, envelope
 
