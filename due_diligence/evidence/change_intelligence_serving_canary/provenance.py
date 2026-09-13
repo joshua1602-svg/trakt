@@ -26,6 +26,15 @@ WHAT IT DELIBERATELY DOES NOT DO. It does not read, set or infer
 access, which this repository's mi-api automation does not hold, and guessing at
 it is the one thing the operator's own sequencing forbids.
 
+WHY IT INSPECTS THE TOKEN'S EXPIRY. A 401 has two causes with opposite owners: a
+production auth defect, or a stored credential that has simply aged out.
+`MI_BEARER` is a static repository secret holding an Entra access token, and those
+live for tens of minutes, so "the bearer did not authenticate" is an unactionable
+finding on its own. The `exp` claim is read WITHOUT verifying the signature — this
+is not an authentication decision, it is a diagnosis — and only the expiry facts
+are reported. An integer timestamp is not credential material; the token itself is
+never printed, and no other claim is either.
+
 SECRET HYGIENE. The bearer arrives through the environment only, never argv, and
 is never printed — the report is rescanned for it before anything is written.
 """
@@ -42,6 +51,41 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 TIMEOUT = 120
+
+
+def _token_expiry(token: str) -> dict:
+    """What the token says about its own validity window. Diagnosis, not auth.
+
+    The signature is deliberately NOT verified: this establishes WHY a 401
+    happened, and the service has already made the authentication decision. Only
+    the time fields are returned, so nothing that could authenticate anything
+    leaves this function.
+    """
+    import base64
+    import time as _time
+
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except Exception as exc:                                         # noqa: BLE001
+        return {"readable": False, "why": f"{type(exc).__name__}"}
+    exp = claims.get("exp")
+    now = int(_time.time())
+    if not isinstance(exp, int):
+        return {"readable": True, "exp": None,
+                "why": "the token carries no integer exp claim"}
+    return {
+        "readable": True,
+        "exp": exp,
+        "expires_at_utc": datetime.fromtimestamp(exp, timezone.utc).isoformat(),
+        "expired": exp <= now,
+        "seconds_past_expiry": max(0, now - exp),
+        # Whether the allow-list CAN be satisfied at all: `principal_of` reads
+        # `actor_id`, which on the bearer path is the token's subject, and
+        # `plan_serving_canary` refuses the literal "unknown-principal".
+        "carries_a_subject": bool(claims.get("oid") or claims.get("sub")),
+    }
 
 
 def _get(url: str, *, bearer: str = "") -> tuple:
@@ -134,6 +178,11 @@ def main() -> int:
         else:
             record["auth"] = "FAIL"
             record["auth_detail"] = f"GET {args.preflight_path} returned {status}"
+        # DIAGNOSE A 401 RATHER THAN REPORTING IT AS A MYSTERY. Read only on the
+        # failing path, because on the passing path the token's own claims are
+        # nobody's business.
+        if record["auth"] == "FAIL":
+            record["token_validity"] = _token_expiry(bearer)
 
     record["verdict"] = ("PASS" if record["provenance"] == "PASS"
                          and record["auth"] == "PASS" else "FAIL")
@@ -149,6 +198,14 @@ def main() -> int:
 
     print(f"PROVENANCE   {record['provenance']}  {record['provenance_detail']}")
     print(f"AUTH         {record['auth']}  {record['auth_detail']}")
+    validity = record.get("token_validity") or {}
+    if validity.get("exp"):
+        print(f"TOKEN        expires {validity['expires_at_utc']}  "
+              f"expired={validity['expired']}  "
+              f"{validity['seconds_past_expiry']}s past expiry  "
+              f"carries_a_subject={validity['carries_a_subject']}")
+    elif validity:
+        print(f"TOKEN        {validity}")
     print(f"SPEND        model calls 0, /mi/query calls 0")
     print(f"VERDICT      {record['verdict']}")
     print(f"wrote {Path(args.out).name}")

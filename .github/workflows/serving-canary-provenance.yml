@@ -35,6 +35,22 @@ name: Serving canary — deployment provenance and preflight
 # value, which lands in process listings and logs. Only its length is printed,
 # and the script rescans its own report for it and refuses to write the file if
 # it survived.
+#
+# ON A 401 THE HARNESS DIAGNOSES RATHER THAN SHRUGS. `MI_BEARER` is a stored
+# Entra access token and those live for tens of minutes, so "the bearer did not
+# authenticate" has two causes with opposite owners: a production auth defect, or
+# a credential that has aged out. The script reads the token's own `exp` claim
+# without verifying its signature — a diagnosis, not an authentication decision —
+# and reports only the expiry facts. The token is never printed and no other
+# claim is.
+#
+# THIS CHECK IS RE-RUNNABLE ON PURPOSE. App Service keeps
+# SCM_DO_BUILD_DURING_DEPLOYMENT=true, so Oryx builds remotely AFTER the deploy
+# action returns and the process restarts after that. A provenance check run too
+# soon reads the OLD build and is a timing artefact, not a failed deployment.
+# Both checks are free GETs, so re-reading until the restart lands costs nothing
+# and tells the truth; nothing here is a retry seeking a favourable sample,
+# because the thing being measured genuinely changes.
 
 # A dispatchable workflow must exist on the default branch before the API will
 # resolve it; a file that lives only on a feature branch 404s. So the convention
