@@ -135,8 +135,8 @@ def client_config_dir() -> Path:
 def _client_config_paths(client_id: str) -> List[Path]:
     """Candidate client-configuration documents, in the platform's own naming.
 
-    Client identifiers appear both as written (``ere_funding_uk``) and under
-    the legacy upper-case file naming (``config_client_ERM_UK.yaml``), so the
+    The client identifier is the Trakt client identity (``ERE``), but legacy
+    files were named for the ASSET (``config_client_ERM_UK.yaml``), so the
     directory is scanned rather than a single name guessed.
     """
     directory = client_config_dir()

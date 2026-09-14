@@ -139,8 +139,23 @@ class OpsEngine:
         # Governed Annex 2 delivery chain (I1): real runners by default; tests
         # substitute a stub with the same method signatures.
         self._annex2_stages = annex2_stages
-        self.client_config_path = Path(client_config_path or os.environ.get(
-            "TRAKT_OPS_CLIENT_CONFIG", "config/client/config_client_ERE.yaml"))
+        # An EXPLICIT repository client-configuration file, or nothing.
+        #
+        # This used to default to the incumbent lender's file, which had two
+        # consequences worth separating. It seeded the effective-configuration
+        # resolver's client layer with ERE Funding for ANY client, and it made
+        # `_client_is_activated` admit a client merely because that file named
+        # it. The first is how another lender's identity reaches a regulatory
+        # return; the second is a grandfather clause for the client who
+        # predates Client Onboarding.
+        #
+        # The grandfather clause is legitimate but must be ASKED FOR. Setting
+        # TRAKT_OPS_CLIENT_CONFIG keeps a pre-onboarding client governed and
+        # leaves a deliberate, inspectable app setting saying so; unset, a
+        # client is governed only by its own activated OCC configuration.
+        configured = client_config_path or os.environ.get(
+            "TRAKT_OPS_CLIENT_CONFIG")
+        self.client_config_path = Path(configured) if configured else None
         self.real_agents = real_agents
         self._adapter_factory = adapter_factory
         self._source_registry_factory = source_registry_factory
@@ -701,15 +716,20 @@ class OpsEngine:
         return client_id == self._configured_client_id()
 
     def _configured_client_id(self) -> str:
-        """The client the repository's configured client file belongs to."""
+        """The client an EXPLICITLY configured client file belongs to.
+
+        Empty unless an operator named that file, so the grandfather clause in
+        :meth:`_client_is_activated` cannot admit a client by default.
+        """
         cached = getattr(self, "_configured_client_id_cache", None)
         if cached is not None:
             return cached
         value = ""
         try:
-            doc = yaml.safe_load(
-                self.client_config_path.read_text(encoding="utf-8")) or {}
-            value = str((doc.get("client") or {}).get("client_id") or "")
+            if self.client_config_path is not None:
+                doc = yaml.safe_load(
+                    self.client_config_path.read_text(encoding="utf-8")) or {}
+                value = str((doc.get("client") or {}).get("client_id") or "")
         except Exception:  # noqa: BLE001
             value = ""
         self._configured_client_id_cache = value

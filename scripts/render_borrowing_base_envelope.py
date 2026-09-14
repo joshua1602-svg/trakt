@@ -41,7 +41,7 @@ import yaml  # noqa: E402
 
 SCHEDULE_8 = (REPO / "tests" / "concentration_tests" / "fixtures"
               / "warehouse_facility_schedule_8.txt")
-CLIENT_ID = "ere_funding_uk"
+CLIENT_ID = "ERE"
 REPORTING_DATE = "2025-11-30"
 RUN_ID = "mi_2025_11"
 
