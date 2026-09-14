@@ -99,6 +99,11 @@ def _known_prefixes(client: str) -> List[Tuple[str, str]]:
         (f"blob://processed-v2/platform/{client}/", ""),
         (f"blob://processed-v2/regime/{client}/", ""),
         (f"blob://processed-v2/mi/{client}/", ""),
+        # The weekly pipeline snapshot the React pipeline view reads
+        # (Layout.pipeline_latest_csv_uri / _pointer_uri / _period_csv_uri).
+        # Omitted from the first version of this list, which is exactly the
+        # omission the container sweep exists to catch.
+        (f"blob://processed-v2/pipeline/{client}/", ""),
         # governed OCC state — operations_control.stores.OpsLayout
         (f"blob://operations-control/{client}/", ""),
         # run records — pack keys begin with the client id, so this one is a
