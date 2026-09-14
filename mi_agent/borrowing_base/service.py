@@ -12,7 +12,7 @@ register without redesigning anything.
 
     from mi_agent.borrowing_base.service import evaluate, measure_definitions
 
-    snapshot = evaluate(df, client_id="ere_funding_uk")
+    snapshot = evaluate(df, client_id="ERE")
     snapshot.measure("borrowing_base")        # -> 103_000_000.0
     snapshot.measure("borrowing_base_headroom")  # -> "NOT_CALCULABLE"
 

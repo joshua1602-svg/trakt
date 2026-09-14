@@ -28,7 +28,19 @@
 # second source able to drift from the pack.
 
 client:
-  client_id: ere_funding_uk
+  # THE TRAKT CLIENT IDENTITY, and it must match the identity every other layer
+  # uses: the operations-control prefix (operations-control/ERE/**), the raw and
+  # processed prefixes (raw-v2/ERE/**, processed-v2/platform/ERE/**), the
+  # operator bindings in TRAKT_OPS_OPERATORS, the tenancy tenant_id, and the
+  # name that locates this very file (config_client_ERE.yaml).
+  #
+  # It said `ere_funding_uk`, which made this document disagree with its own
+  # filename and with every prefix. `OpsEngine._configured_client_id` reads
+  # THIS value to decide whether a client is governed, so the disagreement
+  # meant a delivery for ERE could not be recognised from this file at all.
+  #
+  # The display name below carries the company; this carries the identity.
+  client_id: ERE
   display_name: "ERE Funding - Equity Release Mortgages"   # Used for UI/Reports only
   environment: production
 
