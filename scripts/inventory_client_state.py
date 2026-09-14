@@ -122,20 +122,62 @@ def _identity_records() -> List[str]:
     ]
 
 
+#: Characters that end an identifier inside a path segment. Pack keys and
+#: approval ids join their parts with ``_`` (``ERE_direct_001_funded_...``),
+#: and ``re.sub(r"[^A-Za-z0-9._-]+", "_", ...)`` in ``pack_key_for`` means
+#: ``.`` and ``-`` can appear too.
+_ID_DELIMITERS = "_-."
+
+
+def _names_client(uri: str, client: str) -> Tuple[bool, bool]:
+    """Does ``uri`` name ``client`` — ``(exact_case, any_case)``?
+
+    A SUBSTRING TEST IS WRONG HERE, and the shorter the identifier the more
+    wrong it gets. ``ERE`` appears inside "Int(ere)st", "Wh(ere)", "sph(ere)";
+    a client called ``AB`` would match almost everything. So a hit requires a
+    path SEGMENT that either is the identifier outright (``.../ERE/audit/...``)
+    or starts with it followed by a delimiter (``ERE_direct_001_funded_...``).
+
+    Case is reported separately rather than folded away: blob names are
+    case-sensitive while the onboarding collision check casefolds, so
+    ``raw-v2/ere/**`` is simultaneously a different blob path and the same
+    client. That divergence is the one worth a human's eye.
+    """
+    folded = client.casefold()
+    exact = False
+    any_case = False
+    for segment in uri.split("/"):
+        for value, flag in ((segment, "exact"), (segment.casefold(), "folded")):
+            target = client if flag == "exact" else folded
+            if value == target or (
+                    value.startswith(target)
+                    and len(value) > len(target)
+                    and value[len(target)] in _ID_DELIMITERS):
+                if flag == "exact":
+                    exact = True
+                else:
+                    any_case = True
+    return exact, any_case
+
+
 def inventory(storage, client: str) -> Dict[str, Any]:
     planned: Dict[str, List[str]] = {}
     for prefix, name_filter in _known_prefixes(client):
         found = storage.list(prefix)
         if name_filter:
+            # Match the path REMAINDER after the prefix, not the basename. A
+            # pack is a directory — runs/ERE_<pack>/gates/onboarding/x.json —
+            # so filtering on the basename ("x.json") drops every blob inside
+            # it and undercounts the tree to its top-level files alone.
             found = [u for u in found
-                     if u.rsplit("/", 1)[-1].startswith(name_filter)]
+                     if u[len(prefix):].startswith(name_filter)]
         label = prefix + (f"{name_filter}*" if name_filter else "")
         planned[label] = sorted(found)
 
     # The sweep. Listing a whole container is the point: a blob written outside
     # the layout authorities is exactly what the planned set cannot show.
-    needle = client.casefold()
     everywhere: Dict[str, List[str]] = {}
+    case_variants: Dict[str, List[str]] = {}
     unreachable: Dict[str, str] = {}
     for container in CONTAINERS:
         try:
@@ -143,9 +185,20 @@ def inventory(storage, client: str) -> Dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 — one container is not the sweep
             unreachable[container] = f"{type(exc).__name__}: {exc}"
             continue
-        hits = sorted(n for n in names if needle in n.casefold())
+        hits, variants = [], []
+        for name in names:
+            exact, folded = _names_client(name, client)
+            if exact:
+                hits.append(name)
+            elif folded:
+                # Same identifier, different case. Storage is case-sensitive
+                # and the onboarding collision check is not, so this is the
+                # one difference worth seeing rather than merging.
+                variants.append(name)
         if hits:
-            everywhere[container] = hits
+            everywhere[container] = sorted(hits)
+        if variants:
+            case_variants[container] = sorted(variants)
 
     planned_set = {uri for uris in planned.values() for uri in uris}
     swept_set = {uri for uris in everywhere.values() for uri in uris}
@@ -167,6 +220,8 @@ def inventory(storage, client: str) -> Dict[str, Any]:
         "sweep_total": len(swept_set),
         # The whole reason for two passes.
         "found_outside_planned_prefixes": sorted(swept_set - planned_set),
+        "case_variants_by_container": case_variants,
+        "case_variants_total": sum(len(v) for v in case_variants.values()),
         "identity_records": identity,
         "containers_unreachable": unreachable,
     }
@@ -198,6 +253,21 @@ def _print_human(report: Dict[str, Any]) -> None:
         if len(extra) > 50:
             print(f"    ... and {len(extra) - 50} more (use --json for all)")
     print()
+
+    if report["case_variants_total"]:
+        print("SAME IDENTIFIER, DIFFERENT CASE")
+        print("-" * 64)
+        print(f"  {report['case_variants_total']} blob(s) name {client} in a "
+              "different case. Blob names are case-sensitive and the")
+        print("  onboarding collision check is not, so these are one client to "
+              "the platform and")
+        print("  two paths to storage. Decide deliberately:")
+        for container, uris in report["case_variants_by_container"].items():
+            for uri in uris[:20]:
+                print(f"    {uri}")
+            if len(uris) > 20:
+                print(f"    ... and {len(uris) - 20} more in {container}")
+        print()
 
     print("IDENTITY RECORDS (survive a prefix delete; refuse the id back)")
     print("-" * 64)
