@@ -2162,7 +2162,13 @@ class OccAgentService:
                 agent_case, actor=actor,
                 confirmation=payload.get("confirmation", ""))
         if action == _states.ACTION_CANCEL:
-            return self.cancel(agent_case, actor=actor)
+            # The reason is carried, not dropped. This called cancel() with no
+            # reason at all, so the audit read "cancelled by the operator" and
+            # the withdrawal read "The practice case was cancelled." whatever
+            # the operator had actually typed. The governed dialog refuses a
+            # blank reason; the chat path collected one and threw it away.
+            return self.cancel(agent_case, actor=actor,
+                               reason=payload.get("reason", ""))
         raise ActionNotAllowed(action, agent_case.run.state)  # pragma: no cover
 
     def _resolve_from_language(self, agent_case: AgentCase,

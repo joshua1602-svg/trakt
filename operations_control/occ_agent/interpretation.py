@@ -555,6 +555,8 @@ class DeterministicInterpreter:
                 change = ProposedChange(
                     action=action, summary=summary, material=material,
                     requires_confirmation=material,
+                    payload=({"reason": raw[:MAX_VALUE_CHARS]}
+                             if action in _CARRIES_A_REASON else {}),
                     basis="explicit instruction")
                 change.validate()
                 return change
@@ -783,10 +785,29 @@ def _clause_of(text: str, position: int) -> str:
     return text[start + 1:end].strip()
 
 
+#: The two acts that END a case, and so are the two whose reason is worth
+#: keeping. Both are read back months later by whoever asks why this client was
+#: started and never finished, and a default sentence is the one answer that
+#: cannot help them. The operator's own words go through verbatim: the
+#: instruction is part of the record, not noise to be stripped out of it.
+#:
+#: Deliberately just these two. Every other action leaves the case open, so
+#: what was said at the time is recoverable from the case itself.
+_CARRIES_A_REASON = (_states.ACTION_CANCEL, _states.ACTION_WITHDRAW)
+
 #: (pattern, action, operator summary, material). Ordered — first match wins.
 _ACTION_RULES: Tuple[Tuple[str, str, str, bool], ...] = (
-    (r"\bcancel (this )?(case|run)\b", _states.ACTION_CANCEL,
-     "Cancel this practice case.", True),
+    # The words the SCREEN uses, not only the ones the code does. The Agent tab
+    # heads its list "Practice cases" and the governed dialog calls the same act
+    # "Cancel this onboarding", so both reach cancel. "cancel (this )?(case|run)"
+    # failed all three of those phrasings, which left the one operator the
+    # reader should never fail — the one who says what the screen says.
+    #
+    # Still deliberately narrow: a noun from the closed set has to follow, so
+    # "cancel the pack before it goes out" is a different act and stays
+    # unrecognised rather than abandoning the case.
+    (r"\bcancel (this |the )?(practice )?(case|run|onboarding)\b",
+     _states.ACTION_CANCEL, "Cancel this practice case.", True),
     (r"\bwithdraw\b", _states.ACTION_WITHDRAW,
      "Withdraw the onboarding.", True),
     (r"\b(draft|prepare|generate|build)\b.*\b(pack|questionnaire|email|"
