@@ -1071,7 +1071,31 @@ export class MockAgent {
     this.applyStep(stored, step, {});
     const reply = this.statusSentence(stored, this.onboardingCase(caseRef));
     stored.doc.messages.push({ role: "agent", text: reply, at: nowIso(), refs: [] });
-    return { ...this.status(caseRef), reply, applied: true, proposal: null };
+    // An APPLIED turn still carries a proposal object. This mock used to
+    // return null here, which is why a screen that leaves the proposal banner
+    // up over an already-applied change passed every test: the fake was kinder
+    // than the server. `OccAgentService.instruct` returns
+    // `proposal={"disclosure": plan.disclosure()}` on the applied path, so the
+    // value is TRUTHY and a caller keying off its presence is misled.
+    //
+    // The server sends only the disclosure; the shape here is fuller because
+    // the type demands it. Neither matters to a correct caller — an applied
+    // turn has no pending proposal, and this field must not be read.
+    return {
+      ...this.status(caseRef),
+      reply,
+      applied: true,
+      proposal: {
+        proposal_id: `applied-${this.nextId++}`,
+        action: STEP_ACTIONS[step],
+        payload: { step },
+        summary: "",
+        basis: "applied",
+        material: false,
+        confidence: 1,
+        disclosure: { understood: [reply], proposed: "", questions: [], unrecognised: [] },
+      },
+    };
   }
 
   answerDecision(
