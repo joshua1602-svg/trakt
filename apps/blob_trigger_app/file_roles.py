@@ -73,8 +73,13 @@ DEFAULT_ROLE_RULES: List[Tuple[str, List[List[str]]]] = [
     # tape is often named exactly that, and matching it here would classify a
     # book's primary extract as a supplementary report — the same word meaning
     # two things, resolved in favour of the wrong one.
+    # ``kfi`` + ``pipeline`` is the pair, not the bare word. A KFI is a Key
+    # Facts Illustration — an offer document produced at origination — so it
+    # cannot name a funded loan tape, which is what the bare-word rule above
+    # guards against. A lender sending "KFI and Pipeline" was landing on
+    # fallback_unknown at zero confidence, parking every file for confirmation.
     ("pipeline_report",   [["pipeline", "report"], ["origination", "pipeline"],
-                           ["origination"]]),
+                           ["kfi", "pipeline"], ["origination"]]),
     ("collateral_extract", [["collateral"]]),
 ]
 

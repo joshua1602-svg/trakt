@@ -56,9 +56,16 @@ from .case import (
     new_request_id,
     source_key,
 )
-from .catalogue import Catalogue, catalogue, reset_cache  # noqa: F401
+from .catalogue import (  # noqa: F401
+    SOURCE_CLIENT, Catalogue, catalogue, reset_cache,
+)
 from .store import OnboardingStore
 from .validation import Validator
+
+#: Recorded against a field the CLIENT is asked for when an OPERATOR answers it.
+#: Kept as a literal rather than imported from the agent package: onboarding is
+#: the lower layer and must not depend on the feature built on top of it.
+PROV_HUMAN = "human_supplied"
 
 #: Wizard steps, in order. Each maps to one catalogue section except review.
 #: The wizard's steps, and — because ``save_step`` refuses anything absent from
@@ -263,11 +270,45 @@ class OnboardingService:
             client = case.block("client")
             case.client_id = str(client.get("client_id") or "")
             case.client_name = str(client.get("client_name") or "")
+        self._record_operator_authorship(case, step, payload)
         case.record(f"answered_{step}", actor=by,
                     before={step: before},
                     after={step: _deep_copy(case.answers.get(step))})
         self.cases.save_case(case)
         return case
+
+    def _record_operator_authorship(self, case: OnboardingCase, step: str,
+                                    payload: Optional[Dict[str, Any]]) -> None:
+        """Say that an operator typed this, for fields the CLIENT is asked for.
+
+        ``origin_provenance`` falls back to a field's declared ``source`` when
+        nothing recorded where a value came from. For ``inferred``, ``derived``,
+        ``trakt_default`` and ``system_generated`` that is sound — Trakt filled
+        it and there is nobody else it could have been. For ``client_supplied``
+        it is an ASSUMPTION, and it was wrong every time an operator answered on
+        the client's behalf: the record stated the client had given a contact
+        they had never been asked for.
+
+        So the operator's write is marked. The client's own submissions go
+        through this same method and are re-marked immediately afterwards by
+        ``_mark_client_supplied``, which therefore still wins where it applies —
+        and an operator correcting a client's answer later takes authorship
+        back, which is also true.
+
+        Only the fields actually sent, and only non-repeatable sections. Writing
+        a repeatable section means sending the whole row back, derived values
+        included, so marking from the payload would claim authorship of a
+        currency Trakt worked out and an entity link it minted — the same reason
+        ``_mark_client_supplied`` takes explicit paths rather than a payload.
+        """
+        section = self.catalogue.section(step)
+        if section is None or section.repeatable or section.from_regime:
+            return
+        for key in (payload or {}):
+            field = section.field(key)
+            if field is None or field.source != SOURCE_CLIENT:
+                continue
+            case.provenance_class[f"{step}.{key}"] = PROV_HUMAN
 
     def _sync_derived(self, case: OnboardingCase,
                       touched: Optional[Dict[str, set]] = None) -> None:

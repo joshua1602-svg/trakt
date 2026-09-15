@@ -21,6 +21,40 @@ VALID_BOOK_TYPES = ("direct", "acquired")
 VALID_DATASETS = ("funded", "pipeline", "forecast")
 VALID_FREQUENCIES = ("monthly", "weekly", "daily", "adhoc", "ad_hoc")
 
+#: Spellings that mean the same frequency, mapped to the one that is WRITTEN.
+#:
+#: ``adhoc`` and ``ad_hoc`` were both accepted and are not the same key. The
+#: frequency is a path segment, part of the pack key, and part of a snapshot's
+#: ``logical_slot`` — and ``snapshot.keys.normalise_key_part`` keeps the
+#: underscore, so one stream spelled two ways became two folder trees and two
+#: key spaces, with nothing downstream reconciling them. Only ``adhoc`` is in
+#: ``snapshot.model.VALID_CADENCES``, so the other spelling also raised a
+#: non-fatal ``invalid_cadence`` warning and then settled into the data.
+#:
+#: Same treatment as ``_normalise_period`` directly below: tolerant about what
+#: arrives, strict about what is written.
+_FREQUENCY_ALIASES = {"ad_hoc": "adhoc", "ad-hoc": "adhoc"}
+
+
+def canonical_frequency(value: Optional[str]) -> str:
+    """The one spelling of ``value`` that may be written, or "" if blank.
+
+    Blank stays blank: canonicalising must not invent a frequency nobody chose,
+    because the caller's own default is the right answer there. Anything that is
+    neither blank nor a known frequency raises, rather than being guessed at and
+    written into a key.
+    """
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"\s+", "_", text)
+    text = _FREQUENCY_ALIASES.get(text, text)
+    if text not in VALID_FREQUENCIES:
+        raise PathParseError(
+            f"frequency {value!r} is not one Trakt recognises "
+            f"({', '.join(sorted(set(VALID_FREQUENCIES)))})")
+    return _FREQUENCY_ALIASES.get(text, text)
+
 # reporting_period: 2026-09-30 (date) or 2026-W39 (ISO week) or 2026-09 (month).
 _PERIOD_RE = re.compile(r"^\d{4}(-\d{2}(-\d{2})?|-W\d{2}|-Q[1-4])$")
 

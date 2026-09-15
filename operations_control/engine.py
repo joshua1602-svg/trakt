@@ -437,6 +437,20 @@ class OpsEngine:
         if dataset and dataset not in BATCH_DATASETS:
             raise OpsError("OPS_BAD_DATASET",
                            "Choose which book these files describe.", 400)
+        # ONE SPELLING, AND A REFUSAL RATHER THAN A GUESS.
+        #
+        # The frequency is a path segment, part of the pack key and part of a
+        # snapshot's logical slot, so `adhoc` and `ad_hoc` were two key spaces
+        # for one stream. Canonicalised here — the one door every manually
+        # created delivery passes through — so what is written is consistent
+        # whatever the caller typed.
+        from apps.blob_trigger_app.path_parser import (
+            PathParseError, canonical_frequency,
+        )
+        try:
+            frequency = canonical_frequency(frequency)
+        except PathParseError as exc:
+            raise OpsError("OPS_BAD_FREQUENCY", str(exc), 400) from None
         # A pipeline view can never produce a regime delivery. Refusing the
         # combination here means an operator cannot route a delivery into regime
         # reporting by accident — the same rule the blob trigger applies to
