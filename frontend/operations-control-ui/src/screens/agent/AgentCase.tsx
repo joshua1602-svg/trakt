@@ -483,7 +483,7 @@ export function AgentCaseScreen() {
         </Link>
       }
     >
-      <SyntheticBanner />
+      <SyntheticBanner mode={run.mode} />
 
       {run.state === "BLOCKED" && status.blockers.length > 0 && (
         <div role="alert" className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
