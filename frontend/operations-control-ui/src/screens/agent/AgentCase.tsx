@@ -18,6 +18,7 @@ import type {
   StreamSummary,
 } from "@/api/agentTypes";
 import type { CaseProblem, ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
+import { AgentCancelDialog } from "./AgentCancelDialog";
 import { ClientMailPanel } from "./AgentClientMail";
 import { ClientQuestionsPanel } from "./AgentClientQuestions";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
@@ -46,6 +47,14 @@ import { deriveStages, type StageInfo, type StageKey } from "./stages";
  */
 
 type AgentStep = Parameters<ReturnType<typeof useOpsClient>["runAgentStep"]>[1];
+
+/**
+ * Ending the case. Named once, because two places have to agree about it: the
+ * foot-of-page control that offers it, and the conversational list that must
+ * NOT, or the same act is offered twice — once as a real control with a
+ * required reason, and once as a bullet reading "cancel run".
+ */
+const CANCEL_ACTION = "cancel_run";
 
 /** The governed steps offered beside the conversation, in the order they arise. */
 const STEPS: { action: string; step: AgentStep; label: string }[] = [
@@ -128,6 +137,7 @@ export function AgentCaseScreen() {
   const [proposedFrom, setProposedFrom] = useState("");
   const [showPackage, setShowPackage] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const view = useLoad<AgentStatus>(() => client.getAgentCase(caseId), [caseId]);
   const version = view.data?.run.version;
@@ -717,6 +727,39 @@ export function AgentCaseScreen() {
           </Panel>
         </aside>
       </div>
+
+      {/* ENDING THE CASE. Alone at the foot of the page, below everything that
+          moves it forward, because it is not a way forward — the same place and
+          the same quiet treatment Client Onboarding gives the identical act.
+          Offered only while the case can still be cancelled, so a finished or
+          already-cancelled case shows nothing. */}
+      {available.has(CANCEL_ACTION) && (
+        <div className="mt-10 border-t border-stone-200 pt-6">
+          <button
+            type="button"
+            onClick={() => setConfirmCancel(true)}
+            className="text-sm font-medium text-stone-500 underline-offset-4 hover:text-stone-900 hover:underline"
+          >
+            {copy.agent.cancelLink}
+          </button>
+        </div>
+      )}
+
+      {confirmCancel && (
+        <AgentCancelDialog
+          live={run.mode === "live"}
+          busy={busy}
+          onDismiss={() => setConfirmCancel(false)}
+          onConfirm={(reason) => {
+            void act(async () => {
+              const result = await client.runAgentStep(caseId, "cancel", { reason });
+              setConfirmCancel(false);
+              toast.show(copy.agent.cancelledToast, "success");
+              return result;
+            });
+          }}
+        />
+      )}
     </Page>
   );
 }
@@ -1648,8 +1691,13 @@ function ControlActions({
   onRun: (step: AgentStep) => void;
 }) {
   const buttons = STEPS.filter((entry) => available.has(entry.action));
+  // Cancelling has its own control at the foot of the page. Left in here it
+  // appeared as a bullet reading "cancel run" under "what you can do next" —
+  // which is both the wrong claim (abandoning is not a way forward) and the
+  // wrong words, and was the only mention of cancelling anywhere on the screen.
   const conversational = [...available].filter(
-    (action) => !STEPS.some((entry) => entry.action === action),
+    (action) =>
+      action !== CANCEL_ACTION && !STEPS.some((entry) => entry.action === action),
   );
 
   if (buttons.length === 0 && conversational.length === 0) {

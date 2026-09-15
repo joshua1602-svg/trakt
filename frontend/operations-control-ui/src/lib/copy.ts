@@ -684,6 +684,35 @@ export const copy = {
     actionsInConversation:
       "What you can do next needs a detail Trakt has to be told — use the conversation:",
     actionsNone: "This case is finished. There is nothing further to do.",
+
+    // Ending a case. Deliberately NOT among the governed controls above: those
+    // answer "what next", and abandoning a case is never the answer to that.
+    // It sits alone at the foot of the page, quiet but findable — the same
+    // treatment Client Onboarding gives the identical act, because an operator
+    // who has decided to stop should not have to guess a sentence to say so.
+    cancelLink: "Cancel this case",
+    cancelHeading: "Cancel this case?",
+    cancelExplain:
+      "Nothing has been created for this client, so nothing is removed. The case is kept, " +
+      "with your reason on it, and can be read afterwards.",
+    cancelExplainLive:
+      "This is a real onboarding, but it has not been activated, so no client configuration " +
+      "exists yet and nothing is removed. The case is kept, with your reason on it.",
+    cancelReason: "Why is this being cancelled?",
+    cancelReasonHelp:
+      "Whoever reads this in six months is asking why this client was started and never " +
+      "finished. Write the answer to that.",
+    cancelReasonPlaceholder:
+      "e.g. Superseded by a fresh onboarding so that elapsed time measures the client " +
+      "engagement.",
+    cancelKeep: "Keep working on it",
+    // NOT "Cancel this case" again. That is the link that opened the dialog, so
+    // repeating it put two buttons reading "Cancel this case" on one screen —
+    // indistinguishable to a screen reader, and a coin toss for anyone else, on
+    // the one dialog where being wrong cannot be undone. The pair now reads as
+    // a question and its answer.
+    cancelConfirm: "Yes, cancel it",
+    cancelledToast: "Case cancelled. The record has been kept.",
     uploadHeading: "Provide the client response",
     uploadHelp:
       "Upload practice files, or use the files from a prepared example. They stay inside this " +

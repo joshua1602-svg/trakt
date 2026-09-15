@@ -1550,10 +1550,18 @@ export class MockAgent {
         this.record(stored, "ready_for_execution", "every readiness criterion passed");
         break;
       }
-      case "cancel":
+      case "cancel": {
+        // Faithful to the server: the operator's reason is what the audit and
+        // the withdrawal record, and cancelling the run WITHDRAWS the case
+        // under it (OccAgentService.cancel chains into withdraw). Hardcoding
+        // "cancelled by the operator" here and leaving the case open would
+        // have let a UI test pass against behaviour production does not have.
+        const why = String(body.reason ?? "").trim() || "The practice case was cancelled.";
         this.move(stored, S.CANCELLED);
-        this.record(stored, "practice_case_cancelled", "cancelled by the operator");
+        this.record(stored, "practice_case_cancelled", why);
+        this.onboarding.withdraw(caseRef, why);
         break;
+      }
       default:
         throw new OpsError("That is not something Trakt can do.", "OCC_AGENT_UNKNOWN_STEP");
     }
