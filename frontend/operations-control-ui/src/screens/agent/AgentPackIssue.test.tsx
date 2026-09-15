@@ -125,3 +125,33 @@ describe("OCC Agent — issuing the pack", () => {
     expect(copy.agent.packRecordedToast.toLowerCase()).toContain("nothing was sent");
   });
 });
+
+describe("OCC Agent — providing the files", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("can be done while the case is still waiting on the client's answers", async () => {
+    /* `register_synthetic_artefact` is permitted from PACK_SENT onwards, but
+       the panel lived only on the artefacts stage — which stays FUTURE, and a
+       future stage renders no panel, until the responses stage completes. So
+       an operator already holding the loan tape had to wait for the client to
+       answer contact questions before Trakt would take it. */
+    const user = await readyToIssue();
+    await user.type(
+      screen.getByLabelText(copy.agent.packRecipients),
+      "ops@northstar.example",
+    );
+    await user.click(screen.getByRole("button", { name: copy.agent.packSend }));
+
+    // Now on the responses stage, with the client yet to answer anything.
+    expect(
+      await screen.findByText(copy.agent.artefactsHeading),
+    ).toBeInTheDocument();
+  });
+});
