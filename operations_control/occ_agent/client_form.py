@@ -86,10 +86,18 @@ STEPS: Tuple[Dict[str, Any], ...] = (
     {"key": "access", "label": "Who needs access",
      "help": "People at your end who need Trakt, or who receive reports.",
      "sections": ("access",)},
-    {"key": "anything_else", "label": "Anything else we need to know",
-     "help": "Anything specific to your business, your asset class or this "
-             "portfolio that would help Trakt read your data correctly. "
-             "Leave it blank if nothing comes to mind.",
+    # This heading and help are a SECOND copy of what `additional_context`
+    # declares in the catalogue, because the client-facing grouping is its own
+    # reader-ordered thing. They drifted: the catalogue was rewritten to ask
+    # what the client MANAGES the book on, the field label followed, and the
+    # heading above it still asked what would "help Trakt read your data
+    # correctly" — so the checklist asked two different questions in one
+    # section, and the vaguer one came first.
+    {"key": "anything_else", "label": "How you manage this portfolio",
+     "help": "The metrics, cuts and questions you use to run this book, so "
+             "your MI answers them rather than the generic ones. Nothing here "
+             "changes how your data is read, and leaving it blank holds "
+             "nothing up.",
      "sections": ("additional_context",)},
     {"key": "meaning", "label": "What your numbers mean",
      "help": "The conventions behind your figures. Trakt works out the FORMAT "

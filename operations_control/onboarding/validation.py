@@ -331,19 +331,25 @@ class Validator:
         # Entity roles: a product that names an entity needs that entity.
         products = set(case.products)
         if "esma_annex2" in products and not case.entities_with_role("originator"):
-            # Advisory, like its investor-reporting twin below. Annex 2 was the
-            # only product whose entity requirement refused approval outright,
-            # which meant a client taking MI *and* Annex 2 could not go live on
-            # MI until the regulatory identity was complete — while a client
-            # taking MI alone went live the same day. The regime is not ready
-            # until the originator is named; the MI is, and the two were tied
-            # together by nothing but this severity.
+            # BLOCKING, and deliberately not advisory like the LEI it leads to.
+            #
+            # Naming the originator is a tick: the operator already knows which
+            # entity it is. Obtaining its LEI is a GLEIF lookup that takes as
+            # long as it takes. Those two costs were briefly treated as one and
+            # both made advisory, which did more damage than the delay it was
+            # meant to avoid: with no originator named, `entities.lei` — whose
+            # `required_when` is "roles contains originator" — is required of
+            # nobody, so it drops off the client's checklist as OPTIONAL and
+            # the one thing standing between this client and their first return
+            # is never actually asked for.
+            #
+            # So the cheap half is required and the slow half is not. Name the
+            # originator now; send the LEI when it arrives.
             out.append(Problem(
                 "entities", "roles",
                 "Regulatory reporting names an originator. Give one entity the "
-                "originator role. No Annex 2 return can be built until it is "
-                "named; nothing else in onboarding is held up by it.",
-                severity=SEVERITY_ADVISORY))
+                "originator role — until it is named, its Legal Entity "
+                "Identifier cannot be asked for."))
         if "investor_reporting" in products \
                 and not case.entities_with_role("reporting_entity"):
             out.append(Problem(
