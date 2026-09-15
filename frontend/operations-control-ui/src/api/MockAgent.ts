@@ -479,11 +479,21 @@ export class MockAgent {
       observations: stored.doc.observations,
       blockers: stored.doc.blockers,
       occ_links: [
-        {
-          label: "Client onboarding",
-          to: `/onboarding/${caseRef}`,
-          why: "The onboarding case itself, in the screens an operator normally works it in.",
-        },
+        // Faithful to the server: the onboarding link is offered only once the
+        // case has ACTIVATED and so exists in the governed store, and it points
+        // at the real route. It used to be offered always, at
+        // `/onboarding/{ref}` — which is not a route, for a case the governed
+        // wizard would 404 on anyway. Leaving that here would let a UI test
+        // pass against a link production no longer emits.
+        ...(onboarding.status === "activated"
+          ? [
+              {
+                label: "Client onboarding",
+                to: `/onboarding/cases/${caseRef}`,
+                why: "The activated onboarding case, in the screens an operator normally works it in.",
+              },
+            ]
+          : []),
         {
           label: "Platform configuration",
           to: "/admin/config",

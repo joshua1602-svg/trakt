@@ -215,6 +215,32 @@ export function AgentCaseScreen() {
   const yours = operatorBlocking(onboarding.blocking);
   const openDecisions = status.open_decisions.filter((d) => d.status === "open");
 
+  /**
+   * Providing the client's files.
+   *
+   * Rendered on the artefacts stage AND on the responses stage before it,
+   * because an operator may already hold the tape. `register_synthetic_artefact`
+   * is permitted from PACK_SENT onwards, but the panel lived only on a stage
+   * that stays FUTURE — and a future stage renders no panel — until the
+   * responses stage completes. So the capability was allowed by the state
+   * machine and unreachable on screen: an operator holding the files had to
+   * wait for the client to answer questions before Trakt would take them.
+   *
+   * Gated on the permission rather than on the stage, so it disappears where
+   * the state machine would refuse it rather than rendering a button that can
+   * only produce an error.
+   */
+  const artefactsPanel = (
+    <ArtefactsPanel
+      status={status}
+      busy={busy}
+      canGenerate={available.has("register_synthetic_artefact")}
+      onUpload={(files) => void act(() => client.uploadAgentArtefacts(caseId, files))}
+      onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
+      onFixture={() => void act(() => client.loadAgentFixtureArtefacts(caseId, run.fixture_id))}
+    />
+  );
+
   /** One stage's workflow content. Rendered under exactly one stage. */
   function stageBody(key: StageKey): ReactNode {
     switch (key) {
@@ -290,21 +316,17 @@ export function AgentCaseScreen() {
                 onGenerate={() => void act(() => client.generateAgentAnswers(caseId))}
               />
             </div>
+            {/* PROVIDE. Files may already be in hand, and waiting for the
+                client to answer questions before Trakt will take them helps
+                nobody — the state machine permits it here, so the screen does
+                too. */}
+            {available.has("register_synthetic_artefact") && (
+              <div className="mt-4">{artefactsPanel}</div>
+            )}
           </>
         );
       case "artefacts":
-        return (
-          <ArtefactsPanel
-            status={status}
-            busy={busy}
-            canGenerate={available.has("register_synthetic_artefact")}
-            onUpload={(files) => void act(() => client.uploadAgentArtefacts(caseId, files))}
-            onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
-            onFixture={() =>
-              void act(() => client.loadAgentFixtureArtefacts(caseId, run.fixture_id))
-            }
-          />
-        );
+        return artefactsPanel;
       case "configure":
         return (
           <>

@@ -495,13 +495,34 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(review.document).toMatch(/first representative delivery/i);
   });
 
-  it("links to the onboarding case in the screens it normally lives in", async () => {
+  it("does NOT link to the onboarding case before there is one to open", async () => {
+    /* This asserted the opposite, and pinned a link that could not work.
+     *
+     * An Agent case lives in the synthetic container and reaches the governed
+     * one only at activation, so the case wizard 404s on anything earlier —
+     * and the href it pinned, `/onboarding/{id}`, is not a route at all: the
+     * wizard is `/onboarding/cases/{id}`. The link was broken twice over, on
+     * every case anyone would ever click it on, and an operator who followed
+     * it reasonably concluded their case had been lost.
+     *
+     * The other links stay: they point at views that exist regardless of this
+     * case. `_occ_links` offers the onboarding one once the case has ACTIVATED,
+     * and at the real route — covered server-side in
+     * tests/operations_control/occ_agent/test_an_agent_case_is_visible_work.py,
+     * because a synthetic run cannot reach activation to show it here.
+     */
     await runScenario("A — Clean onboarding");
     const panel = (await screen.findByText(copy.agent.occLinksHeading)).closest("section");
-    const link = within(panel as HTMLElement).getByRole("link", {
-      name: new RegExp(copy.nav.onboarding),
-    });
-    expect(link.getAttribute("href")).toMatch(/^\/onboarding\/ONB-\d{4}-\d{4}$/);
+    expect(
+      within(panel as HTMLElement).queryByRole("link", {
+        name: new RegExp(copy.nav.onboarding),
+      }),
+    ).not.toBeInTheDocument();
+    // The case is still reachable from Client Onboarding's own queues, which
+    // now list Agent cases and link to the tab they are worked in.
+    expect(
+      within(panel as HTMLElement).getByRole("link", { name: /Rules/ }),
+    ).toBeInTheDocument();
   });
 });
 

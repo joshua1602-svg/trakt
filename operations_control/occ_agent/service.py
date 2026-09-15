@@ -50,6 +50,7 @@ from apps.blob_trigger_app.storage import Storage
 from ..contracts import new_id, now_iso
 from ..engine import OpsError
 from ..onboarding.case import (
+    ACTIVATED,
     APPROVED,
     CHANGES_REQUIRED,
     DRAFT,
@@ -2825,10 +2826,25 @@ def _reached_states(run: SyntheticRun) -> set:
 
 def _occ_links(case: OnboardingCase, run: SyntheticRun) -> List[Dict[str, str]]:
     """Deep links into the EXISTING OCC views, rather than reproducing them."""
-    links = [
-        {"label": "Client onboarding", "to": f"/onboarding/{case.case_id}",
-         "why": "The onboarding case itself, in the screens an operator "
-                "normally works it in."},
+    links: List[Dict[str, str]] = []
+    # THE ONBOARDING CASE, only once there is one to open.
+    #
+    # This link was offered on every case and was broken on all of them, twice
+    # over. An Agent case lives in the synthetic container and reaches the
+    # governed one at activation, through `promotion.promote`, so the governed
+    # wizard 404s on anything earlier. And the path was `/onboarding/{id}`,
+    # which is not a route at all — the wizard is `/onboarding/cases/{id}`,
+    # which is what Client Onboarding's own home links to.
+    #
+    # A link an operator cannot follow is worse than no link: it reads as the
+    # place the real work lives, so its failure reads as the case being lost.
+    if case.status == ACTIVATED:
+        links.append(
+            {"label": "Client onboarding",
+             "to": f"/onboarding/cases/{case.case_id}",
+             "why": "The activated onboarding case, in the screens an operator "
+                    "normally works it in."})
+    links += [
         {"label": "Platform configuration", "to": "/admin/config",
          "why": "The asset, regime and system packages this case resolved "
                 "against."},

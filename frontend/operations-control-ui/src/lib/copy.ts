@@ -61,6 +61,21 @@ export const copy = {
     reviewHeading: "Ready for review",
     reviewDescription: "Everything answered, waiting for a decision.",
     noReview: "Nothing is waiting for review.",
+
+    // CASES BEING RUN THROUGH THE OCC AGENT, shown in these queues alongside
+    // the governed ones.
+    //
+    // An Agent case lives in the synthetic container until it activates, so
+    // these queues — which read the governed store — showed nothing while a
+    // real client onboarding was issued and awaiting a reply. The screens told
+    // an operator there was no work, on headings named for exactly the state
+    // the case was in.
+    //
+    // The rows are READ-ONLY here and link to the Agent tab, where the case is
+    // actually worked. Nothing crosses the doorway to make this possible: only
+    // the reader widened, never what may be written.
+    agentChip: "OCC Agent",
+    agentRowHint: "Worked in the OCC Agent.",
     activeHeading: "Active clients",
     activeDescription: "Clients Trakt is configured for. Changes go through an amendment.",
     noActive: "No clients are active yet.",
@@ -425,9 +440,14 @@ export const copy = {
       "The practice case was created but could not be opened automatically. It appears in " +
       "the case list below.",
     openCase: "Open case",
-    caseCreated: "Practice case created",
-    casesHeading: "Practice cases",
-    caseEmpty: "No practice cases yet.",
+    // NOT "Practice cases". This list holds every Agent case, rehearsal and
+    // real onboarding alike — the mode is per case, and a real client
+    // onboarding sat under a heading calling it practice. The distinction is
+    // carried where it belongs, on the row: `syntheticChip` for a rehearsal,
+    // `modeLiveBadge` for the real thing. Those two stay exactly as they were.
+    caseCreated: "Case created",
+    casesHeading: "Cases",
+    caseEmpty: "No cases yet.",
     filterAll: "All",
     filterNeedsYou: "Needs you",
     filterBlocked: "Blocked",
