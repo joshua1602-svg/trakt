@@ -39,7 +39,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from datetime import date
-from typing import Any, Dict, List, Optional, Protocol, Tuple
+from typing import Any, Dict, List, Optional, Protocol, Set, Tuple
 
 from ..engine import OpsError
 from ..onboarding.case import OnboardingCase
@@ -473,13 +473,25 @@ class DeterministicInterpreter:
             client["client_name"] = name
             out.provenance["client.client_name"] = PROV_HUMAN
 
-        named = self._entities(raw, name, consumed)
+        named, assumed = self._entities(raw, name, consumed)
         if named:
             # A cued entity answer ("the LEI is …") describes the entity the
             # sentence is about, which is the first one it named — but only for
             # a field no named entity has already answered. "The servicer is
             # Meridian Servicing" answers Meridian's role, and must not also
             # land on the client's row.
+            #
+            # `assumed` is deliberately NOT subtracted here. Letting cued roles
+            # override the originator fallback fixes "Onboard X. X is the
+            # originator and the reporting entity." — where the guess beat the
+            # stated pair — but the cued roles are read from the WHOLE
+            # instruction with no idea whose they are, so
+            # "…X is the originator. Halewood Servicing Limited is the
+            # servicer." then put `servicer` on X's row. A silent omission
+            # traded for a false statement about a legal entity is not a fix.
+            # Name-first phrasing needs per-clause attribution, which is a
+            # larger change; role-first ("The reporting entity is X") reads
+            # both roles correctly today.
             cued = blocks.pop("entities", None) or {}
             spoken = {key for row in named for key in row}
             for key, value in cued.items():
@@ -498,15 +510,20 @@ class DeterministicInterpreter:
         return consumed
 
     def _entities(self, raw: str, client_name: str,
-                  consumed: set) -> List[Dict[str, Any]]:
+                  consumed: set) -> Tuple[List[Dict[str, Any]], Set[str]]:
         """Counterparties named with their role, plus the client as originator.
 
         The roles are the catalogue's own option list for ``entities.roles``.
+
+        Returns the rows, and the keys of row 0 that were PROPOSED rather than
+        read — see the originator fallback at the foot of this method. The
+        caller needs the distinction: a proposal must never outrank something
+        the instruction actually said.
         """
         f = self.catalogue.field("entities", "roles")
         roles = [str(o.get("value")) for o in ((f.options if f else None) or [])]
         rows: List[Dict[str, Any]] = []
-        seen: set = set()
+        by_name: Dict[str, Dict[str, Any]] = {}
         for role in roles:
             word = role.replace("_", " ")
             m = re.search(_ROLE_RE.format(role=re.escape(word),
@@ -514,18 +531,35 @@ class DeterministicInterpreter:
             if not m:
                 continue
             legal_name = _trim_name(m.group(1))
-            if not legal_name or legal_name.lower() in seen:
+            if not legal_name:
                 continue
-            seen.add(legal_name.lower())
             consumed.add(_clause_of(raw, m.start()))
-            rows.append({"legal_name": legal_name, "roles": [role]})
-        if client_name and client_name.lower() not in seen \
+            existing = by_name.get(legal_name.lower())
+            if existing is not None:
+                # ONE ENTITY, EVERY ROLE IT WAS GIVEN.
+                #
+                # De-duplicating by name was right about the ROW — one company
+                # is one row — and wrong about the ROLES: the first role an
+                # entity matched claimed it and every later one was dropped, so
+                # an originator that is also the reporting entity could only
+                # ever be one of them. `entities.roles` is multi-valued exactly
+                # because that combination is the ordinary case, and the
+                # structural rules require both.
+                if role not in existing["roles"]:
+                    existing["roles"].append(role)
+                continue
+            row = {"legal_name": legal_name, "roles": [role]}
+            by_name[legal_name.lower()] = row
+            rows.append(row)
+        if client_name and client_name.lower() not in by_name \
                 and not any("originator" in r["roles"] for r in rows):
             # The client is the originator unless the instruction named someone
-            # else. Proposed like any other value, and shown for confirmation.
+            # else. Proposed like any other value, and shown for confirmation —
+            # so `roles` here is a guess, and is reported as one.
             rows.insert(0, {"legal_name": client_name,
                             "roles": ["originator"]})
-        return rows
+            return rows, {"roles"}
+        return rows, set()
 
     # -- 2. a follow-up ------------------------------------------------- #
     def interpret_action(self, text: str, run: SyntheticRun,
