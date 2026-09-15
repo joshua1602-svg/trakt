@@ -364,6 +364,17 @@ class CreateBatch(BaseModel):
     # The engine refuses an unknown dataset, and refuses pipeline + mi_annex2 —
     # a pipeline view never carries a regime delivery.
     dataset: str = ""
+    # How often this book arrives: monthly | weekly | daily | adhoc. Blank keeps
+    # the monthly default, so a caller that does not send the field behaves
+    # exactly as before.
+    #
+    # It was absent entirely, and the consequence was not cosmetic: the
+    # destination is derived from the batch's own frequency, `intake` stores
+    # `frequency or BATCH_FREQUENCY_DEFAULT`, and that default is monthly. So
+    # every manually created delivery landed under /monthly/ whatever it was —
+    # a weekly pipeline file included. The engine accepted a frequency and
+    # passed it through the whole way down; only this door dropped it.
+    frequency: str = ""
 
 
 class RegisterBatchFile(BaseModel):
@@ -385,7 +396,7 @@ def create_batch(body: CreateBatch,
         reporting_date=body.reporting_date, workflow_type=body.workflow_type,
         created_by=principal.name,
         auto_start_when_ready=body.auto_start_when_ready,
-        dataset=body.dataset)
+        dataset=body.dataset, frequency=body.frequency)
     return {"ok": True, "batch": presenters.present_batch(batch,
                                                           _role_labels())}
 
