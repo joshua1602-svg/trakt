@@ -6,24 +6,28 @@ A client takes management information AND ESMA Annex 2. The tape exists today;
 the return is not due for weeks. The originator's LEI has been asked for and
 has not come back — GLEIF evidence takes as long as it takes.
 
-Onboarding refused to complete. Two things did it, and neither was the regime
-gate that actually protects the return:
+Onboarding refused to complete, because ``entities.lei`` and
+``entities.country_of_establishment`` are required once an entity holds the
+originator role, and an unanswered required field refused approval. So a client
+taking MI alone went live the day their tape arrived, and the same client taking
+MI *and* Annex 2 waited for a regulatory identity their MI does not use.
 
-* ``entities.lei`` and ``entities.country_of_establishment`` are required once
-  an entity holds the originator role, and an unanswered required field
-  refused approval;
-* a structural rule refused approval outright when Annex 2 was selected and no
-  entity held the originator role.
+TWO COSTS THAT LOOK ALIKE AND ARE NOT
 
-So a client taking MI alone went live the day their tape arrived, and the same
-client taking MI *and* Annex 2 waited for a regulatory identity their MI does
-not use. The second rule also made the obvious workaround useless: dropping
-the originator role to escape the LEI simply substituted one blocker for
-another, which is worse than the original problem because it looks like
-progress.
+Naming the originator is a tick: the operator already knows which entity it is.
+Obtaining its LEI is a GLEIF lookup that takes as long as it takes. Only the
+second is a reason to wait, and conflating them causes damage in either
+direction:
 
-Note the twin immediately below it in ``validation.py``: investor reporting's
-equivalent rule was already ADVISORY. Annex 2 was the outlier.
+* leave both blocking and MI waits weeks for a value it never reads;
+* make both advisory and a case completes with NO originator — at which point
+  ``entities.lei``, whose ``required_when`` is "roles contains originator", is
+  required of nobody. It drops off the client's checklist as optional, the
+  client reasonably deprioritises it, and the one value standing between them
+  and their first return is never actually asked for.
+
+The second is worse, because it is silent. So the cheap half stays BLOCKING and
+the slow half is advisory: name the originator now, send the LEI when it comes.
 
 WHAT MUST NOT WEAKEN
 
@@ -112,16 +116,18 @@ class TestTheRegimeIdentityIsAdvisory:
         assert "entities.country_of_establishment" in advisory
         assert "entities.country_of_establishment" not in blocking
 
-    def test_nor_does_a_missing_originator_role(self, onboarding):
-        """The rule that made the workaround useless.
+    def test_but_naming_the_originator_still_does(self, onboarding):
+        """The cheap half stays required, and must.
 
-        Dropping the originator role to escape the LEI substituted this
-        blocker for that one — motion without progress.
+        Naming the originator is a tick the operator can do now; obtaining its
+        LEI is a GLEIF lookup that takes weeks. Treating both as advisory was
+        briefly tried and did more damage than the delay it avoided — see
+        ``TestTheLeiIsAskedForAtAll`` below.
         """
         case = _case(onboarding, roles=["reporting_entity"])
         blocking, advisory = _by_severity(onboarding, case)
-        assert "entities.roles" in advisory
-        assert "entities.roles" not in blocking
+        assert "entities.roles" in blocking
+        assert "entities.roles" not in advisory
 
     def test_mi_goes_live_with_the_lei_still_outstanding(self, onboarding):
         """The whole point, stated as the platform states it."""
@@ -130,6 +136,35 @@ class TestTheRegimeIdentityIsAdvisory:
         assert onboarding._validator().is_ready(case) is True
         lei = case.items("entities")[0].get("lei")
         assert not lei, "the case is ready precisely BECAUSE this is unanswered"
+
+
+class TestTheLeiIsAskedForAtAll:
+    """The trap in making the originator role advisory too.
+
+    ``entities.lei`` is required when "roles contains originator". Make naming
+    the originator advisory as well, and a case can complete with no originator
+    at all — at which point the LEI is required of NOBODY. It leaves the
+    client's checklist as optional, the client reasonably deprioritises it, and
+    the single value standing between them and their first Annex 2 return is
+    never actually asked for.
+
+    That is worse than the delay the change was meant to avoid, and it is silent
+    — so it is asserted directly rather than left to follow from the severity.
+    """
+
+    def test_selecting_annex_2_forces_someone_to_be_the_originator(
+            self, onboarding):
+        case = _case(onboarding, roles=["reporting_entity"], contacts=True)
+        assert onboarding._validator().is_ready(case) is False, (
+            "a case with no originator must not complete: its LEI would never "
+            "be asked for")
+
+    def test_and_once_named_the_lei_is_asked_as_required(self, onboarding):
+        case = _case(onboarding, roles=["originator", "reporting_entity"])
+        asked = {r["field"] for r in
+                 onboarding.catalogue.outstanding_for_client(case.answers)}
+        assert "lei" in asked
+        assert "country_of_establishment" in asked
 
 
 class TestItIsStillAskedAsRequired:
