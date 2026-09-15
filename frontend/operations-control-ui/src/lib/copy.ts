@@ -540,6 +540,21 @@ export const copy = {
     packNoRecipient:
       "There is no contact address on this case yet. Record one, or type an address when you " +
       "issue it.",
+    // WHY THE BUTTON IS NOT AVAILABLE. It used to disable itself in silence,
+    // which reads as a broken button rather than a missing address — and the
+    // address is missing for a reason that looks like a contradiction: the
+    // reporting contact is one of the questions the pack itself is going out to
+    // ask. Issuing has never depended on that answer; it just needed somewhere
+    // to send it.
+    packNeedsAddress: "Type an address to issue it to.",
+    // WHETHER IT ACTUALLY LEFT TRAKT, said at the moment of issuing rather than
+    // only in the panel afterwards. `sent` is the honest answer and the two
+    // outcomes are not interchangeable: one reached a client, one is a record
+    // that it did not.
+    packIssuedToast: "Pack issued. It left Trakt.",
+    packRecordedToast:
+      "Pack recorded as issued. Nothing was sent — this deployment has no "
+      + "outbound mail configured.",
     packMappingHeading: "About field mappings",
     packSteps: "Steps",
     packRequired: "required",
