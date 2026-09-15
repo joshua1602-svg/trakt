@@ -1555,18 +1555,32 @@ sections:
         writes_to: onboarding_record
 
   - key: access
-    label: Who needs access
+    # WHO SIGNS IN. Nothing else.
+    #
+    # This asked a client to design their own entitlements: a role from a
+    # four-way enum, which portfolios each person may see, and three booleans
+    # for Operations Control Centre access, dashboard access and report
+    # delivery by email. Under a MANAGED SERVICE none of that is the client's
+    # to decide — the Operations Control Centre is operated by Trakt, reports
+    # reach people through the platform, and everyone named here needs the same
+    # thing: an account.
+    #
+    # Seven questions to collect two facts is not thoroughness, it is a form
+    # that invites someone to stall over what "Approves deliveries and
+    # configuration" might commit them to. What remains is exactly what
+    # creating the account requires, and the operator decides the rest.
+    label: Who needs Trakt access
     help: >-
-      The people who will use Trakt for this client, and what each of them
-      needs. Trakt records the requirement; provisioning is an operator action
-      outside onboarding.
+      The people who should be able to sign in. Trakt records who they are;
+      creating the accounts is an operator action after onboarding.
     repeatable: true
     repeatable_key: access
     item_label_field: user_name
     fields:
 
       - key: user_name
-        label: Name
+        label: Full name
+        help: As it should appear on their account.
         scope: access
         source: client_supplied
         type: text
@@ -1576,65 +1590,16 @@ sections:
         writes_to: onboarding_record
 
       - key: user_email
-        label: Email address
+        label: Work email address
+        help: >-
+          The address they will sign in with. It must be the one their
+          organisation uses, not a personal address.
         scope: access
         source: client_supplied
         type: email
         required: true
         validation: email
         consumers: [Onboarding record, access provisioning]
-        writes_to: onboarding_record
-
-      - key: user_role
-        label: Role
-        scope: access
-        source: client_supplied
-        type: enum
-        required: true
-        options:
-          - value: viewer
-            label: Views reports and dashboards
-          - value: analyst
-            label: Works with the data
-          - value: approver
-            label: Approves deliveries and configuration
-          - value: administrator
-            label: Administers this client's settings
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: scope_note
-        label: Which clients or portfolios
-        help: Leave blank for all of this client's portfolios.
-        scope: access
-        source: client_supplied
-        type: text
-        max_length: 200
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: occ_access_required
-        label: Needs Operations Control Centre access
-        scope: access
-        source: client_supplied
-        type: boolean
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: dashboard_access_required
-        label: Needs dashboard access
-        scope: access
-        source: client_supplied
-        type: boolean
-        consumers: [Access provisioning]
-        writes_to: onboarding_record
-
-      - key: report_recipient
-        label: Receives reports by email
-        scope: access
-        source: client_supplied
-        type: boolean
-        consumers: [Report distribution]
         writes_to: onboarding_record
 
 not_collected:

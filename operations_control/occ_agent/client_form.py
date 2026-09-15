@@ -83,8 +83,11 @@ STEPS: Tuple[Dict[str, Any], ...] = (
              "what Trakt can report about eligible collateral, the borrowing "
              "base and facility headroom. Skip it if there is no facility.",
      "sections": ("funding_facility",)},
-    {"key": "access", "label": "Who needs access",
-     "help": "People at your end who need Trakt, or who receive reports.",
+    # Second copy of a catalogue heading — see the note on `anything_else`
+    # below. "or who receive reports" described a distribution list the client
+    # no longer maintains: everyone named here signs in.
+    {"key": "access", "label": "Who needs Trakt access",
+     "help": "The people who should be able to sign in.",
      "sections": ("access",)},
     # This heading and help are a SECOND copy of what `additional_context`
     # declares in the catalogue, because the client-facing grouping is its own

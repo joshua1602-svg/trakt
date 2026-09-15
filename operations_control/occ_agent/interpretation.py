@@ -352,7 +352,35 @@ class DeterministicInterpreter:
                 continue
             target = (out.delivery if hit.ref.section == DELIVERY_SECTION
                       else blocks.setdefault(hit.ref.section, {}))
-            target[hit.ref.key] = hit.value
+            if (hit.ref.type in _extraction.MULTI_VALUED
+                    and isinstance(hit.value, list)):
+                # A MULTI-VALUED FIELD MENTIONED TWICE HOLDS BOTH.
+                #
+                # The extractor emits one hit per span it can claim, and how
+                # many spans one sentence produces depends on wording the
+                # speaker is not choosing deliberately:
+                #
+                #   "...the originator and reporting entity"
+                #        -> one hit, ['reporting_entity', 'originator']
+                #   "...the originator and THE reporting entity"
+                #        -> two hits, ['originator'] then ['reporting_entity']
+                #
+                # A plain assignment made the second overwrite the first, so
+                # the definite article silently dropped a role. Silently is the
+                # problem: the reply confirmed the roles it kept, an operator
+                # read their own sentence back in it, and the missing one only
+                # surfaced later as a field that had gone optional.
+                #
+                # Merging is the only reading that can be right. Two hits on
+                # one multi-valued path are two things the sentence said, and a
+                # field that holds several values has no reason to prefer the
+                # last. Order is kept and duplicates dropped so a value
+                # repeated across spans lands once.
+                merged = [v for v in (target.get(hit.ref.key) or [])]
+                merged += [v for v in hit.value if v not in merged]
+                target[hit.ref.key] = merged
+            else:
+                target[hit.ref.key] = hit.value
             out.provenance[hit.ref.path] = (
                 PROV_HUMAN if hit.confidence >= 1.0 else PROV_AGENT)
             if hit.confidence < 1.0:
