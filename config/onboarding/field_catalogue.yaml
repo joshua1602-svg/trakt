@@ -1145,6 +1145,26 @@ sections:
     # Branding and disclaimer preferences. Genuinely optional: every one has a
     # Trakt default that is fine, so this must not be presented to a client as
     # something they have to complete.
+    #
+    # NONE OF IT IS ASKED OF THE CLIENT ANY MORE.
+    #
+    # Every pack ended with a step headed "Your reports" asking for a hex
+    # colour, a logo, a disclaimer and a note about the reporting calendar.
+    # Under a managed service the answer to each is Trakt's — the operator sets
+    # it — so the questions read as consequential while changing nothing, which
+    # is the worst kind to ask. The same argument retired the entitlement
+    # questions from `access`.
+    #
+    # Answering them to silence the step was the worse option: these write to
+    # `client_config:mi.branding.*`, read by the MI surface and the Annex
+    # delivery publication path, so an operator typing "none" to make the
+    # question go away would have printed "none" as the disclaimer on delivered
+    # output. Silencing a question by writing junk into production
+    # configuration is not an improvement on the question.
+    #
+    # The fields stay, write where they wrote, and stay `amendable`: an
+    # operator sets any of them the moment a client expresses a preference.
+    # What stops is asking a client to invent one during onboarding.
     optional_context: true
     label: Report presentation
     help: >-
@@ -1169,7 +1189,7 @@ sections:
         label: Brand colour
         help: "A hex colour, for example #1F3B5C."
         scope: branding
-        source: client_supplied
+        source: operator_supplied
         type: colour
         required: false
         validation: colour
@@ -1181,7 +1201,7 @@ sections:
         asked_when: "reporting.products contains mi"
         label: Logo
         scope: branding
-        source: client_supplied
+        source: operator_supplied
         type: text
         required: false
         consumers: [Report cover pages]
@@ -1192,7 +1212,7 @@ sections:
         asked_when: "reporting.products contains mi"
         label: Disclaimer
         scope: branding
-        source: client_supplied
+        source: operator_supplied
         type: multiline
         required: false
         consumers: [Report cover pages]
@@ -1230,7 +1250,7 @@ sections:
           Anything Trakt should know about when reports are due — for example a
           fixed business day, or a quarter-end dependency.
         scope: operational
-        source: client_supplied
+        source: operator_supplied
         type: multiline
         required: false
         consumers: [Onboarding record]
