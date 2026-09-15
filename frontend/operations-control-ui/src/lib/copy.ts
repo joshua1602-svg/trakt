@@ -408,7 +408,12 @@ export const copy = {
     syntheticBanner:
       "Practice mode uses the real onboarding controls but does not activate configuration, " +
       "send email, or start the live pipeline.",
-    newCase: "Start a new practice case",
+    // Said on a REAL onboarding, where the practice sentence above is not just
+    // unhelpful but false: this case can send email, and does.
+    liveBanner:
+      "This is a real client onboarding. Email is sent, and confirming activation at the end " +
+      "creates the client's live configuration and starts their first delivery.",
+    newCase: "Start a new case",
     newCaseHeading: "What needs to happen?",
     newCasePrompt:
       "Tell Trakt in your own words. For example: “Onboard Northstar Lending. It is a UK " +
@@ -518,7 +523,7 @@ export const copy = {
     previewDescription:
       "The configuration this onboarding would generate. Nothing here has been created, and " +
       "this tab cannot create it.",
-    previewNothingWritten: "Not created — practice case",
+    previewNothingWritten: "Not created — nothing has been written",
     previewNone: "There is not yet enough answered to generate a configuration.",
     factsHeading: "What the run is for",
     gatesHeading: "Controls",
@@ -537,7 +542,7 @@ export const copy = {
     decisionsHeading: "Decisions waiting for you",
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
-    artefactNotWritten: "Not written — practice case",
+    artefactNotWritten: "Not written",
     executionHeading: "Practice execution",
     readinessHeading: "Readiness",
     observationsHeading: "Worth knowing",
@@ -749,14 +754,18 @@ export const copy = {
     cancelConfirm: "Yes, cancel it",
     cancelledToast: "Case cancelled. The record has been kept.",
     uploadHeading: "Provide the client response",
+    // NOT "practice files". On a real onboarding these are the client's own
+    // files. What is true in both modes is where they go: the case, and not the
+    // client's live storage — which is the reassurance an operator actually
+    // wants before uploading a real loan tape.
     uploadHelp:
-      "Upload practice files, or use the files from a prepared example. They stay inside this " +
-      "practice case.",
+      "Upload the client's files, or use the files from a prepared example. They stay inside " +
+      "this case and are never written to the client's live storage.",
     uploadButton: "Add files",
     uploadFixture: "Use the example files",
     uploadGenerate: "Let Trakt make up a response",
 
-    readyHeadline: "Practice case ready for execution.",
+    readyHeadline: "Case ready for execution.",
     readyNotDone: [
       "No live files were written.",
       "No production pipeline was triggered.",
@@ -801,7 +810,7 @@ export const copy = {
       hard_blocked: "Blocked",
     } as Record<string, string>,
 
-    notFound: "That practice case could not be found.",
+    notFound: "That case could not be found.",
   },
 
   admin: {

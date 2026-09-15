@@ -120,3 +120,53 @@ describe("OCC Agent — the case list is not called practice", () => {
     expect(copy.agent.modeLiveBadge).toBe("Real onboarding");
   });
 });
+
+describe("OCC Agent — the screen does not call a real onboarding practice", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("a rehearsal still leads with the practice banner", async () => {
+    const user = userEvent.setup();
+    renderApp("/agent");
+    await createAgentCase(user);
+    expect(await screen.findByText(copy.agent.syntheticBanner)).toBeInTheDocument();
+    expect(screen.queryByText(copy.agent.liveBanner)).not.toBeInTheDocument();
+  });
+
+  it("the practice banner never claims a real onboarding cannot send email", () => {
+    /* It rendered unconditionally, so a case that had just emailed a client
+       led with "Practice mode ... does not ... send email". A banner that
+       contradicts what the operator did a minute ago invites them to doubt the
+       thing that actually happened. */
+    expect(copy.agent.syntheticBanner).toContain("send email");
+    expect(copy.agent.liveBanner).not.toContain("does not");
+    expect(copy.agent.liveBanner.toLowerCase()).toContain("real client onboarding");
+  });
+
+  it("the upload help does not call the client's own files practice files", () => {
+    expect(copy.agent.uploadHelp.toLowerCase()).not.toContain("practice file");
+    expect(copy.agent.uploadHelp.toLowerCase()).not.toContain("this practice case");
+  });
+
+  it("nothing an operator reads on any case calls it a practice case outright", () => {
+    /* These render regardless of mode, so each was a standing false claim on a
+       real onboarding. Strings that describe the REHEARSAL — which both modes
+       run — are deliberately not in this list. */
+    for (const s of [
+      copy.agent.casesHeading,
+      copy.agent.caseEmpty,
+      copy.agent.caseCreated,
+      copy.agent.newCase,
+      copy.agent.uploadHelp,
+      copy.agent.readyHeadline,
+      copy.agent.notFound,
+      copy.agent.previewNothingWritten,
+      copy.agent.artefactNotWritten,
+    ]) {
+      expect(s.toLowerCase()).not.toContain("practice");
+    }
+  });
+});
