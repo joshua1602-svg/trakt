@@ -254,6 +254,34 @@ describe("OCC Agent tab — the operating loop", () => {
     );
   });
 
+  it("an applied turn still returns a proposal object, and the screen must ignore it", async () => {
+    // THE CONTRACT THIS PINS, and why the test above could not pin it alone.
+    //
+    // `OccAgentService.instruct` returns `proposal={"disclosure": ...}` on the
+    // APPLIED path, so the field is truthy for a change that has already been
+    // written. The mock used to return null there, and a screen that left its
+    // proposal banner up over an applied change therefore passed every test
+    // while misleading every operator: confirm, see the same banner, conclude
+    // nothing saved.
+    //
+    // So the mock now matches the server, and this asserts the mock — not the
+    // screen. Quietly restoring `proposal: null` would make the fake kinder
+    // than production again and re-hide the defect; this fails if anyone does.
+    const client = new MockOpsClient();
+    const created = await client.createAgentCase(
+      "Onboard Northstar Lending. Monthly management information.",
+    );
+    const caseRef = created.run.case_ref;
+
+    const proposed = await client.instructAgent(caseRef, "cancel this case", false);
+    expect(proposed.applied).toBe(false);
+    expect(proposed.proposal).not.toBeNull();
+
+    const applied = await client.instructAgent(caseRef, "cancel this case", true);
+    expect(applied.applied).toBe(true);
+    expect(applied.proposal).not.toBeNull();
+  });
+
   it("links out to the existing OCC views rather than reproducing them", async () => {
     await runScenario("A — Clean onboarding");
     const panel = (await screen.findByText(copy.agent.occLinksHeading)).closest("section");

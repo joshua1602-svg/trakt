@@ -154,9 +154,21 @@ export function AgentCaseScreen() {
     if (!message.trim()) return;
     const turn = await act(() => client.instructAgent(caseId, message.trim(), confirm));
     if (!turn) return;
-    setProposal(turn.proposal);
+    // AN APPLIED TURN HAS NO PENDING PROPOSAL, whatever it carries in the
+    // field. The server returns `proposal={"disclosure": ...}` on the applied
+    // path so the change can be explained, and that object is TRUTHY: keying
+    // the banner off its presence left "Trakt is proposing a change" standing
+    // over a change that had already been written.
+    //
+    // The cost of that is not cosmetic. The operator confirms, sees the same
+    // banner, concludes nothing was saved, and either confirms again or starts
+    // rewording an instruction that already worked — while the case underneath
+    // is correct the whole time. `applied` is the only thing that settles it,
+    // so it is read first and the field is ignored when it is true.
+    const pending = turn.applied ? null : turn.proposal;
+    setProposal(pending);
     // Remember what produced this proposal, so confirming can re-send it.
-    setProposedFrom(turn.proposal ? message.trim() : "");
+    setProposedFrom(pending ? message.trim() : "");
     if (turn.applied || !turn.proposal) setText("");
   }
 
