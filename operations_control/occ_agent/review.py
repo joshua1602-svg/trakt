@@ -160,8 +160,7 @@ class ReviewPackage:
             lines += ["## User access", "", self.access_note, ""]
             for row in self.access_requirements:
                 lines.append(f"- {row.get('user_name') or 'unnamed'} "
-                             f"<{row.get('user_email') or 'no email'}> — "
-                             f"{row.get('user_role') or 'no role'}")
+                             f"<{row.get('user_email') or 'no email'}>")
             lines.append("")
         if self.operator_actions:
             lines += ["## Actions for an administrator", ""]
@@ -319,38 +318,28 @@ def access_actions(rows: List[Dict[str, Any]]) -> List[OperatorAction]:
     has to do — each marked ``not_provisioned`` — rather than a claim that
     somebody now has access.
     """
+    # ONE ACTION PER PERSON: create the account.
+    #
+    # This used to fan a single row into up to four actions, from a role enum,
+    # a scope note and three booleans the client was asked to set — OCC access,
+    # dashboard access, report distribution. Under a managed service none of
+    # those are the client's to decide: the Operations Control Centre is
+    # operated by Trakt, reports reach people through the platform, and
+    # everyone named needs the same thing. The questions are gone from the
+    # catalogue, so the actions derived from them go too rather than quietly
+    # reading keys nobody is asked for any more.
     out: List[OperatorAction] = []
     for row in rows or []:
         who = str(row.get("user_name") or "").strip()
         email = str(row.get("user_email") or "").strip()
-        role = str(row.get("user_role") or "").strip()
         subject = f"{who or 'Unnamed user'}" + (f" <{email}>" if email else "")
-        scope = str(row.get("scope_note") or "").strip()
-        if row.get("occ_access_required"):
-            out.append(OperatorAction(
-                kind="occ_access", subject=subject,
-                detail=("Add to the OCC operator list for this environment "
-                        f"as {role or 'a role that has not been stated'}"
-                        + (f", scoped to {scope}" if scope else "")
-                        + ". Trakt reads operators from environment "
-                          "configuration; this is not done by activating the "
-                          "client.")))
-        if row.get("dashboard_access_required"):
-            out.append(OperatorAction(
-                kind="dashboard_access", subject=subject,
-                detail="Grant dashboard access" + (f" for {scope}" if scope
-                                                   else "")
-                       + ". Not provisioned by Trakt."))
-        if row.get("report_recipient"):
-            out.append(OperatorAction(
-                kind="report_distribution", subject=subject,
-                detail="Add to the report distribution list. Trakt sends no "
-                       "email in this environment; distribution is manual."))
-        if role == "approver":
-            out.append(OperatorAction(
-                kind="approval_role", subject=subject,
-                detail="Confirm this person is permitted to approve "
-                       "configuration changes for this client."))
+        out.append(OperatorAction(
+            kind="user_account", subject=subject,
+            detail=("Create the account for "
+                    + (email or "an address that has not been given")
+                    + ". Trakt records who needs access; the account itself is "
+                      "created in the identity provider and is not provisioned "
+                      "by activating the client.")))
     return out
 
 

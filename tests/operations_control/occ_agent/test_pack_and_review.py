@@ -330,21 +330,29 @@ def test_the_review_package_reports_the_pack_honestly(service, reviewed):
 # --------------------------------------------------------------------------- #
 
 def test_access_requirements_become_operator_actions():
+    """One action per person: create the account.
+
+    This asserted four kinds, fanned out from a role enum and three booleans
+    the client was asked to set. Under a managed service none of those are the
+    client's to decide — the OCC is operated by Trakt and reports reach people
+    through the platform — so the questions went and the actions derived from
+    them went with them. Extra keys are passed here deliberately: a case
+    answered before the change must not resurrect the old fan-out.
+    """
     actions = _review.access_actions([
         {"user_name": "Dana Fox", "user_email": "dana@northstar.example",
          "user_role": "approver", "scope_note": "direct_101",
          "occ_access_required": True, "dashboard_access_required": True,
          "report_recipient": True},
     ])
-    kinds = {a.kind for a in actions}
-    assert kinds == {"occ_access", "dashboard_access", "report_distribution",
-                     "approval_role"}
+    assert [a.kind for a in actions] == ["user_account"]
+    assert "dana@northstar.example" in actions[0].detail
     assert all(a.status == "not_provisioned" for a in actions)
 
 
 def test_nothing_claims_access_was_provisioned():
     actions = _review.access_actions([
-        {"user_name": "Dana Fox", "occ_access_required": True}])
+        {"user_name": "Dana Fox", "user_email": "dana@northstar.example"}])
     text = " ".join(a.detail for a in actions).lower()
     assert "not done by activating" in text or "not provisioned" in text
     assert "granted" not in text

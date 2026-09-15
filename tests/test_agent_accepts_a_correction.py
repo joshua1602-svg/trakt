@@ -172,3 +172,73 @@ class TestTheExtractorReadThemAllAlong:
         steps = DeterministicInterpreter().interpret_instruction(
             "ERE Funding Limited has one role: reporting entity.").steps
         assert steps["entities"]["entities"][0]["roles"] == ["reporting_entity"]
+
+
+# --------------------------------------------------------------------------- #
+# A multi-valued field mentioned twice holds both
+# --------------------------------------------------------------------------- #
+
+class TestAMultiEnumKeepsEveryValue:
+    """"A and B" must not quietly become "B".
+
+    The extractor emits one hit per span it can claim, and how many spans one
+    sentence produces turns on wording nobody chooses deliberately:
+
+        "...the originator and reporting entity"      one hit, both values
+        "...the originator and THE reporting entity"  two hits, one value each
+
+    Assembling those with a plain assignment made the second overwrite the
+    first, so a definite article dropped a role. Silently: the reply confirmed
+    the roles it kept, an operator read their own sentence back in it, and the
+    missing one surfaced later as a field that had gone optional — in the real
+    case, an LEI that stopped being asked for because nobody held the
+    originator role any more.
+    """
+
+    @pytest.mark.parametrize("sentence,expected", [
+        ("ERE Funding Limited is the originator and the reporting entity.",
+         {"originator", "reporting_entity"}),
+        ("ERE Funding Limited is the originator and reporting entity.",
+         {"originator", "reporting_entity"}),
+        ("ERE Funding Limited is the reporting entity and the originator.",
+         {"originator", "reporting_entity"}),
+        ("ERE Funding Limited has two roles: originator and reporting entity.",
+         {"originator", "reporting_entity"}),
+        ("ERE Funding Limited is the originator, the servicer and the "
+         "reporting entity.",
+         {"originator", "servicer", "reporting_entity"}),
+    ])
+    def test_every_role_named_survives(self, sentence, expected):
+        steps = DeterministicInterpreter().interpret_instruction(sentence).steps
+        assert set(steps["entities"]["entities"][0]["roles"]) == expected
+
+    def test_a_single_role_is_still_a_single_role(self):
+        steps = DeterministicInterpreter().interpret_instruction(
+            "ERE Funding Limited is the originator.").steps
+        assert steps["entities"]["entities"][0]["roles"] == ["originator"]
+
+    def test_stating_the_roles_afresh_still_REPLACES_what_is_stored(self, agent):
+        """Merging is within one sentence, never against the case.
+
+        Otherwise a correction could only ever add, and "one role: reporting
+        entity" would leave the originator in place — the exact failure the
+        merge was introduced to fix, in the other direction.
+        """
+        agent_case = _case(agent)
+        assert _reload(agent, agent_case).items("entities")[0]["roles"] \
+            == ["originator"]
+        result = agent.instruct(
+            agent_case, text="ERE Funding Limited has one role: reporting entity.",
+            actor="operator", confirm=True)
+        assert _reload(agent, result.case).items("entities")[0]["roles"] \
+            == ["reporting_entity"]
+
+    def test_and_the_correction_reaches_the_case(self, agent):
+        agent_case = _case(agent)
+        result = agent.instruct(
+            agent_case,
+            text="ERE Funding Limited is the originator and the reporting entity.",
+            actor="operator", confirm=True)
+        assert result.applied is True
+        roles = _reload(agent, result.case).items("entities")[0]["roles"]
+        assert set(roles) == {"originator", "reporting_entity"}
