@@ -61,9 +61,24 @@ from .store import OnboardingStore
 from .validation import Validator
 
 #: Wizard steps, in order. Each maps to one catalogue section except review.
+#: The wizard's steps, and — because ``save_step`` refuses anything absent from
+#: here and ``submit_client_response`` iterates it — the set of catalogue
+#: sections whose answers can be WRITTEN AT ALL.
+#:
+#: ``funding_facility`` and ``additional_context`` were missing. Both are
+#: declared sections, both are asked of the client, both appear on the pack and
+#: in the client form; and an answer to either reached ``save_step`` as a step
+#: it did not recognise, or was skipped by the loop before it got there. The
+#: client typed, the operator submitted, and the value went nowhere — the
+#: quietest possible failure, because a section nobody is required to answer
+#: looks the same when it is answered and lost as when it is left blank.
+#:
+#: ``tests/test_onboarding_step_coverage.py`` now holds these to the catalogue
+#: in both directions, so a new section cannot be declared into the same hole.
 STEPS = ("client", "entities", "contacts", "portfolios", "sources",
-         "reporting", "risk_limits", "regime", "data_semantics",
-         "data_definitions", "access", "presentation",
+         "reporting", "risk_limits", "funding_facility", "regime",
+         "data_semantics", "data_definitions", "access", "presentation",
+         "additional_context",
          "review")
 
 STEP_LABELS = {
@@ -74,11 +89,13 @@ STEP_LABELS = {
     "sources": "Expected deliveries",
     "reporting": "Reporting requirements",
     "risk_limits": "Concentration tests and covenants",
+    "funding_facility": "Warehouse / funding facility",
     "regime": "Regulatory information",
     "data_semantics": "What your numbers mean",
     "data_definitions": "How to read each file",
     "access": "Who needs access",
     "presentation": "Report presentation",
+    "additional_context": "How you manage this portfolio",
     "review": "Review and activate",
 }
 

@@ -1229,32 +1229,55 @@ sections:
   # -----------------------------------------------------------------------
   # -----------------------------------------------------------------------
   - key: additional_context
-    # The one open question in the pack. Everything else Trakt asks is a
-    # declared field with a destination; this is deliberately not, because the
-    # thing a client most wants to tell you at the start is usually the thing
-    # no catalogue anticipated — an asset-class quirk, a servicing arrangement,
-    # a transition mid-period. Offered, never required.
+    # The one open question in the pack, and it asks about OUTPUT.
+    #
+    # WHAT IT USED TO ASK, AND WHY THAT WAS THE WRONG QUESTION HERE. It asked
+    # for anything that would "help Trakt read your data correctly" — an
+    # unusual servicing arrangement, a portfolio acquired mid-period, local
+    # terminology. Those are real and they matter, but they already have two
+    # homes: `data_semantics` and `data_definitions` below, both deliberately
+    # DEFERRED until there is a file, because asking a client to describe a
+    # column Trakt has not looked at yet is a data-dictionary request wearing a
+    # friendlier costume. Asking a third time, generically, before any file
+    # exists, produced exactly what a vague question earns: blank boxes, or
+    # prose restating what the tape says anyway.
+    #
+    # WHAT NOTHING ELSE ASKS is what the client wants OUT of the platform. The
+    # rest of this catalogue establishes what the book IS — its identity,
+    # entities, deliveries, regimes. None of it asks which numbers this lender
+    # actually runs on. Trakt can derive a great deal from a tape; it cannot
+    # derive which slice of it this credit committee looks at first, or which
+    # report someone rebuilds by hand every month. That answer shapes the MI,
+    # and only the client has it.
+    #
+    # Still offered, never required: a client with nothing to add loses nothing
+    # by leaving it blank, and a first delivery still produces full MI.
     optional_context: true
-    label: Anything else we need to know
+    label: How you manage this portfolio
     help: >-
-      Anything specific to your business, your asset class or this portfolio
-      that would help Trakt read your data correctly. Leave it blank if nothing
-      comes to mind — it is not a gate on anything.
+      The metrics, cuts and questions you use to run this book, so your MI
+      answers them rather than the generic ones. Nothing here changes how your
+      data is read, and leaving it blank holds nothing up.
     fields:
 
+      # The key is unchanged. It is the destination for any answer already
+      # given against the old wording, and renaming it would orphan those
+      # answers on cases that are mid-flight.
       - key: client_context_note
-        label: Anything else we should know
+        label: Metrics, analysis and questions specific to your business
         help: >-
-          For example: an unusual servicing or sub-servicing arrangement, a
-          portfolio acquired mid-period, a product feature that behaves
-          differently from the rest of the book, or terminology used in your
-          files that is specific to you.
+          For example: the measures your board or credit committee asks for
+          each month; how you cut the book when you look at it (by product,
+          vintage, region, LTV band, introducer, or something particular to
+          you); a performance or concentration question you currently answer by
+          hand; a ratio or covenant specific to your lending; or a report you
+          produce today that you would rather Trakt produced.
         scope: client
         source: client_supplied
         type: multiline
         required: false
         max_length: 4000
-        consumers: [Onboarding record]
+        consumers: [Onboarding record, MI question design]
         writes_to: onboarding_record
         amendable: true
 
