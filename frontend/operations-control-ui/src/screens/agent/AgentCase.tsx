@@ -233,7 +233,23 @@ export function AgentCaseScreen() {
             caseId={caseId}
             onDraft={() => void act(() => client.draftAgentPack(caseId))}
             onApprove={() => void act(() => client.approveAgentPack(caseId))}
-            onSend={(to) => void act(() => client.sendAgentPack(caseId, to))}
+            // ISSUING IS THE ONE ACTION THAT EMAILS A CLIENT, and it was the
+            // one action that confirmed nothing: `act` toasts on failure and is
+            // silent on success, so a send and a no-op looked identical. The
+            // receipt already carries the honest answer — say it here, when the
+            // operator is asking the question, not only in the panel below.
+            onSend={(to) =>
+              void act(async () => {
+                const after = await client.sendAgentPack(caseId, to);
+                toast.show(
+                  after.pack?.sent
+                    ? copy.agent.packIssuedToast
+                    : copy.agent.packRecordedToast,
+                  after.pack?.sent ? "success" : "info",
+                );
+                return after;
+              })
+            }
           />
         );
       case "responses":
@@ -1333,6 +1349,15 @@ function PackPanel({
             >
               {copy.agent.packSend}
             </button>
+            {/* A DISABLED BUTTON MUST SAY WHY. Without this the control goes
+                grey and nothing else changes, which reads as a broken button —
+                and the operator's next move is to press it again rather than to
+                fill in the box beside it. */}
+            {recipients.length === 0 && !recipient.trim() && (
+              <span role="note" className="text-xs text-stone-500">
+                {copy.agent.packNeedsAddress}
+              </span>
+            )}
           </>
         )}
       </div>
