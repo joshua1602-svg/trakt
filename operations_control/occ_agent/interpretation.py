@@ -585,7 +585,7 @@ class DeterministicInterpreter:
             interpretation = self.interpret_instruction(raw)
         except InterpretationError:
             return None
-        if not _says_something(interpretation, case):
+        if not _says_something(interpretation):
             return None
         return ProposedChange(
             action=_states.ACTION_ANSWER,
@@ -597,42 +597,45 @@ class DeterministicInterpreter:
                    else "part of the message could not be read"))
 
 
-def _says_something(interpretation: Interpretation,
-                    case: OnboardingCase) -> bool:
+def _says_something(interpretation: Interpretation) -> bool:
     """Whether a follow-up says anything worth proposing as a change.
 
-    This used to refuse a follow-up whose only content was the client's NAME,
-    on the reasoning that a bare proper-noun run is usually a false positive
-    ("send it to Northstar") and the client is named by then anyway.
+    WHAT THE EXTRACTOR BOUND IS WHAT THE OPERATOR SAID. This asks one question
+    now — did reading the message produce anything? — and nothing else.
 
-    Both halves were wrong in the case that matters. Correcting the client's
-    name is the single most likely correction an operator makes — it is the
-    first thing the agent reads and the first thing it can get wrong — and
-    refusing it left them with a case named after a verb phrase and no way to
-    fix it. "Trakt could not tell what to do with that" was the response to the
-    one instruction it most needed to understand.
+    IT USED TO SECOND-GUESS THE READING, and the exclusions were precisely the
+    corrections an operator makes most. A follow-up whose only content was a
+    portfolio's ``display_name`` was discarded; so was one whose only content
+    was an entity's ``legal_name`` or ``roles``. The reasoning was that a bare
+    proper-noun run is usually a false positive — "send it to Northstar" — and
+    those fields are answered by then anyway.
 
-    The false positive the guard existed for is now handled where it belongs:
+    Both halves are wrong for exactly the message that matters. The agent reads
+    the opening instruction and proposes a portfolio name and an entity role
+    from it; when it reads either wrongly, correcting it is a message that says
+    ONLY that field, which is the shape this refused. The operator got "Trakt
+    could not tell what to do with that" in reply to the one instruction it
+    most needed to understand — and, because the reply named no field, no way
+    to tell that the message had been read correctly and then discarded.
+
+    The client's own name was carved out of this guard for that reason once
+    already. These two are the same defect, one field over, and removing them
+    piecemeal would only leave the next one waiting.
+
+    The false positive the guard existed for is handled where it belongs:
     :class:`~operations_control.occ_agent.extraction.Candidate.names` will not
-    bind a free-text value on a bare topic cue at all, so "send it to
-    Northstar" yields nothing to propose rather than being caught here.
+    bind a free-text value on a bare topic cue, so "send it to Northstar",
+    "email the pack to ERE Funding Limited" and "the portfolio looks fine" all
+    yield nothing to propose rather than being caught here. That is asserted in
+    ``tests/test_agent_accepts_a_correction.py``, so the protection cannot
+    quietly move back to a guess about which fields count.
     """
     if interpretation.reporting_period or interpretation.delivery:
         return True
     if interpretation.streams or interpretation.expected_artefacts:
         return True
-    for step, payload in (interpretation.steps or {}).items():
-        if step == "entities":
-            for item in (payload.get("entities") or []):
-                if set(item) - {"legal_name", "roles"}:
-                    return True
-        elif step == "portfolios":
-            for item in (payload.get("portfolios") or []):
-                if set(item) - {"display_name"}:
-                    return True
-        elif payload:
-            return True
-    return False
+    return any(bool(payload)
+               for payload in (interpretation.steps or {}).values())
 
 
 #: Where one delivery statement ends and the next begins. A comma counts:
