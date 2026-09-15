@@ -122,3 +122,89 @@ class TestAWholeMonthsPack:
         from apps.blob_trigger_app.path_parser import canonical_frequency
         for d in backfill.plan([FUNDED, PROPERTY, PIPELINE]):
             assert canonical_frequency(d.rule.frequency) == d.rule.frequency
+
+
+class TestWhatItSendsToTrakt:
+    """The two governed calls, with the network stubbed out.
+
+    The transport half of the script had no coverage at all: `paramiko` and
+    `msoffcrypto` are not installed here, so SFTP and decryption cannot be
+    exercised. `requests` IS available, so the part that talks to the governed
+    API — the part that decides what Trakt is actually asked to create — is
+    tested rather than assumed.
+    """
+
+    def _trakt(self, responses):
+        trakt = backfill.Trakt("https://ops.example/", "tok", "ERE")
+        trakt.session = _StubSession(responses)
+        return trakt
+
+    def test_the_pack_carries_the_frequency_the_plan_decided(self):
+        """The whole point of the frequency fix, seen from the caller."""
+        trakt = self._trakt([_Resp(201, {"batch": {"batch_id": "b1"}})])
+        trakt.create_batch(only(PIPELINE), "direct_001")
+        sent = trakt.session.calls[0]
+        assert sent["json"]["frequency"] == "adhoc"
+        assert sent["json"]["dataset"] == "pipeline"
+        assert sent["json"]["reporting_date"] == "2026-09-14"
+        assert sent["json"]["workflow_type"] == "mi"
+
+    def test_a_funded_pack_asks_for_the_prior_month_and_regime(self):
+        trakt = self._trakt([_Resp(201, {"batch": {"batch_id": "b1"}})])
+        trakt.create_batch(only(FUNDED), "direct_001")
+        sent = trakt.session.calls[0]["json"]
+        assert (sent["reporting_date"], sent["frequency"]) == ("2026-04", "monthly")
+        assert sent["workflow_type"] == "mi_annex2"
+
+    def test_it_never_names_a_destination(self):
+        """The browser — and this — send content and facts, never a path."""
+        trakt = self._trakt([_Resp(201, {"batch": {"batch_id": "b1"}})])
+        trakt.create_batch(only(FUNDED), "direct_001")
+        body = trakt.session.calls[0]["json"]
+        assert not any("raw-v2" in str(v) or "/" in str(k)
+                       for k, v in body.items())
+
+    def test_the_upload_sends_content_under_the_batch(self):
+        trakt = self._trakt([_Resp(200, {"batch": {"status": "ready"}})])
+        trakt.upload("b1", "LoanExtract.xlsx", b"bytes")
+        sent = trakt.session.calls[0]
+        assert sent["url"].endswith("/ops/batches/b1/upload")
+        assert sent["params"] == {"client": "ERE"}
+        assert sent["files"]["files"][0] == "LoanExtract.xlsx"
+
+    def test_a_refusal_stops_the_run_and_quotes_trakt(self):
+        """63 more would be refused the same way; say which file and why."""
+        trakt = self._trakt([_Resp(409, {}, text="that period is closed")])
+        with pytest.raises(backfill.Refused) as exc:
+            trakt.create_batch(only(FUNDED), "direct_001")
+        assert "409" in str(exc.value)
+        assert "that period is closed" in str(exc.value)
+        assert FUNDED in str(exc.value)
+
+    def test_the_operator_token_is_sent_as_a_header_not_a_query(self):
+        trakt = backfill.Trakt("https://ops.example", "sekrit", "ERE")
+        assert trakt.session.headers["X-Operator-Token"] == "sekrit"
+
+
+class _Resp:
+    def __init__(self, status_code, payload, text=""):
+        self.status_code = status_code
+        self._payload = payload
+        self.text = text or str(payload)
+
+    def json(self):
+        return self._payload
+
+
+class _StubSession:
+    """Records what would have gone over the wire. Sends nothing."""
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.calls = []
+        self.headers = {}
+
+    def post(self, url, json=None, files=None, params=None, timeout=None):
+        self.calls.append({"url": url, "json": json, "files": files,
+                           "params": params})
+        return self._responses.pop(0)
