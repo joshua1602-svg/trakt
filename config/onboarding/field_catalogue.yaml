@@ -298,12 +298,22 @@ sections:
 
       - key: lei
         label: Legal Entity Identifier
-        help: Twenty characters. Required for any entity named in regulatory reporting.
+        help: >-
+          Twenty characters. Required for any entity named in regulatory
+          reporting — no Annex 2 return can be built without it. Management
+          information does not wait for it.
         scope: legal_entity
         source: client_supplied
         type: lei
         required: false
         required_when: "roles contains originator"
+        # REQUIRED, BUT NOT REQUIRED TO GO LIVE. It stays on the client's
+        # checklist as required, because for the regime it is; it no longer
+        # refuses approval, because MI is ready as soon as there is a tape and
+        # the return is not due for weeks. The regime's own gate still refuses
+        # to build a return without RREL83, which is where the requirement
+        # belongs.
+        blocks_activation: false
         validation: lei
         evidence_required: true
         consumers: [Annex 2 RREL83, Annex 12 IVSS1]
@@ -323,11 +333,17 @@ sections:
 
       - key: country_of_establishment
         label: Country of establishment
+        help: >-
+          Where the originator is established. Required for regulatory
+          reporting; management information does not wait for it.
         scope: legal_entity
         source: client_supplied
         type: country
         required: false
         required_when: "roles contains originator"
+        # Required for RREL84 and asked as such; not a reason to hold the
+        # client's MI. See `lei` above.
+        blocks_activation: false
         validation: country
         consumers: [Annex 2 RREL84]
         writes_to: derived:client_config.defaults

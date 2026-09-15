@@ -145,9 +145,17 @@ class Validator:
 
         if not _present(value):
             if self.catalogue.is_required(f, answers, item):
+                # Required, but not necessarily required TO ACTIVATE. A field
+                # declaring `blocks_activation: false` is still asked and still
+                # reported; it just does not hold the whole onboarding — and
+                # with it the client's MI — behind a regulatory deadline that
+                # has not arrived. See Field.blocks_activation.
                 out.append(Problem(section.key, key,
                                    f"{f.label}{where} is needed.",
-                                   index=index, owner=owner))
+                                   index=index, owner=owner,
+                                   severity=(SEVERITY_BLOCKING
+                                             if f.blocks_activation
+                                             else SEVERITY_ADVISORY)))
             return out
 
         problem = validate_value(f, value)
@@ -323,10 +331,19 @@ class Validator:
         # Entity roles: a product that names an entity needs that entity.
         products = set(case.products)
         if "esma_annex2" in products and not case.entities_with_role("originator"):
+            # Advisory, like its investor-reporting twin below. Annex 2 was the
+            # only product whose entity requirement refused approval outright,
+            # which meant a client taking MI *and* Annex 2 could not go live on
+            # MI until the regulatory identity was complete — while a client
+            # taking MI alone went live the same day. The regime is not ready
+            # until the originator is named; the MI is, and the two were tied
+            # together by nothing but this severity.
             out.append(Problem(
                 "entities", "roles",
                 "Regulatory reporting names an originator. Give one entity the "
-                "originator role."))
+                "originator role. No Annex 2 return can be built until it is "
+                "named; nothing else in onboarding is held up by it.",
+                severity=SEVERITY_ADVISORY))
         if "investor_reporting" in products \
                 and not case.entities_with_role("reporting_entity"):
             out.append(Problem(

@@ -5,21 +5,29 @@
 # _READY.json sentinel. The Operations Control Centre evaluates these
 # requirements after every file registration or recognition result.
 version: 1
+# Four things a client sends, named the way a client says them. Every label
+# here is what appears on the onboarding checklist, so it is written for the
+# person filling it in rather than for the classifier reading it.
 role_labels:
-  loan_extract: "Primary loan tape"
+  loan_extract: "Loan tape"
   collateral_extract: "Collateral tape"
+  # The generic name wins. "Funder principal & interest tape" is the SAME FILE
+  # under a more technical name, and asking for both invited a client to wonder
+  # which they had, or to send one and think the other still outstanding. One
+  # question, in the words more people recognise.
   cashflow_extract: "Cash-flow tape"
-  funder_pi_extract: "Funder principal & interest tape"
-  # NOT "pipeline": that word already names a BOOK in this platform — the
-  # forward-looking stream that is registered, cadenced and reported separately
-  # from the funded book. This is a FILE a client sends. `pipeline_report` is
-  # the name the engine's own classifier and the operator's screen already use
-  # for it, so it is reused rather than a third name invented.
-  pipeline_report: "Pipeline report"
+  # The ROLE key stays `pipeline_report` deliberately: `pipeline` already names
+  # a BOOK in this platform — the forward-looking stream, registered and
+  # cadenced separately from the funded book — and a role sharing that word
+  # would read as the book rather than the file. The LABEL is what the client
+  # sees, and to a client it is a tape like the others.
+  pipeline_report: "Pipeline tape"
   # Still recognised by the classifier so an existing delivery keeps its role,
-  # but no longer asked for separately: property and valuation detail is
-  # captured under the collateral tape.
+  # but no longer asked for separately. Both are captured by a tape above:
+  # property and valuation detail under the collateral tape, funder principal
+  # and interest under the cash-flow tape.
   property_extract: "Property / valuation tape"
+  funder_pi_extract: "Funder principal & interest tape"
 workflows:
   mi:
     required_roles:
@@ -27,7 +35,6 @@ workflows:
     optional_roles:
       - collateral_extract
       - cashflow_extract
-      - funder_pi_extract
       - pipeline_report
   mi_annex2:
     required_roles:
@@ -35,7 +42,6 @@ workflows:
     optional_roles:
       - collateral_extract
       - cashflow_extract
-      - funder_pi_extract
       - pipeline_report
 # Minimum recognition confidence for a file to SATISFY a required role without
 # operator confirmation. Below this, readiness parks as review_required.

@@ -86,6 +86,21 @@ class Field:
     evidence_required: bool = False
     sensitive: bool = False
     amendable: bool = True
+    #: Whether an unanswered REQUIRED field refuses approval, or only reports.
+    #:
+    #: A regime's standing identity — the originator's LEI, its country of
+    #: establishment — is genuinely required: no Annex 2 return can be built
+    #: without it. But requiring it to ACTIVATE holds the client's management
+    #: information hostage to a regulatory deadline that has not arrived,
+    #: which is backwards: MI is ready as soon as there is a tape, and the
+    #: return is not due for weeks.
+    #:
+    #: ``False`` keeps the question REQUIRED where the client reads it — it
+    #: stays on the checklist, stays outstanding, stays chased — and makes the
+    #: unanswered problem advisory, so onboarding completes. Nothing is
+    #: weakened downstream: the regime's own gate still refuses to build a
+    #: return without it, which is where a regulatory requirement belongs.
+    blocks_activation: bool = True
     #: Each mention of this field in one sentence is a separate answer rather
     #: than a competing value for one slot. Only ``sources.dataset`` declares
     #: it today: a book named twice is two source registrations.

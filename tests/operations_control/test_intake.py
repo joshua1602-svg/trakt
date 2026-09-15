@@ -83,7 +83,11 @@ class TestBatchLifecycle:
                                            source_path=str(f),
                                            received_by="alice")
         assert batch["status"] == "incomplete"
-        assert "Primary loan tape" in batch["status_reason"]
+        # By its label, read from the vocabulary rather than repeated here —
+        # client-facing copy changes with the words, and what must hold is that
+        # the missing file is named in plain English rather than by role key.
+        from operations_control.occ_agent.input_roles import artefact_vocabulary
+        assert artefact_vocabulary().label("loan_extract") in batch["status_reason"]
         from operations_control import language
         assert language.is_operator_safe(batch["status_reason"])
 
