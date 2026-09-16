@@ -927,6 +927,17 @@ export const copy = {
       compare: "Compare",
     },
 
+    drift: {
+      heading: "What this deployment carries",
+      adopt: "Draft a version from these files",
+      adopted: "Drafted. Check it, then activate it to put it in force.",
+      explain:
+        "A package is taken from the repository once, when the layer is " +
+        "first used, and never again — so a later deployment's edits are " +
+        "not in force until a version is made from them. Drafting one here " +
+        "changes nothing yet: it still has to be checked and activated.",
+    },
+
     actions: {
       reviewActive: "Review active version",
       createDraft: "Create a draft",

@@ -208,3 +208,147 @@ class _StubSession:
         self.calls.append({"url": url, "json": json, "files": files,
                            "params": params})
         return self._responses.pop(0)
+
+    def get(self, url, params=None, timeout=None):
+        self.calls.append({"url": url, "params": params})
+        return self._responses.pop(0)
+
+
+# --------------------------------------------------------------------------- #
+# Proving one period before the other ninety-odd files are loaded
+# --------------------------------------------------------------------------- #
+
+class TestChoosingThePeriodToProve:
+    """Which period the probe runs, and which files make up its pack.
+
+    The probe exists to answer one question before a bulk load rather than
+    after it: if the MI load goes ahead now, what is still outstanding when
+    the regulatory return is run over the same data? An answer about the
+    wrong period would be worse than no answer, so the period is stated in
+    every outcome and a period that holds no funded tape is refused.
+    """
+
+    def test_the_most_recent_funded_period_is_the_default(self):
+        later = "LoanExtract One - OMNI 2026_09_01.xlsx"
+        period, pack = backfill.probe_period(
+            backfill.plan([FUNDED, PROPERTY, later]))
+        assert period == "2026-08"
+        assert [d.filename for d in pack] == [later]
+
+    def test_a_period_takes_every_file_of_its_pack(self):
+        """The loan tape and the property tape are one delivery, not two."""
+        period, pack = backfill.probe_period(backfill.plan([FUNDED, PROPERTY]))
+        assert period == "2026-04"
+        assert sorted(d.filename for d in pack) == sorted([FUNDED, PROPERTY])
+
+    def test_a_named_period_is_honoured(self):
+        later = "LoanExtract One - OMNI 2026_09_01.xlsx"
+        period, pack = backfill.probe_period(
+            backfill.plan([FUNDED, PROPERTY, later]), "2026-04")
+        assert period == "2026-04"
+        assert len(pack) == 2
+
+    def test_a_period_with_no_funded_tape_is_refused_by_name(self):
+        with pytest.raises(backfill.Refused) as exc:
+            backfill.probe_period(backfill.plan([FUNDED, PROPERTY]), "2026-07")
+        assert "2026-07" in str(exc.value)
+        assert "2026-04" in str(exc.value), "it must say which periods there are"
+
+    def test_a_pipeline_snapshot_is_never_probed(self):
+        """The plan never routes a pipeline tape to the regulatory return, so
+        the probe must not either — there would be nothing to compare."""
+        with pytest.raises(backfill.Refused):
+            backfill.probe_period(backfill.plan([PIPELINE]))
+
+    def test_the_pipeline_is_left_out_of_a_funded_probe(self):
+        _period, pack = backfill.probe_period(
+            backfill.plan([FUNDED, PROPERTY, PIPELINE]))
+        assert PIPELINE not in [d.filename for d in pack]
+
+
+class TestWhatTheProbeAsksTraktFor:
+
+    def _trakt(self, responses):
+        trakt = backfill.Trakt("https://ops.example/", "tok", "ERE")
+        trakt.session = _StubSession(responses)
+        return trakt
+
+    def test_the_pack_is_created_under_the_workflow_the_probe_names(self):
+        """The override exists for the probe alone. Both runs, same period."""
+        trakt = self._trakt([_Resp(201, {"batch": {"batch_id": "b1"}}),
+                             _Resp(201, {"batch": {"batch_id": "b2"}})])
+        for workflow in backfill.PROBE_WORKFLOWS:
+            trakt.create_batch(only(FUNDED), "direct_001", workflow=workflow)
+        sent = [c["json"] for c in trakt.session.calls]
+        assert [s["workflow_type"] for s in sent] == ["mi", "mi_annex2"]
+        assert {s["reporting_date"] for s in sent} == {"2026-04"}
+
+    def test_the_plans_own_workflow_is_used_when_nothing_overrides_it(self):
+        trakt = self._trakt([_Resp(201, {"batch": {"batch_id": "b1"}})])
+        trakt.create_batch(only(FUNDED), "direct_001")
+        assert trakt.session.calls[0]["json"]["workflow_type"] == "mi_annex2"
+
+    def test_reading_a_pack_back_is_scoped_to_the_client(self):
+        trakt = self._trakt([_Resp(200, {"batch": {"batch_id": "b1"}})])
+        trakt.batch("b1")
+        call = trakt.session.calls[0]
+        assert call["url"].endswith("/ops/batches/b1")
+        assert call["params"] == {"client": "ERE"}
+
+    def test_decisions_are_read_for_that_run_only(self):
+        trakt = self._trakt([_Resp(200, {"reviews": [{"blocking": True}]})])
+        trakt.open_decisions("wf-1")
+        assert trakt.session.calls[0]["params"] == {"client": "ERE",
+                                                    "workflow_id": "wf-1"}
+
+    def test_a_run_with_no_workflow_yet_is_not_asked_about(self):
+        """A pack that never started has no decisions; asking would 404."""
+        trakt = self._trakt([])
+        assert trakt.open_decisions("") == []
+        assert trakt.session.calls == []
+
+
+class TestWhatTheComparisonSays:
+
+    def _run(self, workflow, missing=(), blocking=(), advisory=0):
+        reviews = [{"blocking": True, "question": q} for q in blocking]
+        reviews += [{"blocking": False, "question": f"a{i}"}
+                    for i in range(advisory)]
+        return backfill.describe_probe(
+            workflow, {"batch_id": f"b-{workflow}", "status": "awaiting",
+                       "missing_roles": list(missing)}, reviews)
+
+    def test_it_names_what_only_the_regulatory_run_needs(self):
+        lines = "\n".join(backfill.compare_probes([
+            self._run("mi"),
+            self._run("mi_annex2", missing=["Collateral tape"],
+                      blocking=["Which NUTS3 region?"])]))
+        assert "Collateral tape" in lines
+        assert "Which NUTS3 region?" in lines
+
+    def test_what_both_runs_need_is_not_reported_as_a_difference(self):
+        """A decision MI is blocked on too is not news about the regime."""
+        shared = "Which NUTS3 region?"
+        lines = "\n".join(backfill.compare_probes([
+            self._run("mi", missing=["Loan tape"], blocking=[shared]),
+            self._run("mi_annex2", missing=["Loan tape"], blocking=[shared])]))
+        assert shared not in lines
+        assert "Loan tape" not in lines
+        assert "Nothing" in lines
+
+    def test_a_clean_probe_says_the_rest_can_be_loaded(self):
+        lines = "\n".join(backfill.compare_probes(
+            [self._run("mi"), self._run("mi_annex2")]))
+        assert "can be loaded" in lines
+
+    def test_an_outstanding_probe_says_to_resolve_them_once(self):
+        lines = "\n".join(backfill.compare_probes([
+            self._run("mi"), self._run("mi_annex2", blocking=["Which basis?"])]))
+        assert "ONCE" in lines
+        assert "carry forward" in lines
+
+    def test_an_advisory_decision_is_counted_not_listed(self):
+        """Advisory decisions do not stop a load, so they are a number."""
+        run = self._run("mi_annex2", blocking=["Which basis?"], advisory=3)
+        assert run["advisory"] == 3
+        assert run["blocking"] == ["Which basis?"]

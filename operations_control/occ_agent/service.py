@@ -449,7 +449,8 @@ class OccAgentService:
             agent_case.case, self.onboarding.catalogue,
             steps=interpretation.steps,
             provenance=interpretation.provenance,
-            confidence=interpretation.confidence)
+            confidence=interpretation.confidence,
+            set_changes=interpretation.set_changes)
         plan.unrecognised.extend(interpretation.unrecognised)
         plan.reporting_period = interpretation.reporting_period
         plan.streams = list(interpretation.streams)

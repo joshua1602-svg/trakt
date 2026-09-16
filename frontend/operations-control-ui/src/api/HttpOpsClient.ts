@@ -405,6 +405,15 @@ export class HttpOpsClient implements OpsClient {
     );
   }
 
+  async createConfigDraftFromDeployment(
+    layer: ConfigLayer,
+    notes = "",
+  ): Promise<{ version: number; status: string }> {
+    return this.post(`/ops/admin/config/${encodeURIComponent(layer)}/draft-from-deployment`, {
+      notes,
+    });
+  }
+
   async validateConfigVersion(
     layer: ConfigLayer,
     version: number,

@@ -136,6 +136,13 @@ export interface OpsClient {
     layer: ConfigLayer,
     input?: CreateDraftInput,
   ): Promise<{ version: number; status: string }>;
+  /** Draft a version holding the files this deployment carries. A DRAFT: it
+   *  still has to be validated and activated, because adopting whatever was
+   *  last deployed automatically is what the version model exists to prevent. */
+  createConfigDraftFromDeployment(
+    layer: ConfigLayer,
+    notes?: string,
+  ): Promise<{ version: number; status: string }>;
   validateConfigVersion(
     layer: ConfigLayer,
     version: number,

@@ -1709,6 +1709,24 @@ export class MockOpsClient implements OpsClient {
     return this.config.createDraft(layer, input);
   }
 
+  /**
+   * Stand in for a later deployment having landed an edited configuration
+   * file. Mock only: on the real platform the files come from the deployed
+   * repository, and nothing in the UI can put them there.
+   */
+  setDeployedConfigFiles(layer: ConfigLayer, files: Record<string, string>): void {
+    this.config.setDeployedFiles(layer, files);
+  }
+
+  async createConfigDraftFromDeployment(
+    layer: ConfigLayer,
+    notes = "",
+  ): Promise<{ version: number; status: string }> {
+    await this.wait();
+    this.requireAdmin();
+    return this.config.createDraftFromDeployment(layer, notes);
+  }
+
   async validateConfigVersion(
     layer: ConfigLayer,
     version: number,

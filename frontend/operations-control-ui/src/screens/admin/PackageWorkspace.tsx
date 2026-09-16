@@ -208,6 +208,33 @@ export function PackageWorkspace({
         </TechnicalDetails>
       </section>
 
+      {/* What this deployment carries, against what is in force.
+          A package is seeded from the repository ONCE, so a later
+          deployment's edits are simply not in force — and nothing anywhere
+          said so. The screens showed the active version, the active version
+          showed its own snapshot, and every layer of that was truthful while
+          the whole was misleading. */}
+      {info.drift.differs && (
+        <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50/60 p-6">
+          <SectionHeading>{copy.admin.drift.heading}</SectionHeading>
+          <p className="mt-1 text-sm text-stone-800">{info.drift.sentence}</p>
+          <p className="mt-2 text-xs text-stone-600">{copy.admin.drift.explain}</p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void run(
+                () => client.createConfigDraftFromDeployment(layer),
+                copy.admin.drift.adopted,
+              )
+            }
+            className="mt-4 rounded-xl bg-stone-900 px-4 py-2 text-sm font-semibold text-white hover:bg-stone-800 disabled:opacity-40"
+          >
+            {copy.admin.drift.adopt}
+          </button>
+        </section>
+      )}
+
       {/* Draft */}
       <section className="mt-6">
         <SectionHeading>{copy.admin.draft.heading}</SectionHeading>

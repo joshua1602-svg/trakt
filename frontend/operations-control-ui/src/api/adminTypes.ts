@@ -98,9 +98,26 @@ export interface LayerOverview {
   package_hash: string;
   file_count: number;
   files: PackageFile[];
+  /** Whether the files this deployment carries are the version in force. A
+   *  layer is seeded from the repository once and never again, so a later
+   *  deployment's edits are NOT in force until a version is made from them. */
+  drift: LayerDrift;
   draft: DraftSummary | null;
   versions: VersionRow[];
   dependencies: Dependency[];
+}
+
+export interface LayerDrift {
+  layer: ConfigLayer;
+  active_version: number;
+  changed: { path: string; in_force: string; deployed: string }[];
+  added: string[];
+  removed: string[];
+  differs: boolean;
+  changed_labels: string[];
+  /** What is true, in a sentence: not "a screen is stale" but "the platform
+   *  is not using what this deployment carries". */
+  sentence: string;
 }
 
 export interface RegimeReference {

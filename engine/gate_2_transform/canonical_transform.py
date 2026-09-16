@@ -153,9 +153,31 @@ def select_fields_for_portfolio(registry: dict, portfolio_type: str) -> dict:
             out[fname] = meta
     return out
 
+def _is_text(series: pd.Series) -> bool:
+    """Whether a column holds text — whatever pandas is calling that today.
+
+    Every text branch in this module used to ask ``dtype == object``. pandas 3
+    reads a text column as the new ``str`` dtype instead, so those branches
+    stopped running against real data and the values fell straight through to
+    a numeric coercion:
+
+      * ``"0.00%"`` never had its per-cent sign stripped, so it coerced to
+        null. Zero protected equity — a real, known value — became absent.
+      * a blank second-borrower date of birth was never recognised as blank,
+        so an absent value was counted as a failed parse.
+
+    Both were reported from the ERE acquired tape as parse failures, and both
+    are this one predicate. Asked through ``pandas.api.types`` so the next
+    dtype pandas introduces for text is covered without another defect first.
+    """
+    return bool(series.dtype == object
+                or str(series.dtype) in ("string", "str")
+                or pd.api.types.is_string_dtype(series))
+
+
 def _strip_nd(series: pd.Series) -> pd.Series:
     """Treat ND codes as missing in transform step."""
-    if series.dtype == object:
+    if _is_text(series):
         return series.where(~series.astype(str).str.match(ND_PATTERN), other=pd.NA)
     return series
 
@@ -192,7 +214,7 @@ def is_blank_token(value: Any) -> bool:
 
 def _blank_token_mask(series: pd.Series) -> pd.Series:
     """Boolean mask of cells that carry no value (see :func:`is_blank_token`)."""
-    if series.dtype == object or str(series.dtype) == "string":
+    if _is_text(series):
         s = series.astype("string").str.strip().str.lower()
         return s.isna() | s.isin(_BLANK_TOKENS)
     return series.isna()
@@ -417,7 +439,7 @@ def to_percentage(series: pd.Series) -> pd.Series:
     stays NA and is reported as a controlled numeric parse failure.
     """
     s = _void_blanks(_strip_nd(series))
-    if s.dtype == object or str(s.dtype) == "string":
+    if _is_text(s):
         cleaned = (
             s.astype("string")
             .str.strip()
@@ -431,7 +453,7 @@ def to_percentage(series: pd.Series) -> pd.Series:
 
 def to_decimal(series: pd.Series) -> pd.Series:
     s = _void_blanks(_strip_nd(series))
-    if s.dtype == object:
+    if _is_text(s):
         cleaned = (
             s.astype(str)
             .str.replace(r"[^\d\-\.,]", "", regex=True)
@@ -448,7 +470,7 @@ def to_integer(series: pd.Series) -> pd.Series:
 
 def to_bool_yn(series: pd.Series) -> pd.Series:
     s = _void_blanks(_strip_nd(series))
-    if s.dtype != object:
+    if not _is_text(s):
         return s.map(lambda v: "Y" if v == 1 else ("N" if v == 0 else pd.NA))
     t = s.astype(str).str.strip().str.lower()
     truthy = {"y", "yes", "true", "t", "1"}
@@ -462,7 +484,7 @@ def to_bool_yn(series: pd.Series) -> pd.Series:
 
 def to_currency(series: pd.Series, synonym_map: dict | None = None) -> pd.Series:
     s = _strip_nd(series)
-    if s.dtype != object:
+    if not _is_text(s):
         return s.astype("string")
     t = s.astype(str).str.strip().str.upper()
     if synonym_map:
@@ -498,7 +520,7 @@ def apply_types(df: pd.DataFrame, fields_meta: dict, currency_synonyms: dict | N
             out = to_currency(df[col], synonym_map=currency_synonyms)
         else:
             out = _void_blanks(_strip_nd(df[col]))
-            if out.dtype == object:
+            if _is_text(out):
                 out = out.astype("string").str.strip()
 
         df[col] = out

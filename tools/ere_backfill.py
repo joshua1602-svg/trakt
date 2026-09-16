@@ -46,7 +46,15 @@ Usage::
     python tools/ere_backfill.py --remote-dir /exports/ERE --client ERE \\
         --portfolio direct_001 --dry-run
     python tools/ere_backfill.py --remote-dir /exports/ERE --client ERE \\
+        --portfolio direct_001 --probe-regime
+    python tools/ere_backfill.py --remote-dir /exports/ERE --client ERE \\
         --portfolio direct_001
+
+PROVE ONE PERIOD FIRST. ``--probe-regime`` delivers a single period's funded
+pack twice — once as management information, once as the regulatory return —
+and prints what the second asks for that the first does not. Those decisions
+are resolved once and carry forward, so finding them on one period costs an
+afternoon and finding them on ninety costs the load.
 """
 
 from __future__ import annotations
@@ -192,6 +200,93 @@ def plan(filenames: List[str]) -> List[Delivery]:
 
 
 # --------------------------------------------------------------------------- #
+# Probing one period before the rest are loaded
+# --------------------------------------------------------------------------- #
+
+#: The two workflows one funded pack can be delivered under. The probe sends
+#: the SAME files through both, which is the only way to see what the
+#: regulatory return asks for that management information does not — before
+#: ninety-odd files are loaded on the assumption that it asks for nothing more.
+PROBE_WORKFLOWS: Tuple[str, str] = ("mi", "mi_annex2")
+
+#: Only a funded pack is probed. A pipeline tape is a snapshot and is never
+#: routed to the regulatory return (see ``PERIOD_RULES``), so including one
+#: would be asking the probe to prove something the plan forbids.
+PROBE_DATASET = "funded"
+
+
+def probe_period(deliveries: List[Delivery],
+                 period: str = "") -> Tuple[str, List[Delivery]]:
+    """Which period to probe, and the files that make up its pack.
+
+    Defaults to the most recent funded period, because a recent tape is the
+    one whose shape the client is still producing. An explicit period that
+    holds no funded files is refused rather than quietly probing a different
+    one — the whole value of a probe is knowing which period it proved.
+    """
+    funded = [d for d in deliveries if d.rule.dataset == PROBE_DATASET]
+    if not funded:
+        raise Refused(
+            "No funded tape was planned, so there is nothing to probe. The "
+            "regulatory return is prepared from the funded book; a pipeline "
+            "snapshot is never routed to it.")
+    periods = sorted({d.period for d in funded})
+    chosen = period or periods[-1]
+    pack = [d for d in funded if d.period == chosen]
+    if not pack:
+        raise Refused(
+            f"No funded tape was planned for {chosen}. Periods that were: "
+            + ", ".join(periods))
+    return chosen, pack
+
+
+def describe_probe(workflow: str, batch: dict, reviews: List[dict]) -> dict:
+    """One probe run, reduced to what the comparison turns on."""
+    blocking = [r for r in reviews if r.get("blocking")]
+    return {
+        "workflow": workflow,
+        "batch_id": batch.get("batch_id", ""),
+        "status": batch.get("status", ""),
+        "status_sentence": batch.get("status_sentence", ""),
+        "missing_roles": list(batch.get("missing_roles") or []),
+        "configuration_ready": bool(batch.get("configuration_ready")),
+        "blocking": [r.get("question") or r.get("decision_id", "")
+                     for r in blocking],
+        "advisory": len(reviews) - len(blocking),
+    }
+
+
+def compare_probes(runs: List[dict]) -> List[str]:
+    """What the regulatory run asks for that the MI run does not.
+
+    Printed as the answer to one question: if the MI load goes ahead now, what
+    is still outstanding when the regime return is run over the same data?
+    """
+    by_workflow = {r["workflow"]: r for r in runs}
+    mi = by_workflow.get("mi") or {}
+    regime = by_workflow.get("mi_annex2") or {}
+    extra_roles = [r for r in (regime.get("missing_roles") or [])
+                   if r not in (mi.get("missing_roles") or [])]
+    extra_decisions = [q for q in (regime.get("blocking") or [])
+                       if q not in (mi.get("blocking") or [])]
+
+    lines = ["", "What the regulatory return asks for that MI does not:"]
+    if extra_roles:
+        lines.append("  Files still needed: " + ", ".join(extra_roles))
+    if extra_decisions:
+        lines.append(f"  Decisions to resolve: {len(extra_decisions)}")
+        lines.extend(f"    - {q}" for q in extra_decisions)
+    if not extra_roles and not extra_decisions:
+        lines.append("  Nothing. The same files and the same decisions serve "
+                     "both, so the remaining periods can be loaded.")
+    else:
+        lines.append("")
+        lines.append("  Resolve these ONCE, on this period, before loading the "
+                     "rest. They carry forward.")
+    return lines
+
+
+# --------------------------------------------------------------------------- #
 # SFTP and decryption — both local, both in memory
 # --------------------------------------------------------------------------- #
 
@@ -277,9 +372,14 @@ class Trakt:
             raise Refused(f"{what} was refused ({response.status_code}): {body}")
         return response.json()
 
-    def create_batch(self, d: Delivery, portfolio: str) -> str:
+    def create_batch(self, d: Delivery, portfolio: str,
+                     workflow: str = "") -> str:
+        # ``workflow`` is overridden only by the probe, which delivers one
+        # period under both workflows on purpose. Everything else takes the
+        # workflow the plan decided from the filename.
         body = {"client_id": self.client_id, "portfolio_id": portfolio,
-                "reporting_date": d.period, "workflow_type": d.rule.workflow,
+                "reporting_date": d.period,
+                "workflow_type": workflow or d.rule.workflow,
                 "dataset": d.rule.dataset, "frequency": d.rule.frequency,
                 "auto_start_when_ready": True}
         got = self._check(self.session.post(f"{self.base}/ops/batches",
@@ -296,6 +396,23 @@ class Trakt:
             f"uploading {filename}")
         return got["batch"]
 
+    def batch(self, batch_id: str) -> dict:
+        got = self._check(
+            self.session.get(f"{self.base}/ops/batches/{batch_id}",
+                             params={"client": self.client_id}, timeout=120),
+            f"reading pack {batch_id}")
+        return got["batch"]
+
+    def open_decisions(self, workflow_id: str) -> List[dict]:
+        if not workflow_id:
+            return []
+        got = self._check(
+            self.session.get(f"{self.base}/ops/reviews",
+                             params={"client": self.client_id,
+                                     "workflow_id": workflow_id}, timeout=120),
+            f"reading the decisions on {workflow_id}")
+        return list(got.get("reviews") or [])
+
 
 # --------------------------------------------------------------------------- #
 
@@ -310,6 +427,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                     help="Read the names and print the plan. Touches nothing.")
     ap.add_argument("--limit", type=int, default=0,
                     help="Load at most N deliveries. Use 1 first.")
+    ap.add_argument("--probe-regime", action="store_true",
+                    help="Deliver ONE period's funded pack under both the MI "
+                         "and the regulatory workflow, and print what the "
+                         "second asks for that the first does not. Nothing "
+                         "else is loaded.")
+    ap.add_argument("--period", default="",
+                    help="Which period to probe, spelled as the plan prints "
+                         "it (YYYY-MM for a monthly funded pack). Defaults to "
+                         "the most recent funded period in the plan.")
     args = ap.parse_args(argv)
 
     try:
@@ -319,11 +445,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         ssh, sftp = _sftp()
         names = sftp.listdir(args.remote_dir)
         deliveries = plan(names)
-        if args.limit:
+
+        if args.probe_regime:
+            period, deliveries = probe_period(deliveries, args.period)
+            print(f"Probing {period} for {args.client}/{args.portfolio}, "
+                  f"{len(deliveries)} file(s), under "
+                  f"{' and '.join(PROBE_WORKFLOWS)}:\n")
+        elif args.limit:
             deliveries = deliveries[:args.limit]
 
-        print(f"{len(deliveries)} deliveries planned "
-              f"for {args.client}/{args.portfolio}:\n")
+        if not args.probe_regime:
+            print(f"{len(deliveries)} deliveries planned "
+                  f"for {args.client}/{args.portfolio}:\n")
         for d in deliveries:
             print("  •", d.describe())
         if args.dry_run:
@@ -334,6 +467,38 @@ def main(argv: Optional[List[str]] = None) -> int:
         trakt = Trakt(_need("TRAKT_OPS_URL"), _need("TRAKT_OPS_TOKEN"),
                       args.client)
         print()
+
+        if args.probe_regime:
+            # One period, delivered twice. Reading the files once and sending
+            # the same bytes to both packs is deliberate: a difference between
+            # the two runs is then a difference in what Trakt asks of the
+            # data, never a difference in the data.
+            content = {}
+            for d in deliveries:
+                with sftp.open(f"{args.remote_dir}/{d.filename}",
+                               "rb") as handle:
+                    handle.prefetch()
+                    content[d.filename] = _decrypt(d.filename, handle.read(),
+                                                   passwords)
+            runs = []
+            for workflow in PROBE_WORKFLOWS:
+                batch_id = trakt.create_batch(deliveries[0], args.portfolio,
+                                              workflow=workflow)
+                for d in deliveries:
+                    trakt.upload(batch_id, d.filename, content[d.filename])
+                batch = trakt.batch(batch_id)
+                reviews = trakt.open_decisions(batch.get("workflow_id", ""))
+                run = describe_probe(workflow, batch, reviews)
+                runs.append(run)
+                print(f"  {workflow}: {batch_id} -> {run['status']}")
+                if run["missing_roles"]:
+                    print("    still needed: "
+                          + ", ".join(run["missing_roles"]))
+                print(f"    decisions: {len(run['blocking'])} blocking, "
+                      f"{run['advisory']} advisory")
+            for line in compare_probes(runs):
+                print(line)
+            return 0
         for index, d in enumerate(deliveries, start=1):
             head = f"[{index}/{len(deliveries)}] {d.filename}"
             with sftp.open(f"{args.remote_dir}/{d.filename}", "rb") as handle:
