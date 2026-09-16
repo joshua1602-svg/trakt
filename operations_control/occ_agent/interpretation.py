@@ -47,6 +47,7 @@ from ..onboarding.catalogue import Catalogue, catalogue
 from ..onboarding.service import STEPS
 from . import extraction as _extraction
 from . import states as _states
+from .extraction import ADD, REMOVE
 from .input_roles import artefact_vocabulary
 from .run import SyntheticRun
 
@@ -128,6 +129,14 @@ class Interpretation:
     streams: List[str] = field(default_factory=list)
     #: Semantic input roles the instruction said the client would send.
     expected_artefacts: List[str] = field(default_factory=list)
+    #: ``section.field`` -> ``{"add": [...], "remove": [...]}`` for a
+    #: multi-valued answer that AMENDS the list the case already holds rather
+    #: than replacing it. "They also need Annex 2" and "remove Annex 2" are
+    #: the same list of one product until the verb is carried with it — the
+    #: first dropped MI, the second set the products TO the one being taken
+    #: away. What the amendment comes to is worked out against the case, in
+    #: :mod:`.planning`, so the operator is shown the real before and after.
+    set_changes: Dict[str, Dict[str, List[Any]]] = field(default_factory=dict)
     #: ``section.field`` -> one of PROVENANCE_SOURCES.
     provenance: Dict[str, str] = field(default_factory=dict)
     #: ``section.field`` -> 0..1, for anything read with less than certainty.
@@ -147,7 +156,7 @@ class Interpretation:
     def empty(self) -> bool:
         return not (self.steps or self.reporting_period or self.delivery
                     or self.streams or self.stream_delivery
-                    or self.expected_artefacts)
+                    or self.expected_artefacts or self.set_changes)
 
     @property
     def complete(self) -> bool:
@@ -348,6 +357,21 @@ class DeterministicInterpreter:
                     stream = str(value)
                     if stream and stream not in out.streams:
                         out.streams.append(stream)
+                out.provenance[hit.ref.path] = PROV_HUMAN
+                continue
+            if (hit.operation and hit.ref.section != DELIVERY_SECTION
+                    and hit.ref.type in _extraction.MULTI_VALUED):
+                # An amendment, not an answer. It is kept OUT of the answer
+                # itself so that "they need MI and investor reporting but not
+                # static pools" states two products and withdraws a third,
+                # rather than stating all three.
+                spec = out.set_changes.setdefault(
+                    hit.ref.path, {ADD: [], REMOVE: []})
+                bucket = spec[hit.operation]
+                bucket.extend(v for v in (hit.value
+                                          if isinstance(hit.value, list)
+                                          else [hit.value])
+                              if v not in bucket)
                 out.provenance[hit.ref.path] = PROV_HUMAN
                 continue
             target = (out.delivery if hit.ref.section == DELIVERY_SECTION
@@ -697,6 +721,11 @@ def _says_something(interpretation: Interpretation) -> bool:
     if interpretation.reporting_period or interpretation.delivery:
         return True
     if interpretation.streams or interpretation.expected_artefacts:
+        return True
+    if interpretation.set_changes:
+        # An amendment says something even when it adds no answer of its own:
+        # "remove ESMA Annex 2" leaves ``steps`` empty and is the whole point
+        # of the message.
         return True
     return any(bool(payload)
                for payload in (interpretation.steps or {}).values())

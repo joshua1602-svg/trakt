@@ -77,6 +77,13 @@ class FieldRef:
         return f"{self.section}.{self.key}"
 
 
+#: What a multi-valued answer does to the list already held. Empty means the
+#: answer IS the list — the reading that is right for an opening instruction
+#: and wrong for every follow-up that amends one.
+ADD = "add"
+REMOVE = "remove"
+
+
 @dataclass
 class Extracted:
     ref: FieldRef
@@ -84,6 +91,10 @@ class Extracted:
     confidence: float = CUED
     cue: str = ""
     span: Tuple[int, int] = (0, 0)
+    #: ``ADD``, ``REMOVE``, or empty for a replacement. Only ever set on a
+    #: multi-valued field: "they ALSO need Annex 2" and "REMOVE Annex 2" are
+    #: both a list of one product until the verb is read with them.
+    operation: str = ""
 
 
 @dataclass
@@ -451,7 +462,28 @@ _SPACE = "\u0002"
 #: in one sentence far more often than one long statement. Without this, "the
 #: LEI is X and sort out the other thing" reads the LEI and drops the rest
 #: **silently** — which is exactly the failure this must not have.
-_CONJUNCTION = re.compile(r"\s+(?:and|but|then|also|plus)\s+", re.I)
+_CONJUNCTION = re.compile(r"\s+(and|but|then|also|plus)\s+", re.I)
+
+#: The conjunction is sometimes the whole meaning. "They ALSO need Annex 2"
+#: splits into "they" and "need Annex 2", and the word that made it an
+#: addition rather than the client's entire product list was thrown away with
+#: the delimiter. So each fragment is kept with the word that introduced it.
+_ADD_CONJUNCTIONS = frozenset({"also", "plus"})
+
+#: A fragment that opens by adding, whatever joined it to the one before.
+_ADD_OPENER = re.compile(
+    r"^(?:also|and also|in addition|additionally|as well|add|adding)\b", re.I)
+
+#: A word that takes the value AFTER it away. Read as a plain list, "remove
+#: Annex 2" set the client's products TO Annex 2 — the exact inverse of the
+#: instruction, applied silently and confirmed back as if it were right.
+#:
+#: Deliberately without the lifecycle verbs ("cancel", "stop"): those name an
+#: act on the CASE, are read by ``interpret_action`` before this, and would
+#: collide here. And deliberately positional — see :func:`_set_operation`.
+_REMOVE_WORDS = re.compile(
+    r"\b(?:remove|removing|removed|drop|dropping|dropped|delete|deleting|"
+    r"exclude|excluding|without|except|no longer|don'?t|do not|not)\b", re.I)
 
 #: A fragment shorter than this is not a statement; it is the tail of the one
 #: before it, and is re-joined rather than reported as missed.
@@ -482,10 +514,17 @@ def _joined_cues(version: int) -> Tuple[str, ...]:
     return tuple(sorted(out, key=len, reverse=True))
 
 
-def _fragments(clause: str, cat: Optional[Catalogue] = None) -> List[str]:
-    """One clause, split at conjunctions that join two real statements."""
+def _lead_fragments(clause: str, cat: Optional[Catalogue] = None
+                    ) -> List[Tuple[str, str]]:
+    """One clause, split at conjunctions that join two real statements.
+
+    Each fragment comes back with the conjunction that introduced it, because
+    the conjunction is sometimes the whole meaning. Splitting threw it away,
+    so "they ALSO need Annex 2" reached the reader as "need Annex 2" — which
+    is not an addition, it is the client's complete product list.
+    """
     if not _CONJUNCTION.search(clause):
-        return [clause]
+        return [("", clause)]
     # Protect any conjunction that sits inside a catalogue cue before splitting.
     protected = clause
     cat = cat or catalogue()
@@ -493,16 +532,78 @@ def _fragments(clause: str, cat: Optional[Catalogue] = None) -> List[str]:
         protected = re.sub(re.escape(cue),
                            lambda m: m.group(0).replace(" ", _SPACE),
                            protected, flags=re.I)
-    parts = [p.replace(_SPACE, " ") for p in _CONJUNCTION.split(protected)]
-    if len(parts) < 2:
-        return [clause]
-    out: List[str] = []
-    for part in parts:
+    pieces = [p.replace(_SPACE, " ") for p in _CONJUNCTION.split(protected)]
+    if len(pieces) < 3:
+        return [("", clause)]
+    # split() with a capturing group interleaves the delimiters:
+    # [text, conjunction, text, conjunction, text, ...]
+    parts = [("" if i == 0 else pieces[i - 1].strip().lower(), pieces[i])
+             for i in range(0, len(pieces), 2)]
+    out: List[Tuple[str, str]] = []
+    for lead, part in parts:
         if out and len(part.split()) < _MIN_FRAGMENT_WORDS:
-            out[-1] = f"{out[-1]} and {part}"       # a tail, not a statement
+            # A tail, not a statement. Re-joined with the operator's own
+            # conjunction rather than a substituted "and".
+            out[-1] = (out[-1][0], f"{out[-1][1]} {lead or 'and'} {part}")
         else:
-            out.append(part)
+            out.append((lead, part))
     return out
+
+
+def _fragments(clause: str, cat: Optional[Catalogue] = None) -> List[str]:
+    """One clause, split at conjunctions that join two real statements."""
+    return [part for _lead, part in _lead_fragments(clause, cat)]
+
+
+def _set_operation(lead: str, fragment: str, at: int, single: bool) -> str:
+    """Whether the value at ``at`` is being added, taken away, or stated.
+
+    Adding is a property of the whole fragment — "they ALSO need X and Y" adds
+    both — so the lead conjunction decides it.
+
+    Removing is positional: a removal word takes away what FOLLOWS it. Where a
+    fragment names SEVERAL values of one field the reader has only the first
+    one's position, so it cannot tell which of them the word reached. "They are
+    the originator, not the reporting entity" would withdraw the originator
+    too, which is the sentence backwards in a new way — so a removal is read
+    only when the fragment names one value of that field. Several stay a
+    statement, as they were, and an operator can still withdraw one by naming
+    it on its own.
+    """
+    if single and any(m.end() <= at for m in _REMOVE_WORDS.finditer(fragment)):
+        return REMOVE
+    if lead in _ADD_CONJUNCTIONS or _ADD_OPENER.match(fragment.strip()):
+        return ADD
+    return ""
+
+
+def _names_a_field(clause: str, cat: Catalogue) -> bool:
+    """Whether this sentence asks a question of its own.
+
+    A cue, or a value out of a field's own option list, is the sentence
+    naming something. A country or an amount recognised by shape alone is
+    not: "no more than 5% of loans above GBP 750,000" is a concentration
+    limit that happens to contain a currency, and treating that as a new
+    subject is what would cut a three-sentence answer down to one again.
+    """
+    return any(hit.cue or hit.confidence >= CUED
+               for hit in _read_clause(clause, cat))
+
+
+def _prose_start(found: List[Extracted], clause: str) -> Optional[Extracted]:
+    """The prose answer this clause ends on, if it ends on one.
+
+    A multiline field that was NAMED and whose value runs to the end of the
+    sentence has not necessarily finished: prose is what the field is for,
+    and an operator pasting a schedule of limits writes several sentences.
+    """
+    for hit in reversed(found):
+        if hit.ref.type != "multiline" or not hit.cue:
+            continue
+        if hit.span[1] >= len(clause) and str(hit.value).strip():
+            return hit
+        return None
+    return None
 
 
 def read(text: str, cat: Optional[Catalogue] = None) -> Reading:
@@ -511,19 +612,60 @@ def read(text: str, cat: Optional[Catalogue] = None) -> Reading:
     reading = Reading()
     masked = re.sub(_EMAIL, lambda m: m.group(0).replace(".", _DOT),
                     str(text or ""))
-    for clause in (f for whole in _CLAUSE.findall(masked)
-                   for f in _fragments(whole, cat)):
-        stripped = clause.replace(_DOT, ".").strip()
+    prose: Optional[Extracted] = None   # a prose answer still being written
+    prose_from = 0                      # where its value starts, in `masked`
+
+    for whole in _CLAUSE.finditer(masked):
+        raw = whole.group(0)
+        stripped = raw.replace(_DOT, ".").strip()
+
+        # A SENTENCE THAT ASKS NOTHING OF ITS OWN CONTINUES THE ONE BEFORE IT.
+        #
+        # Three concentration limits pasted as three sentences stored one, and
+        # stored it with the colon still attached. Nothing reported the other
+        # two as missed either, because each was a clause the reader simply
+        # never connected to the answer it belonged to.
+        if prose is not None:
+            if stripped and _names_a_field(stripped, cat):
+                prose = None
+            else:
+                if stripped:
+                    prose.value = masked[prose_from:whole.end()].replace(
+                        _DOT, ".").strip()
+                continue
+
         if len(stripped.split()) < 2 or _FILLER.match(stripped):
             continue
-        found = _read_clause(stripped, cat)
-        period = _run_fact_date(stripped)
-        if period and not reading.reporting_period:
-            reading.reporting_period = period
-        if found:
-            reading.found.extend(found)
-        elif not period:
-            reading.unrecognised.append(stripped)
+
+        # Read the sentence whole first, so a prose answer is measured against
+        # the sentence rather than against a fragment of it.
+        entire = _read_clause(stripped, cat)
+        started = _prose_start(entire, stripped)
+        if started is not None:
+            reading.found.extend(entire)
+            prose = started
+            prose_from = (whole.start() + len(raw.rstrip())
+                          - len(str(started.value)))
+            continue
+
+        for lead, clause in _lead_fragments(raw, cat):
+            fragment = clause.replace(_DOT, ".").strip()
+            if len(fragment.split()) < 2 or _FILLER.match(fragment):
+                continue
+            found = _read_clause(fragment, cat)
+            for hit in found:
+                if hit.ref.type in MULTI_VALUED:
+                    hit.operation = _set_operation(
+                        lead, fragment, hit.span[0],
+                        single=not isinstance(hit.value, list)
+                        or len(hit.value) == 1)
+            period = _run_fact_date(fragment)
+            if period and not reading.reporting_period:
+                reading.reporting_period = period
+            if found:
+                reading.found.extend(found)
+            elif not period:
+                reading.unrecognised.append(fragment)
     return reading
 
 
@@ -706,8 +848,12 @@ def _cue_positions(lower: str, cue: str) -> List[int]:
             re.finditer(rf"(?<![a-z0-9]){re.escape(cue)}(?![a-z0-9])", lower)]
 
 
-#: What may sit between a cue and its value.
-_JOIN = r"\s*(?:is|are|=|:|to|of|will be|should be|for|as)?\s*[\"'“]?"
+#: What may sit between a cue and its value. The colon is its own optional
+#: step rather than one of the alternatives, because an operator writes both —
+#: "the concentration tests ARE: ..." — and a single alternation consumed the
+#: word and left the punctuation at the head of the answer.
+_JOIN = (r"\s*(?:is|are|=|to|of|will be|should be|for|as)?\s*"
+         r"[:\-–—]?\s*[\"'“]?")
 
 #: Where a free-text value ends. A clause often carries a second answer after a
 #: conjunction, and swallowing it would lose that answer and corrupt this one.
@@ -745,16 +891,25 @@ def _value_after(text: str, candidate: Candidate
                 if m else None)
 
     if ref.type in ("text", "multiline", "entity_reference"):
-        m = re.match(_JOIN + r"([^,.;]{2,200})", text)
+        # PROSE IS WHAT A MULTILINE FIELD IS FOR. Stopping its value at the
+        # first comma turned "1 High Street, London" into a street, and the
+        # first of three concentration limits into the whole answer. A single
+        # line's worth is the sentence, which the clause split already bounds.
+        prose = ref.type == "multiline"
+        m = re.match(_JOIN + (r"([^\n]{2,2000})" if prose
+                              else r"([^,.;]{2,200})"), text)
         if not m:
             return None
-        value = _TEXT_TAIL.split(m.group(1))[0].strip().strip("\"'“”")
+        body = m.group(1) if prose else _TEXT_TAIL.split(m.group(1))[0]
+        value = body.strip().strip("\"'“”")
         if not value or value.lower() in ("is", "are"):
             return None
         # An address is never a person's name. A value carrying the marks of a
         # typed field belongs to that field, and a text field must not eat it.
-        if "@" in value or any(re.fullmatch(pattern, value)
-                               for _rule, pattern in _SHAPES):
+        # A prose field is exempt: a schedule of limits or a list of report
+        # recipients legitimately carries dates, amounts and addresses.
+        if not prose and ("@" in value or any(re.fullmatch(pattern, value)
+                                              for _rule, pattern in _SHAPES)):
             return _sibling_value(text, candidate)
         return ref, value, (m.start(1), m.start(1) + len(value))
     return _sibling_value(text, candidate)
