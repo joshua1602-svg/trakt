@@ -42,6 +42,7 @@ from ..manual_intake import (
     derive_raw_prefix,
     sanitise_filename,
 )
+from . import workbook as _workbook
 from .derive import ExecutionFacts
 from .input_roles import artefact_vocabulary
 from .policy import CAP_LIVE_BLOB_WRITE, SyntheticPolicy
@@ -114,7 +115,7 @@ class ArtefactService:
 
         path = self.store.write_artefact_bytes(run.tenant, run.case_ref, leaf,
                                                data)
-        columns, rows = _inspect(path)
+        columns, rows, sheet = _inspect(path)
         return SyntheticArtefact(
             artefact_id=new_id("sart"),
             source_file=leaf,
@@ -126,6 +127,7 @@ class ArtefactService:
             sha256="sha256:" + hashlib.sha256(data).hexdigest(),
             size=len(data),
             columns=columns,
+            source_sheet=sheet,
             row_count=rows,
             provided_by=provided_by,
             provided_at=now_iso(),
@@ -259,23 +261,25 @@ def sample_manifest(artefacts: Sequence[SyntheticArtefact]
 # Helpers
 # --------------------------------------------------------------------------- #
 
-def _inspect(path: Path) -> Tuple[List[str], int]:
-    """Column headings and row count, without loading a whole tape.
+def _inspect(path: Path) -> Tuple[List[str], int, str]:
+    """Column headings, row count and the worksheet they came from.
+
+    Reads through :mod:`operations_control.occ_agent.workbook`, which chooses a
+    workbook's data sheet and re-detects a header that is not on row one — the
+    two things a real lender extract does and ``pd.read_excel(path)`` does not
+    survive. Before that, ``LoanExtract One - OMNI`` profiled as five unnamed
+    columns and seven rows: its summary tab.
 
     Failure to parse is not an error here: an unreadable file simply has no
     columns, which the classifier then treats as absent header evidence and the
     readiness check reports as unrecognised.
     """
-    suffix = path.suffix.lower()
-    try:
-        import pandas as pd
-        if suffix == ".csv":
-            head = pd.read_csv(path, nrows=PROFILE_ROWS, low_memory=False)
+    table = _workbook.read_table(path, max_rows=PROFILE_ROWS)
+    if path.suffix.lower() == ".csv":
+        # A CSV's true length is cheap to count and is not capped by the probe.
+        try:
             with path.open("r", encoding="utf-8", errors="replace") as fh:
-                rows = max(sum(1 for _ in fh) - 1, 0)
-        else:
-            head = pd.read_excel(path, nrows=PROFILE_ROWS)
-            rows = int(len(head))
-        return [str(c) for c in head.columns], rows
-    except Exception:  # noqa: BLE001 — an unreadable file is a finding, not a crash
-        return [], 0
+                return table.columns, max(sum(1 for _ in fh) - 1, 0), ""
+        except Exception:  # noqa: BLE001
+            return table.columns, table.row_count, ""
+    return table.columns, table.row_count, table.sheet

@@ -87,6 +87,11 @@ class SyntheticArtefact:
     sha256: str = ""
     size: int = 0
     columns: List[str] = field(default_factory=list)
+    #: The worksheet the columns were read from. Empty for a CSV, and for a
+    #: workbook it is the sheet CHOSEN — a lender's extract opens on a summary
+    #: tab as often as not, so which sheet was read is a fact about the
+    #: delivery, not an implementation detail.
+    source_sheet: str = ""
     row_count: int = 0
     recognition_confidence: Optional[float] = None
     recognition_basis: str = ""
