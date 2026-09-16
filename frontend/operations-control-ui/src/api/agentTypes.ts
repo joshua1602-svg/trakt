@@ -563,6 +563,36 @@ export interface OccLink {
 }
 
 /** Everything the case workspace renders. One request, one shape. */
+/**
+ * One source column, and what became of it.
+ *
+ * `state` is decided SERVER-SIDE (`occ_agent/mapping_view.py`) because it turns
+ * on the same trusted-tier and confidence threshold the engine applies when it
+ * decides whether to use a mapping without asking. Re-deriving it here would
+ * make a screen that can disagree with the engine about which mappings a human
+ * checked.
+ */
+export interface MappingRow {
+  source_file: string;
+  source_column: string;
+  canonical_field: string;
+  field_label: string;
+  tier: string;
+  tier_label: string;
+  confidence: number | null;
+  note: string;
+  state: "needs_you" | "unreadable" | "unused" | "confirmed" | "automatic";
+  state_label: string;
+  /** The open decision this row is waiting on, when it is waiting on one. */
+  decision_id: string;
+}
+
+export interface MappingOverview {
+  rows: MappingRow[];
+  counts: Record<string, number>;
+  files: string[];
+}
+
 export interface AgentStatus {
   case_ref: string;
   run: SyntheticRunDoc;
@@ -578,6 +608,9 @@ export interface AgentStatus {
   readiness: Readiness;
   policy: SyntheticPolicy;
   open_decisions: DecisionCard[];
+  /** Every source column and what became of it — including the ones the
+   *  mapper settled on its own, which are the majority. */
+  mapping: MappingOverview;
   observations: string[];
   blockers: string[];
   occ_links: OccLink[];

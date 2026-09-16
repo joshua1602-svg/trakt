@@ -540,6 +540,22 @@ export const copy = {
     criteriaExecution: "The practice run",
     criteriaBoundary: "The practice boundary",
     decisionsHeading: "Decisions waiting for you",
+    mappingHeading: "Every column, and what Trakt read it as",
+    mappingHelp:
+      "The questions above are only the columns Trakt could not settle. This " +
+      "is all of them, including the ones it matched on its own.",
+    mappingCount: (mapped: number, total: number) =>
+      `${mapped} of ${total} columns are feeding a field`,
+    mappingEmpty:
+      "Nothing has been read yet. The columns appear once the practice run " +
+      "has looked at the files.",
+    mappingColumn: "Column in the file",
+    mappingField: "Trakt reads it as",
+    mappingBasis: "On what evidence",
+    mappingConfidence: "Confidence",
+    mappingNothing: "—",
+    mappingAnswer: "Answer this",
+    mappingFilterAll: "All",
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
     artefactNotWritten: "Not written",

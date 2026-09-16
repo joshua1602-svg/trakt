@@ -69,6 +69,7 @@ from . import classification as _classification
 from . import client_form as _client_form
 from . import communication as _comms
 from . import derive as _derive
+from . import mapping_view as _mapping_view
 from . import pack as _pack
 from . import planning as _planning
 from . import promotion as _promotion
@@ -2641,6 +2642,10 @@ class OccAgentService:
             "readiness": verdict.to_dict(),
             "policy": self.policy.to_dict(),
             "open_decisions": run.open_decisions,
+            # Every source column and what became of it — including the ones
+            # the mapper settled on its own, which are the majority and were
+            # not visible anywhere before.
+            "mapping": _mapping_view.overview(run),
             "observations": run.observations,
             "blockers": run.blockers,
             "occ_links": _occ_links(case, run),

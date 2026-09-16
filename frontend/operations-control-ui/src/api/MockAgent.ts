@@ -25,6 +25,8 @@ import type {
   FieldCategory,
   FieldClassification,
   LifecycleState,
+  MappingOverview,
+  MappingRow,
   PackQuestion,
   PackReceipt,
   PackSection,
@@ -320,12 +322,139 @@ function lifecycle(current?: string, reached?: Set<string>): LifecycleState[] {
   }));
 }
 
+/**
+ * What became of each source column, as the server projects it.
+ *
+ * A double for `occ_agent/mapping_view.overview`, kept in step with it by
+ * `MappingTable.test.tsx` rather than by hope: the trusted-tier set and the
+ * confidence threshold are the engine's, and a screen that classified rows
+ * differently from the engine would tell an operator a mapping had been
+ * checked when it had not.
+ */
+function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
+  const byColumn = new Map<string, string>();
+  for (const decision of doc.open_decisions) {
+    if (decision.status !== "open") continue;
+    const subject = decision.subject as { source_column?: string; source_columns?: string[] };
+    for (const name of [subject?.source_column, ...(subject?.source_columns ?? [])]) {
+      const key = String(name ?? "").trim().toLowerCase();
+      if (key && !byColumn.has(key)) byColumn.set(key, decision.decision_id);
+    }
+  }
+
+  const rows: MappingRow[] = (doc.mapping_report ?? []).map((raw) => {
+    const r = raw as Record<string, unknown>;
+    const tier = String(r.tier ?? "");
+    const canonical = String(r.canonical_field ?? "");
+    const rawConfidence = Number(r.confidence);
+    const confidence = Number.isFinite(rawConfidence) ? rawConfidence : null;
+    const column = String(r.source_column ?? "");
+    const decisionId = byColumn.get(column.toLowerCase()) ?? "";
+    let state: MappingRow["state"];
+    // An open decision wins over the tier: an ambiguity is raised after both
+    // rows are written, at whatever tier they matched at, so reading the tier
+    // alone would call a blocked column "matched automatically".
+    if (decisionId) state = "needs_you";
+    else if (tier === "operator_approved") state = "confirmed";
+    else if (tier === "unreadable") state = "unreadable";
+    else if (!canonical) state = "unused";
+    else if (TRUSTED_TIERS.has(tier) || (confidence !== null && confidence >= LOW_CONFIDENCE))
+      state = "automatic";
+    else state = "needs_you";
+    return {
+      source_file: String(r.source_file ?? ""),
+      source_column: column,
+      canonical_field: canonical,
+      field_label: canonical.replace(/_/g, " "),
+      tier,
+      tier_label: TIER_LABELS[tier] ?? tier.replace(/_/g, " "),
+      confidence,
+      note: String(r.note ?? ""),
+      state,
+      state_label: MAPPING_STATE_LABELS[state],
+      decision_id: decisionId,
+    };
+  });
+
+  rows.sort(
+    (a, b) =>
+      a.source_file.localeCompare(b.source_file) ||
+      MAPPING_STATE_ORDER.indexOf(a.state) - MAPPING_STATE_ORDER.indexOf(b.state) ||
+      a.source_column.toLowerCase().localeCompare(b.source_column.toLowerCase()),
+  );
+
+  const counts: Record<string, number> = {};
+  for (const state of MAPPING_STATE_ORDER) {
+    counts[state] = rows.filter((r) => r.state === state).length;
+  }
+  counts.columns = rows.length;
+  counts.mapped = counts.confirmed + counts.automatic;
+  return {
+    rows,
+    counts,
+    files: [...new Set(rows.map((r) => r.source_file).filter(Boolean))].sort(),
+  };
+}
+
 interface StoredRun {
   doc: SyntheticRunDoc;
   reached: Set<string>;
   scenario: string;
   audit: Record<string, unknown>[];
 }
+
+/**
+ * What the header mapper made of a small but representative tape.
+ *
+ * Deliberately covers every state the table can show — matched exactly,
+ * matched by alias, too weak to use, nothing matched, and one an operator
+ * confirmed — because a fixture that only contains clean rows lets a screen
+ * that renders only clean rows pass.
+ */
+const MAPPING_REPORT: Record<string, unknown>[] = [
+  { source_file: "loan_tape.csv", source_column: "loan_id", canonical_field: "loan_id",
+    tier: "exact", confidence: 1.0, note: "" },
+  { source_file: "loan_tape.csv", source_column: "Current Balance",
+    canonical_field: "current_principal_balance", tier: "alias", confidence: 1.0, note: "" },
+  { source_file: "loan_tape.csv", source_column: "Int Rate",
+    canonical_field: "interest_rate", tier: "normalized", confidence: 1.0, note: "" },
+  { source_file: "loan_tape.csv", source_column: "Prop Val",
+    canonical_field: "property_value", tier: "operator_approved", confidence: 1.0,
+    note: "confirmed by an operator" },
+  { source_file: "loan_tape.csv", source_column: "Val Dt",
+    canonical_field: "valuation_date", tier: "fuzz_token_set", confidence: 0.62,
+    note: "below the confidence threshold" },
+  { source_file: "loan_tape.csv", source_column: "Internal Ref", canonical_field: "",
+    tier: "unmapped", confidence: 0.0, note: "" },
+];
+
+/** Mirrors `occ_agent/mapping_view.TIER_LABELS`. */
+const TIER_LABELS: Record<string, string> = {
+  exact: "The column is named exactly as the field is",
+  normalized: "The names match once case and punctuation are ignored",
+  alias: "A known alias for this field",
+  token_set: "The words overlap, but the names are not the same",
+  fuzz_token_set: "The words are similar, not the same",
+  fuzz_ratio_norm: "The names are spelled similarly",
+  unmapped: "Nothing in the field registry resembles this column",
+  empty: "The column has no name",
+  operator_approved: "You said so",
+  unreadable: "The file could not be read",
+};
+
+const MAPPING_STATE_LABELS: Record<string, string> = {
+  needs_you: "Needs you",
+  unreadable: "Could not be read",
+  unused: "Not used",
+  confirmed: "You confirmed it",
+  automatic: "Matched automatically",
+};
+
+const MAPPING_STATE_ORDER = ["needs_you", "unreadable", "unused", "confirmed", "automatic"];
+
+/** Mirrors `execution._TRUSTED_TIERS` and `execution.LOW_CONFIDENCE`. */
+const TRUSTED_TIERS = new Set(["exact", "normalized", "alias"]);
+const LOW_CONFIDENCE = 0.9;
 
 const AMBIGUOUS_DECISION: DecisionCard = {
   decision_id: "amb_current_principal_balance",
@@ -476,6 +605,7 @@ export class MockAgent {
       readiness: this.readiness(stored, onboarding),
       policy: POLICY,
       open_decisions: stored.doc.open_decisions,
+      mapping: mappingOverview(stored.doc),
       observations: stored.doc.observations,
       blockers: stored.doc.blockers,
       occ_links: [
@@ -1564,6 +1694,9 @@ export class MockAgent {
         }
         this.move(stored, S.SYNTHETIC_ONBOARDING_RUNNING);
         stored.doc.stage_outcomes = COMPLETED_STAGES;
+        // Reading the files is what produces the mapping report, so it is
+        // written here rather than seeded at case creation.
+        stored.doc.mapping_report = MAPPING_REPORT.map((row) => ({ ...row }));
         this.record(stored, "synthetic_onboarding_started", "the conductor ran over the adapter");
         if (stored.scenario === "scenario_b_ambiguous_mapping") {
           stored.doc.stage_outcomes = { onboard: "human_input_required" };
