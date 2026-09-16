@@ -31,7 +31,10 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from apps.blob_trigger_app.path_parser import PathParseError, canonical_period
+
 from ..api.auth import Principal, authenticate
+from ..contracts import BATCH_DATASETS
 from ..engine import OpsError
 from . import adapters as _adapters
 from . import fixtures as _fixtures
@@ -154,6 +157,18 @@ class RunTarget(BaseModel):
     portfolio_id: str = ""
     dataset: str = ""
     reporting_period: str = ""
+    tenant: Optional[str] = None
+
+
+class RemoveArtefact(BaseModel):
+    """One file to take back out of the case's pack, by its own identifier.
+
+    Keyed on ``artefact_id`` rather than the filename deliberately: a filename
+    is not unique in this list — the same name uploaded twice appends twice —
+    and removing "the one called X" would be ambiguous exactly when it matters.
+    """
+
+    artefact_id: str
     tenant: Optional[str] = None
 
 
@@ -436,20 +451,31 @@ def request_changes(case_ref: str, body: TenantBody,
 @router.post("/cases/{case_ref}/target")
 def set_run_target(case_ref: str, body: RunTarget,
                    principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
-    """Name which delivery this practice run is for."""
+    """Name which delivery this practice run is for.
+
+    Both values are checked here rather than taken as typed. Until now nothing
+    reached this endpoint from a screen, so whatever a caller sent was stored
+    verbatim; a period is a path segment and part of the pack key, and
+    "April 2026" written into one is not a validation failure anybody sees — it
+    is a folder with that name.
+    """
     _require_feature()
     service = get_service()
     agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
-    run = agent_case.run
-    if body.portfolio_id:
-        run.portfolio_id = body.portfolio_id
-    if body.dataset:
-        run.dataset = body.dataset
-    if body.reporting_period:
-        run.reporting_period = body.reporting_period
-    run.facts = service.facts(agent_case).to_dict()
-    service.store.save(run)
-    return {"ok": True, **service.status(agent_case)}
+    if body.dataset and body.dataset not in BATCH_DATASETS:
+        raise OpsError(
+            "OCC_AGENT_BAD_DATASET",
+            f"{body.dataset!r} is not a book Trakt reports on "
+            f"({', '.join(BATCH_DATASETS)}).", 400)
+    try:
+        period = canonical_period(body.reporting_period)
+    except PathParseError as exc:
+        raise OpsError("OCC_AGENT_BAD_PERIOD", str(exc), 400) from exc
+    return {"ok": True,
+            **service.status(service.set_run_target(
+                agent_case, actor=principal.name,
+                portfolio_id=body.portfolio_id, dataset=body.dataset,
+                reporting_period=period))}
 
 
 @router.post("/cases/{case_ref}/artefacts")
@@ -475,6 +501,27 @@ async def upload_artefacts(case_ref: str,
     return {"ok": True,
             **service.status(service.classify_artefacts(
                 agent_case, actor=principal.name))}
+
+
+@router.post("/cases/{case_ref}/artefacts/remove")
+def remove_artefact(case_ref: str, body: RemoveArtefact,
+                    principal: Principal = Depends(authenticate)
+                    ) -> Dict[str, Any]:
+    """Take one uploaded file back out of the pack.
+
+    The counterpart to ``POST /artefacts``, which had none: the pack could be
+    added to and never corrected. What is removed is the case's RECORD of the
+    file — which is what the activation intent, the payloads and readiness are
+    all built from. The bytes stay in this case's sandbox; see
+    ``OccAgentService.remove_synthetic_artefact``.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.remove_synthetic_artefact(
+                agent_case, artefact_id=body.artefact_id,
+                actor=principal.name))}
 
 
 @router.post("/cases/{case_ref}/artefacts/fixture")

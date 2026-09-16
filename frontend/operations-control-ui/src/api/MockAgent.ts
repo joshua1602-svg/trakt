@@ -1139,6 +1139,25 @@ export class MockAgent {
     return this.status(caseRef);
   }
 
+  /**
+   * The live URI an artefact WOULD occupy, or "" while it cannot be derived.
+   *
+   * Empty until the client, the portfolio AND the period are all known, which
+   * is what `ArtefactService.intended_uri` does. The mock used to interpolate
+   * an empty period into the path and hand back a URI with a hole in it, so a
+   * screen that showed a destination in the mock showed "—" against the real
+   * server.
+   */
+  private intendedUri(
+    facts: { client_id: string; portfolio_id: string; cadence: string },
+    doc: { reporting_period: string; dataset: string },
+    name: string,
+  ): string {
+    if (!facts.client_id || !facts.portfolio_id || !doc.reporting_period) return "";
+    const book = doc.dataset || "funded";
+    return `blob://raw-v2/${facts.client_id}/direct/${book}/${facts.cadence}/${facts.portfolio_id}/${doc.reporting_period}/${name}`;
+  }
+
   setRunTarget(
     caseRef: string,
     input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
@@ -1147,6 +1166,37 @@ export class MockAgent {
     if (input.portfolio_id) stored.doc.portfolio_id = input.portfolio_id;
     if (input.dataset) stored.doc.dataset = input.dataset;
     if (input.reporting_period) stored.doc.reporting_period = input.reporting_period;
+    // Files already uploaded are re-derived, as the server does: the period is
+    // usually named AFTER the files arrive, and a destination computed once at
+    // upload time would stay empty forever.
+    const facts = this.facts(this.onboardingCase(caseRef), stored);
+    for (const artefact of stored.doc.received_artefacts) {
+      artefact.intended_live_uri = this.intendedUri(facts, stored.doc, artefact.source_file);
+    }
+    this.record(stored, "run_target_set", "an operator named the delivery this run is for");
+    return this.status(caseRef);
+  }
+
+  /** Take one file back out of the pack. The bytes are not deleted. */
+  removeArtefact(caseRef: string, artefactId: string): AgentStatus {
+    const stored = this.get(caseRef);
+    this.requireAction(stored, "register_synthetic_artefact");
+    const before = stored.doc.received_artefacts.length;
+    stored.doc.received_artefacts = stored.doc.received_artefacts.filter(
+      (a) => a.artefact_id !== artefactId,
+    );
+    if (stored.doc.received_artefacts.length === before) {
+      throw new OpsError(
+        "That file is not in this case's pack.",
+        "OCC_AGENT_ARTEFACT_NOT_FOUND",
+      );
+    }
+    this.record(stored, "synthetic_artefact_removed", "an operator removed the file from the pack");
+    this.onboarding.registerSample(
+      caseRef,
+      stored.doc.received_artefacts.map((a) => ({ name: a.source_file, headers: [] })),
+    );
+    this.record(stored, "artefacts_classified", "apps.blob_trigger_app.file_roles");
     return this.status(caseRef);
   }
 
@@ -1160,7 +1210,7 @@ export class MockAgent {
         source_file: name,
         artefact_type: name.toLowerCase().includes("loan") ? "loan_extract" : "property_extract",
         synthetic_location: `practice_cases/${caseRef}/artefacts/${name}`,
-        intended_live_uri: `blob://raw-v2/${facts.client_id}/direct/funded/${facts.cadence}/${facts.portfolio_id}/${stored.doc.reporting_period}/${name}`,
+        intended_live_uri: this.intendedUri(facts, stored.doc, name),
         execution_status: "simulated_only",
         sha256: "sha256:mock",
         size: 4096,

@@ -76,6 +76,32 @@ def _normalise_period(period: str) -> str:
     return candidate if _PERIOD_RE.match(candidate) else period
 
 
+def canonical_period(value: Optional[str]) -> str:
+    """The one spelling of a reporting period that may be written, or "".
+
+    The public counterpart to ``_normalise_period``, and the same contract as
+    :func:`canonical_frequency`: blank stays blank for the caller to default,
+    a recognised period is returned in hyphen form, and anything else raises
+    rather than being written into a path and a pack key.
+
+    ``_normalise_period`` returns an unrecognised value unchanged, which is
+    right where a path is being PARSED — the caller validates the whole path a
+    moment later and fails closed. It is wrong where a period is being
+    ACCEPTED from a person, which is what this is for: there the first and only
+    chance to reject "April 2026" is at the door.
+    """
+    text = str(value or "").strip().upper()
+    if not text:
+        return ""
+    canonical = _normalise_period(text)
+    if not _PERIOD_RE.match(canonical):
+        raise PathParseError(
+            f"reporting period {value!r} is not one Trakt recognises "
+            "(2026-04 for a month, 2026-04-30 for a date, 2026-W14 for an "
+            "ISO week, 2026-Q2 for a quarter)")
+    return canonical
+
+
 class PathParseError(ValueError):
     """Raised when a blob path does not match the convention (fail closed)."""
 

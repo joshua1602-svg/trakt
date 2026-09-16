@@ -1959,6 +1959,11 @@ export class MockOpsClient implements OpsClient {
     );
   }
 
+  async removeAgentArtefact(caseRef: string, artefactId: string): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.removeArtefact(caseRef, artefactId);
+  }
+
   async generateAgentAnswers(caseRef: string): Promise<AgentStatus> {
     await this.wait();
     return this.agent.generateAnswers(caseRef);

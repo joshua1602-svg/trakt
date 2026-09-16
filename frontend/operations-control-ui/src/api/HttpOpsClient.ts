@@ -716,6 +716,13 @@ export class HttpOpsClient implements OpsClient {
     );
   }
 
+  async removeAgentArtefact(caseRef: string, artefactId: string): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/artefacts/remove`,
+      { artefact_id: artefactId },
+    );
+  }
+
   async generateAgentAnswers(caseRef: string): Promise<AgentStatus> {
     return this.post<AgentStatus>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/responses/generate`,

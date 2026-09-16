@@ -1210,6 +1210,109 @@ class OccAgentService:
                             "sha256": artefact.sha256})
         return agent_case
 
+    def set_run_target(self, agent_case: AgentCase, *, actor: str,
+                       portfolio_id: str = "", dataset: str = "",
+                       reporting_period: str = "") -> AgentCase:
+        """Name which delivery this run is for, and re-derive what follows.
+
+        ``intended_live_uri`` is computed once, when a file is registered, from
+        the client, the portfolio and the reporting period. The period is
+        normally the last of the three to be known — and nothing recomputed the
+        URI when it arrived, so a file uploaded first kept the empty string it
+        was given and the card read "Where this would be filed: —" for the life
+        of the case, however many times the target was set afterwards.
+
+        Upload-then-name is the ordinary order of work, not a mistake, so the
+        destinations are re-derived here rather than the operator being
+        expected to remove every file and attach it again.
+
+        Refused once the run is finished. Nothing had ever reached this from a
+        screen, so it was ungated; now that it can be typed into, renaming the
+        period of a delivery that has already started would leave the record
+        describing a period the files did not go to.
+        """
+        run = agent_case.run
+        if run.state in _states.TERMINAL_STATES:
+            raise OpsError(
+                "OCC_AGENT_RUN_FINISHED",
+                "This case is finished, so the delivery it was for cannot be "
+                "changed.", 409)
+        if portfolio_id:
+            run.portfolio_id = portfolio_id
+        if dataset:
+            run.dataset = dataset
+        if reporting_period:
+            run.reporting_period = reporting_period
+        facts = self.facts(agent_case)
+        for doc in run.received_artefacts:
+            doc["intended_live_uri"] = self.artefacts.intended_uri(
+                run, facts, str(doc.get("source_file") or ""))
+        run.facts = facts.to_dict()
+        self.store.save(run)
+        self._audit(run, "run_target_set", actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_DETERMINISTIC,
+                    decision_basis="an operator named the delivery this run "
+                                   "is for",
+                    detail={"portfolio_id": run.portfolio_id,
+                            "dataset": run.dataset,
+                            "reporting_period": run.reporting_period,
+                            "artefacts_retargeted":
+                                len(run.received_artefacts)})
+        return agent_case
+
+    def remove_synthetic_artefact(self, agent_case: AgentCase, *,
+                                  artefact_id: str, actor: str) -> AgentCase:
+        """Take a file back out of the case's pack.
+
+        WHY THIS EXISTS. Uploading was a one-way door: ``received_artefacts``
+        was appended to and never read back out, and the wrong file — an
+        encrypted workbook, a draft, last month's tape — stayed in the pack for
+        the life of the case. Re-uploading under the same name overwrites the
+        BYTES (:meth:`SyntheticRunStore.write_artefact_bytes` writes a
+        sanitised leaf with no uniquifier) but appends a second ROW, so the
+        only way to correct a mistake was to make the record say two files had
+        arrived when one had. Cancelling the case was the alternative.
+
+        WHAT IT REMOVES, EXACTLY. The record, not the bytes. Everything that
+        decides what activation does reads ``run.artefacts()`` — the intent's
+        file list, :meth:`_payloads`, classification, and role readiness — so
+        dropping the row removes the file from all of them. The uploaded bytes
+        stay where they were written, in this case's own sandbox under
+        ``{tenant}/agent-runs/{case_ref}/artefacts/``, and are not written
+        anywhere else. ``Storage`` has no delete at all, and this is not the
+        change that should introduce one: a governed store that can be told to
+        forget is a much larger decision than an operator undoing an upload.
+
+        Allowed wherever uploading is allowed, and for the same reason — if an
+        operator may add a file at this state, they may take one back.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_REGISTER_ARTEFACT)
+        removed = next((a for a in run.received_artefacts
+                        if a.get("artefact_id") == artefact_id), None)
+        if removed is None:
+            raise OpsError("OCC_AGENT_ARTEFACT_NOT_FOUND",
+                           "That file is not in this case's pack.", 404)
+        run.received_artefacts = [a for a in run.received_artefacts
+                                  if a.get("artefact_id") != artefact_id]
+        self.store.save(run)
+        self._audit(run, "synthetic_artefact_removed",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_SYNTHETICALLY_EXECUTED,
+                    input_reference=str(removed.get("source_file") or ""),
+                    output_reference=str(removed.get("synthetic_location")
+                                         or ""),
+                    decision_basis="an operator removed the file from the "
+                                   "pack; its bytes remain in the case "
+                                   "sandbox and were never written elsewhere",
+                    detail={"artefact_id": artefact_id,
+                            "sha256": str(removed.get("sha256") or ""),
+                            "bytes_deleted": False})
+        # Readiness, recognition and the onboarding case's sample all follow
+        # from the pack, so they are recomputed rather than left describing a
+        # file the case no longer holds.
+        return self.classify_artefacts(agent_case, actor=actor)
+
     def generate_synthetic_answers(self, agent_case: AgentCase, *,
                                    actor: str) -> AgentCase:
         """Answer THIS case's own outstanding client questions, synthetically.
