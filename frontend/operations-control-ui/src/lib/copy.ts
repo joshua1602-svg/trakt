@@ -257,6 +257,17 @@ export const copy = {
     newClientLabel: "New client name",
     portfolioLabel: "Portfolio",
     periodLabel: "Reporting period",
+    periodHelp:
+      "A month is 2026-04. A snapshot taken on a particular day is " +
+      "2026-09-14. A week is 2026-W38, a quarter 2026-Q2.",
+    frequencyLabel: "How often this arrives",
+    frequencyHelp:
+      "How often this delivery arrives, which is part of where Trakt files " +
+      "it. A pipeline tape that turns up every few days is ad hoc, not weekly.",
+    frequencyMonthly: "Monthly",
+    frequencyWeekly: "Weekly",
+    frequencyDaily: "Daily",
+    frequencyAdhoc: "Ad hoc",
     createButton: "Continue",
     filesHeading: "Upload files",
     uploadLabel: "Choose the files to send",

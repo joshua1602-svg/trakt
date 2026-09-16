@@ -179,6 +179,7 @@ export class MockOpsClient implements OpsClient {
       workflow_type: "mi",
       dataset: "funded",
       dataset_label: "Funded book",
+      frequency: "monthly",
       status: "review_required",
       status_label: "Needs your review",
       status_sentence:
@@ -227,6 +228,7 @@ export class MockOpsClient implements OpsClient {
       workflow_type: "mi",
       dataset: "funded",
       dataset_label: "Funded book",
+      frequency: "monthly",
       status: "completed",
       status_label: "Done",
       status_sentence: "Trakt has finished with this input pack.",
@@ -1062,6 +1064,10 @@ export class MockOpsClient implements OpsClient {
       workflow_type: input.workflow_type,
       dataset: input.dataset,
       dataset_label: input.dataset === "pipeline" ? "Pipeline" : "Funded book",
+      // Canonicalised and defaulted server-side; the mock mirrors the two
+      // behaviours a screen can see.
+      frequency: (input.frequency || "monthly").trim().toLowerCase().replace(/[\s-]+/g, "_")
+        .replace(/^ad_hoc$/, "adhoc"),
       status: "receiving",
       status_label: "Receiving files",
       status_sentence: "Trakt is watching for the files to arrive.",

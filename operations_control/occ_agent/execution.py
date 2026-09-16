@@ -75,6 +75,7 @@ from .run import (
     STAGE_HUMAN_INPUT_REQUIRED,
     STAGE_SIMULATED,
 )
+from . import workbook as _workbook
 from .policy import CAP_LIVE_PIPELINE_TRIGGER, SyntheticPolicy
 
 REPO = Path(__file__).resolve().parents[2]
@@ -216,7 +217,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                     "canonical_field": "", "tier": "unreadable",
                     "confidence": 0.0,
                     "note": f"could not be profiled ({type(exc).__name__})",
-                    "primary": path == primary})
+                    "primary": path == primary, "source_sheet": ""})
 
         # 2. Real header mapping, per column, for EVERY file in the pack.
         #
@@ -236,13 +237,10 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         resolved: Dict[str, str] = {}
         for path in self.artefact_paths:
             is_primary = path == primary
-            if is_primary:
-                file_frame = frame
-            else:
-                try:
-                    file_frame = _read_table(path)
-                except Exception:  # noqa: BLE001 — already reported at step 1
-                    continue
+            table = _workbook.read_table(path)
+            if table.frame is None:
+                continue          # already reported as unreadable at step 1
+            file_frame = frame if is_primary else table.frame
             for column in [str(c) for c in file_frame.columns]:
                 # An operator's confirmation is keyed on the column name, and
                 # only the primary tape's columns reach the canonical tape, so
@@ -256,7 +254,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                         "source_file": path.name, "source_column": column,
                         "canonical_field": approved, "tier": "operator_approved",
                         "confidence": 1.0, "note": "confirmed by an operator",
-                        "primary": True})
+                        "primary": True, "source_sheet": table.sheet})
                     continue
                 canonical, tier, confidence = mapper.map_one(column)
                 trusted = (tier in _TRUSTED_TIERS
@@ -267,7 +265,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                     "confidence": round(float(confidence), 4),
                     "note": ("" if trusted
                              else "below the confidence threshold"),
-                    "primary": is_primary})
+                    "primary": is_primary, "source_sheet": table.sheet})
                 if not is_primary:
                     # Recorded, never resolved and never raised as a decision:
                     # the canonical tape is not built from this file, so there
@@ -676,9 +674,19 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 
 
 def _read_table(path: Path) -> pd.DataFrame:
-    if path.suffix.lower() == ".csv":
-        return pd.read_csv(path, low_memory=False)
-    return pd.read_excel(path)
+    """The client's tape, read the way the rest of the platform reads one.
+
+    Delegates to :mod:`operations_control.occ_agent.workbook`, which picks a
+    workbook's data sheet and re-detects a header below row one. A plain
+    ``pd.read_excel(path)`` took the first sheet and row one, which for a real
+    lender extract is the summary tab and a title block.
+    """
+    table = _workbook.read_table(path)
+    if table.frame is None:
+        raise SyntheticExecutionError(f"{path.name} could not be read")
+    return table.frame
+
+
 
 
 def _duplicates(resolved: Dict[str, str]) -> Dict[str, List[str]]:
