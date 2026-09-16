@@ -358,6 +358,10 @@ def build_package(run: SyntheticRun, case: OnboardingCase,
             for a in artefacts],
         # 7
         "field_mapping_report": run.mapping_report,
+        # 7b — where the delivery's files disagree with each other. Part of
+        # the readiness package because a conflict stops the build, and an
+        # approver signing readiness off is entitled to see one coming.
+        "cross_file_agreement": list(run.cross_file),
         # 8
         "validation_summary": [r for r in run.control_results
                                if r.get("kind") == "validation"],
