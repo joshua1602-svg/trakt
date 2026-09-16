@@ -229,6 +229,8 @@ export interface OpsClient {
     input: { portfolio_id?: string; dataset?: string; reporting_period?: string },
   ): Promise<AgentStatus>;
   uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus>;
+  /** Take one file back out of the pack. Removes the RECORD, not the bytes. */
+  removeAgentArtefact(caseRef: string, artefactId: string): Promise<AgentStatus>;
   /** Generate a client response from the delivery outcome the case implies. */
   generateAgentResponse(caseRef: string): Promise<AgentStatus>;
   /** Answers the outstanding CLIENT QUESTIONS. Distinct from

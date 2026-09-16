@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -236,6 +236,7 @@ export function AgentCaseScreen() {
       busy={busy}
       canGenerate={available.has("register_synthetic_artefact")}
       onUpload={(files) => void act(() => client.uploadAgentArtefacts(caseId, files))}
+      onRemove={(artefactId) => void act(() => client.removeAgentArtefact(caseId, artefactId))}
       onGenerate={() => void act(() => client.generateAgentResponse(caseId))}
       onFixture={() => void act(() => client.loadAgentFixtureArtefacts(caseId, run.fixture_id))}
     />
@@ -644,10 +645,13 @@ export function AgentCaseScreen() {
                 )}
               </Field>
             )}
-            {run.reporting_period && (
-              <Field label="Reporting period">{run.reporting_period}</Field>
-            )}
           </Panel>
+
+          <RunTargetPanel
+            run={run}
+            busy={busy}
+            onSave={(input) => void act(() => client.setAgentRunTarget(caseId, input))}
+          />
 
           <ClientQuestionsPanel
             caseId={caseId}
@@ -1061,12 +1065,161 @@ function ResponsesBlock({
   );
 }
 
+/**
+ * Which delivery this run is for: the book, and the period it reports.
+ *
+ * `POST /cases/{ref}/target` and `setAgentRunTarget` both existed already; no
+ * screen called either, so the reporting period could not be set from anywhere
+ * and the panel above could only DISPLAY one, hidden entirely while empty. The
+ * visible symptom was a file card reading "Where this would be filed: —",
+ * because the intended URI needs client, portfolio and period, and the period
+ * was the one of the three with no way in.
+ *
+ * The period is free text rather than `<input type="month">` deliberately: a
+ * month picker cannot express a pipeline snapshot's own date (2026-09-14) or
+ * an ISO week, and both are periods Trakt files under. The server canonicalises
+ * what is typed and refuses what it cannot read, so the tolerance costs nothing.
+ */
+function RunTargetPanel({
+  run,
+  busy,
+  onSave,
+}: {
+  run: AgentStatus["run"];
+  busy: boolean;
+  onSave: (input: { dataset: string; reporting_period: string }) => void;
+}) {
+  const [period, setPeriod] = useState(run.reporting_period);
+  const [dataset, setDataset] = useState(run.dataset || "funded");
+
+  // The run is the source of truth: a save, or another operator's change
+  // arriving on a reload, replaces what is in the boxes.
+  useEffect(() => {
+    setPeriod(run.reporting_period);
+    setDataset(run.dataset || "funded");
+  }, [run.reporting_period, run.dataset]);
+
+  const dirty = period !== run.reporting_period || dataset !== (run.dataset || "funded");
+  return (
+    <Panel title={copy.agent.targetHeading}>
+      <label className="block text-xs font-medium text-stone-600" htmlFor="run-period">
+        {copy.agent.targetPeriodLabel}
+      </label>
+      <input
+        id="run-period"
+        value={period}
+        placeholder={copy.agent.targetPeriodPlaceholder}
+        onChange={(event) => setPeriod(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+      />
+      <p className="mt-1 text-xs text-stone-500">{copy.agent.targetHelp}</p>
+
+      <label className="mt-3 block text-xs font-medium text-stone-600" htmlFor="run-dataset">
+        {copy.agent.targetDatasetLabel}
+      </label>
+      <select
+        id="run-dataset"
+        value={dataset}
+        onChange={(event) => setDataset(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+      >
+        <option value="funded">{copy.agent.targetDatasetFunded}</option>
+        <option value="pipeline">{copy.agent.targetDatasetPipeline}</option>
+      </select>
+
+      <button
+        type="button"
+        disabled={busy || !dirty || !period.trim()}
+        onClick={() => onSave({ dataset, reporting_period: period.trim() })}
+        className="mt-3 rounded-xl bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-40"
+      >
+        {copy.agent.targetSave}
+      </button>
+    </Panel>
+  );
+}
+
+/**
+ * One file's row, with the way to take it back out.
+ *
+ * The confirmation is inline rather than a dialog because the thing being
+ * confirmed is the row itself: an operator removing the third of four files
+ * needs to see WHICH one while they decide. It also states what removal does
+ * and does not do — the record goes, the uploaded bytes stay in the case
+ * sandbox — because "Remove" on its own reads as "delete", and that would be
+ * a promise the platform cannot keep.
+ */
+function ArtefactRow({
+  artefact,
+  busy,
+  onRemove,
+}: {
+  artefact: AgentStatus["run"]["received_artefacts"][number];
+  busy: boolean;
+  onRemove: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <li className="rounded-xl border border-stone-200 px-3 py-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-stone-900">{artefact.source_file}</p>
+          <p className="text-xs text-stone-500">
+            {artefact.artefact_type ? humanize(artefact.artefact_type) : copy.workflow.fileKind}
+            {artefact.row_count > 0 && ` · ${artefact.row_count} records`}
+          </p>
+        </div>
+        {!confirming && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setConfirming(true)}
+            className="shrink-0 rounded-lg border border-stone-300 px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-50 disabled:opacity-50"
+          >
+            {copy.agent.artefactRemove}
+          </button>
+        )}
+      </div>
+      <p className="mt-1 break-all text-xs text-stone-400">
+        {copy.agent.artefactIntended}: {artefact.intended_live_uri || "—"}
+      </p>
+      <p className="text-xs font-medium text-violet-700">{copy.agent.artefactNotWritten}</p>
+      {confirming && (
+        <div className="mt-2 rounded-lg bg-stone-50 p-2">
+          <p className="text-xs text-stone-600">{copy.agent.artefactRemoveExplain}</p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setConfirming(false);
+                onRemove();
+              }}
+              className="rounded-lg bg-rose-600 px-2 py-1 text-xs font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+            >
+              {copy.agent.artefactRemoveConfirm}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="rounded-lg border border-stone-300 px-2 py-1 text-xs font-medium text-stone-600 hover:bg-white"
+            >
+              {copy.agent.artefactRemoveKeep}
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
 /** The practice files: what has arrived, and the ways to provide it. */
 function ArtefactsPanel({
   status,
   busy,
   canGenerate,
   onUpload,
+  onRemove,
   onGenerate,
   onFixture,
 }: {
@@ -1074,10 +1227,14 @@ function ArtefactsPanel({
   busy: boolean;
   canGenerate: boolean;
   onUpload: (files: File[]) => void;
+  onRemove: (artefactId: string) => void;
   onGenerate: () => void;
   onFixture: () => void;
 }) {
   const run = status.run;
+  const noDestination =
+    run.received_artefacts.length > 0 &&
+    run.received_artefacts.every((artefact) => !artefact.intended_live_uri);
   return (
     <Panel title={copy.agent.artefactsHeading}>
       {run.received_artefacts.length === 0 ? (
@@ -1088,23 +1245,17 @@ function ArtefactsPanel({
       ) : (
         <ul className="space-y-3">
           {run.received_artefacts.map((artefact) => (
-            <li key={artefact.artefact_id} className="rounded-xl border border-stone-200 px-3 py-2">
-              <p className="text-sm font-medium text-stone-900">{artefact.source_file}</p>
-              <p className="text-xs text-stone-500">
-                {artefact.artefact_type
-                  ? humanize(artefact.artefact_type)
-                  : copy.workflow.fileKind}
-                {artefact.row_count > 0 && ` · ${artefact.row_count} records`}
-              </p>
-              <p className="mt-1 break-all text-xs text-stone-400">
-                {copy.agent.artefactIntended}: {artefact.intended_live_uri || "—"}
-              </p>
-              <p className="text-xs font-medium text-violet-700">
-                {copy.agent.artefactNotWritten}
-              </p>
-            </li>
+            <ArtefactRow
+              key={artefact.artefact_id}
+              artefact={artefact}
+              busy={busy}
+              onRemove={() => onRemove(artefact.artefact_id)}
+            />
           ))}
         </ul>
+      )}
+      {noDestination && (
+        <p className="mt-2 text-sm text-stone-500">{copy.agent.artefactNoDestination}</p>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         <label className="cursor-pointer rounded-xl border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">

@@ -543,6 +543,26 @@ export const copy = {
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
     artefactNotWritten: "Not written",
+    artefactNoDestination:
+      "Name the reporting period below and Trakt can say where this would be filed.",
+    artefactRemove: "Remove",
+    artefactRemoveConfirm: "Yes, remove it",
+    artefactRemoveKeep: "Keep it",
+    artefactRemoveExplain:
+      "Trakt stops counting this file: it leaves the pack, and activation " +
+      "would not place it. The uploaded copy stays in this case's own " +
+      "sandbox and is not written anywhere else.",
+    targetHeading: "Which delivery this is for",
+    targetHelp:
+      "The reporting period the files describe — not the date on the " +
+      "filename. A tape taken on 1 May reports April, so that is 2026-04.",
+    targetPeriodLabel: "Reporting period",
+    targetPeriodPlaceholder: "2026-04",
+    targetDatasetLabel: "Book",
+    targetDatasetFunded: "Funded",
+    targetDatasetPipeline: "Pipeline",
+    targetSave: "Save",
+    targetSaved: "Saved.",
     executionHeading: "Practice execution",
     readinessHeading: "Readiness",
     observationsHeading: "Worth knowing",
