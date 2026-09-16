@@ -164,6 +164,20 @@ class FormField:
     validation: str = ""
     #: Pre-populated from what Trakt already knows. A client edits or confirms.
     value: Any = None
+    #: True when this question has already been answered.
+    #:
+    #: An answered client question used to leave the form entirely, and two
+    #: things followed. An operator who had just saved an answer could not see
+    #: it — the box they typed into simply vanished, so "it saved" and "it did
+    #: not save" looked identical. And because ``plan_response`` checks every
+    #: submitted key against the form, a key that had left the form was refused
+    #: as "not a question Trakt puts to a client": a typo in an answer could not
+    #: be corrected through the form it was typed into.
+    #:
+    #: A serving surface decides what to do with these — a client portal would
+    #: show them as answered and need not re-ask — but they stay ON the form, so
+    #: the answer is visible and correctable.
+    answered: bool = False
     #: Which repeatable item this belongs to, and what to call it on screen.
     index: Optional[int] = None
     item: str = ""
@@ -228,6 +242,10 @@ class ClientForm:
     case_ref: str
     client_name: str = ""
     steps: List[FormStep] = field(default_factory=list)
+    #: Questions already answered. NOT part of `steps`, so a client is never
+    #: re-asked one — see the note in `build`. Carried so an operator can see
+    #: what an answer saved as, and correct it.
+    answered: List[FormField] = field(default_factory=list)
     #: Steps that exist but are not open yet, and what would open them.
     locked: List[Dict[str, str]] = field(default_factory=list)
     content_hash: str = ""
@@ -237,6 +255,7 @@ class ClientForm:
             "case_ref": self.case_ref,
             "client_name": self.client_name,
             "steps": [s.to_dict() for s in self.steps],
+            "answered": [f.to_dict() for f in self.answered],
             "locked": list(self.locked),
             "questions": self.question_count,
             "required": self.required_count,
@@ -255,8 +274,16 @@ class ClientForm:
         return [f.key for s in self.steps for g in s.groups for f in g.fields]
 
     def field(self, key: str) -> Optional[FormField]:
+        """The question one key belongs to, asked or already answered.
+
+        Answered ones count: a correction to an answer is submitted against the
+        same key it was first saved under, and refusing it would mean a typo in
+        a client's answer could never be fixed through the form it was typed
+        into.
+        """
         return next((f for s in self.steps for g in s.groups
-                     for f in g.fields if f.key == key), None)
+                     for f in g.fields if f.key == key),
+                    next((f for f in self.answered if f.key == key), None))
 
 
 # --------------------------------------------------------------------------- #
@@ -304,6 +331,19 @@ def build(case: OnboardingCase, *, cat: Optional[Catalogue] = None
             "label": section.label,
             "unlocked_by": f"Asked once {trigger}."})
 
+    # What has already come back, kept OUT of the steps and beside them.
+    #
+    # An answered question must never be re-asked: `steps` is what a client is
+    # put in front of, and a pack built from it. But an operator has to be able
+    # to see what an answer actually saved as, and to correct a typo in it —
+    # and with answered questions nowhere on the form, `plan_response` refused
+    # a correction as "not a question Trakt puts to a client".
+    #
+    # Beside, not among: the client's form is unchanged, and the answers are
+    # available to a surface that needs them.
+    form.answered = [_field(cat.section(r.section), r, cat)
+                     for r in rows if _is_answered_client(r, cat)
+                     and cat.section(r.section) is not None]
     form.content_hash = stable_hash(canonical_json(
         {"steps": [s.to_dict() for s in form.steps]}))
     return form
@@ -332,6 +372,31 @@ def _groups(section: Section, asked: List[_classification.Classification],
     return out
 
 
+def _is_answered_client(row: _classification.Classification,
+                        cat: Catalogue) -> bool:
+    """A question this client WAS asked, which now has an answer.
+
+    Deliberately narrow. ``KNOWN`` covers everything Trakt already holds —
+    values it derived, defaults it applied, identifiers it minted — and none of
+    those belong on a client's form. Only a field the catalogue declares as the
+    client's to answer qualifies, so widening this cannot turn an internal
+    decision into a client question.
+    """
+    if row.category != _classification.KNOWN:
+        return False
+    section = cat.section(row.section)
+    f = section.field(row.field) if section is not None else None
+    return bool(f is not None and f.asked_of_client and _present(row.value))
+
+
+def _present(value: Any) -> bool:
+    if value is None or value == "":
+        return False
+    if isinstance(value, (list, tuple, dict)):
+        return len(value) > 0
+    return True
+
+
 def _field(section: Section, row: _classification.Classification,
            cat: Catalogue) -> FormField:
     f = cat.field(section.key, row.field)
@@ -342,7 +407,8 @@ def _field(section: Section, row: _classification.Classification,
         type=f.type, options=list(f.options or []), required=row.required,
         sensitive=f.sensitive, evidence_required=f.evidence_required,
         max_length=f.max_length, validation=f.validation,
-        value=row.value, index=row.index, item=row.item)
+        value=row.value, answered=_is_answered_client(row, cat),
+        index=row.index, item=row.item)
 
 
 def answer_key(section: str, field_key: str,

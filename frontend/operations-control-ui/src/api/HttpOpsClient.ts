@@ -723,6 +723,16 @@ export class HttpOpsClient implements OpsClient {
     );
   }
 
+  async recordAgentConcentration(
+    caseRef: string,
+    input: { status: string; response_text?: string; reason?: string },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/concentration`,
+      { response_text: "", reason: "", ...input },
+    );
+  }
+
   async generateAgentAnswers(caseRef: string): Promise<AgentStatus> {
     return this.post<AgentStatus>(
       `/ops/agent/cases/${encodeURIComponent(caseRef)}/responses/generate`,

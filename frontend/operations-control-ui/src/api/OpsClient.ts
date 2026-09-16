@@ -231,6 +231,13 @@ export interface OpsClient {
   uploadAgentArtefacts(caseRef: string, files: File[]): Promise<AgentStatus>;
   /** Take one file back out of the pack. Removes the RECORD, not the bytes. */
   removeAgentArtefact(caseRef: string, artefactId: string): Promise<AgentStatus>;
+  /** The whole concentration-test decision in one act: the status, the
+   *  client's response and the reason. A blank answer cannot be recorded as
+   *  supplied — the server refuses it. */
+  recordAgentConcentration(
+    caseRef: string,
+    input: { status: string; response_text?: string; reason?: string },
+  ): Promise<AgentStatus>;
   /** Generate a client response from the delivery outcome the case implies. */
   generateAgentResponse(caseRef: string): Promise<AgentStatus>;
   /** Answers the outstanding CLIENT QUESTIONS. Distinct from
