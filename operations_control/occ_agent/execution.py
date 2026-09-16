@@ -75,6 +75,7 @@ from .run import (
     STAGE_HUMAN_INPUT_REQUIRED,
     STAGE_SIMULATED,
 )
+from . import cross_file as _cross_file
 from . import workbook as _workbook
 from .policy import CAP_LIVE_PIPELINE_TRIGGER, SyntheticPolicy
 
@@ -149,6 +150,9 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         self.tenant = tenant
         self.records: List[StageRecord] = []
         self.mapping_report: List[Dict[str, Any]] = []
+        #: Fields more than one file in the pack carries, and whether those
+        #: files agree. Reported, never blocking — see :mod:`.cross_file`.
+        self.cross_file: List[Dict[str, Any]] = []
         self.validation_report: List[Dict[str, Any]] = []
         self._assert_inside_sandbox()
 
@@ -235,12 +239,16 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         frame = _read_table(primary)
         decisions: List[Dict[str, Any]] = []
         resolved: Dict[str, str] = {}
+        #: Every file's frame, kept so the pack can be compared against itself
+        #: at step 3b rather than re-read.
+        frames: Dict[str, Any] = {}
         for path in self.artefact_paths:
             is_primary = path == primary
             table = _workbook.read_table(path)
             if table.frame is None:
                 continue          # already reported as unreadable at step 1
             file_frame = frame if is_primary else table.frame
+            frames[path.name] = file_frame
             for column in [str(c) for c in file_frame.columns]:
                 # An operator's confirmation is keyed on the column name, and
                 # only the primary tape's columns reach the canonical tape, so
@@ -286,6 +294,31 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                 resolved.pop(column, None)
             decisions.append(_ambiguity_decision(canonical, columns, frame,
                                                  primary.name))
+
+        # 3b. WHERE THE PACK DISAGREES WITH ITSELF.
+        #
+        #     The same fact usually arrives in more than one file under
+        #     different names, and when the files agree that is free
+        #     reconciliation. When they disagree the central tape builder
+        #     raises a blocking conflict — after activation, which is the one
+        #     place a rehearsal exists to have looked first. Reported here,
+        #     never blocking: the remedy is a source-precedence rule, which is
+        #     not an artefact this surface can write, so presenting it as an
+        #     answerable question would be asking for something an operator
+        #     cannot give from this screen.
+        comparisons = _cross_file.compare(self.mapping_report, frames)
+        self.cross_file = [c.to_dict() for c in comparisons]
+        conflicts = _cross_file.findings(comparisons)
+        if conflicts:
+            self._record(StageRecord(
+                stage="onboard", outcome=STAGE_HUMAN_INPUT_REQUIRED,
+                component="operations_control.occ_agent.cross_file",
+                summary=(f"{len(conflicts)} field"
+                         f"{'s' if len(conflicts) != 1 else ''} disagree "
+                         "between the files in this delivery. Name which "
+                         "file to believe before it is built."),
+                metrics={"fields_in_several_files": len(comparisons),
+                         "fields_disagreeing": len(conflicts)}))
 
         if decisions:
             _write_decisions(work_dir, decisions)

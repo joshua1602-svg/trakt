@@ -397,6 +397,19 @@ export const copy = {
     sourceTerm: "What the file says",
     approvedMeaning: "What it means",
     approvedBy: "Approved by",
+    retire: "Withdraw this rule",
+    retireHeading: "Withdraw this rule",
+    retireHelp:
+      "It stops being applied to deliveries from now on. Nothing already " +
+      "prepared under it changes, and the record of what it did while it " +
+      "was in force is kept.",
+    retireReason: "Why it is being withdrawn",
+    retireReasonHelp:
+      "Read months from now by whoever asks why Trakt stopped treating this " +
+      "column the way it used to.",
+    retireConfirm: "Withdraw it",
+    retireCancel: "Keep it",
+    retired: "Withdrawn. It will not be applied to the next delivery.",
     historyHeading: "Earlier versions",
     empty: "No rules match.",
   },

@@ -580,7 +580,7 @@ export class MockOpsClient implements OpsClient {
       scope: "portfolio",
       client_id: "Alpine Capital",
       portfolio_id: "European Growth",
-      status: "approved",
+      status: "active",
       source_term: "Bk Cost",
       approved_meaning: "Purchase cost",
       description:
@@ -595,7 +595,7 @@ export class MockOpsClient implements OpsClient {
       scope: "client",
       client_id: "Birchwood Partners",
       portfolio_id: "",
-      status: "approved",
+      status: "active",
       source_term: "Cpn",
       approved_meaning: "Interest rate paid by a bond",
       description: "Birchwood files use “Cpn” for the interest a bond pays.",
@@ -609,7 +609,7 @@ export class MockOpsClient implements OpsClient {
       scope: "global",
       client_id: "",
       portfolio_id: "",
-      status: "approved",
+      status: "active",
       source_term: "31.12.2025",
       approved_meaning: "Dates written with the day first",
       description:
@@ -624,7 +624,7 @@ export class MockOpsClient implements OpsClient {
       scope: "client",
       client_id: "Cedar Rock Advisors",
       portfolio_id: "",
-      status: "approved",
+      status: "active",
       source_term: "NAV/Sh",
       approved_meaning: "Value of one share of the fund",
       description: "Cedar Rock statements shorten this in their monthly files.",
@@ -1469,7 +1469,7 @@ export class MockOpsClient implements OpsClient {
         scope: input.scope,
         client_id: review.client_id,
         portfolio_id: "",
-        status: "approved",
+        status: "active",
         source_term: review.title,
         approved_meaning: chosen?.label ?? input.value,
         description: input.reason || "Approved from a review decision.",
@@ -1627,6 +1627,27 @@ export class MockOpsClient implements OpsClient {
       reviewed_at: new Date().toISOString(),
       note: note ?? null,
     };
+  }
+
+  async retireRule(ruleId: string, reason: string,
+                   _clientId?: string): Promise<Rule> {
+    await this.wait();
+    if (!reason.trim()) {
+      throw new OpsError("Please say why this rule is being withdrawn.",
+                         "OPS_REASON_REQUIRED");
+    }
+    const rule = this.rules.find((r) => r.rule_id === ruleId);
+    if (!rule) {
+      throw new OpsError("That rule could not be found.");
+    }
+    if (rule.status !== "active") {
+      throw new OpsError(
+        "That rule is not in force, so there is nothing to withdraw.",
+        "OPS_RULE_NOT_ACTIVE");
+    }
+    // Not a delete: the row stays, marked withdrawn, and its history with it.
+    rule.status = "retired";
+    return deepCopy(rule);
   }
 
   async getRuleHistory(ruleId: string): Promise<Rule[]> {

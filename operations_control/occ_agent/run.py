@@ -206,6 +206,10 @@ class SyntheticRun:
     # What the run did.
     stage_outcomes: Dict[str, str] = field(default_factory=dict)
     mapping_report: List[Dict[str, Any]] = field(default_factory=list)
+    #: Fields more than one file in the delivery carries, and whether those
+    #: files agree about them. A disagreement stops the delivery when it is
+    #: built, so it is surfaced here — in rehearsal — rather than after.
+    cross_file: List[Dict[str, Any]] = field(default_factory=list)
     open_decisions: List[Dict[str, Any]] = field(default_factory=list)
     control_results: List[Dict[str, Any]] = field(default_factory=list)
     planned_pipeline_actions: List[Dict[str, Any]] = field(default_factory=list)

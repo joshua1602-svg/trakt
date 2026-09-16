@@ -1556,6 +1556,7 @@ class OccAgentService:
             self._record_control(run, "validation",
                                  {"findings": adapters.validation_report})
         run.mapping_report = adapters.mapping_report
+        run.cross_file = adapters.cross_file
 
         # Resolved decisions are kept (they are the record of what the human
         # settled); a decision the rerun raises again replaces its open twin

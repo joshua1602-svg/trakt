@@ -119,6 +119,9 @@ export interface OpsClient {
     note?: string,
     client?: string,
   ): Promise<void>;
+  /** Withdraw a standing rule, with a reason. Not a delete: the rule keeps
+   *  its versions and its history and is marked withdrawn. */
+  retireRule(ruleId: string, reason: string, clientId?: string): Promise<Rule>;
   getRuleHistory(ruleId: string): Promise<Rule[]>;
   getHistory(client?: string): Promise<Publication[]>;
 
