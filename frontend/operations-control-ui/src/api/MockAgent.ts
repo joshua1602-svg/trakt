@@ -558,8 +558,30 @@ export class MockAgent {
     return state ? rows.filter((r) => r.state === state) : rows;
   }
 
-  create(instruction: string, fixtureId = ""): AgentStatus {
+  /**
+   * Open a case. `amendClient` opens an AMENDMENT to that client's active
+   * configuration instead of a new onboarding: the answers start from the
+   * version in force, so adding a reporting product later is a difference to
+   * review rather than a fresh set of answers that happen to mostly match.
+   */
+  create(instruction: string, fixtureId = "", amendClient = ""): AgentStatus {
     const scenario = fixtureId || this.scenarioFor(instruction);
+    if (amendClient) {
+      // An amendment already carries the client's answers. Re-reading a
+      // (usually empty) instruction over them would overwrite what is in
+      // force with whatever a sentence happened to mention.
+      const amended = this.onboarding.startAmendment(amendClient, ACTOR);
+      const amendedRun: StoredRun = {
+        doc: this.blankRun(amended.case_id, instruction, scenario, ""),
+        reached: new Set([S.AWAITING_ONBOARDING]),
+        scenario,
+        audit: [],
+      };
+      this.runs.set(amended.case_id, amendedRun);
+      this.record(amendedRun, "practice_case_opened",
+                  `an operator opened an amendment to ${amendClient}`);
+      return this.status(amended.case_id);
+    }
     const opened = this.onboarding.startNewClient(ACTOR);
     const facts = interpret(instruction);
     this.onboarding.saveStep(opened.case_id, "client", {

@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional, Protocol
 
 from ..engine import OpsError
 from ..onboarding.case import APPROVED, OnboardingCase
+from . import mapping_promotion as _mapping_promotion
 from .derive import ExecutionFacts
 from .policy import CAP_ACTIVATE_CONFIGURATION, SyntheticPolicy
 
@@ -179,6 +180,11 @@ class ActivationResult:
     batch_id: str = ""
     workflow_id: str = ""
     files_placed: List[str] = field(default_factory=list)
+    #: Mapping rules carried over from the rehearsal's settled decisions, as
+    #: ``{rule_id, version, source_column, canonical_field}``. Reported because
+    #: adding to a client's standing rules is a governed change, and an
+    #: operator who confirmed an activation is entitled to see what it added.
+    rules_promoted: List[Dict[str, str]] = field(default_factory=list)
     message: str = ""
     error: str = ""
 
@@ -234,7 +240,8 @@ class ExecutionAdapter(Protocol):
 
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
-                 payloads: Optional[Dict[str, bytes]] = None
+                 payloads: Optional[Dict[str, bytes]] = None,
+                 decisions: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult: ...
 
 
@@ -251,10 +258,18 @@ class SyntheticExecutionAdapter:
 
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
-                 payloads: Optional[Dict[str, bytes]] = None
+                 payloads: Optional[Dict[str, bytes]] = None,
+                 decisions: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult:
-        """Always refused, and audited. The refusal is the feature."""
-        del payloads                        # nothing is ever placed anywhere
+        """Always refused, and audited. The refusal is the feature.
+
+        Note what is discarded: the settled mapping decisions reach this
+        adapter and go no further. A rehearsal that is never activated leaves
+        NOTHING in the governed rules — which is the property the synthetic
+        boundary exists to hold, and it holds here rather than depending on a
+        caller remembering not to pass them.
+        """
+        del payloads, decisions             # nothing is ever placed anywhere
         self.policy.require(CAP_ACTIVATE_CONFIGURATION,
                             detail=f"client {intent.client_id}",
                             case_id=pre.case_ref, tenant=pre.tenant,
@@ -284,14 +299,24 @@ class LiveExecutionAdapter:
 
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
-                 payloads: Optional[Dict[str, bytes]] = None
+                 payloads: Optional[Dict[str, bytes]] = None,
+                 decisions: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult:
         """Activate, then hand the files to the existing Onboarding Agent.
 
         The order is the platform's, not this module's: configuration first,
-        because the intake resolves against it; then the governed input pack;
-        then the files; then the start. A failure at any step returns what had
-        already happened, so an operator is never left guessing.
+        because the intake resolves against it; then the rehearsal's settled
+        mappings, because the ingest reads the client's standing rules; then
+        the governed input pack; then the files; then the start. A failure at
+        any step returns what had already happened, so an operator is never
+        left guessing.
+
+        ``decisions`` are the run's decisions. The settled mapping ones become
+        governed rules here — see :mod:`.mapping_promotion` — so that a human's
+        reading of this lender's column names survives the rehearsal that
+        produced it. They are promoted AFTER the configuration and BEFORE the
+        batch, because a rule the ingest cannot yet see is a rule that did not
+        arrive in time.
         """
         assert_may_activate(pre)
         payloads = payloads or {}
@@ -307,6 +332,16 @@ class LiveExecutionAdapter:
                                                   by=actor)
             result.version = activation.get("version")
             result.artefacts_written = list(activation.get("artefacts") or [])
+
+            # What the rehearsal settled about this lender's columns, made
+            # governed. Without this the ingest below re-derives every mapping
+            # and re-asks every question a human already answered.
+            rules = getattr(self.engine, "rules", None)
+            if rules is not None and decisions:
+                result.rules_promoted = _mapping_promotion.promote(
+                    rules, decisions, client_id=intent.client_id,
+                    portfolio_id=intent.portfolio_id,
+                    workflow_id=pre.case_ref)
 
             # The engine's own signature, in full. Every argument comes from
             # the intent the human confirmed — nothing is defaulted here, and

@@ -643,11 +643,13 @@ export class HttpOpsClient implements OpsClient {
     instruction: string,
     fixtureId?: string,
     live?: boolean,
+    amendClient?: string,
   ): Promise<AgentStatus> {
     return this.post<AgentStatus>("/ops/agent/cases", {
       instruction,
       fixture_id: fixtureId ?? "",
       live: live === true,
+      amend_client: amendClient ?? "",
     });
   }
 
