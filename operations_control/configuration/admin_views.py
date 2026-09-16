@@ -211,10 +211,41 @@ def describe_layer(pkgs: ConfigPackageStore, layer: str, *,
         "package_hash": package_hash(active),
         "file_count": len(active.get("files") or {}),
         "files": describe_files(active),
+        # Whether the files this deployment carries still match the version in
+        # force. A layer is seeded from the repository once and never again, so
+        # a later deployment's edits are simply not in force — and until this
+        # was reported, nothing said so anywhere.
+        "drift": describe_drift(pkgs, layer, by=by),
         "draft": describe_draft(pkgs, layer, versions),
         "versions": versions,
         "dependencies": LAYER_DEPENDENCIES.get(layer, []),
     }
+
+
+def describe_drift(pkgs: ConfigPackageStore, layer: str, *,
+                   by: str = "system") -> Dict[str, Any]:
+    """Whether this deployment's files match the version in force, in words.
+
+    The sentence matters as much as the flag. "Two files differ" invites the
+    reading that a screen is out of date; what is actually true is that the
+    deployment carries something the platform is NOT using, and a delivery
+    prepared today is prepared against the version in force.
+    """
+    drift = pkgs.drift(layer, by=by)
+    names = ([friendly_file_name(c["path"]) for c in drift["changed"]]
+             + [friendly_file_name(p) for p in drift["added"]]
+             + [friendly_file_name(p) for p in drift["removed"]])
+    if not drift["differs"]:
+        sentence = ("Everything this deployment carries is the version in "
+                    "force.")
+    else:
+        sentence = (
+            f"{_sentence_list(names)} "
+            f"{'differ' if len(names) != 1 else 'differs'} from the version in "
+            f"force. Trakt is using version {drift['active_version']}; what is "
+            "deployed is not in force until a new version is created from it, "
+            "checked and activated.")
+    return {**drift, "changed_labels": names, "sentence": sentence}
 
 
 def describe_files(doc: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:

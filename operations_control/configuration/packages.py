@@ -59,6 +59,18 @@ LAYER_FILES: Dict[str, List[str]] = {
         "config/asset/product_profiles.yaml",
         "config/asset/product_defaults_ERM.yaml",
         "config/asset/issue_policy.yaml",
+        # Which geography a book reports on — the obligor's or the collateral's
+        # — governed per asset class. A property of the ASSET, established once
+        # at onboarding, and exactly the kind of decision this layer exists to
+        # version: "balance by region" has no answer until somebody has settled
+        # it, and settling it differently changes every regional number.
+        #
+        # It was absent, so it could not be seen on the configuration screens,
+        # compared between versions, validated or rolled back, and a change to
+        # it left no trace in the config audit. `product_defaults_ERM.yaml` has
+        # always been here and carries equity release's own basis, which is why
+        # the gap showed up as "nothing has changed" rather than as a failure.
+        "config/asset/mi_geography.yaml",
     ],
     # None of these exist in the repository, and that is the point: version 1
     # seeds EMPTY, which is the current single-client shape where no external
@@ -180,6 +192,80 @@ class ConfigPackageStore:
     def file_hashes(self, layer: str) -> Dict[str, str]:
         pkg = self.ensure_seeded(layer)
         return {rel: f["sha256"] for rel, f in (pkg.get("files") or {}).items()}
+
+    # -- drift: what the deployment holds vs what is in force ---------------- #
+    def drift(self, layer: str, *, by: str = "system") -> Dict[str, Any]:
+        """How the DEPLOYED repository files differ from the active version.
+
+        WHY THIS HAS TO BE SAID OUT LOUD
+
+        ``ensure_seeded`` takes a snapshot of the repository files the first
+        time a layer is asked for, activates it, and returns early ever after.
+        That is the right governance: a configuration change becomes a new
+        version through draft, validate and activate, not by someone landing a
+        file. But it means an edited file in a later deployment is simply not in
+        force, and nothing anywhere said so — the screens showed the active
+        version, the active version showed its own snapshot, and every layer of
+        that was truthful while the whole was misleading.
+
+        The cost is not theoretical: the resolver reads pack content from the
+        package (``resolver._pkg_yaml``), so a stale package is what a delivery
+        is prepared against, while a reader that loads a repo file directly —
+        ``mi_agent.mi_geography`` does — sees the deployed one. Two readers, two
+        versions of the same governed decision, and no way to notice.
+
+        This only REPORTS. Nothing here adopts a deployed file; that is
+        :meth:`create_draft_from_deployment`, which an operator asks for and
+        which still goes through validate and activate.
+        """
+        active = self.ensure_seeded(layer, by=by)
+        stored = {rel: f.get("sha256", "")
+                  for rel, f in (active.get("files") or {}).items()}
+        changed: List[Dict[str, str]] = []
+        added: List[str] = []
+        removed: List[str] = []
+        for rel in LAYER_FILES.get(layer, []):
+            path = self.repo / rel
+            deployed = _sha(path.read_text(encoding="utf-8")) \
+                if path.exists() else ""
+            in_force = stored.get(rel, "")
+            if not deployed and in_force:
+                removed.append(rel)
+            elif deployed and not in_force:
+                added.append(rel)
+            elif deployed != in_force:
+                changed.append({"path": rel, "in_force": in_force,
+                                "deployed": deployed})
+        # A file in the package that the layer no longer governs is drift too:
+        # it is still being resolved from, and nothing would show it.
+        for rel in stored:
+            if rel not in LAYER_FILES.get(layer, []) and rel not in removed:
+                removed.append(rel)
+        return {"layer": layer, "active_version": active["version"],
+                "changed": changed, "added": sorted(added),
+                "removed": sorted(removed),
+                "differs": bool(changed or added or removed)}
+
+    def create_draft_from_deployment(self, layer: str, *, by: str,
+                                     notes: str = "") -> Dict[str, Any]:
+        """A draft holding the DEPLOYED repository files, for review.
+
+        The deliberate counterpart to re-seeding. Re-seeding automatically
+        would mean whatever was last deployed silently became the configuration
+        in force, which is the one thing the version model exists to prevent.
+        This produces a DRAFT: it still has to be validated and activated, and
+        the diff against the active version is there to be read first.
+        """
+        edits: Dict[str, str] = {}
+        for rel in LAYER_FILES.get(layer, []):
+            path = self.repo / rel
+            if path.exists():
+                edits[rel] = path.read_text(encoding="utf-8")
+        if not edits:
+            raise ValueError(f"no deployed files found for layer {layer!r}")
+        return self.create_draft(
+            layer, by=by, edits=edits,
+            notes=notes or "the configuration files as deployed")
 
     # -- admin lifecycle: draft -> validate -> activate -> rollback ---------- #
     def create_draft(self, layer: str, *, by: str,

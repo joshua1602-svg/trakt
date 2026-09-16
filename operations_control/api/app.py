@@ -956,6 +956,38 @@ def admin_config_draft(layer: str, body: DraftBody,
     return {"ok": True, "version": doc["version"], "status": doc["status"]}
 
 
+@app.post("/ops/admin/config/{layer}/draft-from-deployment")
+def admin_config_draft_from_deployment(
+        layer: str, body: DraftBody,
+        principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    """Draft a new version holding the files this deployment carries.
+
+    A layer is seeded from the repository ONCE and never again, so an edited
+    file in a later deployment is not in force. That is deliberate — a
+    configuration change is a version, drafted, checked and activated, not a
+    file landing. What was missing was any way to act on the difference
+    without hand-copying file contents through the generic draft route.
+
+    This is a DRAFT, not an activation. Re-seeding automatically would mean
+    whatever was last deployed silently became the configuration in force,
+    which is the one thing the version model exists to prevent.
+    """
+    require_admin(principal)
+    eng = get_engine()
+    pkgs = _packages(eng)
+    before = pkgs.drift(layer, by=principal.name)
+    doc = pkgs.create_draft_from_deployment(layer, by=principal.name,
+                                            notes=body.notes)
+    _admin_audit(eng, "config_draft_from_deployment", principal.name,
+                 {"layer": layer, "version": doc["version"],
+                  "based_on": doc.get("based_on_version"),
+                  "changed_files": [c["path"] for c in before["changed"]],
+                  "added_files": before["added"],
+                  "removed_files": before["removed"]})
+    return {"ok": True, "version": doc["version"], "status": doc["status"],
+            "drift": before}
+
+
 @app.post("/ops/admin/config/{layer}/{version}/validate")
 def admin_config_validate(layer: str, version: int,
                           principal: Principal = Depends(authenticate)
