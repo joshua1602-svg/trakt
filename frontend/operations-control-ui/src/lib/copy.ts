@@ -556,6 +556,10 @@ export const copy = {
     mappingNothing: "—",
     mappingAnswer: "Answer this",
     mappingFilterAll: "All",
+    mappingPrimaryFile: "Trakt builds the loan-level data from this file",
+    mappingSecondaryFile:
+      "Read and recorded, but the loan-level data is not built from this one, " +
+      "so nothing here was raised as a question.",
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
     artefactNotWritten: "Not written",

@@ -41,16 +41,22 @@ from .execution import LOW_CONFIDENCE, _TRUSTED_TIERS
 #: that matched its own name exactly.
 ROW_NEEDS_YOU = "needs_you"
 ROW_UNREADABLE = "unreadable"
+ROW_UNCHECKED = "unchecked"
 ROW_UNUSED = "unused"
 ROW_CONFIRMED = "confirmed"
 ROW_AUTOMATIC = "automatic"
 
-STATE_ORDER = (ROW_NEEDS_YOU, ROW_UNREADABLE, ROW_UNUSED, ROW_CONFIRMED,
-               ROW_AUTOMATIC)
+STATE_ORDER = (ROW_NEEDS_YOU, ROW_UNREADABLE, ROW_UNCHECKED, ROW_UNUSED,
+               ROW_CONFIRMED, ROW_AUTOMATIC)
 
 STATE_LABELS = {
     ROW_NEEDS_YOU: "Needs you",
     ROW_UNREADABLE: "Could not be read",
+    #: A weak match in a file the canonical tape is NOT built from. Worth an
+    #: operator's eye — the real orchestrator consolidates loan-domain fields
+    #: from these files — but no decision was raised against it, so calling it
+    #: "Needs you" would point at a question that does not exist.
+    ROW_UNCHECKED: "Weak match, nothing asked",
     ROW_UNUSED: "Not used",
     ROW_CONFIRMED: "You confirmed it",
     ROW_AUTOMATIC: "Matched automatically",
@@ -66,7 +72,7 @@ TIER_LABELS = {
     "token_set": "The words overlap, but the names are not the same",
     "fuzz_token_set": "The words are similar, not the same",
     "fuzz_ratio_norm": "The names are spelled similarly",
-    "unmapped": "Nothing in the field registry resembles this column",
+    "unmapped": "Nothing Trakt reports on resembles this column",
     "empty": "The column has no name",
     "operator_approved": "You said so",
     "unreadable": "The file could not be read",
@@ -82,6 +88,12 @@ def classify(row: Dict[str, Any], *, has_open_decision: bool = False) -> str:
     at — often an exact or alias match, because that is how both came to claim
     the same field. Reading the tier alone, the table would say "matched
     automatically" about a column the run is blocked on.
+
+    A weak match outside the primary tape is ``ROW_UNCHECKED`` rather than
+    ``ROW_NEEDS_YOU``: the canonical tape is not built from that file, so no
+    decision was raised and there is nothing for an operator to answer. It is
+    still reported, because the real orchestrator consolidates loan-domain
+    fields from those files whatever this adapter does with them.
     """
     if has_open_decision:
         return ROW_NEEDS_YOU
@@ -95,7 +107,11 @@ def classify(row: Dict[str, Any], *, has_open_decision: bool = False) -> str:
     confidence = row.get("confidence")
     trusted = (tier in _TRUSTED_TIERS
                or (confidence is not None and float(confidence) >= LOW_CONFIDENCE))
-    return ROW_AUTOMATIC if trusted else ROW_NEEDS_YOU
+    if trusted:
+        return ROW_AUTOMATIC
+    # Absent on rows written before the report covered every file, and those
+    # were all primary-tape rows.
+    return ROW_NEEDS_YOU if row.get("primary", True) else ROW_UNCHECKED
 
 
 def _label(canonical_field: str) -> str:
@@ -156,9 +172,16 @@ def overview(run: Any) -> Dict[str, Any]:
             "state": state,
             "state_label": STATE_LABELS[state],
             "decision_id": decision_id,
+            # Whether this column's file is the one the canonical tape is built
+            # from. The table groups by file and says which is which, so an
+            # operator is not left to infer it from the filename.
+            "primary": bool(raw.get("primary", True)),
         })
 
-    rows.sort(key=lambda r: (r["source_file"],
+    # The primary tape first — it is the one the canonical tape is built from,
+    # so it is what an operator checks first — then the rest alphabetically,
+    # and within each file the rows that want attention at the top.
+    rows.sort(key=lambda r: (not r["primary"], r["source_file"],
                              STATE_ORDER.index(r["state"]),
                              r["source_column"].lower()))
     counts = {state: sum(1 for r in rows if r["state"] == state)
@@ -167,8 +190,16 @@ def overview(run: Any) -> Dict[str, Any]:
     # an operator does not count. Counting it would make a blocked run read as
     # more complete than a finished one.
     in_use = counts[ROW_CONFIRMED] + counts[ROW_AUTOMATIC]
+    files: List[Dict[str, Any]] = []
+    for row in rows:
+        name = row["source_file"]
+        if not name or any(f["name"] == name for f in files):
+            continue
+        files.append({"name": name, "primary": row["primary"],
+                      "columns": sum(1 for r in rows
+                                     if r["source_file"] == name)})
     return {
         "rows": rows,
         "counts": {**counts, "columns": len(rows), "mapped": in_use},
-        "files": sorted({r["source_file"] for r in rows if r["source_file"]}),
+        "files": files,
     }

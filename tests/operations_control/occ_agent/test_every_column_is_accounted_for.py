@@ -50,10 +50,10 @@ class Run:
 
 
 def row(column, canonical="", tier="exact", confidence=1.0, note="",
-        source_file="LoanExtract.xlsx"):
+        source_file="LoanExtract.xlsx", primary=True):
     return {"source_file": source_file, "source_column": column,
             "canonical_field": canonical, "tier": tier,
-            "confidence": confidence, "note": note}
+            "confidence": confidence, "note": note, "primary": primary}
 
 
 class TestWhatBecameOfAColumn:
@@ -179,9 +179,65 @@ class TestTheTableAReaderGets:
         overview = mapping_view.overview(Run([
             row("a", "loan_id", "exact", 1.0, source_file="Loan.xlsx"),
             row("b", "property_value", "exact", 1.0,
-                source_file="Property.xlsx"),
+                source_file="Property.xlsx", primary=False),
         ]))
-        assert overview["files"] == ["Loan.xlsx", "Property.xlsx"]
+        assert overview["files"] == [
+            {"name": "Loan.xlsx", "primary": True, "columns": 1},
+            {"name": "Property.xlsx", "primary": False, "columns": 1}]
+
+
+class TestEveryFileInThePackIsReported:
+    """A pack of three files used to produce one file's worth of rows.
+
+    The canonical tape is built from the loan tape alone, so the mapping
+    report only ever covered that file — and the property and cash-flow tapes
+    appeared nowhere. That is a reporting gap, not a modelling one: the real
+    orchestrator's ``_load_structured_dataframes`` loads every structured file
+    in the inventory, and the central tape builder consolidates a loan-domain
+    field "even when its authoritative source is the cashflow extract, because
+    domain membership follows the canonical field, not the file".
+    """
+
+    PACK = [
+        row("loan_id", "loan_id", "exact", 1.0, source_file="Loan.xlsx"),
+        row("Val", "valuation", "fuzz_token_set", 0.62,
+            source_file="Loan.xlsx"),
+        row("property_value", "property_value", "exact", 1.0,
+            source_file="Property.xlsx", primary=False),
+        row("Prop Ref", "property_reference", "fuzz_ratio_norm", 0.58,
+            source_file="Property.xlsx", primary=False),
+        row("principal", "principal_amount", "exact", 1.0,
+            source_file="PandI.xlsx", primary=False),
+    ]
+
+    def test_all_three_files_have_rows(self):
+        overview = mapping_view.overview(Run(self.PACK))
+        assert [f["name"] for f in overview["files"]] == [
+            "Loan.xlsx", "PandI.xlsx", "Property.xlsx"]
+        assert overview["counts"]["columns"] == 5
+
+    def test_the_tape_the_canonical_file_is_built_from_comes_first(self):
+        overview = mapping_view.overview(Run(self.PACK))
+        assert overview["files"][0] == {"name": "Loan.xlsx", "primary": True,
+                                        "columns": 2}
+
+    def test_a_weak_match_outside_the_primary_tape_asks_nothing(self):
+        """Calling it "Needs you" would point at a question that does not
+        exist: no decision is raised for a file the tape is not built from."""
+        overview = mapping_view.overview(Run(self.PACK))
+        weak = next(r for r in overview["rows"] if r["source_column"] == "Prop Ref")
+        assert weak["state"] == mapping_view.ROW_UNCHECKED
+        assert weak["decision_id"] == ""
+
+    def test_a_weak_match_in_the_primary_tape_still_needs_you(self):
+        overview = mapping_view.overview(Run(self.PACK))
+        weak = next(r for r in overview["rows"] if r["source_column"] == "Val")
+        assert weak["state"] == mapping_view.ROW_NEEDS_YOU
+
+    def test_the_two_are_counted_apart(self):
+        counts = mapping_view.overview(Run(self.PACK))["counts"]
+        assert counts["needs_you"] == 1
+        assert counts["unchecked"] == 1
 
     def test_no_mapping_yet_is_an_empty_table_not_a_crash(self):
         overview = mapping_view.overview(Run([]))
@@ -194,6 +250,74 @@ class TestTheTableAReaderGets:
              "canonical_field": "loan_id", "tier": "exact",
              "confidence": "high"}]))
         assert overview["rows"][0]["confidence"] is None
+
+
+def _spec():
+    from engine.orchestrator_agent.adapters import PortfolioSpec
+    return PortfolioSpec(source_portfolio_id="direct_101", input="")
+
+
+class TestTheAdapterReadsEveryFile:
+    """Where the rows come from, exercised against the real header mapper."""
+
+    def _adapters(self, service, tmp_path, files):
+        from operations_control.occ_agent.execution import (
+            SyntheticOnboardingAdapters,
+        )
+        agent_case = service.create_case(tenant=TENANT_A,
+                                         initiating_user=ACTOR,
+                                         instruction=OPENING)
+        sandbox = service.store.case_dir(TENANT_A, agent_case.case_ref)
+        paths = []
+        for name, text in files:
+            path = sandbox / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+            paths.append(path)
+        return SyntheticOnboardingAdapters(
+            artefact_paths=paths, policy=service.policy, sandbox=sandbox,
+            case_id=agent_case.case_ref, tenant=TENANT_A), sandbox
+
+    PACK = [
+        ("loan_extract.csv", "loan_id,current_principal_balance\nL1,100\n"),
+        ("property_extract.csv", "loan_id,property_value\nL1,250000\n"),
+        ("principal_and_interest.csv",
+         "loan_id,principal_amount,interest_amount\nL1,80,20\n"),
+    ]
+
+    def test_every_file_in_the_pack_contributes_rows(self, service, tmp_path):
+        """The defect: three files produced one file's worth of rows."""
+        adapters, sandbox = self._adapters(service, tmp_path, self.PACK)
+        adapters.onboard(_spec(), sandbox / "work")
+        files = {r["source_file"] for r in adapters.mapping_report}
+        assert files == {"loan_extract.csv", "property_extract.csv",
+                         "principal_and_interest.csv"}
+
+    def test_the_secondary_columns_are_reported(self, service, tmp_path):
+        adapters, sandbox = self._adapters(service, tmp_path, self.PACK)
+        adapters.onboard(_spec(), sandbox / "work")
+        columns = {(r["source_file"], r["source_column"])
+                   for r in adapters.mapping_report}
+        assert ("property_extract.csv", "property_value") in columns
+        assert ("principal_and_interest.csv", "interest_amount") in columns
+
+    def test_only_the_primary_tape_is_marked_primary(self, service, tmp_path):
+        adapters, sandbox = self._adapters(service, tmp_path, self.PACK)
+        adapters.onboard(_spec(), sandbox / "work")
+        primary = {r["source_file"] for r in adapters.mapping_report
+                   if r["primary"]}
+        assert primary == {"loan_extract.csv"}
+
+    def test_a_secondary_file_never_blocks_the_run(self, service, tmp_path):
+        """A weak match in a file the canonical tape is not built from has no
+        answer an operator could give, so it must not become a decision."""
+        adapters, sandbox = self._adapters(service, tmp_path, [
+            self.PACK[0],
+            ("property_extract.csv", "loan_id,Prp Vl Amt Gbp\nL1,250000\n"),
+        ])
+        result = adapters.onboard(_spec(), sandbox / "work")
+        assert result.ok is True
+        assert result.blocking is False
 
 
 class TestItReachesTheScreen:
@@ -218,5 +342,5 @@ class TestItReachesTheScreen:
         ]
         mapping = service.status(agent_case)["mapping"]
         assert mapping["counts"] == {
-            "needs_you": 1, "unreadable": 0, "unused": 0, "confirmed": 0,
-            "automatic": 1, "columns": 2, "mapped": 1}
+            "needs_you": 1, "unreadable": 0, "unchecked": 0, "unused": 0,
+            "confirmed": 0, "automatic": 1, "columns": 2, "mapped": 1}

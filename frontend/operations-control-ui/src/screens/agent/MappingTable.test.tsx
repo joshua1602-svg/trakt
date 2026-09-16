@@ -102,10 +102,10 @@ describe("OCC Agent — every column is accounted for", () => {
   });
 
   it("counts what is feeding a field, not what was proposed", async () => {
-    /* Four of six: two auto, one operator-confirmed... and `Val Dt` is a
-       proposal waiting on somebody, so it does not count. */
+    /* Five of eight. `Val Dt` is a proposal waiting on somebody and `Prp Ref`
+       is a weak match nobody was asked about, so neither counts. */
     await afterTheRun();
-    expect(within(table()).getByText(copy.agent.mappingCount(4, 6))).toBeInTheDocument();
+    expect(within(table()).getByText(copy.agent.mappingCount(5, 8))).toBeInTheDocument();
   });
 
   it("distinguishes what an operator confirmed from what Trakt decided", async () => {
@@ -134,7 +134,7 @@ describe("OCC Agent — every column is accounted for", () => {
     await waitFor(() => expect(within(table()).queryByText("loan_id")).not.toBeInTheDocument());
     expect(within(table()).getByText("Val Dt")).toBeInTheDocument();
 
-    await user.click(within(table()).getByRole("button", { name: /All 6/ }));
+    await user.click(within(table()).getByRole("button", { name: /All 8/ }));
     await waitFor(() => expect(within(table()).getByText("loan_id")).toBeInTheDocument());
   });
 
@@ -142,6 +142,29 @@ describe("OCC Agent — every column is accounted for", () => {
     /* A chip reading "Could not be read 0" is a question nobody asked. */
     await afterTheRun();
     expect(within(table()).queryByRole("button", { name: /Could not be read/ })).toBeNull();
+  });
+
+  it("shows every file in the pack, not only the one the tape is built from", async () => {
+    /* A pack is three or four tapes. The report used to cover the primary tape
+       alone, so the property and cash-flow tapes appeared nowhere. */
+    await afterTheRun();
+    expect(within(table()).getByText("loan_tape.csv")).toBeInTheDocument();
+    expect(within(table()).getByText("property_tape.csv")).toBeInTheDocument();
+  });
+
+  it("says which file the canonical tape is built from", async () => {
+    await afterTheRun();
+    expect(within(table()).getByText(copy.agent.mappingPrimaryFile)).toBeInTheDocument();
+    expect(within(table()).getByText(copy.agent.mappingSecondaryFile)).toBeInTheDocument();
+  });
+
+  it("does not claim a question is waiting on a file the tape is not built from", async () => {
+    /* `Prp Ref` matches weakly, but no decision is raised for a secondary
+       file — so "Needs you" would point at a question that does not exist. */
+    await afterTheRun();
+    expect(within(rowFor("Prp Ref")).getByText("Weak match, nothing asked")).
+      toBeInTheDocument();
+    expect(within(rowFor("Prp Ref")).queryByRole("link")).toBeNull();
   });
 
   it("says nothing has been read yet before the run", async () => {

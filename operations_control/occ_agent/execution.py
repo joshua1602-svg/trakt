@@ -199,6 +199,10 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         alias_map = load_aliases_from_dir(self.aliases_dir)
         mapper = HeaderMapper(canonical_fields, alias_map)
 
+        # The file the canonical tape is built from. Named before profiling so
+        # every mapping-report row can say whether it came from that file.
+        primary = self._primary_tape()
+
         # 1. Real source profiling, per file.
         profiles: Dict[str, List[Dict[str, Any]]] = {}
         for path in self.artefact_paths:
@@ -211,36 +215,71 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                     "source_file": path.name, "source_column": "",
                     "canonical_field": "", "tier": "unreadable",
                     "confidence": 0.0,
-                    "note": f"could not be profiled ({type(exc).__name__})"})
+                    "note": f"could not be profiled ({type(exc).__name__})",
+                    "primary": path == primary})
 
-        # 2. Real header mapping, per column.
-        primary = self._primary_tape()
+        # 2. Real header mapping, per column, for EVERY file in the pack.
+        #
+        #    The canonical tape is still built from the primary tape alone —
+        #    that is this adapter's contract and step 4 below is unchanged. But
+        #    the mapping REPORT used to cover the primary tape only, so a pack
+        #    of three files produced one file's worth of rows and the other two
+        #    appeared nowhere. That is a reporting gap, not a modelling one: the
+        #    real onboarding orchestrator loads every structured file in the
+        #    inventory (``_load_structured_dataframes``) and the central tape
+        #    builder consolidates a loan-domain field "even when its
+        #    authoritative source is the cashflow extract, because domain
+        #    membership follows the canonical field, not the file". An operator
+        #    checking what Trakt made of a delivery has to see all of it.
         frame = _read_table(primary)
         decisions: List[Dict[str, Any]] = []
         resolved: Dict[str, str] = {}
-        for column in [str(c) for c in frame.columns]:
-            approved = self.approved_mappings.get(column)
-            if approved is not None:
-                if approved and approved != "__ignore__":
-                    resolved[column] = approved
+        for path in self.artefact_paths:
+            is_primary = path == primary
+            if is_primary:
+                file_frame = frame
+            else:
+                try:
+                    file_frame = _read_table(path)
+                except Exception:  # noqa: BLE001 — already reported at step 1
+                    continue
+            for column in [str(c) for c in file_frame.columns]:
+                # An operator's confirmation is keyed on the column name, and
+                # only the primary tape's columns reach the canonical tape, so
+                # only there does a confirmation resolve anything.
+                approved = self.approved_mappings.get(column) if is_primary \
+                    else None
+                if approved is not None:
+                    if approved and approved != "__ignore__":
+                        resolved[column] = approved
+                    self.mapping_report.append({
+                        "source_file": path.name, "source_column": column,
+                        "canonical_field": approved, "tier": "operator_approved",
+                        "confidence": 1.0, "note": "confirmed by an operator",
+                        "primary": True})
+                    continue
+                canonical, tier, confidence = mapper.map_one(column)
+                trusted = (tier in _TRUSTED_TIERS
+                           or float(confidence) >= LOW_CONFIDENCE)
                 self.mapping_report.append({
-                    "source_file": primary.name, "source_column": column,
-                    "canonical_field": approved, "tier": "operator_approved",
-                    "confidence": 1.0, "note": "confirmed by an operator"})
-                continue
-            canonical, tier, confidence = mapper.map_one(column)
-            trusted = tier in _TRUSTED_TIERS or float(confidence) >= LOW_CONFIDENCE
-            self.mapping_report.append({
-                "source_file": primary.name, "source_column": column,
-                "canonical_field": canonical or "", "tier": tier,
-                "confidence": round(float(confidence), 4),
-                "note": "" if trusted else "below the confidence threshold"})
-            if canonical and trusted:
-                resolved[column] = canonical
-            elif canonical:
-                decisions.append(_mapping_decision(
-                    column, canonical, tier, float(confidence),
-                    frame[column], primary.name))
+                    "source_file": path.name, "source_column": column,
+                    "canonical_field": canonical or "", "tier": tier,
+                    "confidence": round(float(confidence), 4),
+                    "note": ("" if trusted
+                             else "below the confidence threshold"),
+                    "primary": is_primary})
+                if not is_primary:
+                    # Recorded, never resolved and never raised as a decision:
+                    # the canonical tape is not built from this file, so there
+                    # is nothing here for an operator to settle and blocking the
+                    # run on it would be blocking on a question with no answer.
+                    continue
+                if canonical and trusted:
+                    resolved[column] = canonical
+                elif canonical:
+                    decisions.append(_mapping_decision(
+                        column, canonical, tier, float(confidence),
+                        file_frame[column], path.name))
 
         # 3. A canonical field claimed by two columns is an ambiguity a human
         #    must settle — the engine has no basis to prefer one.
