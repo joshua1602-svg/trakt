@@ -581,16 +581,24 @@ export interface MappingRow {
   tier_label: string;
   confidence: number | null;
   note: string;
-  state: "needs_you" | "unreadable" | "unused" | "confirmed" | "automatic";
+  state:
+    | "needs_you"
+    | "unreadable"
+    | "unchecked"
+    | "unused"
+    | "confirmed"
+    | "automatic";
   state_label: string;
   /** The open decision this row is waiting on, when it is waiting on one. */
   decision_id: string;
+  /** Whether this column's file is the one the canonical tape is built from. */
+  primary: boolean;
 }
 
 export interface MappingOverview {
   rows: MappingRow[];
   counts: Record<string, number>;
-  files: string[];
+  files: { name: string; primary: boolean; columns: number }[];
 }
 
 export interface AgentStatus {

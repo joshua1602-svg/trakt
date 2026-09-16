@@ -57,9 +57,6 @@ BASIS_FALLBACK = "fallback_unknown"
 # Ordered: more specific / compound roles first so e.g. a "loan collateral tape"
 # is not swallowed by a bare "collateral" rule.
 DEFAULT_ROLE_RULES: List[Tuple[str, List[List[str]]]] = [
-    ("funder_pi_extract", [["funder", "principal", "interest"],
-                           ["principal", "and", "interest"],
-                           ["funder", "p&i"], ["funder", "pi"]]),
     # ``collateral extract`` deliberately NOT listed here. Property and
     # valuation detail is now captured under the collateral tape, and the
     # client is asked for that one rather than for both — so a file that says
@@ -68,7 +65,24 @@ DEFAULT_ROLE_RULES: List[Tuple[str, List[List[str]]]] = [
                            ["valuation", "extract"]]),
     ("loan_extract",      [["loanextract"], ["loan", "extract"],
                            ["loan", "tape"], ["loanbook"], ["loan", "report"]]),
-    ("cashflow_extract",  [["cashflow"], ["cash", "flow"]]),
+    # A funder principal-and-interest tape IS a cash-flow tape, and the field
+    # catalogue already says so: ``funder_pi_extract`` is labelled "Funder
+    # principal & interest tape" and marked "no longer asked for separately …
+    # funder principal and interest under the cash-flow tape".
+    #
+    # The catalogue was migrated and the classifier was not, so a real P&I file
+    # landed on a role that is in NEITHER workflow's `optional_roles` and NOT in
+    # `date_semantics.CASHFLOW_ROLES`. It satisfied nothing on the checklist and
+    # did not even take the funded reporting-date basis its siblings take.
+    #
+    # ``funder_pi_extract`` stays a known role — its label, its aliases in
+    # ``occ_agent.input_roles`` and any delivery already recorded under it are
+    # untouched, and an operator can still assign it by hand. What changes is
+    # where a NEW file of that name lands.
+    ("cashflow_extract",  [["cashflow"], ["cash", "flow"],
+                           ["funder", "principal", "interest"],
+                           ["principal", "and", "interest"],
+                           ["funder", "p&i"], ["funder", "pi"]]),
     # A bare "pipeline" is deliberately NOT a rule. The pipeline BOOK's own loan
     # tape is often named exactly that, and matching it here would classify a
     # book's primary extract as a supplementary report — the same word meaning

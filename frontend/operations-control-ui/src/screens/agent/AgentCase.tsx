@@ -1123,73 +1123,102 @@ function MappingPanel({ mapping }: { mapping: MappingOverview }) {
             ))}
           </div>
 
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-400">
-                  <th className="py-2 pr-3 font-medium">{copy.agent.mappingColumn}</th>
-                  <th className="py-2 pr-3 font-medium">{copy.agent.mappingField}</th>
-                  <th className="py-2 pr-3 font-medium">{copy.agent.mappingBasis}</th>
-                  <th className="py-2 font-medium">{copy.agent.mappingConfidence}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr
-                    key={`${row.source_file}:${row.source_column}`}
-                    className="border-b border-stone-100 align-top last:border-0"
-                  >
-                    <td className="py-2 pr-3">
-                      <span className="font-medium text-stone-900">
-                        {row.source_column || copy.agent.mappingNothing}
-                      </span>
-                      <span
-                        className={clsx(
-                          "ml-2 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
-                          MAPPING_STATE_TONES[row.state],
-                        )}
-                      >
-                        {row.state_label}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 text-stone-700">
-                      {row.field_label || copy.agent.mappingNothing}
-                      {row.decision_id && (
-                        <a
-                          href={`#decision-${row.decision_id}`}
-                          className="ml-2 text-xs font-medium text-blue-700 underline"
-                        >
-                          {copy.agent.mappingAnswer}
-                        </a>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3 text-xs text-stone-500">
-                      {row.tier_label}
-                      {row.note && <span className="block text-stone-400">{row.note}</span>}
-                    </td>
-                    <td className="py-2 text-stone-600">
-                      {row.confidence === null
-                        ? copy.agent.mappingNothing
-                        : `${Math.round(row.confidence * 100)}%`}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* Grouped by file. A pack is three or four tapes and a flat list
+              of every column across all of them reads as one enormous table
+              with no way to tell which file a column came from — and which
+              file it came from is what decides whether a weak match is a
+              question waiting for you or a note. */}
+          {mapping.files
+            .filter((file) => rows.some((row) => row.source_file === file.name))
+            .map((file) => (
+              <section key={file.name} className="mt-4">
+                <h4 className="text-sm font-semibold text-stone-900">{file.name}</h4>
+                <p className="text-xs text-stone-500">
+                  {file.primary
+                    ? copy.agent.mappingPrimaryFile
+                    : copy.agent.mappingSecondaryFile}
+                </p>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-400">
+                        <th className="py-2 pr-3 font-medium">{copy.agent.mappingColumn}</th>
+                        <th className="py-2 pr-3 font-medium">{copy.agent.mappingField}</th>
+                        <th className="py-2 pr-3 font-medium">{copy.agent.mappingBasis}</th>
+                        <th className="py-2 font-medium">{copy.agent.mappingConfidence}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows
+                        .filter((row) => row.source_file === file.name)
+                        .map((row) => (
+                          <tr
+                            key={`${row.source_file}:${row.source_column}`}
+                            className="border-b border-stone-100 align-top last:border-0"
+                          >
+                            <td className="py-2 pr-3">
+                              <span className="font-medium text-stone-900">
+                                {row.source_column || copy.agent.mappingNothing}
+                              </span>
+                              <span
+                                className={clsx(
+                                  "ml-2 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
+                                  MAPPING_STATE_TONES[row.state],
+                                )}
+                              >
+                                {row.state_label}
+                              </span>
+                            </td>
+                            <td className="py-2 pr-3 text-stone-700">
+                              {row.field_label || copy.agent.mappingNothing}
+                              {row.decision_id && (
+                                <a
+                                  href={`#decision-${row.decision_id}`}
+                                  className="ml-2 text-xs font-medium text-blue-700 underline"
+                                >
+                                  {copy.agent.mappingAnswer}
+                                </a>
+                              )}
+                            </td>
+                            <td className="py-2 pr-3 text-xs text-stone-500">
+                              {row.tier_label}
+                              {row.note && (
+                                <span className="block text-stone-400">{row.note}</span>
+                              )}
+                            </td>
+                            <td className="py-2 text-stone-600">
+                              {row.confidence === null
+                                ? copy.agent.mappingNothing
+                                : `${Math.round(row.confidence * 100)}%`}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ))}
         </>
       )}
     </Panel>
   );
 }
 
-const MAPPING_STATES = ["needs_you", "unreadable", "unused", "confirmed", "automatic"] as const;
+const MAPPING_STATES = [
+  "needs_you",
+  "unreadable",
+  "unchecked",
+  "unused",
+  "confirmed",
+  "automatic",
+] as const;
 
 /** The server sends a label per row; these are for the filter chips, which
  *  exist whether or not a row of that kind is on screen. */
 const MAPPING_STATE_LABELS: Record<string, string> = {
   needs_you: "Needs you",
   unreadable: "Could not be read",
+  unchecked: "Weak match, nothing asked",
   unused: "Not used",
   confirmed: "You confirmed",
   automatic: "Matched automatically",
@@ -1198,6 +1227,7 @@ const MAPPING_STATE_LABELS: Record<string, string> = {
 const MAPPING_STATE_TONES: Record<string, string> = {
   needs_you: "bg-amber-100 text-amber-800",
   unreadable: "bg-rose-100 text-rose-800",
+  unchecked: "bg-orange-50 text-orange-700",
   unused: "bg-stone-100 text-stone-600",
   confirmed: "bg-emerald-100 text-emerald-800",
   automatic: "bg-blue-50 text-blue-700",

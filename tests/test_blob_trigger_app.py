@@ -1380,8 +1380,16 @@ class TestFileRoleClassification(unittest.TestCase):
         self.assertEqual(FR.classify_file("PropertyExtract - Omni_test.csv"), "property_extract")
         self.assertEqual(FR.classify_file("PG_PropertyExtract Internal OMNI_test.csv"),
                          "property_extract")
+        # A funder principal-and-interest tape IS a cash-flow tape, and the
+        # field catalogue says so: `funder_pi_extract` is retired — "no longer
+        # asked for separately ... funder principal and interest under the
+        # cash-flow tape". It is in neither workflow's `optional_roles` and not
+        # in `date_semantics.CASHFLOW_ROLES`, so a file landing on it satisfied
+        # nothing and took the wrong reporting-date basis. The role is still
+        # known to the platform for deliveries already recorded under it; what
+        # changed is where a NEW file of that name lands.
         self.assertEqual(FR.classify_file("Funder Principal And Interest_test.csv"),
-                         "funder_pi_extract")
+                         "cashflow_extract")
 
     def test_registry_alias_override(self):
         # A filename the default rules would not recognise, mapped via an approved
@@ -1402,7 +1410,7 @@ class TestFileRoleClassification(unittest.TestCase):
             fp_nov = fingerprint_pack(nov)
             fp_oct = fingerprint_pack(oct)
             self.assertEqual(fp_nov.sheets,
-                             ["funder_pi_extract", "loan_extract", "property_extract"])
+                             ["cashflow_extract", "loan_extract", "property_extract"])
             self.assertEqual(fp_nov.fingerprint, fp_oct.fingerprint)   # equivalent → same key
 
     def test_real_schema_change_still_flips_fingerprint(self):
@@ -1538,7 +1546,7 @@ class TestHeaderFirstClassification(unittest.TestCase):
              ("Funder Principal And Interest_test.csv", _FUND_SIG)],
             role_schemas=None)
         roles = {a.assigned_role for a in c.assignments}
-        self.assertEqual(roles, {"loan_extract", "property_extract", "funder_pi_extract"})
+        self.assertEqual(roles, {"loan_extract", "property_extract", "cashflow_extract"})
         self.assertTrue(all(a.role_basis == FR.BASIS_KEYWORD for a in c.assignments))
         self.assertFalse(c.drift_suspected)          # first onboarding, not drift
 
@@ -1567,6 +1575,13 @@ class TestHeaderFirstClassification(unittest.TestCase):
                 "BBB_misc.csv": _FUND_SIG})
             fp_nov = fingerprint_pack(nov, role_schemas=_ROLE_SCHEMAS)
             fp_oct = fingerprint_pack(oct, role_schemas=_ROLE_SCHEMAS)
+            # `funder_pi_extract`, not `cashflow_extract`, and that is the
+            # point of the test sharpened rather than blunted: the FILENAME
+            # rule now says a funder P&I tape is a cash-flow tape, while this
+            # pack's approved header schema says `funder_pi_extract`. The
+            # approved schema wins, which is what "header match beats filename"
+            # means — and a client onboarded before the catalogue retired that
+            # role keeps it.
             self.assertEqual(fp_nov.sheets,
                              ["funder_pi_extract", "loan_extract", "property_extract"])
             self.assertEqual(fp_nov.fingerprint, fp_oct.fingerprint)

@@ -350,6 +350,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     const confidence = Number.isFinite(rawConfidence) ? rawConfidence : null;
     const column = String(r.source_column ?? "");
     const decisionId = byColumn.get(column.toLowerCase()) ?? "";
+    const primary = r.primary !== false;
     let state: MappingRow["state"];
     // An open decision wins over the tier: an ambiguity is raised after both
     // rows are written, at whatever tier they matched at, so reading the tier
@@ -360,7 +361,9 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     else if (!canonical) state = "unused";
     else if (TRUSTED_TIERS.has(tier) || (confidence !== null && confidence >= LOW_CONFIDENCE))
       state = "automatic";
-    else state = "needs_you";
+    // A weak match outside the primary tape raised no question, so calling it
+    // "Needs you" would point at a decision that does not exist.
+    else state = primary ? "needs_you" : "unchecked";
     return {
       source_file: String(r.source_file ?? ""),
       source_column: column,
@@ -373,11 +376,13 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
       state,
       state_label: MAPPING_STATE_LABELS[state],
       decision_id: decisionId,
+      primary,
     };
   });
 
   rows.sort(
     (a, b) =>
+      Number(!a.primary) - Number(!b.primary) ||
       a.source_file.localeCompare(b.source_file) ||
       MAPPING_STATE_ORDER.indexOf(a.state) - MAPPING_STATE_ORDER.indexOf(b.state) ||
       a.source_column.toLowerCase().localeCompare(b.source_column.toLowerCase()),
@@ -389,11 +394,17 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
   }
   counts.columns = rows.length;
   counts.mapped = counts.confirmed + counts.automatic;
-  return {
-    rows,
-    counts,
-    files: [...new Set(rows.map((r) => r.source_file).filter(Boolean))].sort(),
-  };
+
+  const files: MappingOverview["files"] = [];
+  for (const row of rows) {
+    if (!row.source_file || files.some((f) => f.name === row.source_file)) continue;
+    files.push({
+      name: row.source_file,
+      primary: row.primary,
+      columns: rows.filter((r) => r.source_file === row.source_file).length,
+    });
+  }
+  return { rows, counts, files };
 }
 
 interface StoredRun {
@@ -413,19 +424,30 @@ interface StoredRun {
  */
 const MAPPING_REPORT: Record<string, unknown>[] = [
   { source_file: "loan_tape.csv", source_column: "loan_id", canonical_field: "loan_id",
-    tier: "exact", confidence: 1.0, note: "" },
+    tier: "exact", confidence: 1.0, note: "", primary: true },
   { source_file: "loan_tape.csv", source_column: "Current Balance",
-    canonical_field: "current_principal_balance", tier: "alias", confidence: 1.0, note: "" },
+    canonical_field: "current_principal_balance", tier: "alias", confidence: 1.0,
+    note: "", primary: true },
   { source_file: "loan_tape.csv", source_column: "Int Rate",
-    canonical_field: "interest_rate", tier: "normalized", confidence: 1.0, note: "" },
+    canonical_field: "interest_rate", tier: "normalized", confidence: 1.0,
+    note: "", primary: true },
   { source_file: "loan_tape.csv", source_column: "Prop Val",
     canonical_field: "property_value", tier: "operator_approved", confidence: 1.0,
-    note: "confirmed by an operator" },
+    note: "confirmed by an operator", primary: true },
   { source_file: "loan_tape.csv", source_column: "Val Dt",
     canonical_field: "valuation_date", tier: "fuzz_token_set", confidence: 0.62,
-    note: "below the confidence threshold" },
+    note: "below the confidence threshold", primary: true },
   { source_file: "loan_tape.csv", source_column: "Internal Ref", canonical_field: "",
-    tier: "unmapped", confidence: 0.0, note: "" },
+    tier: "unmapped", confidence: 0.0, note: "", primary: true },
+  // A second file in the pack. The canonical tape is not built from it, so a
+  // weak match here raises no question — and a fixture with only one file lets
+  // a table that silently drops the others pass.
+  { source_file: "property_tape.csv", source_column: "property_value",
+    canonical_field: "property_value", tier: "exact", confidence: 1.0,
+    note: "", primary: false },
+  { source_file: "property_tape.csv", source_column: "Prp Ref",
+    canonical_field: "property_reference", tier: "fuzz_ratio_norm", confidence: 0.58,
+    note: "below the confidence threshold", primary: false },
 ];
 
 /** Mirrors `occ_agent/mapping_view.TIER_LABELS`. */
@@ -436,7 +458,7 @@ const TIER_LABELS: Record<string, string> = {
   token_set: "The words overlap, but the names are not the same",
   fuzz_token_set: "The words are similar, not the same",
   fuzz_ratio_norm: "The names are spelled similarly",
-  unmapped: "Nothing in the field registry resembles this column",
+  unmapped: "Nothing Trakt reports on resembles this column",
   empty: "The column has no name",
   operator_approved: "You said so",
   unreadable: "The file could not be read",
@@ -445,12 +467,20 @@ const TIER_LABELS: Record<string, string> = {
 const MAPPING_STATE_LABELS: Record<string, string> = {
   needs_you: "Needs you",
   unreadable: "Could not be read",
+  unchecked: "Weak match, nothing asked",
   unused: "Not used",
   confirmed: "You confirmed it",
   automatic: "Matched automatically",
 };
 
-const MAPPING_STATE_ORDER = ["needs_you", "unreadable", "unused", "confirmed", "automatic"];
+const MAPPING_STATE_ORDER = [
+  "needs_you",
+  "unreadable",
+  "unchecked",
+  "unused",
+  "confirmed",
+  "automatic",
+];
 
 /** Mirrors `execution._TRUSTED_TIERS` and `execution.LOW_CONFIDENCE`. */
 const TRUSTED_TIERS = new Set(["exact", "normalized", "alias"]);
