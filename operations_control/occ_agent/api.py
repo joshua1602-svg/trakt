@@ -160,6 +160,22 @@ class RunTarget(BaseModel):
     tenant: Optional[str] = None
 
 
+class ConcentrationOutcome(BaseModel):
+    """The operator's decision on the concentration-test request.
+
+    One call for the whole decision — the status, the client's response and the
+    reason — because they are one decision. Splitting them across the
+    conversation and the client form is what made an operator set a status in
+    one place and paste the limits in another, with nothing checking that the
+    two agreed.
+    """
+
+    status: str
+    response_text: str = ""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
 class RemoveArtefact(BaseModel):
     """One file to take back out of the case's pack, by its own identifier.
 
@@ -808,6 +824,27 @@ def submit_client_form(case_ref: str, body: ClientResponse,
             **service.status(service.submit_client_response(
                 agent_case, actor=principal.name, response=body.answers,
                 request_id=body.request_id, strict=body.strict))}
+
+
+@router.post("/cases/{case_ref}/concentration")
+def record_concentration(case_ref: str, body: ConcentrationOutcome,
+                         principal: Principal = Depends(authenticate)
+                         ) -> Dict[str, Any]:
+    """Record the operator's decision on the concentration-test request.
+
+    ``OccAgentService.record_concentration_outcome`` has existed, with its own
+    controls — a blank answer can never be recorded as supplied, and only the
+    four declared statuses are accepted — and nothing reached it. The status
+    was set through the conversation and the limits pasted into the client
+    form, two acts with nothing tying them together.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.record_concentration_outcome(
+                agent_case, actor=principal.name, status=body.status,
+                response_text=body.response_text, reason=body.reason))}
 
 
 @router.get("/cases/{case_ref}/classification")

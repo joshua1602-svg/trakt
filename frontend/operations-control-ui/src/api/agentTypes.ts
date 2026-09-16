@@ -296,6 +296,9 @@ export interface ClientFormField {
   validation: string;
   /** Pre-populated from what Trakt already knows. */
   value: unknown;
+  /** True for a field in `ClientForm.answered`. Never true inside `steps`:
+   *  a client is not re-asked what they have answered. */
+  answered: boolean;
   index: number | null;
   item: string;
 }
@@ -326,6 +329,10 @@ export interface ClientFormView {
   case_ref: string;
   client_name: string;
   steps: ClientFormStep[];
+  /** Questions already answered. Deliberately NOT inside `steps` — a client is
+   *  never re-asked one — but carried so an operator can see what an answer
+   *  saved as, and correct a typo in it. */
+  answered: ClientFormField[];
   /** Steps that exist but are not open yet, and what would open them. */
   locked: { step: string; label: string; unlocked_by: string }[];
   questions: number;

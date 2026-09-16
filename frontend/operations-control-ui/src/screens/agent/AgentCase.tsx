@@ -660,6 +660,12 @@ export function AgentCaseScreen() {
             onSave={(input) => void act(() => client.setAgentRunTarget(caseId, input))}
           />
 
+          <ConcentrationPanel
+            answers={onboarding.answers as unknown as Record<string, unknown>}
+            busy={busy}
+            onRecord={(input) => void act(() => client.recordAgentConcentration(caseId, input))}
+          />
+
           <ClientQuestionsPanel
             caseId={caseId}
             version={status.run.version}
@@ -1256,6 +1262,112 @@ function FilterChip({
     >
       {label}
     </button>
+  );
+}
+
+/**
+ * The concentration-test decision, recorded in one act.
+ *
+ * Approval is blocked while this sits at "waiting on the client", and only an
+ * operator moves it. The service method has always taken the whole decision —
+ * the status, the client's own wording and the reason — with its own controls:
+ * a blank answer can never be recorded as supplied, and only the four declared
+ * statuses are accepted. Nothing called it.
+ *
+ * So the status went in through the conversation and the limits through the
+ * client form: two acts with nothing tying them together, and a conversation
+ * that truncates prose at the first clause. An operator could set "supplied"
+ * with no answer behind it, or paste an answer nobody had recorded a decision
+ * about.
+ */
+function ConcentrationPanel({
+  answers,
+  busy,
+  onRecord,
+}: {
+  answers: Record<string, unknown>;
+  busy: boolean;
+  onRecord: (input: { status: string; response_text: string; reason: string }) => void;
+}) {
+  const held = (answers.risk_limits ?? {}) as Record<string, unknown>;
+  const [status, setStatus] = useState(
+    String(held.concentration_tests_status ?? "pending_client_response"),
+  );
+  const [text, setText] = useState(String(held.concentration_tests ?? ""));
+  const [reason, setReason] = useState(String(held.concentration_tests_status_reason ?? ""));
+
+  useEffect(() => {
+    setStatus(String(held.concentration_tests_status ?? "pending_client_response"));
+    setText(String(held.concentration_tests ?? ""));
+    setReason(String(held.concentration_tests_status_reason ?? ""));
+  }, [held.concentration_tests_status, held.concentration_tests, held.concentration_tests_status_reason]);
+
+  const needsText = status === "supplied" && !text.trim();
+  const needsReason =
+    ["not_applicable", "deferred_with_reason"].includes(status) && !reason.trim();
+
+  return (
+    <Panel title={copy.agent.concentrationHeading}>
+      <p className="text-xs text-stone-500">{copy.agent.concentrationHelp}</p>
+
+      <label className="mt-3 block text-xs font-medium text-stone-600" htmlFor="conc-status">
+        {copy.agent.concentrationStatus}
+      </label>
+      <select
+        id="conc-status"
+        value={status}
+        onChange={(event) => setStatus(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+      >
+        <option value="pending_client_response">{copy.agent.concentrationPending}</option>
+        <option value="supplied">{copy.agent.concentrationSupplied}</option>
+        <option value="not_applicable">{copy.agent.concentrationNotApplicable}</option>
+        <option value="deferred_with_reason">{copy.agent.concentrationDeferred}</option>
+      </select>
+
+      <label className="mt-3 block text-xs font-medium text-stone-600" htmlFor="conc-text">
+        {copy.agent.concentrationText}
+      </label>
+      <textarea
+        id="conc-text"
+        rows={6}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+      />
+      <p className="mt-1 text-xs text-stone-500">{copy.agent.concentrationTextHelp}</p>
+
+      <label className="mt-3 block text-xs font-medium text-stone-600" htmlFor="conc-reason">
+        {copy.agent.concentrationReason}
+      </label>
+      <textarea
+        id="conc-reason"
+        rows={2}
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        className="mt-1 w-full rounded-lg border border-stone-300 px-2 py-1.5 text-sm"
+      />
+
+      {/* Said before the button is pressed, not after it is refused. The
+          server enforces both; this only explains why it would. */}
+      {needsText && (
+        <p className="mt-2 text-xs text-amber-700">{copy.agent.concentrationNeedsText}</p>
+      )}
+      {needsReason && (
+        <p className="mt-2 text-xs text-amber-700">{copy.agent.concentrationNeedsReason}</p>
+      )}
+
+      <button
+        type="button"
+        disabled={busy || needsText || needsReason}
+        onClick={() =>
+          onRecord({ status, response_text: text.trim(), reason: reason.trim() })
+        }
+        className="mt-3 rounded-xl bg-stone-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-40"
+      >
+        {copy.agent.concentrationSave}
+      </button>
+    </Panel>
   );
 }
 

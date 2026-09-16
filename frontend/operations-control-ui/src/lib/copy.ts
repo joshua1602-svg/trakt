@@ -551,6 +551,30 @@ export const copy = {
     criteriaExecution: "The practice run",
     criteriaBoundary: "The practice boundary",
     decisionsHeading: "Decisions waiting for you",
+    questionsAnsweredHeading: "Already answered",
+    questionsAnsweredHelp:
+      "What has come back, and what Trakt holds. Edit any of it to correct " +
+      "an answer — the change is recorded the same way the first one was.",
+    concentrationHeading: "The concentration-test request",
+    concentrationHelp:
+      "Approval is held until this is resolved. Record it once here: the " +
+      "decision, the client's own wording, and the reason where there is one.",
+    concentrationStatus: "Where the request stands",
+    concentrationSupplied: "The client has supplied them",
+    concentrationNotApplicable: "Not applicable to this client",
+    concentrationDeferred: "Deferred, with a reason",
+    concentrationPending: "Waiting on the client",
+    concentrationText: "The limits, in the client's own words",
+    concentrationTextHelp:
+      "Paste the covenant wording or limits table as supplied. Once the " +
+      "client is activated, the Concentration tab reads this into proposed " +
+      "tests, each one reviewed and approved before it becomes a control.",
+    concentrationReason: "Why",
+    concentrationSave: "Record the decision",
+    concentrationNeedsText:
+      "Recording them as supplied needs the limits themselves — a blank " +
+      "answer cannot stand as one.",
+    concentrationNeedsReason: "Deferring or ruling it out needs a reason.",
     mappingHeading: "Every column, and what Trakt read it as",
     mappingHelp:
       "The questions above are only the columns Trakt could not settle. This " +

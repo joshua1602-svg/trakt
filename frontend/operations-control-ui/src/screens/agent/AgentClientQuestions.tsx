@@ -171,6 +171,40 @@ export function ClientQuestionsPanel({
             </div>
           ))}
 
+          {/* What has already come back, below the questions still being
+              asked. An answered question used to leave the form entirely, so
+              the operator who had just saved an answer could not see it —
+              "it saved" and "it did not save" looked exactly the same. It is
+              a named region rather than only a visual block, and it is
+              editable: a typo in a client's answer is corrected in the box it
+              was typed into. It is NOT among the questions above, because a
+              client is never re-asked what they have answered. */}
+          {form.answered.length > 0 && (
+            <div
+              role="group"
+              aria-label={copy.agent.questionsAnsweredHeading}
+              className="mt-4 rounded-xl bg-stone-50 p-3"
+            >
+              <p className="text-xs font-medium uppercase tracking-wide text-stone-400">
+                {copy.agent.questionsAnsweredHeading}
+              </p>
+              <p className="mt-0.5 text-xs text-stone-500">
+                {copy.agent.questionsAnsweredHelp}
+              </p>
+              <div className="mt-1 divide-y divide-stone-200">
+                {form.answered.map((field) => (
+                  <QuestionRow
+                    key={field.key}
+                    field={field}
+                    value={field.key in edits ? edits[field.key] : field.value}
+                    disabled={busy || saving}
+                    onChange={(next) => setEdits((prev) => ({ ...prev, [field.key]: next }))}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {form.locked.length > 0 && (
             <p className="mt-4 text-xs text-stone-500">
               {copy.agent.questionsLocked}{" "}

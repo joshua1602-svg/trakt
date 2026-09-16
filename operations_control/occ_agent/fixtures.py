@@ -473,6 +473,12 @@ def generate_answers(form: Any, *, client_name: str = "") -> Dict[str, Any]:
     for step in getattr(form, "steps", []) or []:
         for group in getattr(step, "groups", []) or []:
             for field_ in getattr(group, "fields", []) or []:
+                # An answered question stays ON the form now, so that an
+                # operator can see and correct what was saved. Making one up
+                # over the top of a real answer would be this fixture
+                # overwriting the client's own words.
+                if getattr(field_, "answered", False):
+                    continue
                 value = _answer_for(field_, domain)
                 if value is not None:
                     answers[field_.key] = value

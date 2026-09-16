@@ -819,7 +819,23 @@ export class MockAgent {
   clientForm(caseRef: string): ClientFormView {
     const onboarding = this.onboardingCase(caseRef);
     const catalogue = this.onboarding.reference().catalogue;
-    const asked = this.classify(caseRef).filter((r) => r.category === "client");
+    // Answered client questions sit BESIDE the steps, never among them: a
+    // client is not re-asked what they have answered, and the pack is built
+    // from the steps. They are carried so an operator can see what an answer
+    // saved as and correct a typo in it.
+    const isAnsweredClient = (r: FieldClassification): boolean => {
+      if (r.category !== "known") return false;
+      const section = (catalogue.sections ?? []).find((s2) => s2.key === r.section);
+      const f = (section?.fields ?? []).find((x) => x.key === r.field);
+      return (
+        (f as { source?: string } | undefined)?.source === "client_supplied" &&
+        r.value !== null &&
+        r.value !== undefined &&
+        r.value !== ""
+      );
+    };
+    const rows = this.classify(caseRef);
+    const asked = rows.filter((r) => r.category === "client");
     const steps: ClientFormStep[] = [];
     for (const spec of FORM_STEPS) {
       const groups: ClientFormGroup[] = [];
@@ -852,6 +868,7 @@ export class MockAgent {
               max_length: null,
               validation: f?.validation ?? "",
               value: r.value,
+              answered: false,
               index: r.index,
               item: r.item,
             };
@@ -874,6 +891,28 @@ export class MockAgent {
       case_ref: caseRef,
       client_name: onboarding.client_name,
       steps,
+      answered: rows.filter(isAnsweredClient).map((r) => {
+        const section = (catalogue.sections ?? []).find((s2) => s2.key === r.section);
+        const f = (section?.fields ?? []).find((x) => x.key === r.field);
+        return {
+          key: r.index === null ? `${r.section}.${r.field}` : `${r.section}[${r.index}].${r.field}`,
+          section: r.section,
+          field: r.field,
+          label: r.label,
+          help: f?.help ?? "",
+          type: f?.type ?? "text",
+          options: (f?.options ?? []) as { value: string; label: string }[],
+          required: r.required,
+          sensitive: Boolean(f?.sensitive),
+          evidence_required: false,
+          max_length: null,
+          validation: f?.validation ?? "",
+          value: r.value,
+          answered: true,
+          index: r.index,
+          item: r.item,
+        };
+      }),
       locked: (catalogue.sections ?? [])
         .filter((s: { deferred_until?: string }) => Boolean(s.deferred_until))
         .map((s: { key: string; label: string; deferred_until?: string }) => ({
@@ -931,6 +970,39 @@ export class MockAgent {
    * The same refusals the server applies: a key the catalogue does not declare,
    * and a key this client was not asked, are both refused with nothing saved.
    */
+  /**
+   * The whole concentration-test decision, with the server's own refusals.
+   *
+   * A blank answer can never be recorded as supplied, and only the four
+   * declared statuses are accepted — the two controls this route exists to
+   * enforce, so a screen tested against the mock meets them here too.
+   */
+  recordConcentration(
+    caseRef: string,
+    input: { status: string; response_text?: string; reason?: string },
+  ): AgentStatus {
+    const stored = this.get(caseRef);
+    const allowed = ["supplied", "not_applicable", "deferred_with_reason", "pending_client_response"];
+    if (!allowed.includes(input.status)) {
+      throw new OpsError(
+        `'${input.status}' is not a concentration-test status.`,
+        "OCC_AGENT_INVALID_STATUS",
+      );
+    }
+    if (input.status === "supplied" && !(input.response_text ?? "").trim()) {
+      throw new OpsError(
+        "A blank answer cannot be recorded as supplied.",
+        "OCC_AGENT_BLANK_SUPPLIED",
+      );
+    }
+    const payload: Record<string, unknown> = { concentration_tests_status: input.status };
+    if ((input.response_text ?? "").trim()) payload.concentration_tests = input.response_text;
+    if ((input.reason ?? "").trim()) payload.concentration_tests_status_reason = input.reason;
+    this.onboarding.saveStep(caseRef, "risk_limits", payload);
+    this.record(stored, "concentration_outcome_recorded", "an operator recorded the decision");
+    return this.status(caseRef);
+  }
+
   submitClientForm(
     caseRef: string,
     answers: Record<string, unknown>,
@@ -938,9 +1010,13 @@ export class MockAgent {
   ): AgentStatus {
     const stored = this.get(caseRef);
     const form = this.clientForm(caseRef);
-    const served = new Set(
-      form.steps.flatMap((s) => s.groups.flatMap((g) => g.fields.map((f) => f.key))),
-    );
+    // Asked OR already answered: a correction to an answer is submitted under
+    // the key it was first saved with, and refusing it would mean a typo could
+    // never be fixed through the form it was typed into.
+    const served = new Set([
+      ...form.steps.flatMap((s) => s.groups.flatMap((g) => g.fields.map((f) => f.key))),
+      ...form.answered.map((f) => f.key),
+    ]);
     // A key that is not a catalogue field at all, and a key that IS one but
     // was not put to this client, are different refusals — an operator needs
     // to know which, and so would a client portal.

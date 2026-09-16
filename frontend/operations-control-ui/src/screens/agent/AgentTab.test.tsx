@@ -414,16 +414,41 @@ describe("OCC Agent tab — the operating loop", () => {
     const classification = await client.getAgentClassification(created.case_ref);
     const form = await client.getAgentClientForm(created.case_ref);
 
-    // Only category 2 becomes a question.
-    const asked = new Set(
-      form.form.steps.flatMap((s) => s.groups.flatMap((g) => g.fields.map((f) => f.key))),
+    // Every field on the form is a question Trakt puts to a CLIENT — either
+    // one still outstanding (category 2) or one already answered.
+    //
+    // An answered client question stays on the form now, flagged `answered`,
+    // so an operator can see what was saved and correct a typo in it. That
+    // makes its category "known", because "known" means answered. The rule
+    // being enforced is unchanged and is checked here directly: nothing
+    // derived, defaulted, deferred or internal may reach the form.
+    const onForm = new Map(
+      form.form.steps.flatMap((s) =>
+        s.groups.flatMap((g) => g.fields.map((f) => [f.key, f] as const)),
+      ),
     );
     for (const field of classification.fields) {
       const key =
         field.index === null
           ? `${field.section}.${field.field}`
           : `${field.section}[${field.index}].${field.field}`;
-      if (asked.has(key)) expect(field.category).toBe("client");
+      const served = onForm.get(key);
+      if (!served) continue;
+      if (served.answered) {
+        expect(field.category).toBe("known");
+      } else {
+        expect(field.category).toBe("client");
+      }
+    }
+    // Which is to say: no derived, deferred or internal field is ever served.
+    for (const field of classification.fields) {
+      const key =
+        field.index === null
+          ? `${field.section}.${field.field}`
+          : `${field.section}[${field.index}].${field.field}`;
+      if (["derived", "first_delivery", "internal", "not_applicable"].includes(field.category)) {
+        expect(onForm.has(key)).toBe(false);
+      }
     }
     // And the form is materially smaller than the catalogue.
     expect(form.form.questions).toBeLessThan(classification.summary.total);
