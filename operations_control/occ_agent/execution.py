@@ -447,6 +447,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             get_core_required_fields,
             load_registry,
             select_fields_for_portfolio,
+            validate_core_presence,
         )
         tx_dir = Path(transformation_manifest).parent
         typed_csv = tx_dir / "31_transformed_canonical_tape.csv"
@@ -454,27 +455,42 @@ class SyntheticOnboardingAdapters(AgentAdapters):
 
         issue_policy = _load_yaml(self.issue_policy_path)
 
-        # Canonical: core-required fields must be present and populated. Emitted
-        # in the canonical validator's own schema (rule_id/severity/field/row/
-        # message) so the platform's normaliser handles it unchanged.
+        # Canonical: core-required fields must be present and populated —
+        # through THE PLATFORM'S OWN CHECK, not a second copy of it.
+        #
+        # This used to re-implement the check inline and hard-code
+        # `severity: "error"` on every finding. The real validator asks each
+        # field's `applicability` block first, and the registry says, for
+        # instance:
+        #
+        #   maturity_date:
+        #     applicability:
+        #       equity_release:
+        #         allowed_missing: true
+        #         severity_if_missing: warning
+        #         nd_default: ND2
+        #         reason: "Lifetime mortgage / equity release products do not
+        #                  have a fixed contractual maturity."
+        #
+        # So a lifetime mortgage with no maturity date is a WARNING on the
+        # platform's own ingestion route and was BLOCKING here — the Agent
+        # refusing deliveries the platform accepts, for reasons the
+        # configuration had already answered. The same applied to the
+        # originator's LEI, which the governed client configuration supplies at
+        # projection and the Annex 2 preflight enforces separately.
+        #
+        # APPLICABILITY IS KEYED ON THE ASSET CLASS ("equity_release"), not on
+        # how the book was acquired ("direct" / "acquired"). Passing the
+        # portfolio type found nothing and fell through to the strict default,
+        # which is the second half of the same defect.
         registry = load_registry(self.registry_path)
         fields_meta = select_fields_for_portfolio(
             registry, spec.source_portfolio_type or "direct")
-        canonical_rows: List[Dict[str, Any]] = []
-        for field_name in get_core_required_fields(fields_meta):
-            if field_name not in frame.columns:
-                canonical_rows.append({
-                    "rule_id": "CORE001", "severity": "error",
-                    "field": field_name, "row": -1,
-                    "message": f"{field_name} is not present"})
-                continue
-            blank = frame[field_name].isna() | (
-                frame[field_name].astype(str).str.strip() == "")
-            for idx in frame.index[blank]:
-                canonical_rows.append({
-                    "rule_id": "CORE002", "severity": "error",
-                    "field": field_name, "row": int(idx),
-                    "message": f"{field_name} is empty"})
+        canonical_rows: List[Dict[str, Any]] = [
+            v.__dict__ if hasattr(v, "__dict__") else dict(v)
+            for v in validate_core_presence(
+                frame, get_core_required_fields(fields_meta), fields_meta,
+                self.asset_type or spec.source_portfolio_type or "direct")]
 
         # Business rules: the real rule engine.
         try:
