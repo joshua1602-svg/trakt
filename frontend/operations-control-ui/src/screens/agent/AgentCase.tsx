@@ -530,7 +530,7 @@ export function AgentCaseScreen() {
           {/* Every column, including the ones nobody was asked about. Placed
               under the decisions because the decisions are the work; this is
               the check on everything the mapper did WITHOUT asking. */}
-          <MappingPanel mapping={status.mapping} />
+          <MappingPanel mapping={status.mapping} live={run.mode === "live"} />
 
 
           <section aria-label={copy.agent.timelineHeading}>
@@ -634,7 +634,7 @@ export function AgentCaseScreen() {
                 label={onboarding.status_label}
               />
             </Field>
-            <Field label={copy.agent.stageHeading}>
+            <Field label={copy.agent.stageHeading(run.mode === "live")}>
               <StatusChip status={stateTone(run.state)} label={status.state.label} />
             </Field>
             <Field label={copy.agent.readinessHeading}>
@@ -678,6 +678,7 @@ export function AgentCaseScreen() {
 
           <CriteriaPanel
             criteria={status.readiness.criteria}
+            live={run.mode === "live"}
             /* Expanded once the case is at readiness, where the table is the
                work. Before then most rows read "Blocked" only because the case
                has not got there yet, which is not information — it is the wall
@@ -1093,7 +1094,7 @@ function ResponsesBlock({
  * without asking, and a copy of that test here could disagree with the engine
  * about which mappings a human checked.
  */
-function MappingPanel({ mapping }: { mapping: MappingOverview }) {
+function MappingPanel({ mapping, live }: { mapping: MappingOverview; live: boolean }) {
   const [filter, setFilter] = useState("");
   const counts = mapping.counts ?? {};
   const rows = filter ? mapping.rows.filter((r) => r.state === filter) : mapping.rows;
@@ -1105,7 +1106,7 @@ function MappingPanel({ mapping }: { mapping: MappingOverview }) {
   return (
     <Panel title={copy.agent.mappingHeading}>
       {mapping.rows.length === 0 ? (
-        <p className="text-sm text-stone-500">{copy.agent.mappingEmpty}</p>
+        <p className="text-sm text-stone-500">{copy.agent.mappingEmpty(live)}</p>
       ) : (
         <>
           <p className="text-sm text-stone-600">
@@ -2118,9 +2119,11 @@ function ActivationPanel({
 function CriteriaPanel({
   criteria,
   open,
+  live,
 }: {
   criteria: ReadinessCriterion[];
   open: boolean;
+  live: boolean;
 }) {
   const passed = criteria.filter((criterion) => criterion.passed).length;
   return (
@@ -2132,18 +2135,24 @@ function CriteriaPanel({
         </span>
       </summary>
       <div className="mt-3">
-        <CriteriaList criteria={criteria} />
+        <CriteriaList criteria={criteria} live={live} />
       </div>
     </details>
   );
 }
 
 /** Readiness criteria, grouped by which half of the process they belong to. */
-function CriteriaList({ criteria }: { criteria: ReadinessCriterion[] }) {
+function CriteriaList({
+  criteria,
+  live,
+}: {
+  criteria: ReadinessCriterion[];
+  live: boolean;
+}) {
   const groups: { key: ReadinessCriterion["stage"]; label: string }[] = [
     { key: "onboarding", label: copy.agent.criteriaOnboarding },
-    { key: "execution", label: copy.agent.criteriaExecution },
-    { key: "boundary", label: copy.agent.criteriaBoundary },
+    { key: "execution", label: copy.agent.criteriaExecution(live) },
+    { key: "boundary", label: copy.agent.criteriaBoundary(live) },
   ];
   return (
     <>

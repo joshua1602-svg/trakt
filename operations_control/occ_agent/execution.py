@@ -165,6 +165,11 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                                                   or "")
         #: The confirmation to put to them, when one is outstanding.
         self.product_profile_decision: Optional[Dict[str, Any]] = None
+        #: Reporting-period labels turned into the cut-off dates they stand
+        #: for (``August`` -> ``2026-08-31``), per column. Recorded so the
+        #: transform is visible rather than silent — see
+        #: :func:`_canonicalise_period_cutoffs`.
+        self.period_cutoffs: Dict[str, Any] = {}
         self.validation_report: List[Dict[str, Any]] = []
         self._assert_inside_sandbox()
 
@@ -353,6 +358,8 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         # 4. Build the mapped tape + the handoff manifest.
         mapped = frame.rename(columns=resolved)
         mapped = mapped[[c for c in mapped.columns if c in set(resolved.values())]]
+        self.period_cutoffs = _canonicalise_period_cutoffs(
+            mapped, self.artefact_paths)
         tape = work_dir / "18_central_lender_tape.csv"
         mapped.to_csv(tape, index=False)
         handoff = work_dir / "24_onboarding_handoff_manifest.json"
@@ -369,15 +376,27 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         (work_dir / "source_profiles.json").write_text(
             json.dumps(profiles, indent=2, default=str), encoding="utf-8")
 
+        read_it_as = ""
+        for column, detail in self.period_cutoffs.items():
+            pairs = ", ".join(f"{label} as {iso}"
+                              for label, iso in sorted(
+                                  detail.get("labels", {}).items())[:3])
+            if pairs:
+                read_it_as = (f" Read the reporting month in "
+                              f"{column.replace('_', ' ')} as a cut-off date: "
+                              f"{pairs}.")
         self._record(StageRecord(
             stage="onboard", outcome=STAGE_DETERMINISTIC_COMPLETED,
             component="engine.onboarding_agent.file_profiler + "
                       "engine.gate_1_alignment.semantic_alignment.HeaderMapper",
             summary=f"Read {len(self.artefact_paths)} file"
                     f"{'s' if len(self.artefact_paths) != 1 else ''} and "
-                    f"matched {len(resolved)} columns.",
+                    f"matched {len(resolved)} columns.{read_it_as}",
             metrics={"rows": int(len(mapped)), "mapped_columns": len(resolved),
-                     "source_columns": int(len(frame.columns))}))
+                     "source_columns": int(len(frame.columns)),
+                     "period_labels_dated": sum(
+                         len(d.get("labels", {}))
+                         for d in self.period_cutoffs.values())}))
         return StepResult(ok=True, output_path=str(tape),
                           manifest_path=str(handoff),
                           readiness={"loan_count": int(len(mapped)),
@@ -784,6 +803,71 @@ def _read_table(path: Path) -> pd.DataFrame:
     return table.frame
 
 
+def _run_year(paths: Sequence[Path]) -> Optional[int]:
+    """The reporting year the delivery is for, read from its own file names.
+
+    A bare month label cannot be turned into a cut-off date without one, and
+    the year is not something to guess at: ``None`` means "no year was stated",
+    and the caller then leaves the value exactly as the client wrote it.
+    """
+    from engine.onboarding_agent import run_context as _rc
+    for path in paths:
+        for found in _rc.dates_from_filename(path.name) or []:
+            try:
+                return int(str(found)[:4])
+            except (TypeError, ValueError):   # pragma: no cover — guard
+                continue
+    return None
+
+
+def _canonicalise_period_cutoffs(mapped: "pd.DataFrame",
+                                 paths: Sequence[Path]) -> Dict[str, Any]:
+    """Turn a reporting-period LABEL into the cut-off date it stands for.
+
+    THE DEFECT THIS CLOSES. A lender's monthly extract identifies its period in
+    a ``Month Run`` column carrying ``August``. ``month run`` is a governed
+    alias of ``data_cut_off_date`` (``config/system/aliases_mandatory.yaml``),
+    so the column maps correctly — and then canonical typing reads ``August``
+    as a date, fails, and writes a blank. Every row of a 568-row book came out
+    missing its cut-off date, and the run stopped on a field the client had in
+    fact supplied.
+
+    The platform already knows the answer. ``central_tape_builder`` performs
+    exactly this step for exactly these fields, turning ``August`` into
+    ``2026-08-31`` against the run year and keeping the raw label in lineage.
+    The Agent built its tape without it — the same drift, once more, between a
+    stage body here and the platform's own build.
+
+    So this calls the builder's own function rather than restating it. What it
+    will not do is invent: ``31/08/2026`` is normalised, ``August`` resolves
+    only where the delivery's file names state a year, and anything that
+    resolves to nothing is left untouched for a human to look at.
+    """
+    from engine.onboarding_agent.central_tape_builder import (
+        _PERIOD_CUTOFF_FIELDS,
+        _canonicalise_period_cutoff,
+    )
+    year = _run_year(paths)
+    applied: Dict[str, Any] = {}
+    for column in [c for c in mapped.columns if c in _PERIOD_CUTOFF_FIELDS]:
+        resolved: Dict[str, str] = {}
+        def _canonical(value: Any) -> Any:
+            raw = "" if value is None else str(value).strip()
+            if not raw:
+                return value
+            if raw in resolved:
+                return resolved[raw] or value
+            iso, method, _basis = _canonicalise_period_cutoff(raw, year)
+            resolved[raw] = iso
+            if iso and method == "period_label_to_month_end":
+                # Only the label conversion is reported: re-normalising a date
+                # a client already wrote as a date is not news to anyone.
+                applied.setdefault(column, {"method": method, "run_year": year,
+                                            "labels": {}})
+                applied[column]["labels"][raw] = iso
+            return iso or value
+        mapped[column] = mapped[column].map(_canonical)
+    return applied
 
 
 def _duplicates(resolved: Dict[str, str]) -> Dict[str, List[str]]:

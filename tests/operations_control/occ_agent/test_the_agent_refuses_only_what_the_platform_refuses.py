@@ -147,13 +147,16 @@ class TestWhatTheProductProfileSays:
     @pytest.mark.parametrize("field", [
         "maturity_date", "amortisation_type", "interest_rate_type",
         "originator_legal_entity_identifier", "originator_name",
+        # The denomination is the client's approved reporting currency, held in
+        # the governed client configuration and defaulted by the asset pack. It
+        # is not restated per loan on a monthly extract.
+        "exposure_currency_denomination",
     ])
     def test_these_do_not_block_base_mi(self, profile, field):
         assert profile.is_non_blocking_for_base_mi(field), field
 
     @pytest.mark.parametrize("field", [
-        "current_principal_balance", "exposure_currency_denomination",
-        "data_cut_off_date",
+        "current_principal_balance", "data_cut_off_date",
     ])
     def test_these_do_block_base_mi(self, profile, field):
         """Management information without a balance or a cut-off date is not

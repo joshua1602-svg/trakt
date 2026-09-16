@@ -109,6 +109,44 @@ profiles:
           represents this as OTHR; the value is defaulted with profile rationale,
           not inferred from a source column.
 
+      # The currency a loan is denominated in is a STANDING FACT about the
+      # client, not a column on its monthly extract, and the platform already
+      # answers it in three governed places before the tape is ever read:
+      #
+      #   * the client's approved reporting currency, captured at onboarding
+      #     (`reporting_currency` in config/onboarding/field_catalogue.yaml)
+      #     and written to `portfolio.base_currency` in the client
+      #     configuration, which mi_agent_api.currency treats as OUTRANKING
+      #     whatever the tape says;
+      #   * this asset class's own default (product_defaults_ERM.yaml:
+      #     `exposure_currency_denomination: GBP`), applied by the projection
+      #     agent for the regime;
+      #   * the central tape builder's configured static default plus its
+      #     country -> currency inference, which materialise the field on every
+      #     funded row when no source column maps to it.
+      #
+      # A UK lifetime-mortgage lender does not vary the denomination loan by
+      # loan, so its extracts routinely carry no currency column at all — and
+      # blocking management information on one asks the client to restate, per
+      # row, something they already told us once. The base-MI capability
+      # contract below agrees: it does not list the field.
+      #
+      # This was `required` only because nothing declared it, and an
+      # undeclared field falls through to `required`. It is now declared, and
+      # says the same thing amortisation_type and interest_rate_type say about
+      # the same asset pack's defaults. The REGIME is untouched: RREL28 is
+      # Mandatory in the field registry and the Annex 2 preflight still
+      # enforces it.
+      exposure_currency_denomination:
+        base_mi: defaulted
+        default_value: "GBP"
+        default_label: "client_reporting_currency"
+        rationale: >
+          The denomination is the client's approved reporting currency, held in
+          the governed client configuration and defaulted by the asset pack; it
+          is not restated per loan on a monthly extract. Mandatory for the
+          regulatory return, where the regime's own contract enforces it.
+
       current_outstanding_balance:
         base_mi: derived
         derivation: from_field

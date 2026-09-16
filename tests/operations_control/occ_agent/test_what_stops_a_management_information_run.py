@@ -13,16 +13,24 @@ product, all along. For the equity release lifetime mortgage:
     maturity_date                       not_applicable
     amortisation_type                   defaulted
     interest_rate_type                  defaulted
+    exposure_currency_denomination      defaulted
     originator_legal_entity_identifier  optional
     originator_name                     optional
     current_principal_balance           required
-    exposure_currency_denomination      required
     data_cut_off_date                   required
 
-Five excused, three required. Management information without a balance, a
-currency or a cut-off date is not a report — so the three that remain are the
-right three, and that is the configuration's judgement rather than this
-module's.
+Six excused, two required. Management information without a balance or a
+cut-off date is not a report — so the two that remain are the right two, and
+that is the configuration's judgement rather than this module's.
+
+THE CURRENCY IS DEFAULTED, NOT DEMANDED. A UK lifetime-mortgage lender does not
+vary the denomination loan by loan, and the platform already holds the answer
+in three governed places: the client's approved reporting currency captured at
+onboarding, the asset pack's own default, and the central tape builder's
+static default and country inference. Blocking MI on a currency column asks the
+client to restate, per row, what they told us once at onboarding. It was
+``required`` only because nothing had declared it and an undeclared field falls
+through to ``required``.
 
 THE GUARD THAT IS NOT WORKED AROUND. On the asset class alone the platform
 scores the profile at 0.6, inside its confirm band, and PROPOSES rather than
@@ -43,9 +51,9 @@ ASSET = "equity_release"
 PROFILE = "equity_release_lifetime_mortgage"
 
 EXCUSED_FOR_MI = ("maturity_date", "amortisation_type", "interest_rate_type",
+                  "exposure_currency_denomination",
                   "originator_legal_entity_identifier", "originator_name")
-REQUIRED_FOR_MI = ("current_principal_balance",
-                   "exposure_currency_denomination", "data_cut_off_date")
+REQUIRED_FOR_MI = ("current_principal_balance", "data_cut_off_date")
 
 
 def findings(*fields, materiality="BLOCKING"):
@@ -53,6 +61,7 @@ def findings(*fields, materiality="BLOCKING"):
 
 
 ALL_EIGHT = findings(*EXCUSED_FOR_MI, *REQUIRED_FOR_MI)
+N = len(ALL_EIGHT)
 
 
 def names(rows):
@@ -70,7 +79,7 @@ class TestTheProductMustBeConfirmedFirst:
         would be relaxing a required-field check on a guess."""
         blocking, excused = gate.split(ALL_EIGHT, asset_class=ASSET)
         assert excused == []
-        assert len(blocking) == 8
+        assert len(blocking) == N
 
     def test_the_question_is_raised_instead(self):
         pending = gate.needs_confirmation(ASSET)
@@ -106,13 +115,13 @@ class TestTheProductMustBeConfirmedFirst:
 
 class TestOnceTheProductIsConfirmed:
 
-    def test_the_five_the_product_does_not_need_stop_blocking(self):
+    def test_the_six_the_product_does_not_need_stop_blocking(self):
         blocking, excused = gate.split(ALL_EIGHT, asset_class=ASSET,
                                        confirmed_profile_id=PROFILE)
         assert names(excused) == set(EXCUSED_FOR_MI)
         assert names(blocking) == set(REQUIRED_FOR_MI)
 
-    def test_a_report_still_needs_a_balance_a_currency_and_a_date(self):
+    def test_a_report_still_needs_a_balance_and_a_cut_off_date(self):
         """Not a judgement made here — the profile marks these required."""
         blocking, _excused = gate.split(ALL_EIGHT, asset_class=ASSET,
                                         confirmed_profile_id=PROFILE)
@@ -131,7 +140,7 @@ class TestOnceTheProductIsConfirmed:
         operator who cannot see it cannot question it."""
         _blocking, excused = gate.split(ALL_EIGHT, asset_class=ASSET,
                                         confirmed_profile_id=PROFILE)
-        assert len(excused) == 5
+        assert len(excused) == len(EXCUSED_FOR_MI)
         for row in excused:
             assert row["excused_reason"] == gate.EXCUSED_NOTE
 
@@ -157,13 +166,13 @@ class TestTheRegulatoryReturnIsNotExcused:
                                        regime="ESMA_Annex2",
                                        confirmed_profile_id=PROFILE)
         assert excused == []
-        assert len(blocking) == 8
+        assert len(blocking) == N
 
     def test_the_product_question_is_not_raised_on_a_regime_run(self):
         """There is nothing it could clear, so asking it would be noise."""
         blocking, _ = gate.split(ALL_EIGHT, asset_class=ASSET,
                                  regime="ESMA_Annex2")
-        assert len(blocking) == 8
+        assert len(blocking) == N
 
 
 # --------------------------------------------------------------------------- #
@@ -183,7 +192,7 @@ class TestItDoesNotWiden:
     def test_an_unknown_asset_class_excuses_nothing(self):
         blocking, excused = gate.split(ALL_EIGHT, asset_class="not_a_product")
         assert excused == []
-        assert len(blocking) == 8
+        assert len(blocking) == N
 
     def test_a_field_the_profile_does_not_mention_keeps_blocking(self):
         rows = findings("some_field_nobody_declared")
