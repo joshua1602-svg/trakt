@@ -14,6 +14,7 @@ import type {
   AgentProposal,
   AgentStatus,
   DecisionCard,
+  MappingOverview,
   ReadinessCriterion,
   StreamSummary,
 } from "@/api/agentTypes";
@@ -525,6 +526,12 @@ export function AgentCaseScreen() {
               </ul>
             </Panel>
           )}
+
+          {/* Every column, including the ones nobody was asked about. Placed
+              under the decisions because the decisions are the work; this is
+              the check on everything the mapper did WITHOUT asking. */}
+          <MappingPanel mapping={status.mapping} />
+
 
           <section aria-label={copy.agent.timelineHeading}>
             <h2 className="mb-3 text-sm font-semibold text-stone-900">
@@ -1062,6 +1069,163 @@ function ResponsesBlock({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Every source column, and what the header mapper made of it.
+ *
+ * The decisions panel above shows only the columns the mapper could NOT
+ * settle. Everything it settled on its own — the majority, and the part nobody
+ * has checked — had no screen at all: `run.mapping_report` reached the API in
+ * the readiness and review packages, was typed in the frontend, and was
+ * rendered nowhere. On a hundred-column tape that is the difference between
+ * answering the questions asked and being able to see all the answers.
+ *
+ * Every row's `state` comes from the server. It turns on the same trusted-tier
+ * and confidence test the engine applies when deciding whether to use a mapping
+ * without asking, and a copy of that test here could disagree with the engine
+ * about which mappings a human checked.
+ */
+function MappingPanel({ mapping }: { mapping: MappingOverview }) {
+  const [filter, setFilter] = useState("");
+  const counts = mapping.counts ?? {};
+  const rows = filter ? mapping.rows.filter((r) => r.state === filter) : mapping.rows;
+
+  // Only the states actually present are offered. A chip reading "Not used 0"
+  // is a question nobody asked.
+  const chips = MAPPING_STATES.filter((state) => (counts[state] ?? 0) > 0);
+
+  return (
+    <Panel title={copy.agent.mappingHeading}>
+      {mapping.rows.length === 0 ? (
+        <p className="text-sm text-stone-500">{copy.agent.mappingEmpty}</p>
+      ) : (
+        <>
+          <p className="text-sm text-stone-600">
+            {copy.agent.mappingCount(counts.mapped ?? 0, counts.columns ?? 0)}
+          </p>
+          <p className="mt-1 text-xs text-stone-500">{copy.agent.mappingHelp}</p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <FilterChip
+              label={`${copy.agent.mappingFilterAll} ${counts.columns ?? 0}`}
+              active={filter === ""}
+              onClick={() => setFilter("")}
+            />
+            {chips.map((state) => (
+              <FilterChip
+                key={state}
+                label={`${MAPPING_STATE_LABELS[state]} ${counts[state]}`}
+                active={filter === state}
+                onClick={() => setFilter(state)}
+              />
+            ))}
+          </div>
+
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-400">
+                  <th className="py-2 pr-3 font-medium">{copy.agent.mappingColumn}</th>
+                  <th className="py-2 pr-3 font-medium">{copy.agent.mappingField}</th>
+                  <th className="py-2 pr-3 font-medium">{copy.agent.mappingBasis}</th>
+                  <th className="py-2 font-medium">{copy.agent.mappingConfidence}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={`${row.source_file}:${row.source_column}`}
+                    className="border-b border-stone-100 align-top last:border-0"
+                  >
+                    <td className="py-2 pr-3">
+                      <span className="font-medium text-stone-900">
+                        {row.source_column || copy.agent.mappingNothing}
+                      </span>
+                      <span
+                        className={clsx(
+                          "ml-2 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
+                          MAPPING_STATE_TONES[row.state],
+                        )}
+                      >
+                        {row.state_label}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 text-stone-700">
+                      {row.field_label || copy.agent.mappingNothing}
+                      {row.decision_id && (
+                        <a
+                          href={`#decision-${row.decision_id}`}
+                          className="ml-2 text-xs font-medium text-blue-700 underline"
+                        >
+                          {copy.agent.mappingAnswer}
+                        </a>
+                      )}
+                    </td>
+                    <td className="py-2 pr-3 text-xs text-stone-500">
+                      {row.tier_label}
+                      {row.note && <span className="block text-stone-400">{row.note}</span>}
+                    </td>
+                    <td className="py-2 text-stone-600">
+                      {row.confidence === null
+                        ? copy.agent.mappingNothing
+                        : `${Math.round(row.confidence * 100)}%`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Panel>
+  );
+}
+
+const MAPPING_STATES = ["needs_you", "unreadable", "unused", "confirmed", "automatic"] as const;
+
+/** The server sends a label per row; these are for the filter chips, which
+ *  exist whether or not a row of that kind is on screen. */
+const MAPPING_STATE_LABELS: Record<string, string> = {
+  needs_you: "Needs you",
+  unreadable: "Could not be read",
+  unused: "Not used",
+  confirmed: "You confirmed",
+  automatic: "Matched automatically",
+};
+
+const MAPPING_STATE_TONES: Record<string, string> = {
+  needs_you: "bg-amber-100 text-amber-800",
+  unreadable: "bg-rose-100 text-rose-800",
+  unused: "bg-stone-100 text-stone-600",
+  confirmed: "bg-emerald-100 text-emerald-800",
+  automatic: "bg-blue-50 text-blue-700",
+};
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={clsx(
+        "rounded-full border px-3 py-1 text-xs font-medium",
+        active
+          ? "border-stone-900 bg-stone-900 text-white"
+          : "border-stone-300 bg-white text-stone-600 hover:bg-stone-50",
+      )}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -1964,7 +2128,13 @@ function DecisionCardView({
   onAnswer: (action: string, value: string) => void;
 }) {
   return (
-    <li className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+    <li
+      // The mapping table links here, so a row reading "Needs you" is the
+      // thing you click rather than a label sending you to hunt for the
+      // matching question in another list.
+      id={`decision-${decision.decision_id}`}
+      className="scroll-mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4"
+    >
       <p className="text-sm font-semibold text-stone-900">{decision.title}</p>
       <p className="mt-1 text-sm text-stone-700">{decision.question}</p>
 
