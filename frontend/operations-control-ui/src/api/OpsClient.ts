@@ -198,7 +198,16 @@ export interface OpsClient {
   listAgentCases(state?: string): Promise<CaseSummary[]>;
   /** `live` opens a REAL onboarding rather than a rehearsal. Defaults to a
    *  rehearsal; the backend refuses live where it is not switched on. */
-  createAgentCase(instruction: string, fixtureId?: string, live?: boolean): Promise<AgentStatus>;
+  /** Open an Agent case. `amendClient` opens an AMENDMENT to that client's
+   *  active configuration instead of a new onboarding — the supported way to
+   *  add a reporting product once a client is live, because the source
+   *  registry is only rewritten at (re-)activation. */
+  createAgentCase(
+    instruction: string,
+    fixtureId?: string,
+    live?: boolean,
+    amendClient?: string,
+  ): Promise<AgentStatus>;
   getAgentCase(caseRef: string): Promise<AgentStatus>;
   instructAgent(caseRef: string, text: string, confirm?: boolean): Promise<AgentTurn>;
   answerAgentDecision(

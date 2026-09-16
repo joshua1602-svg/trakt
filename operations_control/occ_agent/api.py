@@ -111,6 +111,13 @@ class CreateCase(BaseModel):
     #: switched on — a case that turns out to be real by accident is the thing
     #: the whole isolation boundary exists to prevent.
     live: bool = False
+    #: Amend this client's active configuration instead of onboarding a new
+    #: one. The case opens pre-populated from the version in force, and the
+    #: version it started from is recorded on it. This is how a reporting
+    #: product is added after a client is live: the source registry is
+    #: rewritten at re-activation, which editing a live case in conversation
+    #: never reaches.
+    amend_client: str = ""
 
 
 class Instruct(BaseModel):
@@ -300,7 +307,8 @@ def create_case(body: CreateCase,
                                initiating_user=principal.name,
                                instruction=body.instruction,
                                fixture_id=body.fixture_id,
-                               live=body.live)
+                               live=body.live,
+                               amend_client=body.amend_client)
     return {"ok": True, **service.status(case)}
 
 

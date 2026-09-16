@@ -425,6 +425,16 @@ export const copy = {
       "This is a real client onboarding. Email is sent, and confirming activation at the end " +
       "creates the client's live configuration and starts their first delivery.",
     newCase: "Start a new case",
+    amendHeading: "Change a client already live",
+    amendPrompt:
+      "Start from the configuration in force, rather than onboarding them " +
+      "again. Adding a report a client did not originally take is this — not " +
+      "an edit. What a book is prepared for is settled when its configuration " +
+      "is activated, so asking for a new report in conversation does not " +
+      "change it, and the delivery is refused rather than half-prepared.",
+    amendLabel: "Client identifier",
+    amendPlaceholder: "ERE",
+    amendStart: "Open an amendment",
     newCaseHeading: "What needs to happen?",
     newCasePrompt:
       "Tell Trakt in your own words. For example: “Onboard Northstar Lending. It is a UK " +

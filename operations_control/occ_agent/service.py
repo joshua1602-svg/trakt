@@ -354,8 +354,15 @@ class OccAgentService:
     # ------------------------------------------------------------------ #
     def create_case(self, *, tenant: str, initiating_user: str,
                     instruction: str = "",
-                    fixture_id: str = "", live: bool = False) -> AgentCase:
+                    fixture_id: str = "", live: bool = False,
+                    amend_client: str = "") -> AgentCase:
         """Open a case — a rehearsal unless ``live`` is asked for explicitly.
+
+        ``amend_client`` opens an AMENDMENT to that client's active
+        configuration instead of a new onboarding. Everything downstream is
+        identical: the same rehearsal, the same controls, the same two
+        approvals, the same one doorway. Only the starting answers differ, and
+        where they came from is recorded on the case.
 
         The onboarding case is opened by Client Onboarding itself — same
         reference series, same blank start, same event history — and the run
@@ -375,7 +382,24 @@ class OccAgentService:
                 "OPS_LIVE_NOT_ENABLED",
                 "Live execution is not switched on in this environment, so a "
                 "live case cannot be opened here.", 409)
-        case = self.onboarding.start_new_client(by=initiating_user)
+        if amend_client:
+            # A CHANGE TO A CLIENT ALREADY LIVE, not a second onboarding of
+            # them. Client Onboarding opens it pre-populated from the version
+            # in force and records which version it started from, so the
+            # change is reviewable as a difference rather than as a fresh set
+            # of answers that happen to mostly match.
+            #
+            # This is the supported way to add a reporting product after
+            # activation. Editing a live case in conversation does not reach
+            # the source registry, where `regime_required` is written at
+            # activation — so the book stays registered as it was, and the
+            # engine refuses the delivery rather than splitting it across two
+            # incomplete ones. An amendment re-activates, and the registry is
+            # rewritten with it.
+            case = self.onboarding.start_amendment(client_id=amend_client,
+                                                   by=initiating_user)
+        else:
+            case = self.onboarding.start_new_client(by=initiating_user)
         run = SyntheticRun(case_ref=case.case_id, tenant=tenant,
                            initiating_user=initiating_user,
                            fixture_id=fixture_id,
@@ -1964,8 +1988,13 @@ class OccAgentService:
                                        "the governed store for activation",
                         output_reference=run.case_ref)
 
+        # The run's decisions travel with the activation so the mappings a
+        # human settled during the rehearsal become governed rules the ingest
+        # can read. The LIVE adapter promotes them; the synthetic one discards
+        # them, so an unactivated rehearsal still leaves nothing behind.
         result = self.adapter.activate(pre=pre, intent=intent, actor=actor,
-                                       payloads=self._payloads(run))
+                                       payloads=self._payloads(run),
+                                       decisions=list(run.open_decisions or []))
         run.activation_result = result.to_dict()
         if result.ok:
             self._move(run, _states.INGESTION_STARTED)
