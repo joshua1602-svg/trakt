@@ -1,0 +1,218 @@
+"""operations_control.occ_agent.base_mi_gate — what stops a management-
+information run, as the product profile already decides it.
+
+THE DEFECT THIS CLOSES. A live equity release onboarding was blocked on eight
+required fields, among them ``maturity_date`` — and a lifetime mortgage has no
+contractual maturity date. The client's own files, loaded through the
+platform's ingestion route, were not blocked at all, because nothing there
+gates on materiality: that gate belongs to the Agent alone, and the Agent
+stopped on every BLOCKING finding without ever asking what the product needs.
+
+``config/asset/product_profiles.yaml`` has always answered this, per field, per
+product. For the equity release lifetime mortgage profile:
+
+    maturity_date                       base_mi: not_applicable
+    amortisation_type                   base_mi: defaulted
+    interest_rate_type                  base_mi: defaulted
+    originator_legal_entity_identifier  base_mi: optional
+    originator_name                     base_mi: optional
+    current_principal_balance           base_mi: required
+    exposure_currency_denomination      base_mi: required
+    data_cut_off_date                   base_mi: required
+
+Five excused, three required. Which is the right answer, and not one this
+module is entitled to reach on its own — it reads the profile and applies it.
+
+TWO THINGS IT DELIBERATELY DOES NOT DO.
+
+It does not excuse anything on a REGULATORY run. ``base_mi`` says what
+management information needs; the Annex 2 return needs more, and a field the
+profile marks optional for MI can still be mandatory for the regulator. So the
+excuse applies only when no regime is being prepared.
+
+It does not hide the finding. An excused field is still reported, still on the
+record, and still visible to whoever approves the run — it simply stops being
+a reason to refuse the delivery. "Not applicable to this product" is an answer,
+not an absence, and an operator who cannot see it cannot question it.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional, Tuple
+
+#: Reported against a finding the profile excuses, so the reason travels with
+#: it rather than being inferable only from the absence of a blocker.
+EXCUSED_NOTE = "not required for management information on this product"
+
+
+def resolve(asset_class: str, confirmed_profile_id: str = ""):
+    """The platform's own profile resolution for this run.
+
+    Returns the ``ResolvedProfile``, or None where the configuration could not
+    be read at all. Resolved through ``resolve_product_profile`` rather than by
+    looking a profile id up directly: which profile applies is a governed
+    decision with its own evidence and confidence thresholds, and a second way
+    of answering it is a second answer waiting to disagree.
+
+    ON ASSET CLASS ALONE THE PLATFORM PROPOSES RATHER THAN APPLIES. Equity
+    release scores 0.6, inside the confirm band, so the profile is offered for
+    confirmation and nothing is relaxed on the strength of it. That guard is
+    correct and is not worked around here: an operator CONFIRMS the product,
+    and the confirmed id comes back as ``confirmed_profile_id``, which the
+    resolver then treats as explicit and trusted.
+    """
+    try:
+        from engine.onboarding_agent.product_profile import (
+            resolve_product_profile,
+        )
+    except Exception:                      # pragma: no cover — import guard
+        return None
+    try:
+        return resolve_product_profile(
+            {"asset_class": asset_class or ""},
+            explicit_profile_id=confirmed_profile_id or "")
+    except Exception:                      # pragma: no cover — config guard
+        return None
+
+
+def _profile_for(asset_class: str, confirmed_profile_id: str = ""):
+    """The applied profile, or None when nothing has been confirmed.
+
+    Only an APPLIED profile excuses anything. A profile merely proposed for
+    confirmation has not been accepted by anyone, and acting on it would be
+    relaxing a check on the strength of a guess.
+    """
+    resolved = resolve(asset_class, confirmed_profile_id)
+    if resolved is None or not getattr(resolved, "applied", False):
+        return None
+    return getattr(resolved, "profile", None)
+
+
+def needs_confirmation(asset_class: str, confirmed_profile_id: str = ""):
+    """The profile awaiting an operator's confirmation, or None.
+
+    This is the question that has to be put BEFORE anything can be excused:
+    "is this client's book a lifetime mortgage?" Until it is answered, every
+    required field keeps blocking — which is the safe direction, and is what
+    the platform's own confidence bands ask for.
+    """
+    resolved = resolve(asset_class, confirmed_profile_id)
+    if resolved is None or getattr(resolved, "applied", False):
+        return None
+    if not getattr(resolved, "needs_confirmation", False):
+        return None
+    return resolved
+
+
+def excused_fields(fields: List[str], *, asset_class: str,
+                   regime: str = "",
+                   confirmed_profile_id: str = "") -> Dict[str, str]:
+    """``{field: why}`` for fields this product does not need for base MI.
+
+    Empty when a regime is being prepared: ``base_mi`` speaks for management
+    information only, and the regulatory return has its own requirements.
+    """
+    if regime:
+        return {}
+    profile = _profile_for(asset_class, confirmed_profile_id)
+    if profile is None:
+        return {}
+    out: Dict[str, str] = {}
+    for field in fields:
+        try:
+            if profile.is_non_blocking_for_base_mi(field):
+                out[field] = str(profile.base_mi_policy(field))
+        except Exception:                  # pragma: no cover — profile guard
+            continue
+    return out
+
+
+def split(findings: List[Dict[str, Any]], *, asset_class: str,
+          regime: str = "", confirmed_profile_id: str = ""
+          ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """``(blocking, excused)`` — what actually stops this run, and what does not.
+
+    ``findings`` are the aggregated validation rows. Only rows the aggregator
+    already called BLOCKING are considered; nothing here promotes a finding.
+    Each excused row is annotated with the policy that excused it, so the
+    reason is carried on the record rather than left to be inferred.
+    """
+    blocking = [r for r in (findings or [])
+                if str(r.get("materiality", "")).upper() == "BLOCKING"]
+    if not blocking:
+        return [], []
+
+    excuses = excused_fields([str(r.get("field_name") or "") for r in blocking],
+                             asset_class=asset_class, regime=regime,
+                             confirmed_profile_id=confirmed_profile_id)
+    if not excuses:
+        return blocking, []
+
+    kept: List[Dict[str, Any]] = []
+    let_through: List[Dict[str, Any]] = []
+    for row in blocking:
+        policy = excuses.get(str(row.get("field_name") or ""))
+        if policy:
+            annotated = dict(row)
+            annotated["base_mi_policy"] = policy
+            annotated["excused_reason"] = EXCUSED_NOTE
+            let_through.append(annotated)
+        else:
+            kept.append(row)
+    return kept, let_through
+
+
+def sentence(row: Dict[str, Any]) -> str:
+    """One excused finding, in words an approver can weigh.
+
+    Deliberately says what the product profile decided, not merely that
+    something was skipped: an approver signing off a run is entitled to see
+    which governed answer let a required field through.
+    """
+    field = str(row.get("field_name") or "").replace("_", " ")
+    policy = str(row.get("base_mi_policy") or "").replace("_", " ")
+    return (f"{field}: {policy} for this product, so it does not hold up "
+            "management information. It is still required for the "
+            "regulatory return.")
+
+
+def confirmation_decision(resolved: Any, blocked_fields: List[str]
+                          ) -> Dict[str, Any]:
+    """The product question, in the shape the run raises a decision in.
+
+    Answering it is what lets the profile excuse anything, so it is put in
+    front of the blockers it would clear rather than buried beside them. The
+    fields it WOULD excuse are named, because "confirm the product" with no
+    consequence attached is a question nobody can weigh.
+    """
+    profile_id = str(getattr(resolved, "profile_id", ""))
+    profile = getattr(resolved, "profile", None)
+    would_clear = sorted(
+        f for f in blocked_fields
+        if profile is not None and profile.is_non_blocking_for_base_mi(f))
+    label = profile_id.replace("_", " ")
+    article = "an" if label[:1].lower() in "aeiou" else "a"
+    return {
+        "decision_id": "product_profile",
+        "decision_type": "product_confirmation",
+        "target_field": "",
+        "source_column": "",
+        "status": "pending",
+        "blocking": True,
+        "recommended_action": "confirm_product",
+        "available_actions": ["confirm_product", "choose_alternative"],
+        "confidence": round(float(getattr(resolved, "confidence", 0.0) or 0.0),
+                            4),
+        "profile_id": profile_id,
+        "issue": f"Is this book {article} {label}?",
+        "evidence_summary": str(getattr(resolved, "rationale", "")),
+        "would_clear": would_clear,
+        "proposed_mapping": (
+            f"Confirming it means {len(would_clear)} required field"
+            f"{'s' if len(would_clear) != 1 else ''} "
+            f"({', '.join(f.replace('_', ' ') for f in would_clear)}) "
+            "are not needed for management information on this product. They "
+            "remain required for the regulatory return."
+            if would_clear else
+            f"Confirming it records the product as {article} {label}."),
+    }

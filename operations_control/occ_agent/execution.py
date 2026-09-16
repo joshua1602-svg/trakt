@@ -75,6 +75,7 @@ from .run import (
     STAGE_HUMAN_INPUT_REQUIRED,
     STAGE_SIMULATED,
 )
+from . import base_mi_gate as _base_mi_gate
 from . import cross_file as _cross_file
 from . import workbook as _workbook
 from .policy import CAP_LIVE_PIPELINE_TRIGGER, SyntheticPolicy
@@ -130,6 +131,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
     def __init__(self, *, artefact_paths: Sequence[Path],
                  policy: SyntheticPolicy, sandbox: Path,
                  asset_type: str = "equity_release",
+                 confirmed_product_profile: str = "",
                  regime: str = "",
                  registry_path: Path = REGISTRY_PATH,
                  aliases_dir: Path = ALIASES_DIR,
@@ -153,6 +155,16 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: Fields more than one file in the pack carries, and whether those
         #: files agree. Reported, never blocking — see :mod:`.cross_file`.
         self.cross_file: List[Dict[str, Any]] = []
+        #: Findings the product profile excuses for base MI. Reported, never
+        #: hidden: "not applicable to this product" is an answer, and an
+        #: operator who cannot see it cannot question it.
+        self.excused_findings: List[Dict[str, Any]] = []
+        #: The product the operator has confirmed this book to be, when they
+        #: have. Empty until then, and nothing is excused without it.
+        self.confirmed_product_profile: str = str(confirmed_product_profile
+                                                  or "")
+        #: The confirmation to put to them, when one is outstanding.
+        self.product_profile_decision: Optional[Dict[str, Any]] = None
         self.validation_report: List[Dict[str, Any]] = []
         self._assert_inside_sandbox()
 
@@ -519,10 +531,46 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                    if len(combined) else pd.DataFrame())
         self.validation_report = (summary.to_dict("records")
                                   if len(summary) else [])
-        blocking = [r for r in self.validation_report
-                    if str(r.get("materiality")).upper() == "BLOCKING"]
+        # WHAT ACTUALLY STOPS THIS RUN, as the product profile decides it.
+        #
+        # Nothing in the platform's ingestion route gates on materiality — that
+        # gate is the Agent's alone, and it used to stop on every BLOCKING
+        # finding without asking what the product needs. So a lifetime mortgage
+        # was refused for having no maturity date, while the same files loaded
+        # through the platform went through.
+        #
+        # `config/asset/product_profiles.yaml` answers this per field, per
+        # product, and has all along. An excused finding is still reported and
+        # still on the record; it simply stops being a reason to refuse.
+        # Nothing is excused when a regime is being prepared: `base_mi` speaks
+        # for management information, and the regulatory return needs more.
+        blocking, excused = _base_mi_gate.split(
+            self.validation_report, asset_class=self.asset_type,
+            regime=self.regime or "",
+            confirmed_profile_id=self.confirmed_product_profile)
+        # The question that has to be answered before anything is excused:
+        # "is this book a lifetime mortgage?". On the asset class alone the
+        # platform PROPOSES a profile rather than applying it, and that guard
+        # is not worked around here — until an operator confirms it, every
+        # required field keeps blocking.
+        pending = _base_mi_gate.needs_confirmation(
+            self.asset_type, self.confirmed_product_profile)
+        if pending is not None and blocking and not self.regime:
+            self.product_profile_decision = _base_mi_gate.confirmation_decision(
+                pending, [str(r.get("field_name") or "") for r in blocking])
+        self.excused_findings = excused
         review = [r for r in self.validation_report
                   if str(r.get("materiality")).upper() == "REVIEW"]
+        if excused:
+            self._record(StageRecord(
+                stage="validate", outcome=STAGE_DETERMINISTIC_COMPLETED,
+                component="engine.onboarding_agent.product_profile",
+                summary=(f"{len(excused)} required field"
+                         f"{'s' if len(excused) != 1 else ''} "
+                         "not needed for management information on this "
+                         "product. Still required for the regulatory return."),
+                metrics={"excused": len(excused)},
+                blockers=[_base_mi_gate.sentence(r) for r in excused]))
 
         val_dir = tx_dir / "validation"
         val_dir.mkdir(parents=True, exist_ok=True)

@@ -362,6 +362,9 @@ def build_package(run: SyntheticRun, case: OnboardingCase,
         # the readiness package because a conflict stops the build, and an
         # approver signing readiness off is entitled to see one coming.
         "cross_file_agreement": list(run.cross_file),
+        # 7c — required fields the product profile does not need for
+        # management information. Shown, never hidden.
+        "excused_for_base_mi": list(run.excused_findings),
         # 8
         "validation_summary": [r for r in run.control_results
                                if r.get("kind") == "validation"],

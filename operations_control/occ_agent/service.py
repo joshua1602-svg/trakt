@@ -1536,6 +1536,7 @@ class OccAgentService:
             artefact_paths=self._artefact_paths(run), policy=self.policy,
             sandbox=self.store.case_dir(run.tenant, run.case_ref),
             asset_type=facts.asset_class,
+            confirmed_product_profile=run.confirmed_product_profile,
             regime=facts.regime,
             approved_mappings=self._approved_mappings(run),
             case_id=run.case_ref, tenant=run.tenant)
@@ -1557,11 +1558,18 @@ class OccAgentService:
                                  {"findings": adapters.validation_report})
         run.mapping_report = adapters.mapping_report
         run.cross_file = adapters.cross_file
+        run.excused_findings = adapters.excused_findings
 
         # Resolved decisions are kept (they are the record of what the human
         # settled); a decision the rerun raises again replaces its open twin
         # rather than being appended beside it.
         decisions = self._decisions_from_run(run, facts, run_root)
+        # The product question, raised beside the blockers it would clear.
+        # Answering it is what lets the profile excuse anything, so it belongs
+        # in the same list an operator works through rather than in a panel of
+        # its own.
+        if adapters.product_profile_decision is not None:
+            decisions = [adapters.product_profile_decision, *decisions]
         settled = {d["decision_id"]: d for d in run.open_decisions
                    if d.get("status") != "open"}
         for decision in decisions:
@@ -1624,6 +1632,14 @@ class OccAgentService:
         target["resolved_by"] = actor
         target["resolved_at"] = now_iso()
         target["reason"] = reason
+        # Confirming the product is not just an answered question: it is what
+        # lets the product profile excuse a field, so the confirmation is
+        # recorded on the run and every later run reads it. Approving it takes
+        # the proposed profile; amending it takes the one the operator named.
+        if str(target.get("decision_type")) == "product_confirmation" \
+                and action != "reject":
+            run.confirmed_product_profile = str(
+                value or target.get("profile_id") or "")
         self.store.save(run)
         self._audit(run, "human_decision_recorded", actor_type=ACTOR_HUMAN,
                     actor=actor, classification=EXEC_HUMAN_CONFIRMED,
