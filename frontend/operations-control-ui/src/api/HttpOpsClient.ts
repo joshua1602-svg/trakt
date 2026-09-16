@@ -333,6 +333,15 @@ export class HttpOpsClient implements OpsClient {
     });
   }
 
+  async retireRule(ruleId: string, reason: string,
+                   clientId?: string): Promise<Rule> {
+    const body = await this.post<{ rule: Rule }>(
+      `/ops/rules/${encodeURIComponent(ruleId)}/retire`,
+      { reason, client: clientId ?? null },
+    );
+    return body.rule;
+  }
+
   async getRuleHistory(ruleId: string): Promise<Rule[]> {
     const body = await this.request<{ history: Rule[] }>(
       `/ops/rules/${encodeURIComponent(ruleId)}/history`,

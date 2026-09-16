@@ -743,6 +743,62 @@ def list_rules(client: Optional[str] = None, q: str = "",
     return {"ok": True, "rules": out}
 
 
+class RetireRule(BaseModel):
+    """Withdrawing a standing rule. The reason is not optional.
+
+    A rule is read on every future delivery, so taking one out changes what
+    the platform will do with data nobody has sent yet. Six months later the
+    only thing that explains that is what was written here.
+    """
+
+    reason: str
+    client: Optional[str] = None
+
+
+@app.post("/ops/rules/{rule_id}/retire")
+def retire_rule(rule_id: str, body: RetireRule,
+                principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
+    """Withdraw a standing rule, so it stops being applied.
+
+    NOT a delete. The rule keeps its history and its versions; it is marked
+    retired, and the record of what it did while it was in force stays
+    readable. Reversing a decision is an ordinary part of operating this
+    platform — it was the one thing the rules surface could not do, so a
+    mapping confirmed in error could only ever be superseded by chance, on a
+    later delivery that happened to ask the same question again.
+    """
+    if not str(body.reason or "").strip():
+        raise OpsError("OPS_REASON_REQUIRED",
+                       "Please say why this rule is being withdrawn.", 400)
+    eng = get_engine()
+    candidates = ([body.client] if body.client
+                  else principal.visible_clients(eng.store.known_clients()))
+    for client_id in [*candidates, None]:
+        if client_id is not None and not principal.allows(client_id):
+            continue
+        current = eng.rules.get(client_id, rule_id)
+        if current is None:
+            continue
+        if current.client_id:
+            require_client(principal, current.client_id)
+        retired = eng.rules.retire(client_id, rule_id,
+                                   by=principal.name, reason=body.reason)
+        if retired is None:
+            raise OpsError(
+                "OPS_RULE_NOT_ACTIVE",
+                "That rule is not in force, so there is nothing to withdraw.",
+                409)
+        eng.store.append_audit(current.client_id or "_global", "rule_retired",
+                               actor=principal.name,
+                               detail={"rule_id": rule_id,
+                                       "version": retired.version,
+                                       "kind": retired.kind,
+                                       "reason": body.reason})
+        return {"ok": True, "rule": presenters.present_rule(retired.to_dict())}
+    raise HTTPException(status_code=404, detail={
+        "errorCode": "OPS_NOT_FOUND", "message": "That could not be found."})
+
+
 @app.get("/ops/rules/{rule_id}/history")
 def rule_history(rule_id: str, client: Optional[str] = None,
                  principal: Principal = Depends(authenticate)) -> Dict[str, Any]:
