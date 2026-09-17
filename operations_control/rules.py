@@ -92,6 +92,11 @@ class RuleRecord:
             return f"enum:{p.get('field', '')}:{_norm(p.get('source_value', ''))}"
         if self.kind == "validation_exception":
             return f"exception:{p.get('check', '')}"
+        if self.kind == "source_precedence":
+            # ABOUT THE FIELD, not about the file chosen. Naming a different
+            # file for the same field is changing your mind, and must
+            # supersede rather than stand beside the earlier answer.
+            return f"source_precedence:{_norm(str(p.get('canonical_field', '')))}"
         if self.kind == "client_rule":
             # A client rule is ABOUT its setting. Without this every client rule
             # shared one subject key, so approving a second one superseded the
@@ -248,6 +253,7 @@ def project_rules_to_client_memory(rules: List[RuleRecord], client_id: str,
     from engine.onboarding_agent.mapping_memory import (
         DECISION_ENUM_MAPPING,
         DECISION_MAPPING_OVERRIDE,
+        DECISION_SOURCE_PRECEDENCE,
         MappingMemoryStore,
         MemoryEntry,
     )
@@ -256,6 +262,14 @@ def project_rules_to_client_memory(rules: List[RuleRecord], client_id: str,
     store = MappingMemoryStore(mdir, client_id=client_id)
     n = 0
     for r in rules:
+        if r.status != RULE_ACTIVE:
+            # ONLY WHAT IS IN FORCE. `list_current` returns a rule's current
+            # record whatever its status, so a withdrawn rule arrives here
+            # looking like any other — and was projected into client memory
+            # and read on the next run, which is the whole of what withdrawing
+            # one is supposed to prevent. `applicable()` has always filtered;
+            # this path had not.
+            continue
         p = r.payload or {}
         if r.kind in ("field_mapping", "alias"):
             src = p.get("source_column") or p.get("alias") or ""
@@ -269,6 +283,34 @@ def project_rules_to_client_memory(rules: List[RuleRecord], client_id: str,
                 confidence=float(r.confidence or 1.0),
                 notes=f"operations-control rule {r.rule_id} v{r.version} "
                       f"({r.scope} scope)"))
+            n += 1
+        elif r.kind == "source_precedence":
+            # WHICH FILE TO BELIEVE, carried in the shape
+            # `mapping_memory.precedence_rules_from_memory` reads back out and
+            # `central_tape_builder` consumes as
+            # `13_source_precedence_rules.yaml`. The evidence keys are that
+            # file's, not this module's: a second spelling here would be a
+            # rule the builder silently ignores.
+            if not p.get("canonical_field") or not p.get("primary_source_file"):
+                continue
+            store.save_entry(MemoryEntry(
+                client_id=client_id,
+                decision_type=DECISION_SOURCE_PRECEDENCE,
+                canonical_field=p.get("canonical_field", ""),
+                source_column=p.get("primary_source_column", ""),
+                source_file_pattern=p.get("primary_source_file", "*"),
+                approved_by=r.approved_by, approved_at=r.approved_at,
+                evidence={
+                    "primary_source_file": p.get("primary_source_file", ""),
+                    "primary_source_column": p.get("primary_source_column", ""),
+                    "secondary_source_file": p.get("secondary_source_file", ""),
+                    "secondary_source_column":
+                        p.get("secondary_source_column", ""),
+                    "reconciliation_status": p.get("reconciliation_status")
+                    or "resolved_by_precedence",
+                },
+                notes=f"operations-control rule {r.rule_id} v{r.version}: "
+                      f"{r.reason}".strip().rstrip(":")))
             n += 1
         elif r.kind == "enum":
             if (p or {}).get("layer") == "regulatory":

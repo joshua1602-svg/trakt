@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from ..contracts import (
     DEC_OPEN,
+    KIND_SOURCE_PRECEDENCE,
     PUBLICATION_SCOPE_DEFAULT,
     RUN_AWAITING_PUBLICATION,
     RUN_BLOCKED,
@@ -36,6 +37,7 @@ from ..contracts import (
 )
 from ..engine import OpsEngine, OpsError
 from ..onboarding.case import CaseError as _CaseError
+from ..rules import RuleRecord
 from ..stores import OpsStore
 from . import presenters, workflow_view
 from .auth import Principal, authenticate, require_admin, require_client
@@ -741,6 +743,78 @@ def list_rules(client: Optional[str] = None, q: str = "",
             continue
         out.append(pr)
     return {"ok": True, "rules": out}
+
+
+class SourcePrecedence(BaseModel):
+    """Which file to believe for one field, when a delivery's files disagree.
+
+    Not a mapping: every source is correctly mapped. They carry different
+    values for the same loan, and something has to say which is authoritative
+    — otherwise the central tape builder refuses the field rather than
+    picking, which is right, and leaves the delivery stopped.
+    """
+
+    client_id: str
+    canonical_field: str
+    primary_source_file: str
+    primary_source_column: str = ""
+    secondary_source_file: str = ""
+    secondary_source_column: str = ""
+    portfolio_id: str = ""
+    reason: str = ""
+
+
+@app.post("/ops/rules/precedence", status_code=201)
+def set_source_precedence(body: SourcePrecedence,
+                          principal: Principal = Depends(authenticate)
+                          ) -> Dict[str, Any]:
+    """Record which file is authoritative for a field. Supersedes, never edits.
+
+    Goes through the same ``RuleStore.approve`` every other governed decision
+    takes, so naming a different file later becomes version n+1 and the
+    previous answer stays readable rather than being overwritten. It reaches
+    the pipeline the way the rules already do — projected into the client's
+    memory, which the onboarding agent reads on the next run.
+    """
+    require_client(principal, body.client_id)
+    for name, value in (("canonical_field", body.canonical_field),
+                        ("primary_source_file", body.primary_source_file)):
+        if not str(value or "").strip():
+            raise OpsError("OPS_FIELD_REQUIRED",
+                           f"A precedence decision needs its {name.replace('_', ' ')}.",
+                           400)
+    if (body.secondary_source_file
+            and body.secondary_source_file == body.primary_source_file):
+        raise OpsError(
+            "OPS_SAME_SOURCE",
+            "The file to believe and the one it is preferred over cannot be "
+            "the same file.", 400)
+
+    eng = get_engine()
+    field_label = body.canonical_field.replace("_", " ")
+    rule = eng.rules.approve(RuleRecord(
+        rule_id="", version=0, kind=KIND_SOURCE_PRECEDENCE,
+        scope="portfolio" if body.portfolio_id else "client",
+        client_id=body.client_id, portfolio_id=body.portfolio_id,
+        payload={"canonical_field": body.canonical_field,
+                 "primary_source_file": body.primary_source_file,
+                 "primary_source_column": body.primary_source_column,
+                 "secondary_source_file": body.secondary_source_file,
+                 "secondary_source_column": body.secondary_source_column,
+                 "reconciliation_status": "resolved_by_precedence"},
+        description=(f"For {field_label}, believe "
+                     f"'{body.primary_source_file}'."),
+        approved_by=principal.name, reason=body.reason,
+        suggested_by="operator"))
+    eng.store.append_audit(body.client_id, "source_precedence_approved",
+                           actor=principal.name,
+                           detail={"rule_id": rule.rule_id,
+                                   "version": rule.version,
+                                   "canonical_field": body.canonical_field,
+                                   "primary_source_file":
+                                       body.primary_source_file,
+                                   "reason": body.reason})
+    return {"ok": True, "rule": presenters.present_rule(rule.to_dict())}
 
 
 class RetireRule(BaseModel):

@@ -65,6 +65,20 @@ STATE_LABELS = {
 #: How each tier reads to somebody who did not write the mapper. The tier names
 #: are the mapper's own vocabulary (``semantic_alignment.HeaderMapper.map_one``)
 #: and mean nothing to an operator; what they need is how firm the evidence is.
+#: On what evidence a column reads as it does — the "mapping basis" an
+#: operator needs to weigh a row. A proposal from a model and a contract-backed
+#: alias are both "a suggested mapping" on the screen and are not remotely the
+#: same claim, so the table has to distinguish them.
+BASIS_OPERATOR = "you"
+BASIS_DETERMINISTIC = "deterministic"
+BASIS_MODEL = "model"
+
+BASIS_LABELS = {
+    BASIS_OPERATOR: "You confirmed it",
+    BASIS_DETERMINISTIC: "Trakt's own matching",
+    BASIS_MODEL: "Suggested by a model, not yet confirmed",
+}
+
 TIER_LABELS = {
     "exact": "The column is named exactly as the field is",
     "normalized": "The names match once case and punctuation are ignored",
@@ -160,6 +174,20 @@ def overview(run: Any) -> Dict[str, Any]:
             except (TypeError, ValueError):
                 confidence = None
         tier = str(raw.get("tier") or "")
+        # What a model proposed for a column Trakt could not place. Never a
+        # mapping — it is carried beside the row so the table can show what was
+        # suggested AND where the suggestion came from, because "suggested
+        # mapping" with no basis beside it invites an operator to accept a
+        # proposal on the same footing as a contract-backed match.
+        suggested = str(raw.get("llm_field") or "")
+        if tier == "operator_approved":
+            basis = BASIS_OPERATOR
+        elif str(raw.get("canonical_field") or ""):
+            basis = BASIS_DETERMINISTIC
+        elif suggested:
+            basis = BASIS_MODEL
+        else:
+            basis = ""
         rows.append({
             "source_file": str(raw.get("source_file") or ""),
             "source_column": column,
@@ -172,6 +200,11 @@ def overview(run: Any) -> Dict[str, Any]:
             "state": state,
             "state_label": STATE_LABELS[state],
             "decision_id": decision_id,
+            "basis": basis,
+            "basis_label": BASIS_LABELS.get(basis, ""),
+            "suggested_field": suggested,
+            "suggested_label": _label(suggested),
+            "suggested_reason": str(raw.get("llm_reasoning") or ""),
             # Whether this column's file is the one the canonical tape is built
             # from. The table groups by file and says which is which, so an
             # operator is not left to infer it from the filename.

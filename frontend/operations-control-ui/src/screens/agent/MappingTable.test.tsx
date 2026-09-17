@@ -174,7 +174,9 @@ describe("OCC Agent — every column is accounted for", () => {
     await user.type(box, "Onboard Northstar Lending. Monthly management information.");
     await user.click(screen.getByRole("button", { name: copy.agent.createButton }));
     await screen.findByText(copy.agent.conversationHeading);
-    expect(await screen.findByText(copy.agent.mappingEmpty)).toBeInTheDocument();
+    // A case created from this screen is a rehearsal until an operator says
+    // otherwise, so this is the practice wording.
+    expect(await screen.findByText(copy.agent.mappingEmpty(false))).toBeInTheDocument();
   });
 });
 

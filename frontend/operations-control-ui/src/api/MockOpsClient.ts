@@ -1942,7 +1942,7 @@ export class MockOpsClient implements OpsClient {
                         amendClient?: string): Promise<AgentStatus> {
     await this.wait();
     mockAgentLive.lastCreateLive = live === true;
-    return this.agent.create(instruction, fixtureId, amendClient);
+    return this.agent.create(instruction, fixtureId, amendClient, live === true);
   }
 
   async getAgentCase(caseRef: string): Promise<AgentStatus> {

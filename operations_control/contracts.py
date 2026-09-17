@@ -143,9 +143,16 @@ KIND_VALIDATION_EXCEPTION = "validation_exception"
 KIND_CLIENT_RULE = "client_rule"          # regulatory configuration setting
 KIND_FILE_ROLE = "file_role"              # identify an ambiguous input file
 KIND_PUBLICATION = "publication"
+#: Which FILE to believe when a delivery's files disagree about one field.
+#: Not a mapping — every source is correctly mapped; they simply carry
+#: different values, and something has to say which is authoritative. Without
+#: it the central tape builder refuses the field rather than picking, which is
+#: right, and left an operator with no way to answer.
+KIND_SOURCE_PRECEDENCE = "source_precedence"
 DECISION_KINDS = (KIND_FIELD_MAPPING, KIND_ALIAS, KIND_ENUM,
                   KIND_TRANSFORMATION, KIND_VALIDATION_EXCEPTION,
-                  KIND_CLIENT_RULE, KIND_FILE_ROLE, KIND_PUBLICATION)
+                  KIND_CLIENT_RULE, KIND_FILE_ROLE, KIND_PUBLICATION,
+                  KIND_SOURCE_PRECEDENCE)
 
 
 def now_iso() -> str:

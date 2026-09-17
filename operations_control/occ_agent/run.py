@@ -210,6 +210,20 @@ class SyntheticRun:
     #: files agree about them. A disagreement stops the delivery when it is
     #: built, so it is surfaced here — in rehearsal — rather than after.
     cross_file: List[Dict[str, Any]] = field(default_factory=list)
+    #: Required fields the product profile does not need for management
+    #: information. Kept on the run because an approver is entitled to see
+    #: which governed answer let a required field through.
+    excused_findings: List[Dict[str, Any]] = field(default_factory=list)
+    #: What a model was asked about the columns deterministic matching could
+    #: not settle, what it proposed, and why it was not asked where it was not.
+    #: Kept on the run because a suggestion an operator confirms is one they
+    #: must be able to see the origin of — and because a model that quietly did
+    #: not run looks exactly like one that had nothing to say.
+    llm: Dict[str, Any] = field(default_factory=dict)
+    #: The product an operator confirmed this book to be. Until it is set, the
+    #: product profile excuses nothing — the platform proposes a profile on the
+    #: asset class alone and deliberately does not apply one.
+    confirmed_product_profile: str = ""
     open_decisions: List[Dict[str, Any]] = field(default_factory=list)
     control_results: List[Dict[str, Any]] = field(default_factory=list)
     planned_pipeline_actions: List[Dict[str, Any]] = field(default_factory=list)

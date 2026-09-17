@@ -252,11 +252,25 @@ def evaluate(run: SyntheticRun, case: OnboardingCase, facts: ExecutionFacts,
         remedy="Approve readiness once the plan is right.")
 
     # -- the boundary ----------------------------------------------------- #
+    #
+    # WHAT THESE TWO SAY, AND TO WHOM. The dry run examines a real client's
+    # files without writing anything, on a rehearsal and on a real onboarding
+    # alike — that is why ``runtime_mode`` is synthetic either way, and why
+    # both criteria hold on both. What differs is what they MEAN. On a
+    # rehearsal, nothing will ever be written and the boundary is the point of
+    # the exercise. On a real onboarding, nothing has been written YET: the
+    # operator is about to activate, and telling them their real client's case
+    # is "practice" is simply untrue. It was read that way on a live case, and
+    # the words are the whole reason.
+    live = str(getattr(run, "mode", "")) == "live"
 
-    # 12. No configuration was written. The point of the whole exercise.
-    add("no_configuration_written", "No configuration was created",
+    # 12. No configuration has been written. The point of the whole exercise.
+    add("no_configuration_written",
+        "Nothing created yet" if live else "No configuration was created",
         case.status in NO_ACTIVE_CONFIGURATION,
-        detail=("This practice case created no client configuration."
+        detail=(("No client configuration has been created from this case yet."
+                 if live else
+                 "This practice case created no client configuration.")
                 if case.status in NO_ACTIVE_CONFIGURATION else
                 "A configuration was activated from this case."),
         remedy="This case cannot proceed; report it to your administrator.",
@@ -265,14 +279,18 @@ def evaluate(run: SyntheticRun, case: OnboardingCase, facts: ExecutionFacts,
     # 13. No synthetic runtime control breached.
     breached = [e for e in (run.control_results or [])
                 if e.get("kind") == "boundary_refusal"]
-    add("runtime_controls_intact", "Practice controls intact",
+    add("runtime_controls_intact",
+        "Dry-run controls intact" if live else "Practice controls intact",
         run.runtime_mode == RUNTIME_MODE_SYNTHETIC
         and policy.runtime_mode == RUNTIME_MODE_SYNTHETIC
         and not any(policy.permits(c) for c in
                     ("external_email", "live_blob_write",
                      "live_pipeline_trigger", "production_config_write",
                      "publish", "activate_configuration")),
-        detail=("The practice boundary held for the whole case."
+        detail=(("The dry run wrote nothing and started nothing. Confirming "
+                 "activation is what changes that."
+                 if live else
+                 "The practice boundary held for the whole case.")
                 + (f" {len(breached)} prohibited call(s) were refused."
                    if breached else "")),
         remedy="This case cannot proceed; report it to your administrator.",
@@ -358,6 +376,13 @@ def build_package(run: SyntheticRun, case: OnboardingCase,
             for a in artefacts],
         # 7
         "field_mapping_report": run.mapping_report,
+        # 7b — where the delivery's files disagree with each other. Part of
+        # the readiness package because a conflict stops the build, and an
+        # approver signing readiness off is entitled to see one coming.
+        "cross_file_agreement": list(run.cross_file),
+        # 7c — required fields the product profile does not need for
+        # management information. Shown, never hidden.
+        "excused_for_base_mi": list(run.excused_findings),
         # 8
         "validation_summary": [r for r in run.control_results
                                if r.get("kind") == "validation"],

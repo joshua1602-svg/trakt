@@ -75,7 +75,9 @@ from .run import (
     STAGE_HUMAN_INPUT_REQUIRED,
     STAGE_SIMULATED,
 )
+from . import base_mi_gate as _base_mi_gate
 from . import cross_file as _cross_file
+from . import llm_mapping as _llm
 from . import workbook as _workbook
 from .policy import CAP_LIVE_PIPELINE_TRIGGER, SyntheticPolicy
 
@@ -130,11 +132,13 @@ class SyntheticOnboardingAdapters(AgentAdapters):
     def __init__(self, *, artefact_paths: Sequence[Path],
                  policy: SyntheticPolicy, sandbox: Path,
                  asset_type: str = "equity_release",
+                 confirmed_product_profile: str = "",
                  regime: str = "",
                  registry_path: Path = REGISTRY_PATH,
                  aliases_dir: Path = ALIASES_DIR,
                  issue_policy_path: Path = ISSUE_POLICY_PATH,
                  approved_mappings: Optional[Dict[str, str]] = None,
+                 llm_policy: Optional["_llm.Policy"] = None,
                  case_id: str = "", tenant: str = ""):
         self.artefact_paths = [Path(p) for p in artefact_paths]
         self.policy = policy
@@ -153,6 +157,28 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: Fields more than one file in the pack carries, and whether those
         #: files agree. Reported, never blocking — see :mod:`.cross_file`.
         self.cross_file: List[Dict[str, Any]] = []
+        #: Findings the product profile excuses for base MI. Reported, never
+        #: hidden: "not applicable to this product" is an answer, and an
+        #: operator who cannot see it cannot question it.
+        self.excused_findings: List[Dict[str, Any]] = []
+        #: The product the operator has confirmed this book to be, when they
+        #: have. Empty until then, and nothing is excused without it.
+        self.confirmed_product_profile: str = str(confirmed_product_profile
+                                                  or "")
+        #: The confirmation to put to them, when one is outstanding.
+        self.product_profile_decision: Optional[Dict[str, Any]] = None
+        #: The governed budget for asking a model about a column the
+        #: deterministic tiers could not settle — see :mod:`.llm_mapping`.
+        self.llm_policy: _llm.Policy = llm_policy or _llm.Policy.load()
+        #: What the model was asked, what it proposed, and why not where not.
+        #: A model that quietly did not run and one that had nothing to say
+        #: look identical from the outside; they are not the same thing.
+        self.llm: Dict[str, Any] = _llm.Outcome().to_dict()
+        #: Reporting-period labels turned into the cut-off dates they stand
+        #: for (``August`` -> ``2026-08-31``), per column. Recorded so the
+        #: transform is visible rather than silent — see
+        #: :func:`_canonicalise_period_cutoffs`.
+        self.period_cutoffs: Dict[str, Any] = {}
         self.validation_report: List[Dict[str, Any]] = []
         self._assert_inside_sandbox()
 
@@ -287,6 +313,72 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                         column, canonical, tier, float(confidence),
                         file_frame[column], path.name))
 
+        # 2b. THE MODEL'S SECOND OPINION, ON WHAT DETERMINISTIC MATCHING COULD
+        #     NOT SETTLE.
+        #
+        #     Zero-cost first, which the loop above already is: the tiered
+        #     mapper runs to exhaustion and everything it settles is settled.
+        #     What reaches the model is only what it could not place — on a
+        #     real hundred-column tape, the thirty columns that matched nothing
+        #     and were previously reported as unreadable with no proposal
+        #     against any of them, leaving an operator to name each canonical
+        #     field from memory.
+        #
+        #     A suggestion is never a mapping. It does not enter `resolved`, it
+        #     cannot reach the tape, and it arrives as a decision that says in
+        #     its own words that a model proposed it — so confirming one is a
+        #     person's act, and they can see what they are confirming.
+        self.llm = _llm.Outcome().to_dict()
+        unsettled = _llm.unresolved(self.mapping_report, self.llm_policy)
+        if unsettled:
+            outcome = _llm.suggest(
+                unsettled, frame, policy=self.llm_policy,
+                registry_path=self.registry_path, aliases_dir=self.aliases_dir,
+                asset_type=self.asset_type)
+            self.llm = outcome.to_dict()
+            already = {str(d.get("source_column") or "") for d in decisions}
+            for column, suggestion in outcome.by_column.items():
+                for row in self.mapping_report:
+                    if (row.get("primary")
+                            and row.get("source_column") == column):
+                        row["llm_field"] = suggestion.field_name
+                        row["llm_confidence"] = round(
+                            float(suggestion.confidence), 4)
+                        row["llm_reasoning"] = suggestion.reasoning
+                if column in already or column not in frame.columns:
+                    # A column the deterministic pass already raised a question
+                    # about keeps that question; the suggestion is recorded
+                    # beside it rather than asked twice.
+                    continue
+                decisions.append(_llm.decision(
+                    suggestion, source_file=primary.name,
+                    populated=_populated(frame[column]),
+                    rows=int(len(frame))))
+            # Narrated when the model ran, and when it was switched ON and
+            # still did not — an operator expecting proposals is owed the
+            # reason none arrived. Not narrated where it is simply switched
+            # off, which is a standing fact about the environment rather than
+            # something that happened during this run; `run.llm` carries it
+            # either way. The outcome stays DETERMINISTIC: nothing here was
+            # simulated, and a model declining to answer is not a simulation.
+            if outcome.asked or (self.llm_policy.enabled
+                                 and outcome.skipped_because):
+                self._record(StageRecord(
+                    stage="onboard",
+                    outcome=STAGE_DETERMINISTIC_COMPLETED,
+                    component="engine.gate_1_alignment.llm_mapper_agent."
+                              "LLMFieldMapper",
+                    summary=(f"Asked a model about {outcome.asked} column"
+                             f"{'s' if outcome.asked != 1 else ''} Trakt could "
+                             f"not match on its own; it proposed "
+                             f"{len(outcome.by_column)}. Nothing it suggested "
+                             "is used until you confirm it."
+                             if outcome.asked else
+                             f"No model was asked: {outcome.skipped_because}."),
+                    metrics={"unsettled_columns": len(unsettled),
+                             "asked": outcome.asked,
+                             "proposed": len(outcome.by_column)}))
+
         # 3. A canonical field claimed by two columns is an ambiguity a human
         #    must settle — the engine has no basis to prefer one.
         for canonical, columns in _duplicates(resolved).items():
@@ -341,6 +433,8 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         # 4. Build the mapped tape + the handoff manifest.
         mapped = frame.rename(columns=resolved)
         mapped = mapped[[c for c in mapped.columns if c in set(resolved.values())]]
+        self.period_cutoffs = _canonicalise_period_cutoffs(
+            mapped, self.artefact_paths)
         tape = work_dir / "18_central_lender_tape.csv"
         mapped.to_csv(tape, index=False)
         handoff = work_dir / "24_onboarding_handoff_manifest.json"
@@ -357,15 +451,27 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         (work_dir / "source_profiles.json").write_text(
             json.dumps(profiles, indent=2, default=str), encoding="utf-8")
 
+        read_it_as = ""
+        for column, detail in self.period_cutoffs.items():
+            pairs = ", ".join(f"{label} as {iso}"
+                              for label, iso in sorted(
+                                  detail.get("labels", {}).items())[:3])
+            if pairs:
+                read_it_as = (f" Read the reporting month in "
+                              f"{column.replace('_', ' ')} as a cut-off date: "
+                              f"{pairs}.")
         self._record(StageRecord(
             stage="onboard", outcome=STAGE_DETERMINISTIC_COMPLETED,
             component="engine.onboarding_agent.file_profiler + "
                       "engine.gate_1_alignment.semantic_alignment.HeaderMapper",
             summary=f"Read {len(self.artefact_paths)} file"
                     f"{'s' if len(self.artefact_paths) != 1 else ''} and "
-                    f"matched {len(resolved)} columns.",
+                    f"matched {len(resolved)} columns.{read_it_as}",
             metrics={"rows": int(len(mapped)), "mapped_columns": len(resolved),
-                     "source_columns": int(len(frame.columns))}))
+                     "source_columns": int(len(frame.columns)),
+                     "period_labels_dated": sum(
+                         len(d.get("labels", {}))
+                         for d in self.period_cutoffs.values())}))
         return StepResult(ok=True, output_path=str(tape),
                           manifest_path=str(handoff),
                           readiness={"loan_count": int(len(mapped)),
@@ -447,6 +553,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             get_core_required_fields,
             load_registry,
             select_fields_for_portfolio,
+            validate_core_presence,
         )
         tx_dir = Path(transformation_manifest).parent
         typed_csv = tx_dir / "31_transformed_canonical_tape.csv"
@@ -454,27 +561,42 @@ class SyntheticOnboardingAdapters(AgentAdapters):
 
         issue_policy = _load_yaml(self.issue_policy_path)
 
-        # Canonical: core-required fields must be present and populated. Emitted
-        # in the canonical validator's own schema (rule_id/severity/field/row/
-        # message) so the platform's normaliser handles it unchanged.
+        # Canonical: core-required fields must be present and populated —
+        # through THE PLATFORM'S OWN CHECK, not a second copy of it.
+        #
+        # This used to re-implement the check inline and hard-code
+        # `severity: "error"` on every finding. The real validator asks each
+        # field's `applicability` block first, and the registry says, for
+        # instance:
+        #
+        #   maturity_date:
+        #     applicability:
+        #       equity_release:
+        #         allowed_missing: true
+        #         severity_if_missing: warning
+        #         nd_default: ND2
+        #         reason: "Lifetime mortgage / equity release products do not
+        #                  have a fixed contractual maturity."
+        #
+        # So a lifetime mortgage with no maturity date is a WARNING on the
+        # platform's own ingestion route and was BLOCKING here — the Agent
+        # refusing deliveries the platform accepts, for reasons the
+        # configuration had already answered. The same applied to the
+        # originator's LEI, which the governed client configuration supplies at
+        # projection and the Annex 2 preflight enforces separately.
+        #
+        # APPLICABILITY IS KEYED ON THE ASSET CLASS ("equity_release"), not on
+        # how the book was acquired ("direct" / "acquired"). Passing the
+        # portfolio type found nothing and fell through to the strict default,
+        # which is the second half of the same defect.
         registry = load_registry(self.registry_path)
         fields_meta = select_fields_for_portfolio(
             registry, spec.source_portfolio_type or "direct")
-        canonical_rows: List[Dict[str, Any]] = []
-        for field_name in get_core_required_fields(fields_meta):
-            if field_name not in frame.columns:
-                canonical_rows.append({
-                    "rule_id": "CORE001", "severity": "error",
-                    "field": field_name, "row": -1,
-                    "message": f"{field_name} is not present"})
-                continue
-            blank = frame[field_name].isna() | (
-                frame[field_name].astype(str).str.strip() == "")
-            for idx in frame.index[blank]:
-                canonical_rows.append({
-                    "rule_id": "CORE002", "severity": "error",
-                    "field": field_name, "row": int(idx),
-                    "message": f"{field_name} is empty"})
+        canonical_rows: List[Dict[str, Any]] = [
+            v.__dict__ if hasattr(v, "__dict__") else dict(v)
+            for v in validate_core_presence(
+                frame, get_core_required_fields(fields_meta), fields_meta,
+                self.asset_type or spec.source_portfolio_type or "direct")]
 
         # Business rules: the real rule engine.
         try:
@@ -503,10 +625,46 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                    if len(combined) else pd.DataFrame())
         self.validation_report = (summary.to_dict("records")
                                   if len(summary) else [])
-        blocking = [r for r in self.validation_report
-                    if str(r.get("materiality")).upper() == "BLOCKING"]
+        # WHAT ACTUALLY STOPS THIS RUN, as the product profile decides it.
+        #
+        # Nothing in the platform's ingestion route gates on materiality — that
+        # gate is the Agent's alone, and it used to stop on every BLOCKING
+        # finding without asking what the product needs. So a lifetime mortgage
+        # was refused for having no maturity date, while the same files loaded
+        # through the platform went through.
+        #
+        # `config/asset/product_profiles.yaml` answers this per field, per
+        # product, and has all along. An excused finding is still reported and
+        # still on the record; it simply stops being a reason to refuse.
+        # Nothing is excused when a regime is being prepared: `base_mi` speaks
+        # for management information, and the regulatory return needs more.
+        blocking, excused = _base_mi_gate.split(
+            self.validation_report, asset_class=self.asset_type,
+            regime=self.regime or "",
+            confirmed_profile_id=self.confirmed_product_profile)
+        # The question that has to be answered before anything is excused:
+        # "is this book a lifetime mortgage?". On the asset class alone the
+        # platform PROPOSES a profile rather than applying it, and that guard
+        # is not worked around here — until an operator confirms it, every
+        # required field keeps blocking.
+        pending = _base_mi_gate.needs_confirmation(
+            self.asset_type, self.confirmed_product_profile)
+        if pending is not None and blocking and not self.regime:
+            self.product_profile_decision = _base_mi_gate.confirmation_decision(
+                pending, [str(r.get("field_name") or "") for r in blocking])
+        self.excused_findings = excused
         review = [r for r in self.validation_report
                   if str(r.get("materiality")).upper() == "REVIEW"]
+        if excused:
+            self._record(StageRecord(
+                stage="validate", outcome=STAGE_DETERMINISTIC_COMPLETED,
+                component="engine.onboarding_agent.product_profile",
+                summary=(f"{len(excused)} required field"
+                         f"{'s' if len(excused) != 1 else ''} "
+                         "not needed for management information on this "
+                         "product. Still required for the regulatory return."),
+                metrics={"excused": len(excused)},
+                blockers=[_base_mi_gate.sentence(r) for r in excused]))
 
         val_dir = tx_dir / "validation"
         val_dir.mkdir(parents=True, exist_ok=True)
@@ -720,6 +878,71 @@ def _read_table(path: Path) -> pd.DataFrame:
     return table.frame
 
 
+def _run_year(paths: Sequence[Path]) -> Optional[int]:
+    """The reporting year the delivery is for, read from its own file names.
+
+    A bare month label cannot be turned into a cut-off date without one, and
+    the year is not something to guess at: ``None`` means "no year was stated",
+    and the caller then leaves the value exactly as the client wrote it.
+    """
+    from engine.onboarding_agent import run_context as _rc
+    for path in paths:
+        for found in _rc.dates_from_filename(path.name) or []:
+            try:
+                return int(str(found)[:4])
+            except (TypeError, ValueError):   # pragma: no cover — guard
+                continue
+    return None
+
+
+def _canonicalise_period_cutoffs(mapped: "pd.DataFrame",
+                                 paths: Sequence[Path]) -> Dict[str, Any]:
+    """Turn a reporting-period LABEL into the cut-off date it stands for.
+
+    THE DEFECT THIS CLOSES. A lender's monthly extract identifies its period in
+    a ``Month Run`` column carrying ``August``. ``month run`` is a governed
+    alias of ``data_cut_off_date`` (``config/system/aliases_mandatory.yaml``),
+    so the column maps correctly — and then canonical typing reads ``August``
+    as a date, fails, and writes a blank. Every row of a 568-row book came out
+    missing its cut-off date, and the run stopped on a field the client had in
+    fact supplied.
+
+    The platform already knows the answer. ``central_tape_builder`` performs
+    exactly this step for exactly these fields, turning ``August`` into
+    ``2026-08-31`` against the run year and keeping the raw label in lineage.
+    The Agent built its tape without it — the same drift, once more, between a
+    stage body here and the platform's own build.
+
+    So this calls the builder's own function rather than restating it. What it
+    will not do is invent: ``31/08/2026`` is normalised, ``August`` resolves
+    only where the delivery's file names state a year, and anything that
+    resolves to nothing is left untouched for a human to look at.
+    """
+    from engine.onboarding_agent.central_tape_builder import (
+        _PERIOD_CUTOFF_FIELDS,
+        _canonicalise_period_cutoff,
+    )
+    year = _run_year(paths)
+    applied: Dict[str, Any] = {}
+    for column in [c for c in mapped.columns if c in _PERIOD_CUTOFF_FIELDS]:
+        resolved: Dict[str, str] = {}
+        def _canonical(value: Any) -> Any:
+            raw = "" if value is None else str(value).strip()
+            if not raw:
+                return value
+            if raw in resolved:
+                return resolved[raw] or value
+            iso, method, _basis = _canonicalise_period_cutoff(raw, year)
+            resolved[raw] = iso
+            if iso and method == "period_label_to_month_end":
+                # Only the label conversion is reported: re-normalising a date
+                # a client already wrote as a date is not news to anyone.
+                applied.setdefault(column, {"method": method, "run_year": year,
+                                            "labels": {}})
+                applied[column]["labels"][raw] = iso
+            return iso or value
+        mapped[column] = mapped[column].map(_canonical)
+    return applied
 
 
 def _duplicates(resolved: Dict[str, str]) -> Dict[str, List[str]]:

@@ -2,9 +2,22 @@
 """
 tests/test_onboarding_llm_cost_policy.py
 
-PART 3-8 — the low-cost LLM mapping review policy: off by default, targeted,
-bounded, budgeted, suggestion-only, with user-gap fallback. The LLM provider is
-always mocked; no network or API key is required.
+PART 3-8 — the low-cost LLM mapping review policy: targeted, bounded, budgeted,
+suggestion-only, with user-gap fallback. The LLM provider is always mocked; no
+network or API key is required.
+
+THE SHIPPED DEFAULT IS NOW ON. It was off, and while it was, a real client's
+tape produced columns the deterministic tiers could not place with no proposal
+against any of them — an operator naming each canonical field from memory, which
+is the work the review exists to do. What made turning it on safe is everything
+else in this file and unchanged by it: zero-cost-first, the skip threshold, the
+per-run budget, redacted samples only, canonical-only enforcement, and the fact
+that a suggestion is never promoted to a mapping.
+
+Switched OFF is still a supported state and still tested — with a policy that
+says so explicitly, rather than by reading the shipped file and assuming the
+answer. A test that asserts a configuration default is a record of a decision,
+and this one records the current decision instead of the previous one.
 """
 
 from __future__ import annotations
@@ -102,14 +115,21 @@ def _cand(col, field, conf, *, ambiguous=False, review=True, alts=None):
 
 
 class TestDefaultOff(unittest.TestCase):
-    def test_7_llm_off_by_default(self):
-        pol = load_llm_policy()
-        self.assertFalse(pol.enabled)
-        resolved = resolve_llm_policy()
-        self.assertFalse(resolved.enabled)
+    def test_7_the_shipped_policy_is_on(self):
+        """The decision this file records. Every guard that makes it safe is
+        tested below and is unchanged by it."""
+        self.assertTrue(load_llm_policy().enabled)
+        self.assertTrue(resolve_llm_policy().enabled)
+
+    def test_7a_the_off_budget_profile_still_turns_it_off(self):
+        """Switching it off for a run, an environment or a client stays a
+        supported thing to do."""
+        self.assertFalse(resolve_llm_policy(budget_profile="off").enabled)
+        self.assertFalse(resolve_llm_policy(enable_llm_review=False).enabled)
 
     def test_7b_review_returns_empty_when_off(self):
-        pol = load_llm_policy()  # enabled False
+        pol = load_llm_policy()
+        pol.enabled = False
         suggestions, usage, gaps = run_llm_mapping_review(
             mapping_candidates=[_cand("a", ANALYTICS_FIELD, 0.5)],
             mapping_ambiguities=[], field_scope=_scope("regulatory_mi"),
@@ -120,7 +140,31 @@ class TestDefaultOff(unittest.TestCase):
         self.assertFalse(usage["llm_enabled"])
         self.assertEqual(usage["calls_completed"], 0)
 
-    def test_8_deterministic_run_writes_off_summary(self):
+    def test_7c_on_but_unreachable_asks_the_person_instead(self):
+        """The state this environment is actually in until a key is supplied:
+        switched on, no provider. Nothing must be quietly dropped — the columns
+        the model would have been asked about become questions for a person,
+        and the summary says the provider was the reason."""
+        pol = load_llm_policy()
+        self.assertTrue(pol.enabled)
+        suggestions, usage, gaps = run_llm_mapping_review(
+            mapping_candidates=[_cand("a", ANALYTICS_FIELD, 0.5)],
+            mapping_ambiguities=[], field_scope=_scope("regulatory_mi"),
+            registry_fields=REGISTRY_FIELDS, mode="regulatory_mi", policy=pol,
+            llm_callable=None,
+        )
+        self.assertEqual(suggestions, [])
+        self.assertFalse(usage["llm_enabled"])
+        self.assertEqual(usage["status"],
+                         "llm_enabled_requested_but_provider_unavailable")
+        self.assertEqual(len(gaps), 1)
+        self.assertEqual(gaps[0].subject_value, "a")
+
+    def test_8_a_run_with_no_provider_writes_an_off_summary(self):
+        """A whole run, end to end, with the policy on and no provider: it
+        completes deterministically, spends nothing, and the summary says WHY
+        no model ran. "Off" and "on but unreachable" produce the same spend and
+        must not produce the same account of themselves."""
         tmp = Path(tempfile.mkdtemp(prefix="llm_off_"))
         run_onboarding(input_dir=str(PACK), client_name="OFF", output_dir=str(tmp),
                        registry_path=str(REGISTRY_PATH), aliases_dir=str(ALIASES),

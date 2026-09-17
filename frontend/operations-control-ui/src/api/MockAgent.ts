@@ -564,7 +564,8 @@ export class MockAgent {
    * version in force, so adding a reporting product later is a difference to
    * review rather than a fresh set of answers that happen to mostly match.
    */
-  create(instruction: string, fixtureId = "", amendClient = ""): AgentStatus {
+  create(instruction: string, fixtureId = "", amendClient = "",
+         live = false): AgentStatus {
     const scenario = fixtureId || this.scenarioFor(instruction);
     if (amendClient) {
       // An amendment already carries the client's answers. Re-reading a
@@ -606,7 +607,8 @@ export class MockAgent {
       this.onboarding.addPipelineBook(opened.case_id, facts.portfolioId);
     }
 
-    const doc = this.blankRun(opened.case_id, instruction, scenario, facts.reportingPeriod);
+    const doc = this.blankRun(opened.case_id, instruction, scenario,
+                              facts.reportingPeriod, live);
     const stored: StoredRun = {
       doc,
       reached: new Set([S.AWAITING_ONBOARDING]),
@@ -2364,6 +2366,7 @@ export class MockAgent {
     instruction: string,
     scenario: string,
     reportingPeriod: string,
+    live = false,
   ): SyntheticRunDoc {
     return {
       case_ref: caseRef,
@@ -2389,7 +2392,13 @@ export class MockAgent {
       readiness_status: "not_evaluated",
       readiness_package_ref: "",
       review_package_ref: "",
-      mode: "synthetic",
+      // The mode an operator CHOSE, which the mock used to discard: every case
+      // it made was a rehearsal, so no screen was ever rendered against a real
+      // onboarding and a heading reading "Practice run" on a live case went
+      // unnoticed until a client onboarding met it. The runtime mode above
+      // stays synthetic on both, and correctly: the dry run writes nothing
+      // either way, and activation is the one crossing that does.
+      mode: live ? "live" : "synthetic",
       pack: {},
       pack_status: "",
       pack_history: [],

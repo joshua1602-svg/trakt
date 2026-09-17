@@ -543,7 +543,17 @@ export const copy = {
     proposalDismiss: "Not yet",
 
     statusHeading: "Where this case has got to",
-    stageHeading: "Practice run",
+    // A REAL CLIENT ONBOARDING IS NOT A PRACTICE RUN. This label sits directly
+    // beside the case status, so an operator reads it as a statement about the
+    // case in front of them — and on a live onboarding it was flatly false.
+    // The same defect already fixed for the case-list heading above: the mode
+    // is per case, so the words have to be too.
+    //
+    // The dry run that reads the client's files IS a dry run on both modes,
+    // which is what makes the honest live wording "onboarding run" rather than
+    // "live run": nothing has been written yet, and confirming activation is
+    // what changes that.
+    stageHeading: (live: boolean) => (live ? "Onboarding run" : "Practice run"),
     onboardingStageHeading: "Onboarding",
     onboardingHeading: "The onboarding",
     onboardingOpen: "Open it in the onboarding screens",
@@ -571,8 +581,14 @@ export const copy = {
       "the ones nobody has asked them for, because they are not the client's " +
       "to answer.",
     criteriaOnboarding: "The onboarding",
-    criteriaExecution: "The practice run",
-    criteriaBoundary: "The practice boundary",
+    criteriaExecution: (live: boolean) => (live ? "The onboarding run" : "The practice run"),
+    // On a rehearsal nothing will EVER be written and that is the point of the
+    // exercise; on a real onboarding nothing has been written YET and the
+    // operator is about to change that. The criteria are the same two either
+    // way — see operations_control/occ_agent/readiness.py, which words their
+    // detail the same way.
+    criteriaBoundary: (live: boolean) =>
+      live ? "Nothing created yet" : "The practice boundary",
     decisionsHeading: "Decisions waiting for you",
     questionsAnsweredHeading: "Already answered",
     questionsAnsweredHelp:
@@ -604,9 +620,10 @@ export const copy = {
       "is all of them, including the ones it matched on its own.",
     mappingCount: (mapped: number, total: number) =>
       `${mapped} of ${total} columns are feeding a field`,
-    mappingEmpty:
-      "Nothing has been read yet. The columns appear once the practice run " +
-      "has looked at the files.",
+    mappingEmpty: (live: boolean) =>
+      "Nothing has been read yet. The columns appear once " +
+      (live ? "the onboarding run" : "the practice run") +
+      " has looked at the files.",
     mappingColumn: "Column in the file",
     mappingField: "Trakt reads it as",
     mappingBasis: "On what evidence",
