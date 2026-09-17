@@ -1559,6 +1559,7 @@ class OccAgentService:
         run.mapping_report = adapters.mapping_report
         run.cross_file = adapters.cross_file
         run.excused_findings = adapters.excused_findings
+        run.llm = adapters.llm
 
         # Resolved decisions are kept (they are the record of what the human
         # settled); a decision the rerun raises again replaces its open twin

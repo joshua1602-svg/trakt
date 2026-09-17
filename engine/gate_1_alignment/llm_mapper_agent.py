@@ -134,6 +134,7 @@ class LLMFieldMapper:
     _DEFAULT_MAX_TOKENS = 4096
     _DEFAULT_BATCH_SIZE = 10
     _DEFAULT_MAX_FIELDS = 80
+    _DEFAULT_MAX_SAMPLE_VALUES = 5
 
     def __init__(
         self,
@@ -146,6 +147,7 @@ class LLMFieldMapper:
         max_tokens: int = _DEFAULT_MAX_TOKENS,
         batch_size: int = _DEFAULT_BATCH_SIZE,
         max_fields_in_catalogue: int = _DEFAULT_MAX_FIELDS,
+        max_sample_values: int = _DEFAULT_MAX_SAMPLE_VALUES,
     ) -> None:
         self.registry_path = Path(registry_path)
         self.portfolio_type = portfolio_type
@@ -158,6 +160,11 @@ class LLMFieldMapper:
         self.max_tokens = max_tokens
         self.batch_size = batch_size
         self.max_fields_in_catalogue = max_fields_in_catalogue
+        # How many redacted sample values may accompany a header. The number is
+        # a governed one — `llm_policy.max_sample_values_per_field` in
+        # config/system/onboarding_agent.yaml — so a caller working to that
+        # policy can state it rather than send five and hope.
+        self.max_sample_values = max(0, int(max_sample_values))
 
         self.registry = _load_registry(self.registry_path)
         self.canonical_set: set = set(self.registry["fields"].keys())
@@ -317,9 +324,11 @@ class LLMFieldMapper:
         null_pct = round(n_null / total * 100, 1) if total else 0.0
         n_unique = int(non_null.nunique())
 
-        # Up to 5 deduplicated, non-null sample values — redacted before sending to LLM
+        # Deduplicated, non-null sample values — redacted before sending to the
+        # LLM, and capped at the governed per-field limit.
         sample_pool = non_null.drop_duplicates().head(20)
-        samples = [self._redact_sample(str(v)) for v in sample_pool.head(5).tolist()]
+        samples = [self._redact_sample(str(v))
+                   for v in sample_pool.head(self.max_sample_values).tolist()]
         envelope["samples"] = samples
 
         stats: dict = {"nunique": n_unique, "null_pct": null_pct}

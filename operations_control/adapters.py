@@ -299,8 +299,16 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
                        "confidence": advisory.get("confidence"),
                        "checked": True}
             elif d.get("recommended_action"):
-                rec = {"source": "deterministic",
-                       "value": str(d.get("recommended_action")), "checked": True}
+                # A decision that says on its own face where its proposal came
+                # from is believed. The OCC Agent raises one for a column its
+                # deterministic tiers could not place, carrying a model's
+                # suggestion and ``basis: llm_suggestion``; labelling that
+                # "deterministic" would tell an operator a model's guess was a
+                # contract-backed match, which is the one thing the human
+                # confirmation step exists to prevent.
+                rec = {"source": str(d.get("basis") or "deterministic"),
+                       "value": str(d.get("recommended_action")),
+                       "confidence": d.get("confidence"), "checked": True}
             friendly = _friendly(target)
             if dtype == "missing_required_target":
                 title = f"The report needs '{friendly}'"

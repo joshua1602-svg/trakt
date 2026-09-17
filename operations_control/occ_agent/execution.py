@@ -77,6 +77,7 @@ from .run import (
 )
 from . import base_mi_gate as _base_mi_gate
 from . import cross_file as _cross_file
+from . import llm_mapping as _llm
 from . import workbook as _workbook
 from .policy import CAP_LIVE_PIPELINE_TRIGGER, SyntheticPolicy
 
@@ -137,6 +138,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                  aliases_dir: Path = ALIASES_DIR,
                  issue_policy_path: Path = ISSUE_POLICY_PATH,
                  approved_mappings: Optional[Dict[str, str]] = None,
+                 llm_policy: Optional["_llm.Policy"] = None,
                  case_id: str = "", tenant: str = ""):
         self.artefact_paths = [Path(p) for p in artefact_paths]
         self.policy = policy
@@ -165,6 +167,13 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                                                   or "")
         #: The confirmation to put to them, when one is outstanding.
         self.product_profile_decision: Optional[Dict[str, Any]] = None
+        #: The governed budget for asking a model about a column the
+        #: deterministic tiers could not settle — see :mod:`.llm_mapping`.
+        self.llm_policy: _llm.Policy = llm_policy or _llm.Policy.load()
+        #: What the model was asked, what it proposed, and why not where not.
+        #: A model that quietly did not run and one that had nothing to say
+        #: look identical from the outside; they are not the same thing.
+        self.llm: Dict[str, Any] = _llm.Outcome().to_dict()
         #: Reporting-period labels turned into the cut-off dates they stand
         #: for (``August`` -> ``2026-08-31``), per column. Recorded so the
         #: transform is visible rather than silent — see
@@ -303,6 +312,72 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                     decisions.append(_mapping_decision(
                         column, canonical, tier, float(confidence),
                         file_frame[column], path.name))
+
+        # 2b. THE MODEL'S SECOND OPINION, ON WHAT DETERMINISTIC MATCHING COULD
+        #     NOT SETTLE.
+        #
+        #     Zero-cost first, which the loop above already is: the tiered
+        #     mapper runs to exhaustion and everything it settles is settled.
+        #     What reaches the model is only what it could not place — on a
+        #     real hundred-column tape, the thirty columns that matched nothing
+        #     and were previously reported as unreadable with no proposal
+        #     against any of them, leaving an operator to name each canonical
+        #     field from memory.
+        #
+        #     A suggestion is never a mapping. It does not enter `resolved`, it
+        #     cannot reach the tape, and it arrives as a decision that says in
+        #     its own words that a model proposed it — so confirming one is a
+        #     person's act, and they can see what they are confirming.
+        self.llm = _llm.Outcome().to_dict()
+        unsettled = _llm.unresolved(self.mapping_report, self.llm_policy)
+        if unsettled:
+            outcome = _llm.suggest(
+                unsettled, frame, policy=self.llm_policy,
+                registry_path=self.registry_path, aliases_dir=self.aliases_dir,
+                asset_type=self.asset_type)
+            self.llm = outcome.to_dict()
+            already = {str(d.get("source_column") or "") for d in decisions}
+            for column, suggestion in outcome.by_column.items():
+                for row in self.mapping_report:
+                    if (row.get("primary")
+                            and row.get("source_column") == column):
+                        row["llm_field"] = suggestion.field_name
+                        row["llm_confidence"] = round(
+                            float(suggestion.confidence), 4)
+                        row["llm_reasoning"] = suggestion.reasoning
+                if column in already or column not in frame.columns:
+                    # A column the deterministic pass already raised a question
+                    # about keeps that question; the suggestion is recorded
+                    # beside it rather than asked twice.
+                    continue
+                decisions.append(_llm.decision(
+                    suggestion, source_file=primary.name,
+                    populated=_populated(frame[column]),
+                    rows=int(len(frame))))
+            # Narrated when the model ran, and when it was switched ON and
+            # still did not — an operator expecting proposals is owed the
+            # reason none arrived. Not narrated where it is simply switched
+            # off, which is a standing fact about the environment rather than
+            # something that happened during this run; `run.llm` carries it
+            # either way. The outcome stays DETERMINISTIC: nothing here was
+            # simulated, and a model declining to answer is not a simulation.
+            if outcome.asked or (self.llm_policy.enabled
+                                 and outcome.skipped_because):
+                self._record(StageRecord(
+                    stage="onboard",
+                    outcome=STAGE_DETERMINISTIC_COMPLETED,
+                    component="engine.gate_1_alignment.llm_mapper_agent."
+                              "LLMFieldMapper",
+                    summary=(f"Asked a model about {outcome.asked} column"
+                             f"{'s' if outcome.asked != 1 else ''} Trakt could "
+                             f"not match on its own; it proposed "
+                             f"{len(outcome.by_column)}. Nothing it suggested "
+                             "is used until you confirm it."
+                             if outcome.asked else
+                             f"No model was asked: {outcome.skipped_because}."),
+                    metrics={"unsettled_columns": len(unsettled),
+                             "asked": outcome.asked,
+                             "proposed": len(outcome.by_column)}))
 
         # 3. A canonical field claimed by two columns is an ambiguity a human
         #    must settle — the engine has no basis to prefer one.
