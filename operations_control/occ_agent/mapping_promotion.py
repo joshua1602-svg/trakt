@@ -56,7 +56,15 @@ from ..rules import RuleRecord
 #: costs one repeated question, and a wrong one corrupts a delivery.
 CONFIRMATION = "mapping_confirmation"
 AMBIGUITY = "mapping_ambiguity"
-PROMOTABLE_TYPES = (CONFIRMATION, AMBIGUITY)
+#: A confident match on a FIRST onboarding, which is proposed rather than
+#: applied because nobody has yet said this client means what the platform's
+#: alias registry says they mean. It reads exactly like a confirmation — the
+#: source column is fixed and the answer names the field — and it is the type
+#: that carries the bulk of a first delivery. Leaving it unpromotable would
+#: make the one approval an operator gives produce no governed rule at all,
+#: and the second month would ask the whole tape again.
+PROPOSAL = "mapping_proposal"
+PROMOTABLE_TYPES = (CONFIRMATION, AMBIGUITY, PROPOSAL)
 
 #: Resolutions that assert a mapping. "reject" asserts the absence of one and
 #: promotes nothing.
@@ -71,13 +79,36 @@ PROMOTED_SCOPE = "portfolio"
 SUGGESTED_BY = "occ_agent_rehearsal"
 
 
+def _read(decision: Dict[str, Any], key: str) -> str:
+    """One field of a decision, from wherever that decision keeps it.
+
+    A mapping decision exists in two shapes and this module is handed both. The
+    adapter writes the RAW artefact row, with everything at the top level. The
+    run holds the operator-facing CARD, which
+    ``OccAgentService._decision_card`` assembles — and which keeps the
+    source column and the target field under ``subject``.
+
+    Reading only the top level is how promotion came to do nothing at all:
+    activation passes ``run.open_decisions``, every card returned "" for
+    ``decision_type``, every decision failed the first test, and the rehearsal's
+    settled mappings were dropped on the floor at the one moment they became
+    usable. The unit tests did not catch it because they built the raw shape,
+    which is the shape this function was written against and not the shape it
+    is called with.
+    """
+    value = decision.get(key)
+    if value in (None, ""):
+        value = (decision.get("subject") or {}).get(key)
+    return str(value or "").strip()
+
+
 def mapping_of(decision: Dict[str, Any]) -> Optional[Dict[str, str]]:
     """``{source_column, canonical_field}`` a settled decision asserts.
 
     ``None`` when the decision asserts no mapping — it was rejected, is not a
     mapping decision, was never resolved, or came out incomplete.
     """
-    if str(decision.get("decision_type") or "") not in PROMOTABLE_TYPES:
+    if _read(decision, "decision_type") not in PROMOTABLE_TYPES:
         return None
     if str(decision.get("status") or "") != "approved":
         return None
@@ -85,14 +116,14 @@ def mapping_of(decision: Dict[str, Any]) -> Optional[Dict[str, str]]:
     if resolution not in PROMOTABLE_RESOLUTIONS:
         return None
 
-    source = str(decision.get("source_column") or "").strip()
-    canonical = str(decision.get("target_field") or "").strip()
+    source = _read(decision, "source_column")
+    canonical = _read(decision, "target_field")
     answer = str(decision.get("resolved_value") or "").strip()
 
     if resolution == "amend" and answer:
         # Which side the operator's answer belongs on depends on which side the
         # question fixed. See the module note.
-        if str(decision.get("decision_type")) == AMBIGUITY:
+        if _read(decision, "decision_type") == AMBIGUITY:
             source = answer
         else:
             canonical = answer

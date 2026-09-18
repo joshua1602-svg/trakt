@@ -1963,6 +1963,11 @@ export class MockOpsClient implements OpsClient {
     return this.agent.answerDecision(caseRef, input);
   }
 
+  async approveAgentMappings(caseRef: string, reason = ""): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.approveMappings(caseRef, reason);
+  }
+
   async runAgentStep(
     caseRef: string,
     step: string,

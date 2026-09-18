@@ -332,13 +332,24 @@ function lifecycle(current?: string, reached?: Set<string>): LifecycleState[] {
  * checked when it had not.
  */
 function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
-  const byColumn = new Map<string, string>();
+  // {column: [decision_id, decision_type]} — faithful to
+  // `mapping_view._open_decision_by_column`. The TYPE matters: a proposal is
+  // approved with the set, a question is answered on its own, and a table that
+  // cannot tell them apart puts seventy clean columns in the same queue as the
+  // three that are genuinely unresolved.
+  const byColumn = new Map<string, [string, string]>();
   for (const decision of doc.open_decisions) {
     if (decision.status !== "open") continue;
-    const subject = decision.subject as { source_column?: string; source_columns?: string[] };
+    const subject = decision.subject as {
+      source_column?: string;
+      source_columns?: string[];
+      decision_type?: string;
+    };
+    const entry: [string, string] = [decision.decision_id,
+                                     String(subject?.decision_type ?? "")];
     for (const name of [subject?.source_column, ...(subject?.source_columns ?? [])]) {
       const key = String(name ?? "").trim().toLowerCase();
-      if (key && !byColumn.has(key)) byColumn.set(key, decision.decision_id);
+      if (key && !byColumn.has(key)) byColumn.set(key, entry);
     }
   }
 
@@ -349,7 +360,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     const rawConfidence = Number(r.confidence);
     const confidence = Number.isFinite(rawConfidence) ? rawConfidence : null;
     const column = String(r.source_column ?? "");
-    const decisionId = byColumn.get(column.toLowerCase()) ?? "";
+    const [decisionId, decisionType] = byColumn.get(column.toLowerCase()) ?? ["", ""];
     const primary = r.primary !== false;
     // What a model proposed for a column the deterministic tiers could not
     // place. Never a mapping — it stands until a person confirms it.
@@ -358,7 +369,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     // An open decision wins over the tier: an ambiguity is raised after both
     // rows are written, at whatever tier they matched at, so reading the tier
     // alone would call a blocked column "matched automatically".
-    if (decisionId) state = "needs_you";
+    if (decisionId) state = decisionType === "mapping_proposal" ? "proposed" : "needs_you";
     else if (tier === "operator_approved") state = "confirmed";
     else if (tier === "unreadable") state = "unreadable";
     else if (!canonical) state = "unused";
@@ -429,7 +440,13 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
       columns: rows.filter((r) => r.source_file === row.source_file).length,
     });
   }
-  return { rows, counts, files };
+  return {
+    rows,
+    counts,
+    files,
+    proposed: counts.proposed ?? 0,
+    blocking_questions: counts.needs_you ?? 0,
+  };
 }
 
 interface StoredRun {
@@ -496,6 +513,7 @@ const TIER_LABELS: Record<string, string> = {
 
 const MAPPING_STATE_LABELS: Record<string, string> = {
   needs_you: "Needs you",
+  proposed: "Proposed",
   unreadable: "Could not be read",
   unchecked: "Weak match, nothing asked",
   unused: "Not used",
@@ -505,6 +523,7 @@ const MAPPING_STATE_LABELS: Record<string, string> = {
 
 const MAPPING_STATE_ORDER = [
   "needs_you",
+  "proposed",
   "unreadable",
   "unchecked",
   "unused",
@@ -515,6 +534,82 @@ const MAPPING_STATE_ORDER = [
 /** Mirrors `execution._TRUSTED_TIERS` and `execution.LOW_CONFIDENCE`. */
 const TRUSTED_TIERS = new Set(["exact", "normalized", "alias"]);
 const LOW_CONFIDENCE = 0.9;
+
+/**
+ * One proposed mapping, as a first onboarding raises it.
+ *
+ * Faithful to `execution._mapping_proposal`: the source column is fixed and
+ * the answer names the field, the subject carries the decision type so
+ * promotion and the table can both read it, and it BLOCKS — a first delivery
+ * does not move until a person has said these are right for this client.
+ */
+function proposalFor(row: { source_column: string; canonical_field: string;
+                            tier: string; confidence: number }): DecisionCard {
+  const field = row.canonical_field.replace(/_/g, " ");
+  return {
+    decision_id: `map_${row.source_column.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    kind: "field_mapping",
+    title: `Confirm '${row.source_column}' reads as ${field}`,
+    question: `'${row.source_column}' reads as ${field}. This is the first delivery from this client, so it is proposed rather than applied.`,
+    blocking: true,
+    status: "open",
+    issue: `'${row.source_column}' reads as ${field}.`,
+    evidence: [],
+    recommendation: row.canonical_field,
+    recommendation_source: "deterministic",
+    confidence: row.confidence,
+    materiality: "BLOCKING",
+    downstream_consequence:
+      "The practice run cannot continue until the mappings are approved.",
+    options: [
+      { value: "accept_mapping", label: "Accept this mapping" },
+      { value: "mark_unavailable", label: "Do not use this column" },
+    ],
+    subject: {
+      decision_type: "mapping_proposal",
+      source_column: row.source_column,
+      target_field: row.canonical_field,
+    },
+  };
+}
+
+/**
+ * One weak match, raised as its own question.
+ *
+ * Faithful to `execution._mapping_decision`. The mock used to seed none of
+ * these, so a column classified "Needs you" from its tier alone had no card to
+ * answer — which was harmless while nothing waited on it, and became a dead
+ * end the moment approval of the set was gated on the questions being cleared.
+ */
+function confirmationFor(row: { source_column: string; canonical_field: string;
+                                confidence: number }): DecisionCard {
+  const field = row.canonical_field.replace(/_/g, " ");
+  return {
+    decision_id: `map_${row.source_column.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    kind: "field_mapping",
+    title: `Confirm how '${row.source_column}' should be read`,
+    question: `'${row.source_column}' looks like ${field}, but not clearly enough to use without confirmation.`,
+    blocking: true,
+    status: "open",
+    issue: `'${row.source_column}' looks like ${field}.`,
+    evidence: [],
+    recommendation: row.canonical_field,
+    recommendation_source: "deterministic",
+    confidence: row.confidence,
+    materiality: "BLOCKING",
+    downstream_consequence:
+      "The practice run cannot continue until this is answered.",
+    options: [
+      { value: "accept_mapping", label: "Accept this mapping" },
+      { value: "mark_unavailable", label: "Do not use this column" },
+    ],
+    subject: {
+      decision_type: "mapping_confirmation",
+      source_column: row.source_column,
+      target_field: row.canonical_field,
+    },
+  };
+}
 
 const AMBIGUOUS_DECISION: DecisionCard = {
   decision_id: "amb_current_principal_balance",
@@ -546,6 +641,12 @@ const AMBIGUOUS_DECISION: DecisionCard = {
     { value: "Principal Balance", label: "Use Principal Balance" },
   ],
   subject: {
+    // Carried, as `OccAgentService._decision_card` now carries it. Without the
+    // type nothing downstream can tell an ambiguity from a proposal: promotion
+    // reads it to decide which side an amended answer belongs on, the table
+    // reads it to tell "Change this" from "Answer this", and the scripted walk
+    // reads it to know this is the one halt it must not settle.
+    decision_type: "mapping_ambiguity",
     source_column: "Current Balance",
     source_columns: ["Current Balance", "Principal Balance"],
     target_field: "current_principal_balance",
@@ -1398,6 +1499,93 @@ export class MockAgent {
     };
   }
 
+  /**
+   * Approve every mapping still proposed on this delivery.
+   *
+   * Faithful to `OccAgentService.approve_proposed_mappings`: one act, and one
+   * resolved record per column — not one record for "the mappings" — because
+   * that is what promotion turns into governed rules. Anything already
+   * answered keeps its answer.
+   */
+  approveMappings(caseRef: string, reason = ""): AgentStatus {
+    const stored = this.get(caseRef);
+    this.requireAction(stored, "resolve_decision");
+    const pending = stored.doc.open_decisions.filter(
+      (d) =>
+        (d.subject as { decision_type?: string })?.decision_type === "mapping_proposal" &&
+        d.status === "open",
+    );
+    if (pending.length === 0) {
+      throw new OpsError(
+        "There are no proposed mappings waiting for approval.",
+        "OCC_AGENT_NO_PROPOSED_MAPPINGS",
+      );
+    }
+    for (const decision of pending) {
+      decision.status = "approved";
+      decision.resolved_value = String(
+        (decision.subject as { target_field?: string })?.target_field ?? "",
+      );
+      decision.resolved_by = ACTOR;
+      this.applyAnswer(
+        stored,
+        String((decision.subject as { source_column?: string })?.source_column ?? ""),
+        decision.resolved_value,
+        true,
+      );
+    }
+    this.record(
+      stored,
+      "mapping_set_approved",
+      reason || "the operator approved the proposed mappings for this delivery",
+    );
+    if (!stored.doc.open_decisions.some((d) => d.blocking && d.status === "open")) {
+      this.move(stored, S.SYNTHETIC_ONBOARDING_RUNNING);
+      stored.doc.stage_outcomes = COMPLETED_STAGES;
+      this.move(stored, S.SYNTHETIC_ONBOARDING_PASSED);
+      stored.doc.blockers = [];
+    }
+    return this.status(caseRef);
+  }
+
+  /**
+   * Record an answered mapping on the report itself.
+   *
+   * The server reruns the whole onboard stage after a decision, and the rerun
+   * resolves that column from `approved_mappings` at tier `operator_approved`.
+   * Without this the mock re-derives the row from its ORIGINAL tier, so a weak
+   * match an operator has just answered goes straight back to "Needs you" and
+   * the approval it gates can never be reached.
+   */
+  private applyAnswer(stored: StoredRun, column: string, field: string,
+                      used: boolean): void {
+    for (const raw of stored.doc.mapping_report) {
+      const row = raw as Record<string, unknown>;
+      if (String(row.source_column ?? "") !== column) continue;
+      row.tier = "operator_approved";
+      row.note = used ? "confirmed by an operator" : "an operator set this aside";
+      row.canonical_field = used ? field : "";
+      row.confidence = 1.0;
+    }
+  }
+
+  /**
+   * The canonical field an answer names, or "" if it names an ACTION.
+   *
+   * The decision card sends the chosen option's value as the amended field, and
+   * the real options are actions — so "accept_mapping" would otherwise be
+   * written into the tape as a field name. `OccAgentService._approved_mappings`
+   * guards exactly this list; without the same guard here the mock let an
+   * action string reach the mapping report, and a column came out reading
+   * "approve".
+   */
+  private static fieldFromAnswer(value: string, fallback: string): string {
+    const ACTIONS = new Set([
+      "accept_mapping", "confirm_selected", "approve", "amend", "",
+    ]);
+    return ACTIONS.has(value) ? fallback : value;
+  }
+
   answerDecision(
     caseRef: string,
     input: { decision_id: string; action: string; value?: string; reason?: string },
@@ -1414,6 +1602,14 @@ export class MockAgent {
     decision.status = input.action === "reject" ? "rejected" : "approved";
     decision.resolved_value = input.value || decision.recommendation;
     decision.resolved_by = ACTOR;
+    const subject = decision.subject as { source_column?: string; target_field?: string };
+    this.applyAnswer(
+      stored,
+      String(subject?.source_column ?? ""),
+      MockAgent.fieldFromAnswer(String(decision.resolved_value ?? ""),
+                                String(subject?.target_field ?? "")),
+      input.action !== "reject" && input.value !== "mark_unavailable",
+    );
     this.record(
       stored,
       "human_decision_recorded",
@@ -1620,11 +1816,74 @@ export class MockAgent {
     // drive stops at the confirmation: that act is a person's, and in a
     // rehearsal it is refused anyway.
     for (const step of ["run", "plan", "readiness/approve", "review", "activation/approve"]) {
-      const now = this.get(caseRef).doc.state;
+      let now = this.get(caseRef).doc.state;
+      // A FIRST ONBOARDING STOPS ONCE TO HAVE ITS MAPPINGS APPROVED, and a
+      // prepared example is a scripted walk of what a person would do — so it
+      // does that too, exactly as the Python scenario harness settles the
+      // decisions a run raises.
+      //
+      // Only what is merely PROPOSED. A genuine question — an ambiguity, a
+      // weak match — is what scenario B exists to halt on, and a walk that
+      // answered those would be a walk with nothing left to demonstrate.
+      if (now === S.EXCEPTIONS_REQUIRE_INPUT && this.nothingAmbiguousIsOpen(caseRef)) {
+        this.settleStraightforwardMappings(caseRef);
+        now = this.get(caseRef).doc.state;
+      }
       if (now === S.BLOCKED || now === S.EXCEPTIONS_REQUIRE_INPUT) break;
       this.step(caseRef, step);
     }
     return this.status(caseRef);
+  }
+
+  /** True when nothing genuinely AMBIGUOUS is waiting.
+   *
+   *  A proposal and a weak match both have an obvious answer — accept what
+   *  Trakt read — and a scripted walk gives it. Two columns claiming one field
+   *  do not, and that is the halt scenario B exists to show.
+   */
+  private nothingAmbiguousIsOpen(caseRef: string): boolean {
+    const open = this.get(caseRef).doc.open_decisions.filter(
+      (d) => d.blocking && d.status === "open",
+    );
+    return (
+      open.length > 0 &&
+      open.every(
+        (d) =>
+          (d.subject as { decision_type?: string })?.decision_type !==
+          "mapping_ambiguity",
+      )
+    );
+  }
+
+  /** Answer the weak matches, then approve the set — what a person would do. */
+  private settleStraightforwardMappings(caseRef: string): void {
+    const stored = this.get(caseRef);
+    const questions = stored.doc.open_decisions.filter(
+      (d) =>
+        d.blocking &&
+        d.status === "open" &&
+        (d.subject as { decision_type?: string })?.decision_type ===
+          "mapping_confirmation",
+    );
+    for (const question of questions) {
+      this.answerDecision(caseRef, {
+        decision_id: question.decision_id,
+        action: "approve",
+        value: question.recommendation,
+        reason: "accepted with the prepared example",
+      });
+    }
+    if (
+      this.get(caseRef).doc.open_decisions.some(
+        (d) =>
+          d.blocking &&
+          d.status === "open" &&
+          (d.subject as { decision_type?: string })?.decision_type ===
+            "mapping_proposal",
+      )
+    ) {
+      this.approveMappings(caseRef, "approved with the prepared example");
+    }
   }
 
   readinessPackage(caseRef: string): AgentReadinessPackage {
@@ -1858,9 +2117,65 @@ export class MockAgent {
         // written here rather than seeded at case creation.
         stored.doc.mapping_report = MAPPING_REPORT.map((row) => ({ ...row }));
         this.record(stored, "synthetic_onboarding_started", "the conductor ran over the adapter");
+        // A FIRST ONBOARDING PROPOSES; IT DOES NOT DECIDE. Every column the
+        // mapper settled on its own is raised for approval, because a governed
+        // alias says the NAME is familiar and not that this client means the
+        // same thing by it. An amendment's mappings are already governed and
+        // already answered, so it keeps matching as before.
+        const proposals = MAPPING_REPORT.filter((raw) => {
+          const r = raw as { primary?: boolean; canonical_field?: string;
+                             tier?: string; confidence?: number };
+          return (
+            r.primary !== false &&
+            Boolean(r.canonical_field) &&
+            // A column a person has already answered is never re-proposed:
+            // `execution.onboard` resolves it on its own branch before the
+            // mapper is consulted. Re-asking would undo the approval this
+            // whole design exists to capture.
+            r.tier !== "operator_approved" &&
+            (TRUSTED_TIERS.has(String(r.tier)) ||
+              Number(r.confidence ?? 0) >= LOW_CONFIDENCE)
+          );
+        }).map((raw) => {
+          const r = raw as { source_column: string; canonical_field: string;
+                             tier: string; confidence: number };
+          return proposalFor(r);
+        });
+        // A weak match is a QUESTION, not a proposal: it is answered on its
+        // own and it gates the approval of the set, so it has to have a card.
+        const questions = MAPPING_REPORT.filter((raw) => {
+          const r = raw as { primary?: boolean; canonical_field?: string;
+                             tier?: string; confidence?: number };
+          return (
+            r.primary !== false &&
+            Boolean(r.canonical_field) &&
+            r.tier !== "operator_approved" &&
+            !TRUSTED_TIERS.has(String(r.tier)) &&
+            Number(r.confidence ?? 0) < LOW_CONFIDENCE
+          );
+        }).map((raw) => {
+          const r = raw as { source_column: string; canonical_field: string;
+                             confidence: number };
+          return confirmationFor(r);
+        });
         if (stored.scenario === "scenario_b_ambiguous_mapping") {
           stored.doc.stage_outcomes = { onboard: "human_input_required" };
-          stored.doc.open_decisions = [{ ...AMBIGUOUS_DECISION }];
+          // The clash is asked FIRST and its two columns stop being proposals:
+          // "is this right?" has no answer while two columns claim one field.
+          const contested = new Set(
+            ((AMBIGUOUS_DECISION.subject as { source_columns?: string[] })
+              ?.source_columns ?? []).map((c) => String(c)),
+          );
+          stored.doc.open_decisions = [
+            ...questions,
+            ...proposals.filter(
+              (p) =>
+                !contested.has(
+                  String((p.subject as { source_column?: string }).source_column),
+                ),
+            ),
+            { ...AMBIGUOUS_DECISION },
+          ];
           this.move(stored, S.EXCEPTIONS_REQUIRE_INPUT);
         } else if (stored.scenario === "scenario_e_business_rule_failure") {
           stored.doc.stage_outcomes = {
@@ -1872,6 +2187,13 @@ export class MockAgent {
           this.block(stored, [
             "PORTFOLIO: DAT002 affects 24 record(s) (100.0%) — materiality BLOCKING",
           ]);
+        } else if (proposals.length + questions.length > 0) {
+          // The ordinary first delivery: nothing is ambiguous and nothing is
+          // wrong, and it still waits. "Clean" means no exceptions, not no
+          // approval.
+          stored.doc.stage_outcomes = { onboard: "human_input_required" };
+          stored.doc.open_decisions = [...questions, ...proposals];
+          this.move(stored, S.EXCEPTIONS_REQUIRE_INPUT);
         } else {
           this.move(stored, S.SYNTHETIC_ONBOARDING_PASSED);
           this.record(stored, "synthetic_onboarding_passed", "every control passed");

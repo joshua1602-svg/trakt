@@ -47,12 +47,101 @@ OPENING = ("Onboard Northstar Lending. UK equity release. Monthly portfolio "
 def settled(decision_id: str, *, source: str, canonical: str,
             kind: str = _promotion.CONFIRMATION, resolution: str = "approve",
             value: str = "", confidence: float = 0.41) -> dict:
-    """One decision as the run holds it once a human has answered."""
+    """One decision in the ADAPTER'S RAW SHAPE, with everything at the top.
+
+    This is the artefact row ``execution`` writes. It is NOT what the run
+    holds — see :func:`as_the_run_holds_it` — and the difference is the whole
+    of the defect below.
+    """
     return {"decision_id": decision_id, "decision_type": kind,
             "source_column": source, "target_field": canonical,
             "status": "approved", "resolution": resolution,
             "resolved_value": value, "resolved_by": ACTOR,
             "resolved_at": "2026-09-16T10:00:00Z", "confidence": confidence}
+
+
+def as_the_run_holds_it(raw: dict) -> dict:
+    """The same decision as ``run.open_decisions`` actually holds it.
+
+    ``OccAgentService._decision_card`` assembles the operator-facing card and
+    keeps the mapping detail under ``subject``. Activation passes those cards
+    to promotion — so this, not the raw row, is the shape promotion is called
+    with in production.
+    """
+    card = {k: v for k, v in raw.items()
+            if k not in ("decision_type", "source_column", "target_field")}
+    card["subject"] = {"decision_type": raw["decision_type"],
+                       "source_column": raw["source_column"],
+                       "target_field": raw["target_field"]}
+    return card
+
+
+# --------------------------------------------------------------------------- #
+# The shape promotion is actually called with
+# --------------------------------------------------------------------------- #
+
+class TestTheShapeTheRunActuallyHolds:
+    """Promotion silently did nothing, and these tests are why it was missed.
+
+    Every test below this class builds the adapter's RAW row — everything at
+    the top level — which is the shape ``mapping_of`` was written against. The
+    run does not hold that shape. ``_decision_card`` keeps the mapping detail
+    under ``subject``, activation passes ``run.open_decisions``, and so every
+    decision reported an empty ``decision_type``, failed the first test, and
+    promoted nothing. A rehearsal's settled mappings were dropped at the exact
+    moment they became usable, and the second month re-asked the whole tape.
+
+    Testing the function and not the wiring is what let that ship. These drive
+    the shape the caller really passes.
+    """
+
+    def test_a_card_from_the_run_promotes(self):
+        card = as_the_run_holds_it(
+            settled("d1", source="Month Run", canonical="data_cut_off_date"))
+        assert _promotion.mapping_of(card) == {
+            "source_column": "Month Run",
+            "canonical_field": "data_cut_off_date"}
+
+    def test_an_amended_card_names_the_field_the_operator_chose(self):
+        card = as_the_run_holds_it(
+            settled("d1", source="Month Run", canonical="data_cut_off_date",
+                    resolution="amend", value="reporting_date"))
+        assert _promotion.mapping_of(card)["canonical_field"] == "reporting_date"
+
+    def test_an_amended_ambiguity_card_names_the_column(self):
+        card = as_the_run_holds_it(
+            settled("d1", source="Cur Bal", canonical="current_balance",
+                    kind=_promotion.AMBIGUITY, resolution="amend",
+                    value="Current Outstanding Balance"))
+        assert _promotion.mapping_of(card)["source_column"] == \
+            "Current Outstanding Balance"
+
+    def test_a_first_onboarding_proposal_promotes_too(self):
+        """It carries the bulk of a first delivery. Unpromotable, the one
+        approval an operator gives would produce no governed rule at all."""
+        card = as_the_run_holds_it(
+            settled("d1", source="Broker", canonical="broker_channel",
+                    kind=_promotion.PROPOSAL))
+        assert _promotion.mapping_of(card) == {
+            "source_column": "Broker", "canonical_field": "broker_channel"}
+
+    def test_the_card_the_service_builds_carries_the_kind(self):
+        """Asserted against the service's own card builder, not a restatement
+        of it: if `_decision_card` stops carrying the type, promotion goes
+        quiet again and nothing else would say so."""
+        from operations_control.occ_agent.service import _decision_card
+
+        class _D:
+            def to_dict(self):
+                return {"decision_id": "map_broker", "kind": "field_mapping",
+                        "title": "t", "question": "q", "blocking": True,
+                        "evidence": [], "options": [],
+                        "subject": {"decision_id": "map_broker"}}
+
+        card = _decision_card(_D(), {"map_broker": {
+            "decision_type": _promotion.PROPOSAL, "source_column": "Broker",
+            "target_field": "broker_channel"}})
+        assert card["subject"]["decision_type"] == _promotion.PROPOSAL
 
 
 # --------------------------------------------------------------------------- #

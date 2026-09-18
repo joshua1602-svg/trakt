@@ -590,6 +590,9 @@ export interface MappingRow {
   note: string;
   state:
     | "needs_you"
+    /** A confident match on a first onboarding, waiting on the approval that
+     *  makes it this client's mapping rather than the platform's guess. */
+    | "proposed"
     | "unreadable"
     | "unchecked"
     | "unused"
@@ -617,6 +620,12 @@ export interface MappingOverview {
   rows: MappingRow[];
   counts: Record<string, number>;
   files: { name: string; primary: boolean; columns: number }[];
+  /** How many columns one approval would settle. */
+  proposed: number;
+  /** How many must be answered on their own first — an ambiguity or a weak
+   *  match is not approvable in bulk, and a button offering to settle the set
+   *  while those wait would promise a run that cannot move. */
+  blocking_questions: number;
 }
 
 export interface AgentStatus {

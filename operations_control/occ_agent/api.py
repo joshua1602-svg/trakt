@@ -155,6 +155,12 @@ class DecisionAnswer(BaseModel):
     tenant: Optional[str] = None
 
 
+class MappingApproval(BaseModel):
+    """One approval over every mapping still proposed on this delivery."""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
 class RunTarget(BaseModel):
     """Which delivery a practice run is for.
 
@@ -620,6 +626,24 @@ def answer_decision(case_ref: str, body: DecisionAnswer,
             **service.status(service.resolve_decision(
                 agent_case, decision_id=body.decision_id, action=body.action,
                 value=body.value, reason=body.reason, actor=principal.name))}
+
+
+@router.post("/cases/{case_ref}/mappings/approve")
+def approve_mappings(case_ref: str, body: MappingApproval,
+                     principal: Principal = Depends(authenticate)
+                     ) -> Dict[str, Any]:
+    """Approve every mapping this delivery still has proposed.
+
+    One act for the operator; one resolved decision per column on the record,
+    because that is what promotion turns into governed rules and what an
+    auditor reads back.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.approve_proposed_mappings(
+                agent_case, actor=principal.name, reason=body.reason))}
 
 
 @router.post("/cases/{case_ref}/plan")

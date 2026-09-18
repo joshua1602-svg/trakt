@@ -32,7 +32,7 @@ answering its decision, which has its own governed route.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from .execution import LOW_CONFIDENCE, _TRUSTED_TIERS
 
@@ -40,17 +40,23 @@ from .execution import LOW_CONFIDENCE, _TRUSTED_TIERS
 #: interest, worst first — a column nobody has looked at matters more than one
 #: that matched its own name exactly.
 ROW_NEEDS_YOU = "needs_you"
+#: A confident match on a FIRST onboarding, waiting on the approval that makes
+#: it this client's mapping. Ranked below "needs you" — a proposal is read and
+#: approved in bulk, a question has to be answered one at a time — and above
+#: everything settled, because until it is approved the run does not move.
+ROW_PROPOSED = "proposed"
 ROW_UNREADABLE = "unreadable"
 ROW_UNCHECKED = "unchecked"
 ROW_UNUSED = "unused"
 ROW_CONFIRMED = "confirmed"
 ROW_AUTOMATIC = "automatic"
 
-STATE_ORDER = (ROW_NEEDS_YOU, ROW_UNREADABLE, ROW_UNCHECKED, ROW_UNUSED,
-               ROW_CONFIRMED, ROW_AUTOMATIC)
+STATE_ORDER = (ROW_NEEDS_YOU, ROW_PROPOSED, ROW_UNREADABLE, ROW_UNCHECKED,
+               ROW_UNUSED, ROW_CONFIRMED, ROW_AUTOMATIC)
 
 STATE_LABELS = {
     ROW_NEEDS_YOU: "Needs you",
+    ROW_PROPOSED: "Proposed",
     ROW_UNREADABLE: "Could not be read",
     #: A weak match in a file the canonical tape is NOT built from. Worth an
     #: operator's eye — the real orchestrator consolidates loan-domain fields
@@ -93,7 +99,8 @@ TIER_LABELS = {
 }
 
 
-def classify(row: Dict[str, Any], *, has_open_decision: bool = False) -> str:
+def classify(row: Dict[str, Any], *, has_open_decision: bool = False,
+             is_proposal: bool = False) -> str:
     """What became of one column, from the row the mapper wrote.
 
     An open decision wins over the tier. Two columns claiming one canonical
@@ -110,7 +117,11 @@ def classify(row: Dict[str, Any], *, has_open_decision: bool = False) -> str:
     fields from those files whatever this adapter does with them.
     """
     if has_open_decision:
-        return ROW_NEEDS_YOU
+        # A proposal is open and blocking, like any other — but it is answered
+        # by approving the set, not by working through a list of questions, so
+        # calling it "Needs you" would put seventy clean columns in the same
+        # queue as the three that are genuinely unresolved.
+        return ROW_PROPOSED if is_proposal else ROW_NEEDS_YOU
     tier = str(row.get("tier") or "")
     if tier == "operator_approved":
         return ROW_CONFIRMED
@@ -133,25 +144,28 @@ def _label(canonical_field: str) -> str:
 
 
 def _open_decision_by_column(decisions: Iterable[Dict[str, Any]]
-                             ) -> Dict[str, str]:
-    """Which open decision, if any, belongs to each source column.
+                             ) -> Dict[str, Tuple[str, str]]:
+    """``{column: (decision_id, decision_type)}`` for each open decision.
 
     So a row reading "Needs you" can be the thing you click, rather than
-    sending an operator to hunt for the matching question in another list.
+    sending an operator to hunt for the matching question in another list —
+    and so the table can tell a PROPOSAL, which is approved with the set, from
+    a question that has to be answered on its own.
     """
-    out: Dict[str, str] = {}
+    out: Dict[str, Tuple[str, str]] = {}
     for decision in decisions or []:
         if str(decision.get("status", "open")) != "open":
             continue
         subject = decision.get("subject") or {}
+        entry = (str(decision.get("decision_id") or ""),
+                 str(subject.get("decision_type") or ""))
         column = str(subject.get("source_column") or "").strip()
         if column:
-            out.setdefault(column.lower(), str(decision.get("decision_id") or ""))
+            out.setdefault(column.lower(), entry)
         for column in (subject.get("source_columns") or []):
             name = str(column or "").strip()
             if name:
-                out.setdefault(name.lower(),
-                               str(decision.get("decision_id") or ""))
+                out.setdefault(name.lower(), entry)
     return out
 
 
@@ -165,8 +179,9 @@ def overview(run: Any) -> Dict[str, Any]:
     rows: List[Dict[str, Any]] = []
     for raw in getattr(run, "mapping_report", []) or []:
         column = str(raw.get("source_column") or "")
-        decision_id = decisions.get(column.lower(), "")
-        state = classify(raw, has_open_decision=bool(decision_id))
+        decision_id, decision_type = decisions.get(column.lower(), ("", ""))
+        state = classify(raw, has_open_decision=bool(decision_id),
+                         is_proposal=(decision_type == "mapping_proposal"))
         confidence: Optional[float] = None
         if raw.get("confidence") is not None:
             try:
@@ -235,4 +250,14 @@ def overview(run: Any) -> Dict[str, Any]:
         "rows": rows,
         "counts": {**counts, "columns": len(rows), "mapped": in_use},
         "files": files,
+        # WHAT THE APPROVAL ACT NEEDS TO SAY FOR ITSELF.
+        #
+        # `proposed` is how many columns one approval would settle, so the
+        # button can name its own consequence instead of reading "Approve".
+        # `blocking_questions` is how many are NOT approvable that way: a
+        # genuine ambiguity or a weak match has to be answered on its own, and
+        # an operator told "approve 71" while three questions wait would be
+        # told the run is one click from moving when it is not.
+        "proposed": counts.get(ROW_PROPOSED, 0),
+        "blocking_questions": counts.get(ROW_NEEDS_YOU, 0),
     }

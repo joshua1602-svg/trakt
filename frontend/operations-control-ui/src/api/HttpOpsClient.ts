@@ -685,6 +685,13 @@ export class HttpOpsClient implements OpsClient {
     );
   }
 
+  async approveAgentMappings(caseRef: string, reason = ""): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mappings/approve`,
+      { reason },
+    );
+  }
+
   async runAgentStep(
     caseRef: string,
     step: string,

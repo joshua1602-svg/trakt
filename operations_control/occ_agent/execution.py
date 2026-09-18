@@ -139,6 +139,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                  issue_policy_path: Path = ISSUE_POLICY_PATH,
                  approved_mappings: Optional[Dict[str, str]] = None,
                  llm_policy: Optional["_llm.Policy"] = None,
+                 confirm_every_mapping: bool = False,
                  case_id: str = "", tenant: str = ""):
         self.artefact_paths = [Path(p) for p in artefact_paths]
         self.policy = policy
@@ -150,6 +151,22 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         self.issue_policy_path = Path(issue_policy_path)
         #: source column -> canonical field, from human-approved decisions.
         self.approved_mappings = dict(approved_mappings or {})
+        #: THE FIRST TIME A LENDER'S TAPE IS READ, NOTHING MATCHES ITSELF.
+        #:
+        #: A governed alias says the NAME is one the platform has seen before.
+        #: It does not say this client means the same thing by it, and nobody
+        #: has ever said they do — so on a first onboarding a trusted match is
+        #: a PROPOSAL, and the human's reading of this lender's columns is the
+        #: artefact the onboarding exists to produce. Promotion then carries it
+        #: into governed rules at activation and production applies it every
+        #: month after, without asking again.
+        #:
+        #: Off for an amendment: those mappings are already governed and
+        #: already answered, and re-asking would make a change to one report a
+        #: re-approval of the whole tape.
+        self.confirm_every_mapping = bool(confirm_every_mapping)
+        #: Columns matched confidently that are waiting on that approval.
+        self.proposed_mappings: Dict[str, str] = {}
         self.case_id = case_id
         self.tenant = tenant
         self.records: List[StageRecord] = []
@@ -306,7 +323,16 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                     # is nothing here for an operator to settle and blocking the
                     # run on it would be blocking on a question with no answer.
                     continue
-                if canonical and trusted:
+                if canonical and trusted and self.confirm_every_mapping:
+                    # A first onboarding. The match is firm and still nobody
+                    # has said it is right FOR THIS CLIENT, so it waits — and
+                    # the waiting is the point: what a person confirms here is
+                    # what gets promoted and applied every month after.
+                    self.proposed_mappings[column] = canonical
+                    decisions.append(_mapping_proposal(
+                        column, canonical, tier, float(confidence),
+                        file_frame[column], path.name))
+                elif canonical and trusted:
                     resolved[column] = canonical
                 elif canonical:
                     decisions.append(_mapping_decision(
@@ -381,9 +407,22 @@ class SyntheticOnboardingAdapters(AgentAdapters):
 
         # 3. A canonical field claimed by two columns is an ambiguity a human
         #    must settle — the engine has no basis to prefer one.
-        for canonical, columns in _duplicates(resolved).items():
+        #
+        #    PROPOSALS COUNT HERE TOO. On a first onboarding a confident match
+        #    is proposed rather than resolved, so a clash between two of them
+        #    would otherwise be invisible until after the set was approved —
+        #    and an operator who approves fifteen mappings only to be told two
+        #    of them collide has been asked to approve something that was never
+        #    coherent. The clash is a real question and it is asked FIRST; the
+        #    two columns stop being proposals, because "is this right?" has no
+        #    answer while two columns claim the same field.
+        claimed = {**resolved, **self.proposed_mappings}
+        for canonical, columns in _duplicates(claimed).items():
             for column in columns:
                 resolved.pop(column, None)
+                self.proposed_mappings.pop(column, None)
+            decisions = [d for d in decisions
+                         if d.get("source_column") not in columns]
             decisions.append(_ambiguity_decision(canonical, columns, frame,
                                                  primary.name))
 
@@ -979,6 +1018,48 @@ def _mapping_decision(column: str, canonical: str, tier: str,
                             f"{confidence:.2f}; "
                             f"{_populated(series)} of {len(series)} records "
                             "carry a value.",
+    }
+
+
+#: A confident match on a first onboarding, waiting for the human reading that
+#: makes it this client's mapping rather than the platform's guess at one.
+#: Distinct from ``mapping_confirmation`` so the surfaces can tell them apart:
+#: a proposal is answered in the TABLE, as part of one approval over the set,
+#: and a confirmation is a question about a column nothing settled.
+DECISION_MAPPING_PROPOSAL = "mapping_proposal"
+
+
+def _mapping_proposal(column: str, canonical: str, tier: str,
+                      confidence: float, series: "pd.Series",
+                      source_file: str) -> Dict[str, Any]:
+    """A firm match that has not yet been read by a person.
+
+    It carries the same subject as a confirmation — a source column and the
+    field it would feed — because that is what promotion turns into a governed
+    rule, and one approval over seventy columns has to leave seventy records
+    behind or the audit says a person approved "the mappings" and cannot say
+    which.
+    """
+    return {
+        "decision_id": f"map_{_slug(column)}",
+        "decision_type": DECISION_MAPPING_PROPOSAL,
+        "target_field": canonical,
+        "source_column": column,
+        "source_file": source_file,
+        "status": "pending",
+        "blocking": True,
+        "recommended_action": "accept_mapping",
+        "available_actions": ["accept_mapping", "choose_alternative",
+                              "mark_unavailable"],
+        "confidence": round(confidence, 4),
+        "basis": "deterministic",
+        "issue": f"'{column}' reads as {canonical.replace('_', ' ')}.",
+        "evidence_summary": (f"matched at tier '{tier}' with confidence "
+                             f"{confidence:.2f}; "
+                             f"{_populated(series)} of {len(series)} records "
+                             "carry a value. This is the first delivery from "
+                             "this client, so it is proposed rather than "
+                             "applied."),
     }
 
 
