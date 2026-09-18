@@ -217,6 +217,11 @@ export interface OpsClient {
     caseRef: string,
     input: { decision_id: string; action: string; value?: string; reason?: string },
   ): Promise<AgentStatus>;
+  /** Approve every mapping this delivery still has proposed.
+   *
+   *  One act for the operator; one resolved decision per column on the record,
+   *  because that is what promotion turns into governed rules. */
+  approveAgentMappings(caseRef: string, reason?: string): Promise<AgentStatus>;
   /** Named lifecycle steps, for the operator controls beside the conversation. */
   runAgentStep(
     caseRef: string,

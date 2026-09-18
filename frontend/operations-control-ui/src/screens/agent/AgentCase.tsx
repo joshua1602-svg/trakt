@@ -215,7 +215,16 @@ export function AgentCaseScreen() {
   const current = stages.find((stage) => stage.status === "current");
   const packStage = packOwner(status);
   const yours = operatorBlocking(onboarding.blocking);
-  const openDecisions = status.open_decisions.filter((d) => d.status === "open");
+  // Open questions that are answered HERE. A proposed mapping is open and
+  // blocking too, but it is answered in the mapping table — as part of one
+  // approval over the set — and rendering seventy cards beside a table that
+  // already lists the same seventy columns is the friction this design exists
+  // to remove.
+  const openDecisions = status.open_decisions.filter(
+    (d) =>
+      d.status === "open" &&
+      (d.subject as { decision_type?: string })?.decision_type !== "mapping_proposal",
+  );
 
   /**
    * Providing the client's files.
@@ -544,7 +553,21 @@ export function AgentCaseScreen() {
           {/* Every column, including the ones nobody was asked about. Placed
               under the decisions because the decisions are the work; this is
               the check on everything the mapper did WITHOUT asking. */}
-          <MappingPanel mapping={status.mapping} live={run.mode === "live"} />
+          <MappingPanel
+            mapping={status.mapping}
+            live={run.mode === "live"}
+            busy={busy}
+            onApprove={() =>
+              void act(async () => {
+                const result = await client.approveAgentMappings(caseId);
+                toast.show(
+                  copy.agent.mappingApprovedToast(status.mapping.proposed ?? 0),
+                  "success",
+                );
+                return result;
+              })
+            }
+          />
 
 
           <section aria-label={copy.agent.timelineHeading}>
@@ -1108,10 +1131,25 @@ function ResponsesBlock({
  * without asking, and a copy of that test here could disagree with the engine
  * about which mappings a human checked.
  */
-function MappingPanel({ mapping, live }: { mapping: MappingOverview; live: boolean }) {
+function MappingPanel({
+  mapping,
+  live,
+  busy,
+  onApprove,
+}: {
+  mapping: MappingOverview;
+  live: boolean;
+  busy: boolean;
+  onApprove: () => void;
+}) {
   const [filter, setFilter] = useState("");
   const counts = mapping.counts ?? {};
   const rows = filter ? mapping.rows.filter((r) => r.state === filter) : mapping.rows;
+  // A first delivery proposes every column it matched. The approval is one
+  // act here rather than one card per column, because an operator who has read
+  // the table has already done the reading — what is missing is saying so.
+  const proposed = mapping.proposed ?? 0;
+  const mustAnswerFirst = mapping.blocking_questions ?? 0;
 
   // Only the states actually present are offered. A chip reading "Not used 0"
   // is a question nobody asked.
@@ -1127,6 +1165,31 @@ function MappingPanel({ mapping, live }: { mapping: MappingOverview; live: boole
             {copy.agent.mappingCount(counts.mapped ?? 0, counts.columns ?? 0)}
           </p>
           <p className="mt-1 text-xs text-stone-500">{copy.agent.mappingHelp}</p>
+
+          {proposed > 0 && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <p className="max-w-3xl text-xs text-amber-900">
+                {copy.agent.mappingApproveHelp}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  disabled={busy || mustAnswerFirst > 0}
+                  onClick={onApprove}
+                  className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {copy.agent.mappingApprove(proposed)}
+                </button>
+                {mustAnswerFirst > 0 && (
+                  // Offering to settle the set while a real question waits
+                  // would promise a run that cannot move.
+                  <span className="text-xs font-medium text-amber-900">
+                    {copy.agent.mappingApproveBlocked(mustAnswerFirst)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 flex flex-wrap gap-2">
             <FilterChip
@@ -1312,7 +1375,11 @@ function MappingFieldCell({ row }: { row: MappingRow }) {
           href={`#decision-${row.decision_id}`}
           className="shrink-0 text-xs font-medium text-blue-700 underline"
         >
-          {copy.agent.mappingAnswer}
+          {/* Different acts, so different words. A proposal is already right
+              or it is not — you change it. A question has no answer yet. */}
+          {row.state === "proposed"
+            ? copy.agent.mappingChange
+            : copy.agent.mappingAnswer}
         </a>
       )}
     </div>
@@ -1321,6 +1388,7 @@ function MappingFieldCell({ row }: { row: MappingRow }) {
 
 const MAPPING_STATES = [
   "needs_you",
+  "proposed",
   "unreadable",
   "unchecked",
   "unused",
@@ -1332,6 +1400,7 @@ const MAPPING_STATES = [
  *  exist whether or not a row of that kind is on screen. */
 const MAPPING_STATE_LABELS: Record<string, string> = {
   needs_you: "Needs you",
+  proposed: "Proposed",
   unreadable: "Could not be read",
   unchecked: "Weak match, nothing asked",
   unused: "Not used",
@@ -1341,6 +1410,8 @@ const MAPPING_STATE_LABELS: Record<string, string> = {
 
 const MAPPING_STATE_TONES: Record<string, string> = {
   needs_you: "bg-amber-100 text-amber-800",
+  // Distinct from "needs you": a proposal is read and approved, not answered.
+  proposed: "bg-sky-100 text-sky-800",
   unreadable: "bg-rose-100 text-rose-800",
   unchecked: "bg-orange-50 text-orange-700",
   unused: "bg-stone-100 text-stone-600",

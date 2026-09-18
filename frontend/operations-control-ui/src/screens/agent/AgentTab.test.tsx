@@ -182,6 +182,27 @@ describe("OCC Agent tab — the operating loop", () => {
     vi.unstubAllEnvs();
   });
 
+  /**
+   * Walk a prepared example as far as it goes.
+   *
+   * A FIRST ONBOARDING NOW STOPS ONCE, to have its proposed mappings approved —
+   * "clean" means no exceptions, not no approval. The walk therefore includes
+   * that act, exactly as the Python scenario harness settles the decisions a
+   * run raises. A test about readiness should not have to know that; a test
+   * ABOUT the approval drives it explicitly (see MappingTable.test.tsx).
+   */
+  async function approveProposedMappings(user: ReturnType<typeof userEvent.setup>) {
+    const approve = screen.queryByRole("button", { name: /Approve \d+ mapping/ });
+    if (approve && !(approve as HTMLButtonElement).disabled) {
+      await user.click(approve);
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: /Approve \d+ mapping/ }),
+        ).not.toBeInTheDocument(),
+      );
+    }
+  }
+
   async function runScenario(label: string) {
     const user = userEvent.setup();
     renderApp("/agent");
@@ -189,6 +210,7 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(card).not.toBeNull();
     await user.click(within(card as HTMLElement).getByRole("button"));
     await screen.findByText(copy.agent.conversationHeading);
+    await approveProposedMappings(user);
     return user;
   }
 
@@ -217,11 +239,16 @@ describe("OCC Agent tab — the operating loop", () => {
   it("an ambiguous mapping shows a decision card with its evidence", async () => {
     await runScenario("B — Ambiguous mapping");
     expect(await screen.findByText(copy.agent.decisionsHeading)).toBeInTheDocument();
-    expect(screen.getByText(/Confirm where 'Current Balance' belongs/)).toBeInTheDocument();
-    expect(screen.getByText(copy.agent.decisionRecommendation)).toBeInTheDocument();
-    expect(screen.getByText(copy.agent.decisionMateriality)).toBeInTheDocument();
-    expect(screen.getByText(copy.agent.decisionConsequence)).toBeInTheDocument();
-    expect(screen.getByText(/carries values for 24 of 24 records/)).toBeInTheDocument();
+    // Scoped to the AMBIGUITY's own card. A first onboarding also raises the
+    // weak match as its own question, so a page-wide match now finds two of
+    // everything a decision card carries.
+    const card = screen
+      .getByText(/Confirm where 'Current Balance' belongs/)
+      .closest("li") as HTMLElement;
+    expect(within(card).getByText(copy.agent.decisionRecommendation)).toBeInTheDocument();
+    expect(within(card).getByText(copy.agent.decisionMateriality)).toBeInTheDocument();
+    expect(within(card).getByText(copy.agent.decisionConsequence)).toBeInTheDocument();
+    expect(within(card).getByText(/carries values for 24 of 24 records/)).toBeInTheDocument();
   });
 
   it("a material business-rule failure cannot be talked past in the conversation", async () => {

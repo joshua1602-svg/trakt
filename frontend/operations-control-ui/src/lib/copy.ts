@@ -629,11 +629,30 @@ export const copy = {
     // facts sharing a cell is what made the longest rows wrap, and a status is
     // the thing an operator scans down — it needs to line up.
     mappingState: "Status",
+    // The approval act, and what it would settle. A button reading "Approve"
+    // with no count does not say what it is about to do.
+    mappingApprove: (n: number) =>
+      `Approve ${n} mapping${n === 1 ? "" : "s"}`,
+    mappingApproveHelp:
+      "This is the first delivery from this client, so Trakt has proposed how " +
+      "to read each column rather than deciding for you. Change any row that " +
+      "is wrong, then approve the rest. What you approve is what Trakt uses " +
+      "every month after this one.",
+    mappingApproveBlocked: (n: number) =>
+      `${n} column${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} an answer first`,
+    mappingApproved: "Approved",
+    mappingApprovedToast: (n: number) =>
+      `${n} mapping${n === 1 ? "" : "s"} approved.`,
+    mappingChange: "Change this",
     mappingFileColumns: (n: number) => `${n} column${n === 1 ? "" : "s"}`,
     mappingField: "Trakt reads it as",
-    // A model's proposal for a column Trakt could not place. Marked, because a
-    // suggestion set in the same type as a contract-backed match reads as one.
-    mappingProposed: "Proposed",
+    // A model's suggestion for a column Trakt could not place. Marked, because
+    // a suggestion set in the same type as a contract-backed match reads as
+    // one — and deliberately NOT the word "Proposed", which the status column
+    // uses for a mapping Trakt is asking you to approve. Two different claims
+    // sharing one word on one screen is how an operator comes to think a model
+    // wrote something a person is being asked to sign.
+    mappingProposed: "From a model",
     mappingBasis: "On what evidence",
     mappingConfidence: "Confidence",
     mappingNothing: "—",

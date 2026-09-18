@@ -48,7 +48,17 @@ function renderApp(route: string) {
  * questions, submitting and approving — which is the scenario runner's whole
  * job, and re-typing it here would test the walk rather than the table.
  */
-async function afterTheRun(fixtureId = "scenario_a_clean") {
+/**
+ * Scenario B, because this file is about the table BEFORE it is settled.
+ *
+ * A prepared example walks as far as it can, and on scenario A that is now all
+ * the way: the proposals get approved and the weak match answered, exactly as
+ * a person would. Scenario B halts on a genuine ambiguity, so its case holds
+ * the whole range at once — proposals waiting on one approval, a weak match
+ * waiting on its own answer, and two columns claiming one field. That is the
+ * table this screen exists for.
+ */
+async function afterTheRun(fixtureId = "scenario_b_ambiguous_mapping") {
   const user = userEvent.setup();
   renderApp("/agent");
   const marker = await screen.findByTestId(`expected-${fixtureId}`);
@@ -102,16 +112,22 @@ describe("OCC Agent — every column is accounted for", () => {
   });
 
   it("counts what is feeding a field, not what was proposed", async () => {
-    /* Five of eight. `Val Dt` is a proposal waiting on somebody and `Prp Ref`
-       is a weak match nobody was asked about, so neither counts. */
+    /* Two of eight. On a first delivery the three confident matches are
+       PROPOSED and feed nothing until approved; `Val Dt` is a question and
+       `Prp Ref` a weak match nobody was asked about. What is left is the one
+       column an operator confirmed and the one on a secondary file. */
     await afterTheRun();
-    expect(within(table()).getByText(copy.agent.mappingCount(5, 8))).toBeInTheDocument();
+    expect(within(table()).getByText(copy.agent.mappingCount(2, 8))).toBeInTheDocument();
   });
 
   it("distinguishes what an operator confirmed from what Trakt decided", async () => {
     await afterTheRun();
     expect(within(rowFor("Prop Val")).getByText("You confirmed it")).toBeInTheDocument();
-    expect(within(rowFor("loan_id")).getByText("Matched automatically")).toBeInTheDocument();
+    // On a first delivery the primary tape's confident matches are proposed,
+    // so what remains "matched automatically" is the secondary file — which
+    // the canonical tape is not built from and so raises nothing to approve.
+    expect(within(rowFor("property_value")).getByText("Matched automatically")).
+      toBeInTheDocument();
   });
 
   it("shows a column nothing matched rather than dropping it", async () => {
@@ -125,12 +141,14 @@ describe("OCC Agent — every column is accounted for", () => {
       .getAllByRole("row")
       .slice(1)
       .map((row) => row.querySelector("td")?.textContent ?? "");
-    expect(columns[0]).toContain("Val Dt");
+    // Both unanswered questions come before anything settled.
+    expect(columns.slice(0, 2).join(" ")).toContain("Val Dt");
+    expect(columns.slice(0, 2).join(" ")).toContain("Current Balance");
   });
 
   it("filters to one kind and back", async () => {
     const user = await afterTheRun();
-    await user.click(within(table()).getByRole("button", { name: /Needs you 1/ }));
+    await user.click(within(table()).getByRole("button", { name: /Needs you 2/ }));
     await waitFor(() => expect(within(table()).queryByText("loan_id")).not.toBeInTheDocument());
     expect(within(table()).getByText("Val Dt")).toBeInTheDocument();
 
@@ -221,11 +239,75 @@ describe("OCC Agent — every column is accounted for", () => {
     expect(within(rowFor("Internal Ref")).getByText("Not used")).toBeInTheDocument();
   });
 
-  it("does not count a proposal as a column feeding a field", async () => {
-    /* Counting it would make a run with an unanswered proposal read as more
-       complete than one without. */
+  /* THE TABLE IS THE APPROVAL SURFACE.
+   *
+   * "This is a first time onboarding so once human approves the initial
+   * onboarding then it will match every month thereafter. It shouldn't auto
+   * match on initial onboarding."
+   *
+   * A governed alias says the NAME is one the platform has seen before; it does
+   * not say this lender means the same thing by it. So on a first delivery every
+   * confident match is PROPOSED, and what a person approves here is what gets
+   * promoted into governed rules and applied every month after.
+   *
+   * One act, because seventy proposals answered one at a time is the same
+   * approval seventy times over — and the table, because seventy cards beside a
+   * table already listing the same seventy columns is the friction this removes.
+   */
+  it("proposes rather than deciding on a first delivery", async () => {
     await afterTheRun();
-    expect(within(table()).getByText(copy.agent.mappingCount(5, 8))).toBeInTheDocument();
+    expect(within(rowFor("Int Rate")).getByText("Proposed")).toBeInTheDocument();
+  });
+
+  it("offers one act for the whole set, and says what it would settle", async () => {
+    await afterTheRun();
+    expect(within(table()).getByRole("button", { name: /Approve 2 mappings/ })).
+      toBeInTheDocument();
+  });
+
+  it("does not also raise a card for every proposed column", async () => {
+    /* The whole point of approving the set. The one genuine question keeps its
+       card; the three proposals do not, because seventy cards beside a table
+       listing the same seventy columns is the friction, not the governance. */
+    await afterTheRun();
+    const panel = screen.getByText(copy.agent.decisionsHeading).closest("section");
+    // Two genuine questions keep their cards — the weak match and the
+    // ambiguity — and the two proposals do not.
+    expect(within(panel as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("will not approve the set while a real question is unanswered", async () => {
+    /* A weak match is answered on its own. Offering to settle the set while one
+       waits would promise a run that cannot move. */
+    await afterTheRun();
+    expect(within(table()).getByRole("button", { name: /Approve 2 mappings/ })).
+      toBeDisabled();
+    expect(within(table()).getByText(/need an answer first/)).toBeInTheDocument();
+  });
+
+  it("offers to change a proposal, not to answer it", async () => {
+    /* Different acts, different words: a proposal is already right or it is
+       not, and a question has no answer yet. */
+    await afterTheRun();
+    expect(within(rowFor("Int Rate")).getByText(copy.agent.mappingChange)).
+      toBeInTheDocument();
+    expect(within(rowFor("Val Dt")).getByText(copy.agent.mappingAnswer)).
+      toBeInTheDocument();
+  });
+
+  it("does not re-propose a column a person already confirmed", async () => {
+    await afterTheRun();
+    expect(within(rowFor("Prop Val")).getByText("You confirmed it")).
+      toBeInTheDocument();
+  });
+
+  it("keeps the word for a model's suggestion distinct from a proposal", async () => {
+    /* Two different claims sharing one word on one screen is how an operator
+       comes to think a model wrote something a person is being asked to sign. */
+    await afterTheRun();
+    expect(within(rowFor("Internal Ref")).getByText(copy.agent.mappingProposed)).
+      toBeInTheDocument();
+    expect(copy.agent.mappingProposed).not.toBe("Proposed");
   });
 
   it("says nothing has been read yet before the run", async () => {
