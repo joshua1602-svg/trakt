@@ -134,15 +134,40 @@ const ALLOWED: Record<string, string[]> = {
     "run_synthetic_onboarding",
     "cancel_run",
   ],
-  [S.SYNTHETIC_ONBOARDING_PASSED]: ["generate_orchestration_plan", "cancel_run"],
-  [S.ORCHESTRATION_PLAN_GENERATED]: ["approve_execution_readiness", "cancel_run"],
-  [S.EXECUTION_APPROVAL_REQUIRED]: ["approve_execution_readiness", "cancel_run"],
+  // Every state after the mapping stage and before activation carries
+  // `reopen_mapping`: a settled mapping is not a permanent one until the case
+  // activates, and this is the governed way back. Mirrors `states.py`.
+  [S.SYNTHETIC_ONBOARDING_PASSED]: [
+    "generate_orchestration_plan",
+    "reopen_mapping",
+    "cancel_run",
+  ],
+  [S.ORCHESTRATION_PLAN_GENERATED]: [
+    "approve_execution_readiness",
+    "reopen_mapping",
+    "cancel_run",
+  ],
+  [S.EXECUTION_APPROVAL_REQUIRED]: [
+    "approve_execution_readiness",
+    "reopen_mapping",
+    "cancel_run",
+  ],
   // A waypoint, not the finish: what follows is the human decision about the
   // real thing.
-  [S.READY_FOR_EXECUTION]: ["request_activation", "cancel_run"],
-  [S.READY_FOR_REVIEW]: ["approve_activation", "cancel_run"],
-  [S.APPROVED_FOR_ACTIVATION]: ["confirm_activation", "cancel_run"],
-  [S.ACTIVATION_CONFIRMATION_REQUIRED]: ["confirm_activation", "cancel_run"],
+  [S.READY_FOR_EXECUTION]: ["request_activation", "reopen_mapping", "cancel_run"],
+  [S.READY_FOR_REVIEW]: ["approve_activation", "reopen_mapping", "cancel_run"],
+  [S.APPROVED_FOR_ACTIVATION]: [
+    "confirm_activation",
+    "reopen_mapping",
+    "cancel_run",
+  ],
+  // Allowed HERE and nowhere after: the last state before anything crosses
+  // into production.
+  [S.ACTIVATION_CONFIRMATION_REQUIRED]: [
+    "confirm_activation",
+    "reopen_mapping",
+    "cancel_run",
+  ],
   [S.ACTIVATING]: [],
   [S.INGESTION_STARTED]: [],
   [S.ACTIVATION_FAILED]: ["confirm_activation", "cancel_run"],
@@ -627,7 +652,10 @@ function decisionFor(decisions: DecisionCard[], sourceFile: string,
 function aliasDecision(sourceFile: string, sourceColumn: string,
                        targetField: string, actor: string): DecisionCard {
   return {
-    decision_id: `alias_${slug(`${sourceFile}::${sourceColumn}`)}`,
+    // Mirrors `field_registry._scoped_id`: the column leads because that is
+    // what a person reads, and a digest of the exact pair follows because that
+    // is what keeps it unique whatever the filenames are.
+    decision_id: `alias_${slug(sourceColumn).slice(0, 40)}_${digest(`${sourceFile}::${sourceColumn}`)}`,
     kind: "field_mapping",
     title: `'${sourceColumn}' is ${targetField.replace(/_/g, " ")}`,
     question: `Trakt could not place '${sourceColumn}'. What field does it feed?`,
@@ -740,6 +768,17 @@ function matchKind(tier: string, canonical: string,
 /** Mirrors `execution._TRUSTED_TIERS` and `execution.LOW_CONFIDENCE`. */
 const TRUSTED_TIERS = new Set(["exact", "normalized", "alias"]);
 const LOW_CONFIDENCE = 0.9;
+
+/** A short, stable digest of a string. Not cryptographic — it exists to keep
+ *  two ids apart, which is all the server's sha256 prefix does here too. */
+function digest(value: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
 
 const slug = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
@@ -1750,7 +1789,7 @@ export class MockAgent {
     },
   ): AgentStatus {
     const stored = this.get(caseRef);
-    this.requireAction(stored, "resolve_decision");
+    this.requireMappingChange(stored);
     const raw = stored.doc.mapping_report.find(
       (r) =>
         String((r as Record<string, unknown>).source_file ?? "") === input.source_file &&
@@ -1767,6 +1806,25 @@ export class MockAgent {
         e.source_file !== input.source_file || e.source_column !== input.source_column,
     );
     if (input.action === "clear") return this.status(caseRef);
+
+    // Answering a column the run has already SETTLED sends it back to the
+    // mapping stage and withdraws the approvals that rested on the old
+    // reading. Faithful to `_reopen_for_mapping_change` — a mock that let the
+    // run stay where it was would hide the cost from the screen.
+    if (String(raw.tier ?? "") === "operator_approved" &&
+        stored.doc.state !== S.EXCEPTIONS_REQUIRE_INPUT) {
+      for (const approval of stored.doc.approvals as { subject?: string;
+                                                       decision?: string }[]) {
+        if (approval.decision === "approved") approval.decision = "withdrawn";
+      }
+      stored.doc.readiness_status = "not_evaluated";
+      stored.doc.readiness = {};
+      stored.doc.review_package_ref = "";
+      stored.doc.readiness_package_ref = "";
+      this.move(stored, S.EXCEPTIONS_REQUIRE_INPUT);
+      this.record(stored, "mapping_reopened",
+                  "an operator took back a mapping the rehearsal had settled");
+    }
 
     let field = input.target_field ?? "";
     if (input.action === "confirm") {
@@ -1821,7 +1879,7 @@ export class MockAgent {
    */
   approveMappings(caseRef: string, reason = ""): AgentStatus {
     const stored = this.get(caseRef);
-    this.requireAction(stored, "resolve_decision");
+    this.requireMappingChange(stored);
     const overview = mappingOverview(stored.doc);
     if (overview.unanswered_questions > 0) {
       const n = overview.unanswered_questions;
@@ -2972,6 +3030,17 @@ export class MockAgent {
       return PENDING_CONFIRMATION[stored.doc.state] ?? null;
     }
     return null;
+  }
+
+  /** A mapping may be answered while the run is at the mapping stage, and
+   *  RE-answered at any point until the case activates. Two permissions,
+   *  because they are two different acts — see `states.ACTION_REOPEN_MAPPING`. */
+  private requireMappingChange(stored: StoredRun): void {
+    const allowed = ALLOWED[stored.doc.state] ?? [];
+    if (allowed.includes("resolve_decision") || allowed.includes("reopen_mapping")) {
+      return;
+    }
+    this.requireAction(stored, "reopen_mapping");
   }
 
   private requireAction(stored: StoredRun, action: string): void {

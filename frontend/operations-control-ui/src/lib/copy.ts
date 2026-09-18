@@ -638,6 +638,18 @@ export const copy = {
     mappingRowChange: "Change",
     mappingRowNotUsed: "Do not use",
     mappingRowUndo: "Undo",
+    // Taking back a mapping the run has already settled. A different act from
+    // undoing a draft, and the words have to say so: it sends the case back to
+    // this step and withdraws anything that was signed off on the old reading.
+    mappingRowReopen: "Change it back",
+    mappingReopenWarning:
+      "This column is already confirmed. Changing it now takes the case back " +
+      "to this step, and anything approved on the old reading — readiness, " +
+      "activation — has to be approved again. Nothing has reached the client " +
+      "or production yet, so it is yours to change until it does.",
+    mappingReopenedToast:
+      "Taken back. The case is at the mapping step again, and approvals that " +
+      "rested on the old reading have been withdrawn.",
     mappingStagedConfirm: "As Trakt read it",
     mappingStagedAmend: (field: string) => `You said: ${field.replace(/_/g, " ")}`,
     mappingStagedNotUsed: "You set this aside",

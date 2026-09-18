@@ -319,8 +319,16 @@ class SyntheticRun:
                 if d.get("blocking") and d.get("status", "open") == "open"]
 
     def has_approval(self, subject: str) -> bool:
-        return any(a.get("subject") == subject and a.get("decision") == "approved"
-                   for a in self.approvals)
+        """Is this approval STANDING — not merely ever given?
+
+        It used to read "approved at any point in this run's history", so an
+        approval that was later withdrawn went on reading as held. That was
+        harmless while nothing withdrew one; re-opening a settled mapping does,
+        and readiness reads this to decide whether a person has signed off the
+        delivery. An approval given against a reading that no longer exists is
+        not an approval of the one that replaced it.
+        """
+        return self.approval(subject).get("decision") == "approved"
 
     def approval(self, subject: str) -> Dict[str, Any]:
         for entry in reversed(self.approvals):

@@ -369,6 +369,138 @@ class TestTheCommit:
         assert all("::" in k for k in detail["mappings"])
 
 
+class TestAConfirmedMappingCanStillBeTakenBack:
+    """A committed mapping is not a permanent one.
+
+        "I MUST be able to reverse this decision before persisting because it
+        is incorrect."
+
+    It becomes permanent at ACTIVATION, when promotion writes it into the
+    client's governed rules. Until then the whole rehearsal is provisional —
+    but the lifecycle is forward-only, so there was no route back: the row said
+    "You confirmed it", offered nothing to click, and the state machine refused
+    ``resolve_decision`` in every state after the mapping stage. The screen was
+    telling an operator their mistake was final when it was not.
+
+    What it costs is said out loud rather than hidden: readiness was evaluated
+    against the old reading and activation may have been approved against it,
+    so those approvals are withdrawn. The one outcome worse than not being able
+    to go back is going back silently and activating on an approval nobody
+    would give again.
+    """
+
+    def _committed(self, service, halted, actor=ACTOR):
+        updated = _answer_the_questions(service, halted)
+        updated = service.confirm_mappings(updated, actor=actor)
+        assert updated.run.state == _states.SYNTHETIC_ONBOARDING_PASSED
+        return updated
+
+    def test_a_confirmed_column_can_be_staged_again(self, service, halted):
+        updated = self._committed(service, halted)
+        row = _one(service, updated, "confirmed")
+        updated = service.stage_mapping(
+            updated, source_file=row["source_file"],
+            source_column=row["source_column"], action="not_used",
+            actor=ACTOR)
+        after = next(r for r in _rows(service, updated)
+                     if r["source_column"] == row["source_column"]
+                     and r["source_file"] == row["source_file"])
+        assert after["state"] == "staged"
+        assert after["staged_action"] == "not_used"
+
+    def test_it_puts_the_run_back_at_the_mapping_stage(self, service, halted):
+        updated = self._committed(service, halted)
+        row = _one(service, updated, "confirmed")
+        updated = service.stage_mapping(
+            updated, source_file=row["source_file"],
+            source_column=row["source_column"], action="not_used",
+            actor=ACTOR)
+        assert updated.run.state == _states.EXCEPTIONS_REQUIRE_INPUT
+
+    def test_the_change_reaches_the_report_when_it_is_committed_again(
+            self, service, halted):
+        """The whole point: the reversal has to actually take."""
+        updated = self._committed(service, halted)
+        row = next(r for r in _rows(service, updated, "confirmed")
+                   if r["canonical_field"])
+        updated = service.stage_mapping(
+            updated, source_file=row["source_file"],
+            source_column=row["source_column"], action="not_used",
+            actor=ACTOR)
+        updated = service.confirm_mappings(updated, actor=ACTOR)
+        after = next(r for r in _rows(service, updated)
+                     if r["source_column"] == row["source_column"]
+                     and r["source_file"] == row["source_file"])
+        assert after["canonical_field"] == ""
+
+    def test_re_answering_leaves_one_record_not_two(self, service, halted):
+        """The decision is RE-resolved, not duplicated.
+
+        A second decision for the same column would be collapsed by id at the
+        rerun, and one of the two answers dropped on the floor.
+        """
+        updated = self._committed(service, halted)
+        row = next(r for r in _rows(service, updated, "confirmed")
+                   if r["canonical_field"])
+        updated = service.stage_mapping(
+            updated, source_file=row["source_file"],
+            source_column=row["source_column"], action="not_used",
+            actor=ACTOR)
+        updated = service.confirm_mappings(updated, actor=ACTOR)
+        ids = [d["decision_id"] for d in updated.run.open_decisions]
+        assert len(ids) == len(set(ids))
+        mine = [d for d in updated.run.open_decisions
+                if (d.get("subject") or {}).get("source_column")
+                == row["source_column"]
+                and (d.get("subject") or {}).get("source_file")
+                == row["source_file"]]
+        assert len(mine) == 1
+        assert mine[0]["resolved_value"] == "mark_unavailable"
+
+    def test_what_rested_on_the_old_reading_is_withdrawn(self, service,
+                                                         halted):
+        """Readiness was approved against a delivery that no longer exists."""
+        updated = self._committed(service, halted)
+        updated = service.generate_orchestration_plan(updated, actor=ACTOR)
+        updated = service.approve_execution_readiness(updated, actor=ACTOR)
+        assert updated.run.has_approval("execution_readiness")
+        row = _one(service, updated, "confirmed")
+        updated = service.stage_mapping(
+            updated, source_file=row["source_file"],
+            source_column=row["source_column"], action="not_used",
+            actor=ACTOR)
+        assert not updated.run.has_approval("execution_readiness")
+        assert updated.run.readiness_status == "not_evaluated"
+        assert updated.run.state == _states.EXCEPTIONS_REQUIRE_INPUT
+
+    def test_taking_one_back_is_audited_with_what_it_cost(self, service,
+                                                          halted):
+        updated = self._committed(service, halted)
+        row = _one(service, updated, "confirmed")
+        updated = service.stage_mapping(
+            updated, source_file=row["source_file"],
+            source_column=row["source_column"], action="not_used",
+            actor=ACTOR)
+        event = next(e for e in
+                     service.store.list_audit(TENANT_A, updated.run.case_ref)
+                     if e["action"] == "mapping_reopened")
+        assert row["source_column"] in event["detail"]["columns"]
+        assert event["actor_identity"] == ACTOR
+
+    def test_staging_while_the_run_is_still_open_reopens_nothing(
+            self, service, halted):
+        """Answering a question that is STILL OPEN is the ordinary act and
+        must not withdraw anybody's approval."""
+        row = _one(service, halted, "proposed")
+        updated = service.stage_mapping(
+            halted, source_file=row["source_file"],
+            source_column=row["source_column"], action="confirm", actor=ACTOR)
+        assert updated.run.state == _states.EXCEPTIONS_REQUIRE_INPUT
+        assert not [e for e in
+                    service.store.list_audit(TENANT_A, updated.run.case_ref)
+                    if e["action"] == "mapping_reopened"]
+
+
 class TestTheButtonCanNameItsOwnConsequence:
     def test_the_overview_counts_what_a_commit_would_do(self, service,
                                                         halted):

@@ -251,11 +251,32 @@ def validate_field_name(name: str) -> str:
     return normalised
 
 
-def _alias_id(source_file: str, source_column: str) -> str:
+def _scoped_id(prefix: str, source_file: str, source_column: str) -> str:
+    """An id that is unique across the pack AND survives a long filename.
+
+    The obvious spelling — slug the combined ``file::column`` — truncates at 48
+    characters, and a real delivery spends most of that on the filename:
+    ``ERE_LoanExtract_One_202608.xlsx::Current Interest Rate`` lands at 47, one
+    character from eating the column name entirely. Two columns of that file
+    sharing a prefix would then collapse onto one id, and the rerun collapses
+    decisions by id — so one operator's answer would be dropped on the floor
+    with nothing saying so.
+
+    The COLUMN leads, because that is what a person reads in an audit trail,
+    and a digest of the exact pair follows, because that is what makes it
+    unique whatever the names are.
+    """
+    import hashlib
+
     from .execution import _slug
-    return f"alias_{_slug(mapping_key(source_file, source_column))}"
+    key = mapping_key(source_file, source_column)
+    digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
+    return f"{prefix}_{_slug(source_column)[:40]}_{digest}"
+
+
+def _alias_id(source_file: str, source_column: str) -> str:
+    return _scoped_id("alias", source_file, source_column)
 
 
 def _request_id(source_file: str, source_column: str) -> str:
-    from .execution import _slug
-    return f"fieldreq_{_slug(mapping_key(source_file, source_column))}"
+    return _scoped_id("fieldreq", source_file, source_column)

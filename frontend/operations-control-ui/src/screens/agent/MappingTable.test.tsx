@@ -496,6 +496,46 @@ describe("OCC Agent — the table is a draft until it is confirmed", () => {
     );
   });
 
+  it("lets a confirmed mapping be taken back", async () => {
+    /* "I MUST be able to reverse this decision before persisting because it is
+       incorrect."
+
+       A committed row used to render NOTHING in its action column, and the
+       state machine refused every mapping action after the mapping stage. The
+       screen was telling an operator their mistake was final when it was not:
+       a mapping becomes permanent at activation, not at the commit. */
+    const user = await afterTheRun();
+    await confirmRow(user, "Val Dt");
+    await confirmRow(user, "Prp Ref", "property_tape.csv");
+    await confirmRow(user, "Current Balance");
+    const aside = within(rowFor("Principal Balance")).getByRole("button", {
+      name: copy.agent.mappingRowNotUsed,
+    });
+    await waitFor(() => expect(aside).toBeEnabled());
+    await user.click(aside);
+    const commit = within(table()).getByRole("button", {
+      name: /Confirm \d+ mappings/,
+    });
+    await waitFor(() => expect(commit).toBeEnabled());
+    await user.click(commit);
+    await waitFor(() =>
+      expect(within(rowFor("Int Rate")).getByText("You confirmed it")).
+        toBeInTheDocument(),
+    );
+
+    // The committed row still offers a way back, and says what it costs.
+    const back = within(rowFor("Int Rate")).getByRole("button", {
+      name: copy.agent.mappingRowNotUsed,
+    });
+    expect(back.getAttribute("title")).toBe(copy.agent.mappingReopenWarning);
+    await waitFor(() => expect(back).toBeEnabled());
+    await user.click(back);
+    await waitFor(() =>
+      expect(within(rowFor("Int Rate")).getByText("Ready to confirm")).
+        toBeInTheDocument(),
+    );
+  });
+
   it("flags a field that more than one column claims", async () => {
     /* Every file's columns are proposed now, so two extracts routinely claim
        one field — and an operator confirming the set is confirming all of
