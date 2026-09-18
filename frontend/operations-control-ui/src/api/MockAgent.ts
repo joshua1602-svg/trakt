@@ -397,7 +397,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
   // The operator's working copy: what they have said each column is, held as
   // a draft until the set is committed. Faithful to `mapping_view.overview`.
   const staged = new Map<string, { action: string; target_field: string;
-                                   staged_by: string }>();
+                                   staged_by: string; origin?: string }>();
   for (const item of doc.staged_mappings ?? []) {
     staged.set(`${item.source_file}::${item.source_column}`, item);
   }
@@ -486,6 +486,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
       staged_field: answer?.target_field ?? "",
       staged_label: (answer?.target_field ?? "").replace(/_/g, " "),
       staged_by: answer?.staged_by ?? "",
+      staged_origin: answer?.origin ?? "",
     };
   });
 
@@ -1786,6 +1787,7 @@ export class MockAgent {
       action: "confirm" | "amend" | "not_used" | "clear";
       target_field?: string;
       reason?: string;
+      origin?: string;
     },
   ): AgentStatus {
     const stored = this.get(caseRef);
@@ -1801,11 +1803,25 @@ export class MockAgent {
         "OCC_AGENT_COLUMN_NOT_FOUND",
       );
     }
+    const previous = (stored.doc.staged_mappings ?? []).find(
+      (e) =>
+        e.source_file === input.source_file && e.source_column === input.source_column,
+    );
     stored.doc.staged_mappings = (stored.doc.staged_mappings ?? []).filter(
       (e) =>
         e.source_file !== input.source_file || e.source_column !== input.source_column,
     );
-    if (input.action === "clear") return this.status(caseRef);
+    if (input.action === "clear") {
+      // Undoing a set-aside a field request wrote takes the REQUEST back too,
+      // or the column goes back to being proposed with the ask still standing
+      // — mapped and requested at once.
+      if (previous?.origin === "field_request") {
+        this.withdrawFieldRequest(
+          stored, input.source_file, input.source_column,
+          "the operator undid the set-aside the request made");
+      }
+      return this.status(caseRef);
+    }
 
     // Answering a column the run has already SETTLED sends it back to the
     // mapping stage and withdraws the approvals that rested on the old
@@ -1859,6 +1875,7 @@ export class MockAgent {
       staged_by: ACTOR,
       staged_at: new Date().toISOString(),
       reason: input.reason ?? "",
+      origin: input.origin ?? "operator",
     });
     if (field) {
       this.withdrawFieldRequest(stored, input.source_file, input.source_column,
@@ -2372,6 +2389,22 @@ export class MockAgent {
           route: "config package, system layer: config/system/fields_registry.yaml",
         },
       ];
+      // SET THE COLUMN ASIDE, so the commit leaves it out. Without this the
+      // column keeps its proposal and the commit approves it — mapped and
+      // requested at once. An answer the operator gave by hand is left alone.
+      const held = (stored.doc.staged_mappings ?? []).find(
+        (e) =>
+          e.source_file === input.source_file &&
+          e.source_column === input.source_column);
+      if (held?.action !== "not_used") {
+        this.stageMapping(caseRef, {
+          source_file: input.source_file,
+          source_column: input.source_column,
+          action: "not_used",
+          origin: "field_request",
+          reason: `an operator asked for a new field, '${name}', for this column`,
+        });
+      }
       this.record(stored, "field_registry_requested",
                   input.reason || input.description ||
                   "an operator asked for a canonical field the registry does not have");
@@ -2382,6 +2415,16 @@ export class MockAgent {
       if (!withdrawn) {
         throw new OpsError("There is no open field request for that column.",
                            "OCC_AGENT_FIELD_REQUEST_NOT_FOUND");
+      }
+      // The ask is what put the column out of the delivery, so taking it back
+      // puts the column back — but only where the ask is what set it aside.
+      const held = (stored.doc.staged_mappings ?? []).find(
+        (e) =>
+          e.source_file === input.source_file &&
+          e.source_column === input.source_column);
+      if (held?.origin === "field_request") {
+        stored.doc.staged_mappings = (stored.doc.staged_mappings ?? []).filter(
+          (e) => e !== held);
       }
       this.record(stored, "field_registry_request_withdrawn",
                   input.reason || "withdrawn by the operator");

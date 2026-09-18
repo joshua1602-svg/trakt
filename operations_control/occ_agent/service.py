@@ -1734,7 +1734,8 @@ class OccAgentService:
 
     def stage_mapping(self, agent_case: AgentCase, *, source_file: str,
                       source_column: str, action: str, actor: str,
-                      target_field: str = "", reason: str = "") -> AgentCase:
+                      target_field: str = "", reason: str = "",
+                      origin: str = _staging.ORIGIN_OPERATOR) -> AgentCase:
         """What this operator says one column is. A draft, not an act.
 
         Nothing is resolved, nothing is promoted and nothing reruns: the answer
@@ -1755,11 +1756,20 @@ class OccAgentService:
             raise OpsError("OCC_AGENT_COLUMN_NOT_FOUND",
                            f"'{column}' is not a column Trakt read in "
                            f"{file_name}.", http_status=404)
+        previous = _staging.find(run.staged_mappings, file_name, column)
         run.staged_mappings = [
             e for e in run.staged_mappings
             if _staging.key(e.get("source_file"), e.get("source_column"))
             != _staging.key(file_name, column)]
         if what == _staging.ACTION_CLEAR:
+            # Undoing a set-aside a field request wrote takes the REQUEST back
+            # too. Leaving the ask standing over a column that has gone back to
+            # being proposed is the mapped-and-requested state this path exists
+            # to prevent, reached from the other end.
+            if _staging.is_request_driven(previous):
+                self._withdraw_field_request(
+                    run, file_name, column, actor=actor, at=now_iso(),
+                    why="the operator undid the set-aside the request made")
             self.store.save(run)
             return agent_case
 
@@ -1794,7 +1804,7 @@ class OccAgentService:
         run.staged_mappings.append(_staging.entry(
             source_file=file_name, source_column=column, action=what,
             target_field=field_name, decision_id=decision_id, actor=actor,
-            at=now_iso(), reason=reason))
+            at=now_iso(), reason=reason, origin=origin))
         # An ask for a new field and a decision about the column are two
         # answers to one question; recording either withdraws the other.
         if field_name:
@@ -2053,9 +2063,30 @@ class OccAgentService:
         versioned system config package an administrator drafts and activates.
         The column stays unmapped in this delivery, visibly, so nobody reads a
         request as a mapping.
+
+        THE COLUMN IS SET ASIDE HERE, which is what makes the sentence above
+        true. It used to record the ask and touch nothing else, and that was
+        only harmless while a request could only come from a column that
+        matched nothing. It cannot: "Change" opens the same dialog on ANY row,
+        so a column with a live proposal could be requested as a new field and
+        keep its proposal — and the commit approves every untouched proposal.
+        One column would be mapped and requested at once. That is how
+        'ERCs Paid in the period' — a money column — came to sit on a standing
+        request for ``early_repayment_charge_amount_in_period`` while still
+        proposed onto ``early_repayment_charge``, which is a Y/N field: a
+        decimal heading into a boolean parser, with a governed rule promoted
+        for it at activation.
+
+        Asking for a new field IS saying Trakt has no field for this column, so
+        it is staged like any other answer — as a draft, reversible until the
+        set is committed, and released again if the ask is withdrawn.
         """
         run = agent_case.run
-        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        # The same permission a mapping change needs, rather than
+        # `resolve_decision` alone: this now stages an answer, and answering a
+        # column the run has already settled is the act `reopen_mapping`
+        # governs.
+        self._require_mapping_change(run)
         column = str(source_column or "").strip()
         file_name = str(source_file or "").strip()
         if not column or not file_name:
@@ -2090,6 +2121,20 @@ class OccAgentService:
             r for r in run.field_requests
             if _staging.key(r.get("source_file"), r.get("source_column"))
             != _staging.key(file_name, column)] + [request]
+        # SET THE COLUMN ASIDE, so the commit leaves it out. An answer the
+        # operator has already given by hand is left exactly as it is: they
+        # have read this column and said what it is, and a request about it
+        # does not overrule that — nor should withdrawing the request later
+        # release a set-aside they meant.
+        existing = _staging.find(run.staged_mappings, file_name, column)
+        if existing is None or str(existing.get("action") or "") != \
+                _staging.ACTION_NOT_USED:
+            self.stage_mapping(
+                agent_case, source_file=file_name, source_column=column,
+                action=_staging.ACTION_NOT_USED, actor=actor,
+                origin=_staging.ORIGIN_REQUEST,
+                reason=f"an operator asked for a new field, '{name}', for "
+                       f"this column")
         self.store.save(run)
         self._audit(run, "field_registry_requested", actor_type=ACTOR_HUMAN,
                     actor=actor, classification=EXEC_HUMAN_CONFIRMED,
@@ -2106,17 +2151,34 @@ class OccAgentService:
                                         source_file: str, source_column: str,
                                         actor: str, reason: str = ""
                                         ) -> AgentCase:
-        """Take back an ask. A mistaken request is otherwise permanent."""
+        """Take back an ask, and with it the set-aside the ask imposed.
+
+        The request is what put this column out of the delivery, so withdrawing
+        it has to put the column back — otherwise taking back a mistaken ask
+        would silently leave the column unused, which is the opposite of what
+        the operator meant and invisible until the report came back short.
+
+        Only a set-aside THIS request wrote is released. One the operator
+        staged by hand stands: they said the column feeds nothing, and an
+        unrelated ask being withdrawn is not them changing their mind.
+        """
         run = agent_case.run
-        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        self._require_mapping_change(run)
+        file_name = str(source_file or "").strip()
+        column = str(source_column or "").strip()
         withdrawn = self._withdraw_field_request(
-            run, str(source_file or "").strip(),
-            str(source_column or "").strip(), actor=actor, at=now_iso(),
+            run, file_name, column, actor=actor, at=now_iso(),
             why=reason or "withdrawn by the operator")
         if not withdrawn:
             raise OpsError("OCC_AGENT_FIELD_REQUEST_NOT_FOUND",
                            "There is no open field request for that column.",
                            http_status=404)
+        if _staging.is_request_driven(
+                _staging.find(run.staged_mappings, file_name, column)):
+            run.staged_mappings = [
+                e for e in run.staged_mappings
+                if _staging.key(e.get("source_file"), e.get("source_column"))
+                != _staging.key(file_name, column)]
         self.store.save(run)
         self._audit(run, "field_registry_request_withdrawn",
                     actor_type=ACTOR_HUMAN, actor=actor,

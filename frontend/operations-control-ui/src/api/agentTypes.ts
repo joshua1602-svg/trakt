@@ -651,6 +651,11 @@ export interface MappingRow {
    *  made, so eighty-nine unused columns can be told apart from the ones
    *  somebody has already dealt with. */
   requested_field: string;
+  /** "field_request" when an ask for a new canonical field set this column
+   *  aside, "operator" when the operator did it themselves. They undo
+   *  differently: withdrawing the ask releases the first and leaves the
+   *  second exactly where it is. */
+  staged_origin: string;
 }
 
 /** A canonical field an unmapped column may be pointed at. */
@@ -679,6 +684,11 @@ export interface StagedMapping {
   staged_by: string;
   staged_at: string;
   reason: string;
+  /** "operator" when a person staged this by hand, "field_request" when an ask
+   *  for a new canonical field set the column aside. Withdrawing the ask
+   *  releases the second and leaves the first standing. Absent on entries
+   *  staged before origins were recorded, which are the operator's own. */
+  origin?: string;
 }
 
 /** An ask for a canonical field the platform does not have. */
