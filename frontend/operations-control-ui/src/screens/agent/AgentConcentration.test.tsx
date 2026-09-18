@@ -201,6 +201,16 @@ describe("OCC Agent — a saved answer can be seen and corrected", () => {
       expect(screen.getByLabelText(/Company registration number/i)).toHaveValue("09876543"),
     );
     const box = await screen.findByLabelText(/Company registration number/i);
+    // WAIT FOR THE BOX TO BE EDITABLE, not just for the value to arrive.
+    //
+    // These are two different moments and the gap between them is real: the
+    // value lands when the reloaded status renders, and the form stays
+    // disabled until the action that reloaded it settles its `busy` flag in a
+    // `finally` AFTER that render. Asserting only on the value, the test
+    // reached for a box the screen was still holding shut and `clear()` threw
+    // "only supported on editable elements" — intermittently, because it is a
+    // race, which is why it passed locally and failed in CI.
+    await waitFor(() => expect(box).toBeEnabled());
     await user.clear(box);
     await user.type(box, "12345678");
     await user.click(screen.getByRole("button", { name: copy.agent.questionsSave }));
