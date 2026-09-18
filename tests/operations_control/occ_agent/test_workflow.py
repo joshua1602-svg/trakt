@@ -64,7 +64,15 @@ def test_scenario_a_reaches_ready_for_execution(service):
 
 
 def test_scenario_a_walks_both_lifecycles(service):
-    """One conversation, two governed lifecycles, in the right order."""
+    """One conversation, two governed lifecycles, in the right order.
+
+    A CLEAN PACK STILL STOPS ONCE. ``EXCEPTIONS_REQUIRE_INPUT`` sits in this
+    progression even though nothing about this fixture is ambiguous: it is the
+    first delivery from this client, so every column the mapper matched is
+    PROPOSED rather than applied, and a person approves the set before the run
+    goes on. "Clean" means no exceptions, not no approval — the human reading
+    of a lender's columns is the artefact a first onboarding exists to produce.
+    """
     run = run_scenario(service, "scenario_a_clean", tenant=TENANT_A, actor=ACTOR)
     assert run.onboarding_progression == [
         "draft", "information_requested", "in_review", "ready_for_approval",
@@ -72,7 +80,8 @@ def test_scenario_a_walks_both_lifecycles(service):
     assert run.progression == [
         _states.AWAITING_ONBOARDING, _states.PACK_REVIEW_REQUIRED,
         _states.PACK_APPROVED_TO_SEND, _states.PACK_SENT,
-        _states.READY_TO_RUN, _states.SYNTHETIC_ONBOARDING_PASSED,
+        _states.READY_TO_RUN, _states.EXCEPTIONS_REQUIRE_INPUT,
+        _states.SYNTHETIC_ONBOARDING_PASSED,
         _states.EXECUTION_APPROVAL_REQUIRED, _states.READY_FOR_EXECUTION,
         _states.READY_FOR_REVIEW,
         _states.ACTIVATION_CONFIRMATION_REQUIRED]
@@ -84,8 +93,15 @@ def test_scenario_b_needs_a_human_then_reruns_the_affected_controls(service):
                           tenant=TENANT_A, actor=ACTOR,
                           resolve_decisions=False)
     assert halted.case.run.state == _states.EXCEPTIONS_REQUIRE_INPUT
+    # THE AMBIGUITY SPECIFICALLY. On a first onboarding the clean columns are
+    # proposed alongside it, so "the first open decision" is no longer the one
+    # this test is about — and the clash is raised BEFORE the set is offered
+    # for approval, because "is this right?" has no answer while two columns
+    # claim the same field.
     decision = next(d for d in halted.case.run.open_decisions
-                    if d["status"] == "open")
+                    if d["status"] == "open"
+                    and (d.get("subject") or {}).get("decision_type")
+                    == "mapping_ambiguity")
     assert decision["blocking"] is True
     # Before the decision, validation has not run at all.
     assert "validate" not in halted.case.run.stage_outcomes
@@ -94,7 +110,16 @@ def test_scenario_b_needs_a_human_then_reruns_the_affected_controls(service):
         halted.case, decision_id=decision["decision_id"], action="approve",
         value=decision["recommendation"], actor=ACTOR,
         reason="accepted the recommendation")
-    # Resolving reran the affected controls, which now completed.
+
+    # SETTLING THE AMBIGUITY IS NOT THE WHOLE ANSWER. This is a first
+    # onboarding, so the columns that matched cleanly are proposed too, and the
+    # run is right to keep waiting: a person has answered the hard question and
+    # has not yet said the easy ones are correct for this client.
+    assert agent_case.run.blocking_decisions()
+    assert "validate" not in agent_case.run.stage_outcomes
+
+    agent_case = service.approve_proposed_mappings(agent_case, actor=ACTOR)
+    # With the set approved, the affected controls ran again and completed.
     assert agent_case.run.stage_outcomes.get("validate") == \
         "deterministic_execution_completed"
     assert agent_case.run.state == _states.SYNTHETIC_ONBOARDING_PASSED

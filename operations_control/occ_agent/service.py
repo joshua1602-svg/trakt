@@ -56,6 +56,7 @@ from ..onboarding.case import (
     DRAFT,
     IN_REVIEW,
     INFORMATION_REQUESTED,
+    KIND_NEW_CLIENT,
     NO_ACTIVE_CONFIGURATION,
     READY_FOR_APPROVAL,
     STATUS_LABELS,
@@ -84,7 +85,11 @@ from .adapters import (
 )
 from .artefacts import ArtefactService, RoleReadiness, sample_manifest
 from .derive import ExecutionFacts
-from .execution import SyntheticOnboardingAdapters, run_synthetic_orchestration
+from .execution import (
+    DECISION_MAPPING_PROPOSAL,
+    SyntheticOnboardingAdapters,
+    run_synthetic_orchestration,
+)
 from .input_roles import artefact_vocabulary
 from .interpretation import (
     PROV_AGENT,
@@ -1539,6 +1544,10 @@ class OccAgentService:
             confirmed_product_profile=run.confirmed_product_profile,
             regime=facts.regime,
             approved_mappings=self._approved_mappings(run),
+            # A new client's columns have never been read by anyone. An
+            # amendment's have, and are already governed — see
+            # `SyntheticOnboardingAdapters.confirm_every_mapping`.
+            confirm_every_mapping=(agent_case.case.kind == KIND_NEW_CLIENT),
             case_id=run.case_ref, tenant=run.tenant)
         run_root = self.store.run_dir(run.tenant, run.case_ref)
         self._purge_stale_decisions(run_root)
@@ -1648,6 +1657,63 @@ class OccAgentService:
                     decision_basis=reason or f"operator chose '{action}'",
                     detail={"resolved_value": target["resolved_value"]})
 
+        if not run.blocking_decisions():
+            if _states.is_transition_allowed(
+                    run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
+                return self.run_synthetic_onboarding(agent_case, actor=actor)
+        return agent_case
+
+    def approve_proposed_mappings(self, agent_case: AgentCase, *,
+                                  actor: str, reason: str = "") -> AgentCase:
+        """One act of approval over every mapping still proposed.
+
+        A first onboarding proposes rather than applies, so a seventy-column
+        tape arrives as seventy proposals. Answering them one at a time is the
+        same approval seventy times over, and an operator who has read the
+        table has already done the reading — what is missing is the act of
+        saying so.
+
+        SO IT IS ONE ACT AND SEVENTY RECORDS. Each column is resolved on its
+        own, with its own approver and timestamp, because that is what
+        promotion turns into a governed rule and what an auditor asking "who
+        said 'Month Run' was the cut-off date?" has to be able to read. An
+        approval that left one record behind could not answer that question.
+
+        Anything a person has already changed keeps their answer: this
+        approves what is still OPEN, and never overwrites a decision somebody
+        has been through.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        pending = [d for d in run.open_decisions
+                   if _decision_type_of(d) == DECISION_MAPPING_PROPOSAL
+                   and str(d.get("status", "open")) in ("open", "pending")]
+        if not pending:
+            raise OpsError(
+                "OCC_AGENT_NO_PROPOSED_MAPPINGS",
+                "There are no proposed mappings waiting for approval.",
+                http_status=409)
+        at = now_iso()
+        for decision in pending:
+            decision["status"] = "approved"
+            decision["resolution"] = "approve"
+            decision["resolved_value"] = str(
+                (decision.get("subject") or {}).get("target_field")
+                or decision.get("target_field") or "")
+            decision["resolved_by"] = actor
+            decision["resolved_at"] = at
+            decision["reason"] = reason or "approved with the mapping set"
+        self.store.save(run)
+        self._audit(run, "mapping_set_approved", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis=(reason or "the operator approved the "
+                                    "proposed mappings for this delivery"),
+                    detail={"columns": len(pending),
+                            "mappings": {
+                                str((d.get("subject") or {}).get(
+                                    "source_column") or ""):
+                                str(d.get("resolved_value") or "")
+                                for d in pending}})
         if not run.blocking_decisions():
             if _states.is_transition_allowed(
                     run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
@@ -2857,6 +2923,18 @@ _AGENT_FOR_STEP = {
     "stamp": "Provenance stamping",
 }
 
+def _decision_type_of(decision: Dict[str, Any]) -> str:
+    """What kind of decision this is, from either shape it may be in.
+
+    The adapter's raw row keeps it at the top level; the run's card keeps it
+    under ``subject``. Both reach this module.
+    """
+    value = decision.get("decision_type")
+    if value in (None, ""):
+        value = (decision.get("subject") or {}).get("decision_type")
+    return str(value or "")
+
+
 def _raw_decisions(run_root: Path) -> Dict[str, Dict[str, Any]]:
     """The adapter's own pending-decision rows, keyed by decision id.
 
@@ -2887,6 +2965,10 @@ def _decision_card(decision,
     subject = dict(d.get("subject") or {})
     source = (raw or {}).get(str(subject.get("decision_id") or ""))
     if source:
+        # Carried so the run's own copy of a decision still says WHAT KIND it
+        # is. Dropping it made promotion silently no-op: every card reported an
+        # empty decision type and every settled mapping failed the first test.
+        subject.setdefault("decision_type", source.get("decision_type", ""))
         subject.setdefault("source_column", source.get("source_column", ""))
         subject.setdefault("source_columns", source.get("source_columns", []))
         subject.setdefault("target_field", source.get("target_field", ""))
