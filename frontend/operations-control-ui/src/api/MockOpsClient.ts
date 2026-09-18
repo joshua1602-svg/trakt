@@ -1969,6 +1969,20 @@ export class MockOpsClient implements OpsClient {
     return this.agent.approveMappings(caseRef, reason);
   }
 
+  async stageAgentMapping(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "confirm" | "amend" | "not_used" | "clear";
+      target_field?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.stageMapping(caseRef, input);
+  }
+
   async agentFieldRegistry(caseRef: string): Promise<RegistryField[]> {
     await this.wait();
     return this.agent.fieldRegistry(caseRef);

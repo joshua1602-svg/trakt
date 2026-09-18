@@ -236,19 +236,23 @@ describe("OCC Agent tab — the operating loop", () => {
     expect(screen.queryByText(copy.agent.readyHeadline)).not.toBeInTheDocument();
   });
 
-  it("an ambiguous mapping shows a decision card with its evidence", async () => {
+  it("an ambiguous mapping is answered on its row, with its evidence", async () => {
+    /* It used to be a decision card. Every question about a column is answered
+       on the mapping table now, because the table is a DRAFT an operator works
+       down and commits in one act — a card that applied its answer on click
+       would be a second route to the same column with different rules.
+       Deleting the card must not delete the one thing that settles the
+       question: how many records each competing column actually carries. */
     await runScenario("B — Ambiguous mapping");
-    expect(await screen.findByText(copy.agent.decisionsHeading)).toBeInTheDocument();
-    // Scoped to the AMBIGUITY's own card. A first onboarding also raises the
-    // weak match as its own question, so a page-wide match now finds two of
-    // everything a decision card carries.
-    const card = screen
-      .getByText(/Confirm where 'Current Balance' belongs/)
-      .closest("li") as HTMLElement;
-    expect(within(card).getByText(copy.agent.decisionRecommendation)).toBeInTheDocument();
-    expect(within(card).getByText(copy.agent.decisionMateriality)).toBeInTheDocument();
-    expect(within(card).getByText(copy.agent.decisionConsequence)).toBeInTheDocument();
-    expect(within(card).getByText(/carries values for 24 of 24 records/)).toBeInTheDocument();
+    const table = (await screen.findByText(copy.agent.mappingHeading))
+      .closest("section") as HTMLElement;
+    const row = within(table).getByText("Current Balance").closest("tr") as HTMLElement;
+    expect(within(row).getByText("Needs you")).toBeInTheDocument();
+    expect(
+      within(row).getByText(copy.agent.mappingContested(2)).getAttribute("title"),
+    ).toMatch(/carries values for 24 of 24 records/);
+    // And no card, anywhere, for a question about a column.
+    expect(screen.queryByText(/Confirm where 'Current Balance' belongs/)).toBeNull();
   });
 
   it("a material business-rule failure cannot be talked past in the conversation", async () => {

@@ -14,9 +14,9 @@ THE TWO THINGS A PERSON ACTUALLY KNOWS, AND WHY THEY ARE DIFFERENT ACTS
   * "This is our name for a field Trakt already has." A lender calls the
     outstanding balance ``CurBalGBP``; the platform calls it
     ``current_principal_balance``. Nothing new exists — a name does. That is an
-    ALIAS, it is this client's, and it is settled here and now: the column is
-    mapped, it feeds the tape, and it promotes at activation into a governed
-    rule scoped to the portfolio like every other mapping an operator approves.
+    ALIAS, and it is this client's. It is staged like every other answer on the
+    mapping table (:mod:`.staging`), applied when the operator commits the set,
+    and promoted at activation into a governed rule scoped to the portfolio.
 
   * "Trakt has no field for this." That is not a mapping at all. It is a change
     to the platform's canonical vocabulary, which every client, every regime
@@ -144,19 +144,27 @@ def alias_decision(*, source_file: str, source_column: str,
     is. The record still carries an approver and a timestamp, because that is
     what promotion reads and what an auditor asking "who said ``Pool Ref`` was
     the portfolio identifier?" has to be able to answer.
+
+    An EMPTY ``target_field`` is the operator saying this column feeds nothing,
+    which is an answer and not an absence of one. It is recorded the same way,
+    so the next delivery does not ask about the column again.
     """
     words = str(target_field).replace("_", " ")
+    title = (f"'{source_column}' is {words}" if target_field
+             else f"'{source_column}' is not used")
     return {
         "decision_id": _alias_id(source_file, source_column),
         "kind": "field_mapping",
-        "title": f"'{source_column}' is {words}",
+        "title": title,
         "question": (f"Trakt could not place '{source_column}'. What field "
                      "does it feed?"),
         "blocking": False,
         "status": "approved",
         "issue": f"'{source_column}' is not a column Trakt recognised.",
         "evidence": [{"label": "What the operator said", "kind": "text",
-                      "data": {"issue": f"{source_column} → {target_field}",
+                      "data": {"issue": (f"{source_column} → {target_field}"
+                                         if target_field
+                                         else f"{source_column} → not used"),
                                "detail": reason}}],
         "recommendation": "",
         "recommendation_source": BASIS_OPERATOR,
@@ -180,7 +188,8 @@ def alias_decision(*, source_file: str, source_column: str,
             "source_column": source_column,
             "source_columns": [],
             "target_field": target_field,
-            "proposed_mapping": f"{source_column} → {target_field}",
+            "proposed_mapping": (f"{source_column} → {target_field}"
+                                 if target_field else ""),
             "basis": BASIS_OPERATOR,
         },
     }

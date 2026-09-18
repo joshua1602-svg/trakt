@@ -118,8 +118,8 @@ def test_scenario_b_needs_a_human_then_reruns_the_affected_controls(service):
     assert agent_case.run.blocking_decisions()
     assert "validate" not in agent_case.run.stage_outcomes
 
-    agent_case = service.approve_proposed_mappings(agent_case, actor=ACTOR)
-    # With the set approved, the affected controls ran again and completed.
+    agent_case = service.confirm_mappings(agent_case, actor=ACTOR)
+    # With the set confirmed, the affected controls ran again and completed.
     assert agent_case.run.stage_outcomes.get("validate") == \
         "deterministic_execution_completed"
     assert agent_case.run.state == _states.SYNTHETIC_ONBOARDING_PASSED

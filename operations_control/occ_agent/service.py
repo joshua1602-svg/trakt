@@ -77,6 +77,7 @@ from . import planning as _planning
 from . import promotion as _promotion
 from . import readiness as _readiness
 from . import review as _review
+from . import staging as _staging
 from . import states as _states
 from . import workbook as _workbook
 from .adapters import (
@@ -1666,69 +1667,274 @@ class OccAgentService:
                 return self.run_synthetic_onboarding(agent_case, actor=actor)
         return agent_case
 
-    def approve_proposed_mappings(self, agent_case: AgentCase, *,
-                                  actor: str, reason: str = "") -> AgentCase:
-        """One act of approval over every mapping still proposed.
+    # ------------------------------------------------------------------ #
+    # The mapping table: read it, then commit it
+    # ------------------------------------------------------------------ #
+    def stage_mapping(self, agent_case: AgentCase, *, source_file: str,
+                      source_column: str, action: str, actor: str,
+                      target_field: str = "", reason: str = "") -> AgentCase:
+        """What this operator says one column is. A draft, not an act.
 
-        A first onboarding proposes rather than applies, so a seventy-column
-        tape arrives as seventy proposals. Answering them one at a time is the
-        same approval seventy times over, and an operator who has read the
-        table has already done the reading — what is missing is the act of
-        saying so.
-
-        SO IT IS ONE ACT AND SEVENTY RECORDS. Each column is resolved on its
-        own, with its own approver and timestamp, because that is what
-        promotion turns into a governed rule and what an auditor asking "who
-        said 'Month Run' was the cut-off date?" has to be able to read. An
-        approval that left one record behind could not answer that question.
-
-        Anything a person has already changed keeps their answer: this
-        approves what is still OPEN, and never overwrites a decision somebody
-        has been through.
+        Nothing is resolved, nothing is promoted and nothing reruns: the answer
+        is held on the run so it survives a refresh, and it can be replaced or
+        withdrawn until the set is committed. See :mod:`.staging`.
         """
         run = agent_case.run
         self._require_action(run, _states.ACTION_RESOLVE_DECISION)
-        pending = [d for d in run.open_decisions
-                   if _decision_type_of(d) == DECISION_MAPPING_PROPOSAL
-                   and str(d.get("status", "open")) in ("open", "pending")]
-        if not pending:
+        column = str(source_column or "").strip()
+        file_name = str(source_file or "").strip()
+        what = str(action or "").strip()
+        if what not in _staging.ACTIONS:
+            raise OpsError("OCC_AGENT_UNKNOWN_MAPPING_ACTION",
+                           "That is not something Trakt can record about a "
+                           "column.", http_status=400)
+        row = self._mapping_row(run, file_name, column)
+        if row is None:
+            raise OpsError("OCC_AGENT_COLUMN_NOT_FOUND",
+                           f"'{column}' is not a column Trakt read in "
+                           f"{file_name}.", http_status=404)
+        run.staged_mappings = [
+            e for e in run.staged_mappings
+            if _staging.key(e.get("source_file"), e.get("source_column"))
+            != _staging.key(file_name, column)]
+        if what == _staging.ACTION_CLEAR:
+            self.store.save(run)
+            return agent_case
+
+        field_name = str(target_field or "").strip()
+        if what == _staging.ACTION_CONFIRM:
+            # Confirming means "what is on the row is right", so the field is
+            # the row's own — taking one from the request would let a caller
+            # confirm a column onto a field the operator never saw.
+            field_name = str(row.get("canonical_field") or "")
+            if not field_name:
+                raise OpsError(
+                    "OCC_AGENT_NOTHING_TO_CONFIRM",
+                    f"Trakt has not read '{column}' as anything, so there is "
+                    "nothing to confirm. Name the field instead.",
+                    http_status=409)
+        elif what == _staging.ACTION_AMEND:
+            self._require_registry_field(agent_case, field_name)
+        else:
+            field_name = ""
+
+        decision_id, _, _ = _mapping_view.decision_for_column(
+            run.open_decisions, file_name, column)
+        run.staged_mappings.append(_staging.entry(
+            source_file=file_name, source_column=column, action=what,
+            target_field=field_name, decision_id=decision_id, actor=actor,
+            at=now_iso(), reason=reason))
+        # An ask for a new field and a decision about the column are two
+        # answers to one question; recording either withdraws the other.
+        if field_name:
+            self._withdraw_field_request(
+                run, file_name, column, actor=actor, at=now_iso(),
+                why="the column was given a field instead")
+        self.store.save(run)
+        return agent_case
+
+    def confirm_mappings(self, agent_case: AgentCase, *, actor: str,
+                         reason: str = "") -> AgentCase:
+        """THE act. Everything the operator staged, plus every untouched
+        proposal, applied in one go.
+
+        One act for them; one resolved decision per column on the record,
+        because that is what promotion turns into governed rules and what an
+        auditor asking "who said 'Month Run' was the cut-off date?" reads back.
+        Each column keeps the approver who STAGED it — the reading is the
+        judgement, and a second operator pressing the button has not done it.
+
+        Refused while a genuine question is unanswered. A proposal carries a
+        field and "confirm" means accepting it; a weak match or an ambiguity
+        carries no answer at all, and committing the set around one would be
+        the button inventing an answer nobody gave.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        overview = _mapping_view.overview(run)
+        unanswered = overview["unanswered_questions"]
+        if unanswered:
             raise OpsError(
-                "OCC_AGENT_NO_PROPOSED_MAPPINGS",
-                "There are no proposed mappings waiting for approval.",
+                "OCC_AGENT_QUESTIONS_UNANSWERED",
+                f"{unanswered} column{'s' if unanswered != 1 else ''} still "
+                f"need{'' if unanswered != 1 else 's'} an answer before the "
+                "mappings can be confirmed.", http_status=409)
+        staged = _staging.by_column(run.staged_mappings)
+        untouched = [d for d in run.open_decisions
+                     if _decision_type_of(d) == DECISION_MAPPING_PROPOSAL
+                     and str(d.get("status", "open")) in ("open", "pending")
+                     and _staging.key(
+                         (d.get("subject") or {}).get("source_file"),
+                         (d.get("subject") or {}).get("source_column"))
+                     not in staged]
+        if not staged and not untouched:
+            raise OpsError(
+                "OCC_AGENT_NOTHING_TO_CONFIRM",
+                "There are no mappings waiting to be confirmed.",
                 http_status=409)
+
         at = now_iso()
-        for decision in pending:
+        applied: Dict[str, str] = {}
+        # ONE RESOLVED DECISION PER COLUMN, always.
+        #
+        # An ambiguity is one decision about SEVERAL columns, and the operator
+        # answers per column. Writing each of their answers onto that shared
+        # decision made the last one overwrite the rest: setting the losing
+        # column aside stamped "not used" on the decision, and
+        # `_approved_mappings` reads that as BOTH columns unused — including
+        # the one they had just confirmed. So each answer gets a record of its
+        # own, and the shared decision is settled separately, below, from the
+        # whole set of answers rather than from whichever came last.
+        for item in run.staged_mappings:
+            file_name = str(item.get("source_file") or "")
+            column = str(item.get("source_column") or "")
+            value = _staging.resolved_value(item)
+            decision = self._own_decision_for(run, file_name, column)
+            if decision is None:
+                decision = _field_registry.alias_decision(
+                    source_file=file_name, source_column=column,
+                    target_field=item.get("target_field") or "",
+                    actor=str(item.get("staged_by") or actor),
+                    reason=str(item.get("reason") or ""),
+                    at=str(item.get("staged_at") or at))
+                run.open_decisions.append(decision)
+            decision["status"] = "approved"
+            decision["resolution"] = _staging.RESOLUTION[item["action"]]
+            decision["resolved_value"] = value
+            decision["resolved_by"] = str(item.get("staged_by") or actor)
+            decision["resolved_at"] = str(item.get("staged_at") or at)
+            decision["reason"] = (str(item.get("reason") or "")
+                                  or reason or "confirmed with the mapping set")
+            applied[_mapping_key(file_name, column)] = value
+        self._settle_shared_decisions(run, actor=actor, at=at, reason=reason)
+        for decision in untouched:
+            subject = decision.get("subject") or {}
+            value = str(subject.get("target_field")
+                        or decision.get("target_field") or "")
             decision["status"] = "approved"
             decision["resolution"] = "approve"
-            decision["resolved_value"] = str(
-                (decision.get("subject") or {}).get("target_field")
-                or decision.get("target_field") or "")
+            decision["resolved_value"] = value
             decision["resolved_by"] = actor
             decision["resolved_at"] = at
-            decision["reason"] = reason or "approved with the mapping set"
+            decision["reason"] = reason or "confirmed as proposed"
+            applied[_mapping_key(str(subject.get("source_file") or ""),
+                                 str(subject.get("source_column") or ""))] = value
+
+        counts = _staging.summary(run.staged_mappings)
+        run.staged_mappings = []
         self.store.save(run)
-        self._audit(run, "mapping_set_approved", actor_type=ACTOR_HUMAN,
+        self._audit(run, "mappings_confirmed", actor_type=ACTOR_HUMAN,
                     actor=actor, classification=EXEC_HUMAN_CONFIRMED,
-                    decision_basis=(reason or "the operator approved the "
-                                    "proposed mappings for this delivery"),
+                    decision_basis=(reason or "the operator confirmed the "
+                                    "mappings for this delivery"),
                     # Keyed by FILE and column, because every file in a pack
                     # carries a loan identifier: keyed on the name alone, one
-                    # approval of three columns left one line in the record and
-                    # an auditor asking which file could not be answered.
-                    detail={"columns": len(pending),
-                            "mappings": {
-                                _mapping_key(
-                                    str((d.get("subject") or {}).get(
-                                        "source_file") or ""),
-                                    str((d.get("subject") or {}).get(
-                                        "source_column") or "")):
-                                str(d.get("resolved_value") or "")
-                                for d in pending}})
+                    # confirmation of three columns left one line in the record
+                    # and an auditor asking which file could not be answered.
+                    detail={"columns": len(applied),
+                            "as_proposed": len(untouched),
+                            "changed": counts[_staging.ACTION_AMEND],
+                            "set_aside": counts[_staging.ACTION_NOT_USED],
+                            "mappings": applied})
         if not run.blocking_decisions():
             if _states.is_transition_allowed(
                     run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
                 return self.run_synthetic_onboarding(agent_case, actor=actor)
         return agent_case
+
+    @staticmethod
+    def _own_decision_for(run: SyntheticRun, source_file: str,
+                          source_column: str) -> Optional[Dict[str, Any]]:
+        """The open decision about THIS column and no other, if there is one.
+
+        A decision naming several columns is deliberately not returned: it is
+        one question about the set and is settled from the whole set, not from
+        whichever of its columns the operator answered last.
+
+        Matched on the pair, falling back to the bare column name for a
+        decision recorded before decisions carried their file.
+        """
+        fallback = None
+        for decision in run.open_decisions:
+            if str(decision.get("status", "open")) != "open":
+                continue
+            subject = decision.get("subject") or {}
+            if len(subject.get("source_columns") or []) > 1:
+                continue
+            if str(subject.get("source_column") or "") != source_column:
+                continue
+            if str(subject.get("source_file") or "") == source_file:
+                return decision
+            if not subject.get("source_file"):
+                fallback = decision
+        return fallback
+
+    @staticmethod
+    def _settle_shared_decisions(run: SyntheticRun, *, actor: str, at: str,
+                                 reason: str) -> None:
+        """Close an ambiguity from the answers its columns were given.
+
+        "Which of these two is the balance?" is answered by the operator
+        keeping one and setting the other aside, and the decision records the
+        COLUMN that won — which is the shape ``_approved_mappings`` and
+        ``mapping_promotion`` both read for an ambiguity, and the opposite of
+        the shape a confirmation uses. If they set all of them aside, that is
+        an answer too: none of these is it.
+        """
+        staged = _staging.by_column(run.staged_mappings)
+        for decision in run.open_decisions:
+            if str(decision.get("status", "open")) != "open":
+                continue
+            subject = decision.get("subject") or {}
+            columns = [str(c or "") for c in
+                       (subject.get("source_columns") or [])]
+            if len(columns) < 2:
+                continue
+            source_file = str(subject.get("source_file") or "")
+            answers = [staged.get(_staging.key(source_file, c))
+                       for c in columns]
+            if not all(answers):
+                continue          # still a question; the commit refused above
+            target = str(subject.get("target_field") or "")
+            winner = next((a for a in answers
+                           if a["action"] != _staging.ACTION_NOT_USED
+                           and a["target_field"] == target), None)
+            decision["status"] = "approved"
+            decision["resolution"] = "amend" if winner else "approve"
+            decision["resolved_value"] = (winner["source_column"] if winner
+                                          else _staging.NOT_USED_VALUE)
+            decision["resolved_by"] = str(
+                (winner or answers[0]).get("staged_by") or actor)
+            decision["resolved_at"] = str(
+                (winner or answers[0]).get("staged_at") or at)
+            decision["reason"] = (reason
+                                  or "settled with the mapping set")
+
+    def _require_registry_field(self, agent_case: AgentCase,
+                                field_name: str) -> None:
+        """A field an operator names has to be one this book reports on.
+
+        Said as two different sentences, because the remedies differ: a name
+        nothing in the registry has is a request, and a name this book cannot
+        use is a configuration question about the book.
+        """
+        name = str(field_name or "").strip()
+        if not name:
+            raise OpsError("OCC_AGENT_FIELD_REQUIRED",
+                           "Name the field this column feeds.",
+                           http_status=400)
+        facts = self.facts(agent_case)
+        if _field_registry.known_field(name, facts.asset_class):
+            return
+        if _field_registry.registered_anywhere(name):
+            raise OpsError(
+                "OCC_AGENT_FIELD_NOT_FOR_THIS_BOOK",
+                f"'{name}' is a Trakt field, but not one this asset class "
+                "reports on.", http_status=409)
+        raise OpsError(
+            "OCC_AGENT_FIELD_NOT_REGISTERED",
+            f"Trakt has no field called '{name}'. If it genuinely does not "
+            "exist, request it as a new field instead.", http_status=409)
 
     # ------------------------------------------------------------------ #
     # Columns that matched nothing
@@ -1746,75 +1952,17 @@ class OccAgentService:
 
         The column matched nothing, so nothing asked about it and there is no
         decision to answer — the operator is volunteering knowledge the
-        platform did not have. It is recorded as an approved mapping decision
-        all the same: that is the shape promotion reads, so this client's name
-        for the field becomes a governed rule at activation and the next
-        delivery matches it without asking.
+        platform did not have. It STAGES like every other answer on this table,
+        and ``confirm_mappings`` turns it into a resolved decision: that is the
+        shape promotion reads, so this client's name for the field becomes a
+        governed rule at activation and the next delivery matches it without
+        asking.
         """
-        run = agent_case.run
-        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
-        column = str(source_column or "").strip()
-        file_name = str(source_file or "").strip()
-        field_name = str(target_field or "").strip()
-        if not column or not file_name:
-            raise OpsError("OCC_AGENT_COLUMN_REQUIRED",
-                           "Name the file and the column this mapping is "
-                           "about.", http_status=400)
-        row = self._mapping_row(run, file_name, column)
-        if row is None:
-            raise OpsError("OCC_AGENT_COLUMN_NOT_FOUND",
-                           f"'{column}' is not a column Trakt read in "
-                           f"{file_name}.", http_status=404)
-        facts = self.facts(agent_case)
-        if not _field_registry.known_field(field_name, facts.asset_class):
-            # Said as two different sentences, because the remedies differ: a
-            # name nothing in the registry has is a request, and a name this
-            # book cannot use is a configuration question about the book.
-            if _field_registry.registered_anywhere(field_name):
-                raise OpsError(
-                    "OCC_AGENT_FIELD_NOT_FOR_THIS_BOOK",
-                    f"'{field_name}' is a Trakt field, but not one this "
-                    "asset class reports on.", http_status=409)
-            raise OpsError(
-                "OCC_AGENT_FIELD_NOT_REGISTERED",
-                f"Trakt has no field called '{field_name}'. If it genuinely "
-                "does not exist, request it as a new field instead.",
-                http_status=409)
-        at = now_iso()
-        decision = _field_registry.alias_decision(
-            source_file=file_name, source_column=column,
-            target_field=field_name, actor=actor, reason=reason, at=at)
-        run.open_decisions = [d for d in run.open_decisions
-                              if d.get("decision_id")
-                              != decision["decision_id"]] + [decision]
-        # An ask for a new field and a mapping to an existing one are two
-        # answers to one question, so recording the second withdraws the first
-        # rather than leaving the case asking for a field it no longer needs.
-        self._withdraw_field_request(run, file_name, column, actor=actor,
-                                     at=at, why="the column was mapped to an "
-                                               "existing field instead")
-        # The report row says so straight away, in the shape a rerun would
-        # write it. Nothing else here is allowed to lag: a table that still
-        # reads "Not used" after an operator has named the field invites them
-        # to name it again, and a second answer to a question nobody asked is
-        # a second governed rule about the same column.
-        row["canonical_field"] = field_name
-        row["tier"] = "operator_approved"
-        row["confidence"] = 1.0
-        row["note"] = "confirmed by an operator"
-        self.store.save(run)
-        self._audit(run, "unmapped_column_mapped", actor_type=ACTOR_HUMAN,
-                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
-                    input_reference=decision["decision_id"],
-                    decision_basis=(reason or "an operator named the field "
-                                    "this column feeds"),
-                    detail={"source_file": file_name, "source_column": column,
-                            "target_field": field_name})
-        if not run.blocking_decisions():
-            if _states.is_transition_allowed(
-                    run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
-                return self.run_synthetic_onboarding(agent_case, actor=actor)
-        return agent_case
+        return self.stage_mapping(
+            agent_case, source_file=source_file, source_column=source_column,
+            action=_staging.ACTION_AMEND, target_field=target_field,
+            actor=actor,
+            reason=reason or "an operator named the field this column feeds")
 
     def request_registry_field(self, agent_case: AgentCase, *,
                                source_file: str, source_column: str,
@@ -2307,9 +2455,15 @@ class OccAgentService:
         # human settled during the rehearsal become governed rules the ingest
         # can read. The LIVE adapter promotes them; the synthetic one discards
         # them, so an unactivated rehearsal still leaves nothing behind.
-        result = self.adapter.activate(pre=pre, intent=intent, actor=actor,
-                                       payloads=self._payloads(run),
-                                       decisions=list(run.open_decisions or []))
+        # The run's field requests travel with it too. The LIVE adapter turns
+        # them into a draft system configuration version for a configuration
+        # owner; the synthetic one discards them, so an unactivated rehearsal
+        # leaves no proposal behind either.
+        result = self.adapter.activate(
+            pre=pre, intent=intent, actor=actor,
+            payloads=self._payloads(run),
+            decisions=list(run.open_decisions or []),
+            field_requests=list(run.field_requests or []))
         run.activation_result = result.to_dict()
         if result.ok:
             self._move(run, _states.INGESTION_STARTED)
@@ -2368,6 +2522,7 @@ class OccAgentService:
             tenant=run.tenant,
             client_id=facts.client_id,
             portfolio_id=facts.portfolio_id,
+            asset_class=facts.asset_class,
             configuration_valid=bool(preview.get("artefacts")) and not problems,
             configuration_problems=problems,
             artefacts_present=len(run.received_artefacts),
@@ -3078,7 +3233,16 @@ class OccAgentService:
         as the fallback it always was.
         """
         out: Dict[str, str] = {}
-        for decision in run.open_decisions:
+        # A decision about SEVERAL columns is read first, so a per-column
+        # answer written later wins. An ambiguity says which of two columns is
+        # the balance; each of those columns then has its own record saying
+        # what it feeds, and that record is the operator's actual answer about
+        # that column. Read the other way round, setting the losing column
+        # aside would drop the winning one too.
+        for decision in sorted(
+                run.open_decisions,
+                key=lambda d: len((d.get("subject") or {}).get(
+                    "source_columns") or []) < 2):
             if decision.get("status") != "approved":
                 continue
             subject = decision.get("subject") or {}

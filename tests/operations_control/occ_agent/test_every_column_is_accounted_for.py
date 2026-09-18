@@ -423,5 +423,5 @@ class TestItReachesTheScreen:
         mapping = service.status(agent_case)["mapping"]
         assert mapping["counts"] == {
             "needs_you": 1, "proposed": 0, "unreadable": 0, "unchecked": 0,
-            "unused": 0, "confirmed": 0, "automatic": 1, "columns": 2,
-            "mapped": 1}
+            "unused": 0, "staged": 0, "confirmed": 0, "automatic": 1,
+            "columns": 2, "mapped": 1}

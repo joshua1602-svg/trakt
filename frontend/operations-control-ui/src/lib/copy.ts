@@ -631,19 +631,44 @@ export const copy = {
     mappingState: "Status",
     // The approval act, and what it would settle. A button reading "Approve"
     // with no count does not say what it is about to do.
-    mappingApprove: (n: number) =>
-      `Approve ${n} mapping${n === 1 ? "" : "s"}`,
+    // --- Reading the table, then committing it ----------------------------
+    // Per-row answers are a DRAFT. The words have to keep the two apart, or an
+    // operator reads "Confirm" on a row and believes the column is settled.
+    mappingRowConfirm: "Confirm",
+    mappingRowChange: "Change",
+    mappingRowNotUsed: "Do not use",
+    mappingRowUndo: "Undo",
+    mappingStagedConfirm: "As Trakt read it",
+    mappingStagedAmend: (field: string) => `You said: ${field.replace(/_/g, " ")}`,
+    mappingStagedNotUsed: "You set this aside",
+    mappingDraftHelp:
+      "Nothing here is applied yet. Work down the table, change anything " +
+      "that is wrong, and confirm the lot when you are done — that is the " +
+      "act that makes these this client's mappings.",
+    mappingCommit: (n: number) =>
+      `Confirm ${n} mapping${n === 1 ? "" : "s"}`,
+    mappingCommitBreakdown: (staged: number, asProposed: number) =>
+      [staged > 0 ? `${staged} you have been through` : "",
+       asProposed > 0 ? `${asProposed} as Trakt read them` : ""]
+        .filter(Boolean)
+        .join(", "),
+    mappingCommittedToast: (n: number) =>
+      `${n} mapping${n === 1 ? "" : "s"} confirmed.`,
+    // A field two or more columns both claim. Not a blocker — two files
+    // carrying the same fact is ordinary — but an operator confirming the set
+    // is confirming all of them and should see which.
+    mappingContested: (n: number) => `${n} columns claim this`,
+    mappingContestedHelp:
+      "More than one column reads as this field. Where they are in different " +
+      "files that is normal and Trakt reconciles it; where they are in the " +
+      "same file, pick one and set the other aside.",
+    mappingContestedFilter: "Claimed twice",
     mappingApproveHelp:
       "This is the first delivery from this client, so Trakt has proposed how " +
-      "to read each column rather than deciding for you. Change any row that " +
-      "is wrong, then approve the rest. What you approve is what Trakt uses " +
-      "every month after this one.",
+      "to read each column rather than deciding for you. What you confirm is " +
+      "what Trakt uses every month after this one.",
     mappingApproveBlocked: (n: number) =>
       `${n} column${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} an answer first`,
-    mappingApproved: "Approved",
-    mappingApprovedToast: (n: number) =>
-      `${n} mapping${n === 1 ? "" : "s"} approved.`,
-    mappingChange: "Change this",
     mappingFileColumns: (n: number) => `${n} column${n === 1 ? "" : "s"}`,
     mappingField: "Trakt reads it as",
     // A model's suggestion for a column Trakt could not place. Marked, because
@@ -653,10 +678,12 @@ export const copy = {
     // sharing one word on one screen is how an operator comes to think a model
     // wrote something a person is being asked to sign.
     mappingProposed: "From a model",
-    mappingBasis: "On what evidence",
+    // The column holds a two-word kind now, not a sentence of evidence, and
+    // the heading has to fit beside it: at the old wording it was itself the
+    // first thing to clip on a narrow screen.
+    mappingBasis: "How it matched",
     mappingConfidence: "Confidence",
     mappingNothing: "—",
-    mappingAnswer: "Answer this",
     mappingFilterAll: "All",
     mappingPrimaryFile: "Trakt builds the loan-level data from this file",
     // Every file's columns are put to a person now. The loan-level data is

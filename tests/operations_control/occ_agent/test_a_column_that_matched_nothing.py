@@ -43,15 +43,14 @@ from operations_control.occ_agent.scenarios import run_scenario
 from .conftest import ACTOR, TENANT_A
 
 
-#: A column nothing in the registry resembles, added to the fixture's report.
+#: The column in the prepared example that matches nothing.
 #:
-#: The prepared examples carry tapes whose every column maps, which is what
-#: makes them useful for the rest of the suite and useless for this: the acts
-#: under test are about a column the mapper could NOT place. So one is added to
-#: the report the run recorded — the same shape the adapter writes for an
-#: unmapped column, in the same file — rather than a second fixture being kept
-#: in step with the first.
-UNPLACEABLE = "Brkr Cd Ref"
+#: A REAL column of a real file — ``fixtures.property_tape`` carries it — not a
+#: row pushed into the report by this test. That matters here more than
+#: elsewhere: committing the set reruns the onboarding, which rebuilds the
+#: report from the files, and a fabricated row would vanish at exactly the
+#: moment these tests are asserting on it.
+UNPLACEABLE = "Broker Code"
 
 
 @pytest.fixture()
@@ -61,13 +60,6 @@ def halted(service):
     run = run_scenario(service, "scenario_b_ambiguous_mapping",
                        tenant=TENANT_A, actor=ACTOR, resolve_decisions=False)
     assert run.case.run.state == _states.EXCEPTIONS_REQUIRE_INPUT
-    report = run.case.run.mapping_report
-    primary = next(r["source_file"] for r in report if r.get("primary"))
-    report.append({"source_file": primary, "source_column": UNPLACEABLE,
-                   "canonical_field": "", "tier": "unmapped",
-                   "confidence": 0.0, "note": "", "primary": True,
-                   "source_sheet": ""})
-    service.store.save(run.case.run)
     return run.case
 
 
@@ -77,6 +69,28 @@ def _unused(service, agent_case):
     unused = [r for r in rows if r["state"] == "unused"]
     assert unused, "the fixture no longer contains an unmapped column"
     return unused[0]
+
+
+def _commit(service, agent_case, actor=ACTOR):
+    """Answer whatever is still genuinely open, then confirm the set.
+
+    The commit refuses while a weak match or an ambiguity has no answer, which
+    is the point of it — so a test about what a COMMITTED mapping does has to
+    answer them first, exactly as an operator would. Where two columns claim
+    one field the first wins and the rest are set aside, because "confirm
+    both" is not an answer to "which of these is it?".
+    """
+    taken = set()
+    for row in service.status(agent_case)["mapping"]["rows"]:
+        if row["state"] != "needs_you":
+            continue
+        field = row["canonical_field"]
+        action = "confirm" if field and field not in taken else "not_used"
+        taken.add(field)
+        agent_case = service.stage_mapping(
+            agent_case, source_file=row["source_file"],
+            source_column=row["source_column"], action=action, actor=actor)
+    return service.confirm_mappings(agent_case, actor=actor)
 
 
 class TestTheFieldsAnOperatorMayChooseFrom:
@@ -109,13 +123,40 @@ class TestTheFieldsAnOperatorMayChooseFrom:
 
 
 class TestNamingAFieldTraktAlreadyHas:
-    def test_the_column_stops_being_unused(self, service, halted):
+    def test_naming_it_is_a_draft_until_the_set_is_confirmed(self, service,
+                                                             halted):
+        """It reads as answered and it has not been applied.
+
+        Nothing about the column is resolved, promoted or rerun until the
+        operator commits — which is what lets them change their mind about it.
+        """
         row = _unused(service, halted)
         updated = service.map_unmapped_column(
             halted, source_file=row["source_file"],
             source_column=row["source_column"],
             target_field="current_principal_balance", actor=ACTOR,
             reason="their name for the outstanding balance")
+        after = {(r["source_file"], r["source_column"]): r
+                 for r in service.status(updated)["mapping"]["rows"]}
+        settled = after[(row["source_file"], row["source_column"])]
+        assert settled["state"] == "staged"
+        assert settled["staged_field"] == "current_principal_balance"
+        # Not applied: the report still says nothing matched it, and no
+        # decision asserts a mapping.
+        assert settled["canonical_field"] == ""
+        assert not [d for d in updated.run.open_decisions
+                    if (d.get("subject") or {}).get("artefact")
+                    == "unmapped_column"]
+
+    def test_the_column_stops_being_unused_once_confirmed(self, service,
+                                                          halted):
+        row = _unused(service, halted)
+        updated = service.map_unmapped_column(
+            halted, source_file=row["source_file"],
+            source_column=row["source_column"],
+            target_field="current_principal_balance", actor=ACTOR,
+            reason="their name for the outstanding balance")
+        updated = _commit(service, updated)
         after = {(r["source_file"], r["source_column"]): r
                  for r in service.status(updated)["mapping"]["rows"]}
         settled = after[(row["source_file"], row["source_column"])]
@@ -129,6 +170,7 @@ class TestNamingAFieldTraktAlreadyHas:
             halted, source_file=row["source_file"],
             source_column=row["source_column"],
             target_field="current_principal_balance", actor=ACTOR)
+        updated = _commit(service, updated)
         decision = next(d for d in updated.run.open_decisions
                         if (d.get("subject") or {}).get("artefact")
                         == "unmapped_column")
@@ -148,6 +190,7 @@ class TestNamingAFieldTraktAlreadyHas:
             halted, source_file=row["source_file"],
             source_column=row["source_column"],
             target_field="current_principal_balance", actor=ACTOR)
+        updated = _commit(service, updated)
         decision = next(d for d in updated.run.open_decisions
                         if (d.get("subject") or {}).get("artefact")
                         == "unmapped_column")
@@ -302,9 +345,10 @@ class TestTheRecordSaysWhatHappened:
             halted, source_file=row["source_file"],
             source_column=row["source_column"],
             target_field="current_principal_balance", actor=ACTOR)
+        updated = _commit(service, updated)
         events = [e["action"] for e in
                   service.store.list_audit(TENANT_A, updated.run.case_ref)]
-        assert "unmapped_column_mapped" in events
+        assert "mappings_confirmed" in events
 
     def test_an_ask_is_audited_as_an_ask(self, service, halted):
         row = _unused(service, halted)
@@ -359,8 +403,9 @@ class TestTheRoutesTheScreenCalls:
         assert body["ok"] is True
         after = {(r["source_file"], r["source_column"]): r
                  for r in body["mapping"]["rows"]}
-        assert after[(row["source_file"],
-                      row["source_column"])]["state"] == "confirmed"
+        settled = after[(row["source_file"], row["source_column"])]
+        assert settled["state"] == "staged"
+        assert settled["staged_field"] == "current_principal_balance"
 
     def test_asking_for_a_field_comes_back_as_a_request(self, api_client,
                                                         service, halted):

@@ -198,6 +198,10 @@ export interface SyntheticRunDoc {
   /** Canonical fields an operator asked for because a column in the delivery
    *  has nowhere to go. Requests, not fields. */
   field_requests?: FieldRequest[];
+  /** The operator's working copy of the mapping table: what they have said
+   *  each column is, held as a DRAFT until the set is committed. Nothing here
+   *  has resolved a decision, promoted a rule or caused a rerun. */
+  staged_mappings?: StagedMapping[];
   open_decisions: DecisionCard[];
   control_results: Record<string, unknown>[];
   planned_pipeline_actions: Record<string, unknown>[];
@@ -599,11 +603,19 @@ export interface MappingRow {
     | "unreadable"
     | "unchecked"
     | "unused"
+    /** The operator has been through this column and said what it is, and has
+     *  not committed the set. A DRAFT: reversible, read by nothing
+     *  downstream, and it becomes "confirmed" when the set is confirmed. */
+    | "staged"
     | "confirmed"
     | "automatic";
   state_label: string;
   /** The open decision this row is waiting on, when it is waiting on one. */
   decision_id: string;
+  /** What that question said — for an ambiguity, the coverage each competing
+   *  column has, which is the thing that actually settles it. Carried onto
+   *  the row because the row is where it is answered. */
+  decision_detail: string;
   /** Whether this column's file is the one the canonical tape is built from. */
   primary: boolean;
   /** On what evidence this row reads as it does: an operator's own answer,
@@ -617,6 +629,22 @@ export interface MappingRow {
   suggested_field: string;
   suggested_label: string;
   suggested_reason: string;
+  /** What kind of reading this is, in two words: a known alias, the same
+   *  name, a similar name, a model's suggestion, or nothing at all. The tier
+   *  sentence explains the evidence and is the right length to READ; this is
+   *  the right length to SCAN a hundred and fifty rows by. */
+  match_kind: "operator" | "alias" | "name" | "similar" | "model" | "none" | "unreadable";
+  match_kind_label: string;
+  /** Every other column claiming the same canonical field. `same_file` marks
+   *  the ones that are a real ambiguity — two columns of ONE file — as
+   *  against two files carrying the same fact, which is ordinary. */
+  also_claimed_by: { source_file: string; source_column: string; same_file: boolean }[];
+  /** What the operator staged about this column, and "" where they have not
+   *  been through it yet. A draft: nothing here has been applied. */
+  staged_action: "" | "confirm" | "amend" | "not_used";
+  staged_field: string;
+  staged_label: string;
+  staged_by: string;
   /** A canonical field an operator asked for because this column has nowhere
    *  to go. Still unmapped — a request is not a field, and adding one is a
    *  versioned system-configuration change — but the row says the ask was
@@ -637,6 +665,20 @@ export interface RegistryField {
    *  plausible fields is choosing between two obligations. */
   regimes: string[];
   regime_code?: string;
+}
+
+/** One column an operator has been through, and what they said it is. */
+export interface StagedMapping {
+  source_file: string;
+  source_column: string;
+  action: "confirm" | "amend" | "not_used";
+  target_field: string;
+  decision_id: string;
+  /** Who READ the column. The commit carries its own actor beside these: the
+   *  reading is the judgement, and whoever presses the button has not done it. */
+  staged_by: string;
+  staged_at: string;
+  reason: string;
 }
 
 /** An ask for a canonical field the platform does not have. */
@@ -662,12 +704,22 @@ export interface MappingOverview {
   rows: MappingRow[];
   counts: Record<string, number>;
   files: { name: string; primary: boolean; columns: number }[];
-  /** How many columns one approval would settle. */
+  /** How many columns are still as Trakt read them, and would commit as
+   *  proposed. */
   proposed: number;
   /** How many must be answered on their own first — an ambiguity or a weak
    *  match is not approvable in bulk, and a button offering to settle the set
    *  while those wait would promise a run that cannot move. */
   blocking_questions: number;
+  /** How many the operator has been through by hand. */
+  staged: number;
+  /** What one commit would settle: staged plus untouched proposals. */
+  to_confirm: number;
+  /** How many genuine questions have no answer. The commit is refused while
+   *  this is above zero. */
+  unanswered_questions: number;
+  /** How many rows are one of two or more claiming a single field. */
+  contested: number;
 }
 
 export interface AgentStatus {

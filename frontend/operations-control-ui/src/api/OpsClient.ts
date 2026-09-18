@@ -222,7 +222,21 @@ export interface OpsClient {
    *
    *  One act for the operator; one resolved decision per column on the record,
    *  because that is what promotion turns into governed rules. */
+  /** Commit the mapping table: everything staged, plus every proposal left as
+   *  Trakt read it. Refused while a genuine question has no answer. */
   approveAgentMappings(caseRef: string, reason?: string): Promise<AgentStatus>;
+  /** Record what the operator says one column is, WITHOUT applying it.
+   *  Reversible until the set is committed — see the staging module. */
+  stageAgentMapping(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "confirm" | "amend" | "not_used" | "clear";
+      target_field?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus>;
   /** Every canonical field an unmapped column may be pointed at — the
    *  mapper's own selection, so a field offered on the screen is one the run
    *  will accept. */

@@ -156,7 +156,23 @@ class DecisionAnswer(BaseModel):
 
 
 class MappingApproval(BaseModel):
-    """One approval over every mapping still proposed on this delivery."""
+    """One act over everything staged, plus every untouched proposal."""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
+class MappingStage(BaseModel):
+    """What the operator says one column is. A draft, not an act.
+
+    ``action`` is one of ``confirm`` (what Trakt read it as is right),
+    ``amend`` (it is ``target_field`` instead), ``not_used`` (it feeds
+    nothing) or ``clear`` (take the staged answer back). Nothing is resolved,
+    promoted or rerun until the set is confirmed.
+    """
+    source_file: str
+    source_column: str
+    action: str
+    target_field: str = ""
     reason: str = ""
     tenant: Optional[str] = None
 
@@ -167,8 +183,9 @@ class UnmappedColumn(BaseModel):
     ``action`` is one of:
 
     ``use_existing``
-        The operator names the canonical field the column feeds.
-        ``target_field`` is required and must be a field this book reports on.
+        The operator names the canonical field the column feeds. Staged, not
+        applied. ``target_field`` is required and must be a field this book
+        reports on.
     ``request_field``
         The operator asks for a canonical field the platform does not have.
         ``field_name`` is required; the column stays unmapped.
@@ -654,21 +671,43 @@ def answer_decision(case_ref: str, body: DecisionAnswer,
                 value=body.value, reason=body.reason, actor=principal.name))}
 
 
-@router.post("/cases/{case_ref}/mappings/approve")
-def approve_mappings(case_ref: str, body: MappingApproval,
-                     principal: Principal = Depends(authenticate)
-                     ) -> Dict[str, Any]:
-    """Approve every mapping this delivery still has proposed.
+@router.post("/cases/{case_ref}/mappings/stage")
+def stage_mapping(case_ref: str, body: MappingStage,
+                  principal: Principal = Depends(authenticate)
+                  ) -> Dict[str, Any]:
+    """Record what this operator says one column is, without applying it.
 
-    One act for the operator; one resolved decision per column on the record,
-    because that is what promotion turns into governed rules and what an
-    auditor reads back.
+    Reading the table is the work and it is not done in one sitting. A staged
+    answer survives a refresh, can be replaced or withdrawn, and resolves
+    nothing until ``/mappings/approve`` commits the set.
     """
     _require_feature()
     service = get_service()
     agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
     return {"ok": True,
-            **service.status(service.approve_proposed_mappings(
+            **service.status(service.stage_mapping(
+                agent_case, source_file=body.source_file,
+                source_column=body.source_column, action=body.action,
+                target_field=body.target_field, actor=principal.name,
+                reason=body.reason))}
+
+
+@router.post("/cases/{case_ref}/mappings/approve")
+def approve_mappings(case_ref: str, body: MappingApproval,
+                     principal: Principal = Depends(authenticate)
+                     ) -> Dict[str, Any]:
+    """Commit the mapping table: everything staged, plus every proposal left
+    as Trakt read it.
+
+    One act for the operator; one resolved decision per column on the record,
+    because that is what promotion turns into governed rules and what an
+    auditor reads back. Refused while a genuine question has no answer.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.confirm_mappings(
                 agent_case, actor=principal.name, reason=body.reason))}
 
 
@@ -693,10 +732,11 @@ def resolve_unmapped_column(case_ref: str, body: UnmappedColumn,
                             ) -> Dict[str, Any]:
     """Give a column that matched nothing somewhere to go.
 
-    Either it feeds a field Trakt already has — an alias, settled here and
-    promoted into the client's governed rules at activation — or it needs a
-    field Trakt does not have, which is a versioned change to the platform's
-    canonical vocabulary and is recorded as a request rather than made here.
+    Either it feeds a field Trakt already has — an alias, STAGED like every
+    other answer on the mapping table and applied when the set is confirmed —
+    or it needs a field Trakt does not have, which is a versioned change to the
+    platform's canonical vocabulary and is recorded as a request rather than
+    made here.
     """
     _require_feature()
     service = get_service()

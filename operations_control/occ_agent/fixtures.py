@@ -106,6 +106,13 @@ class Scenario:
 #: would actually use. Every canonical field the platform marks
 #: ``core_canonical`` for a direct book is present, so a clean fixture has no
 #: manufactured gaps.
+#:
+#: ``Broker Code`` is the exception and is here on purpose: it matches NOTHING.
+#: A real delivery always carries a few columns that are the lender's own
+#: business and not anything the platform reports on, and a fixture in which
+#: every column maps lets a screen that has no answer for an unmapped one pass.
+#: It is an extra column, not a missing field, so the "no manufactured gaps"
+#: property above still holds.
 _LOAN_HEADERS = (
     "Loan Identifier",
     "Account Status",
@@ -121,6 +128,7 @@ _LOAN_HEADERS = (
     "Originator Legal Entity Identifier",
     "Originator Name",
     "Current Valuation Amount",
+    "Broker Code",
 )
 
 REPORTING_DATE = "2026-06-30"
@@ -158,6 +166,7 @@ def _loan_rows(count: int, *, prefix: str, originator: str,
             _SYNTHETIC_LEI,
             originator,
             f"{valuation}",
+            f"BRK{i % 4 + 1:03d}",
         ])
     return rows
 
@@ -191,15 +200,22 @@ def loan_tape(*, count: int = 24, prefix: str, originator: str,
 
 
 def property_tape(*, count: int = 24, prefix: str) -> str:
-    """A synthetic property/valuation extract."""
+    """A synthetic property/valuation extract.
+
+    ``Broker Code`` is here on purpose and matches NOTHING. A real delivery
+    always carries a few columns that are the lender's own business and not
+    anything the platform reports on, and a fixture in which every column maps
+    lets a screen that has no answer for an unmapped one pass: the operator
+    knows what it is, and until recently had nowhere to say so.
+    """
     headers = ["Loan Identifier", "Collateral Identifier",
                "Current Valuation Amount", "Current Valuation Date",
-               "Property Postcode"]
+               "Property Postcode", "Broker Code"]
     rows = []
     for i in range(1, count + 1):
         rows.append([f"{prefix}{i:05d}", f"COL{i:05d}",
                      f"{300000 + i * 4119}", REPORTING_DATE,
-                     f"AB{i % 9 + 1} {i % 9 + 1}CD"])
+                     f"AB{i % 9 + 1} {i % 9 + 1}CD", f"BRK{i % 4 + 1:03d}"])
     return _csv(headers, rows)
 
 

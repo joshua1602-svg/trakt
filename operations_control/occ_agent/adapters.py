@@ -37,6 +37,7 @@ from typing import Any, Dict, List, Optional, Protocol
 
 from ..engine import OpsError
 from ..onboarding.case import APPROVED, OnboardingCase
+from . import field_promotion as _field_promotion
 from . import mapping_promotion as _mapping_promotion
 from .derive import ExecutionFacts
 from .policy import CAP_ACTIVATE_CONFIGURATION, SyntheticPolicy
@@ -89,6 +90,10 @@ class ActivationPreconditions:
     tenant: str = ""
     client_id: str = ""
     portfolio_id: str = ""
+    #: The book's asset class. Carried so a field an operator asks for is
+    #: proposed for THIS kind of book rather than for every client at once —
+    #: see :func:`field_promotion.field_entry`.
+    asset_class: str = ""
     configuration_valid: bool = False
     configuration_problems: List[str] = field(default_factory=list)
     artefacts_present: int = 0
@@ -185,6 +190,13 @@ class ActivationResult:
     #: adding to a client's standing rules is a governed change, and an
     #: operator who confirmed an activation is entitled to see what it added.
     rules_promoted: List[Dict[str, str]] = field(default_factory=list)
+    #: Canonical fields the operator asked for, carried into a DRAFT system
+    #: configuration version for a configuration owner to review. Never
+    #: activated here — see :mod:`.field_promotion`. Reported because an
+    #: operator who asked is entitled to know the ask reached somebody, and
+    #: because a proposal that could not be written says so here rather than
+    #: disappearing.
+    fields_proposed: List[Dict[str, Any]] = field(default_factory=list)
     message: str = ""
     error: str = ""
 
@@ -241,7 +253,8 @@ class ExecutionAdapter(Protocol):
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
                  payloads: Optional[Dict[str, bytes]] = None,
-                 decisions: Optional[List[Dict[str, Any]]] = None
+                 decisions: Optional[List[Dict[str, Any]]] = None,
+                 field_requests: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult: ...
 
 
@@ -259,17 +272,19 @@ class SyntheticExecutionAdapter:
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
                  payloads: Optional[Dict[str, bytes]] = None,
-                 decisions: Optional[List[Dict[str, Any]]] = None
+                 decisions: Optional[List[Dict[str, Any]]] = None,
+                 field_requests: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult:
         """Always refused, and audited. The refusal is the feature.
 
-        Note what is discarded: the settled mapping decisions reach this
-        adapter and go no further. A rehearsal that is never activated leaves
-        NOTHING in the governed rules — which is the property the synthetic
-        boundary exists to hold, and it holds here rather than depending on a
-        caller remembering not to pass them.
+        Note what is discarded: the settled mapping decisions AND the fields
+        the operator asked for reach this adapter and go no further. A
+        rehearsal that is never activated leaves nothing in the governed rules
+        and no proposal in the configuration history — which is the property
+        the synthetic boundary exists to hold, and it holds here rather than
+        depending on a caller remembering not to pass them.
         """
-        del payloads, decisions             # nothing is ever placed anywhere
+        del payloads, decisions, field_requests   # nothing is placed anywhere
         self.policy.require(CAP_ACTIVATE_CONFIGURATION,
                             detail=f"client {intent.client_id}",
                             case_id=pre.case_ref, tenant=pre.tenant,
@@ -300,7 +315,8 @@ class LiveExecutionAdapter:
     def activate(self, *, pre: ActivationPreconditions,
                  intent: ActivationIntent, actor: str,
                  payloads: Optional[Dict[str, bytes]] = None,
-                 decisions: Optional[List[Dict[str, Any]]] = None
+                 decisions: Optional[List[Dict[str, Any]]] = None,
+                 field_requests: Optional[List[Dict[str, Any]]] = None
                  ) -> ActivationResult:
         """Activate, then hand the files to the existing Onboarding Agent.
 
@@ -342,6 +358,17 @@ class LiveExecutionAdapter:
                     rules, decisions, client_id=intent.client_id,
                     portfolio_id=intent.portfolio_id,
                     workflow_id=pre.case_ref)
+
+            # Fields this delivery needs that the platform has no word for,
+            # carried into the route that can grant them — as a DRAFT, which a
+            # configuration owner reads, validates and activates. The registry
+            # is every client's vocabulary and is never written from here.
+            store = getattr(self.engine, "store", None)
+            if store is not None and field_requests:
+                from ..configuration.packages import ConfigPackageStore
+                result.fields_proposed = _field_promotion.propose(
+                    ConfigPackageStore(store), field_requests, by=actor,
+                    case_ref=pre.case_ref, asset_type=pre.asset_class)
 
             # The engine's own signature, in full. Every argument comes from
             # the intent the human confirmed — nothing is defaulted here, and
