@@ -1842,6 +1842,25 @@ export class MockAgent {
                   "an operator took back a mapping the rehearsal had settled");
     }
 
+    // Answering a column the run has already SETTLED sends it back to the
+    // mapping stage and withdraws the approvals that rested on the old
+    // reading. Faithful to `_reopen_for_mapping_change` — a mock that let the
+    // run stay where it was would hide the cost from the screen.
+    if (String(raw.tier ?? "") === "operator_approved" &&
+        stored.doc.state !== S.EXCEPTIONS_REQUIRE_INPUT) {
+      for (const approval of stored.doc.approvals as { subject?: string;
+                                                       decision?: string }[]) {
+        if (approval.decision === "approved") approval.decision = "withdrawn";
+      }
+      stored.doc.readiness_status = "not_evaluated";
+      stored.doc.readiness = {};
+      stored.doc.review_package_ref = "";
+      stored.doc.readiness_package_ref = "";
+      this.move(stored, S.EXCEPTIONS_REQUIRE_INPUT);
+      this.record(stored, "mapping_reopened",
+                  "an operator took back a mapping the rehearsal had settled");
+    }
+
     let field = input.target_field ?? "";
     if (input.action === "confirm") {
       // "Confirm" means "what is on the row is right", so the field is the
