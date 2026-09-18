@@ -351,6 +351,9 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     const column = String(r.source_column ?? "");
     const decisionId = byColumn.get(column.toLowerCase()) ?? "";
     const primary = r.primary !== false;
+    // What a model proposed for a column the deterministic tiers could not
+    // place. Never a mapping — it stands until a person confirms it.
+    const suggested = String(r.llm_field ?? "");
     let state: MappingRow["state"];
     // An open decision wins over the tier: an ambiguity is raised after both
     // rows are written, at whatever tier they matched at, so reading the tier
@@ -377,6 +380,28 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
       state_label: MAPPING_STATE_LABELS[state],
       decision_id: decisionId,
       primary,
+      // Faithful to `operations_control.occ_agent.mapping_view.overview`: an
+      // operator's own answer, then Trakt's deterministic matching, then a
+      // model's proposal for a column nothing matched. A mock that omits the
+      // basis lets a screen be built against a field the server sends and the
+      // double does not, which is how the last mock/server drift got through.
+      basis: tier === "operator_approved"
+        ? "you"
+        : canonical
+          ? "deterministic"
+          : suggested
+            ? "model"
+            : "",
+      basis_label: tier === "operator_approved"
+        ? "You confirmed it"
+        : canonical
+          ? "Trakt's own matching"
+          : suggested
+            ? "Suggested by a model, not yet confirmed"
+            : "",
+      suggested_field: suggested,
+      suggested_label: suggested.replace(/_/g, " "),
+      suggested_reason: String(r.llm_reasoning ?? ""),
     };
   });
 
@@ -437,8 +462,13 @@ const MAPPING_REPORT: Record<string, unknown>[] = [
   { source_file: "loan_tape.csv", source_column: "Val Dt",
     canonical_field: "valuation_date", tier: "fuzz_token_set", confidence: 0.62,
     note: "below the confidence threshold", primary: true },
+  // Nothing matched it, and a model proposed something. That is the ordinary
+  // shape of a real tape now the model is wired into the mapping stage, and a
+  // fixture without one lets a table that drops every proposal pass.
   { source_file: "loan_tape.csv", source_column: "Internal Ref", canonical_field: "",
-    tier: "unmapped", confidence: 0.0, note: "", primary: true },
+    tier: "unmapped", confidence: 0.0, note: "", primary: true,
+    llm_field: "loan_identifier", llm_confidence: 0.81,
+    llm_reasoning: "An internal loan reference." },
   // A second file in the pack. The canonical tape is not built from it, so a
   // weak match here raises no question — and a fixture with only one file lets
   // a table that silently drops the others pass.

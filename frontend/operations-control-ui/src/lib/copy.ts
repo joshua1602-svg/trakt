@@ -625,7 +625,15 @@ export const copy = {
       (live ? "the onboarding run" : "the practice run") +
       " has looked at the files.",
     mappingColumn: "Column in the file",
+    // Its own column now, rather than a pill appended to the column name. Two
+    // facts sharing a cell is what made the longest rows wrap, and a status is
+    // the thing an operator scans down — it needs to line up.
+    mappingState: "Status",
+    mappingFileColumns: (n: number) => `${n} column${n === 1 ? "" : "s"}`,
     mappingField: "Trakt reads it as",
+    // A model's proposal for a column Trakt could not place. Marked, because a
+    // suggestion set in the same type as a contract-backed match reads as one.
+    mappingProposed: "Proposed",
     mappingBasis: "On what evidence",
     mappingConfidence: "Confidence",
     mappingNothing: "—",

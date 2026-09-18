@@ -600,6 +600,17 @@ export interface MappingRow {
   decision_id: string;
   /** Whether this column's file is the one the canonical tape is built from. */
   primary: boolean;
+  /** On what evidence this row reads as it does: an operator's own answer,
+   *  Trakt's deterministic matching, or a model's proposal. Sent by the server
+   *  (`operations_control.occ_agent.mapping_view`) so the screen cannot
+   *  disagree with the engine about which mappings a human checked. */
+  basis: "" | "you" | "deterministic" | "model";
+  basis_label: string;
+  /** What a model proposed for a column the deterministic tiers could not
+   *  place. NEVER a mapping — it stands until a person confirms it. */
+  suggested_field: string;
+  suggested_label: string;
+  suggested_reason: string;
 }
 
 export interface MappingOverview {
