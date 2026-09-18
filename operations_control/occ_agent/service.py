@@ -70,6 +70,7 @@ from . import classification as _classification
 from . import client_form as _client_form
 from . import communication as _comms
 from . import derive as _derive
+from . import field_registry as _field_registry
 from . import mapping_view as _mapping_view
 from . import pack as _pack
 from . import planning as _planning
@@ -77,6 +78,7 @@ from . import promotion as _promotion
 from . import readiness as _readiness
 from . import review as _review
 from . import states as _states
+from . import workbook as _workbook
 from .adapters import (
     ActivationPreconditions,
     ExecutionAdapter,
@@ -90,6 +92,7 @@ from .execution import (
     SyntheticOnboardingAdapters,
     run_synthetic_orchestration,
 )
+from .execution import mapping_key as _mapping_key
 from .input_roles import artefact_vocabulary
 from .interpretation import (
     PROV_AGENT,
@@ -1708,10 +1711,17 @@ class OccAgentService:
                     actor=actor, classification=EXEC_HUMAN_CONFIRMED,
                     decision_basis=(reason or "the operator approved the "
                                     "proposed mappings for this delivery"),
+                    # Keyed by FILE and column, because every file in a pack
+                    # carries a loan identifier: keyed on the name alone, one
+                    # approval of three columns left one line in the record and
+                    # an auditor asking which file could not be answered.
                     detail={"columns": len(pending),
                             "mappings": {
-                                str((d.get("subject") or {}).get(
-                                    "source_column") or ""):
+                                _mapping_key(
+                                    str((d.get("subject") or {}).get(
+                                        "source_file") or ""),
+                                    str((d.get("subject") or {}).get(
+                                        "source_column") or "")):
                                 str(d.get("resolved_value") or "")
                                 for d in pending}})
         if not run.blocking_decisions():
@@ -1719,6 +1729,227 @@ class OccAgentService:
                     run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
                 return self.run_synthetic_onboarding(agent_case, actor=actor)
         return agent_case
+
+    # ------------------------------------------------------------------ #
+    # Columns that matched nothing
+    # ------------------------------------------------------------------ #
+    def field_catalogue(self, agent_case: AgentCase) -> List[Dict[str, Any]]:
+        """Every canonical field this book may map an unmapped column to."""
+        facts = self.facts(agent_case)
+        return _field_registry.catalogue(facts.asset_class,
+                                         regime=facts.regime or "")
+
+    def map_unmapped_column(self, agent_case: AgentCase, *, source_file: str,
+                            source_column: str, target_field: str, actor: str,
+                            reason: str = "") -> AgentCase:
+        """An operator naming the existing field a column feeds.
+
+        The column matched nothing, so nothing asked about it and there is no
+        decision to answer — the operator is volunteering knowledge the
+        platform did not have. It is recorded as an approved mapping decision
+        all the same: that is the shape promotion reads, so this client's name
+        for the field becomes a governed rule at activation and the next
+        delivery matches it without asking.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        column = str(source_column or "").strip()
+        file_name = str(source_file or "").strip()
+        field_name = str(target_field or "").strip()
+        if not column or not file_name:
+            raise OpsError("OCC_AGENT_COLUMN_REQUIRED",
+                           "Name the file and the column this mapping is "
+                           "about.", http_status=400)
+        row = self._mapping_row(run, file_name, column)
+        if row is None:
+            raise OpsError("OCC_AGENT_COLUMN_NOT_FOUND",
+                           f"'{column}' is not a column Trakt read in "
+                           f"{file_name}.", http_status=404)
+        facts = self.facts(agent_case)
+        if not _field_registry.known_field(field_name, facts.asset_class):
+            # Said as two different sentences, because the remedies differ: a
+            # name nothing in the registry has is a request, and a name this
+            # book cannot use is a configuration question about the book.
+            if _field_registry.registered_anywhere(field_name):
+                raise OpsError(
+                    "OCC_AGENT_FIELD_NOT_FOR_THIS_BOOK",
+                    f"'{field_name}' is a Trakt field, but not one this "
+                    "asset class reports on.", http_status=409)
+            raise OpsError(
+                "OCC_AGENT_FIELD_NOT_REGISTERED",
+                f"Trakt has no field called '{field_name}'. If it genuinely "
+                "does not exist, request it as a new field instead.",
+                http_status=409)
+        at = now_iso()
+        decision = _field_registry.alias_decision(
+            source_file=file_name, source_column=column,
+            target_field=field_name, actor=actor, reason=reason, at=at)
+        run.open_decisions = [d for d in run.open_decisions
+                              if d.get("decision_id")
+                              != decision["decision_id"]] + [decision]
+        # An ask for a new field and a mapping to an existing one are two
+        # answers to one question, so recording the second withdraws the first
+        # rather than leaving the case asking for a field it no longer needs.
+        self._withdraw_field_request(run, file_name, column, actor=actor,
+                                     at=at, why="the column was mapped to an "
+                                               "existing field instead")
+        # The report row says so straight away, in the shape a rerun would
+        # write it. Nothing else here is allowed to lag: a table that still
+        # reads "Not used" after an operator has named the field invites them
+        # to name it again, and a second answer to a question nobody asked is
+        # a second governed rule about the same column.
+        row["canonical_field"] = field_name
+        row["tier"] = "operator_approved"
+        row["confidence"] = 1.0
+        row["note"] = "confirmed by an operator"
+        self.store.save(run)
+        self._audit(run, "unmapped_column_mapped", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=decision["decision_id"],
+                    decision_basis=(reason or "an operator named the field "
+                                    "this column feeds"),
+                    detail={"source_file": file_name, "source_column": column,
+                            "target_field": field_name})
+        if not run.blocking_decisions():
+            if _states.is_transition_allowed(
+                    run.state, _states.SYNTHETIC_ONBOARDING_RUNNING):
+                return self.run_synthetic_onboarding(agent_case, actor=actor)
+        return agent_case
+
+    def request_registry_field(self, agent_case: AgentCase, *,
+                               source_file: str, source_column: str,
+                               field_name: str, actor: str, label: str = "",
+                               description: str = "", data_type: str = "",
+                               reason: str = "") -> AgentCase:
+        """An ask for a canonical field the platform does not have.
+
+        Recorded, not created. Adding a field changes the vocabulary every
+        client's report is written in, and it has its own governed route — a
+        versioned system config package an administrator drafts and activates.
+        The column stays unmapped in this delivery, visibly, so nobody reads a
+        request as a mapping.
+        """
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        column = str(source_column or "").strip()
+        file_name = str(source_file or "").strip()
+        if not column or not file_name:
+            raise OpsError("OCC_AGENT_COLUMN_REQUIRED",
+                           "Name the file and the column this request is "
+                           "about.", http_status=400)
+        row = self._mapping_row(run, file_name, column)
+        if row is None:
+            raise OpsError("OCC_AGENT_COLUMN_NOT_FOUND",
+                           f"'{column}' is not a column Trakt read in "
+                           f"{file_name}.", http_status=404)
+        name = _field_registry.validate_field_name(field_name)
+        facts = self.facts(agent_case)
+        if _field_registry.known_field(name, facts.asset_class):
+            raise OpsError(
+                "OCC_AGENT_FIELD_ALREADY_REGISTERED",
+                f"Trakt already reports on '{name}'. Map the column to it "
+                "instead of requesting it again.", http_status=409)
+        at = now_iso()
+        request = _field_registry.field_request(
+            source_file=file_name, source_column=column, field_name=name,
+            label=label, description=description, data_type=data_type,
+            actor=actor, at=at,
+            samples=self._sample_values(run, file_name, column))
+        run.field_requests = [r for r in run.field_requests
+                              if r.get("request_id")
+                              != request["request_id"]] + [request]
+        self.store.save(run)
+        self._audit(run, "field_registry_requested", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=request["request_id"],
+                    decision_basis=(reason or description
+                                    or "an operator asked for a canonical "
+                                       "field the registry does not have"),
+                    detail={"field_name": name, "source_file": file_name,
+                            "source_column": column,
+                            "route": request["route"]})
+        return agent_case
+
+    def withdraw_registry_field_request(self, agent_case: AgentCase, *,
+                                        source_file: str, source_column: str,
+                                        actor: str, reason: str = ""
+                                        ) -> AgentCase:
+        """Take back an ask. A mistaken request is otherwise permanent."""
+        run = agent_case.run
+        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        withdrawn = self._withdraw_field_request(
+            run, str(source_file or "").strip(),
+            str(source_column or "").strip(), actor=actor, at=now_iso(),
+            why=reason or "withdrawn by the operator")
+        if not withdrawn:
+            raise OpsError("OCC_AGENT_FIELD_REQUEST_NOT_FOUND",
+                           "There is no open field request for that column.",
+                           http_status=404)
+        self.store.save(run)
+        self._audit(run, "field_registry_request_withdrawn",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=withdrawn["request_id"],
+                    decision_basis=reason or "withdrawn by the operator")
+        return agent_case
+
+    @staticmethod
+    def _withdraw_field_request(run: SyntheticRun, source_file: str,
+                                source_column: str, *, actor: str, at: str,
+                                why: str) -> Optional[Dict[str, Any]]:
+        """Mark an open request withdrawn. Kept, never deleted: an ask that was
+        made and taken back is part of the record of what happened."""
+        for request in run.field_requests:
+            if (request.get("source_file") == source_file
+                    and request.get("source_column") == source_column
+                    and request.get("status") == _field_registry.REQUEST_OPEN):
+                request["status"] = _field_registry.REQUEST_WITHDRAWN
+                request["withdrawn_by"] = actor
+                request["withdrawn_at"] = at
+                request["withdrawn_because"] = why
+                return request
+        return None
+
+    @staticmethod
+    def _mapping_row(run: SyntheticRun, source_file: str,
+                     source_column: str) -> Optional[Dict[str, Any]]:
+        """The report row for one column of one file, or None if Trakt never
+        read it. Stops a mapping being recorded against a column that is not
+        in the delivery — a typo would otherwise promote into a governed rule
+        that silently matches nothing every month."""
+        for row in run.mapping_report or []:
+            if (str(row.get("source_file") or "") == source_file
+                    and str(row.get("source_column") or "") == source_column):
+                return row
+        return None
+
+    def _sample_values(self, run: SyntheticRun, source_file: str,
+                       source_column: str) -> List[str]:
+        """A few real values from the column, for whoever reads the request.
+
+        Best effort: the files are rebuilt from durable storage and may not be
+        present on this instance, and a request with no samples is still a
+        request worth recording.
+        """
+        try:
+            for path in self._artefact_paths(run):
+                if path.name != source_file:
+                    continue
+                table = _workbook.read_table(path)
+                if table.frame is None or source_column not in table.frame:
+                    return []
+                series = table.frame[source_column].dropna().astype(str)
+                seen: List[str] = []
+                for value in series:
+                    text = value.strip()
+                    if text and text not in seen:
+                        seen.append(text)
+                    if len(seen) >= 5:
+                        break
+                return seen
+        except Exception:                  # noqa: BLE001 — never a crash here
+            return []
+        return []
 
     def acknowledge_exception(self, agent_case: AgentCase, *, decision_id: str,
                               actor: str, reason: str = "") -> AgentCase:
@@ -2833,11 +3064,18 @@ class OccAgentService:
 
     @staticmethod
     def _approved_mappings(run: SyntheticRun) -> Dict[str, str]:
-        """source column -> canonical field, from resolved mapping decisions.
+        """``file::column`` -> canonical field, from resolved mapping decisions.
 
         An empty target means "do not use this column", which is how the losing
         side of an ambiguity is recorded: both columns are answered, so the next
         run has nothing left to ask about.
+
+        KEYED ON THE PAIR, NOT THE NAME. Every file in a pack carries a loan
+        identifier and most carry a valuation date, so a flat column-name key
+        made an answer about the property extract's 'Pool' an answer about the
+        tape's. A decision that predates file-scoping carries no
+        ``source_file``; it is keyed on the bare name, which the adapter reads
+        as the fallback it always was.
         """
         out: Dict[str, str] = {}
         for decision in run.open_decisions:
@@ -2847,6 +3085,7 @@ class OccAgentService:
             target = str(subject.get("target_field") or "")
             columns = [str(c) for c in (subject.get("source_columns") or [])]
             primary = str(subject.get("source_column") or "")
+            source_file = str(subject.get("source_file") or "")
             if not primary and not columns:
                 continue
             value = str(decision.get("resolved_value") or "")
@@ -2862,11 +3101,12 @@ class OccAgentService:
                 chosen, target_field = primary, value
             else:
                 chosen, target_field = primary, target
+            key = (lambda c: _mapping_key(source_file, c) if source_file else c)
             if chosen:
-                out[chosen] = target_field
+                out[key(chosen)] = target_field
             for column in columns:
                 if column != chosen:
-                    out[column] = ""       # the losing candidate is not used
+                    out[key(column)] = ""  # the losing candidate is not used
         return out
 
     @staticmethod
@@ -2971,6 +3211,11 @@ def _decision_card(decision,
         subject.setdefault("decision_type", source.get("decision_type", ""))
         subject.setdefault("source_column", source.get("source_column", ""))
         subject.setdefault("source_columns", source.get("source_columns", []))
+        # WHICH FILE'S COLUMN. Every file in a pack carries a loan identifier
+        # and most carry a valuation date, so a card that says only "Pool"
+        # names three different columns at once — and the table, which matched
+        # rows to decisions on the name alone, marked all three.
+        subject.setdefault("source_file", source.get("source_file", ""))
         subject.setdefault("target_field", source.get("target_field", ""))
         subject.setdefault("proposed_mapping",
                            source.get("proposed_mapping", ""))

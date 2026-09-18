@@ -221,9 +221,11 @@ class TestEveryFileInThePackIsReported:
         assert overview["files"][0] == {"name": "Loan.xlsx", "primary": True,
                                         "columns": 2}
 
-    def test_a_weak_match_outside_the_primary_tape_asks_nothing(self):
-        """Calling it "Needs you" would point at a question that does not
-        exist: no decision is raised for a file the tape is not built from."""
+    def test_a_weak_match_with_no_question_against_it_says_so(self):
+        """Every file's columns are asked about now, so nothing raises this
+        state any more. A case rehearsed before that change still holds rows
+        in it, and the table must say what happened to them rather than claim
+        a question was asked that never was."""
         overview = mapping_view.overview(Run(self.PACK))
         weak = next(r for r in overview["rows"] if r["source_column"] == "Prop Ref")
         assert weak["state"] == mapping_view.ROW_UNCHECKED
@@ -257,10 +259,23 @@ def _spec():
     return PortfolioSpec(source_portfolio_id="direct_101", input="")
 
 
+def _decisions(work_dir):
+    """The pending-decision artefact the adapter writes, as the OCC reads it."""
+    import yaml
+
+    from operations_control.occ_agent.execution import DECISIONS_FILE
+    path = work_dir / DECISIONS_FILE
+    if not path.exists():
+        return []
+    return (yaml.safe_load(path.read_text(encoding="utf-8"))
+            or {}).get("decisions") or []
+
+
 class TestTheAdapterReadsEveryFile:
     """Where the rows come from, exercised against the real header mapper."""
 
-    def _adapters(self, service, tmp_path, files):
+    def _adapters(self, service, tmp_path, files, *,
+                  confirm_every_mapping=False, approved_mappings=None):
         from operations_control.occ_agent.execution import (
             SyntheticOnboardingAdapters,
         )
@@ -276,6 +291,8 @@ class TestTheAdapterReadsEveryFile:
             paths.append(path)
         return SyntheticOnboardingAdapters(
             artefact_paths=paths, policy=service.policy, sandbox=sandbox,
+            confirm_every_mapping=confirm_every_mapping,
+            approved_mappings=approved_mappings,
             case_id=agent_case.case_ref, tenant=TENANT_A), sandbox
 
     PACK = [
@@ -308,16 +325,79 @@ class TestTheAdapterReadsEveryFile:
                    if r["primary"]}
         assert primary == {"loan_extract.csv"}
 
-    def test_a_secondary_file_never_blocks_the_run(self, service, tmp_path):
-        """A weak match in a file the canonical tape is not built from has no
-        answer an operator could give, so it must not become a decision."""
+    def test_a_weak_match_is_put_to_a_person_whichever_file_it_is_in(
+            self, service, tmp_path):
+        """It used to be recorded and never asked about.
+
+        The canonical tape is built from the primary file, and that was also
+        the limit of what the adapter ASKED about — so a column in the property
+        extract was matched, reported as settled, and never shown to anyone.
+        But a mapping an operator approves is promoted to a rule scoped to the
+        PORTFOLIO, and production's own tape builder consolidates a loan-domain
+        field whichever file carries it. Their reading of this file's columns
+        is worth exactly what their reading of the tape's is.
+        """
         adapters, sandbox = self._adapters(service, tmp_path, [
             self.PACK[0],
-            ("property_extract.csv", "loan_id,Prp Vl Amt Gbp\nL1,250000\n"),
+            ("property_extract.csv",
+             "loan_id,Interest Coverage Ratio At The Securitisation\nL1,1.4\n"),
         ])
         result = adapters.onboard(_spec(), sandbox / "work")
-        assert result.ok is True
-        assert result.blocking is False
+        raised = _decisions(sandbox / "work")
+        weak = [d for d in raised
+                if d["source_file"] == "property_extract.csv"
+                and d["source_column"]
+                == "Interest Coverage Ratio At The Securitisation"]
+        assert weak, "a weak match outside the tape was never put to anybody"
+        assert result.blocking is True
+
+    def test_a_first_onboarding_proposes_every_file_not_only_the_tape(
+            self, service, tmp_path):
+        """The reported defect.
+
+        "Why are some fields being proposed, while other fields are still
+        automatically matched? ALL fields should either be proposed, or
+        unmapped."
+        """
+        adapters, sandbox = self._adapters(service, tmp_path, self.PACK,
+                                           confirm_every_mapping=True)
+        adapters.onboard(_spec(), sandbox / "work")
+        proposed = {f for f, _ in adapters.proposed_mappings}
+        assert proposed == {"loan_extract.csv", "property_extract.csv",
+                            "principal_and_interest.csv"}
+
+    def test_the_same_column_name_in_two_files_gets_two_questions(
+            self, service, tmp_path):
+        """One decision id per (file, column), not per column.
+
+        A pack carries a loan identifier in every extract. Keyed on the name
+        alone the two collided: one decision was written twice under one id,
+        and answering it answered for a file it was not about.
+        """
+        adapters, sandbox = self._adapters(service, tmp_path, self.PACK,
+                                           confirm_every_mapping=True)
+        adapters.onboard(_spec(), sandbox / "work")
+        raised = _decisions(sandbox / "work")
+        ids = [d["decision_id"] for d in raised]
+        assert len(ids) == len(set(ids))
+        loan_id = [d for d in raised if d["source_column"] == "loan_id"]
+        assert len(loan_id) == 3
+        assert len({d["decision_id"] for d in loan_id}) == 3
+
+    def test_an_answer_about_one_file_does_not_answer_for_another(
+            self, service, tmp_path):
+        """Keyed on the pair, so confirming the tape's ``loan_id`` leaves the
+        property extract's still asking."""
+        adapters, sandbox = self._adapters(
+            service, tmp_path, self.PACK, confirm_every_mapping=True,
+            approved_mappings={"loan_extract.csv::loan_id": "loan_id"})
+        adapters.onboard(_spec(), sandbox / "work")
+        rows = {(r["source_file"], r["source_column"]): r
+                for r in adapters.mapping_report}
+        assert rows[("loan_extract.csv", "loan_id")]["tier"] \
+            == "operator_approved"
+        assert rows[("property_extract.csv", "loan_id")]["tier"] \
+            != "operator_approved"
 
 
 class TestItReachesTheScreen:

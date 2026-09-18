@@ -58,10 +58,11 @@ STATE_LABELS = {
     ROW_NEEDS_YOU: "Needs you",
     ROW_PROPOSED: "Proposed",
     ROW_UNREADABLE: "Could not be read",
-    #: A weak match in a file the canonical tape is NOT built from. Worth an
-    #: operator's eye — the real orchestrator consolidates loan-domain fields
-    #: from these files — but no decision was raised against it, so calling it
-    #: "Needs you" would point at a question that does not exist.
+    #: A weak match in a file the canonical tape is NOT built from, left
+    #: unasked. No run raises one any more — every file's columns are put to a
+    #: person now — but a case that was rehearsed before that change still
+    #: holds rows in this state, and re-labelling them "Needs you" would point
+    #: at a question that was never raised.
     ROW_UNCHECKED: "Weak match, nothing asked",
     ROW_UNUSED: "Not used",
     ROW_CONFIRMED: "You confirmed it",
@@ -110,11 +111,10 @@ def classify(row: Dict[str, Any], *, has_open_decision: bool = False,
     the same field. Reading the tier alone, the table would say "matched
     automatically" about a column the run is blocked on.
 
-    A weak match outside the primary tape is ``ROW_UNCHECKED`` rather than
-    ``ROW_NEEDS_YOU``: the canonical tape is not built from that file, so no
-    decision was raised and there is nothing for an operator to answer. It is
-    still reported, because the real orchestrator consolidates loan-domain
-    fields from those files whatever this adapter does with them.
+    A weak match outside the primary tape reads ``ROW_UNCHECKED`` only on a run
+    rehearsed before every file's columns were put to a person. Nothing raises
+    that state now; it is kept so an older case still says what happened to it
+    rather than claiming a question was asked that never was.
     """
     if has_open_decision:
         # A proposal is open and blocking, like any other — but it is answered
@@ -144,29 +144,45 @@ def _label(canonical_field: str) -> str:
 
 
 def _open_decision_by_column(decisions: Iterable[Dict[str, Any]]
-                             ) -> Dict[str, Tuple[str, str]]:
-    """``{column: (decision_id, decision_type)}`` for each open decision.
+                             ) -> Dict[Tuple[str, str], Tuple[str, str]]:
+    """``{(file, column): (decision_id, decision_type)}`` per open decision.
 
     So a row reading "Needs you" can be the thing you click, rather than
     sending an operator to hunt for the matching question in another list —
     and so the table can tell a PROPOSAL, which is approved with the set, from
     a question that has to be answered on its own.
+
+    KEYED ON THE PAIR. Keyed on the column NAME alone, one proposal raised
+    against the tape's 'Pool' marked the property extract's 'Pool' and the
+    cashflow extract's 'Pool' as proposed too — three rows pointing at one
+    question, two of which that question does not answer. A decision that
+    names no file is still matched on the name alone, so a case part-way
+    through its onboarding does not lose the link to answers it already has.
     """
-    out: Dict[str, Tuple[str, str]] = {}
+    out: Dict[Tuple[str, str], Tuple[str, str]] = {}
     for decision in decisions or []:
         if str(decision.get("status", "open")) != "open":
             continue
         subject = decision.get("subject") or {}
         entry = (str(decision.get("decision_id") or ""),
                  str(subject.get("decision_type") or ""))
-        column = str(subject.get("source_column") or "").strip()
-        if column:
-            out.setdefault(column.lower(), entry)
-        for column in (subject.get("source_columns") or []):
-            name = str(column or "").strip()
+        source_file = str(subject.get("source_file") or "").strip()
+        names = [str(subject.get("source_column") or "").strip()]
+        names += [str(c or "").strip()
+                  for c in (subject.get("source_columns") or [])]
+        for name in names:
             if name:
-                out.setdefault(name.lower(), entry)
+                out.setdefault((source_file, name.lower()), entry)
     return out
+
+
+def _decision_for(decisions: Dict[Tuple[str, str], Tuple[str, str]],
+                  source_file: str, column: str) -> Tuple[str, str]:
+    """This row's open decision: its own file's, or an unscoped one."""
+    key = column.lower()
+    return (decisions.get((source_file, key))
+            or decisions.get(("", key))
+            or ("", ""))
 
 
 def overview(run: Any) -> Dict[str, Any]:
@@ -176,10 +192,20 @@ def overview(run: Any) -> Dict[str, Any]:
     at the top of the table rather than wherever the tape happened to put them.
     """
     decisions = _open_decision_by_column(getattr(run, "open_decisions", []))
+    # Columns an operator asked for a new canonical field for. Still unmapped —
+    # a request is not a field — but the row has to say the ask was made, or an
+    # operator scanning eighty-nine unused columns cannot tell the ones they
+    # have already dealt with from the ones they have not.
+    requests = {(str(r.get("source_file") or ""),
+                 str(r.get("source_column") or "").lower()): r
+                for r in (getattr(run, "field_requests", None) or [])
+                if str(r.get("status") or "") == "requested"}
     rows: List[Dict[str, Any]] = []
     for raw in getattr(run, "mapping_report", []) or []:
         column = str(raw.get("source_column") or "")
-        decision_id, decision_type = decisions.get(column.lower(), ("", ""))
+        source_file = str(raw.get("source_file") or "")
+        decision_id, decision_type = _decision_for(decisions, source_file,
+                                                   column)
         state = classify(raw, has_open_decision=bool(decision_id),
                          is_proposal=(decision_type == "mapping_proposal"))
         confidence: Optional[float] = None
@@ -204,7 +230,7 @@ def overview(run: Any) -> Dict[str, Any]:
         else:
             basis = ""
         rows.append({
-            "source_file": str(raw.get("source_file") or ""),
+            "source_file": source_file,
             "source_column": column,
             "canonical_field": str(raw.get("canonical_field") or ""),
             "field_label": _label(raw.get("canonical_field")),
@@ -220,6 +246,9 @@ def overview(run: Any) -> Dict[str, Any]:
             "suggested_field": suggested,
             "suggested_label": _label(suggested),
             "suggested_reason": str(raw.get("llm_reasoning") or ""),
+            "requested_field": str(
+                (requests.get((source_file, column.lower())) or {}
+                 ).get("field_name") or ""),
             # Whether this column's file is the one the canonical tape is built
             # from. The table groups by file and says which is which, so an
             # operator is not left to infer it from the filename.
