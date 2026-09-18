@@ -2080,9 +2080,16 @@ class OccAgentService:
             label=label, description=description, data_type=data_type,
             actor=actor, at=at,
             samples=self._sample_values(run, file_name, column))
-        run.field_requests = [r for r in run.field_requests
-                              if r.get("request_id")
-                              != request["request_id"]] + [request]
+        # SUPERSEDED BY WHAT IT IS ABOUT, not by its id. A request IS its
+        # (file, column): asking twice about one column is one ask, restated.
+        # Keying on the id made that true only while the id scheme held still,
+        # and it has since changed — so a request made under the old scheme
+        # would not have been replaced by the same ask under the new one, and
+        # the case would carry the column twice.
+        run.field_requests = [
+            r for r in run.field_requests
+            if _staging.key(r.get("source_file"), r.get("source_column"))
+            != _staging.key(file_name, column)] + [request]
         self.store.save(run)
         self._audit(run, "field_registry_requested", actor_type=ACTOR_HUMAN,
                     actor=actor, classification=EXEC_HUMAN_CONFIRMED,

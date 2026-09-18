@@ -283,6 +283,32 @@ class TestAskingForAFieldTraktDoesNotHave:
                 field_name="current_principal_balance", actor=ACTOR)
         assert caught.value.code == "OCC_AGENT_FIELD_ALREADY_REGISTERED"
 
+    def test_asking_twice_about_one_column_leaves_one_ask(self, service,
+                                                          halted):
+        """A request IS its (file, column): asking again restates it.
+
+        It used to be superseded by its ID, which was true only while the id
+        scheme held still. The scheme has since changed, so a request recorded
+        under the old one would not have been replaced by the same ask under
+        the new one and the case would carry the column twice — a live case
+        mid-onboarding is exactly where that would have shown up.
+        """
+        row = _unused(service, halted)
+        updated = service.request_registry_field(
+            halted, source_file=row["source_file"],
+            source_column=row["source_column"], field_name="broker_code",
+            actor=ACTOR)
+        # Rewrite the stored id to the shape an earlier release would have
+        # written, which is what a case opened before the change carries.
+        updated.run.field_requests[0]["request_id"] = "fieldreq_old-scheme-id"
+        service.store.save(updated.run)
+        updated = service.request_registry_field(
+            updated, source_file=row["source_file"],
+            source_column=row["source_column"], field_name="introducer_code",
+            actor=ACTOR)
+        assert len(updated.run.field_requests) == 1
+        assert updated.run.field_requests[0]["field_name"] == "introducer_code"
+
     def test_a_request_can_be_taken_back(self, service, halted):
         """A mistaken ask would otherwise sit in the activation pack for ever.
 
