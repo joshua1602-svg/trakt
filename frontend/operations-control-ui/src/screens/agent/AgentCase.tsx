@@ -1458,6 +1458,13 @@ function MappingPanel({
                                 busy={busy}
                                 onStage={onStage}
                                 onPickField={() => setAnswering(row)}
+                                onWithdrawRequest={() =>
+                                  onResolveUnmapped({
+                                    source_file: row.source_file,
+                                    source_column: row.source_column,
+                                    action: "withdraw_request",
+                                  })
+                                }
                               />
                             </td>
                           </tr>
@@ -1563,32 +1570,54 @@ function MappingRowActions({
   busy,
   onStage,
   onPickField,
+  onWithdrawRequest,
 }: {
   row: MappingRow;
   busy: boolean;
   onStage: (input: StageInput) => void;
   onPickField: () => void;
+  onWithdrawRequest: () => void;
 }) {
   const where = { source_file: row.source_file, source_column: row.source_column };
   if (row.state === "staged") {
-    const said =
-      row.staged_action === "not_used"
+    // A SET-ASIDE A REQUEST WROTE UNDOES AS THE REQUEST, not as a set-aside.
+    // The ask is what put the column out of the delivery, so "Undo" here would
+    // put it back while the ask still stood — mapped and requested at once,
+    // which is the state this whole path exists to prevent. One control, and
+    // it says what it actually does.
+    const byRequest = row.staged_origin === "field_request";
+    // NO ANSWER PHRASE ON A REQUEST ROW. On every other staged row the phrase
+    // IS the answer — "You said: valuation date". On this one the answer is
+    // "Requested: <field>", which the field cell already carries, so a phrase
+    // beside it is the fourth thing on the row saying the same thing and the
+    // only one paying for it in width: "Set aside for the new field" truncated
+    // to "Set asi…" at 1280 and still to "Set aside for …" at 1680.
+    const said = byRequest
+      ? ""
+      : row.staged_action === "not_used"
         ? copy.agent.mappingStagedNotUsed
         : row.staged_action === "amend"
           ? copy.agent.mappingStagedAmend(row.staged_field)
           : copy.agent.mappingStagedConfirm;
     return (
       <div className="flex min-w-0 items-baseline justify-end gap-2">
-        <span className="truncate text-xs text-emerald-700" title={said}>
-          {said}
-        </span>
+        {said && (
+          <span className="truncate text-xs text-emerald-700" title={said}>
+            {said}
+          </span>
+        )}
         <button
           type="button"
           disabled={busy}
-          onClick={() => onStage({ ...where, action: "clear" })}
+          title={byRequest ? copy.agent.mappingStagedRequested : undefined}
+          onClick={() =>
+            byRequest ? onWithdrawRequest() : onStage({ ...where, action: "clear" })
+          }
           className="shrink-0 text-xs font-medium text-blue-700 underline disabled:opacity-50"
         >
-          {copy.agent.mappingRowUndo}
+          {byRequest
+            ? copy.agent.mappingWithdrawRequest
+            : copy.agent.mappingRowUndo}
         </button>
       </div>
     );
@@ -1941,11 +1970,14 @@ function UnmappedColumnDialog({
  * pushed off the row by a long field name.
  */
 function MappingFieldCell({ row }: { row: MappingRow }) {
-  // A column that matched nothing used to render "—" and stop there: the
-  // operator knew what it was and the screen had nowhere for them to say so.
-  // On a first delivery that is most of the tape.
-  const unmapped = row.state === "unused";
-  const requested = unmapped ? row.requested_field : "";
+  // A COLUMN CARRIES ITS REQUEST WHATEVER TRAKT MADE OF IT. This was gated on
+  // `row.state === "unused"`, written on the assumption that an ask only ever
+  // comes from a column that matched nothing. It does not: "Change" opens the
+  // same dialog on any row, so a column with a live proposal can be requested
+  // as a new field — and on that row the chip was thrown away before it
+  // reached the cell. The operator saw their ask recorded in the panel below
+  // and the row above it still reading as though nothing had happened.
+  const requested = row.requested_field;
   // AN OPEN REQUEST SETTLES WHAT THIS CELL IS ABOUT. A model's guess and an
   // operator's ask are both answers to "what is this column?", and the
   // operator's is the later and the deciding one — they have said Trakt has no
@@ -1979,7 +2011,17 @@ function MappingFieldCell({ row }: { row: MappingRow }) {
       {requested && (
         <span
           className="min-w-0 truncate rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800"
-          title={copy.agent.mappingRequestNewHelp}
+          // WHAT THE ASK DISPLACED, where it displaced something. On a column
+          // that matched nothing there is nothing to say; on one Trakt had
+          // read as a field, the reading is the very thing the operator
+          // overruled, and an operator revisiting the row a week later needs
+          // to see what they overruled it with.
+          title={[copy.agent.mappingRequestNewHelp,
+                  row.field_label
+                    ? copy.agent.mappingRequestDisplaced(row.field_label)
+                    : ""]
+            .filter(Boolean)
+            .join(" ")}
         >
           {copy.agent.mappingRequestedChip(requested)}
         </span>

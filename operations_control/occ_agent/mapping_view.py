@@ -417,6 +417,11 @@ def overview(run: Any) -> Dict[str, Any]:
             "staged_field": str((answer or {}).get("target_field") or ""),
             "staged_label": _label((answer or {}).get("target_field")),
             "staged_by": str((answer or {}).get("staged_by") or ""),
+            # Whether the operator set this column aside themselves or a field
+            # request set it aside for them. The two undo differently — see
+            # :func:`staging.is_request_driven` — so the row says which rather
+            # than leaving the screen to infer it from the request beside it.
+            "staged_origin": str((answer or {}).get("origin") or ""),
             "suggested_field": suggested,
             "suggested_label": _label(suggested),
             "suggested_reason": str(raw.get("llm_reasoning") or ""),

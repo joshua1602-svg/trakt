@@ -65,6 +65,26 @@ RESOLUTION = {ACTION_CONFIRM: "approve",
 #: rather than as a question nobody answered.
 NOT_USED_VALUE = "mark_unavailable"
 
+#: WHO SET THIS COLUMN ASIDE, and therefore what taking it back means.
+#:
+#: An operator clicking "Do not use" and a column set aside because they asked
+#: for a canonical field to be created for it are the same staged answer with
+#: two different owners. Withdrawing the request must release the second and
+#: leave the first exactly where it is: a column the operator said outright
+#: feeds nothing must not quietly start feeding a field again because an
+#: unrelated ask was taken back.
+ORIGIN_OPERATOR = "operator"
+ORIGIN_REQUEST = "field_request"
+
+
+def is_request_driven(staged: Optional[Dict[str, Any]]) -> bool:
+    """Was this staged answer written BY a field request rather than by hand?
+
+    Absent on entries staged before origins were recorded, which are the
+    operator's own — the request path is the one that writes the other value.
+    """
+    return str((staged or {}).get("origin") or "") == ORIGIN_REQUEST
+
 
 def key(source_file: str, source_column: str) -> Tuple[str, str]:
     return (str(source_file or ""), str(source_column or ""))
@@ -84,7 +104,7 @@ def by_column(staged: List[Dict[str, Any]]
 
 def entry(*, source_file: str, source_column: str, action: str,
           target_field: str, decision_id: str, actor: str, at: str,
-          reason: str = "") -> Dict[str, Any]:
+          reason: str = "", origin: str = ORIGIN_OPERATOR) -> Dict[str, Any]:
     """One staged answer, carrying who said it and when.
 
     The approver is recorded HERE rather than at the commit, because it is the
@@ -95,7 +115,7 @@ def entry(*, source_file: str, source_column: str, action: str,
     return {"source_file": source_file, "source_column": source_column,
             "action": action, "target_field": target_field,
             "decision_id": decision_id, "staged_by": actor, "staged_at": at,
-            "reason": reason}
+            "reason": reason, "origin": origin}
 
 
 def resolved_value(staged: Dict[str, Any]) -> str:

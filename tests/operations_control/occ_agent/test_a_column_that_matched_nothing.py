@@ -223,7 +223,16 @@ class TestNamingAFieldTraktAlreadyHas:
 
 class TestAskingForAFieldTraktDoesNotHave:
     def test_it_records_a_request_and_maps_nothing(self, service, halted):
-        """The distinction the whole design turns on."""
+        """The distinction the whole design turns on.
+
+        The row reads STAGED rather than unused, because the ask is an answer
+        about the column — "Trakt has no field for this" — and is held as a
+        draft like every other answer. What matters is unchanged and asserted
+        here: nothing is mapped, and the ask is on the row. See
+        :mod:`tests.operations_control.occ_agent
+        .test_a_requested_column_is_not_also_mapped` for why the set-aside is
+        the load-bearing half.
+        """
         row = _unused(service, halted)
         updated = service.request_registry_field(
             halted, source_file=row["source_file"],
@@ -235,7 +244,8 @@ class TestAskingForAFieldTraktDoesNotHave:
         after = {(r["source_file"], r["source_column"]): r
                  for r in service.status(updated)["mapping"]["rows"]}
         still = after[(row["source_file"], row["source_column"])]
-        assert still["state"] == "unused"
+        assert still["state"] == "staged"
+        assert still["staged_action"] == "not_used"
         assert still["canonical_field"] == ""
         assert still["requested_field"] == "broker_code"
 

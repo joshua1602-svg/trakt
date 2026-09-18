@@ -695,9 +695,58 @@ describe("OCC Agent — a column that matched nothing has somewhere to go", () =
         ),
       ).toBeInTheDocument(),
     );
-    // Still unused: nothing was mapped, and a screen that implied otherwise
-    // would have an operator believe a field exists that does not.
-    expect(within(rowFor("Internal Ref")).getByText("Not used")).toBeInTheDocument();
+    // SET ASIDE FOR THE ASK, which is what keeps "a request is not a mapping"
+    // true at the commit. It used to read "Not used" and stage nothing, and
+    // the commit approves every untouched proposal — so on a column that HAD
+    // matched, the ask and a governed mapping onto the field it overruled went
+    // forward together.
+    // The one control on the row takes the ASK back, not the set-aside:
+    // undoing the set-aside alone would put the column back to proposed with
+    // the request still standing.
+    expect(
+      within(rowFor("Internal Ref")).getByRole("button", {
+        name: copy.agent.mappingWithdrawRequest,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(rowFor("Internal Ref")).queryByText(copy.agent.mappingRowUndo),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the ask on a column Trakt HAD placed, and keeps it out of the commit", async () => {
+    /* THE DEFECT THE OPERATOR HIT. `MappingFieldCell` gated the chip on
+       `row.state === "unused"`, written on the assumption that an ask only
+       ever comes from a column that matched nothing. "Change" opens the same
+       dialog on any row, so a column with a live proposal could carry an ask
+       and keep its proposal — recorded, correct, and invisible exactly where
+       the operator was looking. */
+    const user = await afterTheRun();
+    await user.click(
+      within(rowFor("Principal Balance")).getByRole("button", {
+        name: copy.agent.mappingRowChange,
+      }),
+    );
+    await screen.findByText(copy.agent.mappingUnmappedHeading("Principal Balance"));
+    await user.click(screen.getByLabelText(copy.agent.mappingRequestNew));
+    await user.type(
+      screen.getByLabelText(copy.agent.mappingNewFieldName),
+      "early_repayment_charge_amount_in_period",
+    );
+    await user.click(
+      screen.getByRole("button", { name: copy.agent.mappingRequestConfirm }),
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor("Principal Balance")).getByText(
+          copy.agent.mappingRequestedChip("early_repayment_charge_amount_in_period"),
+        ),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      within(rowFor("Principal Balance")).getByRole("button", {
+        name: copy.agent.mappingWithdrawRequest,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("says who is going to act on the ask, and lets it be taken back", async () => {

@@ -653,6 +653,14 @@ export const copy = {
     mappingStagedConfirm: "As Trakt read it",
     mappingStagedAmend: (field: string) => `You said: ${field.replace(/_/g, " ")}`,
     mappingStagedNotUsed: "You set this aside",
+    // Why a column set aside BY a request is out, and what taking the ask back
+    // does. On the control rather than beside it: the row already says
+    // "Requested: <field>" in the field cell, and a phrase repeating it is the
+    // one thing on the row with no width to spare.
+    mappingStagedRequested:
+      "This column is out of the delivery because you asked for a new field " +
+      "for it. Withdrawing the request puts the column back to what Trakt " +
+      "read it as.",
     mappingDraftHelp:
       "Nothing here is applied yet. Work down the table, change anything " +
       "that is wrong, and confirm the lot when you are done — that is the " +
@@ -741,6 +749,9 @@ export const copy = {
     mappingRequestConfirm: "Request this field",
     mappingWithdrawRequest: "Withdraw the request",
     mappingRequestedChip: (field: string) => `Requested: ${field}`,
+    mappingRequestDisplaced: (field: string) =>
+      `Trakt had read this column as ${field}; the request overrules that ` +
+      `and the column stays out of this delivery.`,
     mappingMappedToast: (column: string, field: string) =>
       `'${column}' now feeds ${field.replace(/_/g, " ")}.`,
     mappingRequestedToast: (field: string) =>
