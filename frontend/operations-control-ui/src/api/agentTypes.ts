@@ -195,6 +195,9 @@ export interface SyntheticRunDoc {
   received_artefacts: SyntheticArtefact[];
   stage_outcomes: Record<string, string>;
   mapping_report: Record<string, unknown>[];
+  /** Canonical fields an operator asked for because a column in the delivery
+   *  has nowhere to go. Requests, not fields. */
+  field_requests?: FieldRequest[];
   open_decisions: DecisionCard[];
   control_results: Record<string, unknown>[];
   planned_pipeline_actions: Record<string, unknown>[];
@@ -614,6 +617,45 @@ export interface MappingRow {
   suggested_field: string;
   suggested_label: string;
   suggested_reason: string;
+  /** A canonical field an operator asked for because this column has nowhere
+   *  to go. Still unmapped — a request is not a field, and adding one is a
+   *  versioned system-configuration change — but the row says the ask was
+   *  made, so eighty-nine unused columns can be told apart from the ones
+   *  somebody has already dealt with. */
+  requested_field: string;
+}
+
+/** A canonical field an unmapped column may be pointed at. */
+export interface RegistryField {
+  name: string;
+  label: string;
+  category: string;
+  format: string;
+  layer: string;
+  core_canonical: boolean;
+  /** Which regulatory annexes this field answers. Choosing between two
+   *  plausible fields is choosing between two obligations. */
+  regimes: string[];
+  regime_code?: string;
+}
+
+/** An ask for a canonical field the platform does not have. */
+export interface FieldRequest {
+  request_id: string;
+  status: "requested" | "withdrawn" | string;
+  field_name: string;
+  label: string;
+  description: string;
+  data_type: string;
+  source_file: string;
+  source_column: string;
+  sample_values: string[];
+  requested_by: string;
+  requested_at: string;
+  route: string;
+  withdrawn_by?: string;
+  withdrawn_at?: string;
+  withdrawn_because?: string;
 }
 
 export interface MappingOverview {

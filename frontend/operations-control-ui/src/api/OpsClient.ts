@@ -14,6 +14,7 @@ import type {
   AgentTurn,
   CaseSummary,
   MailIngestOutcome,
+  RegistryField,
 } from "./agentTypes";
 import type {
   AuditTrail,
@@ -222,6 +223,27 @@ export interface OpsClient {
    *  One act for the operator; one resolved decision per column on the record,
    *  because that is what promotion turns into governed rules. */
   approveAgentMappings(caseRef: string, reason?: string): Promise<AgentStatus>;
+  /** Every canonical field an unmapped column may be pointed at — the
+   *  mapper's own selection, so a field offered on the screen is one the run
+   *  will accept. */
+  agentFieldRegistry(caseRef: string): Promise<RegistryField[]>;
+  /** Give a column that matched nothing somewhere to go: an existing field
+   *  (an alias, settled here and promoted at activation), or an ask for a
+   *  field the platform does not have (recorded, never created here). */
+  resolveUnmappedColumn(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "use_existing" | "request_field" | "withdraw_request";
+      target_field?: string;
+      field_name?: string;
+      label?: string;
+      description?: string;
+      data_type?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus>;
   /** Named lifecycle steps, for the operator controls beside the conversation. */
   runAgentStep(
     caseRef: string,

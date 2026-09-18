@@ -659,9 +659,56 @@ export const copy = {
     mappingAnswer: "Answer this",
     mappingFilterAll: "All",
     mappingPrimaryFile: "Trakt builds the loan-level data from this file",
+    // Every file's columns are put to a person now. The loan-level data is
+    // still built from the primary tape, but what an operator approves becomes
+    // a rule for the whole book — and production consolidates a field
+    // whichever file carries it — so a mapping here is worth as much as one
+    // there and is confirmed the same way.
     mappingSecondaryFile:
-      "Read and recorded, but the loan-level data is not built from this one, " +
-      "so nothing here was raised as a question.",
+      "The loan-level data is not built from this one, but its columns are " +
+      "confirmed the same way: what you approve here is this client's " +
+      "mapping from now on.",
+
+    // --- A column that matched nothing ------------------------------------
+    // Two different acts, kept apart in the words as well as the code. One
+    // names a field Trakt already has, and is settled on the spot. The other
+    // asks for a field it does not have, which changes the vocabulary every
+    // client's report is written in and is not an onboarding operator's to
+    // make.
+    mappingUnmappedAction: "Give it a field",
+    mappingUnmappedHeading: (column: string) => `What is '${column}'?`,
+    mappingUnmappedIntro:
+      "Nothing Trakt reports on resembled this column. If you know what it " +
+      "is, say so — it becomes this client's mapping from now on.",
+    mappingUseExisting: "It is something Trakt already reports on",
+    mappingUseExistingHelp:
+      "The column feeds this field from now on, and the mapping becomes one " +
+      "of this client's own rules when the case goes live — so next month's " +
+      "delivery matches it without asking.",
+    mappingPickField: "Which field",
+    mappingPickFieldPlaceholder: "Start typing a field name",
+    mappingRequestNew: "Trakt has no field for this",
+    mappingRequestNewHelp:
+      "The list of fields Trakt reports on is shared by every client, so a " +
+      "new one is not added from here. Trakt records the request — this " +
+      "column, what its values look like and your name — for whoever looks " +
+      "after those settings. The column stays unused until they add it.",
+    mappingNewFieldName: "Name for the new field",
+    mappingNewFieldNamePlaceholder: "lower_case_with_underscores",
+    mappingNewFieldWhat: "What it means",
+    mappingNewFieldWhatPlaceholder: "One sentence somebody could decide from",
+    mappingNewFieldType: "What the values look like",
+    mappingUseExistingConfirm: "Use this field",
+    mappingRequestConfirm: "Request this field",
+    mappingWithdrawRequest: "Withdraw the request",
+    mappingRequestedChip: (field: string) => `Requested: ${field}`,
+    mappingMappedToast: (column: string, field: string) =>
+      `'${column}' now feeds ${field.replace(/_/g, " ")}.`,
+    mappingRequestedToast: (field: string) =>
+      `Requested '${field}'. It is recorded for whoever looks after those ` +
+      "settings; the column stays unused until the field exists.",
+    mappingWithdrawnToast: "The request has been withdrawn.",
+    mappingRequestsHeading: "Fields you have asked for",
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
     artefactNotWritten: "Not written",

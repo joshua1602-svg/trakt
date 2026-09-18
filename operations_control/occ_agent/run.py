@@ -220,6 +220,14 @@ class SyntheticRun:
     #: must be able to see the origin of — and because a model that quietly did
     #: not run looks exactly like one that had nothing to say.
     llm: Dict[str, Any] = field(default_factory=dict)
+    #: Canonical fields an operator asked for because a column in the delivery
+    #: has no field to go to. Requests, not fields: ``operations_control.rules``
+    #: states that the core field registry is never written from here, and
+    #: adding a canonical field is a versioned system-configuration change with
+    #: its own approval. Kept on the run so the ask is a governed record with a
+    #: named requester and the column that prompted it, rather than a note in
+    #: somebody's inbox.
+    field_requests: List[Dict[str, Any]] = field(default_factory=list)
     #: The product an operator confirmed this book to be. Until it is set, the
     #: product profile excuses nothing — the platform proposes a profile on the
     #: asset class alone and deliberately does not apply one.

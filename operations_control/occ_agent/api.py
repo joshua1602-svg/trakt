@@ -161,6 +161,32 @@ class MappingApproval(BaseModel):
     tenant: Optional[str] = None
 
 
+class UnmappedColumn(BaseModel):
+    """What to do about a column nothing in the registry resembled.
+
+    ``action`` is one of:
+
+    ``use_existing``
+        The operator names the canonical field the column feeds.
+        ``target_field`` is required and must be a field this book reports on.
+    ``request_field``
+        The operator asks for a canonical field the platform does not have.
+        ``field_name`` is required; the column stays unmapped.
+    ``withdraw_request``
+        Take back an ask made in error.
+    """
+    source_file: str
+    source_column: str
+    action: str = "use_existing"
+    target_field: str = ""
+    field_name: str = ""
+    label: str = ""
+    description: str = ""
+    data_type: str = ""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
 class RunTarget(BaseModel):
     """Which delivery a practice run is for.
 
@@ -644,6 +670,60 @@ def approve_mappings(case_ref: str, body: MappingApproval,
     return {"ok": True,
             **service.status(service.approve_proposed_mappings(
                 agent_case, actor=principal.name, reason=body.reason))}
+
+
+@router.get("/cases/{case_ref}/field-registry")
+def field_registry(case_ref: str, tenant: Optional[str] = None,
+                   principal: Principal = Depends(authenticate)
+                   ) -> Dict[str, Any]:
+    """Every canonical field this book may map an unmapped column to.
+
+    The mapper's own selection, so a field an operator can pick on the screen
+    is a field the run will accept.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
+    return {"ok": True, "fields": service.field_catalogue(agent_case)}
+
+
+@router.post("/cases/{case_ref}/mappings/unmapped")
+def resolve_unmapped_column(case_ref: str, body: UnmappedColumn,
+                            principal: Principal = Depends(authenticate)
+                            ) -> Dict[str, Any]:
+    """Give a column that matched nothing somewhere to go.
+
+    Either it feeds a field Trakt already has — an alias, settled here and
+    promoted into the client's governed rules at activation — or it needs a
+    field Trakt does not have, which is a versioned change to the platform's
+    canonical vocabulary and is recorded as a request rather than made here.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    action = (body.action or "use_existing").strip()
+    if action == "use_existing":
+        updated = service.map_unmapped_column(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, target_field=body.target_field,
+            actor=principal.name, reason=body.reason)
+    elif action == "request_field":
+        updated = service.request_registry_field(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, field_name=body.field_name,
+            label=body.label, description=body.description,
+            data_type=body.data_type, actor=principal.name,
+            reason=body.reason)
+    elif action == "withdraw_request":
+        updated = service.withdraw_registry_field_request(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, actor=principal.name,
+            reason=body.reason)
+    else:
+        raise OpsError("OCC_AGENT_UNKNOWN_MAPPING_ACTION",
+                       "That is not something Trakt can do with an unmapped "
+                       "column.", http_status=400)
+    return {"ok": True, **service.status(updated)}
 
 
 @router.post("/cases/{case_ref}/plan")

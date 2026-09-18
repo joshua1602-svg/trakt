@@ -72,8 +72,21 @@ function table(): HTMLElement {
   return screen.getByText(copy.agent.mappingHeading).closest("section") as HTMLElement;
 }
 
-function rowFor(column: string): HTMLElement {
-  return within(table()).getByText(column).closest("tr") as HTMLElement;
+/** The section for one file of the pack. */
+function fileSection(name: string): HTMLElement {
+  return within(table()).getByText(name).closest("section") as HTMLElement;
+}
+
+/**
+ * One row, named the way the server names a mapping: by FILE and column.
+ *
+ * A pack carries the same column name in more than one file — "Val Dt" is in
+ * the loan tape and the property extract — so a helper that looked a row up by
+ * name alone found two and threw. That is the same collision the decision
+ * lookup had, arriving in the tests.
+ */
+function rowFor(column: string, file = "loan_tape.csv"): HTMLElement {
+  return within(fileSection(file)).getByText(column).closest("tr") as HTMLElement;
 }
 
 describe("OCC Agent — every column is accounted for", () => {
@@ -112,21 +125,33 @@ describe("OCC Agent — every column is accounted for", () => {
   });
 
   it("counts what is feeding a field, not what was proposed", async () => {
-    /* Two of eight. On a first delivery the three confident matches are
-       PROPOSED and feed nothing until approved; `Val Dt` is a question and
-       `Prp Ref` a weak match nobody was asked about. What is left is the one
-       column an operator confirmed and the one on a secondary file. */
+    /* One of nine. On a first delivery EVERY confident match is proposed and
+       feeds nothing until approved — in the property extract as much as in the
+       tape, because what an operator approves becomes a rule for the whole
+       book. `Val Dt` and `Prp Ref` are questions. What is left feeding a field
+       is the one column an operator has already confirmed. */
     await afterTheRun();
-    expect(within(table()).getByText(copy.agent.mappingCount(2, 8))).toBeInTheDocument();
+    expect(within(table()).getByText(copy.agent.mappingCount(1, 9))).toBeInTheDocument();
   });
 
   it("distinguishes what an operator confirmed from what Trakt decided", async () => {
     await afterTheRun();
     expect(within(rowFor("Prop Val")).getByText("You confirmed it")).toBeInTheDocument();
-    // On a first delivery the primary tape's confident matches are proposed,
-    // so what remains "matched automatically" is the secondary file — which
-    // the canonical tape is not built from and so raises nothing to approve.
-    expect(within(rowFor("property_value")).getByText("Matched automatically")).
+  });
+
+  it("settles nothing on its own on a first delivery, in any file", async () => {
+    /* The reported defect, in the operator's words: "Why are some fields being
+       proposed, while other fields are still automatically matched? ALL fields
+       should either be proposed, or unmapped."
+
+       The cause was that only the primary tape's columns were put to a person;
+       every other file's were matched and reported as settled. So a hundred and
+       fifty three columns came back reading two different ways, and the
+       thirty-six that read "matched automatically" were settled by exactly the
+       alias registry a first onboarding exists to stop trusting unread. */
+    await afterTheRun();
+    expect(within(table()).queryByText("Matched automatically")).toBeNull();
+    expect(within(rowFor("property_value", "property_tape.csv")).getByText("Proposed")).
       toBeInTheDocument();
   });
 
@@ -148,11 +173,11 @@ describe("OCC Agent — every column is accounted for", () => {
 
   it("filters to one kind and back", async () => {
     const user = await afterTheRun();
-    await user.click(within(table()).getByRole("button", { name: /Needs you 2/ }));
+    await user.click(within(table()).getByRole("button", { name: /Needs you 3/ }));
     await waitFor(() => expect(within(table()).queryByText("loan_id")).not.toBeInTheDocument());
-    expect(within(table()).getByText("Val Dt")).toBeInTheDocument();
+    expect(within(fileSection("loan_tape.csv")).getByText("Val Dt")).toBeInTheDocument();
 
-    await user.click(within(table()).getByRole("button", { name: /All 8/ }));
+    await user.click(within(table()).getByRole("button", { name: /All 9/ }));
     await waitFor(() => expect(within(table()).getByText("loan_id")).toBeInTheDocument());
   });
 
@@ -176,13 +201,28 @@ describe("OCC Agent — every column is accounted for", () => {
     expect(within(table()).getByText(copy.agent.mappingSecondaryFile)).toBeInTheDocument();
   });
 
-  it("does not claim a question is waiting on a file the tape is not built from", async () => {
-    /* `Prp Ref` matches weakly, but no decision is raised for a secondary
-       file — so "Needs you" would point at a question that does not exist. */
+  it("asks about a weak match in a file the tape is not built from", async () => {
+    /* It used to read "Weak match, nothing asked" and have nothing to click.
+       The canonical tape is not built from the property extract, but a mapping
+       an operator approves is promoted to a rule scoped to the BOOK, and
+       production consolidates a loan-domain field whichever file carries it —
+       so a column here is worth a person's answer exactly as much as one in
+       the tape. */
     await afterTheRun();
-    expect(within(rowFor("Prp Ref")).getByText("Weak match, nothing asked")).
+    const row = rowFor("Prp Ref", "property_tape.csv");
+    expect(within(row).getByText("Needs you")).toBeInTheDocument();
+    expect(within(row).getByText(copy.agent.mappingAnswer)).toBeInTheDocument();
+  });
+
+  it("gives the same column name in two files its own question", async () => {
+    /* The decision lookup keyed on the column NAME alone, so a question raised
+       about the tape's "Val Dt" marked the property extract's "Val Dt" too:
+       two rows pointing at one question, one of which it was not about. */
+    await afterTheRun();
+    expect(within(rowFor("Val Dt", "loan_tape.csv")).getByText("Needs you")).
       toBeInTheDocument();
-    expect(within(rowFor("Prp Ref")).queryByRole("link")).toBeNull();
+    expect(within(rowFor("Val Dt", "property_tape.csv")).getByText("Proposed")).
+      toBeInTheDocument();
   });
 
   /* One row, one line.
@@ -261,7 +301,7 @@ describe("OCC Agent — every column is accounted for", () => {
 
   it("offers one act for the whole set, and says what it would settle", async () => {
     await afterTheRun();
-    expect(within(table()).getByRole("button", { name: /Approve 2 mappings/ })).
+    expect(within(table()).getByRole("button", { name: /Approve 4 mappings/ })).
       toBeInTheDocument();
   });
 
@@ -271,16 +311,16 @@ describe("OCC Agent — every column is accounted for", () => {
        listing the same seventy columns is the friction, not the governance. */
     await afterTheRun();
     const panel = screen.getByText(copy.agent.decisionsHeading).closest("section");
-    // Two genuine questions keep their cards — the weak match and the
-    // ambiguity — and the two proposals do not.
-    expect(within(panel as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
+    // Three genuine questions keep their cards — the two weak matches and the
+    // ambiguity — and the four proposals do not.
+    expect(within(panel as HTMLElement).getAllByRole("listitem")).toHaveLength(3);
   });
 
   it("will not approve the set while a real question is unanswered", async () => {
     /* A weak match is answered on its own. Offering to settle the set while one
        waits would promise a run that cannot move. */
     await afterTheRun();
-    expect(within(table()).getByRole("button", { name: /Approve 2 mappings/ })).
+    expect(within(table()).getByRole("button", { name: /Approve 4 mappings/ })).
       toBeDisabled();
     expect(within(table()).getByText(/need an answer first/)).toBeInTheDocument();
   });
@@ -320,6 +360,144 @@ describe("OCC Agent — every column is accounted for", () => {
     // A case created from this screen is a rehearsal until an operator says
     // otherwise, so this is the practice wording.
     expect(await screen.findByText(copy.agent.mappingEmpty(false))).toBeInTheDocument();
+  });
+});
+
+/* A COLUMN THAT MATCHED NOTHING USED TO BE A DEAD END.
+ *
+ * "For unmapped fields, there should still be an option to i) add to field
+ * registry as a new entry, or ii) add to an existing field in the field
+ * registry as an alias."
+ *
+ * The table labelled it "Not used" and stopped there. On a first delivery that
+ * is most of the tape — eighty-nine of a hundred and fifty three for the first
+ * client through — and an operator who KNEW what the column was had nowhere to
+ * say so.
+ *
+ * The two acts are not the same act, and these tests hold them apart. Naming a
+ * field Trakt already has settles the column here and now. Asking for a field
+ * it does not have changes what every client's report is written in, so it is
+ * recorded as a request and the column stays unused.
+ */
+describe("OCC Agent — a column that matched nothing has somewhere to go", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  async function openTheDialog() {
+    const user = await afterTheRun();
+    await user.click(
+      within(rowFor("Internal Ref")).getByRole("button", {
+        name: copy.agent.mappingUnmappedAction,
+      }),
+    );
+    await screen.findByText(copy.agent.mappingUnmappedHeading("Internal Ref"));
+    return user;
+  }
+
+  it("offers an unused column somewhere to go", async () => {
+    await afterTheRun();
+    expect(
+      within(rowFor("Internal Ref")).getByRole("button", {
+        name: copy.agent.mappingUnmappedAction,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers nothing of the sort on a column that already has a field", async () => {
+    /* The action belongs to a column with no field. On one that has one it
+       would be a second, ungoverned way to change a mapping — the governed way
+       is answering its decision. */
+    await afterTheRun();
+    expect(
+      within(rowFor("Int Rate")).queryByRole("button", {
+        name: copy.agent.mappingUnmappedAction,
+      }),
+    ).toBeNull();
+  });
+
+  it("maps it to a field Trakt already has", async () => {
+    const user = await openTheDialog();
+    // The picker holds still until the field list has arrived: a box you can
+    // type a field name into before the list exists is a box that cannot tell
+    // you the name is not one.
+    const picker = screen.getByLabelText(copy.agent.mappingPickField);
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.type(picker, "borrower_date_of_birth");
+    await user.click(
+      screen.getByRole("button", { name: copy.agent.mappingUseExistingConfirm }),
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor("Internal Ref")).getByText(/borrower date of birth/),
+      ).toBeInTheDocument(),
+    );
+    expect(within(rowFor("Internal Ref")).getByText("You confirmed it")).
+      toBeInTheDocument();
+  });
+
+  it("refuses a field Trakt does not report on", async () => {
+    /* A free-text box would let a name that matches nothing be promoted into a
+       governed rule that silently matches nothing every month. */
+    const user = await openTheDialog();
+    const picker = screen.getByLabelText(copy.agent.mappingPickField);
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.type(picker, "made_up_field");
+    expect(
+      screen.getByRole("button", { name: copy.agent.mappingUseExistingConfirm }),
+    ).toBeDisabled();
+  });
+
+  it("records an ask for a new field without mapping anything", async () => {
+    /* The distinction the whole design turns on: a request is not a field, and
+       the column has to keep saying so. */
+    const user = await openTheDialog();
+    await user.click(screen.getByLabelText(copy.agent.mappingRequestNew));
+    await user.type(screen.getByLabelText(copy.agent.mappingNewFieldName), "broker_code");
+    await user.type(
+      screen.getByLabelText(copy.agent.mappingNewFieldWhat),
+      "The intermediary who introduced the case.",
+    );
+    await user.click(
+      screen.getByRole("button", { name: copy.agent.mappingRequestConfirm }),
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor("Internal Ref")).getByText(
+          copy.agent.mappingRequestedChip("broker_code"),
+        ),
+      ).toBeInTheDocument(),
+    );
+    // Still unused: nothing was mapped, and a screen that implied otherwise
+    // would have an operator believe a field exists that does not.
+    expect(within(rowFor("Internal Ref")).getByText("Not used")).toBeInTheDocument();
+  });
+
+  it("says who is going to act on the ask, and lets it be taken back", async () => {
+    const user = await openTheDialog();
+    await user.click(screen.getByLabelText(copy.agent.mappingRequestNew));
+    await user.type(screen.getByLabelText(copy.agent.mappingNewFieldName), "broker_code");
+    await user.click(
+      screen.getByRole("button", { name: copy.agent.mappingRequestConfirm }),
+    );
+    const asks = await screen.findByText(copy.agent.mappingRequestsHeading);
+    const panel = asks.closest("section") as HTMLElement;
+    expect(within(panel).getByText(copy.agent.mappingRequestNewHelp)).toBeInTheDocument();
+    // The control holds still while the previous act is in flight, so the walk
+    // waits for it rather than clicking at a button that is not listening.
+    const withdraw = within(panel).getByRole("button", {
+      name: copy.agent.mappingWithdrawRequest,
+    });
+    await waitFor(() => expect(withdraw).toBeEnabled());
+    await user.click(withdraw);
+    await waitFor(() =>
+      expect(screen.queryByText(copy.agent.mappingRequestsHeading)).toBeNull(),
+    );
   });
 });
 

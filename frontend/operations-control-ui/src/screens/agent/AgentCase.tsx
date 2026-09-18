@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,15 +14,18 @@ import type {
   AgentProposal,
   AgentStatus,
   DecisionCard,
+  FieldRequest,
   MappingOverview,
   MappingRow,
   ReadinessCriterion,
+  RegistryField,
   StreamSummary,
 } from "@/api/agentTypes";
 import type { CaseProblem, ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
 import { AgentCancelDialog } from "./AgentCancelDialog";
 import { ClientMailPanel } from "./AgentClientMail";
 import { ClientQuestionsPanel } from "./AgentClientQuestions";
+import { DialogButtons, Modal } from "@/components/admin/primitives";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
 import { StatusChip } from "@/components/StatusChip";
@@ -125,6 +128,13 @@ function packOwner(status: AgentStatus): StageKey {
 export function AgentCaseScreen() {
   const { caseId = "" } = useParams();
   const client = useOpsClient();
+  // Stable, because the dialog fetches on it. A fresh closure every render
+  // makes the effect that loads the field list re-run on its own result, and
+  // an input re-rendering under the cursor loses what is being typed into it.
+  const loadFields = useCallback(
+    () => client.agentFieldRegistry(caseId),
+    [client, caseId],
+  );
   const toast = useToast();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -555,8 +565,10 @@ export function AgentCaseScreen() {
               the check on everything the mapper did WITHOUT asking. */}
           <MappingPanel
             mapping={status.mapping}
+            requests={run.field_requests ?? []}
             live={run.mode === "live"}
             busy={busy}
+            loadFields={loadFields}
             onApprove={() =>
               void act(async () => {
                 const result = await client.approveAgentMappings(caseId);
@@ -564,6 +576,31 @@ export function AgentCaseScreen() {
                   copy.agent.mappingApprovedToast(status.mapping.proposed ?? 0),
                   "success",
                 );
+                return result;
+              })
+            }
+            onResolveUnmapped={(input) =>
+              void act(async () => {
+                const result = await client.resolveUnmappedColumn(caseId, input);
+                // Said in the words of the act that happened. A request is not
+                // a mapping, and a toast that read the same for both would
+                // leave an operator believing the column was settled.
+                if (input.action === "use_existing") {
+                  toast.show(
+                    copy.agent.mappingMappedToast(
+                      input.source_column,
+                      input.target_field ?? "",
+                    ),
+                    "success",
+                  );
+                } else if (input.action === "request_field") {
+                  toast.show(
+                    copy.agent.mappingRequestedToast(input.field_name ?? ""),
+                    "success",
+                  );
+                } else {
+                  toast.show(copy.agent.mappingWithdrawnToast, "success");
+                }
                 return result;
               })
             }
@@ -1133,16 +1170,26 @@ function ResponsesBlock({
  */
 function MappingPanel({
   mapping,
+  requests,
   live,
   busy,
   onApprove,
+  onResolveUnmapped,
+  loadFields,
 }: {
   mapping: MappingOverview;
+  requests: FieldRequest[];
   live: boolean;
   busy: boolean;
   onApprove: () => void;
+  onResolveUnmapped: (input: UnmappedInput) => void;
+  loadFields: () => Promise<RegistryField[]>;
 }) {
   const [filter, setFilter] = useState("");
+  // Which unmapped column the operator is answering, if any. One at a time:
+  // the question is about THIS column, and a form that could be about three
+  // of them is a form somebody answers for the wrong one.
+  const [answering, setAnswering] = useState<MappingRow | null>(null);
   const counts = mapping.counts ?? {};
   const rows = filter ? mapping.rows.filter((r) => r.state === filter) : mapping.rows;
   // A first delivery proposes every column it matched. The approval is one
@@ -1305,8 +1352,15 @@ function MappingPanel({
                                 {row.state_label}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-stone-700">
-                              <MappingFieldCell row={row} />
+                            {/* `overflow-hidden` is the backstop: a fixed
+                                layout does not clip on its own, so anything
+                                that will not shrink prints OVER the next
+                                column rather than being cut off by it. */}
+                            <td className="overflow-hidden px-3 py-2.5 text-stone-700">
+                              <MappingFieldCell
+                                row={row}
+                                onGiveItAField={() => setAnswering(row)}
+                              />
                             </td>
                             <td
                               className="truncate px-3 py-2.5 text-xs text-stone-500"
@@ -1329,9 +1383,300 @@ function MappingPanel({
                 </div>
               </section>
             ))}
+
+          {/* An ask is a governed record, so it is on the screen rather than
+              only in the audit trail: an operator who asked for a field last
+              week should not have to remember that they did. */}
+          {requests.filter((r) => r.status === "requested").length > 0 && (
+            <section className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <h4 className="text-sm font-semibold text-amber-900">
+                {copy.agent.mappingRequestsHeading}
+              </h4>
+              <ul className="mt-2 space-y-2">
+                {requests
+                  .filter((r) => r.status === "requested")
+                  .map((request) => (
+                    <li key={request.request_id} className="text-xs text-amber-900">
+                      <span className="font-semibold">{request.field_name}</span>
+                      {" — "}
+                      {request.source_column} in {request.source_file}
+                      {request.description && <> · {request.description}</>}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          onResolveUnmapped({
+                            source_file: request.source_file,
+                            source_column: request.source_column,
+                            action: "withdraw_request",
+                          })
+                        }
+                        className="ml-2 font-medium underline disabled:opacity-50"
+                      >
+                        {copy.agent.mappingWithdrawRequest}
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-2 max-w-3xl text-xs text-amber-800">
+                {copy.agent.mappingRequestNewHelp}
+              </p>
+            </section>
+          )}
+
+          {answering && (
+            <UnmappedColumnDialog
+              row={answering}
+              busy={busy}
+              loadFields={loadFields}
+              onCancel={() => setAnswering(null)}
+              onSubmit={(input) => {
+                setAnswering(null);
+                onResolveUnmapped(input);
+              }}
+            />
+          )}
         </>
       )}
     </Panel>
+  );
+}
+
+/** What the screen asks the server to do about one unmapped column. */
+type UnmappedInput = {
+  source_file: string;
+  source_column: string;
+  action: "use_existing" | "request_field" | "withdraw_request";
+  target_field?: string;
+  field_name?: string;
+  label?: string;
+  description?: string;
+  data_type?: string;
+  reason?: string;
+};
+
+/**
+ * What to do about a column nothing in the registry resembled.
+ *
+ * THE TWO CHOICES ARE NOT THE SAME ACT, and the dialog is built so they cannot
+ * be mistaken for each other. Naming a field Trakt already has is settled on
+ * the spot and promotes into this client's governed rules. Asking for a field
+ * Trakt does NOT have changes the vocabulary every client's report is written
+ * in — so it is recorded as a request, the column stays unmapped, and the
+ * panel says so in the form rather than after the fact.
+ *
+ * The field list is the server's (`OccAgentService.field_catalogue`, the
+ * mapper's own selection), fetched when the dialog opens rather than held on
+ * every status response: it is five hundred fields, it does not change during
+ * a case, and most operators never open this.
+ */
+function UnmappedColumnDialog({
+  row,
+  busy,
+  loadFields,
+  onCancel,
+  onSubmit,
+}: {
+  row: MappingRow;
+  busy: boolean;
+  loadFields: () => Promise<RegistryField[]>;
+  onCancel: () => void;
+  onSubmit: (input: UnmappedInput) => void;
+}) {
+  const [mode, setMode] = useState<"use_existing" | "request_field">("use_existing");
+  const [fields, setFields] = useState<RegistryField[] | null>(null);
+  const [chosen, setChosen] = useState("");
+  const [name, setName] = useState("");
+  const [what, setWhat] = useState("");
+  const [type, setType] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    void loadFields().then((list) => {
+      if (live) setFields(list);
+    });
+    return () => {
+      live = false;
+    };
+  }, [loadFields]);
+
+  const known = fields ?? [];
+  const valid =
+    mode === "use_existing"
+      ? known.some((f) => f.name === chosen)
+      : name.trim().length > 0;
+
+  return (
+    <Modal labelledBy="unmapped-column-title">
+      <h3 id="unmapped-column-title" className="text-lg font-semibold text-stone-900">
+        {copy.agent.mappingUnmappedHeading(row.source_column)}
+      </h3>
+      <p className="mt-1 text-xs text-stone-500">{row.source_file}</p>
+      <p className="mt-3 text-sm text-stone-600">{copy.agent.mappingUnmappedIntro}</p>
+
+      <fieldset className="mt-4 space-y-3">
+        <label className="flex gap-3">
+          <input
+            type="radio"
+            name="unmapped-mode"
+            className="mt-1"
+            // Named explicitly: the visible label carries the explanation as
+            // well as the choice, and a control whose name is a paragraph is
+            // one a screen reader reads as a paragraph.
+            aria-label={copy.agent.mappingUseExisting}
+            checked={mode === "use_existing"}
+            onChange={() => setMode("use_existing")}
+          />
+          <span>
+            <span className="text-sm font-medium text-stone-900">
+              {copy.agent.mappingUseExisting}
+            </span>
+            <span className="mt-0.5 block text-xs text-stone-500">
+              {copy.agent.mappingUseExistingHelp}
+            </span>
+          </span>
+        </label>
+        {mode === "use_existing" && (
+          <div className="pl-7">
+            <label
+              htmlFor="unmapped-field"
+              className="block text-xs font-medium text-stone-700"
+            >
+              {copy.agent.mappingPickField}
+            </label>
+            {/* A list, not a free-text box: a field that is not in the
+                registry is not a mapping, and the server refuses one. The
+                browser's own filtering keeps five hundred fields usable. */}
+            <input
+              id="unmapped-field"
+              list="unmapped-field-options"
+              value={chosen}
+              disabled={busy || fields === null}
+              placeholder={copy.agent.mappingPickFieldPlaceholder}
+              onChange={(e) => setChosen(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            />
+            <datalist id="unmapped-field-options">
+              {known.map((field) => (
+                <option key={field.name} value={field.name}>
+                  {field.regimes.length > 0
+                    ? `${field.label} · ${field.regimes.join(", ")}`
+                    : field.label}
+                </option>
+              ))}
+            </datalist>
+          </div>
+        )}
+
+        <label className="flex gap-3">
+          <input
+            type="radio"
+            name="unmapped-mode"
+            className="mt-1"
+            aria-label={copy.agent.mappingRequestNew}
+            checked={mode === "request_field"}
+            onChange={() => setMode("request_field")}
+          />
+          <span>
+            <span className="text-sm font-medium text-stone-900">
+              {copy.agent.mappingRequestNew}
+            </span>
+            <span className="mt-0.5 block text-xs text-stone-500">
+              {copy.agent.mappingRequestNewHelp}
+            </span>
+          </span>
+        </label>
+        {mode === "request_field" && (
+          <div className="space-y-3 pl-7">
+            <div>
+              <label
+                htmlFor="new-field-name"
+                className="block text-xs font-medium text-stone-700"
+              >
+                {copy.agent.mappingNewFieldName}
+              </label>
+              <input
+                id="new-field-name"
+                value={name}
+                disabled={busy}
+                placeholder={copy.agent.mappingNewFieldNamePlaceholder}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="new-field-what"
+                className="block text-xs font-medium text-stone-700"
+              >
+                {copy.agent.mappingNewFieldWhat}
+              </label>
+              <textarea
+                id="new-field-what"
+                value={what}
+                rows={2}
+                disabled={busy}
+                placeholder={copy.agent.mappingNewFieldWhatPlaceholder}
+                onChange={(e) => setWhat(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="new-field-type"
+                className="block text-xs font-medium text-stone-700"
+              >
+                {copy.agent.mappingNewFieldType}
+              </label>
+              <select
+                id="new-field-type"
+                value={type}
+                disabled={busy}
+                onChange={(e) => setType(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              >
+                <option value="">{copy.agent.mappingNothing}</option>
+                <option value="string">Text</option>
+                <option value="decimal">A number</option>
+                <option value="date">A date</option>
+                <option value="list">One of a fixed set of values</option>
+                <option value="Y/N">Yes or no</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </fieldset>
+
+      <DialogButtons
+        onCancel={onCancel}
+        busy={busy}
+        disabled={!valid}
+        confirmLabel={
+          mode === "use_existing"
+            ? copy.agent.mappingUseExistingConfirm
+            : copy.agent.mappingRequestConfirm
+        }
+        onConfirm={() =>
+          onSubmit(
+            mode === "use_existing"
+              ? {
+                  source_file: row.source_file,
+                  source_column: row.source_column,
+                  action: "use_existing",
+                  target_field: chosen,
+                }
+              : {
+                  source_file: row.source_file,
+                  source_column: row.source_column,
+                  action: "request_field",
+                  field_name: name.trim(),
+                  description: what.trim(),
+                  data_type: type,
+                },
+          )
+        }
+      />
+    </Modal>
   );
 }
 
@@ -1350,21 +1695,43 @@ function MappingPanel({
  * One line: the name truncates, the link does not, so "Answer this" is never
  * pushed off the row by a long field name.
  */
-function MappingFieldCell({ row }: { row: MappingRow }) {
-  const proposed = !row.canonical_field && Boolean(row.suggested_label);
-  const label = proposed ? row.suggested_label : row.field_label;
+function MappingFieldCell({
+  row,
+  onGiveItAField,
+}: {
+  row: MappingRow;
+  onGiveItAField?: () => void;
+}) {
+  // A column that matched nothing used to render "—" and stop there: the
+  // operator knew what it was and the screen had nowhere for them to say so.
+  // On a first delivery that is most of the tape.
+  const unmapped = row.state === "unused";
+  const requested = unmapped ? row.requested_field : "";
+  // AN OPEN REQUEST SETTLES WHAT THIS CELL IS ABOUT. A model's guess and an
+  // operator's ask are both answers to "what is this column?", and the
+  // operator's is the later and the deciding one — they have said Trakt has no
+  // field for it. Showing both put four things on one row, which overran the
+  // cell and printed the action on top of the next column.
+  const proposed = !requested && !row.canonical_field
+    && Boolean(row.suggested_label);
+  const label = requested ? "" : proposed ? row.suggested_label : row.field_label;
   return (
     <div className="flex min-w-0 items-baseline gap-2">
-      <span
-        className={clsx("truncate", proposed && "italic text-stone-500")}
-        title={
-          [label, proposed ? row.basis_label : "", row.suggested_reason]
-            .filter(Boolean)
-            .join(" — ") || undefined
-        }
-      >
-        {label || copy.agent.mappingNothing}
-      </span>
+      {/* The em-dash stands for "no field", so it is dropped where something
+          else in the cell already says what became of the column: "— Requested:
+          broker_code" reads as a field called nothing AND a field asked for. */}
+      {(label || !requested) && (
+        <span
+          className={clsx("truncate", proposed && "italic text-stone-500")}
+          title={
+            [label, proposed ? row.basis_label : "", row.suggested_reason]
+              .filter(Boolean)
+              .join(" — ") || undefined
+          }
+        >
+          {label || copy.agent.mappingNothing}
+        </span>
+      )}
       {proposed && (
         <span className="shrink-0 rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-700">
           {copy.agent.mappingProposed}
@@ -1381,6 +1748,23 @@ function MappingFieldCell({ row }: { row: MappingRow }) {
             ? copy.agent.mappingChange
             : copy.agent.mappingAnswer}
         </a>
+      )}
+      {requested && (
+        <span
+          className="min-w-0 truncate rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+          title={copy.agent.mappingRequestNewHelp}
+        >
+          {copy.agent.mappingRequestedChip(requested)}
+        </span>
+      )}
+      {unmapped && onGiveItAField && (
+        <button
+          type="button"
+          onClick={onGiveItAField}
+          className="shrink-0 text-xs font-medium text-blue-700 underline"
+        >
+          {copy.agent.mappingUnmappedAction}
+        </button>
       )}
     </div>
   );
