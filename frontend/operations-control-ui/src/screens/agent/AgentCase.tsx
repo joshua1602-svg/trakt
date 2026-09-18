@@ -15,6 +15,7 @@ import type {
   AgentStatus,
   DecisionCard,
   MappingOverview,
+  MappingRow,
   ReadinessCriterion,
   StreamSummary,
 } from "@/api/agentTypes";
@@ -471,6 +472,10 @@ export function AgentCaseScreen() {
 
   return (
     <Page
+      // The case screen's subject is a TABLE — every source column in the
+      // delivery and what Trakt read it as. At the reading width that table had
+      // 528px for five columns and every row wrapped onto two lines.
+      width="wide"
       title={onboarding.client_name || status.case_ref}
       subtitle={[status.case_ref, facts.portfolio_id, humanize(facts.asset_class)]
         .filter(Boolean)
@@ -502,7 +507,16 @@ export function AgentCaseScreen() {
 
       <CaseSummaryCard status={status} currentStageLabel={current?.label ?? ""} />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <div
+        // The status rail costs the main column 22rem, and the main column's
+        // job is the mapping table. The rail therefore appears only once there
+        // is room for BOTH, which the stock breakpoints get wrong here: the
+        // shell's navigation already takes ~264px, so `lg` left the table
+        // 824px and even `2xl` left it 808px — both under the 960px at which
+        // the headings and the widest status chip stop clipping. Measured, not
+        // guessed; the threshold is where the arithmetic actually lands.
+        className="mt-6 grid gap-6 min-[1700px]:grid-cols-[minmax(0,1fr)_22rem]"
+      >
         <div className="space-y-4">
           {openDecisions.length > 0 && (
             <Panel title={copy.agent.decisionsHeading}>
@@ -1138,21 +1152,69 @@ function MappingPanel({ mapping, live }: { mapping: MappingOverview; live: boole
           {mapping.files
             .filter((file) => rows.some((row) => row.source_file === file.name))
             .map((file) => (
-              <section key={file.name} className="mt-4">
-                <h4 className="text-sm font-semibold text-stone-900">{file.name}</h4>
-                <p className="text-xs text-stone-500">
-                  {file.primary
-                    ? copy.agent.mappingPrimaryFile
-                    : copy.agent.mappingSecondaryFile}
-                </p>
-                <div className="mt-2 overflow-x-auto">
-                  <table className="w-full text-left text-sm">
+              <section key={file.name} className="mt-6 first:mt-4">
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <h4 className="text-sm font-semibold text-stone-900">{file.name}</h4>
+                  <span
+                    className={clsx(
+                      "rounded-full px-2 py-0.5 text-xs font-medium",
+                      file.primary
+                        ? "bg-stone-900 text-white"
+                        : "bg-stone-100 text-stone-600",
+                    )}
+                  >
+                    {file.primary
+                      ? copy.agent.mappingPrimaryFile
+                      : copy.agent.mappingSecondaryFile}
+                  </span>
+                  <span className="text-xs tabular-nums text-stone-500">
+                    {copy.agent.mappingFileColumns(file.columns)}
+                  </span>
+                </div>
+                {/* ONE ROW, ONE LINE. `table-fixed` plus an explicit width per
+                    column is what makes that true: without it the browser
+                    sizes columns from their content, so one long header or one
+                    long evidence sentence re-flows the whole table and every
+                    row wraps. Each cell then truncates and carries its full
+                    text in `title`, so nothing is lost — it is one hover away
+                    rather than one line down.
+
+                    `min-w` keeps the promise on a narrow viewport: the table
+                    scrolls sideways inside its own box instead of wrapping,
+                    because a row split across two lines is the defect being
+                    fixed and a scrollbar is not. */}
+                <div className="mt-2 overflow-x-auto rounded-xl border border-stone-200">
+                  <table className="w-full min-w-[60rem] table-fixed text-left text-sm">
+                    {/* Proportions measured against the rendered table, not
+                        guessed: at 16% the status chip truncated to "Matched
+                        automa…", at 19% to "Weak match, nothing a…", and at 9%
+                        the confidence heading itself was clipped to
+                        "CONFIDENC".
+
+                        What gets the room is what an operator triages on — the
+                        column's own name, what Trakt read it as, and the
+                        status. The evidence is the justification for those
+                        three and is the one that may truncate, because it is
+                        a hover away and they are not. */}
+                    <colgroup>
+                      <col className="w-[22%]" />
+                      <col className="w-[22%]" />
+                      <col className="w-[24%]" />
+                      <col className="w-[21%]" />
+                      <col className="w-[11%]" />
+                    </colgroup>
                     <thead>
-                      <tr className="border-b border-stone-200 text-xs uppercase tracking-wide text-stone-400">
-                        <th className="py-2 pr-3 font-medium">{copy.agent.mappingColumn}</th>
-                        <th className="py-2 pr-3 font-medium">{copy.agent.mappingField}</th>
-                        <th className="py-2 pr-3 font-medium">{copy.agent.mappingBasis}</th>
-                        <th className="py-2 font-medium">{copy.agent.mappingConfidence}</th>
+                      {/* Sticky against the PAGE scroll: a real tape is
+                          seventy to a hundred columns, and by row forty an
+                          operator is reading five unlabelled values. */}
+                      <tr className="sticky top-0 z-10 border-b border-stone-200 bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
+                        <th className="truncate px-3 py-2 font-medium">{copy.agent.mappingColumn}</th>
+                        <th className="truncate px-3 py-2 font-medium">{copy.agent.mappingState}</th>
+                        <th className="truncate px-3 py-2 font-medium">{copy.agent.mappingField}</th>
+                        <th className="truncate px-3 py-2 font-medium">{copy.agent.mappingBasis}</th>
+                        <th className="truncate px-3 py-2 text-right font-medium">
+                          {copy.agent.mappingConfidence}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1161,39 +1223,38 @@ function MappingPanel({ mapping, live }: { mapping: MappingOverview; live: boole
                         .map((row) => (
                           <tr
                             key={`${row.source_file}:${row.source_column}`}
-                            className="border-b border-stone-100 align-top last:border-0"
+                            className="border-b border-stone-100 last:border-0 hover:bg-stone-50"
                           >
-                            <td className="py-2 pr-3">
-                              <span className="font-medium text-stone-900">
-                                {row.source_column || copy.agent.mappingNothing}
-                              </span>
+                            <td
+                              className="truncate px-3 py-2.5 font-medium text-stone-900"
+                              title={row.source_column || undefined}
+                            >
+                              {row.source_column || copy.agent.mappingNothing}
+                            </td>
+                            <td className="px-3 py-2.5">
                               <span
                                 className={clsx(
-                                  "ml-2 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
+                                  "inline-block max-w-full truncate whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium",
                                   MAPPING_STATE_TONES[row.state],
                                 )}
+                                title={row.state_label}
                               >
                                 {row.state_label}
                               </span>
                             </td>
-                            <td className="py-2 pr-3 text-stone-700">
-                              {row.field_label || copy.agent.mappingNothing}
-                              {row.decision_id && (
-                                <a
-                                  href={`#decision-${row.decision_id}`}
-                                  className="ml-2 text-xs font-medium text-blue-700 underline"
-                                >
-                                  {copy.agent.mappingAnswer}
-                                </a>
-                              )}
+                            <td className="px-3 py-2.5 text-stone-700">
+                              <MappingFieldCell row={row} />
                             </td>
-                            <td className="py-2 pr-3 text-xs text-stone-500">
-                              {row.tier_label}
+                            <td
+                              className="truncate px-3 py-2.5 text-xs text-stone-500"
+                              title={[row.tier_label, row.note].filter(Boolean).join(" — ")}
+                            >
+                              <span>{row.tier_label}</span>
                               {row.note && (
-                                <span className="block text-stone-400">{row.note}</span>
+                                <span className="text-stone-400"> — {row.note}</span>
                               )}
                             </td>
-                            <td className="py-2 text-stone-600">
+                            <td className="px-3 py-2.5 text-right tabular-nums text-stone-600">
                               {row.confidence === null
                                 ? copy.agent.mappingNothing
                                 : `${Math.round(row.confidence * 100)}%`}
@@ -1208,6 +1269,53 @@ function MappingPanel({ mapping, live }: { mapping: MappingOverview; live: boole
         </>
       )}
     </Panel>
+  );
+}
+
+/**
+ * What Trakt reads a column as — and, where it could not, what a model
+ * proposed instead.
+ *
+ * A column the deterministic tiers could not place has no canonical field, so
+ * this cell used to render "—" for it. Now that the model is wired into the
+ * mapping stage that is the one row an operator most needs to see: the
+ * proposal is on the run and was visible nowhere. It is shown as a PROPOSAL —
+ * in the muted voice, with the basis beside it — because a suggestion set in
+ * the same type as a contract-backed match is the model writing mappings by
+ * another route.
+ *
+ * One line: the name truncates, the link does not, so "Answer this" is never
+ * pushed off the row by a long field name.
+ */
+function MappingFieldCell({ row }: { row: MappingRow }) {
+  const proposed = !row.canonical_field && Boolean(row.suggested_label);
+  const label = proposed ? row.suggested_label : row.field_label;
+  return (
+    <div className="flex min-w-0 items-baseline gap-2">
+      <span
+        className={clsx("truncate", proposed && "italic text-stone-500")}
+        title={
+          [label, proposed ? row.basis_label : "", row.suggested_reason]
+            .filter(Boolean)
+            .join(" — ") || undefined
+        }
+      >
+        {label || copy.agent.mappingNothing}
+      </span>
+      {proposed && (
+        <span className="shrink-0 rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-700">
+          {copy.agent.mappingProposed}
+        </span>
+      )}
+      {row.decision_id && (
+        <a
+          href={`#decision-${row.decision_id}`}
+          className="shrink-0 text-xs font-medium text-blue-700 underline"
+        >
+          {copy.agent.mappingAnswer}
+        </a>
+      )}
+    </div>
   );
 }
 
@@ -2286,8 +2394,10 @@ function DecisionCardView({
       id={`decision-${decision.decision_id}`}
       className="scroll-mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4"
     >
-      <p className="text-sm font-semibold text-stone-900">{decision.title}</p>
-      <p className="mt-1 text-sm text-stone-700">{decision.question}</p>
+      {/* The card runs the full width of a wide screen; its PROSE does not.
+          A question set across 1100px is a question nobody finishes reading. */}
+      <p className="max-w-3xl text-sm font-semibold text-stone-900">{decision.title}</p>
+      <p className="mt-1 max-w-3xl text-sm text-stone-700">{decision.question}</p>
 
       <dl className="mt-3 space-y-1 text-sm">
         <Detail label={copy.agent.decisionIssue}>{decision.issue}</Detail>

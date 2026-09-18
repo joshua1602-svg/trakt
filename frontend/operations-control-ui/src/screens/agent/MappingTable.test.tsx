@@ -167,6 +167,67 @@ describe("OCC Agent — every column is accounted for", () => {
     expect(within(rowFor("Prp Ref")).queryByRole("link")).toBeNull();
   });
 
+  /* One row, one line.
+   *
+   * The reported defect, in the operator's words: "it is too narrow so one row
+   * falls onto two lines". The cause was structural — the table sat in a
+   * 1024px reading measure, inside a two-column grid whose rail took 24rem,
+   * leaving 528px for five columns of a hundred-column tape.
+   *
+   * jsdom does no layout, so the rendered height cannot be asserted here; that
+   * was measured against a real browser across 1024–2560px, where every row
+   * comes out at a uniform 46px with nothing clipped. What IS assertable here
+   * is the structure that produces it, and the structure is what a careless
+   * edit would undo: a fixed layout, and one fact per cell.
+   */
+  it("gives every fact its own cell rather than stacking them", async () => {
+    /* The status used to be a pill appended to the column name. Two facts in
+       one cell is what made the longest rows wrap, and a status is the thing
+       an operator scans down a column — it has to line up. */
+    await afterTheRun();
+    const cells = within(rowFor("Val Dt")).getAllByRole("cell");
+    expect(cells).toHaveLength(5);
+    expect(cells[0]).toHaveTextContent("Val Dt");
+    expect(cells[1]).toHaveTextContent("Needs you");
+    expect(cells[0]).not.toHaveTextContent("Needs you");
+  });
+
+  it("lays the columns out to a fixed width rather than to their content", async () => {
+    /* Without this one long evidence sentence re-flows the whole table and
+       every row wraps — which is the defect, arriving by a different door. */
+    await afterTheRun();
+    const el = within(table()).getAllByRole("table")[0];
+    expect(el.className).toContain("table-fixed");
+    expect(el.querySelectorAll("colgroup col")).toHaveLength(5);
+  });
+
+  /* What a model proposed for a column nothing matched.
+   *
+   * With the model wired into the mapping stage this is the row an operator
+   * most needs, and the table rendered "—" for it: the proposal was on the run
+   * and visible nowhere. */
+  it("shows what a model proposed for a column nothing matched", async () => {
+    await afterTheRun();
+    expect(within(rowFor("Internal Ref")).getByText(/loan identifier/)).
+      toBeInTheDocument();
+  });
+
+  it("marks a proposal as a proposal, not as a mapping", async () => {
+    /* A suggestion set in the same type as a contract-backed match is the
+       model writing mappings by another route. */
+    await afterTheRun();
+    expect(within(rowFor("Internal Ref")).getByText(copy.agent.mappingProposed)).
+      toBeInTheDocument();
+    expect(within(rowFor("Internal Ref")).getByText("Not used")).toBeInTheDocument();
+  });
+
+  it("does not count a proposal as a column feeding a field", async () => {
+    /* Counting it would make a run with an unanswered proposal read as more
+       complete than one without. */
+    await afterTheRun();
+    expect(within(table()).getByText(copy.agent.mappingCount(5, 8))).toBeInTheDocument();
+  });
+
   it("says nothing has been read yet before the run", async () => {
     const user = userEvent.setup();
     renderApp("/agent");
