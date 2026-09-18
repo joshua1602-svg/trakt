@@ -220,6 +220,27 @@ class SyntheticRun:
     #: must be able to see the origin of — and because a model that quietly did
     #: not run looks exactly like one that had nothing to say.
     llm: Dict[str, Any] = field(default_factory=dict)
+    #: Canonical fields an operator asked for because a column in the delivery
+    #: has no field to go to. Requests, not fields: ``operations_control.rules``
+    #: states that the core field registry is never written from here, and
+    #: adding a canonical field is a versioned system-configuration change with
+    #: its own approval. Kept on the run so the ask is a governed record with a
+    #: named requester and the column that prompted it, rather than a note in
+    #: somebody's inbox.
+    field_requests: List[Dict[str, Any]] = field(default_factory=list)
+    #: THE OPERATOR'S WORKING COPY OF THE MAPPING TABLE.
+    #:
+    #: One entry per column they have been through — the field they confirmed,
+    #: the field they changed it to, or their decision not to use it — held as
+    #: a DRAFT. Nothing here has resolved a decision, promoted a rule, or
+    #: caused a rerun; every entry can be changed or taken back, and a hundred
+    #: and fifty columns are read and answered over an afternoon rather than in
+    #: one sitting. ``confirm_mappings`` is the single act that applies the lot.
+    #:
+    #: Persisted rather than held in the browser because the reading is the
+    #: work: a lost tab or a hard refresh must not cost an operator an
+    #: afternoon of it. Persisted is not applied.
+    staged_mappings: List[Dict[str, Any]] = field(default_factory=list)
     #: The product an operator confirmed this book to be. Until it is set, the
     #: product profile excuses nothing — the platform proposes a profile on the
     #: asset class alone and deliberately does not apply one.

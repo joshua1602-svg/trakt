@@ -72,8 +72,21 @@ function table(): HTMLElement {
   return screen.getByText(copy.agent.mappingHeading).closest("section") as HTMLElement;
 }
 
-function rowFor(column: string): HTMLElement {
-  return within(table()).getByText(column).closest("tr") as HTMLElement;
+/** The section for one file of the pack. */
+function fileSection(name: string): HTMLElement {
+  return within(table()).getByText(name).closest("section") as HTMLElement;
+}
+
+/**
+ * One row, named the way the server names a mapping: by FILE and column.
+ *
+ * A pack carries the same column name in more than one file — "Val Dt" is in
+ * the loan tape and the property extract — so a helper that looked a row up by
+ * name alone found two and threw. That is the same collision the decision
+ * lookup had, arriving in the tests.
+ */
+function rowFor(column: string, file = "loan_tape.csv"): HTMLElement {
+  return within(fileSection(file)).getByText(column).closest("tr") as HTMLElement;
 }
 
 describe("OCC Agent — every column is accounted for", () => {
@@ -112,21 +125,33 @@ describe("OCC Agent — every column is accounted for", () => {
   });
 
   it("counts what is feeding a field, not what was proposed", async () => {
-    /* Two of eight. On a first delivery the three confident matches are
-       PROPOSED and feed nothing until approved; `Val Dt` is a question and
-       `Prp Ref` a weak match nobody was asked about. What is left is the one
-       column an operator confirmed and the one on a secondary file. */
+    /* One of ten. On a first delivery EVERY confident match is proposed and
+       feeds nothing until approved — in the property extract as much as in the
+       tape, because what an operator approves becomes a rule for the whole
+       book. `Val Dt` and `Prp Ref` are questions. What is left feeding a field
+       is the one column an operator has already confirmed. */
     await afterTheRun();
-    expect(within(table()).getByText(copy.agent.mappingCount(2, 8))).toBeInTheDocument();
+    expect(within(table()).getByText(copy.agent.mappingCount(1, 10))).toBeInTheDocument();
   });
 
   it("distinguishes what an operator confirmed from what Trakt decided", async () => {
     await afterTheRun();
     expect(within(rowFor("Prop Val")).getByText("You confirmed it")).toBeInTheDocument();
-    // On a first delivery the primary tape's confident matches are proposed,
-    // so what remains "matched automatically" is the secondary file — which
-    // the canonical tape is not built from and so raises nothing to approve.
-    expect(within(rowFor("property_value")).getByText("Matched automatically")).
+  });
+
+  it("settles nothing on its own on a first delivery, in any file", async () => {
+    /* The reported defect, in the operator's words: "Why are some fields being
+       proposed, while other fields are still automatically matched? ALL fields
+       should either be proposed, or unmapped."
+
+       The cause was that only the primary tape's columns were put to a person;
+       every other file's were matched and reported as settled. So a hundred and
+       fifty three columns came back reading two different ways, and the
+       thirty-six that read "matched automatically" were settled by exactly the
+       alias registry a first onboarding exists to stop trusting unread. */
+    await afterTheRun();
+    expect(within(table()).queryByText("Matched automatically")).toBeNull();
+    expect(within(rowFor("property_value", "property_tape.csv")).getByText("Proposed")).
       toBeInTheDocument();
   });
 
@@ -141,18 +166,20 @@ describe("OCC Agent — every column is accounted for", () => {
       .getAllByRole("row")
       .slice(1)
       .map((row) => row.querySelector("td")?.textContent ?? "");
-    // Both unanswered questions come before anything settled.
-    expect(columns.slice(0, 2).join(" ")).toContain("Val Dt");
-    expect(columns.slice(0, 2).join(" ")).toContain("Current Balance");
+    // Every unanswered question comes before anything settled: the two
+    // columns of the ambiguity, and the weak match.
+    expect(columns.slice(0, 3).join(" ")).toContain("Val Dt");
+    expect(columns.slice(0, 3).join(" ")).toContain("Current Balance");
+    expect(columns.slice(0, 3).join(" ")).toContain("Principal Balance");
   });
 
   it("filters to one kind and back", async () => {
     const user = await afterTheRun();
-    await user.click(within(table()).getByRole("button", { name: /Needs you 2/ }));
+    await user.click(within(table()).getByRole("button", { name: /Needs you 4/ }));
     await waitFor(() => expect(within(table()).queryByText("loan_id")).not.toBeInTheDocument());
-    expect(within(table()).getByText("Val Dt")).toBeInTheDocument();
+    expect(within(fileSection("loan_tape.csv")).getByText("Val Dt")).toBeInTheDocument();
 
-    await user.click(within(table()).getByRole("button", { name: /All 8/ }));
+    await user.click(within(table()).getByRole("button", { name: /All 10/ }));
     await waitFor(() => expect(within(table()).getByText("loan_id")).toBeInTheDocument());
   });
 
@@ -176,13 +203,30 @@ describe("OCC Agent — every column is accounted for", () => {
     expect(within(table()).getByText(copy.agent.mappingSecondaryFile)).toBeInTheDocument();
   });
 
-  it("does not claim a question is waiting on a file the tape is not built from", async () => {
-    /* `Prp Ref` matches weakly, but no decision is raised for a secondary
-       file — so "Needs you" would point at a question that does not exist. */
+  it("asks about a weak match in a file the tape is not built from", async () => {
+    /* It used to read "Weak match, nothing asked" and have nothing to click.
+       The canonical tape is not built from the property extract, but a mapping
+       an operator approves is promoted to a rule scoped to the BOOK, and
+       production consolidates a loan-domain field whichever file carries it —
+       so a column here is worth a person's answer exactly as much as one in
+       the tape. */
     await afterTheRun();
-    expect(within(rowFor("Prp Ref")).getByText("Weak match, nothing asked")).
+    const row = rowFor("Prp Ref", "property_tape.csv");
+    expect(within(row).getByText("Needs you")).toBeInTheDocument();
+    expect(
+      within(row).getByRole("button", { name: copy.agent.mappingRowConfirm }),
+    ).toBeInTheDocument();
+  });
+
+  it("gives the same column name in two files its own question", async () => {
+    /* The decision lookup keyed on the column NAME alone, so a question raised
+       about the tape's "Val Dt" marked the property extract's "Val Dt" too:
+       two rows pointing at one question, one of which it was not about. */
+    await afterTheRun();
+    expect(within(rowFor("Val Dt", "loan_tape.csv")).getByText("Needs you")).
       toBeInTheDocument();
-    expect(within(rowFor("Prp Ref")).queryByRole("link")).toBeNull();
+    expect(within(rowFor("Val Dt", "property_tape.csv")).getByText("Proposed")).
+      toBeInTheDocument();
   });
 
   /* One row, one line.
@@ -204,7 +248,9 @@ describe("OCC Agent — every column is accounted for", () => {
        an operator scans down a column — it has to line up. */
     await afterTheRun();
     const cells = within(rowFor("Val Dt")).getAllByRole("cell");
-    expect(cells).toHaveLength(5);
+    // Six: the operator ACTS on this table, and an action crammed into the
+    // field cell overran it and printed on top of the next column.
+    expect(cells).toHaveLength(6);
     expect(cells[0]).toHaveTextContent("Val Dt");
     expect(cells[1]).toHaveTextContent("Needs you");
     expect(cells[0]).not.toHaveTextContent("Needs you");
@@ -216,7 +262,7 @@ describe("OCC Agent — every column is accounted for", () => {
     await afterTheRun();
     const el = within(table()).getAllByRole("table")[0];
     expect(el.className).toContain("table-fixed");
-    expect(el.querySelectorAll("colgroup col")).toHaveLength(5);
+    expect(el.querySelectorAll("colgroup col")).toHaveLength(6);
   });
 
   /* What a model proposed for a column nothing matched.
@@ -261,38 +307,48 @@ describe("OCC Agent — every column is accounted for", () => {
 
   it("offers one act for the whole set, and says what it would settle", async () => {
     await afterTheRun();
-    expect(within(table()).getByRole("button", { name: /Approve 2 mappings/ })).
+    expect(within(table()).getByRole("button", { name: /Confirm 4 mappings/ })).
       toBeInTheDocument();
   });
 
-  it("does not also raise a card for every proposed column", async () => {
-    /* The whole point of approving the set. The one genuine question keeps its
-       card; the three proposals do not, because seventy cards beside a table
-       listing the same seventy columns is the friction, not the governance. */
+  it("raises no card at all for a question about a column", async () => {
+    /* Every question about a source column is answered on the table now: the
+       proposals, the weak matches and the ambiguities alike. Not only to avoid
+       seventy cards beside a table listing the same seventy columns — the
+       table is a DRAFT an operator works down and commits in one act, and a
+       card that applied its answer on click would be a second route to the
+       same column with different rules. */
     await afterTheRun();
-    const panel = screen.getByText(copy.agent.decisionsHeading).closest("section");
-    // Two genuine questions keep their cards — the weak match and the
-    // ambiguity — and the two proposals do not.
-    expect(within(panel as HTMLElement).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.queryByText(copy.agent.decisionsHeading)).toBeNull();
+    // And the table is carrying all seven of them.
+    const counts = within(table());
+    expect(counts.getByRole("button", { name: /Needs you 4/ })).toBeInTheDocument();
+    expect(counts.getByRole("button", { name: /Proposed 4/ })).toBeInTheDocument();
   });
 
   it("will not approve the set while a real question is unanswered", async () => {
     /* A weak match is answered on its own. Offering to settle the set while one
        waits would promise a run that cannot move. */
     await afterTheRun();
-    expect(within(table()).getByRole("button", { name: /Approve 2 mappings/ })).
+    expect(within(table()).getByRole("button", { name: /Confirm 4 mappings/ })).
       toBeDisabled();
     expect(within(table()).getByText(/need an answer first/)).toBeInTheDocument();
   });
 
-  it("offers to change a proposal, not to answer it", async () => {
-    /* Different acts, different words: a proposal is already right or it is
-       not, and a question has no answer yet. */
+  it("offers the same three acts on a proposal and on a question", async () => {
+    /* Both are "what is this column?", and both are answered by confirming
+       what Trakt read, naming a different field, or setting it aside. The
+       difference is what happens if you do NOTHING: a proposal commits as
+       shown, a question refuses the commit. */
     await afterTheRun();
-    expect(within(rowFor("Int Rate")).getByText(copy.agent.mappingChange)).
-      toBeInTheDocument();
-    expect(within(rowFor("Val Dt")).getByText(copy.agent.mappingAnswer)).
-      toBeInTheDocument();
+    for (const row of [rowFor("Int Rate"), rowFor("Val Dt")]) {
+      expect(within(row).getByRole("button", { name: copy.agent.mappingRowConfirm })).
+        toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: copy.agent.mappingRowChange })).
+        toBeInTheDocument();
+      expect(within(row).getByRole("button", { name: copy.agent.mappingRowNotUsed })).
+        toBeInTheDocument();
+    }
   });
 
   it("does not re-propose a column a person already confirmed", async () => {
@@ -323,6 +379,310 @@ describe("OCC Agent — every column is accounted for", () => {
   });
 });
 
+/* READING THE TABLE IS NOT COMMITTING IT.
+ *
+ * "Workflow should be operator confirms each field and then there is a final
+ * 'confirm' all changes button which is what persists. Before that point the
+ * user can change their confirmed fields."
+ *
+ * Every answer used to apply itself, and the moment the last blocking decision
+ * cleared the whole onboarding reran. On a hundred-and-fifty-column tape that
+ * makes reading the table an irreversible walk.
+ *
+ * What these assert is the seam: a per-row answer changes the screen and
+ * nothing else, and one button at the top applies the lot.
+ */
+describe("OCC Agent — the table is a draft until it is confirmed", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  async function confirmRow(user: Awaited<ReturnType<typeof afterTheRun>>,
+                            column: string, file?: string) {
+    const button = within(rowFor(column, file)).getByRole("button", {
+      name: copy.agent.mappingRowConfirm,
+    });
+    await waitFor(() => expect(button).toBeEnabled());
+    await user.click(button);
+    await waitFor(() =>
+      expect(within(rowFor(column, file)).getByText("Ready to confirm")).
+        toBeInTheDocument(),
+    );
+  }
+
+  it("marks a confirmed row ready, not done", async () => {
+    /* "You confirmed it" is what a row says AFTER the set was applied. A row
+       that said it before would tell an operator the column is settled when
+       it is still theirs to change. */
+    const user = await afterTheRun();
+    await confirmRow(user, "Int Rate");
+    const row = rowFor("Int Rate");
+    expect(within(row).getByText("Ready to confirm")).toBeInTheDocument();
+    expect(within(row).getByText(copy.agent.mappingStagedConfirm)).
+      toBeInTheDocument();
+  });
+
+  it("lets an answer be taken back", async () => {
+    const user = await afterTheRun();
+    await confirmRow(user, "Int Rate");
+    const undo = within(rowFor("Int Rate")).getByRole("button", {
+      name: copy.agent.mappingRowUndo,
+    });
+    await waitFor(() => expect(undo).toBeEnabled());
+    await user.click(undo);
+    await waitFor(() =>
+      expect(within(rowFor("Int Rate")).getByText("Proposed")).toBeInTheDocument(),
+    );
+  });
+
+  it("does not move the run when the last answer is given", async () => {
+    /* The commit is the only thing that moves it. A screen that settled the
+       run on the last staged row would be built against a workflow the server
+       does not have. */
+    const user = await afterTheRun();
+    await confirmRow(user, "Int Rate");
+    expect(screen.queryByText(copy.agent.mappingCommittedToast(4))).toBeNull();
+    expect(within(table()).getByRole("button", { name: /Confirm \d+ mapping/ })).
+      toBeInTheDocument();
+  });
+
+  it("says what the button would do, not just that it would do something", async () => {
+    /* "Confirm 26" is 26 of what. An operator needs to know how many they went
+       through and how many commit exactly as Trakt read them. */
+    const user = await afterTheRun();
+    await confirmRow(user, "Int Rate");
+    expect(within(table()).getByText(copy.agent.mappingCommitBreakdown(1, 3))).
+      toBeInTheDocument();
+  });
+
+  it("refuses the commit while a real question has no answer", async () => {
+    await afterTheRun();
+    expect(within(table()).getByRole("button", { name: /Confirm 4 mappings/ })).
+      toBeDisabled();
+    expect(within(table()).getByText(/need an answer first/)).toBeInTheDocument();
+  });
+
+  it("commits everything once the questions are answered", async () => {
+    const user = await afterTheRun();
+    // The two weak matches, and the ambiguity settled by keeping one column
+    // and setting the other aside.
+    await confirmRow(user, "Val Dt");
+    await confirmRow(user, "Prp Ref", "property_tape.csv");
+    // The ambiguity: one column wins and the other is set aside. "Confirm
+    // both" is not an answer to "which of these is it?".
+    await confirmRow(user, "Current Balance");
+    const aside = within(rowFor("Principal Balance")).getByRole("button", {
+      name: copy.agent.mappingRowNotUsed,
+    });
+    await waitFor(() => expect(aside).toBeEnabled());
+    await user.click(aside);
+    await waitFor(() =>
+      expect(within(rowFor("Principal Balance")).getByText("Ready to confirm")).
+        toBeInTheDocument(),
+    );
+    const commit = within(table()).getByRole("button", {
+      name: /Confirm \d+ mappings/,
+    });
+    await waitFor(() => expect(commit).toBeEnabled());
+    await user.click(commit);
+    await waitFor(() =>
+      expect(within(rowFor("Int Rate")).getByText("You confirmed it")).
+        toBeInTheDocument(),
+    );
+  });
+
+  it("flags a field that more than one column claims", async () => {
+    /* Every file's columns are proposed now, so two extracts routinely claim
+       one field — and an operator confirming the set is confirming all of
+       them. Reported, not blocked: production reconciles two files carrying
+       the same fact by source precedence. */
+    await afterTheRun();
+    expect(within(rowFor("Val Dt", "property_tape.csv")).
+      getByText(copy.agent.mappingContested(2))).toBeInTheDocument();
+    expect(within(table()).getByRole("button", {
+      name: new RegExp(copy.agent.mappingContestedFilter),
+    })).toBeInTheDocument();
+  });
+
+  it("stops flagging a clash the operator has just resolved", async () => {
+    /* The one piece of feedback they need is whether the duplicate is dealt
+       with. Reading the report instead of the draft, both columns would go on
+       saying "2 columns claim this" after one was set aside. */
+    const user = await afterTheRun();
+    expect(within(rowFor("Current Balance")).getByText(copy.agent.mappingContested(2))).
+      toBeInTheDocument();
+    const aside = within(rowFor("Principal Balance")).getByRole("button", {
+      name: copy.agent.mappingRowNotUsed,
+    });
+    await waitFor(() => expect(aside).toBeEnabled());
+    await user.click(aside);
+    await waitFor(() =>
+      expect(within(rowFor("Current Balance")).
+        queryByText(copy.agent.mappingContested(2))).toBeNull(),
+    );
+  });
+
+  it("says on every row what kind of reading it is", async () => {
+    /* "Is this an alias, a model's guess, or something else?" is the first
+       question an operator asks of a row, and the answer has to be the same
+       width and in the same place on all hundred and fifty. */
+    await afterTheRun();
+    expect(within(rowFor("Current Balance")).getByText("Known alias")).
+      toBeInTheDocument();
+    expect(within(rowFor("loan_id")).getByText("Same name")).toBeInTheDocument();
+    expect(within(rowFor("Val Dt")).getByText("Similar name")).toBeInTheDocument();
+    // The row a model proposed a field for. Its TIER is "unmapped", because
+    // the deterministic mapper is what failed — rendering that alone put
+    // "Nothing Trakt reports on resembles this column" beside a chip saying a
+    // model had proposed one.
+    expect(within(rowFor("Internal Ref")).getByText("A model's suggestion")).
+      toBeInTheDocument();
+  });
+});
+
+/* A COLUMN THAT MATCHED NOTHING USED TO BE A DEAD END.
+ *
+ * "For unmapped fields, there should still be an option to i) add to field
+ * registry as a new entry, or ii) add to an existing field in the field
+ * registry as an alias."
+ *
+ * The table labelled it "Not used" and stopped there. On a first delivery that
+ * is most of the tape — eighty-nine of a hundred and fifty three for the first
+ * client through — and an operator who KNEW what the column was had nowhere to
+ * say so.
+ *
+ * The two acts are not the same act, and these tests hold them apart. Naming a
+ * field Trakt already has settles the column here and now. Asking for a field
+ * it does not have changes what every client's report is written in, so it is
+ * recorded as a request and the column stays unused.
+ */
+describe("OCC Agent — a column that matched nothing has somewhere to go", () => {
+  beforeEach(() => {
+    vi.stubEnv("VITE_OPS_MODE", "mock");
+    vi.stubEnv("VITE_OCC_AGENT_SYNTHETIC_ENABLED", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  async function openTheDialog() {
+    const user = await afterTheRun();
+    await user.click(
+      within(rowFor("Internal Ref")).getByRole("button", {
+        name: copy.agent.mappingUnmappedAction,
+      }),
+    );
+    await screen.findByText(copy.agent.mappingUnmappedHeading("Internal Ref"));
+    return user;
+  }
+
+  it("offers an unused column somewhere to go", async () => {
+    await afterTheRun();
+    expect(
+      within(rowFor("Internal Ref")).getByRole("button", {
+        name: copy.agent.mappingUnmappedAction,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers nothing of the sort on a column that already has a field", async () => {
+    /* The action belongs to a column with no field. On one that has one it
+       would be a second, ungoverned way to change a mapping — the governed way
+       is answering its decision. */
+    await afterTheRun();
+    expect(
+      within(rowFor("Int Rate")).queryByRole("button", {
+        name: copy.agent.mappingUnmappedAction,
+      }),
+    ).toBeNull();
+  });
+
+  it("maps it to a field Trakt already has", async () => {
+    const user = await openTheDialog();
+    // The picker holds still until the field list has arrived: a box you can
+    // type a field name into before the list exists is a box that cannot tell
+    // you the name is not one.
+    const picker = screen.getByLabelText(copy.agent.mappingPickField);
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.type(picker, "borrower_date_of_birth");
+    await user.click(
+      screen.getByRole("button", { name: copy.agent.mappingUseExistingConfirm }),
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor("Internal Ref")).getByText(/borrower date of birth/),
+      ).toBeInTheDocument(),
+    );
+    expect(within(rowFor("Internal Ref")).getByText("You confirmed it")).
+      toBeInTheDocument();
+  });
+
+  it("refuses a field Trakt does not report on", async () => {
+    /* A free-text box would let a name that matches nothing be promoted into a
+       governed rule that silently matches nothing every month. */
+    const user = await openTheDialog();
+    const picker = screen.getByLabelText(copy.agent.mappingPickField);
+    await waitFor(() => expect(picker).toBeEnabled());
+    await user.type(picker, "made_up_field");
+    expect(
+      screen.getByRole("button", { name: copy.agent.mappingUseExistingConfirm }),
+    ).toBeDisabled();
+  });
+
+  it("records an ask for a new field without mapping anything", async () => {
+    /* The distinction the whole design turns on: a request is not a field, and
+       the column has to keep saying so. */
+    const user = await openTheDialog();
+    await user.click(screen.getByLabelText(copy.agent.mappingRequestNew));
+    await user.type(screen.getByLabelText(copy.agent.mappingNewFieldName), "broker_code");
+    await user.type(
+      screen.getByLabelText(copy.agent.mappingNewFieldWhat),
+      "The intermediary who introduced the case.",
+    );
+    await user.click(
+      screen.getByRole("button", { name: copy.agent.mappingRequestConfirm }),
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor("Internal Ref")).getByText(
+          copy.agent.mappingRequestedChip("broker_code"),
+        ),
+      ).toBeInTheDocument(),
+    );
+    // Still unused: nothing was mapped, and a screen that implied otherwise
+    // would have an operator believe a field exists that does not.
+    expect(within(rowFor("Internal Ref")).getByText("Not used")).toBeInTheDocument();
+  });
+
+  it("says who is going to act on the ask, and lets it be taken back", async () => {
+    const user = await openTheDialog();
+    await user.click(screen.getByLabelText(copy.agent.mappingRequestNew));
+    await user.type(screen.getByLabelText(copy.agent.mappingNewFieldName), "broker_code");
+    await user.click(
+      screen.getByRole("button", { name: copy.agent.mappingRequestConfirm }),
+    );
+    const asks = await screen.findByText(copy.agent.mappingRequestsHeading);
+    const panel = asks.closest("section") as HTMLElement;
+    expect(within(panel).getByText(copy.agent.mappingRequestNewHelp)).toBeInTheDocument();
+    // The control holds still while the previous act is in flight, so the walk
+    // waits for it rather than clicking at a button that is not listening.
+    const withdraw = within(panel).getByRole("button", {
+      name: copy.agent.mappingWithdrawRequest,
+    });
+    await waitFor(() => expect(withdraw).toBeEnabled());
+    await user.click(withdraw);
+    await waitFor(() =>
+      expect(screen.queryByText(copy.agent.mappingRequestsHeading)).toBeNull(),
+    );
+  });
+});
+
 describe("OCC Agent — a blocked column does not read as settled", () => {
   beforeEach(() => {
     vi.stubEnv("VITE_OPS_MODE", "mock");
@@ -333,16 +693,19 @@ describe("OCC Agent — a blocked column does not read as settled", () => {
     vi.restoreAllMocks();
   });
 
-  it("links a needs-you row to the decision that settles it", async () => {
-    /* Without this the table says "needs you" and sends an operator hunting
-       for the matching question in a different list. */
+  it("answers an ambiguous column on the row, not in a second list", async () => {
+    /* It used to link out to a decision card. The table is now a DRAFT the
+       operator works down and commits in one act; a card that applied its
+       answer on click would be a second route to the same column with
+       different rules, and a column settled from a card could not be changed
+       back. So no mapping question has a card at all. */
     await afterTheRun("scenario_b_ambiguous_mapping");
-    const link = within(rowFor("Current Balance")).getByRole("link", {
-      name: copy.agent.mappingAnswer,
-    });
-    expect(link).toHaveAttribute("href", "#decision-amb_current_principal_balance");
-    expect(document.getElementById("decision-amb_current_principal_balance")).
+    const row = rowFor("Current Balance");
+    expect(within(row).getByRole("button", { name: copy.agent.mappingRowNotUsed })).
       toBeInTheDocument();
+    expect(within(row).queryByRole("link")).toBeNull();
+    expect(document.getElementById("decision-amb_current_principal_balance")).
+      toBeNull();
   });
 
   it("calls an ambiguous column unsettled, however well its name matched", async () => {

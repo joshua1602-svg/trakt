@@ -143,7 +143,14 @@ def rules_from(decisions: List[Dict[str, Any]], *, client_id: str,
     """
     out: List[RuleRecord] = []
     seen: set = set()
-    for decision in decisions or []:
+    # A decision about SEVERAL columns is read first, so a per-column answer
+    # written later supersedes it — the same ordering ``_approved_mappings``
+    # uses, and for the same reason: an ambiguity says which column won, and
+    # that column's own record says what it feeds.
+    for decision in sorted(
+            decisions or [],
+            key=lambda d: len((d.get("subject") or {}).get("source_columns")
+                              or d.get("source_columns") or []) < 2):
         mapping = mapping_of(decision)
         if mapping is None:
             continue

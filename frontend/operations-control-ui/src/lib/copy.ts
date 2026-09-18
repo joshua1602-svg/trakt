@@ -631,19 +631,44 @@ export const copy = {
     mappingState: "Status",
     // The approval act, and what it would settle. A button reading "Approve"
     // with no count does not say what it is about to do.
-    mappingApprove: (n: number) =>
-      `Approve ${n} mapping${n === 1 ? "" : "s"}`,
+    // --- Reading the table, then committing it ----------------------------
+    // Per-row answers are a DRAFT. The words have to keep the two apart, or an
+    // operator reads "Confirm" on a row and believes the column is settled.
+    mappingRowConfirm: "Confirm",
+    mappingRowChange: "Change",
+    mappingRowNotUsed: "Do not use",
+    mappingRowUndo: "Undo",
+    mappingStagedConfirm: "As Trakt read it",
+    mappingStagedAmend: (field: string) => `You said: ${field.replace(/_/g, " ")}`,
+    mappingStagedNotUsed: "You set this aside",
+    mappingDraftHelp:
+      "Nothing here is applied yet. Work down the table, change anything " +
+      "that is wrong, and confirm the lot when you are done — that is the " +
+      "act that makes these this client's mappings.",
+    mappingCommit: (n: number) =>
+      `Confirm ${n} mapping${n === 1 ? "" : "s"}`,
+    mappingCommitBreakdown: (staged: number, asProposed: number) =>
+      [staged > 0 ? `${staged} you have been through` : "",
+       asProposed > 0 ? `${asProposed} as Trakt read them` : ""]
+        .filter(Boolean)
+        .join(", "),
+    mappingCommittedToast: (n: number) =>
+      `${n} mapping${n === 1 ? "" : "s"} confirmed.`,
+    // A field two or more columns both claim. Not a blocker — two files
+    // carrying the same fact is ordinary — but an operator confirming the set
+    // is confirming all of them and should see which.
+    mappingContested: (n: number) => `${n} columns claim this`,
+    mappingContestedHelp:
+      "More than one column reads as this field. Where they are in different " +
+      "files that is normal and Trakt reconciles it; where they are in the " +
+      "same file, pick one and set the other aside.",
+    mappingContestedFilter: "Claimed twice",
     mappingApproveHelp:
       "This is the first delivery from this client, so Trakt has proposed how " +
-      "to read each column rather than deciding for you. Change any row that " +
-      "is wrong, then approve the rest. What you approve is what Trakt uses " +
-      "every month after this one.",
+      "to read each column rather than deciding for you. What you confirm is " +
+      "what Trakt uses every month after this one.",
     mappingApproveBlocked: (n: number) =>
       `${n} column${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} an answer first`,
-    mappingApproved: "Approved",
-    mappingApprovedToast: (n: number) =>
-      `${n} mapping${n === 1 ? "" : "s"} approved.`,
-    mappingChange: "Change this",
     mappingFileColumns: (n: number) => `${n} column${n === 1 ? "" : "s"}`,
     mappingField: "Trakt reads it as",
     // A model's suggestion for a column Trakt could not place. Marked, because
@@ -653,15 +678,64 @@ export const copy = {
     // sharing one word on one screen is how an operator comes to think a model
     // wrote something a person is being asked to sign.
     mappingProposed: "From a model",
-    mappingBasis: "On what evidence",
+    // The column holds a two-word kind now, not a sentence of evidence, and
+    // the heading has to fit beside it: at the old wording it was itself the
+    // first thing to clip on a narrow screen.
+    mappingBasis: "How it matched",
     mappingConfidence: "Confidence",
     mappingNothing: "—",
-    mappingAnswer: "Answer this",
     mappingFilterAll: "All",
     mappingPrimaryFile: "Trakt builds the loan-level data from this file",
+    // Every file's columns are put to a person now. The loan-level data is
+    // still built from the primary tape, but what an operator approves becomes
+    // a rule for the whole book — and production consolidates a field
+    // whichever file carries it — so a mapping here is worth as much as one
+    // there and is confirmed the same way.
     mappingSecondaryFile:
-      "Read and recorded, but the loan-level data is not built from this one, " +
-      "so nothing here was raised as a question.",
+      "The loan-level data is not built from this one, but its columns are " +
+      "confirmed the same way: what you approve here is this client's " +
+      "mapping from now on.",
+
+    // --- A column that matched nothing ------------------------------------
+    // Two different acts, kept apart in the words as well as the code. One
+    // names a field Trakt already has, and is settled on the spot. The other
+    // asks for a field it does not have, which changes the vocabulary every
+    // client's report is written in and is not an onboarding operator's to
+    // make.
+    mappingUnmappedAction: "Give it a field",
+    mappingUnmappedHeading: (column: string) => `What is '${column}'?`,
+    mappingUnmappedIntro:
+      "Nothing Trakt reports on resembled this column. If you know what it " +
+      "is, say so — it becomes this client's mapping from now on.",
+    mappingUseExisting: "It is something Trakt already reports on",
+    mappingUseExistingHelp:
+      "The column feeds this field from now on, and the mapping becomes one " +
+      "of this client's own rules when the case goes live — so next month's " +
+      "delivery matches it without asking.",
+    mappingPickField: "Which field",
+    mappingPickFieldPlaceholder: "Start typing a field name",
+    mappingRequestNew: "Trakt has no field for this",
+    mappingRequestNewHelp:
+      "The list of fields Trakt reports on is shared by every client, so a " +
+      "new one is not added from here. Trakt records the request — this " +
+      "column, what its values look like and your name — for whoever looks " +
+      "after those settings. The column stays unused until they add it.",
+    mappingNewFieldName: "Name for the new field",
+    mappingNewFieldNamePlaceholder: "lower_case_with_underscores",
+    mappingNewFieldWhat: "What it means",
+    mappingNewFieldWhatPlaceholder: "One sentence somebody could decide from",
+    mappingNewFieldType: "What the values look like",
+    mappingUseExistingConfirm: "Use this field",
+    mappingRequestConfirm: "Request this field",
+    mappingWithdrawRequest: "Withdraw the request",
+    mappingRequestedChip: (field: string) => `Requested: ${field}`,
+    mappingMappedToast: (column: string, field: string) =>
+      `'${column}' now feeds ${field.replace(/_/g, " ")}.`,
+    mappingRequestedToast: (field: string) =>
+      `Requested '${field}'. It is recorded for whoever looks after those ` +
+      "settings; the column stays unused until the field exists.",
+    mappingWithdrawnToast: "The request has been withdrawn.",
+    mappingRequestsHeading: "Fields you have asked for",
     artefactsHeading: "Files received",
     artefactIntended: "Where this would be filed",
     artefactNotWritten: "Not written",

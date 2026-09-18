@@ -30,6 +30,7 @@ import type {
   PackQuestion,
   PackReceipt,
   PackSection,
+  RegistryField,
   ScenarioSummary,
   SyntheticRunDoc,
   AgentMail,
@@ -337,20 +338,51 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
   // approved with the set, a question is answered on its own, and a table that
   // cannot tell them apart puts seventy clean columns in the same queue as the
   // three that are genuinely unresolved.
-  const byColumn = new Map<string, [string, string]>();
+  // Keyed on FILE AND COLUMN, like the server. A pack carries "Loan ID" in
+  // every extract; keyed on the name alone, one proposal against the tape
+  // marked every same-named column in every file as proposed.
+  const byColumn = new Map<string, [string, string, string]>();
   for (const decision of doc.open_decisions) {
     if (decision.status !== "open") continue;
     const subject = decision.subject as {
+      source_file?: string;
       source_column?: string;
       source_columns?: string[];
       decision_type?: string;
     };
-    const entry: [string, string] = [decision.decision_id,
-                                     String(subject?.decision_type ?? "")];
+    const evidence = (decision.evidence ?? [])
+      .map((e) => String((e.data as { detail?: string })?.detail ?? "").trim())
+      .find(Boolean) ?? decision.question ?? "";
+    const entry: [string, string, string] = [decision.decision_id,
+                                             String(subject?.decision_type ?? ""),
+                                             evidence];
+    const file = String(subject?.source_file ?? "").trim();
     for (const name of [subject?.source_column, ...(subject?.source_columns ?? [])]) {
       const key = String(name ?? "").trim().toLowerCase();
-      if (key && !byColumn.has(key)) byColumn.set(key, entry);
+      if (key && !byColumn.has(`${file}::${key}`)) byColumn.set(`${file}::${key}`, entry);
     }
+  }
+  // A decision that names no file — one recorded before decisions were
+  // file-scoped — still matches on the name alone, so a case part-way through
+  // its onboarding does not lose the link to answers it already has.
+  const decisionFor = (file: string, column: string): [string, string, string] =>
+    byColumn.get(`${file}::${column.toLowerCase()}`) ??
+    byColumn.get(`::${column.toLowerCase()}`) ?? ["", "", ""];
+
+  // The operator's working copy: what they have said each column is, held as
+  // a draft until the set is committed. Faithful to `mapping_view.overview`.
+  const staged = new Map<string, { action: string; target_field: string;
+                                   staged_by: string }>();
+  for (const item of doc.staged_mappings ?? []) {
+    staged.set(`${item.source_file}::${item.source_column}`, item);
+  }
+  const requestedFields = new Map<string, string>();
+  for (const request of doc.field_requests ?? []) {
+    if (request.status !== "requested") continue;
+    requestedFields.set(
+      `${request.source_file}::${request.source_column.toLowerCase()}`,
+      request.field_name,
+    );
   }
 
   const rows: MappingRow[] = (doc.mapping_report ?? []).map((raw) => {
@@ -360,7 +392,8 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     const rawConfidence = Number(r.confidence);
     const confidence = Number.isFinite(rawConfidence) ? rawConfidence : null;
     const column = String(r.source_column ?? "");
-    const [decisionId, decisionType] = byColumn.get(column.toLowerCase()) ?? ["", ""];
+    const sourceFile = String(r.source_file ?? "");
+    const [decisionId, decisionType, decisionDetail] = decisionFor(sourceFile, column);
     const primary = r.primary !== false;
     // What a model proposed for a column the deterministic tiers could not
     // place. Never a mapping — it stands until a person confirms it.
@@ -369,7 +402,12 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     // An open decision wins over the tier: an ambiguity is raised after both
     // rows are written, at whatever tier they matched at, so reading the tier
     // alone would call a blocked column "matched automatically".
-    if (decisionId) state = decisionType === "mapping_proposal" ? "proposed" : "needs_you";
+    const answer = staged.get(`${sourceFile}::${column}`);
+    // A staged answer wins over everything the mapper said: the operator has
+    // read the column and named it, and a row still reading "Needs you" after
+    // they answered would send them back to answer it twice.
+    if (answer) state = "staged";
+    else if (decisionId) state = decisionType === "mapping_proposal" ? "proposed" : "needs_you";
     else if (tier === "operator_approved") state = "confirmed";
     else if (tier === "unreadable") state = "unreadable";
     else if (!canonical) state = "unused";
@@ -379,7 +417,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     // "Needs you" would point at a decision that does not exist.
     else state = primary ? "needs_you" : "unchecked";
     return {
-      source_file: String(r.source_file ?? ""),
+      source_file: sourceFile,
       source_column: column,
       canonical_field: canonical,
       field_label: canonical.replace(/_/g, " "),
@@ -390,6 +428,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
       state,
       state_label: MAPPING_STATE_LABELS[state],
       decision_id: decisionId,
+      decision_detail: decisionDetail,
       primary,
       // Faithful to `operations_control.occ_agent.mapping_view.overview`: an
       // operator's own answer, then Trakt's deterministic matching, then a
@@ -413,8 +452,44 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
       suggested_field: suggested,
       suggested_label: suggested.replace(/_/g, " "),
       suggested_reason: String(r.llm_reasoning ?? ""),
+      requested_field:
+        requestedFields.get(`${sourceFile}::${column.toLowerCase()}`) ?? "",
+      match_kind: matchKind(tier, canonical, suggested),
+      match_kind_label: MATCH_KIND_LABELS[matchKind(tier, canonical, suggested)],
+      also_claimed_by: [],
+      staged_action: (answer?.action ?? "") as MappingRow["staged_action"],
+      staged_field: answer?.target_field ?? "",
+      staged_label: (answer?.target_field ?? "").replace(/_/g, " "),
+      staged_by: answer?.staged_by ?? "",
     };
   });
+
+  // Every other column claiming the same canonical field. Two files carrying
+  // the same fact is the ordinary shape of a delivery and is not blocked; it
+  // is marked, because an operator approving the set approves them all.
+  const claimants = new Map<string, MappingRow[]>();
+  for (const row of rows) {
+    // A STAGED ANSWER IS WHAT THIS COLUMN CLAIMS NOW. Reading the report
+    // instead, an operator who had just set the losing column aside would
+    // still see "2 columns claim this" on both.
+    const field = row.staged_action ? row.staged_field : row.canonical_field;
+    if (!field || row.state === "unreadable") continue;
+    const list = claimants.get(field) ?? [];
+    list.push(row);
+    claimants.set(field, list);
+  }
+  for (const list of claimants.values()) {
+    if (list.length < 2) continue;
+    for (const row of list) {
+      row.also_claimed_by = list
+        .filter((other) => other !== row)
+        .map((other) => ({
+          source_file: other.source_file,
+          source_column: other.source_column,
+          same_file: other.source_file === row.source_file,
+        }));
+    }
+  }
 
   rows.sort(
     (a, b) =>
@@ -430,6 +505,7 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
   }
   counts.columns = rows.length;
   counts.mapped = counts.confirmed + counts.automatic;
+  const unanswered = counts.needs_you;
 
   const files: MappingOverview["files"] = [];
   for (const row of rows) {
@@ -445,7 +521,11 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
     counts,
     files,
     proposed: counts.proposed ?? 0,
-    blocking_questions: counts.needs_you ?? 0,
+    blocking_questions: unanswered,
+    staged: counts.staged ?? 0,
+    to_confirm: (counts.staged ?? 0) + (counts.proposed ?? 0),
+    unanswered_questions: unanswered,
+    contested: rows.filter((r) => r.also_claimed_by.length > 0).length,
   };
 }
 
@@ -479,6 +559,13 @@ const MAPPING_REPORT: Record<string, unknown>[] = [
   { source_file: "loan_tape.csv", source_column: "Val Dt",
     canonical_field: "valuation_date", tier: "fuzz_token_set", confidence: 0.62,
     note: "below the confidence threshold", primary: true },
+  // THE OTHER HALF OF THE AMBIGUITY. `AMBIGUOUS_DECISION` names two columns
+  // claiming one field and the report carried only one of them, so the clash
+  // the whole scenario exists to demonstrate had nothing to choose BETWEEN on
+  // screen — and a table that never flagged a duplicate passed.
+  { source_file: "loan_tape.csv", source_column: "Principal Balance",
+    canonical_field: "current_principal_balance", tier: "alias", confidence: 1.0,
+    note: "", primary: true },
   // Nothing matched it, and a model proposed something. That is the ordinary
   // shape of a real tape now the model is wired into the mapping stage, and a
   // fixture without one lets a table that drops every proposal pass.
@@ -486,15 +573,108 @@ const MAPPING_REPORT: Record<string, unknown>[] = [
     tier: "unmapped", confidence: 0.0, note: "", primary: true,
     llm_field: "loan_identifier", llm_confidence: 0.81,
     llm_reasoning: "An internal loan reference." },
-  // A second file in the pack. The canonical tape is not built from it, so a
-  // weak match here raises no question — and a fixture with only one file lets
-  // a table that silently drops the others pass.
+  // A second file in the pack. The canonical tape is not built from it and its
+  // columns are still put to a person: the mapping an operator approves is
+  // promoted to a rule scoped to the PORTFOLIO, and production's own tape
+  // builder consolidates a loan-domain field whichever file carries it. A
+  // fixture with only one file lets a table that silently drops the others
+  // pass, and one whose second file is auto-matched lets the defect this
+  // fixes pass.
   { source_file: "property_tape.csv", source_column: "property_value",
     canonical_field: "property_value", tier: "exact", confidence: 1.0,
     note: "", primary: false },
   { source_file: "property_tape.csv", source_column: "Prp Ref",
     canonical_field: "property_reference", tier: "fuzz_ratio_norm", confidence: 0.58,
     note: "below the confidence threshold", primary: false },
+  // THE SAME COLUMN NAME IN TWO FILES, which is the ordinary shape of a pack
+  // and the case a name-keyed decision lookup got wrong: a question raised
+  // about the tape's 'Val Dt' marked this one too, so one row pointed at a
+  // question that was not about it.
+  { source_file: "property_tape.csv", source_column: "Val Dt",
+    canonical_field: "valuation_date", tier: "alias", confidence: 1.0,
+    note: "", primary: false },
+];
+
+/**
+ * A short stand-in for the canonical field registry.
+ *
+ * The real one has five hundred fields and is read server-side
+ * (`OccAgentService.field_catalogue`) from the mapper's own selection. What
+ * this fixture has to carry is the SHAPE — a name, a readable label, and which
+ * regulatory annexes the field answers — because an operator choosing between
+ * two plausible fields for an unmapped column is choosing between two
+ * obligations, and a picker that hides that is a picker that invites a guess.
+ */
+/** The open mapping decision one column of one file is answering, if any. */
+function decisionFor(decisions: DecisionCard[], sourceFile: string,
+                     sourceColumn: string): string {
+  let fallback = "";
+  for (const decision of decisions) {
+    if (decision.status !== "open") continue;
+    const subject = decision.subject as { source_file?: string;
+                                          source_column?: string;
+                                          source_columns?: string[] };
+    const columns = [subject?.source_column, ...(subject?.source_columns ?? [])];
+    if (!columns.includes(sourceColumn)) continue;
+    if ((subject?.source_file ?? "") === sourceFile) return decision.decision_id;
+    if (!subject?.source_file) fallback = decision.decision_id;
+  }
+  return fallback;
+}
+
+/** An operator naming the field a column feeds, where nothing asked them.
+ *  Faithful to `field_registry.alias_decision`. */
+function aliasDecision(sourceFile: string, sourceColumn: string,
+                       targetField: string, actor: string): DecisionCard {
+  return {
+    decision_id: `alias_${slug(`${sourceFile}::${sourceColumn}`)}`,
+    kind: "field_mapping",
+    title: `'${sourceColumn}' is ${targetField.replace(/_/g, " ")}`,
+    question: `Trakt could not place '${sourceColumn}'. What field does it feed?`,
+    blocking: false,
+    status: "approved",
+    issue: `'${sourceColumn}' is not a column Trakt recognised.`,
+    evidence: [],
+    recommendation: "",
+    recommendation_source: "operator",
+    confidence: null,
+    materiality: "REVIEW",
+    downstream_consequence:
+      "This column feeds the report from now on, and the mapping is promoted into the client's governed rules when the case is activated.",
+    options: [],
+    resolved_value: targetField,
+    resolved_by: actor,
+    subject: {
+      artefact: "unmapped_column",
+      decision_type: "mapping_confirmation",
+      source_file: sourceFile,
+      source_column: sourceColumn,
+      target_field: targetField,
+    },
+  } as DecisionCard;
+}
+
+const REGISTRY_FIELDS: RegistryField[] = [
+  { name: "loan_id", label: "loan id", category: "identifier", format: "string",
+    layer: "core", core_canonical: true, regimes: ["ESMA_Annex2"] },
+  { name: "current_principal_balance", label: "current principal balance",
+    category: "regulatory", format: "decimal", layer: "core",
+    core_canonical: true, regimes: ["ESMA_Annex2"] },
+  { name: "interest_rate", label: "interest rate", category: "regulatory",
+    format: "decimal", layer: "core", core_canonical: true,
+    regimes: ["ESMA_Annex2"] },
+  { name: "property_value", label: "property value", category: "regulatory",
+    format: "decimal", layer: "collateral", core_canonical: false,
+    regimes: ["ESMA_Annex2"] },
+  { name: "valuation_date", label: "valuation date", category: "regulatory",
+    format: "date", layer: "collateral", core_canonical: false,
+    regimes: ["ESMA_Annex2"] },
+  { name: "property_reference", label: "property reference",
+    category: "identifier", format: "string", layer: "collateral",
+    core_canonical: false, regimes: [] },
+  { name: "borrower_date_of_birth", label: "borrower date of birth",
+    category: "regulatory", format: "date", layer: "borrower",
+    core_canonical: false, regimes: ["ESMA_Annex2"] },
 ];
 
 /** Mirrors `occ_agent/mapping_view.TIER_LABELS`. */
@@ -517,6 +697,7 @@ const MAPPING_STATE_LABELS: Record<string, string> = {
   unreadable: "Could not be read",
   unchecked: "Weak match, nothing asked",
   unused: "Not used",
+  staged: "Ready to confirm",
   confirmed: "You confirmed it",
   automatic: "Matched automatically",
 };
@@ -527,13 +708,56 @@ const MAPPING_STATE_ORDER = [
   "unreadable",
   "unchecked",
   "unused",
+  "staged",
   "confirmed",
   "automatic",
 ];
 
+/** Mirrors `mapping_view.KIND_LABELS`. */
+const MATCH_KIND_LABELS: Record<string, string> = {
+  operator: "You said so",
+  alias: "Known alias",
+  name: "Same name",
+  similar: "Similar name",
+  model: "A model's suggestion",
+  none: "Nothing matched",
+  unreadable: "Could not be read",
+};
+
+/** Mirrors `mapping_view.match_kind`: the BASIS wins where the two disagree,
+ *  so a column a model proposed a field for is not called "Nothing matched". */
+function matchKind(tier: string, canonical: string,
+                   suggested: string): MappingRow["match_kind"] {
+  if (!canonical && suggested) return "model";
+  if (tier === "operator_approved") return "operator";
+  if (tier === "alias") return "alias";
+  if (tier === "exact" || tier === "normalized") return "name";
+  if (tier.startsWith("fuzz") || tier === "token_set") return "similar";
+  if (tier === "unreadable") return "unreadable";
+  return "none";
+}
+
 /** Mirrors `execution._TRUSTED_TIERS` and `execution.LOW_CONFIDENCE`. */
 const TRUSTED_TIERS = new Set(["exact", "normalized", "alias"]);
 const LOW_CONFIDENCE = 0.9;
+
+const slug = (value: string) =>
+  value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
+
+/**
+ * A decision id unique across the pack, mirroring `execution._decision_id`.
+ *
+ * The primary tape keeps the unqualified id it has always had, because a case
+ * part-way through its onboarding has answers recorded against those ids.
+ * Every other file carries its name, because "Val Dt" in the property extract
+ * and "Val Dt" in the tape are two different questions.
+ */
+function mappingDecisionId(prefix: string, subject: string, sourceFile: string,
+                           primary: boolean): string {
+  return primary
+    ? `${prefix}_${slug(subject)}`
+    : `${prefix}_${slug(sourceFile)}__${slug(subject)}`;
+}
 
 /**
  * One proposed mapping, as a first onboarding raises it.
@@ -543,11 +767,13 @@ const LOW_CONFIDENCE = 0.9;
  * promotion and the table can both read it, and it BLOCKS — a first delivery
  * does not move until a person has said these are right for this client.
  */
-function proposalFor(row: { source_column: string; canonical_field: string;
-                            tier: string; confidence: number }): DecisionCard {
+function proposalFor(row: { source_file: string; source_column: string;
+                            canonical_field: string; tier: string;
+                            confidence: number; primary?: boolean }): DecisionCard {
   const field = row.canonical_field.replace(/_/g, " ");
   return {
-    decision_id: `map_${row.source_column.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    decision_id: mappingDecisionId("map", row.source_column, row.source_file,
+                                   row.primary !== false),
     kind: "field_mapping",
     title: `Confirm '${row.source_column}' reads as ${field}`,
     question: `'${row.source_column}' reads as ${field}. This is the first delivery from this client, so it is proposed rather than applied.`,
@@ -567,6 +793,7 @@ function proposalFor(row: { source_column: string; canonical_field: string;
     ],
     subject: {
       decision_type: "mapping_proposal",
+      source_file: row.source_file,
       source_column: row.source_column,
       target_field: row.canonical_field,
     },
@@ -581,11 +808,13 @@ function proposalFor(row: { source_column: string; canonical_field: string;
  * answer — which was harmless while nothing waited on it, and became a dead
  * end the moment approval of the set was gated on the questions being cleared.
  */
-function confirmationFor(row: { source_column: string; canonical_field: string;
-                                confidence: number }): DecisionCard {
+function confirmationFor(row: { source_file: string; source_column: string;
+                                canonical_field: string; confidence: number;
+                                primary?: boolean }): DecisionCard {
   const field = row.canonical_field.replace(/_/g, " ");
   return {
-    decision_id: `map_${row.source_column.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    decision_id: mappingDecisionId("map", row.source_column, row.source_file,
+                                   row.primary !== false),
     kind: "field_mapping",
     title: `Confirm how '${row.source_column}' should be read`,
     question: `'${row.source_column}' looks like ${field}, but not clearly enough to use without confirmation.`,
@@ -605,6 +834,7 @@ function confirmationFor(row: { source_column: string; canonical_field: string;
     ],
     subject: {
       decision_type: "mapping_confirmation",
+      source_file: row.source_file,
       source_column: row.source_column,
       target_field: row.canonical_field,
     },
@@ -647,6 +877,7 @@ const AMBIGUOUS_DECISION: DecisionCard = {
     // reads it to tell "Change this" from "Answer this", and the scripted walk
     // reads it to know this is the one halt it must not settle.
     decision_type: "mapping_ambiguity",
+    source_file: "loan_tape.csv",
     source_column: "Current Balance",
     source_columns: ["Current Balance", "Principal Balance"],
     target_field: "current_principal_balance",
@@ -1500,44 +1731,157 @@ export class MockAgent {
   }
 
   /**
-   * Approve every mapping still proposed on this delivery.
+   * What the operator says one column is. A draft, not an act.
    *
-   * Faithful to `OccAgentService.approve_proposed_mappings`: one act, and one
-   * resolved record per column — not one record for "the mappings" — because
-   * that is what promotion turns into governed rules. Anything already
-   * answered keeps its answer.
+   * Faithful to `OccAgentService.stage_mapping`: nothing is resolved, nothing
+   * is promoted, and — this is the part a careless mock would get wrong —
+   * NOTHING RERUNS, even when it is the last outstanding answer. A double that
+   * settled the run on the last staged row would let a screen be built against
+   * a workflow the server does not have.
+   */
+  stageMapping(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "confirm" | "amend" | "not_used" | "clear";
+      target_field?: string;
+      reason?: string;
+    },
+  ): AgentStatus {
+    const stored = this.get(caseRef);
+    this.requireAction(stored, "resolve_decision");
+    const raw = stored.doc.mapping_report.find(
+      (r) =>
+        String((r as Record<string, unknown>).source_file ?? "") === input.source_file &&
+        String((r as Record<string, unknown>).source_column ?? "") === input.source_column,
+    ) as Record<string, unknown> | undefined;
+    if (!raw) {
+      throw new OpsError(
+        `'${input.source_column}' is not a column Trakt read in ${input.source_file}.`,
+        "OCC_AGENT_COLUMN_NOT_FOUND",
+      );
+    }
+    stored.doc.staged_mappings = (stored.doc.staged_mappings ?? []).filter(
+      (e) =>
+        e.source_file !== input.source_file || e.source_column !== input.source_column,
+    );
+    if (input.action === "clear") return this.status(caseRef);
+
+    let field = input.target_field ?? "";
+    if (input.action === "confirm") {
+      // "Confirm" means "what is on the row is right", so the field is the
+      // row's own — taking one from the request would let a caller confirm a
+      // column onto a field the operator never saw.
+      field = String(raw.canonical_field ?? "");
+      if (!field) {
+        throw new OpsError(
+          `Trakt has not read '${input.source_column}' as anything, so there is nothing to confirm. Name the field instead.`,
+          "OCC_AGENT_NOTHING_TO_CONFIRM",
+        );
+      }
+    } else if (input.action === "amend") {
+      if (!REGISTRY_FIELDS.some((f) => f.name === field)) {
+        throw new OpsError(
+          `Trakt has no field called '${field}'. If it genuinely does not exist, request it as a new field instead.`,
+          "OCC_AGENT_FIELD_NOT_REGISTERED",
+        );
+      }
+    } else {
+      field = "";
+    }
+    const decision = decisionFor(stored.doc.open_decisions, input.source_file,
+                                 input.source_column);
+    stored.doc.staged_mappings.push({
+      source_file: input.source_file,
+      source_column: input.source_column,
+      action: input.action,
+      target_field: field,
+      decision_id: decision,
+      staged_by: ACTOR,
+      staged_at: new Date().toISOString(),
+      reason: input.reason ?? "",
+    });
+    if (field) {
+      this.withdrawFieldRequest(stored, input.source_file, input.source_column,
+                                "the column was given a field instead");
+    }
+    return this.status(caseRef);
+  }
+
+  /**
+   * Commit the mapping table: everything staged, plus every proposal left as
+   * Trakt read it.
+   *
+   * Faithful to `OccAgentService.confirm_mappings`: one act, and one resolved
+   * record per column — not one record for "the mappings" — because that is
+   * what promotion turns into governed rules. Each column keeps the operator
+   * who STAGED it, and the commit is refused while a genuine question has no
+   * answer at all.
    */
   approveMappings(caseRef: string, reason = ""): AgentStatus {
     const stored = this.get(caseRef);
     this.requireAction(stored, "resolve_decision");
-    const pending = stored.doc.open_decisions.filter(
-      (d) =>
-        (d.subject as { decision_type?: string })?.decision_type === "mapping_proposal" &&
-        d.status === "open",
-    );
-    if (pending.length === 0) {
+    const overview = mappingOverview(stored.doc);
+    if (overview.unanswered_questions > 0) {
+      const n = overview.unanswered_questions;
       throw new OpsError(
-        "There are no proposed mappings waiting for approval.",
-        "OCC_AGENT_NO_PROPOSED_MAPPINGS",
+        `${n} column${n === 1 ? "" : "s"} still need${n === 1 ? "s" : ""} an answer before the mappings can be confirmed.`,
+        "OCC_AGENT_QUESTIONS_UNANSWERED",
       );
     }
-    for (const decision of pending) {
+    const staged = stored.doc.staged_mappings ?? [];
+    const stagedKeys = new Set(
+      staged.map((e) => `${e.source_file}::${e.source_column}`),
+    );
+    const untouched = stored.doc.open_decisions.filter((d) => {
+      const subject = d.subject as { decision_type?: string; source_file?: string;
+                                     source_column?: string };
+      return (
+        subject?.decision_type === "mapping_proposal" &&
+        d.status === "open" &&
+        !stagedKeys.has(`${subject?.source_file ?? ""}::${subject?.source_column ?? ""}`)
+      );
+    });
+    if (staged.length === 0 && untouched.length === 0) {
+      throw new OpsError(
+        "There are no mappings waiting to be confirmed.",
+        "OCC_AGENT_NOTHING_TO_CONFIRM",
+      );
+    }
+    for (const item of staged) {
+      const value = item.action === "not_used" ? "mark_unavailable" : item.target_field;
+      let decision = stored.doc.open_decisions.find(
+        (d) => d.decision_id === item.decision_id && d.status === "open",
+      );
+      if (!decision) {
+        decision = aliasDecision(item.source_file, item.source_column,
+                                 item.target_field, item.staged_by);
+        stored.doc.open_decisions.push(decision);
+      }
       decision.status = "approved";
-      decision.resolved_value = String(
-        (decision.subject as { target_field?: string })?.target_field ?? "",
-      );
-      decision.resolved_by = ACTOR;
-      this.applyAnswer(
-        stored,
-        String((decision.subject as { source_column?: string })?.source_column ?? ""),
-        decision.resolved_value,
-        true,
-      );
+      decision.resolved_value = value;
+      decision.resolved_by = item.staged_by;
+      this.applyAnswer(stored, item.source_column,
+                       item.action === "not_used" ? "" : item.target_field,
+                       item.action !== "not_used", item.source_file);
     }
+    for (const decision of untouched) {
+      const subject = decision.subject as { source_file?: string;
+                                            source_column?: string;
+                                            target_field?: string };
+      decision.status = "approved";
+      decision.resolved_value = String(subject?.target_field ?? "");
+      decision.resolved_by = ACTOR;
+      this.applyAnswer(stored, String(subject?.source_column ?? ""),
+                       decision.resolved_value, true,
+                       String(subject?.source_file ?? ""));
+    }
+    stored.doc.staged_mappings = [];
     this.record(
       stored,
-      "mapping_set_approved",
-      reason || "the operator approved the proposed mappings for this delivery",
+      "mappings_confirmed",
+      reason || "the operator confirmed the mappings for this delivery",
     );
     if (!stored.doc.open_decisions.some((d) => d.blocking && d.status === "open")) {
       this.move(stored, S.SYNTHETIC_ONBOARDING_RUNNING);
@@ -1558,10 +1902,14 @@ export class MockAgent {
    * the approval it gates can never be reached.
    */
   private applyAnswer(stored: StoredRun, column: string, field: string,
-                      used: boolean): void {
+                      used: boolean, sourceFile = ""): void {
     for (const raw of stored.doc.mapping_report) {
       const row = raw as Record<string, unknown>;
       if (String(row.source_column ?? "") !== column) continue;
+      // An answer about one file's column is an answer about one file's
+      // column. A decision that names no file — recorded before decisions were
+      // file-scoped — still applies by name, as it always did.
+      if (sourceFile && String(row.source_file ?? "") !== sourceFile) continue;
       row.tier = "operator_approved";
       row.note = used ? "confirmed by an operator" : "an operator set this aside";
       row.canonical_field = used ? field : "";
@@ -1602,13 +1950,18 @@ export class MockAgent {
     decision.status = input.action === "reject" ? "rejected" : "approved";
     decision.resolved_value = input.value || decision.recommendation;
     decision.resolved_by = ACTOR;
-    const subject = decision.subject as { source_column?: string; target_field?: string };
+    const subject = decision.subject as {
+      source_file?: string;
+      source_column?: string;
+      target_field?: string;
+    };
     this.applyAnswer(
       stored,
       String(subject?.source_column ?? ""),
       MockAgent.fieldFromAnswer(String(decision.resolved_value ?? ""),
                                 String(subject?.target_field ?? "")),
       input.action !== "reject" && input.value !== "mark_unavailable",
+      String(subject?.source_file ?? ""),
     );
     this.record(
       stored,
@@ -1833,6 +2186,176 @@ export class MockAgent {
       this.step(caseRef, step);
     }
     return this.status(caseRef);
+  }
+
+  /**
+   * Every canonical field an unmapped column may be pointed at.
+   *
+   * Faithful to `OccAgentService.field_catalogue`, which reads the mapper's
+   * own selection from the field registry: a field offered here is one the
+   * run will accept. Short by design — the real registry has five hundred —
+   * because a fixture's job is to exercise the screen, not to mirror a file.
+   */
+  fieldRegistry(caseRef: string): RegistryField[] {
+    this.get(caseRef);
+    return REGISTRY_FIELDS.map((f) => ({ ...f }));
+  }
+
+  /**
+   * Give a column that matched nothing somewhere to go.
+   *
+   * Faithful to `OccAgentService.map_unmapped_column`,
+   * `request_registry_field` and `withdraw_registry_field_request`. The two
+   * acts are NOT the same thing and the mock must not blur them: naming an
+   * existing field settles the column here and now, and asking for a field the
+   * platform does not have records a request and leaves the column unmapped,
+   * because adding a canonical field is a versioned configuration change with
+   * its own approval.
+   */
+  resolveUnmapped(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "use_existing" | "request_field" | "withdraw_request";
+      target_field?: string;
+      field_name?: string;
+      label?: string;
+      description?: string;
+      data_type?: string;
+      reason?: string;
+    },
+  ): AgentStatus {
+    const stored = this.get(caseRef);
+    this.requireAction(stored, "resolve_decision");
+    const row = stored.doc.mapping_report.find(
+      (raw) =>
+        String((raw as Record<string, unknown>).source_file ?? "") === input.source_file &&
+        String((raw as Record<string, unknown>).source_column ?? "") === input.source_column,
+    );
+    if (!row) {
+      throw new OpsError(
+        `'${input.source_column}' is not a column Trakt read in ${input.source_file}.`,
+        "OCC_AGENT_COLUMN_NOT_FOUND",
+      );
+    }
+    if (input.action === "use_existing") {
+      const target = String(input.target_field ?? "");
+      if (!REGISTRY_FIELDS.some((f) => f.name === target)) {
+        throw new OpsError(
+          `Trakt has no field called '${target}'. If it genuinely does not exist, request it as a new field instead.`,
+          "OCC_AGENT_FIELD_NOT_REGISTERED",
+        );
+      }
+      const at = new Date().toISOString();
+      const id = `alias_${slug(`${input.source_file}::${input.source_column}`)}`;
+      stored.doc.open_decisions = [
+        ...stored.doc.open_decisions.filter((d) => d.decision_id !== id),
+        {
+          decision_id: id,
+          kind: "field_mapping",
+          title: `'${input.source_column}' is ${target.replace(/_/g, " ")}`,
+          question: `Trakt could not place '${input.source_column}'. What field does it feed?`,
+          blocking: false,
+          status: "approved",
+          issue: `'${input.source_column}' is not a column Trakt recognised.`,
+          evidence: [],
+          recommendation: "",
+          recommendation_source: "operator",
+          confidence: null,
+          materiality: "REVIEW",
+          downstream_consequence:
+            "This column feeds the report from now on, and the mapping is promoted into the client's governed rules when the case is activated.",
+          options: [],
+          resolved_value: target,
+          resolved_by: ACTOR,
+          resolved_at: at,
+          subject: {
+            decision_type: "mapping_confirmation",
+            source_file: input.source_file,
+            source_column: input.source_column,
+            target_field: target,
+          },
+        } as DecisionCard,
+      ];
+      this.withdrawFieldRequest(stored, input.source_file, input.source_column,
+                                "the column was mapped to an existing field instead");
+      this.applyAnswer(stored, input.source_column, target, true, input.source_file);
+      this.record(stored, "unmapped_column_mapped",
+                  input.reason || "an operator named the field this column feeds");
+    } else if (input.action === "request_field") {
+      const name = String(input.field_name ?? "").trim().toLowerCase()
+        .replace(/[\s-]+/g, "_");
+      if (!name) {
+        throw new OpsError("A new field needs a name before it can be requested.",
+                           "OCC_AGENT_FIELD_NAME_REQUIRED");
+      }
+      if (REGISTRY_FIELDS.some((f) => f.name === name)) {
+        throw new OpsError(
+          `Trakt already reports on '${name}'. Map the column to it instead of requesting it again.`,
+          "OCC_AGENT_FIELD_ALREADY_REGISTERED",
+        );
+      }
+      const requestId = `fieldreq_${slug(`${input.source_file}::${input.source_column}`)}`;
+      stored.doc.field_requests = [
+        ...(stored.doc.field_requests ?? []).filter((r) => r.request_id !== requestId),
+        {
+          request_id: requestId,
+          status: "requested",
+          field_name: name,
+          label: input.label || name.replace(/_/g, " "),
+          description: input.description ?? "",
+          data_type: input.data_type ?? "",
+          source_file: input.source_file,
+          source_column: input.source_column,
+          sample_values: [],
+          requested_by: ACTOR,
+          requested_at: new Date().toISOString(),
+          route: "config package, system layer: config/system/fields_registry.yaml",
+        },
+      ];
+      this.record(stored, "field_registry_requested",
+                  input.reason || input.description ||
+                  "an operator asked for a canonical field the registry does not have");
+    } else {
+      const withdrawn = this.withdrawFieldRequest(
+        stored, input.source_file, input.source_column,
+        input.reason || "withdrawn by the operator");
+      if (!withdrawn) {
+        throw new OpsError("There is no open field request for that column.",
+                           "OCC_AGENT_FIELD_REQUEST_NOT_FOUND");
+      }
+      this.record(stored, "field_registry_request_withdrawn",
+                  input.reason || "withdrawn by the operator");
+    }
+    if (!stored.doc.open_decisions.some((d) => d.blocking && d.status === "open")) {
+      this.move(stored, S.SYNTHETIC_ONBOARDING_RUNNING);
+      stored.doc.stage_outcomes = COMPLETED_STAGES;
+      this.move(stored, S.SYNTHETIC_ONBOARDING_PASSED);
+      stored.doc.blockers = [];
+    }
+    return this.status(caseRef);
+  }
+
+  /** Mark an open request withdrawn. Kept, never deleted: an ask made and
+   *  taken back is part of the record of what happened. */
+  private withdrawFieldRequest(stored: StoredRun, sourceFile: string,
+                               sourceColumn: string, why: string): boolean {
+    let found = false;
+    for (const request of stored.doc.field_requests ?? []) {
+      if (
+        request.source_file === sourceFile &&
+        request.source_column === sourceColumn &&
+        request.status === "requested"
+      ) {
+        request.status = "withdrawn";
+        request.withdrawn_by = ACTOR;
+        request.withdrawn_at = new Date().toISOString();
+        request.withdrawn_because = why;
+        found = true;
+      }
+    }
+    return found;
   }
 
   /** True when nothing genuinely AMBIGUOUS is waiting.
@@ -2122,11 +2645,16 @@ export class MockAgent {
         // alias says the NAME is familiar and not that this client means the
         // same thing by it. An amendment's mappings are already governed and
         // already answered, so it keeps matching as before.
+        // EVERY FILE, not only the tape. The canonical tape is built from the
+        // primary file; the mapping an operator approves is promoted to a rule
+        // scoped to the PORTFOLIO, and production consolidates a loan-domain
+        // field whichever file carries it. Proposing only the tape's columns
+        // left the rest "matched automatically" — settled unread by exactly
+        // the alias registry a first onboarding exists to stop trusting.
         const proposals = MAPPING_REPORT.filter((raw) => {
-          const r = raw as { primary?: boolean; canonical_field?: string;
+          const r = raw as { canonical_field?: string;
                              tier?: string; confidence?: number };
           return (
-            r.primary !== false &&
             Boolean(r.canonical_field) &&
             // A column a person has already answered is never re-proposed:
             // `execution.onboard` resolves it on its own branch before the
@@ -2137,25 +2665,26 @@ export class MockAgent {
               Number(r.confidence ?? 0) >= LOW_CONFIDENCE)
           );
         }).map((raw) => {
-          const r = raw as { source_column: string; canonical_field: string;
-                             tier: string; confidence: number };
+          const r = raw as { source_file: string; source_column: string;
+                             canonical_field: string; tier: string;
+                             confidence: number; primary?: boolean };
           return proposalFor(r);
         });
         // A weak match is a QUESTION, not a proposal: it is answered on its
         // own and it gates the approval of the set, so it has to have a card.
         const questions = MAPPING_REPORT.filter((raw) => {
-          const r = raw as { primary?: boolean; canonical_field?: string;
+          const r = raw as { canonical_field?: string;
                              tier?: string; confidence?: number };
           return (
-            r.primary !== false &&
             Boolean(r.canonical_field) &&
             r.tier !== "operator_approved" &&
             !TRUSTED_TIERS.has(String(r.tier)) &&
             Number(r.confidence ?? 0) < LOW_CONFIDENCE
           );
         }).map((raw) => {
-          const r = raw as { source_column: string; canonical_field: string;
-                             confidence: number };
+          const r = raw as { source_file: string; source_column: string;
+                             canonical_field: string; confidence: number;
+                             primary?: boolean };
           return confirmationFor(r);
         });
         if (stored.scenario === "scenario_b_ambiguous_mapping") {

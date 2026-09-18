@@ -56,7 +56,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 import yaml
@@ -165,8 +165,12 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: already answered, and re-asking would make a change to one report a
         #: re-approval of the whole tape.
         self.confirm_every_mapping = bool(confirm_every_mapping)
-        #: Columns matched confidently that are waiting on that approval.
-        self.proposed_mappings: Dict[str, str] = {}
+        #: Columns matched confidently that are waiting on that approval,
+        #: keyed ``(source file, source column)``. The pack routinely carries
+        #: the same column name in more than one file — a loan identifier is
+        #: in every extract — and keying on the name alone made one file's
+        #: proposal answer for all of them.
+        self.proposed_mappings: Dict[Tuple[str, str], str] = {}
         self.case_id = case_id
         self.tenant = tenant
         self.records: List[StageRecord] = []
@@ -198,6 +202,23 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         self.period_cutoffs: Dict[str, Any] = {}
         self.validation_report: List[Dict[str, Any]] = []
         self._assert_inside_sandbox()
+
+    def _approved_for(self, source_file: str, column: str) -> Optional[str]:
+        """What an operator already said about this column OF THIS FILE.
+
+        ``None`` means nobody has answered; ``""`` means they answered "do not
+        use it", which is not the same thing and must not collapse into it.
+
+        Keyed on the pair because a pack carries the same column name in
+        several files and an answer given about one of them is an answer about
+        one of them. The bare column name is still accepted as a fallback, so
+        answers recorded before decisions were file-scoped keep working — a
+        case mid-onboarding must not lose what a person already confirmed.
+        """
+        qualified = mapping_key(source_file, column)
+        if qualified in self.approved_mappings:
+            return self.approved_mappings[qualified]
+        return self.approved_mappings.get(column)
 
     def _assert_inside_sandbox(self) -> None:
         """Every input must already live inside the case sandbox.
@@ -285,6 +306,12 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: Every file's frame, kept so the pack can be compared against itself
         #: at step 3b rather than re-read.
         frames: Dict[str, Any] = {}
+        #: file -> {column: canonical field} for every claim this run makes or
+        #: proposes. Two columns IN ONE FILE claiming a field is an ambiguity;
+        #: two files carrying the same field is ordinary and is reconciled at
+        #: step 3b, so the clash is looked for within a file and not across the
+        #: pack.
+        claims: Dict[str, Dict[str, str]] = {}
         for path in self.artefact_paths:
             is_primary = path == primary
             table = _workbook.read_table(path)
@@ -292,20 +319,19 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                 continue          # already reported as unreadable at step 1
             file_frame = frame if is_primary else table.frame
             frames[path.name] = file_frame
+            claims.setdefault(path.name, {})
             for column in [str(c) for c in file_frame.columns]:
-                # An operator's confirmation is keyed on the column name, and
-                # only the primary tape's columns reach the canonical tape, so
-                # only there does a confirmation resolve anything.
-                approved = self.approved_mappings.get(column) if is_primary \
-                    else None
+                approved = self._approved_for(path.name, column)
                 if approved is not None:
                     if approved and approved != "__ignore__":
-                        resolved[column] = approved
+                        claims[path.name][column] = approved
+                        if is_primary:
+                            resolved[column] = approved
                     self.mapping_report.append({
                         "source_file": path.name, "source_column": column,
                         "canonical_field": approved, "tier": "operator_approved",
                         "confidence": 1.0, "note": "confirmed by an operator",
-                        "primary": True, "source_sheet": table.sheet})
+                        "primary": is_primary, "source_sheet": table.sheet})
                     continue
                 canonical, tier, confidence = mapper.map_one(column)
                 trusted = (tier in _TRUSTED_TIERS
@@ -317,27 +343,46 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                     "note": ("" if trusted
                              else "below the confidence threshold"),
                     "primary": is_primary, "source_sheet": table.sheet})
-                if not is_primary:
-                    # Recorded, never resolved and never raised as a decision:
-                    # the canonical tape is not built from this file, so there
-                    # is nothing here for an operator to settle and blocking the
-                    # run on it would be blocking on a question with no answer.
-                    continue
+                # EVERY FILE'S COLUMNS ARE PUT TO A PERSON, NOT ONLY THE TAPE'S.
+                #
+                # This adapter builds its canonical tape from the primary file,
+                # and for a long time that was also the limit of what it ASKED
+                # about: a column in the cashflow or property extract was
+                # matched, reported as "matched automatically", and never
+                # shown to anyone. That made one delivery read two ways —
+                # forty-five columns proposed and thirty-six settled by the
+                # platform on its own — and the thirty-six were settled by
+                # exactly the alias registry that the proposal exists to stop
+                # trusting unread.
+                #
+                # It also under-read the delivery. Production does not work
+                # from the primary tape alone: the central tape builder
+                # consolidates a loan-domain field "even when its
+                # authoritative source is the cashflow extract, because domain
+                # membership follows the canonical field, not the file". A
+                # mapping approved here is promoted to a governed rule scoped
+                # to the PORTFOLIO, not to this adapter's tape — so an
+                # operator's reading of the property extract's columns is
+                # worth exactly as much as their reading of the tape's, and
+                # both are wanted before anything is applied every month.
                 if canonical and trusted and self.confirm_every_mapping:
                     # A first onboarding. The match is firm and still nobody
                     # has said it is right FOR THIS CLIENT, so it waits — and
                     # the waiting is the point: what a person confirms here is
                     # what gets promoted and applied every month after.
-                    self.proposed_mappings[column] = canonical
+                    self.proposed_mappings[(path.name, column)] = canonical
+                    claims[path.name][column] = canonical
                     decisions.append(_mapping_proposal(
                         column, canonical, tier, float(confidence),
-                        file_frame[column], path.name))
+                        file_frame[column], path.name, primary=is_primary))
                 elif canonical and trusted:
-                    resolved[column] = canonical
+                    claims[path.name][column] = canonical
+                    if is_primary:
+                        resolved[column] = canonical
                 elif canonical:
                     decisions.append(_mapping_decision(
                         column, canonical, tier, float(confidence),
-                        file_frame[column], path.name))
+                        file_frame[column], path.name, primary=is_primary))
 
         # 2b. THE MODEL'S SECOND OPINION, ON WHAT DETERMINISTIC MATCHING COULD
         #     NOT SETTLE.
@@ -362,7 +407,11 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                 registry_path=self.registry_path, aliases_dir=self.aliases_dir,
                 asset_type=self.asset_type)
             self.llm = outcome.to_dict()
-            already = {str(d.get("source_column") or "") for d in decisions}
+            # Scoped to the primary tape: the model is only ever asked about
+            # that file, and a same-named column in another file has its own
+            # question, which is not this one.
+            already = {str(d.get("source_column") or "") for d in decisions
+                       if str(d.get("source_file") or "") == primary.name}
             for column, suggestion in outcome.by_column.items():
                 for row in self.mapping_report:
                     if (row.get("primary")
@@ -416,15 +465,25 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #    coherent. The clash is a real question and it is asked FIRST; the
         #    two columns stop being proposals, because "is this right?" has no
         #    answer while two columns claim the same field.
-        claimed = {**resolved, **self.proposed_mappings}
-        for canonical, columns in _duplicates(claimed).items():
-            for column in columns:
-                resolved.pop(column, None)
-                self.proposed_mappings.pop(column, None)
-            decisions = [d for d in decisions
-                         if d.get("source_column") not in columns]
-            decisions.append(_ambiguity_decision(canonical, columns, frame,
-                                                 primary.name))
+        #    AND IT IS ASKED PER FILE. The same fact arriving in two files
+        #    under two names is not an ambiguity — it is the ordinary shape of
+        #    a delivery, and step 3b reconciles it. Only two columns of ONE
+        #    file claiming one field is a question the engine cannot answer.
+        for file_name, claimed in claims.items():
+            file_frame = frames.get(file_name)
+            if file_frame is None:
+                continue
+            for canonical, columns in _duplicates(claimed).items():
+                for column in columns:
+                    if file_name == primary.name:
+                        resolved.pop(column, None)
+                    self.proposed_mappings.pop((file_name, column), None)
+                decisions = [d for d in decisions
+                             if not (d.get("source_file") == file_name
+                                     and d.get("source_column") in columns)]
+                decisions.append(_ambiguity_decision(
+                    canonical, columns, file_frame, file_name,
+                    primary=(file_name == primary.name)))
 
         # 3b. WHERE THE PACK DISAGREES WITH ITSELF.
         #
@@ -996,12 +1055,40 @@ def _populated(series: "pd.Series") -> int:
     return int(series.notna().sum() - (series.astype(str).str.strip() == "").sum())
 
 
+#: How a source file and a source column are written as one key, wherever a
+#: mapping is held by the pair rather than by the column name alone. A pack
+#: routinely carries "Loan ID" in every extract; keying on the name alone made
+#: one answer speak for all of them.
+KEY_SEPARATOR = "::"
+
+
+def mapping_key(source_file: str, column: str) -> str:
+    return f"{source_file}{KEY_SEPARATOR}{column}"
+
+
+def _decision_id(prefix: str, subject: str, source_file: str,
+                 primary: bool) -> str:
+    """A decision id that is unique across the pack, not just within a file.
+
+    The PRIMARY tape keeps the unqualified id it has always had. That is not
+    tidiness: a case part-way through its onboarding has answers recorded
+    against those ids, and renaming them would orphan every one. Columns in the
+    other files — which were never asked about before this, so have no answers
+    to orphan — carry their file in the id, because "Pool" in the property
+    extract and "Pool" in the tape are two different questions.
+    """
+    if primary:
+        return f"{prefix}_{_slug(subject)}"
+    return f"{prefix}_{_slug(source_file)}__{_slug(subject)}"
+
+
 def _mapping_decision(column: str, canonical: str, tier: str,
                       confidence: float, series: "pd.Series",
-                      source_file: str) -> Dict[str, Any]:
+                      source_file: str, *, primary: bool = True
+                      ) -> Dict[str, Any]:
     """A low-confidence match, in the existing pending-decision shape."""
     return {
-        "decision_id": f"map_{_slug(column)}",
+        "decision_id": _decision_id("map", column, source_file, primary),
         "decision_type": "mapping_confirmation",
         "target_field": canonical,
         "source_column": column,
@@ -1031,7 +1118,8 @@ DECISION_MAPPING_PROPOSAL = "mapping_proposal"
 
 def _mapping_proposal(column: str, canonical: str, tier: str,
                       confidence: float, series: "pd.Series",
-                      source_file: str) -> Dict[str, Any]:
+                      source_file: str, *, primary: bool = True
+                      ) -> Dict[str, Any]:
     """A firm match that has not yet been read by a person.
 
     It carries the same subject as a confirmation — a source column and the
@@ -1041,7 +1129,7 @@ def _mapping_proposal(column: str, canonical: str, tier: str,
     which.
     """
     return {
-        "decision_id": f"map_{_slug(column)}",
+        "decision_id": _decision_id("map", column, source_file, primary),
         "decision_type": DECISION_MAPPING_PROPOSAL,
         "target_field": canonical,
         "source_column": column,
@@ -1065,14 +1153,15 @@ def _mapping_proposal(column: str, canonical: str, tier: str,
 
 def _ambiguity_decision(canonical: str, columns: List[str],
                         frame: "pd.DataFrame",
-                        source_file: str) -> Dict[str, Any]:
+                        source_file: str, *, primary: bool = True
+                        ) -> Dict[str, Any]:
     """Two columns claiming one canonical field. Always a human decision."""
     counts = {c: _populated(frame[c]) for c in columns}
     detail = "; ".join(f"'{c}' carries values for {n} of {len(frame)} records"
                        for c, n in counts.items())
     preferred = max(counts, key=lambda c: (counts[c], c))
     return {
-        "decision_id": f"amb_{_slug(canonical)}",
+        "decision_id": _decision_id("amb", canonical, source_file, primary),
         "decision_type": "mapping_ambiguity",
         "target_field": canonical,
         "source_column": preferred,

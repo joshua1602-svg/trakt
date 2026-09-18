@@ -148,7 +148,9 @@ class Outcome:
 
 #: Tiers that settle a column outright, so there is nothing to ask a model
 #: about. The first three are ``execution._TRUSTED_TIERS`` — exact or
-#: contract-backed, settled whatever the numeric confidence. The fourth is an
+#: contract-backed, settled whatever the numeric confidence, and on a first
+#: onboarding PROPOSED to a person rather than applied. Either way the mapper
+#: has an answer and a model is not needed to supply one. The fourth is an
 #: operator's own answer, which ``execution`` handles on a separate branch
 #: before the mapper is consulted at all; it is named here because this module
 #: reads the REPORT rather than that branch, and a column a person already
@@ -159,10 +161,18 @@ SETTLED_TIERS = frozenset({"exact", "normalized", "alias", "operator_approved"})
 def unresolved(rows: Sequence[Dict[str, Any]], policy: Policy) -> List[str]:
     """The columns of the primary tape the deterministic pass did not settle.
 
-    Everything else is excluded on the configuration's own terms: a settled
-    tier, a confidence above the threshold, or a column from a file the
-    canonical tape is not built from — where an operator's answer would resolve
-    nothing, so a question about it is a question with no answer.
+    A settled tier or a confidence above the threshold is excluded on the
+    configuration's own terms: there is nothing to ask, and asking would spend
+    budget to be told what is already known.
+
+    THE PRIMARY TAPE ONLY, WHICH IS A BUDGET DECISION AND NOT A CLAIM ABOUT
+    WORTH. Every file's columns are now put to a PERSON, and a mapping approved
+    on any of them is promoted to a governed rule. What is confined to the
+    primary tape is the MODEL: the sample values it reasons from come from that
+    frame, and ``max_llm_calls_per_run`` is a per-run budget that a four-file
+    pack would exhaust on the first extract. A column in another file that
+    nothing matched is reported unmapped and offered to an operator, which is
+    the same remedy a model's suggestion leads to.
     """
     out: List[str] = []
     seen = set()

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import pytest
 
+from operations_control.occ_agent import field_promotion as _field_promotion
 from operations_control.occ_agent import mapping_promotion as _promotion
 from operations_control.occ_agent.adapters import (
     ActivationIntent,
@@ -295,6 +296,117 @@ class TestWhereASettledMappingMayLand:
         for cls in (SyntheticExecutionAdapter,):
             params = inspect.signature(cls.activate).parameters
             assert "decisions" in params
+            assert "field_requests" in params
+
+
+# --------------------------------------------------------------------------- #
+# A field the platform has no word for
+# --------------------------------------------------------------------------- #
+
+class TestAFieldTheOperatorAskedFor:
+    """An ask becomes a DRAFT configuration version, and never more than that.
+
+    The field registry is the vocabulary every client's report is written in.
+    ``operations_control.rules`` states the invariant — "the core field
+    registry is never written" from this container — and proposing is not
+    writing: nothing in force changes, no delivery sees the new field, and the
+    second pair of eyes the config lifecycle exists to require is still
+    required. One client's first delivery must not change what every other
+    client's report means.
+    """
+
+    REQUEST = {"request_id": "fieldreq_1", "status": "requested",
+               "field_name": "broker_code", "label": "broker code",
+               "description": "The intermediary who introduced the case.",
+               "data_type": "string", "source_file": "property.csv",
+               "source_column": "Broker Code",
+               "sample_values": ["BRK001", "BRK002"],
+               "requested_by": ACTOR, "requested_at": "2026-09-18T00:00:00Z",
+               "route": "config package, system layer: "
+                        "config/system/fields_registry.yaml"}
+
+    def _packages(self, storage):
+        from operations_control.configuration.packages import (
+            ConfigPackageStore,
+        )
+        from operations_control.stores import OpsStore
+        return ConfigPackageStore(OpsStore(storage))
+
+    def test_the_ask_becomes_a_draft(self, storage):
+        packages = self._packages(storage)
+        proposed = _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        assert [p["status"] for p in proposed] == ["proposed"]
+        version = packages.get_version("system", proposed[0]["version"])
+        assert version["status"] == "draft"
+
+    def test_the_draft_carries_the_field(self, storage):
+        import yaml
+        packages = self._packages(storage)
+        proposed = _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        version = packages.get_version("system", proposed[0]["version"])
+        registry = yaml.safe_load(
+            version["files"]["config/system/fields_registry.yaml"]["content"])
+        assert "broker_code" in registry["fields"]
+        # Scoped to THIS book. The operator met the column in an equity
+        # release tape and said what it means there; whether every asset class
+        # means the same by it is a second claim they did not make.
+        assert registry["fields"]["broker_code"]["portfolio_type"] \
+            == "equity_release"
+        assert registry["fields"]["broker_code"]["core_canonical"] is False
+
+    def test_nothing_in_force_changes(self, storage):
+        packages = self._packages(storage)
+        before = packages.ensure_seeded("system")["version"]
+        _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        assert packages.active_version("system")["version"] == before
+
+    def test_the_reviewer_is_told_what_they_are_deciding(self, storage):
+        packages = self._packages(storage)
+        proposed = _field_promotion.propose(
+            packages, [self.REQUEST], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release")
+        notes = packages.get_version("system", proposed[0]["version"])["notes"]
+        assert "Broker Code" in notes and "property.csv" in notes
+        assert ACTOR in notes and "intermediary" in notes
+        assert "BRK001" in notes
+
+    def test_a_withdrawn_ask_reaches_nobody(self, storage):
+        packages = self._packages(storage)
+        withdrawn = {**self.REQUEST, "status": "withdrawn"}
+        assert _field_promotion.propose(
+            packages, [withdrawn], by=ACTOR, case_ref="ONB-2026-0010",
+            asset_type="equity_release") == []
+
+    def test_a_field_that_already_exists_is_left_alone(self, storage):
+        """Overwriting a field in use would be the worst possible outcome of
+        asking for a new one."""
+        import yaml
+        packages = self._packages(storage)
+        active = packages.ensure_seeded("system")
+        current = active["files"]["config/system/fields_registry.yaml"]["content"]
+        drafted = _field_promotion.draft_registry(
+            current, [{**self.REQUEST, "field_name": "loan_identifier"}],
+            asset_type="equity_release")
+        before = yaml.safe_load(current)["fields"]["loan_identifier"]
+        assert yaml.safe_load(drafted)["fields"]["loan_identifier"] == before
+
+    def test_a_rehearsal_proposes_nothing(self):
+        """The same reason mappings promote at activation and not sooner: a
+        draft config version is a GLOBAL artefact, and a practice case that is
+        never activated must not litter the platform's configuration history
+        with proposals for clients that never went live."""
+        adapter = SyntheticExecutionAdapter(synthetic_policy())
+        pre = ActivationPreconditions(case_ref="ONB-2026-0010",
+                                      tenant=TENANT_A)
+        with pytest.raises(Exception):
+            adapter.activate(pre=pre, intent=ActivationIntent(client_id="ERE"),
+                             actor=ACTOR, field_requests=[self.REQUEST])
 
 
 # --------------------------------------------------------------------------- #

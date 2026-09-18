@@ -19,6 +19,7 @@ import type {
   CaseSummary,
   AgentMail,
   MailIngestOutcome,
+  RegistryField,
 } from "./agentTypes";
 
 import type {
@@ -1966,6 +1967,43 @@ export class MockOpsClient implements OpsClient {
   async approveAgentMappings(caseRef: string, reason = ""): Promise<AgentStatus> {
     await this.wait();
     return this.agent.approveMappings(caseRef, reason);
+  }
+
+  async stageAgentMapping(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "confirm" | "amend" | "not_used" | "clear";
+      target_field?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.stageMapping(caseRef, input);
+  }
+
+  async agentFieldRegistry(caseRef: string): Promise<RegistryField[]> {
+    await this.wait();
+    return this.agent.fieldRegistry(caseRef);
+  }
+
+  async resolveUnmappedColumn(
+    caseRef: string,
+    input: {
+      source_file: string;
+      source_column: string;
+      action: "use_existing" | "request_field" | "withdraw_request";
+      target_field?: string;
+      field_name?: string;
+      label?: string;
+      description?: string;
+      data_type?: string;
+      reason?: string;
+    },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.resolveUnmapped(caseRef, input);
   }
 
   async runAgentStep(

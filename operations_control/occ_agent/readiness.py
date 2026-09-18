@@ -383,6 +383,13 @@ def build_package(run: SyntheticRun, case: OnboardingCase,
         # 7c — required fields the product profile does not need for
         # management information. Shown, never hidden.
         "excused_for_base_mi": list(run.excused_findings),
+        # 7d — canonical fields an operator asked for because a column in this
+        # delivery has nowhere to go. Not mappings and not fields: adding one
+        # is a versioned system-configuration change with its own approval, so
+        # the request travels with the package for a configuration owner
+        # rather than being applied here. An approver reading the package
+        # should see what this client's data needs that Trakt has no field for.
+        "field_registry_requests": list(run.field_requests),
         # 8
         "validation_summary": [r for r in run.control_results
                                if r.get("kind") == "validation"],

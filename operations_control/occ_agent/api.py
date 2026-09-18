@@ -156,7 +156,50 @@ class DecisionAnswer(BaseModel):
 
 
 class MappingApproval(BaseModel):
-    """One approval over every mapping still proposed on this delivery."""
+    """One act over everything staged, plus every untouched proposal."""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
+class MappingStage(BaseModel):
+    """What the operator says one column is. A draft, not an act.
+
+    ``action`` is one of ``confirm`` (what Trakt read it as is right),
+    ``amend`` (it is ``target_field`` instead), ``not_used`` (it feeds
+    nothing) or ``clear`` (take the staged answer back). Nothing is resolved,
+    promoted or rerun until the set is confirmed.
+    """
+    source_file: str
+    source_column: str
+    action: str
+    target_field: str = ""
+    reason: str = ""
+    tenant: Optional[str] = None
+
+
+class UnmappedColumn(BaseModel):
+    """What to do about a column nothing in the registry resembled.
+
+    ``action`` is one of:
+
+    ``use_existing``
+        The operator names the canonical field the column feeds. Staged, not
+        applied. ``target_field`` is required and must be a field this book
+        reports on.
+    ``request_field``
+        The operator asks for a canonical field the platform does not have.
+        ``field_name`` is required; the column stays unmapped.
+    ``withdraw_request``
+        Take back an ask made in error.
+    """
+    source_file: str
+    source_column: str
+    action: str = "use_existing"
+    target_field: str = ""
+    field_name: str = ""
+    label: str = ""
+    description: str = ""
+    data_type: str = ""
     reason: str = ""
     tenant: Optional[str] = None
 
@@ -628,22 +671,99 @@ def answer_decision(case_ref: str, body: DecisionAnswer,
                 value=body.value, reason=body.reason, actor=principal.name))}
 
 
-@router.post("/cases/{case_ref}/mappings/approve")
-def approve_mappings(case_ref: str, body: MappingApproval,
-                     principal: Principal = Depends(authenticate)
-                     ) -> Dict[str, Any]:
-    """Approve every mapping this delivery still has proposed.
+@router.post("/cases/{case_ref}/mappings/stage")
+def stage_mapping(case_ref: str, body: MappingStage,
+                  principal: Principal = Depends(authenticate)
+                  ) -> Dict[str, Any]:
+    """Record what this operator says one column is, without applying it.
 
-    One act for the operator; one resolved decision per column on the record,
-    because that is what promotion turns into governed rules and what an
-    auditor reads back.
+    Reading the table is the work and it is not done in one sitting. A staged
+    answer survives a refresh, can be replaced or withdrawn, and resolves
+    nothing until ``/mappings/approve`` commits the set.
     """
     _require_feature()
     service = get_service()
     agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
     return {"ok": True,
-            **service.status(service.approve_proposed_mappings(
+            **service.status(service.stage_mapping(
+                agent_case, source_file=body.source_file,
+                source_column=body.source_column, action=body.action,
+                target_field=body.target_field, actor=principal.name,
+                reason=body.reason))}
+
+
+@router.post("/cases/{case_ref}/mappings/approve")
+def approve_mappings(case_ref: str, body: MappingApproval,
+                     principal: Principal = Depends(authenticate)
+                     ) -> Dict[str, Any]:
+    """Commit the mapping table: everything staged, plus every proposal left
+    as Trakt read it.
+
+    One act for the operator; one resolved decision per column on the record,
+    because that is what promotion turns into governed rules and what an
+    auditor reads back. Refused while a genuine question has no answer.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    return {"ok": True,
+            **service.status(service.confirm_mappings(
                 agent_case, actor=principal.name, reason=body.reason))}
+
+
+@router.get("/cases/{case_ref}/field-registry")
+def field_registry(case_ref: str, tenant: Optional[str] = None,
+                   principal: Principal = Depends(authenticate)
+                   ) -> Dict[str, Any]:
+    """Every canonical field this book may map an unmapped column to.
+
+    The mapper's own selection, so a field an operator can pick on the screen
+    is a field the run will accept.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, tenant), case_ref)
+    return {"ok": True, "fields": service.field_catalogue(agent_case)}
+
+
+@router.post("/cases/{case_ref}/mappings/unmapped")
+def resolve_unmapped_column(case_ref: str, body: UnmappedColumn,
+                            principal: Principal = Depends(authenticate)
+                            ) -> Dict[str, Any]:
+    """Give a column that matched nothing somewhere to go.
+
+    Either it feeds a field Trakt already has — an alias, STAGED like every
+    other answer on the mapping table and applied when the set is confirmed —
+    or it needs a field Trakt does not have, which is a versioned change to the
+    platform's canonical vocabulary and is recorded as a request rather than
+    made here.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    action = (body.action or "use_existing").strip()
+    if action == "use_existing":
+        updated = service.map_unmapped_column(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, target_field=body.target_field,
+            actor=principal.name, reason=body.reason)
+    elif action == "request_field":
+        updated = service.request_registry_field(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, field_name=body.field_name,
+            label=body.label, description=body.description,
+            data_type=body.data_type, actor=principal.name,
+            reason=body.reason)
+    elif action == "withdraw_request":
+        updated = service.withdraw_registry_field_request(
+            agent_case, source_file=body.source_file,
+            source_column=body.source_column, actor=principal.name,
+            reason=body.reason)
+    else:
+        raise OpsError("OCC_AGENT_UNKNOWN_MAPPING_ACTION",
+                       "That is not something Trakt can do with an unmapped "
+                       "column.", http_status=400)
+    return {"ok": True, **service.status(updated)}
 
 
 @router.post("/cases/{case_ref}/plan")

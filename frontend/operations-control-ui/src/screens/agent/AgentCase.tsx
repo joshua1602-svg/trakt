@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -14,15 +14,18 @@ import type {
   AgentProposal,
   AgentStatus,
   DecisionCard,
+  FieldRequest,
   MappingOverview,
   MappingRow,
   ReadinessCriterion,
+  RegistryField,
   StreamSummary,
 } from "@/api/agentTypes";
 import type { CaseProblem, ChecklistRow, InformationRequest } from "@/api/onboardingTypes";
 import { AgentCancelDialog } from "./AgentCancelDialog";
 import { ClientMailPanel } from "./AgentClientMail";
 import { ClientQuestionsPanel } from "./AgentClientQuestions";
+import { DialogButtons, Modal } from "@/components/admin/primitives";
 import { ErrorNote, Loading } from "@/components/ErrorNote";
 import { Page } from "@/components/Page";
 import { StatusChip } from "@/components/StatusChip";
@@ -125,6 +128,13 @@ function packOwner(status: AgentStatus): StageKey {
 export function AgentCaseScreen() {
   const { caseId = "" } = useParams();
   const client = useOpsClient();
+  // Stable, because the dialog fetches on it. A fresh closure every render
+  // makes the effect that loads the field list re-run on its own result, and
+  // an input re-rendering under the cursor loses what is being typed into it.
+  const loadFields = useCallback(
+    () => client.agentFieldRegistry(caseId),
+    [client, caseId],
+  );
   const toast = useToast();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -215,15 +225,21 @@ export function AgentCaseScreen() {
   const current = stages.find((stage) => stage.status === "current");
   const packStage = packOwner(status);
   const yours = operatorBlocking(onboarding.blocking);
-  // Open questions that are answered HERE. A proposed mapping is open and
-  // blocking too, but it is answered in the mapping table — as part of one
-  // approval over the set — and rendering seventy cards beside a table that
-  // already lists the same seventy columns is the friction this design exists
-  // to remove.
+  // Open questions that are answered HERE. EVERY question about a column is
+  // answered in the mapping table instead — the proposals, the weak matches
+  // and the ambiguities alike.
+  //
+  // Not only to avoid rendering seventy cards beside a table listing the same
+  // seventy columns. The table is a DRAFT an operator works down and commits
+  // in one act; a card that applied its answer the moment it was clicked would
+  // be a second route to the same column with different rules, and the column
+  // an operator settled from a card could not then be changed back.
   const openDecisions = status.open_decisions.filter(
     (d) =>
       d.status === "open" &&
-      (d.subject as { decision_type?: string })?.decision_type !== "mapping_proposal",
+      !MAPPING_DECISION_TYPES.has(
+        String((d.subject as { decision_type?: string })?.decision_type ?? ""),
+      ),
   );
 
   /**
@@ -555,15 +571,46 @@ export function AgentCaseScreen() {
               the check on everything the mapper did WITHOUT asking. */}
           <MappingPanel
             mapping={status.mapping}
+            requests={run.field_requests ?? []}
             live={run.mode === "live"}
             busy={busy}
+            loadFields={loadFields}
+            onStage={(input) =>
+              void act(() => client.stageAgentMapping(caseId, input))
+            }
             onApprove={() =>
               void act(async () => {
                 const result = await client.approveAgentMappings(caseId);
                 toast.show(
-                  copy.agent.mappingApprovedToast(status.mapping.proposed ?? 0),
+                  copy.agent.mappingCommittedToast(
+                    status.mapping.to_confirm ?? 0),
                   "success",
                 );
+                return result;
+              })
+            }
+            onResolveUnmapped={(input) =>
+              void act(async () => {
+                const result = await client.resolveUnmappedColumn(caseId, input);
+                // Said in the words of the act that happened. A request is not
+                // a mapping, and a toast that read the same for both would
+                // leave an operator believing the column was settled.
+                if (input.action === "use_existing") {
+                  toast.show(
+                    copy.agent.mappingMappedToast(
+                      input.source_column,
+                      input.target_field ?? "",
+                    ),
+                    "success",
+                  );
+                } else if (input.action === "request_field") {
+                  toast.show(
+                    copy.agent.mappingRequestedToast(input.field_name ?? ""),
+                    "success",
+                  );
+                } else {
+                  toast.show(copy.agent.mappingWithdrawnToast, "success");
+                }
                 return result;
               })
             }
@@ -1133,23 +1180,44 @@ function ResponsesBlock({
  */
 function MappingPanel({
   mapping,
+  requests,
   live,
   busy,
   onApprove,
+  onStage,
+  onResolveUnmapped,
+  loadFields,
 }: {
   mapping: MappingOverview;
+  requests: FieldRequest[];
   live: boolean;
   busy: boolean;
   onApprove: () => void;
+  onStage: (input: StageInput) => void;
+  onResolveUnmapped: (input: UnmappedInput) => void;
+  loadFields: () => Promise<RegistryField[]>;
 }) {
   const [filter, setFilter] = useState("");
+  // Which unmapped column the operator is answering, if any. One at a time:
+  // the question is about THIS column, and a form that could be about three
+  // of them is a form somebody answers for the wrong one.
+  const [answering, setAnswering] = useState<MappingRow | null>(null);
   const counts = mapping.counts ?? {};
-  const rows = filter ? mapping.rows.filter((r) => r.state === filter) : mapping.rows;
-  // A first delivery proposes every column it matched. The approval is one
-  // act here rather than one card per column, because an operator who has read
-  // the table has already done the reading — what is missing is saying so.
+  const rows =
+    filter === CONTESTED
+      ? mapping.rows.filter((r) => r.also_claimed_by.length > 0)
+      : filter
+        ? mapping.rows.filter((r) => r.state === filter)
+        : mapping.rows;
+  // WHAT THE COMMIT WOULD DO. `staged` is what the operator has been through
+  // by hand; `proposed` is what they have left as Trakt read it, which commits
+  // with the rest; `mustAnswerFirst` has no answer at all and is why the
+  // button is refused rather than being allowed to invent one.
+  const staged = mapping.staged ?? 0;
   const proposed = mapping.proposed ?? 0;
-  const mustAnswerFirst = mapping.blocking_questions ?? 0;
+  const toConfirm = mapping.to_confirm ?? staged + proposed;
+  const mustAnswerFirst = mapping.unanswered_questions ?? 0;
+  const contested = mapping.contested ?? 0;
 
   // Only the states actually present are offered. A chip reading "Not used 0"
   // is a question nobody asked.
@@ -1166,10 +1234,16 @@ function MappingPanel({
           </p>
           <p className="mt-1 text-xs text-stone-500">{copy.agent.mappingHelp}</p>
 
-          {proposed > 0 && (
+          {toConfirm > 0 && (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
               <p className="max-w-3xl text-xs text-amber-900">
                 {copy.agent.mappingApproveHelp}
+              </p>
+              {/* Said out loud, because the whole point of the draft is that
+                  it has NOT happened. An operator who has confirmed forty rows
+                  needs to know the forty are still theirs to change. */}
+              <p className="mt-1 max-w-3xl text-xs text-amber-800">
+                {copy.agent.mappingDraftHelp}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <button
@@ -1178,8 +1252,14 @@ function MappingPanel({
                   onClick={onApprove}
                   className="rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                 >
-                  {copy.agent.mappingApprove(proposed)}
+                  {copy.agent.mappingCommit(toConfirm)}
                 </button>
+                {/* The button names its own consequence: how many the operator
+                    went through, and how many commit exactly as Trakt read
+                    them. "Confirm 26" without that is 26 of what. */}
+                <span className="text-xs text-amber-900">
+                  {copy.agent.mappingCommitBreakdown(staged, proposed)}
+                </span>
                 {mustAnswerFirst > 0 && (
                   // Offering to settle the set while a real question waits
                   // would promise a run that cannot move.
@@ -1205,6 +1285,17 @@ function MappingPanel({
                 onClick={() => setFilter(state)}
               />
             ))}
+            {/* Not a state — a row is contested AND proposed at once — so it
+                filters on its own. An operator asked to be able to find them
+                before approving the set, and a count they cannot filter to is
+                just a number. */}
+            {contested > 0 && (
+              <FilterChip
+                label={`${copy.agent.mappingContestedFilter} ${contested}`}
+                active={filter === CONTESTED}
+                onClick={() => setFilter(CONTESTED)}
+              />
+            )}
           </div>
 
           {/* Grouped by file. A pack is three or four tapes and a flat list
@@ -1247,7 +1338,14 @@ function MappingPanel({
                     because a row split across two lines is the defect being
                     fixed and a scrollbar is not. */}
                 <div className="mt-2 overflow-x-auto rounded-xl border border-stone-200">
-                  <table className="w-full min-w-[60rem] table-fixed text-left text-sm">
+                  {/* 72rem, not 60: the table carries an action column now,
+                      and three controls need about 190px. Below that the
+                      buttons themselves were clipped — which is worse than
+                      the scrollbar, because a clipped row still LOOKS
+                      complete. `overflow-hidden` on the cells stops anything
+                      printing over its neighbour; this stops there being
+                      anything to clip. */}
+                  <table className="w-full min-w-[72rem] table-fixed text-left text-sm">
                     {/* Proportions measured against the rendered table, not
                         guessed: at 16% the status chip truncated to "Matched
                         automa…", at 19% to "Weak match, nothing a…", and at 9%
@@ -1259,12 +1357,21 @@ function MappingPanel({
                         status. The evidence is the justification for those
                         three and is the one that may truncate, because it is
                         a hover away and they are not. */}
+                    {/* Six columns now: the operator ACTS on this table, and
+                        an action crammed into the field cell overran it and
+                        printed on top of the next column. What gets the room
+                        is still what they triage on — the column's own name,
+                        what Trakt read it as, and the status; the evidence is
+                        the justification for those and is the one that
+                        truncates, because it is a hover away and they are
+                        not. */}
                     <colgroup>
-                      <col className="w-[22%]" />
-                      <col className="w-[22%]" />
-                      <col className="w-[24%]" />
-                      <col className="w-[21%]" />
-                      <col className="w-[11%]" />
+                      <col className="w-[16%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[28%]" />
+                      <col className="w-[13%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[19%]" />
                     </colgroup>
                     <thead>
                       {/* Sticky against the PAGE scroll: a real tape is
@@ -1277,6 +1384,9 @@ function MappingPanel({
                         <th className="truncate px-3 py-2 font-medium">{copy.agent.mappingBasis}</th>
                         <th className="truncate px-3 py-2 text-right font-medium">
                           {copy.agent.mappingConfidence}
+                        </th>
+                        <th className="truncate px-3 py-2 text-right font-medium">
+                          <span className="sr-only">{copy.agent.mappingRowConfirm}</span>
                         </th>
                       </tr>
                     </thead>
@@ -1305,22 +1415,50 @@ function MappingPanel({
                                 {row.state_label}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-stone-700">
+                            {/* `overflow-hidden` is the backstop: a fixed
+                                layout does not clip on its own, so anything
+                                that will not shrink prints OVER the next
+                                column rather than being cut off by it. */}
+                            <td className="overflow-hidden px-3 py-2.5 text-stone-700">
                               <MappingFieldCell row={row} />
                             </td>
+                            {/* WHAT KIND OF READING THIS IS, first and always
+                                in the same place. The tier sentence explains
+                                the evidence and is the right length to read;
+                                it is the wrong length to scan a hundred and
+                                fifty rows by, and on a model-suggested row it
+                                read "Nothing Trakt reports on resembles this
+                                column" beside a chip saying a model had
+                                proposed one. */}
                             <td
-                              className="truncate px-3 py-2.5 text-xs text-stone-500"
-                              title={[row.tier_label, row.note].filter(Boolean).join(" — ")}
+                              className="overflow-hidden px-3 py-2.5 text-xs text-stone-500"
+                              title={[row.match_kind_label, row.tier_label,
+                                      row.note, row.decision_detail]
+                                .filter(Boolean)
+                                .join(" — ")}
                             >
-                              <span>{row.tier_label}</span>
-                              {row.note && (
-                                <span className="text-stone-400"> — {row.note}</span>
-                              )}
+                              <span
+                                className={clsx(
+                                  "inline-block max-w-full truncate whitespace-nowrap rounded px-1.5 py-0.5 font-medium",
+                                  MATCH_KIND_TONES[row.match_kind] ??
+                                    "bg-stone-100 text-stone-600",
+                                )}
+                              >
+                                {row.match_kind_label}
+                              </span>
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums text-stone-600">
                               {row.confidence === null
                                 ? copy.agent.mappingNothing
                                 : `${Math.round(row.confidence * 100)}%`}
+                            </td>
+                            <td className="overflow-hidden px-3 py-2.5 text-right">
+                              <MappingRowActions
+                                row={row}
+                                busy={busy}
+                                onStage={onStage}
+                                onPickField={() => setAnswering(row)}
+                              />
                             </td>
                           </tr>
                         ))}
@@ -1329,9 +1467,418 @@ function MappingPanel({
                 </div>
               </section>
             ))}
+
+          {/* An ask is a governed record, so it is on the screen rather than
+              only in the audit trail: an operator who asked for a field last
+              week should not have to remember that they did. */}
+          {requests.filter((r) => r.status === "requested").length > 0 && (
+            <section className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <h4 className="text-sm font-semibold text-amber-900">
+                {copy.agent.mappingRequestsHeading}
+              </h4>
+              <ul className="mt-2 space-y-2">
+                {requests
+                  .filter((r) => r.status === "requested")
+                  .map((request) => (
+                    <li key={request.request_id} className="text-xs text-amber-900">
+                      <span className="font-semibold">{request.field_name}</span>
+                      {" — "}
+                      {request.source_column} in {request.source_file}
+                      {request.description && <> · {request.description}</>}
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          onResolveUnmapped({
+                            source_file: request.source_file,
+                            source_column: request.source_column,
+                            action: "withdraw_request",
+                          })
+                        }
+                        className="ml-2 font-medium underline disabled:opacity-50"
+                      >
+                        {copy.agent.mappingWithdrawRequest}
+                      </button>
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-2 max-w-3xl text-xs text-amber-800">
+                {copy.agent.mappingRequestNewHelp}
+              </p>
+            </section>
+          )}
+
+          {answering && (
+            <UnmappedColumnDialog
+              row={answering}
+              busy={busy}
+              loadFields={loadFields}
+              onCancel={() => setAnswering(null)}
+              onSubmit={(input) => {
+                setAnswering(null);
+                onResolveUnmapped(input);
+              }}
+            />
+          )}
         </>
       )}
     </Panel>
+  );
+}
+
+/** The filter that is not a state: a row is contested AND proposed at once. */
+const CONTESTED = "__contested__";
+
+/** Every question about a source column. All of them are answered on the
+ *  mapping table, which is the one surface with the draft-then-commit rules. */
+const MAPPING_DECISION_TYPES = new Set([
+  "mapping_proposal",
+  "mapping_confirmation",
+  "mapping_ambiguity",
+]);
+
+/** What the screen asks the server to record about one column. A draft. */
+type StageInput = {
+  source_file: string;
+  source_column: string;
+  action: "confirm" | "amend" | "not_used" | "clear";
+  target_field?: string;
+  reason?: string;
+};
+
+/**
+ * What an operator does to one row.
+ *
+ * THE WHOLE TABLE IS A DRAFT UNTIL IT IS COMMITTED, so these words have to
+ * keep two things apart that used to be one. "Confirm" here records that this
+ * operator has read this column and agrees — and applies nothing. The button
+ * at the top of the panel is what applies the lot.
+ *
+ * A row that has been answered shows the answer and an undo, not the choices
+ * again: the question on it has been asked and answered, and re-offering
+ * "Confirm / Change / Do not use" invites it to be answered twice.
+ */
+function MappingRowActions({
+  row,
+  busy,
+  onStage,
+  onPickField,
+}: {
+  row: MappingRow;
+  busy: boolean;
+  onStage: (input: StageInput) => void;
+  onPickField: () => void;
+}) {
+  const where = { source_file: row.source_file, source_column: row.source_column };
+  if (row.state === "staged") {
+    const said =
+      row.staged_action === "not_used"
+        ? copy.agent.mappingStagedNotUsed
+        : row.staged_action === "amend"
+          ? copy.agent.mappingStagedAmend(row.staged_field)
+          : copy.agent.mappingStagedConfirm;
+    return (
+      <div className="flex min-w-0 items-baseline justify-end gap-2">
+        <span className="truncate text-xs text-emerald-700" title={said}>
+          {said}
+        </span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onStage({ ...where, action: "clear" })}
+          className="shrink-0 text-xs font-medium text-blue-700 underline disabled:opacity-50"
+        >
+          {copy.agent.mappingRowUndo}
+        </button>
+      </div>
+    );
+  }
+  // A column already committed, or one from a file that could not be read, is
+  // not something to answer.
+  if (row.state === "confirmed" || row.state === "unreadable") return null;
+  return (
+    <div className="flex min-w-0 items-baseline justify-end gap-2">
+      {row.canonical_field && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onStage({ ...where, action: "confirm" })}
+          className="shrink-0 rounded border border-stone-300 px-1.5 py-0.5 text-xs font-medium text-stone-700 hover:bg-stone-100 disabled:opacity-50"
+        >
+          {copy.agent.mappingRowConfirm}
+        </button>
+      )}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onPickField}
+        className="shrink-0 text-xs font-medium text-blue-700 underline disabled:opacity-50"
+      >
+        {row.canonical_field
+          ? copy.agent.mappingRowChange
+          : copy.agent.mappingUnmappedAction}
+      </button>
+      {row.canonical_field && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onStage({ ...where, action: "not_used" })}
+          className="shrink-0 text-xs font-medium text-stone-500 underline hover:text-stone-700 disabled:opacity-50"
+        >
+          {copy.agent.mappingRowNotUsed}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** How firm each kind of reading is, at a glance. A known alias and a model's
+ *  guess are not the same claim and must not share a colour. */
+const MATCH_KIND_TONES: Record<string, string> = {
+  operator: "bg-emerald-50 text-emerald-700",
+  alias: "bg-blue-50 text-blue-700",
+  name: "bg-blue-50 text-blue-700",
+  similar: "bg-amber-50 text-amber-800",
+  model: "bg-violet-50 text-violet-700",
+  none: "bg-stone-100 text-stone-500",
+  unreadable: "bg-rose-50 text-rose-700",
+};
+
+/** What the screen asks the server to do about one unmapped column. *//** What the screen asks the server to do about one unmapped column. */
+type UnmappedInput = {
+  source_file: string;
+  source_column: string;
+  action: "use_existing" | "request_field" | "withdraw_request";
+  target_field?: string;
+  field_name?: string;
+  label?: string;
+  description?: string;
+  data_type?: string;
+  reason?: string;
+};
+
+/**
+ * What to do about a column nothing in the registry resembled.
+ *
+ * THE TWO CHOICES ARE NOT THE SAME ACT, and the dialog is built so they cannot
+ * be mistaken for each other. Naming a field Trakt already has is settled on
+ * the spot and promotes into this client's governed rules. Asking for a field
+ * Trakt does NOT have changes the vocabulary every client's report is written
+ * in — so it is recorded as a request, the column stays unmapped, and the
+ * panel says so in the form rather than after the fact.
+ *
+ * The field list is the server's (`OccAgentService.field_catalogue`, the
+ * mapper's own selection), fetched when the dialog opens rather than held on
+ * every status response: it is five hundred fields, it does not change during
+ * a case, and most operators never open this.
+ */
+function UnmappedColumnDialog({
+  row,
+  busy,
+  loadFields,
+  onCancel,
+  onSubmit,
+}: {
+  row: MappingRow;
+  busy: boolean;
+  loadFields: () => Promise<RegistryField[]>;
+  onCancel: () => void;
+  onSubmit: (input: UnmappedInput) => void;
+}) {
+  const [mode, setMode] = useState<"use_existing" | "request_field">("use_existing");
+  const [fields, setFields] = useState<RegistryField[] | null>(null);
+  const [chosen, setChosen] = useState("");
+  const [name, setName] = useState("");
+  const [what, setWhat] = useState("");
+  const [type, setType] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    void loadFields().then((list) => {
+      if (live) setFields(list);
+    });
+    return () => {
+      live = false;
+    };
+  }, [loadFields]);
+
+  const known = fields ?? [];
+  const valid =
+    mode === "use_existing"
+      ? known.some((f) => f.name === chosen)
+      : name.trim().length > 0;
+
+  return (
+    <Modal labelledBy="unmapped-column-title">
+      <h3 id="unmapped-column-title" className="text-lg font-semibold text-stone-900">
+        {copy.agent.mappingUnmappedHeading(row.source_column)}
+      </h3>
+      <p className="mt-1 text-xs text-stone-500">{row.source_file}</p>
+      <p className="mt-3 text-sm text-stone-600">{copy.agent.mappingUnmappedIntro}</p>
+
+      <fieldset className="mt-4 space-y-3">
+        <label className="flex gap-3">
+          <input
+            type="radio"
+            name="unmapped-mode"
+            className="mt-1"
+            // Named explicitly: the visible label carries the explanation as
+            // well as the choice, and a control whose name is a paragraph is
+            // one a screen reader reads as a paragraph.
+            aria-label={copy.agent.mappingUseExisting}
+            checked={mode === "use_existing"}
+            onChange={() => setMode("use_existing")}
+          />
+          <span>
+            <span className="text-sm font-medium text-stone-900">
+              {copy.agent.mappingUseExisting}
+            </span>
+            <span className="mt-0.5 block text-xs text-stone-500">
+              {copy.agent.mappingUseExistingHelp}
+            </span>
+          </span>
+        </label>
+        {mode === "use_existing" && (
+          <div className="pl-7">
+            <label
+              htmlFor="unmapped-field"
+              className="block text-xs font-medium text-stone-700"
+            >
+              {copy.agent.mappingPickField}
+            </label>
+            {/* A list, not a free-text box: a field that is not in the
+                registry is not a mapping, and the server refuses one. The
+                browser's own filtering keeps five hundred fields usable. */}
+            <input
+              id="unmapped-field"
+              list="unmapped-field-options"
+              value={chosen}
+              disabled={busy || fields === null}
+              placeholder={copy.agent.mappingPickFieldPlaceholder}
+              onChange={(e) => setChosen(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+            />
+            <datalist id="unmapped-field-options">
+              {known.map((field) => (
+                <option key={field.name} value={field.name}>
+                  {field.regimes.length > 0
+                    ? `${field.label} · ${field.regimes.join(", ")}`
+                    : field.label}
+                </option>
+              ))}
+            </datalist>
+          </div>
+        )}
+
+        <label className="flex gap-3">
+          <input
+            type="radio"
+            name="unmapped-mode"
+            className="mt-1"
+            aria-label={copy.agent.mappingRequestNew}
+            checked={mode === "request_field"}
+            onChange={() => setMode("request_field")}
+          />
+          <span>
+            <span className="text-sm font-medium text-stone-900">
+              {copy.agent.mappingRequestNew}
+            </span>
+            <span className="mt-0.5 block text-xs text-stone-500">
+              {copy.agent.mappingRequestNewHelp}
+            </span>
+          </span>
+        </label>
+        {mode === "request_field" && (
+          <div className="space-y-3 pl-7">
+            <div>
+              <label
+                htmlFor="new-field-name"
+                className="block text-xs font-medium text-stone-700"
+              >
+                {copy.agent.mappingNewFieldName}
+              </label>
+              <input
+                id="new-field-name"
+                value={name}
+                disabled={busy}
+                placeholder={copy.agent.mappingNewFieldNamePlaceholder}
+                onChange={(e) => setName(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="new-field-what"
+                className="block text-xs font-medium text-stone-700"
+              >
+                {copy.agent.mappingNewFieldWhat}
+              </label>
+              <textarea
+                id="new-field-what"
+                value={what}
+                rows={2}
+                disabled={busy}
+                placeholder={copy.agent.mappingNewFieldWhatPlaceholder}
+                onChange={(e) => setWhat(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="new-field-type"
+                className="block text-xs font-medium text-stone-700"
+              >
+                {copy.agent.mappingNewFieldType}
+              </label>
+              <select
+                id="new-field-type"
+                value={type}
+                disabled={busy}
+                onChange={(e) => setType(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm"
+              >
+                <option value="">{copy.agent.mappingNothing}</option>
+                <option value="string">Text</option>
+                <option value="decimal">A number</option>
+                <option value="date">A date</option>
+                <option value="list">One of a fixed set of values</option>
+                <option value="Y/N">Yes or no</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </fieldset>
+
+      <DialogButtons
+        onCancel={onCancel}
+        busy={busy}
+        disabled={!valid}
+        confirmLabel={
+          mode === "use_existing"
+            ? copy.agent.mappingUseExistingConfirm
+            : copy.agent.mappingRequestConfirm
+        }
+        onConfirm={() =>
+          onSubmit(
+            mode === "use_existing"
+              ? {
+                  source_file: row.source_file,
+                  source_column: row.source_column,
+                  action: "use_existing",
+                  target_field: chosen,
+                }
+              : {
+                  source_file: row.source_file,
+                  source_column: row.source_column,
+                  action: "request_field",
+                  field_name: name.trim(),
+                  description: what.trim(),
+                  data_type: type,
+                },
+          )
+        }
+      />
+    </Modal>
   );
 }
 
@@ -1351,36 +1898,69 @@ function MappingPanel({
  * pushed off the row by a long field name.
  */
 function MappingFieldCell({ row }: { row: MappingRow }) {
-  const proposed = !row.canonical_field && Boolean(row.suggested_label);
-  const label = proposed ? row.suggested_label : row.field_label;
+  // A column that matched nothing used to render "—" and stop there: the
+  // operator knew what it was and the screen had nowhere for them to say so.
+  // On a first delivery that is most of the tape.
+  const unmapped = row.state === "unused";
+  const requested = unmapped ? row.requested_field : "";
+  // AN OPEN REQUEST SETTLES WHAT THIS CELL IS ABOUT. A model's guess and an
+  // operator's ask are both answers to "what is this column?", and the
+  // operator's is the later and the deciding one — they have said Trakt has no
+  // field for it. Showing both put four things on one row, which overran the
+  // cell and printed the action on top of the next column.
+  const proposed = !requested && !row.canonical_field
+    && Boolean(row.suggested_label);
+  const label = requested ? "" : proposed ? row.suggested_label : row.field_label;
   return (
     <div className="flex min-w-0 items-baseline gap-2">
-      <span
-        className={clsx("truncate", proposed && "italic text-stone-500")}
-        title={
-          [label, proposed ? row.basis_label : "", row.suggested_reason]
-            .filter(Boolean)
-            .join(" — ") || undefined
-        }
-      >
-        {label || copy.agent.mappingNothing}
-      </span>
+      {/* The em-dash stands for "no field", so it is dropped where something
+          else in the cell already says what became of the column: "— Requested:
+          broker_code" reads as a field called nothing AND a field asked for. */}
+      {(label || !requested) && (
+        <span
+          className={clsx("truncate", proposed && "italic text-stone-500")}
+          title={
+            [label, proposed ? row.basis_label : "", row.suggested_reason]
+              .filter(Boolean)
+              .join(" — ") || undefined
+          }
+        >
+          {label || copy.agent.mappingNothing}
+        </span>
+      )}
       {proposed && (
         <span className="shrink-0 rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-700">
           {copy.agent.mappingProposed}
         </span>
       )}
-      {row.decision_id && (
-        <a
-          href={`#decision-${row.decision_id}`}
-          className="shrink-0 text-xs font-medium text-blue-700 underline"
+      {requested && (
+        <span
+          className="min-w-0 truncate rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800"
+          title={copy.agent.mappingRequestNewHelp}
         >
-          {/* Different acts, so different words. A proposal is already right
-              or it is not — you change it. A question has no answer yet. */}
-          {row.state === "proposed"
-            ? copy.agent.mappingChange
-            : copy.agent.mappingAnswer}
-        </a>
+          {copy.agent.mappingRequestedChip(requested)}
+        </span>
+      )}
+      {row.also_claimed_by.length > 0 && (
+        // A field more than one column reads as. Where they are in different
+        // files that is the ordinary shape of a delivery and production
+        // reconciles it; where they are in the SAME file it is an ambiguity
+        // and the run is already blocked on it. Either way an operator
+        // confirming the set is confirming all of them, and is entitled to
+        // see that before they do.
+        <span
+          className="shrink-0 rounded bg-orange-50 px-1.5 py-0.5 text-xs font-medium text-orange-800"
+          title={[copy.agent.mappingContestedHelp,
+                  ...row.also_claimed_by.map(
+                    (c) => `${c.source_column} in ${c.source_file}`),
+                  // WHAT THE CHOICE TURNS ON. How many records each competing
+                  // column actually carries used to live on a decision card;
+                  // deleting the card would have deleted the one thing that
+                  // settles the question.
+                  row.decision_detail].filter(Boolean).join(" ")}
+        >
+          {copy.agent.mappingContested(row.also_claimed_by.length + 1)}
+        </span>
       )}
     </div>
   );
@@ -1392,6 +1972,7 @@ const MAPPING_STATES = [
   "unreadable",
   "unchecked",
   "unused",
+  "staged",
   "confirmed",
   "automatic",
 ] as const;
@@ -1404,6 +1985,7 @@ const MAPPING_STATE_LABELS: Record<string, string> = {
   unreadable: "Could not be read",
   unchecked: "Weak match, nothing asked",
   unused: "Not used",
+  staged: "Ready to confirm",
   confirmed: "You confirmed",
   automatic: "Matched automatically",
 };
@@ -1415,6 +1997,9 @@ const MAPPING_STATE_TONES: Record<string, string> = {
   unreadable: "bg-rose-100 text-rose-800",
   unchecked: "bg-orange-50 text-orange-700",
   unused: "bg-stone-100 text-stone-600",
+  // Read and answered, and not yet committed. Distinct from "You confirmed
+  // it", which is the same reading after the set was applied.
+  staged: "bg-emerald-50 text-emerald-700",
   confirmed: "bg-emerald-100 text-emerald-800",
   automatic: "bg-blue-50 text-blue-700",
 };
