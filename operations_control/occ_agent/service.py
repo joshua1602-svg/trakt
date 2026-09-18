@@ -1670,6 +1670,68 @@ class OccAgentService:
     # ------------------------------------------------------------------ #
     # The mapping table: read it, then commit it
     # ------------------------------------------------------------------ #
+    def _require_mapping_change(self, run: SyntheticRun) -> None:
+        """A mapping may be answered while the run is at the mapping stage,
+        and RE-answered at any point until the case activates.
+
+        Two permissions rather than one, because they are two different acts.
+        ``resolve_decision`` answers a question that is still open.
+        ``reopen_mapping`` takes back a reading the run has already settled,
+        which sends the run backwards and withdraws what rested on it — see
+        :meth:`_reopen_for_mapping_change`.
+        """
+        if _states.action_allowed(run.state, _states.ACTION_RESOLVE_DECISION):
+            return
+        if _states.action_allowed(run.state, _states.ACTION_REOPEN_MAPPING):
+            return
+        raise ActionNotAllowed(_states.ACTION_REOPEN_MAPPING, run.state)
+
+    def _reopen_for_mapping_change(self, run: SyntheticRun, *, actor: str,
+                                   columns: List[str]) -> bool:
+        """Put the run back at the mapping stage, and withdraw what rested on
+        the reading being changed.
+
+        A COMMITTED MAPPING IS NOT A PERMANENT ONE. It becomes permanent at
+        activation, when promotion writes it into the client's governed rules;
+        until then the whole rehearsal is provisional, and an operator who
+        reads a settled row and sees it is wrong must be able to say so. A
+        screen that says "You confirmed it" with nothing to click is telling
+        them their mistake is final when it is not.
+
+        WHAT IT COSTS, SAID OUT LOUD. Readiness was evaluated against the old
+        reading and activation may have been approved against it. Those
+        approvals were about a delivery that no longer exists, so they are
+        withdrawn here rather than left standing over a changed mapping — the
+        one outcome worse than not being able to go back is going back
+        silently and activating on an approval nobody would give again.
+        """
+        if run.state == _states.EXCEPTIONS_REQUIRE_INPUT:
+            return False
+        prior = run.state
+        withdrawn = [a["subject"] for a in run.approvals
+                     if a.get("decision") == "approved"
+                     and a.get("subject") in ("execution_readiness",
+                                              "configuration")]
+        for subject in withdrawn:
+            run.approvals.append({
+                "approval_id": new_id("appr"), "subject": subject,
+                "decision": "withdrawn", "actor": actor, "at": now_iso(),
+                "reason": "a mapping this approval rested on was re-opened"})
+        run.readiness_status = "not_evaluated"
+        run.readiness = {}
+        run.review_package_ref = ""
+        run.readiness_package_ref = ""
+        run.activation_intent = {}
+        self._move(run, _states.EXCEPTIONS_REQUIRE_INPUT)
+        self._audit(run, "mapping_reopened", actor_type=ACTOR_HUMAN,
+                    actor=actor, prior_state=prior,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis="an operator took back a mapping the "
+                                   "rehearsal had already settled",
+                    detail={"columns": columns,
+                            "approvals_withdrawn": withdrawn})
+        return True
+
     def stage_mapping(self, agent_case: AgentCase, *, source_file: str,
                       source_column: str, action: str, actor: str,
                       target_field: str = "", reason: str = "") -> AgentCase:
@@ -1680,7 +1742,7 @@ class OccAgentService:
         withdrawn until the set is committed. See :mod:`.staging`.
         """
         run = agent_case.run
-        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        self._require_mapping_change(run)
         column = str(source_column or "").strip()
         file_name = str(source_file or "").strip()
         what = str(action or "").strip()
@@ -1718,6 +1780,15 @@ class OccAgentService:
         else:
             field_name = ""
 
+        # Answering a column the run has already SETTLED is a different act
+        # from answering one that is still open: it sends the run back to the
+        # mapping stage and withdraws the approvals that rested on the old
+        # reading. Done here, at the moment the operator says so, rather than
+        # at the commit — so the screen tells them immediately what their
+        # change costs instead of after they press the button.
+        if str(row.get("tier") or "") == "operator_approved":
+            self._reopen_for_mapping_change(run, actor=actor,
+                                            columns=[column])
         decision_id, _, _ = _mapping_view.decision_for_column(
             run.open_decisions, file_name, column)
         run.staged_mappings.append(_staging.entry(
@@ -1750,7 +1821,7 @@ class OccAgentService:
         the button inventing an answer nobody gave.
         """
         run = agent_case.run
-        self._require_action(run, _states.ACTION_RESOLVE_DECISION)
+        self._require_mapping_change(run)
         overview = _mapping_view.overview(run)
         unanswered = overview["unanswered_questions"]
         if unanswered:
@@ -1856,7 +1927,12 @@ class OccAgentService:
         """
         fallback = None
         for decision in run.open_decisions:
-            if str(decision.get("status", "open")) != "open":
+            # An ALREADY-RESOLVED decision about this column counts: the
+            # operator is re-answering it. Skipping it created a SECOND
+            # decision for the same column, and the rerun collapses decisions
+            # by id — so one of the two answers was silently dropped.
+            if str(decision.get("status", "open")) not in ("open", "approved",
+                                                           "pending"):
                 continue
             subject = decision.get("subject") or {}
             if len(subject.get("source_columns") or []) > 1:
@@ -1883,7 +1959,8 @@ class OccAgentService:
         """
         staged = _staging.by_column(run.staged_mappings)
         for decision in run.open_decisions:
-            if str(decision.get("status", "open")) != "open":
+            if str(decision.get("status", "open")) not in ("open", "approved",
+                                                           "pending"):
                 continue
             subject = decision.get("subject") or {}
             columns = [str(c or "") for c in
@@ -2003,9 +2080,16 @@ class OccAgentService:
             label=label, description=description, data_type=data_type,
             actor=actor, at=at,
             samples=self._sample_values(run, file_name, column))
-        run.field_requests = [r for r in run.field_requests
-                              if r.get("request_id")
-                              != request["request_id"]] + [request]
+        # SUPERSEDED BY WHAT IT IS ABOUT, not by its id. A request IS its
+        # (file, column): asking twice about one column is one ask, restated.
+        # Keying on the id made that true only while the id scheme held still,
+        # and it has since changed — so a request made under the old scheme
+        # would not have been replaced by the same ask under the new one, and
+        # the case would carry the column twice.
+        run.field_requests = [
+            r for r in run.field_requests
+            if _staging.key(r.get("source_file"), r.get("source_column"))
+            != _staging.key(file_name, column)] + [request]
         self.store.save(run)
         self._audit(run, "field_registry_requested", actor_type=ACTOR_HUMAN,
                     actor=actor, classification=EXEC_HUMAN_CONFIRMED,

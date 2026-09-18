@@ -112,6 +112,19 @@ ACTION_RUN_ONBOARDING = "run_synthetic_onboarding"
 ACTION_RESOLVE_DECISION = "resolve_decision"
 ACTION_ACKNOWLEDGE_EXCEPTION = "acknowledge_exception"
 ACTION_GENERATE_PLAN = "generate_orchestration_plan"
+#: TAKE BACK A MAPPING THE REHEARSAL HAS ALREADY SETTLED.
+#:
+#: The lifecycle is forward-only on purpose, and this is the one governed way
+#: back — because a mapping is not REAL until the case activates, and until
+#: then a person who reads a committed row and sees it is wrong must be able to
+#: say so. "You confirmed it" with nothing to click is a screen telling an
+#: operator their mistake is permanent when it is not.
+#:
+#: It is a separate action from ``resolve_decision`` so the permission is
+#: precise: re-opening returns the run to the mapping stage and withdraws the
+#: approvals that rested on the reading it changes, which is a materially
+#: different act from answering a question that is still open.
+ACTION_REOPEN_MAPPING = "reopen_mapping"
 ACTION_APPROVE_EXECUTION = "approve_execution_readiness"
 
 # -- activation -------------------------------------------------------------- #
@@ -139,6 +152,7 @@ EXECUTION_ACTIONS = (
     ACTION_DRAFT_PACK, ACTION_APPROVE_PACK, ACTION_SEND_PACK,
     ACTION_REGISTER_ARTEFACT, ACTION_RUN_ONBOARDING, ACTION_RESOLVE_DECISION,
     ACTION_ACKNOWLEDGE_EXCEPTION, ACTION_GENERATE_PLAN,
+    ACTION_REOPEN_MAPPING,
     ACTION_APPROVE_EXECUTION, ACTION_REQUEST_ACTIVATION,
     ACTION_APPROVE_ACTIVATION, ACTION_CONFIRM_ACTIVATION,
     ACTION_CANCEL, ACTION_ASK,
@@ -264,7 +278,18 @@ STATE_SPECS: Dict[str, StateSpec] = {
     EXCEPTIONS_REQUIRE_INPUT: StateSpec(
         state=EXCEPTIONS_REQUIRE_INPUT,
         label="Exceptions need your input",
-        permitted_prior=(SYNTHETIC_ONBOARDING_RUNNING,),
+        # Reachable from the rehearsal, and from every state AFTER it that has
+        # not yet activated: re-opening a settled mapping puts the run back
+        # here, which is where a mapping is answered. See
+        # ``ACTION_REOPEN_MAPPING``.
+        permitted_prior=(SYNTHETIC_ONBOARDING_RUNNING,
+                         SYNTHETIC_ONBOARDING_PASSED,
+                         ORCHESTRATION_PLAN_GENERATED,
+                         EXECUTION_APPROVAL_REQUIRED,
+                         READY_FOR_EXECUTION,
+                         READY_FOR_REVIEW,
+                         APPROVED_FOR_ACTIVATION,
+                         ACTIVATION_CONFIRMATION_REQUIRED),
         required_inputs=("open decisions from the run",),
         automatic_actions=("present each open decision as a decision card",),
         required_approvals=("each blocking decision",),
@@ -283,8 +308,10 @@ STATE_SPECS: Dict[str, StateSpec] = {
         permitted_prior=(SYNTHETIC_ONBOARDING_RUNNING,),
         required_inputs=("a completed run with no blocking exceptions",),
         deterministic_controls=("no blocking control failures remain",),
-        allowed_human_actions=(ACTION_GENERATE_PLAN, ACTION_CANCEL),
-        next_states=(ORCHESTRATION_PLAN_GENERATED,) + _ALWAYS_NEXT,
+        allowed_human_actions=(ACTION_GENERATE_PLAN, ACTION_REOPEN_MAPPING,
+                               ACTION_CANCEL),
+        next_states=(ORCHESTRATION_PLAN_GENERATED,
+                     EXCEPTIONS_REQUIRE_INPUT) + _ALWAYS_NEXT,
         occ_stage=STAGE_ASSEMBLY,
     ),
     ORCHESTRATION_PLAN_GENERATED: StateSpec(
@@ -298,8 +325,10 @@ STATE_SPECS: Dict[str, StateSpec] = {
         deterministic_controls=("orchestration sequencing valid",
                                "assembler prerequisites satisfied",
                                "intended blob paths valid"),
-        allowed_human_actions=(ACTION_APPROVE_EXECUTION, ACTION_CANCEL),
-        next_states=(EXECUTION_APPROVAL_REQUIRED,) + _ALWAYS_NEXT,
+        allowed_human_actions=(ACTION_APPROVE_EXECUTION,
+                               ACTION_REOPEN_MAPPING, ACTION_CANCEL),
+        next_states=(EXECUTION_APPROVAL_REQUIRED,
+                     EXCEPTIONS_REQUIRE_INPUT) + _ALWAYS_NEXT,
         occ_stage=STAGE_ASSEMBLY,
     ),
     EXECUTION_APPROVAL_REQUIRED: StateSpec(
@@ -308,8 +337,10 @@ STATE_SPECS: Dict[str, StateSpec] = {
         permitted_prior=(ORCHESTRATION_PLAN_GENERATED,),
         required_inputs=("orchestration execution plan",),
         required_approvals=("execution_readiness",),
-        allowed_human_actions=(ACTION_APPROVE_EXECUTION, ACTION_CANCEL),
-        next_states=(READY_FOR_EXECUTION,) + _ALWAYS_NEXT,
+        allowed_human_actions=(ACTION_APPROVE_EXECUTION,
+                               ACTION_REOPEN_MAPPING, ACTION_CANCEL),
+        next_states=(READY_FOR_EXECUTION,
+                     EXCEPTIONS_REQUIRE_INPUT) + _ALWAYS_NEXT,
         blocking_conditions=("Readiness has not been approved.",),
     ),
     READY_FOR_EXECUTION: StateSpec(
@@ -323,8 +354,10 @@ STATE_SPECS: Dict[str, StateSpec] = {
                                "deterministically",),
         # A WAYPOINT: the rehearsal passed. What follows is a human decision
         # about the real thing.
-        allowed_human_actions=(ACTION_REQUEST_ACTIVATION, ACTION_CANCEL),
-        next_states=(READY_FOR_REVIEW,) + _ALWAYS_NEXT,
+        allowed_human_actions=(ACTION_REQUEST_ACTIVATION,
+                               ACTION_REOPEN_MAPPING, ACTION_CANCEL),
+        next_states=(READY_FOR_REVIEW,
+                     EXCEPTIONS_REQUIRE_INPUT) + _ALWAYS_NEXT,
     ),
     READY_FOR_REVIEW: StateSpec(
         state=READY_FOR_REVIEW,
@@ -333,8 +366,10 @@ STATE_SPECS: Dict[str, StateSpec] = {
         required_inputs=("the complete human review package",),
         automatic_actions=("present the review package",),
         required_approvals=("activation, by a human",),
-        allowed_human_actions=(ACTION_APPROVE_ACTIVATION, ACTION_CANCEL),
-        next_states=(APPROVED_FOR_ACTIVATION,) + _ALWAYS_NEXT,
+        allowed_human_actions=(ACTION_APPROVE_ACTIVATION,
+                               ACTION_REOPEN_MAPPING, ACTION_CANCEL),
+        next_states=(APPROVED_FOR_ACTIVATION,
+                     EXCEPTIONS_REQUIRE_INPUT) + _ALWAYS_NEXT,
         blocking_conditions=("Activation has not been approved.",),
     ),
     APPROVED_FOR_ACTIVATION: StateSpec(
@@ -344,8 +379,10 @@ STATE_SPECS: Dict[str, StateSpec] = {
         required_approvals=("recorded, attributed and audited",),
         automatic_actions=("prepare the activation confirmation",),
         # Approval is not the trigger. A separate, explicit confirmation is.
-        allowed_human_actions=(ACTION_CONFIRM_ACTIVATION, ACTION_CANCEL),
-        next_states=(ACTIVATION_CONFIRMATION_REQUIRED,) + _ALWAYS_NEXT,
+        allowed_human_actions=(ACTION_CONFIRM_ACTIVATION,
+                               ACTION_REOPEN_MAPPING, ACTION_CANCEL),
+        next_states=(ACTIVATION_CONFIRMATION_REQUIRED,
+                     EXCEPTIONS_REQUIRE_INPUT) + _ALWAYS_NEXT,
     ),
     ACTIVATION_CONFIRMATION_REQUIRED: StateSpec(
         state=ACTIVATION_CONFIRMATION_REQUIRED,
@@ -355,8 +392,13 @@ STATE_SPECS: Dict[str, StateSpec] = {
                          "the actions that will occur",),
         required_approvals=("an explicit confirmation naming what will "
                             "happen",),
-        allowed_human_actions=(ACTION_CONFIRM_ACTIVATION, ACTION_CANCEL),
-        next_states=(ACTIVATING,) + _ALWAYS_NEXT,
+        # Re-opening is allowed HERE and nowhere after: this is the last
+        # state before anything crosses into production, and an operator
+        # reading the confirmation and spotting a wrong mapping must be able
+        # to go back rather than activate it.
+        allowed_human_actions=(ACTION_CONFIRM_ACTIVATION,
+                               ACTION_REOPEN_MAPPING, ACTION_CANCEL),
+        next_states=(ACTIVATING, EXCEPTIONS_REQUIRE_INPUT) + _ALWAYS_NEXT,
         blocking_conditions=("Production is not started by an approval "
                              "alone.",),
     ),

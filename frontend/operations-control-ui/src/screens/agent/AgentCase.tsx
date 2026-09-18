@@ -1593,9 +1593,43 @@ function MappingRowActions({
       </div>
     );
   }
-  // A column already committed, or one from a file that could not be read, is
-  // not something to answer.
-  if (row.state === "confirmed" || row.state === "unreadable") return null;
+  // A COLUMN ALREADY COMMITTED IS STILL NOT A PERMANENT ONE. It becomes
+  // permanent at activation, when promotion writes it into the client's
+  // governed rules; until then the rehearsal is provisional. This used to
+  // render nothing at all, which told an operator reading a settled row that
+  // their mistake was final when it was not.
+  //
+  // Set apart from the ordinary acts, and warned about in the title, because
+  // it is not the ordinary act: it sends the case back to this step and
+  // withdraws anything approved on the old reading.
+  if (row.state === "confirmed") {
+    return (
+      <div className="flex min-w-0 items-baseline justify-end gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          title={copy.agent.mappingReopenWarning}
+          onClick={onPickField}
+          className="shrink-0 text-xs font-medium text-amber-700 underline disabled:opacity-50"
+        >
+          {copy.agent.mappingRowReopen}
+        </button>
+        {row.canonical_field && (
+          <button
+            type="button"
+            disabled={busy}
+            title={copy.agent.mappingReopenWarning}
+            onClick={() => onStage({ ...where, action: "not_used" })}
+            className="shrink-0 text-xs font-medium text-stone-500 underline hover:text-stone-700 disabled:opacity-50"
+          >
+            {copy.agent.mappingRowNotUsed}
+          </button>
+        )}
+      </div>
+    );
+  }
+  // A file that could not be read has no column to answer about.
+  if (row.state === "unreadable") return null;
   return (
     <div className="flex min-w-0 items-baseline justify-end gap-2">
       {row.canonical_field && (
@@ -1714,7 +1748,16 @@ function UnmappedColumnDialog({
         {copy.agent.mappingUnmappedHeading(row.source_column)}
       </h3>
       <p className="mt-1 text-xs text-stone-500">{row.source_file}</p>
-      <p className="mt-3 text-sm text-stone-600">{copy.agent.mappingUnmappedIntro}</p>
+      {/* A settled column is a different conversation from one that matched
+          nothing: it already HAS a field, and changing it costs the approvals
+          that rested on it. Saying "nothing resembled this column" over a row
+          reading `current interest rate` would be the screen contradicting
+          itself at the moment it asks for a decision. */}
+      <p className="mt-3 text-sm text-stone-600">
+        {row.state === "confirmed"
+          ? copy.agent.mappingReopenWarning
+          : copy.agent.mappingUnmappedIntro}
+      </p>
 
       <fieldset className="mt-4 space-y-3">
         <label className="flex gap-3">
