@@ -140,6 +140,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                  approved_mappings: Optional[Dict[str, str]] = None,
                  llm_policy: Optional["_llm.Policy"] = None,
                  confirm_every_mapping: bool = False,
+                 client_defaults: Optional[Dict[str, Any]] = None,
                  case_id: str = "", tenant: str = ""):
         self.artefact_paths = [Path(p) for p in artefact_paths]
         self.policy = policy
@@ -188,6 +189,15 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                                                   or "")
         #: The confirmation to put to them, when one is outstanding.
         self.product_profile_decision: Optional[Dict[str, Any]] = None
+        #: What the REGULATORY return still wants once the asset pack and the
+        #: client configuration have been asked. Never blocks the MI: the two
+        #: are separate verdicts and the pipeline has always carried them as
+        #: two flags. See :func:`base_mi_gate.regime_outstanding`.
+        self.regime_pending: List[Dict[str, Any]] = []
+        #: The client's own standing answers — the originator's name, LEI and
+        #: country of establishment are captured once at onboarding and written
+        #: here, not restated per loan on a monthly extract.
+        self.client_defaults: Dict[str, Any] = dict(client_defaults or {})
         #: Which file each consolidated column came from, and which files could
         #: not be joined. A tape built from four files rather than one has to
         #: say so: "where did this balance come from?" is the first question an
@@ -794,17 +804,49 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             self.validation_report, asset_class=self.asset_type,
             regime=self.regime or "",
             confirmed_profile_id=self.confirmed_product_profile)
+        # WHAT THE REGULATOR STILL WANTS IS A SEPARATE VERDICT FROM WHETHER THE
+        # MI IS SOUND. A field Annex 2 needs and base MI does not has nothing
+        # to do with the management information, and holding the MI for it
+        # means a lender waiting on one LEI cannot see their own book. Asked of
+        # the asset pack and the client configuration first, so `maturity_date`
+        # — answered ND5 because a lifetime mortgage has no term — is never put
+        # to the operator as something the lender owes us.
+        self.regime_pending = _base_mi_gate.regime_outstanding(
+            excused, regime=self.regime or "", asset_class=self.asset_type,
+            client_defaults=self.client_defaults,
+            registry_path=self.registry_path)
         # The question that has to be answered before anything is excused:
         # "is this book a lifetime mortgage?". On the asset class alone the
         # platform PROPOSES a profile rather than applying it, and that guard
         # is not worked around here — until an operator confirms it, every
-        # required field keeps blocking.
+        # required field keeps blocking. Asked on a REGULATORY run too: the
+        # profile decides what base MI needs either way, and suppressing the
+        # question on a regime run left the operator with seven blockers, no
+        # explanation and nothing to answer.
         pending = _base_mi_gate.needs_confirmation(
             self.asset_type, self.confirmed_product_profile)
-        if pending is not None and blocking and not self.regime:
+        if pending is not None and blocking:
             self.product_profile_decision = _base_mi_gate.confirmation_decision(
                 pending, [str(r.get("field_name") or "") for r in blocking])
         self.excused_findings = excused
+        if self.regime_pending:
+            # REPORTED, NEVER BLOCKING. The stage completes, the MI goes on,
+            # and the regulatory return is held instead — see the handoff
+            # manifest's `ready_for_projection`, which has always been a flag
+            # of its own beside `ready_for_transformation_validation`.
+            self._record(StageRecord(
+                stage="validate", outcome=STAGE_DETERMINISTIC_COMPLETED,
+                component="operations_control.occ_agent.base_mi_gate",
+                summary=(f"{len(self.regime_pending)} field"
+                         f"{'s' if len(self.regime_pending) != 1 else ''} the "
+                         f"{self.regime} return needs "
+                         f"{'are' if len(self.regime_pending) != 1 else 'is'} "
+                         "outstanding. The management information is "
+                         "unaffected and goes on; the regulatory return waits "
+                         "for them."),
+                metrics={"regime_pending": len(self.regime_pending)},
+                blockers=[_base_mi_gate.regime_sentence(r)
+                          for r in self.regime_pending]))
         review = [r for r in self.validation_report
                   if str(r.get("materiality")).upper() == "REVIEW"]
         if excused:
@@ -823,6 +865,16 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         val_manifest = val_dir / "40_validation_manifest.json"
         val_manifest.write_text(json.dumps({
             "ready_for_validation_complete": not blocking,
+            # TWO VERDICTS, WRITTEN AS TWO FLAGS. The MI is ready when nothing
+            # base MI needs is missing; the regulatory return is ready only
+            # when the regulator's own fields are answered too. Conflating them
+            # is what stopped a sound delivery for want of an LEI.
+            "ready_for_projection": bool(self.regime) and not self.regime_pending,
+            "regime_pending": [
+                {"field_name": str(r.get("field_name") or ""),
+                 "regime_code": str(r.get("regime_code") or ""),
+                 "regime": str(r.get("regime") or "")}
+                for r in self.regime_pending],
             "findings": self.validation_report,
             "runtime_mode": "synthetic",
         }, indent=2, default=str), encoding="utf-8")

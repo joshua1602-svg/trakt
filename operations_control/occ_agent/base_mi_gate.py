@@ -38,7 +38,13 @@ not an absence, and an operator who cannot see it cannot question it.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+#: Declared here rather than imported from :mod:`.execution`, which imports
+#: THIS module — the import would be circular.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+REGISTRY_PATH = _REPO_ROOT / "config" / "system" / "fields_registry.yaml"
 
 #: Reported against a finding the profile excuses, so the reason travels with
 #: it rather than being inferable only from the absence of a blocker.
@@ -104,16 +110,78 @@ def needs_confirmation(asset_class: str, confirmed_profile_id: str = ""):
     return resolved
 
 
+def asset_supplies(field: str, *, asset_class: str) -> str:
+    """Where the ASSET PACK would get this field from, or ``""`` if nowhere.
+
+    ``config/asset/product_defaults_ERM.yaml`` answers for a lifetime mortgage
+    what the tape does not have to: ``maturity_date: ND5`` because there is no
+    fixed term, ``amortisation_type: Bullet`` because an ERM rolls up,
+    ``exposure_currency_denomination: GBP`` because the denomination is the
+    client's reporting currency and not a per-loan fact. The projection agent
+    reads exactly these at Gate 4.
+
+    So a field the asset pack answers is NOT outstanding for the regime, and
+    reporting it as though the lender still owed us the data would be asking
+    them for something the platform already knows.
+    """
+    try:
+        import yaml as _yaml
+        from pathlib import Path as _Path
+        root = _Path(__file__).resolve().parents[2]
+        name = str(asset_class or "").strip().lower()
+        pack = root / "config" / "asset" / "product_defaults_ERM.yaml"
+        if name not in ("equity_release", "erm", "rre", "equity release"):
+            return ""
+        if not pack.exists():
+            return ""
+        cfg = _yaml.safe_load(pack.read_text(encoding="utf-8")) or {}
+    except Exception:                        # pragma: no cover — config guard
+        return ""
+    nd = (cfg.get("nd_defaults") or {})
+    if field in nd:
+        return f"the asset pack answers it as {nd[field]}"
+    static = (cfg.get("defaults") or {})
+    if field in static:
+        return f"the asset pack defaults it to {static[field]}"
+    return ""
+
+
+def client_supplies(field: str, *, client_defaults: Optional[Dict[str, Any]]
+                    ) -> str:
+    """Where the CLIENT CONFIGURATION would get this field from.
+
+    ``config/regime/onboarding_standing_fields.yaml`` declares the originator's
+    name, LEI and country of establishment as ``standing_client`` fields,
+    captured once at onboarding and written to client config. They are not
+    columns in a monthly extract, and blocking a loan tape for want of them
+    asks the client to restate per loan what they told us once.
+    """
+    value = (client_defaults or {}).get(field)
+    if value in (None, "", []):
+        return ""
+    return "the client configuration holds it"
+
+
 def excused_fields(fields: List[str], *, asset_class: str,
                    regime: str = "",
                    confirmed_profile_id: str = "") -> Dict[str, str]:
     """``{field: why}`` for fields this product does not need for base MI.
 
-    Empty when a regime is being prepared: ``base_mi`` speaks for management
-    information only, and the regulatory return has its own requirements.
+    THE REGIME NO LONGER EMPTIES THIS. It used to: ``base_mi`` speaks for
+    management information, so on a regulatory run nothing was excused and the
+    delivery stopped on every field Annex 2 wants. That conflated two verdicts.
+
+        "It should be the case the Operator invokes an MI + Regime run AND
+         that MI can run without Regime being fully validated."
+
+    Which is right, and is how the pipeline is already built: the handoff
+    manifest carries ``ready_for_transformation_validation`` and
+    ``ready_for_projection`` as two separate flags. A field Annex 2 needs and
+    base MI does not has nothing to do with whether the MI is sound — and
+    holding the MI for it means a lender waiting on one LEI cannot see their
+    own book. What the regime still wants is reported separately, by
+    :func:`regime_outstanding`, and holds the REGIME back rather than the run.
     """
-    if regime:
-        return {}
     profile = _profile_for(asset_class, confirmed_profile_id)
     if profile is None:
         return {}
@@ -160,6 +228,72 @@ def split(findings: List[Dict[str, Any]], *, asset_class: str,
         else:
             kept.append(row)
     return kept, let_through
+
+
+def regime_outstanding(excused: List[Dict[str, Any]], *, regime: str,
+                       asset_class: str,
+                       client_defaults: Optional[Dict[str, Any]] = None,
+                       registry_path: Path = REGISTRY_PATH
+                       ) -> List[Dict[str, Any]]:
+    """What the REGULATORY return still wants, once the config has been asked.
+
+    Excused for management information is not the same as answered for the
+    regulator, and the difference is the whole reason the two verdicts are
+    separate. But a field is only outstanding when NOBODY can supply it:
+
+        "Any core_canonical: true fields that are not met for MI purposes must
+         first consult the asset and client configuration to assess whether
+         there are any rules. For example, maturity date is not relevant for an
+         equity release portfolio."
+
+    So each field is put to the asset pack and then to the client
+    configuration before it is called outstanding. ``maturity_date`` is
+    answered — ``ND5``, no fixed term — and never reaches the operator as
+    something the lender owes us. An originator LEI is not: RREL83 permits no
+    ND code and must match GLEIF, so it is a real ask, and it is ONE value in
+    client config rather than a column in every monthly extract.
+
+    Returns the rows that genuinely hold the regime back, each carrying the
+    regime code it answers so the ask can be put to the lender in their terms.
+    """
+    if not regime:
+        return []
+    fields = _registry_fields(registry_path)
+    out: List[Dict[str, Any]] = []
+    for row in excused:
+        field = str(row.get("field_name") or "")
+        codes = ((fields.get(field) or {}).get("regime_mapping") or {})
+        mapping = codes.get(regime) or {}
+        if str(mapping.get("priority") or "").lower() not in ("mandatory",):
+            continue
+        supplied = (asset_supplies(field, asset_class=asset_class)
+                    or client_supplies(field, client_defaults=client_defaults))
+        if supplied:
+            continue
+        pending = dict(row)
+        pending["regime_code"] = str(mapping.get("code") or "")
+        pending["regime"] = regime
+        out.append(pending)
+    return out
+
+
+def _registry_fields(registry_path: Path) -> Dict[str, Any]:
+    try:
+        from engine.gate_1_alignment.semantic_alignment import (
+            load_field_registry,
+        )
+        return (load_field_registry(Path(registry_path)).get("fields") or {})
+    except Exception:                        # pragma: no cover — config guard
+        return {}
+
+
+def regime_sentence(row: Dict[str, Any]) -> str:
+    """One outstanding regulatory field, in words an operator can pass on."""
+    field = str(row.get("field_name") or "").replace("_", " ")
+    code = str(row.get("regime_code") or "")
+    return (f"{field}{f' ({code})' if code else ''}: needed for "
+            f"{str(row.get('regime') or 'the regulatory return')}, and neither "
+            "the asset pack nor the client configuration supplies it.")
 
 
 def sentence(row: Dict[str, Any]) -> str:
