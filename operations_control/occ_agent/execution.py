@@ -1122,6 +1122,51 @@ LOAN_KEY = "loan_identifier"
 #: and the loan tape wants the latest.
 PERIOD_FIELD = "data_cut_off_date"
 
+#: Below this, two files' keys are not the same identifier under any rule the
+#: platform knows, and joining them would be a guess. Reported, never forced.
+KEY_OVERLAP_FLOOR = 0.5
+
+
+def _key_rule(spine: List[str], other: List[str]) -> Tuple[str, str]:
+    """``(rule, rule_for_other)`` — how these two files' loan ids compare.
+
+    A LENDER'S FILES DO NOT SPELL THE LOAN ID THE SAME WAY, and the platform has
+    known this all along. ``entity_key_resolver`` names the real cases from real
+    packs: ``Loan Policy Number`` of ``760341`` is the same loan as
+    ``Account Number`` of ``76034101`` — a stable trailing ``01`` — and
+    ``76034101`` read from an Excel numeric column arrives as ``76034101.0``.
+
+    A bare string comparison joins NEITHER, and the failure is silent: every
+    lookup misses, the column is added full of blanks or not at all, and the
+    tape looks assembled. That is worse than not consolidating, because it
+    cannot be seen.
+
+    So the rule is chosen by the platform's own detector rather than restated
+    here — ``_detect_global_suffix`` over the two key spaces, then
+    ``_canonical_rule_for`` per side, which strips a suffix only when it
+    dominates AND does not collapse distinct ids into one. Both are the
+    functions ``resolve_entity_keys`` itself uses.
+    """
+    from engine.onboarding_agent.entity_key_resolver import (
+        _canonical_rule_for,
+        _detect_global_suffix,
+        _numeric_set,
+    )
+    spine_num, other_num = _numeric_set(spine), _numeric_set(other)
+    if not spine_num or not other_num:
+        return "exact", "exact"
+    suffix = _detect_global_suffix([spine_num, other_num])
+    spine_rule, _, _ = _canonical_rule_for(spine_num, suffix)
+    other_rule, _, _ = _canonical_rule_for(other_num, suffix)
+    return spine_rule, other_rule
+
+
+def _keys(values: "pd.Series", rule: str) -> "pd.Series":
+    """One file's loan ids as comparison keys. Never mutates the source: the
+    original value stays on the tape for lineage, as the resolver requires."""
+    from engine.onboarding_agent.entity_key_resolver import normalise_key
+    return values.map(lambda v: normalise_key(v, rule))
+
 
 def _mapped_frame(frame: "pd.DataFrame", resolved: Dict[str, str]
                   ) -> "pd.DataFrame":
@@ -1142,7 +1187,7 @@ def _mapped_frame(frame: "pd.DataFrame", resolved: Dict[str, str]
     return out
 
 
-def _one_row_per_loan(frame: "pd.DataFrame", file_name: str
+def _one_row_per_loan(frame: "pd.DataFrame", keys: "pd.Series", file_name: str
                       ) -> Tuple[Optional["pd.DataFrame"], str]:
     """``(frame, note)`` — a secondary file collapsed to one row per loan.
 
@@ -1158,7 +1203,6 @@ def _one_row_per_loan(frame: "pd.DataFrame", file_name: str
     Picking an arbitrary row would be inventing an answer about which month the
     balance came from.
     """
-    keys = frame[LOAN_KEY].astype(str).str.strip()
     if not keys.duplicated().any():
         return frame, ""
     if PERIOD_FIELD not in frame.columns:
@@ -1173,10 +1217,9 @@ def _one_row_per_loan(frame: "pd.DataFrame", file_name: str
             f"{file_name} carries more than one row per loan and its "
             f"{PERIOD_FIELD.replace('_', ' ')} could not be read as a date, so "
             "Trakt cannot tell which row speaks for the loan.")
-    ranked = frame.assign(_occ_key=keys, _occ_period=order)
+    ranked = frame.assign(_occ_key=keys.to_numpy(), _occ_period=order.to_numpy())
     ranked = ranked.sort_values("_occ_period", na_position="first")
     collapsed = ranked.drop_duplicates("_occ_key", keep="last")
-    collapsed = collapsed.drop(columns=["_occ_key", "_occ_period"])
     return collapsed, (
         f"{file_name} carries more than one row per loan; the latest "
         f"{PERIOD_FIELD.replace('_', ' ')} was taken for each.")
@@ -1230,7 +1273,6 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
                      "other files in the pack cannot be joined to it.")})
         return spine, report
 
-    spine_keys = spine[LOAN_KEY].astype(str).str.strip()
     for file_name, resolved in sorted(resolved_by_file.items()):
         if file_name == primary_name or file_name not in frames:
             continue
@@ -1250,13 +1292,38 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
                 "note": (f"{file_name} carries nothing the loan tape was "
                          "missing.")})
             continue
-        collapsed, note = _one_row_per_loan(other[[LOAN_KEY, *spare]], file_name)
+        # HOW THE TWO FILES SPELL THE SAME LOAN. Chosen by the platform's own
+        # detector, not assumed — see :func:`_key_rule`.
+        spine_rule, other_rule = _key_rule(
+            [str(v) for v in spine[LOAN_KEY].tolist()],
+            [str(v) for v in other[LOAN_KEY].tolist()])
+        spine_keys = _keys(spine[LOAN_KEY], spine_rule)
+        other_keys = _keys(other[LOAN_KEY], other_rule)
+        wanted = {k for k in spine_keys if k}
+        overlap = (len({k for k in other_keys if k} & wanted) / len(wanted)
+                   if wanted else 0.0)
+        if overlap < KEY_OVERLAP_FLOOR:
+            # NOT THE SAME IDENTIFIER, and forcing it would be a guess. Said
+            # out loud: a join that silently matches nothing leaves a column of
+            # blanks and a tape that looks assembled, which is worse than not
+            # consolidating at all because it cannot be seen.
+            report["files"].append({
+                "source_file": file_name, "joined": False,
+                "overlap": round(overlap, 4), "key_rule": other_rule,
+                "note": (f"{file_name} and {primary_name} agree on "
+                         f"{overlap:.0%} of their loan identifiers, so Trakt "
+                         "cannot tell they are the same loans. Check the "
+                         "column each file identifies a loan by.")})
+            continue
+        collapsed, note = _one_row_per_loan(
+            other[[LOAN_KEY, *spare]].assign(**{LOAN_KEY: other[LOAN_KEY]}),
+            other_keys, file_name)
         if collapsed is None:
             report["files"].append({"source_file": file_name, "joined": False,
                                     "note": note})
             continue
-        lookup = collapsed.set_index(
-            collapsed[LOAN_KEY].astype(str).str.strip())
+        lookup = collapsed.set_index("_occ_key") if "_occ_key" in \
+            collapsed.columns else collapsed.set_index(other_keys.to_numpy())
         added: List[str] = []
         for column in spare:
             values = spine_keys.map(lookup[column])
@@ -1265,7 +1332,9 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
             spine[column] = values.to_numpy()
             added.append(column)
         report["files"].append({"source_file": file_name, "joined": True,
-                                "added": sorted(added), "note": note})
+                                "added": sorted(added), "note": note,
+                                "overlap": round(overlap, 4),
+                                "key_rule": other_rule})
         for column in added:
             report["added"][column] = file_name
     return spine, report

@@ -219,6 +219,80 @@ class TestAPerPeriodExtract:
         assert "more than one row per loan" in entry["note"]
 
 
+class TestTheFilesDoNotSpellTheLoanIdTheSameWay:
+    """``entity_key_resolver`` names these from real packs, and a bare string
+    comparison joins NONE of them — silently, leaving a column of blanks and a
+    tape that looks assembled."""
+
+    def test_a_trailing_component_suffix_still_joins(self):
+        """"Loan Policy Number 760341 links to Account Number 76034101 — a
+        stable trailing 01 suffix." """
+        frames, resolved = _pack()
+        frames[PRIMARY]["Loan Ref"] = ["760341", "760342", "760343"]
+        frames[CASHFLOW]["Account"] = ["76034101", "76034201", "76034301"]
+        tape, report = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape["current_principal_balance"]) == [100.0, 200.0, 300.0]
+        assert report["added"]["current_principal_balance"] == CASHFLOW
+
+    def test_an_excel_decimal_suffix_still_joins(self):
+        """``76034101`` read from a numeric column arrives as ``76034101.0``."""
+        frames, resolved = _pack()
+        frames[PRIMARY]["Loan Ref"] = ["76034101", "76034201", "76034301"]
+        frames[CASHFLOW]["Account"] = [76034101.0, 76034201.0, 76034301.0]
+        tape, _ = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape["current_principal_balance"]) == [100.0, 200.0, 300.0]
+
+    def test_unrelated_identifiers_are_refused_rather_than_joined_to_nothing(self):
+        """THE SILENT FAILURE THIS GUARDS. Two files whose keys have nothing in
+        common must not produce a 'joined' tape full of blanks — that looks
+        assembled and is not."""
+        frames, resolved = _pack()
+        frames[CASHFLOW]["Account"] = ["L7", "L8", "L9"]
+        tape, report = consolidate_pack(frames, resolved, PRIMARY)
+        assert "current_principal_balance" not in tape.columns
+        entry = next(f for f in report["files"]
+                     if f["source_file"] == CASHFLOW)
+        assert entry["joined"] is False
+        assert entry["overlap"] == 0.0
+        assert "loan identifiers" in entry["note"]
+
+    def test_an_alpha_prefix_is_not_part_of_the_key(self):
+        """PINNED AS THE PLATFORM'S BEHAVIOUR, not as a preference.
+
+        ``entity_key_resolver``'s numeric rule is ``re.sub(r"\\D", "", s)``, so
+        ``L1`` and ``XX1`` are one key. That is how the platform joins a pack
+        whose files prefix the same id differently, and re-deciding it here
+        would be exactly the drift this consolidation exists to remove. It is
+        asserted so a change to the rule shows up as a failure HERE, beside the
+        join that depends on it, rather than as a wrong tape.
+        """
+        frames, resolved = _pack()
+        frames[CASHFLOW]["Account"] = ["XX1", "XX2", "XX3"]
+        tape, _ = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape["current_principal_balance"]) == [100.0, 200.0, 300.0]
+
+    def test_the_rule_and_the_overlap_are_on_the_record(self):
+        """Which rule joined two files is a fact about the delivery, and an
+        approver asking "are these the same loans?" needs the number."""
+        frames, resolved = _pack()
+        frames[PRIMARY]["Loan Ref"] = ["760341", "760342", "760343"]
+        frames[CASHFLOW]["Account"] = ["76034101", "76034201", "76034301"]
+        _, report = consolidate_pack(frames, resolved, PRIMARY)
+        entry = next(f for f in report["files"]
+                     if f["source_file"] == CASHFLOW)
+        assert entry["overlap"] == 1.0
+        assert entry["key_rule"] == "strip_trailing_01"
+
+    def test_the_source_value_is_never_mutated(self):
+        """"Normalisation never mutates source data: it produces a comparison
+        key only; original values are preserved for lineage." """
+        frames, resolved = _pack()
+        frames[PRIMARY]["Loan Ref"] = ["760341", "760342", "760343"]
+        frames[CASHFLOW]["Account"] = ["76034101", "76034201", "76034301"]
+        tape, _ = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape[LOAN_KEY]) == ["760341", "760342", "760343"]
+
+
 class TestAPackOfOneFile:
     def test_it_reads_exactly_as_before(self):
         """The change must not alter a single-file delivery, which is most of
