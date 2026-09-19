@@ -293,6 +293,84 @@ class TestTheFilesDoNotSpellTheLoanIdTheSameWay:
         assert list(tape[LOAN_KEY]) == ["760341", "760342", "760343"]
 
 
+class TestOnePackWhereTheFilesDisagreeWithEachOther:
+    """ERE's actual pack, described by the operator:
+
+        "Loan Policy Number in the LoanExtract matches Account Number in the
+         P&I excel but the only joiner in the PropertyExtract is LoanID and it
+         drops the 01 suffix."
+
+    So the loan extract and the cashflow extract share the LONG form, and the
+    property extract carries the SHORT one. There is no single rule that joins
+    the whole pack: against the cashflow file the spine's key is already right,
+    and against the property file the same key must be stripped.
+
+    This is why the rule is resolved PER PAIR rather than once for the pack.
+    A single global rule would have to strip for everyone — which breaks the
+    cashflow join — or strip for nobody, which breaks the property join. Either
+    way one file silently contributes nothing.
+    """
+
+    def _ere_pack(self):
+        frames = {
+            PRIMARY: pd.DataFrame({
+                "Loan Policy Number": ["76034101", "76034201", "76034301"],
+                "Rate": [4.5, 5.0, 5.5],
+            }),
+            CASHFLOW: pd.DataFrame({
+                "Account Number": ["76034101", "76034201", "76034301"],
+                "C/F Principal Balance": [100.0, 200.0, 300.0],
+            }),
+            PROPERTY: pd.DataFrame({
+                "LoanID": ["760341", "760342", "760343"],
+                "Latest Property Value": [500.0, 600.0, 700.0],
+            }),
+        }
+        resolved = {
+            PRIMARY: {"Loan Policy Number": LOAN_KEY,
+                      "Rate": "current_interest_rate"},
+            CASHFLOW: {"Account Number": LOAN_KEY,
+                       "C/F Principal Balance": "current_principal_balance"},
+            PROPERTY: {"LoanID": LOAN_KEY,
+                       "Latest Property Value": "current_valuation_amount"},
+        }
+        return frames, resolved
+
+    def test_both_files_join_under_their_own_rule(self):
+        frames, resolved = self._ere_pack()
+        tape, report = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape["current_principal_balance"]) == [100.0, 200.0, 300.0]
+        assert list(tape["current_valuation_amount"]) == [500.0, 600.0, 700.0]
+        assert report["added"] == {
+            "current_principal_balance": CASHFLOW,
+            "current_valuation_amount": PROPERTY}
+
+    def test_the_suffix_is_stripped_only_where_it_has_to_be(self):
+        """THE EVIDENCE that the resolution is per pair and not per pack.
+
+        The SPINE's own rule differs between the two joins: left alone against
+        the cashflow extract, which already carries the long key, and stripped
+        against the property extract, which carries the short one. A single
+        rule for the pack could not do both.
+        """
+        frames, resolved = self._ere_pack()
+        _, report = consolidate_pack(frames, resolved, PRIMARY)
+        by_file = {f["source_file"]: f for f in report["files"]}
+        assert by_file[CASHFLOW]["primary_key_rule"] == "numeric_string"
+        assert by_file[PROPERTY]["primary_key_rule"] == "strip_trailing_01"
+        assert by_file[CASHFLOW]["key_rule"] == "numeric_string"
+        assert by_file[PROPERTY]["key_rule"] == "numeric_string"
+        assert by_file[CASHFLOW]["overlap"] == 1.0
+        assert by_file[PROPERTY]["overlap"] == 1.0
+
+    def test_the_tape_keeps_the_spine_s_own_identifier(self):
+        """The long form is what the loan extract calls the loan, and the tape
+        is the loan extract's. A comparison key is not an identifier."""
+        frames, resolved = self._ere_pack()
+        tape, _ = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape[LOAN_KEY]) == ["76034101", "76034201", "76034301"]
+
+
 class TestAPackOfOneFile:
     def test_it_reads_exactly_as_before(self):
         """The change must not alter a single-file delivery, which is most of

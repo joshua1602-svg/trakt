@@ -1310,6 +1310,7 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
             report["files"].append({
                 "source_file": file_name, "joined": False,
                 "overlap": round(overlap, 4), "key_rule": other_rule,
+                "primary_key_rule": spine_rule,
                 "note": (f"{file_name} and {primary_name} agree on "
                          f"{overlap:.0%} of their loan identifiers, so Trakt "
                          "cannot tell they are the same loans. Check the "
@@ -1331,10 +1332,17 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
                 continue
             spine[column] = values.to_numpy()
             added.append(column)
+        # BOTH SIDES OF THE COMPARISON, because a rule named on its own does
+        # not say how the match was made. ERE's pack is the case: the cashflow
+        # extract shares the loan extract's long key and the property extract
+        # carries the short one, so the SPINE is stripped for the second join
+        # and left alone for the first. "How were these matched?" is answered
+        # by the pair, not by one half of it.
         report["files"].append({"source_file": file_name, "joined": True,
                                 "added": sorted(added), "note": note,
                                 "overlap": round(overlap, 4),
-                                "key_rule": other_rule})
+                                "key_rule": other_rule,
+                                "primary_key_rule": spine_rule})
         for column in added:
             report["added"][column] = file_name
     return spine, report
