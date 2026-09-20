@@ -99,9 +99,17 @@ class TestTheProductMustBeConfirmedFirst:
         assert "regulatory return" in decision["proposed_mapping"]
 
     def test_the_question_reads_as_a_question(self):
+        """It is the card's TITLE, which is the line an operator reads first.
+
+        It used to be the ``issue``, which on a card is the supporting detail
+        under the headline — and the whole decision was in the raw artefact
+        shape, so there was no headline at all. See
+        :mod:`tests.operations_control.occ_agent
+        .test_the_product_question_can_be_answered`.
+        """
         pending = gate.needs_confirmation(ASSET)
         decision = gate.confirmation_decision(pending, ["maturity_date"])
-        assert decision["issue"] == ("Is this book an equity release lifetime "
+        assert decision["title"] == ("Is this book an equity release lifetime "
                                      "mortgage?")
         assert decision["blocking"] is True
 
