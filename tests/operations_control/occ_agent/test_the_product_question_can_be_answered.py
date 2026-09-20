@@ -58,11 +58,16 @@ def card():
 
 
 class TestItReadsAsOpen:
-    def test_it_sets_no_explicit_status(self, card):
-        """THE BUG. A missing status reads as open everywhere in this system;
-        an explicit "pending" reads as open NOWHERE."""
-        assert "status" not in card
-        assert card.get("status", "open") == "open"
+    def test_it_says_open_rather_than_leaving_it_to_a_default(self, card):
+        """THE BUG, AND THE TRAP ONE STEP PAST IT.
+
+        Readers default a missing status to open — ``d.get("status", "open")``
+        — so omitting it looks safe. The RERUN does not default: it keeps
+        ``d.get("status") != "open"`` as already settled and never replaces it.
+        A card with no status is frozen at its first appearance, which is
+        exactly what ``"pending"`` did one step earlier.
+        """
+        assert card["status"] == "open"
 
     def test_the_screen_s_own_filter_keeps_it(self, card):
         """`AgentCase.tsx` renders `status.open_decisions.filter(d => d.status
@@ -78,6 +83,23 @@ class TestItReadsAsOpen:
         question nobody is sent to answer is not a question."""
         assert card.get("status", "open") == "open"
         assert card["blocking"] is True
+
+    def test_a_rerun_replaces_it_rather_than_keeping_the_old_one(self, card):
+        """THE PART A DEPLOY COULD NOT HAVE FIXED.
+
+        The rerun keeps what a human SETTLED and re-raises everything else. A
+        ``"pending"`` decision was neither open nor settled, so it counted as
+        settled, ``setdefault`` refused to replace it, and it was stuck on the
+        case's own document for good — beyond the reach of any code change,
+        because the broken value was in the data.
+        """
+        from operations_control.occ_agent.service import _SETTLED_STATUSES
+        assert str(card["status"]).lower() not in _SETTLED_STATUSES
+        assert "pending" not in _SETTLED_STATUSES, \
+            "a status nobody deliberately wrote is not an answer"
+        for answered in ("approved", "rejected", "acknowledged"):
+            assert answered in _SETTLED_STATUSES, \
+                f"a decision a human {answered} must not be asked again"
 
 
 class TestTheCardCanBeRendered:
