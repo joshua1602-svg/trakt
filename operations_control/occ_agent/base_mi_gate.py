@@ -312,12 +312,39 @@ def sentence(row: Dict[str, Any]) -> str:
 
 def confirmation_decision(resolved: Any, blocked_fields: List[str]
                           ) -> Dict[str, Any]:
-    """The product question, in the shape the run raises a decision in.
+    """The product question, as a CARD an operator can actually answer.
 
     Answering it is what lets the profile excuse anything, so it is put in
     front of the blockers it would clear rather than buried beside them. The
     fields it WOULD excuse are named, because "confirm the product" with no
     consequence attached is a question nobody can weigh.
+
+    WHY THIS IS A CARD AND NOT AN ARTEFACT ROW. There are two decision shapes
+    in this system. The RAW row — ``decision_type`` and ``issue`` at the top
+    level, ``status: "pending"`` — is what a stage writes into
+    ``34_target_first_decisions.yaml``; ``_decisions_from_run`` then reads that
+    artefact and converts it into the operator-facing CARD that
+    ``run.open_decisions`` holds. This decision is raised by the gate rather
+    than by the artefact, and was prepended to the list AFTER that conversion:
+
+        decisions = self._decisions_from_run(run, facts, run_root)
+        if adapters.product_profile_decision is not None:
+            decisions = [adapters.product_profile_decision, *decisions]
+
+    So it landed in a list of cards wearing the wrong shape, and was invisible
+    twice over. Every reader treats a MISSING status as open — ``d.get("status",
+    "open")`` — and this was the one decision that set one explicitly, to
+    ``"pending"``, which is not ``"open"``. So the screen's ``d.status ===
+    "open"`` filtered it out, ``open_now`` did not count it, and
+    ``blocking_decisions`` did not see it. And had it rendered, the card does
+    ``decision.evidence.map(...)`` and ``decision.options.map(...)`` on arrays
+    this dict did not carry, which throws and takes the whole panel down.
+
+    The result was a live case showing seven blocking fields, no question to
+    answer, and no way to confirm the product that would have cleared six of
+    them. The raw keys are kept beside the card ones because
+    ``resolve_decision`` reads ``decision_type`` and ``profile_id`` from the
+    top level to record the confirmation.
     """
     profile_id = str(getattr(resolved, "profile_id", ""))
     profile = getattr(resolved, "profile", None)
@@ -326,27 +353,56 @@ def confirmation_decision(resolved: Any, blocked_fields: List[str]
         if profile is not None and profile.is_non_blocking_for_base_mi(f))
     label = profile_id.replace("_", " ")
     article = "an" if label[:1].lower() in "aeiou" else "a"
+    consequence = (
+        f"Confirming it means {len(would_clear)} required field"
+        f"{'s' if len(would_clear) != 1 else ''} "
+        f"({', '.join(f.replace('_', ' ') for f in would_clear)}) "
+        "are not needed for management information on this product. They "
+        "remain required for the regulatory return."
+        if would_clear else
+        f"Confirming it records the product as {article} {label}.")
+    rationale = str(getattr(resolved, "rationale", ""))
     return {
         "decision_id": "product_profile",
         "decision_type": "product_confirmation",
         "target_field": "",
         "source_column": "",
-        "status": "pending",
+        # NO EXPLICIT STATUS. Every reader in the system treats a missing one
+        # as open — `d.get("status", "open")` — and the one decision that set
+        # it explicitly was the one nobody could see.
         "blocking": True,
+        "kind": "product_confirmation",
+        "title": f"Is this book {article} {label}?",
+        "question": ("Confirm the product so Trakt can apply what the asset "
+                     "pack already knows about it."),
+        "issue": (f"{len(blocked_fields)} required field"
+                  f"{'s are' if len(blocked_fields) != 1 else ' is'} missing, "
+                  "and nothing can be excused until the product is confirmed. "
+                  "On the asset class alone Trakt proposes a profile rather "
+                  "than applying it."),
+        "evidence": [{"label": "Why Trakt thinks so", "kind": "text",
+                      "data": {"issue": rationale or
+                               f"the asset class resolves to {label}"}}],
+        "recommendation": profile_id,
+        "recommendation_source": "engine.onboarding_agent.product_profile",
+        "materiality": "BLOCKING",
+        "downstream_consequence": consequence,
+        # The alternative is named rather than free-typed: a profile id the
+        # resolver does not know is not an answer to this question.
+        "options": [{"value": profile_id,
+                     "label": f"Yes — {label}"}],
         "recommended_action": "confirm_product",
         "available_actions": ["confirm_product", "choose_alternative"],
         "confidence": round(float(getattr(resolved, "confidence", 0.0) or 0.0),
                             4),
         "profile_id": profile_id,
-        "issue": f"Is this book {article} {label}?",
-        "evidence_summary": str(getattr(resolved, "rationale", "")),
+        "evidence_summary": rationale,
         "would_clear": would_clear,
-        "proposed_mapping": (
-            f"Confirming it means {len(would_clear)} required field"
-            f"{'s' if len(would_clear) != 1 else ''} "
-            f"({', '.join(f.replace('_', ' ') for f in would_clear)}) "
-            "are not needed for management information on this product. They "
-            "remain required for the regulatory return."
-            if would_clear else
-            f"Confirming it records the product as {article} {label}."),
+        "proposed_mapping": consequence,
+        "subject": {
+            "artefact": "product_profile",
+            "decision_id": "product_profile",
+            "decision_type": "product_confirmation",
+            "profile_id": profile_id,
+        },
     }
