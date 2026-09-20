@@ -157,22 +157,83 @@ class TestOnceTheProductIsConfirmed:
 # The regime is not excused
 # --------------------------------------------------------------------------- #
 
-class TestTheRegulatoryReturnIsNotExcused:
+class TestTheRegulatoryReturnIsItsOwnVerdict:
+    """Two questions, not one.
 
-    def test_every_field_blocks_again_once_a_regime_is_prepared(self):
-        """``base_mi`` speaks for management information. A field the profile
-        marks optional for MI can still be mandatory for the regulator."""
+        "It should be the case the Operator invokes an MI + Regime run AND
+         that MI can run without Regime being fully validated."
+
+    ``base_mi`` used to be emptied the moment a regime was in play, so a
+    regulatory run excused nothing and stopped on every field Annex 2 wants.
+    That conflated "is the management information sound?" with "is the
+    regulatory return complete?" — and the cost was concrete: a lender waiting
+    on one Legal Entity Identifier could not see their own book.
+
+    The pipeline was already built for two answers. The validation manifest
+    carries ``ready_for_validation_complete`` and ``ready_for_projection`` as
+    separate flags; only this gate had folded them together.
+    """
+
+    def test_mi_is_excused_on_its_own_terms_even_under_a_regime(self):
         blocking, excused = gate.split(ALL_EIGHT, asset_class=ASSET,
                                        regime="ESMA_Annex2",
                                        confirmed_profile_id=PROFILE)
-        assert excused == []
-        assert len(blocking) == N
+        names = {r["field_name"] for r in excused}
+        assert "maturity_date" in names
+        assert len(blocking) < N
 
-    def test_the_product_question_is_not_raised_on_a_regime_run(self):
-        """There is nothing it could clear, so asking it would be noise."""
-        blocking, _ = gate.split(ALL_EIGHT, asset_class=ASSET,
-                                 regime="ESMA_Annex2")
-        assert len(blocking) == N
+    def test_the_asset_pack_answers_before_the_lender_is_asked(self):
+        """THE OPERATOR'S RULE, in their words:
+
+            "Any core_canonical: true fields that are not met for MI purposes
+             must first consult the asset and client configuration to assess
+             whether there are any rules. For example, maturity date is not
+             relevant for an equity release portfolio."
+
+        ``product_defaults_ERM.yaml`` answers ``maturity_date: ND5`` — no fixed
+        term — so it is not outstanding and must never reach an operator as
+        something the lender still owes us.
+        """
+        _, excused = gate.split(ALL_EIGHT, asset_class=ASSET,
+                                regime="ESMA_Annex2",
+                                confirmed_profile_id=PROFILE)
+        pending = gate.regime_outstanding(
+            excused, regime="ESMA_Annex2", asset_class=ASSET)
+        assert "maturity_date" not in {r["field_name"] for r in pending}
+
+    def test_the_client_configuration_answers_before_the_lender_is_asked(self):
+        """The originator's name is a standing client field, captured once on
+        the entity holding the role — not a column in a monthly extract."""
+        _, excused = gate.split(ALL_EIGHT, asset_class=ASSET,
+                                regime="ESMA_Annex2",
+                                confirmed_profile_id=PROFILE)
+        pending = gate.regime_outstanding(
+            excused, regime="ESMA_Annex2", asset_class=ASSET,
+            client_defaults={"originator_name": "ERE Funding Limited"})
+        assert "originator_name" not in {r["field_name"] for r in pending}
+
+    def test_what_nobody_can_supply_is_still_reported(self):
+        """RREL83 permits no ND code and must match GLEIF, so an LEI nobody
+        holds is a real ask — and it is ONE value in client config rather than
+        a column in every monthly extract."""
+        _, excused = gate.split(ALL_EIGHT, asset_class=ASSET,
+                                regime="ESMA_Annex2",
+                                confirmed_profile_id=PROFILE)
+        pending = gate.regime_outstanding(
+            excused, regime="ESMA_Annex2", asset_class=ASSET)
+        lei = next((r for r in pending
+                    if r["field_name"] == "originator_legal_entity_identifier"),
+                   None)
+        assert lei is not None
+        assert lei["regime_code"] == "RREL83"
+        assert "RREL83" in gate.regime_sentence(lei)
+
+    def test_nothing_is_outstanding_when_no_regime_is_prepared(self):
+        """An MI-only delivery owes the regulator nothing."""
+        _, excused = gate.split(ALL_EIGHT, asset_class=ASSET,
+                                confirmed_profile_id=PROFILE)
+        assert gate.regime_outstanding(
+            excused, regime="", asset_class=ASSET) == []
 
 
 # --------------------------------------------------------------------------- #

@@ -1552,6 +1552,14 @@ class OccAgentService:
             # amendment's have, and are already governed — see
             # `SyntheticOnboardingAdapters.confirm_every_mapping`.
             confirm_every_mapping=(agent_case.case.kind == KIND_NEW_CLIENT),
+            # THE CLIENT'S OWN STANDING ANSWERS. The originator's name, LEI and
+            # country of establishment are captured once on the entity holding
+            # the originator role and reach the regime defaults from there —
+            # `onboarding.artefacts` already derives exactly this, and an
+            # operator is never asked for the same legal name twice. Read here
+            # so a field the client configuration already holds is not reported
+            # as something the regulator is still waiting for.
+            client_defaults=self._standing_client_defaults(agent_case),
             case_id=run.case_ref, tenant=run.tenant)
         run_root = self.store.run_dir(run.tenant, run.case_ref)
         self._purge_stale_decisions(run_root)
@@ -1670,6 +1678,36 @@ class OccAgentService:
     # ------------------------------------------------------------------ #
     # The mapping table: read it, then commit it
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _standing_client_defaults(agent_case: AgentCase) -> Dict[str, Any]:
+        """The regime's standing CLIENT fields, from the entity that holds the
+        role rather than from the loan tape.
+
+        ``config/regime/onboarding_standing_fields.yaml`` declares the
+        originator's name (RREL82), LEI (RREL83) and country of establishment
+        (RREL84) as ``standing_client``, ``source: derived``, ``derives_from:
+        the entity holding the originator role``. They are not columns in a
+        monthly extract, and a delivery stopped for want of them is asking the
+        client to restate per loan what they told us once at onboarding.
+        """
+        try:
+            originators = agent_case.case.entities_with_role("originator")
+        except Exception:                    # noqa: BLE001 — a case guard
+            return {}
+        if not originators:
+            return {}
+        entity = originators[0]
+        out: Dict[str, Any] = {}
+        for key, field_name in (
+                ("legal_name", "originator_name"),
+                ("lei", "originator_legal_entity_identifier"),
+                ("country_of_establishment",
+                 "originator_establishment_country")):
+            value = str(entity.get(key) or "").strip()
+            if value:
+                out[field_name] = value
+        return out
+
     def _require_mapping_change(self, run: SyntheticRun) -> None:
         """A mapping may be answered while the run is at the mapping stage,
         and RE-answered at any point until the case activates.
