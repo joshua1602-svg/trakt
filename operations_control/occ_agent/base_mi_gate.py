@@ -367,9 +367,12 @@ def confirmation_decision(resolved: Any, blocked_fields: List[str]
         "decision_type": "product_confirmation",
         "target_field": "",
         "source_column": "",
-        # NO EXPLICIT STATUS. Every reader in the system treats a missing one
-        # as open — `d.get("status", "open")` — and the one decision that set
-        # it explicitly was the one nobody could see.
+        # OPEN, SAID OUT LOUD. Not merely because every reader defaults a
+        # missing status to open, but because the RERUN does not: it keeps
+        # `d.get("status") != "open"` as already settled and never replaces it.
+        # A card with no status is therefore frozen at its first appearance —
+        # which is the same trap `"pending"` fell into, one step further on.
+        "status": "open",
         "blocking": True,
         "kind": "product_confirmation",
         "title": f"Is this book {article} {label}?",

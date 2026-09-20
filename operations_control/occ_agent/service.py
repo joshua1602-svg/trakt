@@ -168,6 +168,17 @@ ACTION_PHRASES: Dict[str, str] = {
 _NOT_A_WAY_FORWARD = (_states.ACTION_CANCEL, _states.ACTION_WITHDRAW,
                       _states.ACTION_REQUEST_CHANGES)
 
+#: A decision a human has ANSWERED, and which a rerun must therefore keep
+#: rather than ask again. Written deliberately by the three paths that settle
+#: one: ``resolve_decision`` sets approved or rejected, ``acknowledge_exception``
+#: sets acknowledged, and the mapping commit sets approved.
+#:
+#: Everything else is re-raisable. That is deliberate and it is the safe
+#: direction — the worst case is a question asked twice, against a decision
+#: nobody can answer and no deploy can dislodge, because the value that froze
+#: it lives in the case's own document rather than in the code.
+_SETTLED_STATUSES = ("approved", "rejected", "acknowledged")
+
 
 def action_phrase(action: str) -> str:
     return ACTION_PHRASES.get(action, str(action).replace("_", " "))
@@ -1592,8 +1603,22 @@ class OccAgentService:
         # its own.
         if adapters.product_profile_decision is not None:
             decisions = [adapters.product_profile_decision, *decisions]
+        # WHAT A HUMAN ACTUALLY SETTLED, rather than everything that is not the
+        # word "open". The distinction was invisible while every card carried
+        # an explicit `"status": "open"` and every settled one carried
+        # "approved" — and then one decision was raised carrying "pending",
+        # which is neither. It counted as settled, `setdefault` below refused to
+        # replace it, and it was stuck on the run for good: a rerun could not
+        # dislodge it and a deploy could not fix it, because the broken value
+        # was in the case's own document rather than in the code.
+        #
+        # A status nobody wrote deliberately is not an answer. These three are
+        # the ones the writers use — `resolve_decision` sets approved/rejected,
+        # `acknowledge_exception` sets acknowledged — and anything else is
+        # re-raisable, which is the safe direction: the worst case is a
+        # question asked twice, not an answer that cannot be given.
         settled = {d["decision_id"]: d for d in run.open_decisions
-                   if d.get("status") != "open"}
+                   if str(d.get("status") or "").lower() in _SETTLED_STATUSES}
         for decision in decisions:
             settled.setdefault(decision["decision_id"], decision)
         run.open_decisions = list(settled.values())
