@@ -1368,9 +1368,20 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
                          "cannot tell they are the same loans. Check the "
                          "column each file identifies a loan by.")})
             continue
+        # THE PERIOD COLUMN TRAVELS WITH THE NARROWING, even when the spine
+        # already carries it. `spare` is what this file would ADD, and a
+        # cashflow extract's reporting date is precisely what it does not add:
+        # the loan extract states the same date, so the column is excluded as
+        # redundant. Narrowing to `spare` alone therefore took away the one
+        # column `_one_row_per_loan` needs to say which of a loan's monthly rows
+        # speaks for it — and the file was dropped with "no data cut off date",
+        # against an operator who had mapped it. It is carried here and attached
+        # to nothing: only `spare` is written to the spine below.
+        for_collapse = [LOAN_KEY, *spare]
+        if PERIOD_FIELD in other.columns and PERIOD_FIELD not in for_collapse:
+            for_collapse.append(PERIOD_FIELD)
         collapsed, note = _one_row_per_loan(
-            other[[LOAN_KEY, *spare]].assign(**{LOAN_KEY: other[LOAN_KEY]}),
-            other_keys, file_name)
+            other[for_collapse], other_keys, file_name)
         if collapsed is None:
             report["files"].append({"source_file": file_name, "joined": False,
                                     "note": note})
