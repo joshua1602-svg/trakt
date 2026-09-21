@@ -60,6 +60,48 @@ defaults:
   exposure_currency_denomination: GBP
   currency_of_financials: GBP
 
+# A CLOSED LOAN'S BALANCE IS NOUGHT, NOT MISSING.
+#
+# A lender's balances extract carries the loans that still have a balance, so a
+# loan redeemed in the period is simply absent from it. The loan extract still
+# lists it — it was on the book for part of the period and belongs in the
+# reporting — and the consolidated tape therefore shows a blank, which
+# validation refuses as a missing mandatory value (CORE002, BLOCKING).
+#
+# The refusal is wrong. Nothing is missing: the borrower repaid, and the
+# outstanding balance of a repaid loan is nought. That is a property of the
+# PRODUCT, not of the client's data quality, which is why it is stated here —
+# the operator's rule, in their words: "any core_canonical: true fields that
+# are not met for MI purposes must first consult the asset and client
+# configuration to assess whether there are any rules."
+#
+# It is not a default for an absent value. It fires only on POSITIVE evidence
+# that the account has closed, and only where the lender states no balance:
+#
+#   * a blank or unrecognised status derives nothing, so a truncated balances
+#     extract still refuses — every live loan it dropped stays blank;
+#   * a stated balance always wins, even a contradictory one, which is
+#     reported rather than silently overwritten.
+#
+# PARTIAL REPAYMENTS ARE NOT THIS. A loan that repays part of its balance stays
+# open and keeps its status, so it never reaches this rule. Confirmed with the
+# first ERM lender through onboarding: "Redeemed means fully repaid", a partial
+# leaving the account active. A lender whose status says otherwise must not use
+# this list — their partial-repayment indicator has to be mapped and read
+# first, or a live loan would be reported at nought.
+closed_account:
+  # `account_status` values meaning repaid in full and closed. Both the
+  # canonical enum code and the label a lender writes are listed, because this
+  # runs either side of enum normalisation; matching ignores case and padding.
+  # See config/system/enum_synonyms.yaml — account_status: Redeemed -> RDMD.
+  statuses: [RDMD, Redeemed]
+  # What such a loan carries as nought. Both balances, because they are the
+  # same fact at different points of the waterfall and a tape that zeroed one
+  # and left the other blank would be incoherent.
+  zero_fields:
+    - current_principal_balance
+    - current_outstanding_balance
+
 nd_defaults:
 # --- 4. Income & Affordability (ND1) ---
   # NEW: Explicitly stating these are not required for ERM underwriting

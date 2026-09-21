@@ -208,6 +208,10 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: later refusal can say which file mapped the field it is refusing.
         #: See :func:`why_absent`.
         self.resolved_by_file: Dict[str, Dict[str, str]] = {}
+        #: What the asset pack's closed-account rule filled, and what it found
+        #: contradicting it. A value the platform wrote rather than read has to
+        #: be visible as such. See :func:`_closed_account_zeroing`.
+        self.closed_accounts: Dict[str, Any] = {}
         #: The governed budget for asking a model about a column the
         #: deterministic tiers could not settle — see :mod:`.llm_mapping`.
         self.llm_policy: _llm.Policy = llm_policy or _llm.Policy.load()
@@ -676,6 +680,19 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                               blockers=[f"canonical typing failed "
                                         f"({type(exc).__name__})"],
                               message="transform failed")
+        # WHAT THE ASSET CLASS ANSWERS ABOUT A CLOSED ACCOUNT.
+        #
+        # A loan redeemed in the period is absent from the lender's balances
+        # extract — there is no balance to report — so the consolidated tape
+        # carries a blank and validation refuses it as a missing mandatory
+        # value. Nothing is missing: the borrower repaid, and a repaid loan's
+        # balance is nought. That is the product's answer, stated in the asset
+        # pack, and read here rather than decided here.
+        #
+        # The platform's own function, called by the platform's own
+        # `derive_fields` too, so the rehearsal and production cannot drift
+        # into two readings of the same rule.
+        self.closed_accounts = _closed_account_zeroing(frame, self.asset_type)
         typed = frame
         typed_fields = report.get("fields") or {}
         parse_failures = {name: spec.get("parse_failures", 0)
@@ -700,10 +717,21 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             component="engine.gate_2_transform.canonical_transform.apply_types",
             summary=f"Typed {len(typed_fields)} canonical column"
                     f"{'s' if len(typed_fields) != 1 else ''} across "
-                    f"{len(typed)} records.",
+                    f"{len(typed)} records.{_closed_sentence(self.closed_accounts)}",
             metrics={"rows": int(len(typed)),
                      "typed_columns": len(typed_fields),
-                     "parse_failures": parse_failures}))
+                     "closed_accounts": self.closed_accounts,
+                     "parse_failures": parse_failures},
+            # A closed account STATING a balance is a contradiction: the
+            # lender says the loan is repaid and also says money is owed on it.
+            # The value is left exactly as they wrote it, and named here
+            # because only they can say which of the two is right.
+            blockers=[
+                f"{n} loan{'s' if n != 1 else ''} with a closed account status "
+                f"still state a {f.replace('_', ' ')}. The value the lender "
+                "sent has been kept; ask them which is right."
+                for f, n in sorted(
+                    (self.closed_accounts.get("contradicted") or {}).items())]))
         return StepResult(ok=True, output_path=str(typed_csv),
                           manifest_path=str(manifest_path),
                           readiness={"ready_for_validation": True},
@@ -1440,6 +1468,53 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
         for column in added:
             report["added"][column] = file_name
     return spine, report
+
+
+def _closed_sentence(outcome: Dict[str, Any]) -> str:
+    """What the closed-account rule did, for the stage an operator reads.
+
+    A value the platform wrote is not the same as one the lender sent, and the
+    tape does not distinguish them. Silence here would make a derived nought
+    indistinguishable from a reported one.
+    """
+    filled = (outcome or {}).get("filled") or {}
+    if not filled:
+        return ""
+    rows = max(int(n) for n in filled.values())
+    fields = ", ".join(f.replace("_", " ") for f in sorted(filled))
+    return (f" {rows} loan{'s' if rows != 1 else ''} with a closed account "
+            f"status had no balance, which the asset class answers as nought: "
+            f"{fields} set to 0.")
+
+
+def _closed_account_zeroing(frame: "pd.DataFrame", asset_class: str
+                            ) -> Dict[str, Any]:
+    """Apply the asset pack's closed-account answer, and say what it did.
+
+    Never raises: a configuration that cannot be read must leave the tape
+    exactly as the lender sent it and refuse as it would have before, rather
+    than take a delivery down.
+    """
+    try:
+        import yaml as _yaml
+        from engine.gate_2_transform.canonical_transform import (
+            zero_balances_on_closed_accounts,
+        )
+        name = str(asset_class or "").strip().lower().replace(" ", "_")
+        if name not in ("equity_release", "erm", "rre"):
+            return {}
+        pack = REPO / "config" / "asset" / "product_defaults_ERM.yaml"
+        if not pack.exists():
+            return {}
+        cfg = (_yaml.safe_load(pack.read_text(encoding="utf-8")) or {})
+        closed = cfg.get("closed_account") or {}
+        if not closed.get("statuses"):
+            return {}
+        return zero_balances_on_closed_accounts(
+            frame, statuses=closed.get("statuses") or [],
+            zero_fields=closed.get("zero_fields") or [])
+    except Exception:                       # pragma: no cover — config guard
+        return {}
 
 
 def why_absent(field: str, resolved_by_file: Dict[str, Dict[str, str]],
