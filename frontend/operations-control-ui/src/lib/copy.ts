@@ -678,10 +678,22 @@ export const copy = {
     // carrying the same fact is ordinary — but an operator confirming the set
     // is confirming all of them and should see which.
     mappingContested: (n: number) => `${n} columns claim this`,
-    mappingContestedHelp:
-      "More than one column reads as this field. Where they are in different " +
-      "files that is normal and Trakt reconciles it; where they are in the " +
-      "same file, pick one and set the other aside.",
+    // TWO COLUMNS OF ONE FILE. A real question: which of them is it? The run
+    // is blocked until somebody picks.
+    mappingAmbiguousHelp:
+      "Two columns of this file read as the same field, and Trakt has no " +
+      "basis to prefer one. Pick the one to use and set the other aside.",
+    // THE SAME FIELD IN ANOTHER FILE, which is not a problem and is usually
+    // the point. Every extract carries a loan identifier and the assembler
+    // needs each of them to join on — a file without one contributes nothing.
+    // This read as a warning, in orange, on rows an operator had just got
+    // right, and told them to undo the very mapping that makes the join work.
+    mappingAlsoIn: (n: number) =>
+      n === 1 ? "also in 1 other file" : `also in ${n} other files`,
+    mappingAlsoInHelp:
+      "Another file reads a column as this field too. That is normal — Trakt " +
+      "joins the files on the loan identifier and reconciles the rest — and " +
+      "for the loan identifier itself it is what makes the join possible.",
     mappingContestedFilter: "Claimed twice",
     mappingApproveHelp:
       "This is the first delivery from this client, so Trakt has proposed how " +
