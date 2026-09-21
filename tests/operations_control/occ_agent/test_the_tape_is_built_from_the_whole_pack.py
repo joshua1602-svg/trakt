@@ -219,6 +219,96 @@ class TestAPerPeriodExtract:
         assert "more than one row per loan" in entry["note"]
 
 
+class TestBothFilesCarryTheReportingDate:
+    """REPORTED FROM THE LIVE CASE, with the balance mapped and confirmed:
+
+        "current_principal_balance: CORE001 affects 0 record(s) — BLOCKING"
+        "I have already tagged [it] as being mapped to a field from the P&I
+         file. Why isn't this mapping being picked up?"
+
+    Both halves of the consolidation were right and they cancelled each other
+    out. ``spare`` is what a secondary file would ADD, and a loan extract
+    states the same reporting date the cashflow extract does — so the period
+    column was excluded as redundant, and the narrowing to ``spare`` took away
+    the one column ``_one_row_per_loan`` needs to say which of a loan's monthly
+    rows speaks for it.
+
+    The file was then dropped for having "no data cut off date", against an
+    operator who had mapped exactly that. The advice in the message was to map
+    the reporting date. They had. Following it could not have helped, and the
+    balance stayed out of the tape while the screen said the mapping was
+    confirmed at 100%.
+
+    ``TestAPerPeriodExtract`` above did not catch it because its spine carries
+    no reporting date of its own, which is the one arrangement where the column
+    survives the narrowing.
+    """
+
+    def _both_dated(self):
+        frames, resolved = _pack()
+        frames[PRIMARY] = pd.DataFrame({
+            "Loan Ref": ["L1", "L2", "L3"],
+            "Rate": [4.5, 5.0, 5.5],
+            "Reporting Date": ["2026-09-30"] * 3,
+        })
+        resolved[PRIMARY]["Reporting Date"] = PERIOD_FIELD
+        frames[CASHFLOW] = pd.DataFrame({
+            "Account": ["L1", "L1", "L2", "L2", "L3", "L3"],
+            "C/F Principal Balance": [90.0, 100.0, 180.0, 200.0, 270.0, 300.0],
+            "Month Run": ["2026-08-31", "2026-09-30"] * 3,
+        })
+        resolved[CASHFLOW]["Month Run"] = PERIOD_FIELD
+        return frames, resolved
+
+    def test_the_balance_still_reaches_the_tape(self):
+        """THE DEFECT, in one line."""
+        frames, resolved = self._both_dated()
+        tape, _ = consolidate_pack(frames, resolved, PRIMARY)
+        assert "current_principal_balance" in tape.columns
+
+    def test_the_latest_period_still_speaks_for_the_loan(self):
+        """Carrying the period column through the narrowing must not change
+        WHICH row wins — only whether the question can be answered at all."""
+        frames, resolved = self._both_dated()
+        tape, _ = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape["current_principal_balance"]) == [100.0, 200.0, 300.0]
+
+    def test_the_tape_does_not_fan_out(self):
+        frames, resolved = self._both_dated()
+        tape, _ = consolidate_pack(frames, resolved, PRIMARY)
+        assert len(tape) == 3
+
+    def test_the_spine_keeps_its_own_reporting_date(self):
+        """The period column is carried for the COLLAPSE and attached to
+        nothing. The primary wins a contested field, and the date the loan
+        extract states is the date on the tape."""
+        frames, resolved = self._both_dated()
+        tape, report = consolidate_pack(frames, resolved, PRIMARY)
+        assert list(tape[PERIOD_FIELD]) == ["2026-09-30"] * 3
+        assert PERIOD_FIELD not in (report["added"] or {})
+
+    def test_it_is_not_reported_as_missing_the_date_that_was_mapped(self):
+        """The note told the operator to do the thing they had already done."""
+        frames, resolved = self._both_dated()
+        _, report = consolidate_pack(frames, resolved, PRIMARY)
+        entry = next(f for f in report["files"]
+                     if f["source_file"] == CASHFLOW)
+        assert entry["joined"] is True
+        assert "no data cut off date" not in entry["note"]
+
+    def test_a_file_that_genuinely_lacks_the_date_is_still_refused(self):
+        """The refusal is right when it is true. Carrying the column through
+        must not turn "Trakt cannot tell which row speaks for the loan" into a
+        silent guess."""
+        frames, resolved = self._both_dated()
+        resolved[CASHFLOW].pop("Month Run")
+        tape, report = consolidate_pack(frames, resolved, PRIMARY)
+        assert "current_principal_balance" not in tape.columns
+        entry = next(f for f in report["files"]
+                     if f["source_file"] == CASHFLOW)
+        assert entry["joined"] is False
+
+
 class TestTheFilesDoNotSpellTheLoanIdTheSameWay:
     """``entity_key_resolver`` names these from real packs, and a bare string
     comparison joins NONE of them — silently, leaving a column of blanks and a
