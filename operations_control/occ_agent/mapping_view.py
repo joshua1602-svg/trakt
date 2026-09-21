@@ -448,7 +448,15 @@ def overview(run: Any) -> Dict[str, Any]:
     # an operator does not count. Counting it would make a blocked run read as
     # more complete than a finished one.
     in_use = counts[ROW_CONFIRMED] + counts[ROW_AUTOMATIC]
+    # TWO DIFFERENT FACTS, COUNTED SEPARATELY. A field claimed twice inside ONE
+    # file is an ambiguity the engine cannot resolve and the run blocks on it.
+    # A field claimed by two FILES is the ordinary shape of a delivery — every
+    # extract carries a loan identifier, and the join needs each of them. Rolled
+    # into one number, an operator who had just correctly mapped the identifier
+    # in a second file was told they had a problem.
     contested = sum(1 for r in rows if r["also_claimed_by"])
+    ambiguous = sum(1 for r in rows
+                    if any(c.get("same_file") for c in r["also_claimed_by"]))
     # A question the operator has not staged an answer to. `classify` puts a
     # staged row in ROW_STAGED, so what is left in ROW_NEEDS_YOU is exactly
     # the set that has no answer — which is what the commit refuses on.
@@ -487,4 +495,8 @@ def overview(run: Any) -> Dict[str, Any]:
         # blocker — see `_mark_contested` — but the operator asked to be able
         # to find them, and a count they cannot filter to is a number.
         "contested": contested,
+        # Of those, the ones that are a REAL question: two columns of one file.
+        # This is the number worth a warning; `contested` on its own counts
+        # every loan identifier in the pack.
+        "ambiguous": ambiguous,
     }

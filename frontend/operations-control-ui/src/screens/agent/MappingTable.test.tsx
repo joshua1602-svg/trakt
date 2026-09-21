@@ -540,13 +540,39 @@ describe("OCC Agent — the table is a draft until it is confirmed", () => {
     /* Every file's columns are proposed now, so two extracts routinely claim
        one field — and an operator confirming the set is confirming all of
        them. Reported, not blocked: production reconciles two files carrying
-       the same fact by source precedence. */
+       the same fact by source precedence.
+
+       SAID NEUTRALLY, because across files it is not a problem. See
+       "a second file carrying the same field is not a warning" below. */
     await afterTheRun();
     expect(within(rowFor("Val Dt", "property_tape.csv")).
-      getByText(copy.agent.mappingContested(2))).toBeInTheDocument();
+      getByText(copy.agent.mappingAlsoIn(1))).toBeInTheDocument();
     expect(within(table()).getByRole("button", {
       name: new RegExp(copy.agent.mappingContestedFilter),
     })).toBeInTheDocument();
+  });
+
+  it("a second file carrying the same field is not a warning", async () => {
+    /* REPORTED FROM THE LIVE CASE. The operator mapped the loan identifier in
+       the principal-and-interest extract — which is REQUIRED, because a file
+       without one cannot be joined and contributes nothing — and the row came
+       back in orange saying "2 columns claim this".
+
+           "This does not make any sense. I mapped to Loan_identifier."
+
+       They were right. `_mark_contested` has always recorded `same_file` on
+       each claimant precisely because "the two read differently to an operator
+       and must not be conflated", and the screen then rendered both in the
+       same orange chip. So the one action that makes a multi-file pack
+       assemble was reported as a problem, on the row they had just got right,
+       with a tooltip nobody hovers explaining it was fine.
+
+       Two columns of ONE file stays a warning: that one is a real question. */
+    await afterTheRun();
+    const acrossFiles = within(rowFor("Val Dt", "property_tape.csv"));
+    expect(acrossFiles.getByText(copy.agent.mappingAlsoIn(1))).
+      toBeInTheDocument();
+    expect(acrossFiles.queryByText(copy.agent.mappingContested(2))).toBeNull();
   });
 
   it("stops flagging a clash the operator has just resolved", async () => {

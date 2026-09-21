@@ -2026,27 +2026,47 @@ function MappingFieldCell({ row }: { row: MappingRow }) {
           {copy.agent.mappingRequestedChip(requested)}
         </span>
       )}
-      {row.also_claimed_by.length > 0 && (
-        // A field more than one column reads as. Where they are in different
-        // files that is the ordinary shape of a delivery and production
-        // reconciles it; where they are in the SAME file it is an ambiguity
-        // and the run is already blocked on it. Either way an operator
-        // confirming the set is confirming all of them, and is entitled to
-        // see that before they do.
-        <span
-          className="shrink-0 rounded bg-orange-50 px-1.5 py-0.5 text-xs font-medium text-orange-800"
-          title={[copy.agent.mappingContestedHelp,
-                  ...row.also_claimed_by.map(
-                    (c) => `${c.source_column} in ${c.source_file}`),
-                  // WHAT THE CHOICE TURNS ON. How many records each competing
-                  // column actually carries used to live on a decision card;
-                  // deleting the card would have deleted the one thing that
-                  // settles the question.
-                  row.decision_detail].filter(Boolean).join(" ")}
-        >
-          {copy.agent.mappingContested(row.also_claimed_by.length + 1)}
-        </span>
-      )}
+      {row.also_claimed_by.length > 0 && (() => {
+        // A field more than one column reads as — and the two cases are not
+        // the same thing, so they must not wear the same warning.
+        //
+        // SAME FILE is an ambiguity the engine cannot resolve: which of these
+        // two columns is the balance? The run blocks on it and the operator
+        // has to pick one.
+        //
+        // DIFFERENT FILES is the ordinary shape of a delivery, and more than
+        // that — it is REQUIRED. Every extract carries a loan identifier and
+        // the assembler needs each of them to join on; a file without one
+        // contributes nothing. Reported in orange, an operator who had just
+        // correctly mapped the identifier in a second file was told they had
+        // a problem, on the row they had just got right.
+        const ambiguous = row.also_claimed_by.some((c) => c.same_file);
+        const elsewhere = row.also_claimed_by.filter((c) => !c.same_file);
+        return (
+          <span
+            className={
+              "shrink-0 rounded px-1.5 py-0.5 text-xs font-medium " +
+              (ambiguous
+                ? "bg-orange-50 text-orange-800"
+                : "bg-stone-100 text-stone-600")
+            }
+            title={[ambiguous
+                      ? copy.agent.mappingAmbiguousHelp
+                      : copy.agent.mappingAlsoInHelp,
+                    ...row.also_claimed_by.map(
+                      (c) => `${c.source_column} in ${c.source_file}`),
+                    // WHAT THE CHOICE TURNS ON. How many records each competing
+                    // column actually carries used to live on a decision card;
+                    // deleting the card would have deleted the one thing that
+                    // settles the question.
+                    row.decision_detail].filter(Boolean).join(" ")}
+          >
+            {ambiguous
+              ? copy.agent.mappingContested(row.also_claimed_by.length + 1)
+              : copy.agent.mappingAlsoIn(elsewhere.length)}
+          </span>
+        );
+      })()}
     </div>
   );
 }
