@@ -25,7 +25,7 @@ import re
 import calendar
 import warnings
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Sequence
 from datetime import datetime
 
 import numpy as np
@@ -871,6 +871,69 @@ def _resolve_ltv(df: pd.DataFrame, ltv_col: str, bal_cols: tuple, val_col: str,
                       or report["unresolved_rows"]) else None
 
 
+#: Where the asset class states what a closed account carries. Read rather than
+#: restated here, because "which statuses mean repaid in full" is a property of
+#: the product and belongs with the rest of the product's standing answers.
+CLOSED_ACCOUNT_KEY = "closed_account"
+
+
+def zero_balances_on_closed_accounts(
+        df: pd.DataFrame, *, statuses: Sequence[str],
+        zero_fields: Sequence[str],
+        status_field: str = "account_status") -> Dict[str, Any]:
+    """A repaid loan's balance is nought, not missing.
+
+    A lender's balances extract carries the loans that still have a balance, so
+    a loan redeemed during the period is simply absent from it. The loan
+    extract still lists it, the consolidated tape shows a blank, and validation
+    refuses the blank as a missing mandatory value — CORE002, BLOCKING, on a
+    delivery where nothing is actually missing.
+
+    THIS IS NOT A DEFAULT FOR AN ABSENT VALUE, and the distinction is the whole
+    safety argument. It fires on POSITIVE EVIDENCE that the account has closed:
+
+      * a blank or unrecognised status derives nothing, so a balances extract
+        that arrives truncated still refuses — every live loan it dropped stays
+        blank and still blocks, which is the behaviour that makes a silent
+        understatement impossible;
+      * a stated balance always wins. A closed account carrying a non-zero
+        balance is a contradiction worth someone's attention, so it is counted
+        and reported rather than quietly overwritten.
+
+    Partial repayments never reach this: a loan that repays part of its balance
+    stays open and keeps its status. A lender whose status says otherwise must
+    not be configured into ``statuses`` — see the asset pack's own note.
+
+    Returns a report naming what was filled and what contradicted, because a
+    value the platform wrote rather than read has to be visible as such.
+    """
+    wanted = {str(s).strip().upper() for s in (statuses or []) if str(s).strip()}
+    report: Dict[str, Any] = {"closed_rows": 0, "filled": {}, "contradicted": {}}
+    if not wanted or status_field not in df.columns:
+        return report
+    status = df[status_field].map(
+        lambda v: "" if v is None else str(v).strip().upper())
+    closed = status.isin(wanted)
+    if not bool(closed.any()):
+        return report
+    report["closed_rows"] = int(closed.sum())
+    report["statuses"] = sorted(wanted)
+    for field in zero_fields or []:
+        if field not in df.columns:
+            continue
+        stated = pd.to_numeric(df[field], errors="coerce")
+        blank = closed & stated.isna()
+        if bool(blank.any()):
+            df.loc[blank, field] = 0.0
+            report["filled"][field] = int(blank.sum())
+        # A closed account that still states a balance. Left exactly as the
+        # lender wrote it; named so it can be asked about.
+        odd = closed & stated.notna() & (stated != 0)
+        if bool(odd.any()):
+            report["contradicted"][field] = int(odd.sum())
+    return report
+
+
 def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
                  dayfirst: bool, infer_year: bool, derive_month: bool,
                  default_year: Optional[int], config: dict) -> Dict[str, Any]:
@@ -878,6 +941,18 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
     deriv_report: Dict[str, Any] = {"derived": {}, "skipped": {}}
     pt = (portfolio_type or "").strip().lower()
     is_erm = pt in {"equity_release", "erm", "rre"}
+
+    # 0. A CLOSED ACCOUNT CARRIES NOUGHT, and it has to be said before balance
+    #    coherence runs: coherence derives one balance from another, and a
+    #    redeemed loan has neither to derive from. The statuses that mean
+    #    "repaid in full" come from the asset pack, never from here.
+    closed = (config.get(CLOSED_ACCOUNT_KEY) or {})
+    if closed.get("statuses"):
+        outcome = zero_balances_on_closed_accounts(
+            df, statuses=closed.get("statuses") or [],
+            zero_fields=closed.get("zero_fields") or [])
+        if outcome.get("filled") or outcome.get("contradicted"):
+            deriv_report.setdefault("derived", {})["closed_account"] = outcome
 
     # 1. ERM Balance Coherence
     if is_erm:
