@@ -136,6 +136,96 @@ class TestItStaysQuietWhenThereIsNothingToAdd:
         assert why_absent(FIELD, {PRIMARY: {"x": FIELD}}, {}) != ""
 
 
+class TestTheLoansASecondaryFileDoesNotCarry:
+    """REPORTED FROM THE LIVE CASE, one step past the join finally working:
+
+        current_principal_balance: CORE002 affects 1 record(s) (0.18%)
+                                   — materiality BLOCKING
+
+    CORE001 was gone, so the column was on the tape and the files had joined.
+    What was left is subtler and reads like a data fault: one loan in 568 with
+    no balance. It is not a fault. The loan extract is the spine and decides
+    which loans exist; a loan it carries that the principal-and-interest
+    extract does not gets a blank, and validation refuses the blank per row.
+
+    That is a RECONCILIATION question for the lender — "this loan is in your
+    loan extract and not in your balances extract" — and nothing on the
+    blocker said so. An operator reading "1 record is missing a mandatory
+    value" goes looking for a broken row; the row is not broken and does not
+    exist.
+
+    A join at 99.8% is still a join, so this must not block the join. It has to
+    be SAID.
+    """
+
+    def _short_by_one(self, loans=568):
+        ids = [f"{76034000 + i}01" for i in range(loans)]
+        frames = {
+            PRIMARY: pd.DataFrame({"Loan Policy Number": ids,
+                                   "Rate": [4.5] * loans}),
+            # every loan but the last
+            CASHFLOW: pd.DataFrame({"Account Number": ids[:-1],
+                                    "C/F Principal Balance": [100.0] * (loans - 1)}),
+        }
+        resolved = {
+            PRIMARY: {"Loan Policy Number": "loan_identifier",
+                      "Rate": "current_interest_rate"},
+            CASHFLOW: {"Account Number": "loan_identifier",
+                       "C/F Principal Balance": FIELD},
+        }
+        tape, report = consolidate_pack(frames, resolved, PRIMARY)
+        return tape, why_absent(FIELD, resolved, report), ids
+
+    def test_the_file_still_joins(self):
+        """99.8% is a join. One loan short is not a reason to throw the other
+        567 balances away."""
+        tape, _said, _ids = self._short_by_one()
+        assert FIELD in tape.columns
+        assert int(tape[FIELD].notna().sum()) == 567
+
+    def test_the_blank_is_exactly_the_loan_that_is_missing(self):
+        tape, _said, ids = self._short_by_one()
+        missing = tape.loc[tape[FIELD].isna(), "loan_identifier"].tolist()
+        assert missing == [ids[-1]]
+
+    def test_the_refusal_says_the_loan_has_no_row_in_that_file(self):
+        """THE SENTENCE. "1 record is blank" sends an operator hunting for a
+        broken row; "1 loan has no row in the P&I extract" is a question they
+        can put to the lender."""
+        _tape, said, _ids = self._short_by_one()
+        assert "no row in" in said
+        assert CASHFLOW in said
+
+    def test_it_names_the_loan(self):
+        """A count with no identifier attached cannot be looked up."""
+        _tape, said, ids = self._short_by_one()
+        assert ids[-1] in said
+
+    def test_a_file_that_covers_every_loan_says_nothing(self):
+        """The sentence is for news. A complete join is not news, and adding a
+        line to every finding would bury the ones that carry some."""
+        frames, resolved = _explain_pack_complete()
+        tape, report = consolidate_pack(frames, resolved, PRIMARY)
+        assert int(tape[FIELD].isna().sum()) == 0
+        assert why_absent(FIELD, resolved, report) == ""
+
+
+def _explain_pack_complete():
+    ids = ["76034101", "76034201"]
+    frames = {
+        PRIMARY: pd.DataFrame({"Loan Policy Number": ids, "Rate": [4.5, 5.0]}),
+        CASHFLOW: pd.DataFrame({"Account Number": ids,
+                                "C/F Principal Balance": [100.0, 200.0]}),
+    }
+    resolved = {
+        PRIMARY: {"Loan Policy Number": "loan_identifier",
+                  "Rate": "current_interest_rate"},
+        CASHFLOW: {"Account Number": "loan_identifier",
+                   "C/F Principal Balance": FIELD},
+    }
+    return frames, resolved
+
+
 class TestTheFieldItIsAbout:
     def test_it_speaks_only_about_the_field_in_the_finding(self):
         """A pack drops a file carrying six mapped columns; a finding about one

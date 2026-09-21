@@ -1420,10 +1420,21 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
         # carries the short one, so the SPINE is stripped for the second join
         # and left alone for the first. "How were these matched?" is answered
         # by the pair, not by one half of it.
+        # THE LOANS THIS FILE DID NOT COVER. A join at 99.8% is a join, and the
+        # loans in the remaining 0.2% get a blank rather than a value — which
+        # validation then refuses as a missing mandatory value, per row, with
+        # no hint that the cause is a loan the lender's own extract does not
+        # carry. That is a reconciliation question for the lender, not a data
+        # fault, and the two need different actions. A few identifiers are kept
+        # so it can be looked up rather than hunted for.
+        unmatched = sorted({k for k in spine_keys if k}
+                           - {k for k in other_keys if k})
         report["files"].append({"source_file": file_name, "joined": True,
                                 "added": sorted(added), "blank": sorted(blank),
                                 "note": note,
                                 "overlap": round(overlap, 4),
+                                "unmatched": len(unmatched),
+                                "unmatched_examples": unmatched[:5],
                                 "key_rule": other_rule,
                                 "primary_key_rule": spine_rule})
         for column in added:
@@ -1480,6 +1491,22 @@ def why_absent(field: str, resolved_by_file: Dict[str, Dict[str, str]],
         elif field in (entry.get("blank") or []):
             said.append(f"{file_name} was joined to the loan tape and every "
                         f"value it carried for this field was blank.")
+        elif field in (entry.get("added") or []) and entry.get("unmatched"):
+            # PRESENT, AND BLANK FOR THE LOANS THAT FILE DOES NOT CARRY. The
+            # symptom is a per-row "missing mandatory value" and the cause is a
+            # loan the lender's own extract is missing — which is a question
+            # for them, not a fault to fix here. Without this, a delivery is
+            # refused over a number with no name attached to it.
+            count = int(entry.get("unmatched") or 0)
+            examples = [str(v) for v in (entry.get("unmatched_examples") or [])]
+            shown = (f" ({', '.join(examples)}"
+                     f"{', …' if count > len(examples) else ''})"
+                     if examples else "")
+            said.append(
+                f"{count} loan{'s' if count != 1 else ''} on the loan tape "
+                f"{'have' if count != 1 else 'has'} no row in {file_name}"
+                f"{shown}, so this field is blank for "
+                f"{'them' if count != 1 else 'it'}.")
         elif field not in (entry.get("added") or []):
             said.append(f"{file_name} maps a column to it and the loan tape "
                         "already had the field, so nothing was taken from it.")
