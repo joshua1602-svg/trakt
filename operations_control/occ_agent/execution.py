@@ -204,6 +204,10 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: approver asks, and the answer must not be inferable only from the
         #: absence of a column. See :func:`consolidate_pack`.
         self.consolidation: Dict[str, Any] = {}
+        #: file -> {column: canonical field}, kept past the onboard stage so a
+        #: later refusal can say which file mapped the field it is refusing.
+        #: See :func:`why_absent`.
+        self.resolved_by_file: Dict[str, Dict[str, str]] = {}
         #: The governed budget for asking a model about a column the
         #: deterministic tiers could not settle — see :mod:`.llm_mapping`.
         self.llm_policy: _llm.Policy = llm_policy or _llm.Policy.load()
@@ -566,6 +570,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         frames.setdefault(primary.name, frame)
         mapped, self.consolidation = consolidate_pack(
             frames, resolved_by_file, primary.name)
+        self.resolved_by_file = resolved_by_file
         self.period_cutoffs = _canonicalise_period_cutoffs(
             mapped, self.artefact_paths)
         tape = work_dir / "18_central_lender_tape.csv"
@@ -880,11 +885,19 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         }, indent=2, default=str), encoding="utf-8")
 
         if blocking:
-            blockers = [
-                f"{r.get('field_name')}: {r.get('issue_type')} affects "
-                f"{r.get('affected_rows')} record(s) "
-                f"({r.get('error_rate')}%) — materiality BLOCKING"
-                for r in blocking]
+            # WHY, NOT ONLY WHAT. A refusal naming a field an operator has
+            # mapped and confirmed is unanswerable on its own: their screen
+            # says 100%, this line says nought records, and what happened to
+            # the file in between is recorded on a different stage. Where the
+            # consolidation knows, it says so here. See :func:`why_absent`.
+            blockers = []
+            for r in blocking:
+                said = (f"{r.get('field_name')}: {r.get('issue_type')} affects "
+                        f"{r.get('affected_rows')} record(s) "
+                        f"({r.get('error_rate')}%) — materiality BLOCKING")
+                because = why_absent(str(r.get("field_name") or ""),
+                                     self.resolved_by_file, self.consolidation)
+                blockers.append(f"{said}. {because}" if because else said)
             self._record(StageRecord(
                 stage="validate", outcome=STAGE_HARD_BLOCKED,
                 component="engine.gate_3_validation.validate_business_rules + "
@@ -1389,9 +1402,15 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
         lookup = collapsed.set_index("_occ_key") if "_occ_key" in \
             collapsed.columns else collapsed.set_index(other_keys.to_numpy())
         added: List[str] = []
+        #: Mapped, joined, and every value that reached the spine was blank.
+        #: Silently skipped until now, which is the one failure mode nobody can
+        #: see: the file reads as joined, the column is simply absent, and
+        #: validation refuses the field as though the client had never sent it.
+        blank: List[str] = []
         for column in spare:
             values = spine_keys.map(lookup[column])
             if _populated(values) == 0:
+                blank.append(column)
                 continue
             spine[column] = values.to_numpy()
             added.append(column)
@@ -1402,13 +1421,69 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
         # and left alone for the first. "How were these matched?" is answered
         # by the pair, not by one half of it.
         report["files"].append({"source_file": file_name, "joined": True,
-                                "added": sorted(added), "note": note,
+                                "added": sorted(added), "blank": sorted(blank),
+                                "note": note,
                                 "overlap": round(overlap, 4),
                                 "key_rule": other_rule,
                                 "primary_key_rule": spine_rule})
         for column in added:
             report["added"][column] = file_name
     return spine, report
+
+
+def why_absent(field: str, resolved_by_file: Dict[str, Dict[str, str]],
+               consolidation: Dict[str, Any]) -> str:
+    """What became of the mapping for ``field``, for an operator reading a
+    refusal about it.
+
+    "CORE001 affects 0 record(s)" says a column is not on the tape. It does not
+    say why, and the operator's own screen says they mapped it and confirmed it
+    at 100%. Both are true at once whenever consolidation drops a file, and the
+    reason is recorded where nobody reading the blocker is looking — so the
+    refusal was unanswerable and the only way forward was to guess.
+
+    The consolidation knows exactly what happened. This says it, on the line
+    that stops the run:
+
+      * nobody mapped it — nothing to add, the field was genuinely not supplied
+      * the file it was mapped in could not be joined, and why
+      * the file joined and every value that reached the tape was blank, which
+        means the loans matched but this column is empty for them
+
+    Returns "" when there is nothing to add, so a finding about a field nobody
+    mapped reads exactly as it did before.
+    """
+    holders = sorted(file_name for file_name, resolved
+                     in (resolved_by_file or {}).items()
+                     if field in (resolved or {}).values())
+    if not holders:
+        return ""
+    primary = str((consolidation or {}).get("primary") or "")
+    by_file = {str(f.get("source_file") or ""): f
+               for f in ((consolidation or {}).get("files") or [])}
+    said: List[str] = []
+    for file_name in holders:
+        if file_name == primary:
+            # The spine's own column. It is on the tape by construction, so a
+            # presence failure here is emptiness rather than absence.
+            said.append(f"{file_name} maps a column to it, and it is the loan "
+                        "tape itself — so the column is there and the values "
+                        "are not.")
+            continue
+        entry = by_file.get(file_name)
+        if entry is None:
+            said.append(f"{file_name} maps a column to it but was not read.")
+        elif not entry.get("joined"):
+            said.append(str(entry.get("note") or
+                            f"{file_name} could not be joined to the loan "
+                            "tape."))
+        elif field in (entry.get("blank") or []):
+            said.append(f"{file_name} was joined to the loan tape and every "
+                        f"value it carried for this field was blank.")
+        elif field not in (entry.get("added") or []):
+            said.append(f"{file_name} maps a column to it and the loan tape "
+                        "already had the field, so nothing was taken from it.")
+    return " ".join(s for s in said if s)
 
 
 #: How a source file and a source column are written as one key, wherever a
