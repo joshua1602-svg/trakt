@@ -1559,16 +1559,11 @@ class OccAgentService:
         # reads every artefact on the case, so it states the same thing to the
         # onboarding record. Recorded, never fatal: a sample that cannot be
         # registered must not take the practice run down with it.
-        if agent_case.case.status not in TERMINAL:
-            try:
-                agent_case.case = self.onboarding.register_sample(
-                    case_id=agent_case.case_ref,
-                    files=sample_manifest(
-                        self.artefacts.classify(run.artefacts())[0]),
-                    by=actor)
-            except OpsError as exc:
-                logger.warning("occ_agent: sample not registered for %s: %s",
-                               run.case_ref, exc)
+        self._record_sample_from_pack(agent_case, actor=actor)
+        # THIS run's obstacles, not the last one's. run.blockers was written by
+        # _block and cleared by nothing, so a case that recovered kept showing
+        # what used to be wrong.
+        run.blockers = []
 
         prior = self._move(run, _states.SYNTHETIC_ONBOARDING_RUNNING)
         run.facts = facts.to_dict()
@@ -2648,6 +2643,41 @@ class OccAgentService:
                             "operator_actions": len(package.operator_actions)})
         return agent_case
 
+    def _record_sample_from_pack(self, agent_case: AgentCase, *,
+                                 actor: str) -> None:
+        """Tell the onboarding case what the pack on this run actually is.
+
+        Recorded, never fatal — a sample that cannot be registered must not
+        stop an approval.
+        """
+        if agent_case.case.status in TERMINAL:
+            return
+        try:
+            agent_case.case = self.onboarding.register_sample(
+                case_id=agent_case.case_ref,
+                files=sample_manifest(
+                    self.artefacts.classify(agent_case.run.artefacts())[0]),
+                by=actor)
+        except OpsError as exc:
+            logger.warning("occ_agent: sample not registered for %s: %s",
+                           agent_case.run.case_ref, exc)
+
+    def _clear_settled_blockers(self, agent_case: AgentCase) -> None:
+        """``run.blockers`` is the CURRENT obstacle, not a history of them.
+
+        It was written by :meth:`_block` and by an activation failure, and
+        cleared by nothing. So a case that recovered went on showing what used
+        to be wrong: a readiness panel reading "13 of 13 criteria passed,
+        blocking exceptions cleared" beside a "What's in the way" naming a
+        check that no longer blocks — and, once volume stopped promoting a
+        warning to BLOCKING, naming a materiality the platform can no longer
+        produce. The history is in the audit trail, which is where a history
+        belongs.
+        """
+        run = agent_case.run
+        if run.blockers and self._verdict(agent_case).ready:
+            run.blockers = []
+
     def approve_activation(self, agent_case: AgentCase, *, actor: str,
                            reason: str = "") -> AgentCase:
         """A human approves the configuration for activation.
@@ -2669,6 +2699,16 @@ class OccAgentService:
             "reason": reason or "Configuration approved for activation.",
             "review_package_ref": run.review_package_ref})
         prior = self._move(run, _states.APPROVED_FOR_ACTIVATION)
+        # THE PACK THIS CONFIGURATION IS FOR, stated once more before the
+        # expectation derived from it is written. Every other point that
+        # records the sample — an upload, a removal, the start of a run — is
+        # unreachable from here: no state past the rehearsal permits
+        # ACTION_REGISTER_ARTEFACT or ACTION_RUN_ONBOARDING, so an operator
+        # whose expected delivery was recorded from a smaller pack had nothing
+        # left to press but `reopen_mapping`, which withdraws the approvals
+        # they had just spent the session earning.
+        self._record_sample_from_pack(agent_case, actor=actor)
+        self._clear_settled_blockers(agent_case)
         intent = self._intent(agent_case)
         run.activation_intent = intent.to_dict()
         self._move(run, _states.ACTIVATION_CONFIRMATION_REQUIRED)
