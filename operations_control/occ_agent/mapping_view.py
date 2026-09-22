@@ -42,7 +42,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from .execution import LOW_CONFIDENCE, _TRUSTED_TIERS
+from .execution import (LOW_CONFIDENCE, _TRUSTED_TIERS,
+                        percentage_scaled_fields)
 
 #: What became of one source column. The order is the order of a reader's
 #: interest, worst first — a column nobody has looked at matters more than one
@@ -356,6 +357,11 @@ def overview(run: Any) -> Dict[str, Any]:
     staged = {(str(e.get("source_file") or ""),
                str(e.get("source_column") or "")): e
               for e in (getattr(run, "staged_mappings", None) or [])}
+    # Which fields hold a percentage, and what the operator has said about
+    # each. Read once: the registry answers the first and the run the second.
+    scaled = set(percentage_scaled_fields())
+    units = {str(k): str(v) for k, v in
+             (getattr(run, "source_units", None) or {}).items()}
     rows: List[Dict[str, Any]] = []
     for raw in getattr(run, "mapping_report", []) or []:
         column = str(raw.get("source_column") or "")
@@ -392,6 +398,12 @@ def overview(run: Any) -> Dict[str, Any]:
             basis = BASIS_MODEL
         else:
             basis = ""
+        # THE FIELD THIS ROW WILL FEED, staged answer first. A unit declared
+        # for a field is about the field, so the row has to ask about the one
+        # it is actually going to feed rather than the one the mapper first
+        # guessed.
+        reads_as = (str((answer or {}).get("target_field") or "")
+                    or str(raw.get("canonical_field") or ""))
         rows.append({
             "source_file": source_file,
             "source_column": column,
@@ -422,6 +434,12 @@ def overview(run: Any) -> Dict[str, Any]:
             # :func:`staging.is_request_driven` — so the row says which rather
             # than leaving the screen to infer it from the request beside it.
             "staged_origin": str((answer or {}).get("origin") or ""),
+            # WHICH SCALE THE LENDER WRITES THIS ON, where the field is one
+            # the platform holds as percentage POINTS and the two could mean
+            # different things by the same number. Empty on every other row,
+            # so the control appears only where the question is real.
+            "percentage_scaled": reads_as in scaled,
+            "source_unit": str(units.get(reads_as, "")),
             "suggested_field": suggested,
             "suggested_label": _label(suggested),
             "suggested_reason": str(raw.get("llm_reasoning") or ""),

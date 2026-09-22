@@ -244,6 +244,13 @@ export interface OpsClient {
   /** Give a column that matched nothing somewhere to go: an existing field
    *  (an alias, settled here and promoted at activation), or an ask for a
    *  field the platform does not have (recorded, never created here). */
+  /** Say whether the lender writes a percentage field as points or a
+   *  fraction. An empty unit withdraws the declaration. */
+  declareSourceUnit(
+    caseRef: string,
+    input: { field: string; unit: string; reason?: string },
+  ): Promise<AgentStatus>;
+
   resolveUnmappedColumn(
     caseRef: string,
     input: {

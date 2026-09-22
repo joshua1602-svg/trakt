@@ -141,6 +141,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                  llm_policy: Optional["_llm.Policy"] = None,
                  confirm_every_mapping: bool = False,
                  client_defaults: Optional[Dict[str, Any]] = None,
+                 source_units: Optional[Dict[str, str]] = None,
                  case_id: str = "", tenant: str = ""):
         self.artefact_paths = [Path(p) for p in artefact_paths]
         self.policy = policy
@@ -150,6 +151,12 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         self.registry_path = Path(registry_path)
         self.aliases_dir = Path(aliases_dir)
         self.issue_policy_path = Path(issue_policy_path)
+        #: canonical field -> the scale the LENDER writes it on, where the
+        #: operator has said. Canonical is percentage POINTS; a lender sending
+        #: 0.35 for 35% is on another scale, not wrong. See
+        #: :func:`percentage_scaled_fields`.
+        self.source_units = {str(k): str(v) for k, v in
+                             (source_units or {}).items() if v}
         #: source column -> canonical field, from human-approved decisions.
         self.approved_mappings = dict(approved_mappings or {})
         #: THE FIRST TIME A LENDER'S TAPE IS READ, NOTHING MATCHES ITSELF.
@@ -718,7 +725,8 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         # a delivery down.
         try:
             self.derivations = _derive_fields(
-                frame, spec.source_portfolio_type or "", tape.name)
+                frame, spec.source_portfolio_type or "", tape.name,
+                source_units=self.source_units)
         except Exception as exc:            # noqa: BLE001 — reported, not fatal
             self.derivations = {"error": f"{type(exc).__name__}: {exc}"}
         typed = frame
@@ -1506,8 +1514,32 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
     return spine, report
 
 
+#: The scales a lender can write a percentage on. Canonical is POINTS.
+SOURCE_UNITS = ("percentage_points", "fraction")
+
+
+def percentage_scaled_fields(registry_path: Path = REGISTRY_PATH) -> List[str]:
+    """Canonical fields where "points or a fraction?" is a real question.
+
+    Read from the registry's own ``unit: percentage_points`` declaration — the
+    governed percentage contract — rather than listed here, so a field that
+    joins or leaves that contract does not need this module edited too.
+    """
+    try:
+        import yaml as _yaml
+        reg = _yaml.safe_load(Path(registry_path).read_text(encoding="utf-8"))
+        fields = ((reg or {}).get("fields") or {})
+        return sorted(name for name, meta in fields.items()
+                      if str((meta or {}).get("unit") or "")
+                      == "percentage_points")
+    except Exception:                       # pragma: no cover — config guard
+        return []
+
+
 def _derive_fields(frame: "pd.DataFrame", portfolio_type: str,
-                   filename: str) -> Dict[str, Any]:
+                   filename: str,
+                   source_units: Optional[Dict[str, str]] = None
+                   ) -> Dict[str, Any]:
     """The platform's own derivation step, run on the rehearsal's tape.
 
     ``config`` is empty by design: every key it reads is an OVERRIDE — a
@@ -1522,9 +1554,19 @@ def _derive_fields(frame: "pd.DataFrame", portfolio_type: str,
     for the coherence step to see it.
     """
     from engine.gate_2_transform.canonical_transform import derive_fields
+    # A DECLARED UNIT IS AUTHORITATIVE and short-circuits the reconciliation,
+    # which is the point of declaring one: reconciliation needs a balance and a
+    # valuation to compare against, and a book that has neither — or whose
+    # ratios are genuinely small enough to read either way — cannot be settled
+    # by arithmetic. The operator's answer can.
+    config: Dict[str, Any] = {}
+    declared = {f: {"source_unit": u} for f, u in (source_units or {}).items()
+                if u}
+    if declared:
+        config["aliases"] = declared
     return derive_fields(frame, portfolio_type, filename,
                          dayfirst=True, infer_year=True, derive_month=False,
-                         default_year=None, config={}) or {}
+                         default_year=None, config=config) or {}
 
 
 def _closed_sentence(outcome: Dict[str, Any]) -> str:

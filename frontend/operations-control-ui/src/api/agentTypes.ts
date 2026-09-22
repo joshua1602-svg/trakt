@@ -198,6 +198,9 @@ export interface SyntheticRunDoc {
   /** Canonical fields an operator asked for because a column in the delivery
    *  has nowhere to go. Requests, not fields. */
   field_requests?: FieldRequest[];
+  /** Canonical field -> the scale the lender writes it on, where the operator
+   *  has said. "percentage_points" | "fraction". */
+  source_units?: Record<string, string>;
   /** The operator's working copy of the mapping table: what they have said
    *  each column is, held as a DRAFT until the set is committed. Nothing here
    *  has resolved a decision, promoted a rule or caused a rerun. */
@@ -656,6 +659,15 @@ export interface MappingRow {
    *  differently: withdrawing the ask releases the first and leaves the
    *  second exactly where it is. */
   staged_origin: string;
+  /** Whether the field this row feeds is one Trakt holds as percentage
+   *  POINTS, so "does the lender write 35 or 0.35?" is a real question about
+   *  it. False on every other row — the control appears only where the
+   *  question means something. */
+  percentage_scaled: boolean;
+  /** What the operator has said that scale is: "percentage_points",
+   *  "fraction", or "" for "let Trakt reconcile it", which is the default and
+   *  is usually right. */
+  source_unit: string;
 }
 
 /** A canonical field an unmapped column may be pointed at. */
