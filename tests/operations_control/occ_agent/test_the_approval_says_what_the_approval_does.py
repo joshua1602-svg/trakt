@@ -183,6 +183,26 @@ class TestANewSampleChangesWhatTheSampleSettled:
         self._refresh({}, sources)
         assert sources[0]["expected_files"] == [ONE]
 
+    def test_an_approved_case_can_still_record_the_pack_it_is_given(self):
+        """The two guards were mutually exclusive, so neither ever fired.
+
+        ``run_synthetic_onboarding`` refuses to start unless the onboarding is
+        APPROVED. ``classify_artefacts`` refused to register the sample once it
+        was. So every file uploaded FOR the practice run — which is every file
+        the practice run uses — could never reach the sample, and the expected
+        delivery stayed at whatever had been registered before approval.
+
+        Registering a sample is recording EVIDENCE about the delivery, not
+        revising an answer, so the answer lock does not apply to it. Only an
+        activated or withdrawn case refuses.
+        """
+        from operations_control.onboarding.case import (
+            ACTIVATED, APPROVED, TERMINAL, WITHDRAWN,
+        )
+        assert APPROVED not in TERMINAL, (
+            "an approved case must still be able to record its pack")
+        assert ACTIVATED in TERMINAL and WITHDRAWN in TERMINAL
+
     def test_the_ordinary_inference_pass_still_never_overwrites(self):
         """Only registering a sample refreshes. Every other save is unchanged."""
         sources = [{"portfolio_id": "direct_001", "dataset": "funded",

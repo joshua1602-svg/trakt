@@ -1468,7 +1468,15 @@ class OccAgentService:
                     decision_basis="apps.blob_trigger_app.file_roles",
                     detail=readiness.to_dict())
 
-        if agent_case.case.status not in (APPROVED,) + TERMINAL:
+        # AN APPROVED CASE IS THE ONLY KIND THAT CAN REHEARSE, so excluding one
+        # here excluded every pack the rehearsal exists to read.
+        # `run_synthetic_onboarding` refuses to start unless the onboarding is
+        # APPROVED; this refused to record the sample once it was. The two
+        # conditions never overlap, so the files uploaded FOR the practice run
+        # could not reach the sample, and the expected delivery stayed at
+        # whatever was registered before approval — one file, where a client
+        # sends three, with no operator action able to correct it.
+        if agent_case.case.status not in TERMINAL:
             agent_case.case = self.onboarding.register_sample(
                 case_id=agent_case.case_ref,
                 files=sample_manifest(classified), by=actor)
@@ -1542,6 +1550,25 @@ class OccAgentService:
             return self._block(agent_case, _missing_role_messages(roles),
                                actor=actor,
                                reason="required input roles not satisfied")
+
+        # THE PACK ABOUT TO BE READ IS THE PACK TO BE EXPECTED. Registering the
+        # sample otherwise happens only on a FILE action — an upload, a
+        # removal, a fixture — so an operator whose expected delivery was
+        # recorded wrongly had nothing they could press to correct it. Starting
+        # the run is the act that says "use what I have given you", and it
+        # reads every artefact on the case, so it states the same thing to the
+        # onboarding record. Recorded, never fatal: a sample that cannot be
+        # registered must not take the practice run down with it.
+        if agent_case.case.status not in TERMINAL:
+            try:
+                agent_case.case = self.onboarding.register_sample(
+                    case_id=agent_case.case_ref,
+                    files=sample_manifest(
+                        self.artefacts.classify(run.artefacts())[0]),
+                    by=actor)
+            except OpsError as exc:
+                logger.warning("occ_agent: sample not registered for %s: %s",
+                               run.case_ref, exc)
 
         prior = self._move(run, _states.SYNTHETIC_ONBOARDING_RUNNING)
         run.facts = facts.to_dict()
