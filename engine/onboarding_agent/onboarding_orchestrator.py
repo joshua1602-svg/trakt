@@ -237,7 +237,15 @@ def run_onboarding(
             # WHOSE FILES THESE ARE. A filing convention — whether a pack dated
             # the first of a month closes the month before — belongs to the
             # client, so the client's own configuration gets a say here.
-            client_id=client_id)
+            #
+            # BOTH identities, because this function's ``client_id`` is the
+            # SOURCE PORTFOLIO (see the mapping-scope resolution below: the live
+            # adapter passes ``source_portfolio_id`` here and the tenant in
+            # ``client_name``). Asking for a client block under ``client_id``
+            # alone asked for ``config_client_direct_001.yaml`` and never for
+            # ``config_client_ERE.yaml``, so in the live path no client's own
+            # configuration was ever read.
+            client_id=(client_name, client_id))
     except Exception as _exc:  # never block onboarding on period eligibility
         import logging as _logging
         _logging.getLogger(__name__).warning("period eligibility skipped: %s", _exc)

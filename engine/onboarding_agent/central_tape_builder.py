@@ -1457,6 +1457,31 @@ def _build_lender_tape(
         "duplicate_raw_keys_collapsed": duplicate_raw_keys_collapsed,
         "excluded_sources": excluded_sources,
         "excluded_row_counts": sum(e.get("row_count", 0) for e in excluded_sources),
+        # EVERY FILE THIS BUILD OPENED, and the role it opened it as. Without
+        # this, "no universe source and nothing excluded" is indistinguishable
+        # from "no file was opened at all", and the operator was told the first
+        # when it could as easily have been the second.
+        "considered_sources": [
+            {"source_file": pk[0], "source_sheet": pk[1],
+             "artefact_role": ld.get("artefact_role", ""),
+             "inferred_reporting_period": ld.get("inferred_reporting_period", ""),
+             "period_eligible": bool(ld.get("period_eligible", True)),
+             "is_universe_source": bool(ld.get("is_universe_source")),
+             "key_column": key_cols.get(pk, ""),
+             "key_count": int(ld.get("key_count", 0) or 0),
+             "rows_raw": int(ld.get("rows_raw", 0) or 0),
+             # A file the approved mapping names but the delivery does not
+             # contain reads identically to one that was read and found empty.
+             "file_in_inventory": bool(ld.get("file_in_inventory")),
+             "frame_loaded": bool(ld.get("frame_loaded"))}
+            for pk, ld in sorted(load_debug.items())],
+        # Every file in the pack, opened or not, as onboarding classified it.
+        "pack_files": [{"source_file": name, "artefact_role": role}
+                       for name, role in
+                       sorted((period_gate.get("role_by_file") or {}).items())],
+        # The roles that count as the loan listing, so the sentence that says a
+        # file did not qualify can say what would have.
+        "universe_roles": sorted(universe_roles),
         "pipeline_sources_excluded_from_lender_tape":
             [e.get("source_file", "") for e in pipeline_excluded],
         # Filled in by build_central_tapes from the pipeline_mi 04c domain.
@@ -1774,7 +1799,14 @@ def build_central_tapes(
         # the run-period funded / current-book source(s) only; future-period or
         # other-period files contribute no rows or values. Gated to MI modes;
         # regulatory (Annex 2) keeps the legacy generic universe.
-        spe_cfg = spe.load_config()
+        # The SAME client identity onboarding resolved eligibility under — the
+        # tenant and the source portfolio, in that order. This config is the
+        # fallback the builder re-computes eligibility with when 04c has no row
+        # for a (file, sheet); loading it without a client made that fallback
+        # disagree with the recorded answer for any client with a filing
+        # convention of its own.
+        spe_cfg = spe.load_config(client_id=(run_summary.get("client_name", ""),
+                                             run_summary.get("client_id", "")))
         if spe_cfg.get("enabled", True):
             run_id = getattr(run_paths, "run_id", "") or run_summary.get("run_id", "")
             input_dir = getattr(run_paths, "input_dir", "") or run_summary.get("input_dir", "")
@@ -2069,10 +2101,56 @@ def explain_empty_lender_tape(result: Dict[str, Any]) -> List[str]:
                     + (f", and this delivery is for {period}" if period else "")
                     + f". It holds {e.get('row_count') or 0} row(s).")
         elif not chosen:
-            said.append(
-                "No file in this pack was recognised as the loan listing — the "
-                "one file that says which loans exist. Every other file fills "
-                "columns onto it, so without it there is nothing to fill.")
+            # NOTHING WAS SET ASIDE AND NOTHING WAS CHOSEN. That is not one
+            # situation, it is three: no file was opened at all; files were
+            # opened but none was read as the loan listing; or one was and it
+            # yielded no loan identifier. Naming the first of them as if it
+            # were the only one is the guess this function exists to replace,
+            # so say which of the three it is, from what the build recorded.
+            considered = [c for c in (debug.get("considered_sources") or [])
+                          if isinstance(c, dict)]
+            roles = [str(r) for r in (debug.get("universe_roles") or []) if r]
+            wanted = (", ".join(roles) if roles
+                      else "a funded or current-book report")
+            if not considered:
+                pack = [str(f.get("source_file") or "")
+                        for f in (debug.get("pack_files") or [])
+                        if isinstance(f, dict) and f.get("source_file")]
+                said.append(
+                    "No file in this delivery was opened. Trakt opens a file "
+                    "only where a column it was asked to fill was mapped to "
+                    "that file, so nothing here was reached by the approved "
+                    "mapping."
+                    + (f" The delivery holds: {', '.join(pack[:6])}."
+                       if pack else " The delivery appears to hold no files."))
+            else:
+                missing = [c for c in considered
+                           if not c.get("file_in_inventory")
+                           or not c.get("frame_loaded")]
+                for c in missing[:4]:
+                    said.append(
+                        f"{c.get('source_file') or 'a file'} is named by the "
+                        "approved mapping but "
+                        + ("was not found in this delivery."
+                           if not c.get("file_in_inventory")
+                           else "could not be read from this delivery."))
+                for c in [c for c in considered if c not in missing][:4]:
+                    role = str(c.get("artefact_role") or "")
+                    said.append(
+                        f"{c.get('source_file') or 'a file'} was opened and "
+                        + (f"read as a {role}" if role
+                           else "not recognised as any known kind of file")
+                        + (f", giving {c.get('key_count') or 0} loan "
+                           f"identifier(s) from '{c.get('key_column')}'"
+                           if c.get("key_column")
+                           else ", and no loan identifier column was found in it")
+                        + ".")
+                if len(missing) < len(considered):
+                    said.append(
+                        "None of them is the loan listing — the one file that "
+                        "says which loans exist. Trakt takes that from a file "
+                        f"read as {wanted}, and every other file fills columns "
+                        "onto it.")
         elif canonical == 0 and raw > 0:
             key = str(debug.get("selected_universe_key_column") or "")
             rule = str(debug.get("selected_universe_normalisation_rule") or "")
