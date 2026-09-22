@@ -3504,7 +3504,14 @@ class OccAgentService:
             # not visible anywhere before.
             "mapping": _mapping_view.overview(run),
             "observations": run.observations,
-            "blockers": run.blockers,
+            # WHAT IS IN THE WAY NOW. `run.blockers` is written by `_block`
+            # and cleared by nothing, so a case that recovered kept reporting
+            # what used to stop it — a readiness panel reading "13 of 13
+            # criteria passed, blocking exceptions cleared" beside a "What's in
+            # the way" naming a check that no longer blocks, in the same
+            # payload, from the same verdict that is already in scope here.
+            # The history stays in the audit trail, where a history belongs.
+            "blockers": [] if verdict.ready else list(run.blockers or []),
             "occ_links": _occ_links(case, run),
             # The client-facing half: what has been drafted, approved and
             # issued, and — honestly — whether anything actually left Trakt.

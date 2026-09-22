@@ -210,6 +210,30 @@ class ReviewPackage:
 # Building it
 # --------------------------------------------------------------------------- #
 
+#: The one row whose stored value can fall behind the pack it describes.
+_PACK_FIELD = "expected_files"
+
+
+def _state_the_pack(sections: List[Dict[str, Any]], pack: List[str]) -> None:
+    """Say what the delivery is, from the files the case is holding.
+
+    Only the funded delivery carries ``expected_files`` — a pipeline book
+    carries different files and this pack does not speak for it — so matching
+    the field name is enough to reach the right row.
+    """
+    for section in sections:
+        for row in section.get("rows") or []:
+            if row.get("field") != _PACK_FIELD:
+                continue
+            if list(row.get("value") or []) == pack:
+                continue
+            row["value"] = list(pack)
+            row["provenance"] = "artefact_derived"
+            row["provenance_label"] = (
+                f"{PROVENANCE_LABELS['artefact_derived']} — the "
+                f"{len(pack)} file(s) this case is holding")
+
+
 def build(case: OnboardingCase, run: SyntheticRun, facts: ExecutionFacts, *,
           cat: Catalogue, readiness: Optional[Dict[str, Any]] = None,
           preview: Optional[Dict[str, Any]] = None,
@@ -229,6 +253,23 @@ def build(case: OnboardingCase, run: SyntheticRun, facts: ExecutionFacts, *,
             package.sections.append({
                 "key": section.key, "label": section.label,
                 "rows": [r.to_dict() for r in rows]})
+
+    # THE PACK ON THE CASE, NOT A COPY OF IT MADE EARLIER.
+    #
+    # `expected_files` is derived from the sample and then stored, and every
+    # way of bringing the store back into step runs somewhere an approver
+    # cannot reach: a file action, or the start of a practice run, neither of
+    # which any state past the rehearsal permits. So an approver was shown a
+    # delivery of one file three lines above an activation that places three,
+    # in the same document, and asked to sign it.
+    #
+    # The document reports the artefacts the case actually holds — the same
+    # list the activation intent enumerates — so the two cannot disagree.
+    # Nothing is written here: this is the read that produces the document, and
+    # `approve_activation` persists the same fact when a human acts on it.
+    pack = [a.source_file for a in run.artefacts() if a.source_file]
+    if pack:
+        _state_the_pack(package.sections, pack)
 
     package.outstanding = list(onboarding.get("client_checklist") or [])
     package.data_definitions = [dict(i) for i in case.items("data_definitions")]
