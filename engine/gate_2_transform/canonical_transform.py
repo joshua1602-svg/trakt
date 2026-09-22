@@ -956,12 +956,29 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
 
     # 1. ERM Balance Coherence
     if is_erm:
-        for col in ["current_outstanding_balance", "current_principal_balance", "accrued_interest"]:
+        for col in ["current_outstanding_balance", "current_principal_balance"]:
             if col not in df.columns: df[col] = pd.NA
+
+        # THE ROLLED-UP INTEREST, BY A NAME THE CANONICAL ACTUALLY USES. This
+        # read ``accrued_interest``, which is not a field: the registry calls
+        # the cumulative figure ``cumulative_accrued_interest`` and the period
+        # figure ``accrued_interest_in_period``. The column was therefore
+        # created empty on every run and the addition was always of nought — so
+        # this step, whose whole purpose is that an equity release balance is
+        # principal PLUS the interest that rolled up on it, silently copied one
+        # balance to the other instead. A lender who sent only a principal
+        # balance got an outstanding balance that was not outstanding, and its
+        # LTV came out short by exactly the interest this was meant to add.
+        #
+        # The cumulative figure is the one that belongs here. A single period's
+        # accrual is not the amount owed.
+        accrued = _first_present(df, ("cumulative_accrued_interest",
+                                      "accrued_interest"))
 
         o = pd.to_numeric(df["current_outstanding_balance"], errors="coerce")
         p = pd.to_numeric(df["current_principal_balance"], errors="coerce")
-        i = pd.to_numeric(df["accrued_interest"], errors="coerce").fillna(0.0)
+        i = (pd.to_numeric(df[accrued], errors="coerce").fillna(0.0)
+             if accrued else pd.Series(0.0, index=df.index))
 
         # Outstanding = Principal + Accrued
         mask_out = o.isna() & p.notna()
@@ -987,10 +1004,23 @@ def derive_fields(df: pd.DataFrame, portfolio_type: str, filename: str,
     # balance is preferred and an outstanding balance is the fallback: an
     # acquired tape carries only the latter, so requiring principal silently
     # skipped LTV for the whole acquired book — and with it both LTV validators.
+    #
+    # EQUITY RELEASE INVERTS THAT ORDER, because the product inverts the
+    # assumption behind it. On an amortising mortgage the two balances are the
+    # same number and the precedence never shows. On a lifetime mortgage the
+    # interest is never paid — it rolls up and is secured on the same property —
+    # so the amount actually lent against the house is the OUTSTANDING balance,
+    # and the principal balance is only the part of it that was advanced. A
+    # lender's own LTV is quoted on the rolled-up figure. Measuring it against
+    # principal understates LTV by the whole accrued interest, which on a
+    # seasoned book is the larger share, so every loan past its first months
+    # disagrees with its own stated LTV — a disagreement created here, not
+    # found in the data.
+    current_balances = (("current_outstanding_balance", "current_principal_balance")
+                        if is_erm else
+                        ("current_principal_balance", "current_outstanding_balance"))
     for ltv_col, bal_cols, val_col in [
-        ("current_loan_to_value",
-         ("current_principal_balance", "current_outstanding_balance"),
-         "current_valuation_amount"),
+        ("current_loan_to_value", current_balances, "current_valuation_amount"),
         ("original_loan_to_value",
          ("original_principal_balance",),
          "original_valuation_amount"),

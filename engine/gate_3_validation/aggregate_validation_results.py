@@ -175,7 +175,18 @@ def determine_materiality(error_rate_pct: float, severity: str, classification: 
 
     sev = str(severity or "").lower()
     if error_rate_pct >= high:
-        return "BLOCKING"
+        # Volume says SYSTEMATIC, not FATAL. A rule that declared itself a
+        # warning is a cross-check — "these two numbers disagree" — and a
+        # cross-check that disagrees across the whole book is the strongest
+        # possible case for a human reading it, not for refusing the book.
+        # Escalation may therefore raise a warning as far as REVIEW and no
+        # further; only a rule that declared itself an error blocks on volume.
+        #
+        # This is also what the production batch path has always done: its gate
+        # diagnostics count a finding as blocking from the rule's OWN severity,
+        # so a warning at any rate ships as a warning. Reading the same result
+        # two ways meant a tape that had run in production could not onboard.
+        return "REVIEW" if sev == "warning" else "BLOCKING"
     if error_rate_pct >= medium:
         return "REVIEW"
     if sev in ("error",) and default_mat == "BLOCKING":

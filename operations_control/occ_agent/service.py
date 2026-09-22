@@ -91,6 +91,7 @@ from .artefacts import ArtefactService, RoleReadiness, sample_manifest
 from .derive import ExecutionFacts
 from .execution import (
     DECISION_MAPPING_PROPOSAL,
+    MATERIALITY_MARK,
     SyntheticOnboardingAdapters,
     run_synthetic_orchestration,
 )
@@ -1593,6 +1594,21 @@ class OccAgentService:
         run.mapping_report = adapters.mapping_report
         run.cross_file = adapters.cross_file
         run.excused_findings = adapters.excused_findings
+        # A finding that did not block still belongs on the operator's screen.
+        # It used to be a count on a stage that had gone green, which was
+        # survivable only while REVIEW was the quiet outcome — and it is not
+        # any more, now that volume alone cannot promote a warning-severity
+        # check into a refusal.
+        #
+        # THIS RUN'S FINDINGS REPLACE THE LAST RUN'S. Observations otherwise
+        # only ever accumulate, which is right for the artefact notes they were
+        # built for — a file was recognised, and it stays recognised — and
+        # exactly wrong for a count that a rerun is meant to change. An
+        # operator who fixes a mapping and reruns would be shown the figure
+        # they just fixed sitting underneath the figure they fixed it to.
+        run.observations = [o for o in run.observations
+                            if MATERIALITY_MARK not in o]
+        run.observations.extend(adapters.review_findings)
         run.llm = adapters.llm
 
         # Resolved decisions are kept (they are the record of what the human
