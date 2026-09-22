@@ -1029,6 +1029,20 @@ class OpsEngine:
         # later about a missing loan listing. An absent input is not a
         # modelling result, so it is refused where it is true.
         shortfall = self._input_shortfall(run)
+        if shortfall and run.batch_id:
+            # AND IF IT IS NOT THERE, GO AND GET IT. Restaging above restores
+            # file by RECORD, so it can only put back what the pack still
+            # lists as current and unique. The pack itself is not a record —
+            # it is a folder in the container, still holding every file the
+            # delivery arrived with. `backfill` refetches from there on every
+            # run, which is exactly why it works where a rerun does not; its
+            # own docstring says so. A rerun now does the same.
+            batch = self.intake.load_batch(run.client_id, run.batch_id)
+            if batch is not None:
+                refetch = self.intake.restage_from_source_prefix(
+                    batch, dest=Path(str(run.delivery.get("input_path") or "")))
+                self.store.append_event(run, "input_refetched", detail=refetch)
+                shortfall = self._input_shortfall(run)
         if shortfall:
             self._park(run, RUN_BLOCKED)
             run.blockers = [shortfall]
