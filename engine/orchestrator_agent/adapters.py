@@ -326,7 +326,18 @@ class RealAgentAdapters(AgentAdapters):
                 ok=ok, blocking=not ok, output_path=tape, manifest_path=handoff_manifest,
                 readiness={"central_lender_tape": tape, "loan_count": res.get("loan_count"),
                            "mi_handoff": handoff_manifest, "target_contract": "mi_semantics"},
-                blockers=[] if ok else ["onboarding did not produce a central lender tape"],
+                # WHY, NOT ONLY WHAT. This said "onboarding did not produce a
+                # central lender tape" and stopped — while the build had already
+                # recorded which file it chose as the loan listing, the key
+                # column and rule it used, how many rows it read, and every
+                # source it excluded with the reason. The operator's screen then
+                # translated the bare sentence into a guess about a missing loan
+                # listing, so a delivery could halt with nothing on it to act on.
+                # Its sibling three lines above names the role and the column to
+                # check; this one now does the same, from the same record.
+                blockers=[] if ok else (
+                    central_tape_builder.explain_empty_lender_tape(res)
+                    or ["onboarding did not produce a central lender tape"]),
                 message=f"central tape: {tape}")
 
         # Regulatory path: the governed handoff package.

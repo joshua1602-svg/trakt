@@ -151,3 +151,23 @@ mi:
     app_title: "Portfolio MI Dashboard"
     theme:
       primary_color: "#0B1F3B"
+
+
+# --------------------------------------------------------------------------- #
+# How ERE dates its funded packs
+# --------------------------------------------------------------------------- #
+# ERE files its funded extracts on the FIRST of a month for the month that has
+# just closed: "LoanExtract One - OMNI 2026_09_01.xlsx" is August 2026, and
+# "... 2026_08_01" is July. Read verbatim the filename date is a FUTURE period
+# against the delivery it belongs to, so every funded file is set aside and the
+# loan tape is built from nothing.
+#
+# This is a fact about how one lender names its files, not about the platform,
+# so it is stated here and overlays the system answer for this client alone.
+# A client whose YYYY-MM-01 pack genuinely reports that month keeps the system
+# default of 0 by saying nothing.
+#
+# FUNDED ONLY. A pipeline snapshot dated the first was taken that day and means
+# what it says; shifting it would move a real date backwards.
+source_period_eligibility:
+  funded_filename_delivery_offset_months: -1
