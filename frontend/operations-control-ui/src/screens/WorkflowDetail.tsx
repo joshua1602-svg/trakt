@@ -387,9 +387,18 @@ export function WorkflowDetailScreen() {
     }
   }
 
+  // The engine permits a return to RUNNING from every status that is not
+  // terminal and not already running — RUN_TRANSITIONS says so, needs_review
+  // included. This listed three of them, so a delivery that stopped on a
+  // blocking problem and came to rest in needs_review offered no way to run it
+  // again: the step read "Held by a blocking problem", the header read "Needs
+  // review", and the only control on the page was to cancel the delivery.
+  // Asked from the engine, the same way canCancel below asks it, rather than
+  // restated here where it can fall behind.
   const canRerun =
     workflow &&
-    (["blocked", "failed", "held"].includes(workflow.status) || workflow.interrupted);
+    (!["published", "cancelled", "running", "received"].includes(workflow.status)
+      || workflow.interrupted);
   // The engine allows cancelling from every status except the two terminal
   // ones. Anything else is a delivery somebody may still be waiting on.
   const canCancel = workflow && !["published", "cancelled"].includes(workflow.status);
