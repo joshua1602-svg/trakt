@@ -37,6 +37,57 @@ the one action those states do permit.
 from __future__ import annotations
 
 from operations_control.occ_agent import states as st
+from operations_control.occ_agent.review import _state_the_pack
+
+
+PACK = ["LoanExtract One - OMNI 2026_09_01.xlsx",
+        "Principal And Interest - OMNI 2026_09_01.xlsx",
+        "PropertyExtract - Omni 2026_09_01.xlsx"]
+
+
+def _sections(expected):
+    return [{"rows": [
+        {"field": "expected_files", "value": list(expected),
+         "provenance": "artefact_derived",
+         "provenance_label": "read from a file the client sent"},
+        {"field": "cadence", "value": "monthly",
+         "provenance": "inherited_default",
+         "provenance_label": "a governed default, inherited"}]}]
+
+
+class TestTheDocumentStatesThePackItIsApproving:
+    """An approver was shown a delivery of ONE file three lines above an
+    activation that places THREE, in the same document, and asked to sign it.
+
+    The correction used to run on approving, which is the wrong order: it made
+    the approved document the false one and the document after it the true one.
+    The document now reports the artefacts the case is actually holding — the
+    same list the activation intent enumerates — and nothing is written to say
+    so. ``approve_activation`` persists the same fact when a human acts on it.
+    """
+
+    def test_the_expected_delivery_is_the_pack_on_the_case(self):
+        sections = _sections([PACK[0]])
+        _state_the_pack(sections, PACK)
+        assert sections[0]["rows"][0]["value"] == PACK
+
+    def test_it_says_where_that_came_from(self):
+        sections = _sections([PACK[0]])
+        _state_the_pack(sections, PACK)
+        assert "3 file(s) this case is holding" in \
+            sections[0]["rows"][0]["provenance_label"]
+
+    def test_a_record_already_in_step_is_left_alone(self):
+        sections = _sections(PACK)
+        before = dict(sections[0]["rows"][0])
+        _state_the_pack(sections, PACK)
+        assert sections[0]["rows"][0] == before
+
+    def test_no_other_row_is_touched(self):
+        sections = _sections([PACK[0]])
+        _state_the_pack(sections, PACK)
+        assert sections[0]["rows"][1]["value"] == "monthly"
+        assert sections[0]["rows"][1]["provenance"] == "inherited_default"
 
 
 class TestTheStatesThatLeftAnOperatorNothingToPress:
