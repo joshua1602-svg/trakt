@@ -72,6 +72,7 @@ from . import communication as _comms
 from . import derive as _derive
 from . import execution as _execution
 from . import field_registry as _field_registry
+from . import mapping_promotion as _mapping_promotion
 from . import mapping_view as _mapping_view
 from . import pack as _pack
 from . import planning as _planning
@@ -2817,11 +2818,21 @@ class OccAgentService:
         files = [{"name": a.source_file, "target": a.intended_live_uri,
                   "sha256": a.sha256} for a in run.artefacts()]
         preview = self._safe_preview(agent_case)
+        # WHAT WOULD BE PROMOTED, COUNTED WITHOUT PROMOTING IT.
+        # `rules_from` builds the records and persists nothing, for exactly
+        # this: showing an operator what activation would add to the client's
+        # standing rules before they agree to it.
+        promotable = _mapping_promotion.rules_from(
+            list(run.open_decisions or []),
+            client_id=facts.client_id, portfolio_id=facts.portfolio_id,
+            workflow_id="")
         return _adapters.build_intent(
             agent_case.case, facts, reporting_period=run.reporting_period,
             files=files,
             configuration_artefacts=[str(a.get("path") or a.get("name") or a)
-                                     for a in (preview.get("artefacts") or [])])
+                                     for a in (preview.get("artefacts") or [])],
+            mappings=len(promotable),
+            field_requests=len(run.field_requests or []))
 
     def _payloads(self, run: SyntheticRun) -> Dict[str, bytes]:
         """The bytes behind the intent's files, rebuilt from durable storage.

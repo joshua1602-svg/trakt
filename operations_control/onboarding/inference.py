@@ -393,6 +393,52 @@ def _sources(case: OnboardingCase, r: Dict[str, Any],
                  "the files in the sample the client supplied")
 
 
+#: What a sample settles, and therefore what a NEW sample has to be able to
+#: settle again. See :func:`refresh_from_sample`.
+SAMPLE_DERIVED = ("file_format", "expected_files")
+
+
+def refresh_from_sample(case: OnboardingCase) -> Dict[str, str]:
+    """Re-derive what the sample answers, because the sample has just changed.
+
+    :func:`_set` fills a BLANK and never overwrites, which is right for a
+    default meeting an answer somebody gave. It is wrong for a value derived
+    from the sample, because it cannot tell "a human decided this" from "Trakt
+    worked this out earlier, from less".
+
+    A client who supplied one file and then supplied three had the first
+    answer frozen: the inference read all three correctly and then declined to
+    write them down, so the registered delivery went on expecting one file
+    while three arrived every month. Nothing the operator did could shift it —
+    re-uploading the pack produced the same refusal — and the approval package
+    stated the stale figure as fact.
+
+    Registering a sample is a deliberate act that REPLACES the sample block
+    wholesale, and the pack it names is the complete current one. So what the
+    sample settles is re-derived here, at the one point that knows the sample
+    changed, rather than by loosening :func:`_set` for every caller.
+    """
+    sample = case.answers.get("sample") or {}
+    inferred = infer_from_sample(sample) if sample else {}
+    prov: Dict[str, str] = {}
+    if not inferred:
+        return prov
+    for index, s in enumerate(case.items("sources")):
+        path = f"sources[{index}]"
+        if inferred.get("file_format"):
+            _set(s, "file_format", inferred["file_format"], prov,
+                 f"{path}.file_format", "the sample the client supplied",
+                 force=True)
+        # The funded book is the one the sample describes; a pipeline book
+        # carries different files and is not spoken for by this pack.
+        if inferred.get("expected_files") and s.get("dataset") == "funded":
+            _set(s, "expected_files", inferred["expected_files"], prov,
+                 f"{path}.expected_files",
+                 "the files in the sample the client supplied", force=True)
+    case.provenance.update(prov)
+    return prov
+
+
 # -- presentation ----------------------------------------------------------- #
 
 def _presentation(case: OnboardingCase, r: Dict[str, Any],
