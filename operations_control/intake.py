@@ -337,6 +337,72 @@ class IntakeService:
                     "replaced_previous": replaced})
         return batch
 
+    #: What counts as a data file when refetching a delivery from its governed
+    #: folder. Markers and notes are not inputs.
+    _DATA_SUFFIXES = (".csv", ".xlsx", ".xls", ".xlsm")
+
+    def restage_from_source_prefix(
+            self, batch: Dict[str, Any], *,
+            dest: Optional[Path] = None) -> Dict[str, Any]:
+        """Refetch the delivery's whole pack from the folder it arrived in.
+
+        WHAT BACKFILL DOES AND A RERUN DID NOT. ``backfill``'s own docstring
+        names the difference: "Unlike ``ops rerun`` — which replays a run
+        record's ``input_dir`` and therefore depends on an ephemeral run
+        scratch that Azure has usually reclaimed — backfill re-fetches the
+        pack's source files from the container every time, so it can always
+        localise the source."
+
+        :meth:`restage_missing_files` restores file BY RECORD, so it can only
+        put back what the pack still lists as current and unique, and it says
+        nothing when that set is empty. This restores by LOCATION: every data
+        file under the governed folder the delivery arrived in, which is the
+        same thing the automated route reads and the one place the files are
+        known to be. Nothing is registered and no pack version is opened —
+        this only rebuilds the working copy.
+
+        ``dest`` is where the run will actually read; the caller passes its own
+        input path rather than letting this assume the batch's, because those
+        two are separately recorded and a delivery is not helped by files
+        restored beside the folder it reads.
+        """
+        prefix = str(batch.get("source_prefix") or "").strip("/")
+        report: Dict[str, Any] = {"restored": [], "prefix": prefix,
+                                  "reason": ""}
+        if not prefix:
+            report["reason"] = ("no governed source location is recorded for "
+                                "this delivery")
+            return report
+        target = Path(dest) if dest else self.batch_dir(batch)
+        try:
+            uris = self.store.storage.list(f"blob://{prefix}/")
+        except Exception as exc:  # noqa: BLE001 — a failed refetch is reported
+            report["reason"] = f"{type(exc).__name__}: {exc}"
+            return report
+        target.mkdir(parents=True, exist_ok=True)
+        for uri in uris:
+            name = uri.rsplit("/", 1)[-1]
+            if Path(name).suffix.lower() not in self._DATA_SUFFIXES:
+                continue
+            try:
+                self.store.storage.download_file(uri, target / name)
+                report["restored"].append(name)
+            except Exception as exc:  # noqa: BLE001
+                report.setdefault("failed", []).append(
+                    {"filename": name, "reason": f"{type(exc).__name__}"})
+        if report["restored"]:
+            self.store.append_audit(
+                batch["client_id"], "delivery_refetched_from_source",
+                actor="system",
+                detail={"batch_id": batch["batch_id"], "source_prefix": prefix,
+                        "restored": report["restored"],
+                        "note": "the working copy was rebuilt from the "
+                                "governed folder the delivery arrived in"})
+        elif not report["reason"]:
+            report["reason"] = ("the governed folder holds no data files for "
+                                "this delivery")
+        return report
+
     def restage_missing_files(self, batch: Dict[str, Any]) -> Dict[str, Any]:
         """Put back any registered file whose staged copy has gone.
 
