@@ -228,6 +228,16 @@ class SyntheticRun:
     #: named requester and the column that prompted it, rather than a note in
     #: somebody's inbox.
     field_requests: List[Dict[str, Any]] = field(default_factory=list)
+    #: HOW THE LENDER WRITES A PERCENTAGE, where they and the platform could
+    #: mean two different things by the same number. Canonical is percentage
+    #: POINTS — 35 means 35% — and a lender who sends 0.35 is not wrong, just
+    #: on another scale. The transform reconciles the two where it can see a
+    #: balance and a valuation to reconcile against; where it cannot, this is
+    #: the operator saying which it is, rather than the platform guessing from
+    #: magnitude and being wrong about a genuinely small ratio.
+    #:
+    #: canonical field -> "percentage_points" | "fraction".
+    source_units: Dict[str, str] = field(default_factory=dict)
     #: THE OPERATOR'S WORKING COPY OF THE MAPPING TABLE.
     #:
     #: One entry per column they have been through — the field they confirmed,

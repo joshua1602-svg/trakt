@@ -578,6 +578,9 @@ export function AgentCaseScreen() {
             onStage={(input) =>
               void act(() => client.stageAgentMapping(caseId, input))
             }
+            onDeclareUnit={(field, unit) =>
+              void act(() => client.declareSourceUnit(caseId, { field, unit }))
+            }
             onApprove={() =>
               void act(async () => {
                 const result = await client.approveAgentMappings(caseId);
@@ -1186,6 +1189,7 @@ function MappingPanel({
   onApprove,
   onStage,
   onResolveUnmapped,
+  onDeclareUnit,
   loadFields,
 }: {
   mapping: MappingOverview;
@@ -1195,6 +1199,7 @@ function MappingPanel({
   onApprove: () => void;
   onStage: (input: StageInput) => void;
   onResolveUnmapped: (input: UnmappedInput) => void;
+  onDeclareUnit: (field: string, unit: string) => void;
   loadFields: () => Promise<RegistryField[]>;
 }) {
   const [filter, setFilter] = useState("");
@@ -1420,7 +1425,13 @@ function MappingPanel({
                                 that will not shrink prints OVER the next
                                 column rather than being cut off by it. */}
                             <td className="overflow-hidden px-3 py-2.5 text-stone-700">
-                              <MappingFieldCell row={row} />
+                              <MappingFieldCell
+                                row={row}
+                                busy={busy}
+                                onDeclareUnit={(unit) =>
+                                  onDeclareUnit(row.staged_field || row.canonical_field, unit)
+                                }
+                              />
                             </td>
                             {/* WHAT KIND OF READING THIS IS, first and always
                                 in the same place. The tier sentence explains
@@ -1969,7 +1980,15 @@ function UnmappedColumnDialog({
  * One line: the name truncates, the link does not, so "Answer this" is never
  * pushed off the row by a long field name.
  */
-function MappingFieldCell({ row }: { row: MappingRow }) {
+function MappingFieldCell({
+  row,
+  busy,
+  onDeclareUnit,
+}: {
+  row: MappingRow;
+  busy: boolean;
+  onDeclareUnit: (unit: string) => void;
+}) {
   // A COLUMN CARRIES ITS REQUEST WHATEVER TRAKT MADE OF IT. This was gated on
   // `row.state === "unused"`, written on the assumption that an ask only ever
   // comes from a column that matched nothing. It does not: "Change" opens the
@@ -1986,6 +2005,27 @@ function MappingFieldCell({ row }: { row: MappingRow }) {
   const proposed = !requested && !row.canonical_field
     && Boolean(row.suggested_label);
   const label = requested ? "" : proposed ? row.suggested_label : row.field_label;
+  // HOW THE LENDER WRITES THIS PERCENTAGE. Only on a field Trakt holds as
+  // percentage POINTS, where 35 and 0.35 can mean the same thing and the
+  // platform cannot tell from the number alone. Left unset, Trakt reconciles
+  // the scale against the balance and the valuation — right whenever it has
+  // both — so this is the answer for the books where it has not.
+  const unitControl = row.percentage_scaled ? (
+    <span className="ml-auto flex shrink-0 items-center gap-1">
+      <select
+        aria-label={copy.agent.mappingUnitLabel}
+        title={copy.agent.mappingUnitHelp}
+        disabled={busy}
+        value={row.source_unit}
+        onChange={(e) => onDeclareUnit(e.target.value)}
+        className="rounded border border-stone-300 bg-white px-1 py-0.5 text-xs text-stone-700 disabled:opacity-50"
+      >
+        <option value="">{copy.agent.mappingUnitAuto}</option>
+        <option value="percentage_points">{copy.agent.mappingUnitPoints}</option>
+        <option value="fraction">{copy.agent.mappingUnitFraction}</option>
+      </select>
+    </span>
+  ) : null;
   return (
     <div className="flex min-w-0 items-baseline gap-2">
       {/* The em-dash stands for "no field", so it is dropped where something
@@ -2067,6 +2107,7 @@ function MappingFieldCell({ row }: { row: MappingRow }) {
           </span>
         );
       })()}
+      {unitControl}
     </div>
   );
 }

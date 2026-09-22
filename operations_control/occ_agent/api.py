@@ -177,6 +177,19 @@ class MappingStage(BaseModel):
     tenant: Optional[str] = None
 
 
+class SourceUnitBody(BaseModel):
+    """Which scale the lender writes a percentage field on.
+
+    ``unit`` is ``percentage_points``, ``fraction``, or empty to withdraw the
+    declaration and let Trakt reconcile the scale again.
+    """
+
+    field: str
+    unit: str = ""
+    tenant: Optional[str] = None
+    reason: str = ""
+
+
 class UnmappedColumn(BaseModel):
     """What to do about a column nothing in the registry resembled.
 
@@ -763,6 +776,26 @@ def resolve_unmapped_column(case_ref: str, body: UnmappedColumn,
         raise OpsError("OCC_AGENT_UNKNOWN_MAPPING_ACTION",
                        "That is not something Trakt can do with an unmapped "
                        "column.", http_status=400)
+    return {"ok": True, **service.status(updated)}
+
+
+@router.post("/cases/{case_ref}/mappings/source-unit")
+def declare_source_unit(case_ref: str, body: SourceUnitBody,
+                        principal: Principal = Depends(authenticate)
+                        ) -> Dict[str, Any]:
+    """Say whether the lender writes a percentage as points or as a fraction.
+
+    THE REMEDY A BLOCKER HAD NO ROUTE TO. A lender stating loan-to-value as
+    0.35 where the platform means 35 fails every consistency check on the
+    field, and nothing on that screen let an operator say which was meant.
+    Trakt reconciles the two where there is a balance and a valuation to
+    reconcile against; this is the answer where there is not.
+    """
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    updated = service.declare_source_unit(
+        agent_case, field=body.field, unit=body.unit, actor=principal.name)
     return {"ok": True, **service.status(updated)}
 
 

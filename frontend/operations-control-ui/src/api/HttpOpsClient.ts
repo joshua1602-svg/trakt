@@ -716,6 +716,16 @@ export class HttpOpsClient implements OpsClient {
     return doc.fields ?? [];
   }
 
+  async declareSourceUnit(
+    caseRef: string,
+    input: { field: string; unit: string; reason?: string },
+  ): Promise<AgentStatus> {
+    return this.post<AgentStatus>(
+      `/ops/agent/cases/${encodeURIComponent(caseRef)}/mappings/source-unit`,
+      { reason: "", ...input },
+    );
+  }
+
   async resolveUnmappedColumn(
     caseRef: string,
     input: {

@@ -487,6 +487,14 @@ function mappingOverview(doc: SyntheticRunDoc): MappingOverview {
       staged_label: (answer?.target_field ?? "").replace(/_/g, " "),
       staged_by: answer?.staged_by ?? "",
       staged_origin: answer?.origin ?? "",
+      // Only where the field is one Trakt holds as percentage POINTS, so the
+      // control appears exactly where "35 or 0.35?" means something.
+      percentage_scaled: PERCENTAGE_SCALED.has(
+        answer?.target_field || canonical,
+      ),
+      source_unit: String(
+        (doc.source_units ?? {})[answer?.target_field || canonical] ?? "",
+      ),
     };
   });
 
@@ -585,6 +593,13 @@ const MAPPING_REPORT: Record<string, unknown>[] = [
   { source_file: "loan_tape.csv", source_column: "Val Dt",
     canonical_field: "valuation_date", tier: "fuzz_token_set", confidence: 0.62,
     note: "below the confidence threshold", primary: true },
+  // A PERCENTAGE FIELD, because a real tape has one and the scale it is
+  // written on is a question only about fields like this. Without a row here
+  // the table could not show the control that answers it, and the fixture
+  // would be quietly unrepresentative of every loan tape Trakt reads.
+  { source_file: "loan_tape.csv", source_column: "LTV",
+    canonical_field: "current_loan_to_value", tier: "operator_approved",
+    confidence: 1.0, note: "confirmed by an operator", primary: true },
   // THE OTHER HALF OF THE AMBIGUITY. `AMBIGUOUS_DECISION` names two columns
   // claiming one field and the report carried only one of them, so the clash
   // the whole scenario exists to demonstrate had nothing to choose BETWEEN on
@@ -683,6 +698,15 @@ function aliasDecision(sourceFile: string, sourceColumn: string,
   } as DecisionCard;
 }
 
+/** Canonical fields the registry declares as `unit: percentage_points` — the
+ *  ones where a lender writing 0.35 and Trakt meaning 35 is a real ambiguity. */
+const PERCENTAGE_SCALED = new Set([
+  "current_loan_to_value",
+  "original_loan_to_value",
+  "debt_to_income_ratio",
+  "protected_equity_percentage",
+]);
+
 const REGISTRY_FIELDS: RegistryField[] = [
   { name: "loan_id", label: "loan id", category: "identifier", format: "string",
     layer: "core", core_canonical: true, regimes: ["ESMA_Annex2"] },
@@ -692,6 +716,9 @@ const REGISTRY_FIELDS: RegistryField[] = [
   { name: "interest_rate", label: "interest rate", category: "regulatory",
     format: "decimal", layer: "core", core_canonical: true,
     regimes: ["ESMA_Annex2"] },
+  { name: "current_loan_to_value", label: "current loan to value",
+    category: "regulatory", format: "decimal", layer: "core",
+    core_canonical: false, regimes: [] },
   { name: "property_value", label: "property value", category: "regulatory",
     format: "decimal", layer: "collateral", core_canonical: false,
     regimes: ["ESMA_Annex2"] },
@@ -2306,6 +2333,44 @@ export class MockAgent {
    * because adding a canonical field is a versioned configuration change with
    * its own approval.
    */
+  /** Which scale the lender writes a percentage field on. Empty withdraws the
+   *  declaration and lets Trakt reconcile it again. */
+  declareUnit(
+    caseRef: string,
+    input: { field: string; unit: string; reason?: string },
+  ): AgentStatus {
+    const stored = this.get(caseRef);
+    // The same permission a mapping change needs: this changes how a confirmed
+    // column is READ.
+    this.requireAction(stored, "resolve_decision");
+    const field = String(input.field ?? "").trim();
+    const unit = String(input.unit ?? "").trim().toLowerCase();
+    if (!PERCENTAGE_SCALED.has(field)) {
+      throw new OpsError(
+        `'${field}' is not a field Trakt holds on a percentage scale, so there is no unit to declare for it.`,
+        "OCC_AGENT_NOT_A_PERCENTAGE_FIELD",
+      );
+    }
+    if (unit && unit !== "percentage_points" && unit !== "fraction") {
+      throw new OpsError(
+        `'${input.unit}' is not a scale Trakt reads. Use percentage_points or fraction.`,
+        "OCC_AGENT_UNKNOWN_SOURCE_UNIT",
+      );
+    }
+    const units = { ...(stored.doc.source_units ?? {}) };
+    if (unit) units[field] = unit;
+    else delete units[field];
+    stored.doc.source_units = units;
+    this.record(
+      stored,
+      "source_unit_declared",
+      unit
+        ? `the lender writes ${field} as ${unit}`
+        : `the declared scale for ${field} was withdrawn; Trakt reconciles it again`,
+    );
+    return this.status(caseRef);
+  }
+
   resolveUnmapped(
     caseRef: string,
     input: {

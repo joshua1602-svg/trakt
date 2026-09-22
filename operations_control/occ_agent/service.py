@@ -70,6 +70,7 @@ from . import classification as _classification
 from . import client_form as _client_form
 from . import communication as _comms
 from . import derive as _derive
+from . import execution as _execution
 from . import field_registry as _field_registry
 from . import mapping_view as _mapping_view
 from . import pack as _pack
@@ -1571,6 +1572,7 @@ class OccAgentService:
             # so a field the client configuration already holds is not reported
             # as something the regulator is still waiting for.
             client_defaults=self._standing_client_defaults(agent_case),
+            source_units=dict(run.source_units or {}),
             case_id=run.case_ref, tenant=run.tenant)
         run_root = self.store.run_dir(run.tenant, run.case_ref)
         self._purge_stale_decisions(run_root)
@@ -2208,6 +2210,58 @@ class OccAgentService:
                     detail={"field_name": name, "source_file": file_name,
                             "source_column": column,
                             "route": request["route"]})
+        return agent_case
+
+    def declare_source_unit(self, agent_case: AgentCase, *,
+                            field: str, unit: str, actor: str) -> AgentCase:
+        """Say which scale the lender writes a percentage on.
+
+        THE REMEDY A BLOCKER HAD NO ROUTE TO. A lender stating loan-to-value as
+        ``0.35`` where the platform means ``35`` fails every consistency check
+        on the field, at an error rate the policy escalates to BLOCKING — and
+        nothing on that screen let an operator say which scale was meant. The
+        transform reconciles the two where it can see a balance and a valuation
+        to reconcile against; where it cannot, this is the answer.
+
+        NEVER INFERRED FROM MAGNITUDE. "Small numbers must be fractions" is
+        wrong for a genuinely small ratio and the mistake is invisible
+        afterwards, so the platform declines to guess and asks instead.
+
+        An empty ``unit`` withdraws the declaration and puts the field back to
+        reconciliation, which is the default and is usually right.
+        """
+        run = agent_case.run
+        # The same permission a mapping change needs: this changes how a
+        # confirmed column is READ, which is the act `reopen_mapping` governs.
+        self._require_mapping_change(run)
+        name = str(field or "").strip()
+        said = str(unit or "").strip().lower()
+        allowed = _execution.percentage_scaled_fields()
+        if name not in allowed:
+            raise OpsError(
+                "OCC_AGENT_NOT_A_PERCENTAGE_FIELD",
+                f"'{name}' is not a field Trakt holds on a percentage scale, "
+                "so there is no unit to declare for it.", http_status=400)
+        if said and said not in _execution.SOURCE_UNITS:
+            raise OpsError(
+                "OCC_AGENT_UNKNOWN_SOURCE_UNIT",
+                f"'{unit}' is not a scale Trakt reads. Use "
+                f"{' or '.join(_execution.SOURCE_UNITS)}.", http_status=400)
+        units = dict(run.source_units or {})
+        if said:
+            units[name] = said
+        else:
+            units.pop(name, None)
+        run.source_units = units
+        self.store.save(run)
+        self._audit(run, "source_unit_declared", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    input_reference=name,
+                    decision_basis=(f"the lender writes {name} as {said}"
+                                    if said else
+                                    f"the declared scale for {name} was "
+                                    "withdrawn; Trakt reconciles it again"),
+                    detail={"field": name, "source_unit": said})
         return agent_case
 
     def withdraw_registry_field_request(self, agent_case: AgentCase, *,

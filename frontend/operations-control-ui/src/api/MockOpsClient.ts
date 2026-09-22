@@ -1988,6 +1988,14 @@ export class MockOpsClient implements OpsClient {
     return this.agent.fieldRegistry(caseRef);
   }
 
+  async declareSourceUnit(
+    caseRef: string,
+    input: { field: string; unit: string; reason?: string },
+  ): Promise<AgentStatus> {
+    await this.wait();
+    return this.agent.declareUnit(caseRef, input);
+  }
+
   async resolveUnmappedColumn(
     caseRef: string,
     input: {

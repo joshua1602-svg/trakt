@@ -129,9 +129,9 @@ describe("OCC Agent — every column is accounted for", () => {
        feeds nothing until approved — in the property extract as much as in the
        tape, because what an operator approves becomes a rule for the whole
        book. `Val Dt` and `Prp Ref` are questions. What is left feeding a field
-       is the one column an operator has already confirmed. */
+       is the two columns an operator has already confirmed. */
     await afterTheRun();
-    expect(within(table()).getByText(copy.agent.mappingCount(1, 10))).toBeInTheDocument();
+    expect(within(table()).getByText(copy.agent.mappingCount(2, 11))).toBeInTheDocument();
   });
 
   it("distinguishes what an operator confirmed from what Trakt decided", async () => {
@@ -179,7 +179,7 @@ describe("OCC Agent — every column is accounted for", () => {
     await waitFor(() => expect(within(table()).queryByText("loan_id")).not.toBeInTheDocument());
     expect(within(fileSection("loan_tape.csv")).getByText("Val Dt")).toBeInTheDocument();
 
-    await user.click(within(table()).getByRole("button", { name: /All 10/ }));
+    await user.click(within(table()).getByRole("button", { name: /All 11/ }));
     await waitFor(() => expect(within(table()).getByText("loan_id")).toBeInTheDocument());
   });
 
@@ -550,6 +550,43 @@ describe("OCC Agent — the table is a draft until it is confirmed", () => {
     expect(within(table()).getByRole("button", {
       name: new RegExp(copy.agent.mappingContestedFilter),
     })).toBeInTheDocument();
+  });
+
+  it("offers the percentage scale only where the question is real", async () => {
+    /* REPORTED FROM THE LIVE CASE, on a blocker with no route out of it:
+
+           PORTFOLIO: LTV002 affects 567 record(s) (99.82%) — BLOCKING
+
+       The lender wrote loan-to-value as 0.35 where Trakt means 35. Every row
+       failed the consistency check and nothing on the screen let an operator
+       say which scale was meant.
+
+       Trakt reconciles the two against balance and valuation where it has
+       both; this is the answer where it has not. It appears ONLY on a field
+       held as percentage points — on any other row the question is
+       meaningless, and a control on all hundred and fifty rows is noise. */
+    await afterTheRun();
+    const rows = within(table()).getAllByRole("row");
+    const pickers = within(table()).queryAllByLabelText(
+      copy.agent.mappingUnitLabel,
+    );
+    expect(pickers.length).toBeGreaterThan(0);
+    expect(pickers.length).toBeLessThan(rows.length);
+  });
+
+  it("defaults to letting Trakt work the scale out", async () => {
+    /* Reconciliation against the balance and the valuation is right whenever
+       Trakt has both, so a declaration is the exception. A control that
+       defaulted to a guess would be the platform inferring scale from
+       magnitude — wrong for a genuinely small ratio, and invisible after. */
+    await afterTheRun();
+    const picker = within(table()).getAllByLabelText(
+      copy.agent.mappingUnitLabel,
+    )[0] as HTMLSelectElement;
+    expect(picker.value).toBe("");
+    expect(
+      within(picker).getByRole("option", { name: copy.agent.mappingUnitAuto }),
+    ).toBeInTheDocument();
   });
 
   it("a second file carrying the same field is not a warning", async () => {
