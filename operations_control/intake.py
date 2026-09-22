@@ -352,12 +352,22 @@ class IntakeService:
         or the file is left missing. A file with no ``source_uri`` (a hand
         upload from before the location was recorded) cannot be restored.
 
-        Returns ``{"restored": [...], "missing": [...]}``; both empty is the
-        normal case where nothing was lost.
+        Returns ``{"restored": [...], "missing": [...], "recorded": n,
+        "considered": n}``. Both lists empty means only that nothing was
+        RESTORED — which is the happy case when ``considered`` files were found
+        present, and a different thing entirely when ``considered`` is 0 while
+        ``recorded`` is not: then every file this pack holds was filtered out
+        as superseded or duplicate, this call had nothing it could put back,
+        and its silence is not evidence that the working folder has anything
+        in it. The caller checks the folder itself.
         """
-        report: Dict[str, Any] = {"restored": [], "missing": []}
+        current = self._current_files(batch)
+        report: Dict[str, Any] = {
+            "restored": [], "missing": [],
+            "recorded": len(batch.get("files") or []),
+            "considered": len(current)}
         dest = self.batch_dir(batch)
-        for f in self._current_files(batch):
+        for f in current:
             ref = str(f.get("storage_reference") or "")
             if ref and Path(ref).exists():
                 continue

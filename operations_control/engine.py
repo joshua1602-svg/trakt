@@ -359,6 +359,40 @@ class OpsEngine:
     def _staging_dir(self, run: WorkflowRun) -> Path:
         return self.staging_root / run.client_id / run.workflow_id
 
+    #: What a delivery's working folder must hold for there to be anything to
+    #: read. Everything else in a pack (markers, notes) is not a data file.
+    _DATA_SUFFIXES = (".csv", ".xlsx", ".xls")
+
+    def _input_shortfall(self, run: WorkflowRun) -> str:
+        """One operator sentence when this run's files are not where it reads.
+
+        Returns "" when the working folder holds at least one data file, which
+        is the only state in which the agents have anything to work on.
+        """
+        recorded = 0
+        if run.batch_id:
+            batch = self.intake.load_batch(run.client_id, run.batch_id)
+            recorded = len(batch.get("files") or []) if batch else 0
+
+        path = str(run.delivery.get("input_path") or "")
+        if not path:
+            return ("This delivery has no recorded location for its files, so "
+                    "there is nothing for Trakt to read. Send the pack again "
+                    "to open a new delivery for this period.")
+        base = Path(path)
+        if base.is_dir() and any(p.is_file()
+                                 and p.suffix.lower() in self._DATA_SUFFIXES
+                                 for p in base.iterdir()):
+            return ""
+        return (
+            (f"This delivery recorded {recorded} file(s), but none of them is "
+             "available to read now and none could be restored from the copy "
+             "Trakt keeps. " if recorded else
+             "No files are available to read for this delivery. ")
+            + "The files you sent are safe where they were received; it is "
+              "this delivery's working copy that is gone. Send the pack again "
+              "to open a new delivery for this period.")
+
     def _contract_target(self, run: WorkflowRun) -> str:
         """The TARGET whose field contract this delivery must satisfy.
 
@@ -985,6 +1019,25 @@ class OpsEngine:
                     self.store.append_event(run, "restage_failed",
                                             detail=report)
                     return
+
+        # AND THEN LOOK. Restaging reports what it could not put back; it says
+        # nothing about a delivery it was never asked to put anything back for,
+        # because `_current_files` had already filtered every recorded file out
+        # as superseded or duplicate. Both cases end here identically — an
+        # empty working folder — and the run used to proceed into it, produce
+        # an empty file inventory, an empty loan tape, and a blocker four steps
+        # later about a missing loan listing. An absent input is not a
+        # modelling result, so it is refused where it is true.
+        shortfall = self._input_shortfall(run)
+        if shortfall:
+            self._park(run, RUN_BLOCKED)
+            run.blockers = [shortfall]
+            self.store.save_workflow(run)
+            self.store.append_event(
+                run, "input_unavailable",
+                detail={"input_path": str(run.delivery.get("input_path") or ""),
+                        "batch_id": run.batch_id or ""})
+            return
 
         # Materialise applicable approved rules into client memory (existing
         # MappingMemoryStore artefact) before the agents run.
