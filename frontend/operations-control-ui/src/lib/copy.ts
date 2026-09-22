@@ -694,12 +694,6 @@ export const copy = {
       "Another file reads a column as this field too. That is normal — Trakt " +
       "joins the files on the loan identifier and reconciles the rest — and " +
       "for the loan identifier itself it is what makes the join possible.",
-    // HOW THE LENDER WRITES A PERCENTAGE. Canonical is percentage POINTS —
-    // 35 means 35% — and a lender sending 0.35 is on another scale, not
-    // wrong. Trakt reconciles the two against balance and valuation where it
-    // can; where it cannot, the operator says which, because guessing from
-    // magnitude is wrong for a genuinely small ratio and invisible after.
-<<<<<<< HEAD
     // THE WAY OUT OF A BLOCK, said on the row that is stopping them. A
     // blocked case can always be re-run, and the button lived on a stage that
     // by then read "done" and sat several screens above.
@@ -707,8 +701,11 @@ export const copy = {
     rerunBlockedHelp:
       "Fix what is in the way above, then run the rehearsal again. Nothing " +
       "is created by running it.",
-=======
->>>>>>> origin/claude/occ-production-certification-axdj1z
+    // HOW THE LENDER WRITES A PERCENTAGE. Canonical is percentage POINTS —
+    // 35 means 35% — and a lender sending 0.35 is on another scale, not
+    // wrong. Trakt reconciles the two against balance and valuation where it
+    // can; where it cannot, the operator says which, because guessing from
+    // magnitude is wrong for a genuinely small ratio and invisible after.
     mappingUnitLabel: "Written as",
     mappingUnitAuto: "Trakt works it out",
     mappingUnitPoints: "Percentage points (35 = 35%)",
