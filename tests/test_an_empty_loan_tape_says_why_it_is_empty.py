@@ -59,12 +59,6 @@ class TestTheBuildSaysWhyThereIsNoTape:
         assert "2026-09" in first and "2026-08" in first
         assert "568 row(s)" in first
 
-    def test_no_loan_listing_says_what_a_loan_listing_is_for(self):
-        said = explain_empty_lender_tape(_result(
-            selected_universe_source_file="", excluded_sources=[]))
-        assert "recognised as the loan listing" in said[0]
-        assert "which loans exist" in said[0]
-
     def test_rows_read_but_no_identifier_names_the_column_and_rule(self):
         said = explain_empty_lender_tape(_result(
             selected_universe_source_file=LOAN,
@@ -95,6 +89,81 @@ class TestTheBuildSaysWhyThereIsNoTape:
                     {"lender_summary": {"universe_debug":
                                         {"excluded_sources": "not a list"}}}):
             assert isinstance(explain_empty_lender_tape(bad), list)
+
+
+class TestNothingChosenAndNothingSetAsideIsThreeDifferentSituations:
+    """The first fix replaced one guess with another.
+
+    "No file in this pack was recognised as the loan listing" was asserted
+    whenever nothing was chosen and nothing was excluded — and ERE's delivery
+    reached exactly that branch. But that state has three causes, and the
+    sentence named one of them: no file was OPENED at all (nothing in the pack
+    was reached by the approved mapping); files were opened and none was read
+    as a loan listing; or one was and it produced no identifier. An operator
+    told the second when it is the first goes looking at file classification
+    while the mapping is what is wrong.
+    """
+
+    def test_no_file_opened_says_so_and_names_what_was_delivered(self):
+        said = " ".join(explain_empty_lender_tape(_result(
+            selected_universe_source_file="", excluded_sources=[],
+            considered_sources=[],
+            pack_files=[{"source_file": LOAN, "artefact_role": "current_loan_report"},
+                        {"source_file": CASH, "artefact_role": "cashflow_report"}])))
+        assert "No file in this delivery was opened" in said
+        assert "approved mapping" in said
+        assert LOAN in said and CASH in said
+
+    def test_files_opened_but_none_qualifying_names_each_and_its_role(self):
+        said = " ".join(explain_empty_lender_tape(_result(
+            selected_universe_source_file="", excluded_sources=[],
+            universe_roles=["current_loan_report", "funded_book"],
+            considered_sources=[
+                {"source_file": LOAN, "artefact_role": "collateral_report",
+                 "key_column": "Loan Policy Number", "key_count": 568,
+                 "file_in_inventory": True, "frame_loaded": True},
+                {"source_file": CASH, "artefact_role": "cashflow_report",
+                 "key_column": "Loan Policy Number", "key_count": 568,
+                 "file_in_inventory": True, "frame_loaded": True}])))
+        assert LOAN in said and "collateral_report" in said
+        assert CASH in said and "cashflow_report" in said
+        # And what WOULD have qualified, so the operator can act.
+        assert "current_loan_report" in said and "funded_book" in said
+        assert "which loans exist" in said
+
+    def test_a_file_opened_with_no_key_column_says_that_rather_than_a_count(self):
+        said = " ".join(explain_empty_lender_tape(_result(
+            selected_universe_source_file="", excluded_sources=[],
+            considered_sources=[{"source_file": LOAN, "artefact_role": "",
+                                 "key_column": "", "key_count": 0,
+                                 "file_in_inventory": True,
+                                 "frame_loaded": True}])))
+        assert "no loan identifier column was found" in said
+        assert "not recognised as any known kind of file" in said
+
+    def test_a_file_the_mapping_names_but_the_delivery_lacks_says_that(self):
+        """The mapping was learned from a sample. If it names that sample's
+        file and the delivery carries another name, "opened and found empty"
+        and "never there" read identically — and only one of them is fixed by
+        looking at the file."""
+        said = " ".join(explain_empty_lender_tape(_result(
+            selected_universe_source_file="", excluded_sources=[],
+            considered_sources=[{"source_file": "LoanExtract One - OMNI.xlsx",
+                                 "artefact_role": "current_loan_report",
+                                 "key_column": "", "key_count": 0,
+                                 "file_in_inventory": False,
+                                 "frame_loaded": False}])))
+        assert "named by the approved mapping" in said
+        assert "not found in this delivery" in said
+        # …and it does not then also claim the file failed to qualify.
+        assert "None of them is the loan listing" not in said
+
+    def test_it_never_claims_a_cause_it_was_given_no_evidence_for(self):
+        """An older build writes no ``considered_sources``. Absent evidence the
+        wording must not assert that files were opened and rejected."""
+        said = " ".join(explain_empty_lender_tape(_result(
+            selected_universe_source_file="", excluded_sources=[])))
+        assert "None of them is the loan listing" not in said
 
 
 class TestASentenceWrittenForAHumanSurvivesTranslation:

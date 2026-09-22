@@ -108,3 +108,60 @@ class TestTheClientBlockOverlaysRatherThanReplaces:
         ere = spe.load_config(client_id="ERE")
         assert ere["funded_filename_delivery_offset_months"] == -1
         assert "funded_filename_delivery_offset_months" not in spe.load_config()
+
+
+class TestTheIdentityTheLivePathActuallyCarries:
+    """The overlay above was correct and unreachable.
+
+    Onboarding's ``client_id`` argument is the SOURCE PORTFOLIO — the live
+    adapter passes ``source_portfolio_id`` into it and puts the tenant in
+    ``client_name``, and the orchestrator says so where it resolves mapping
+    scope. So the client block was asked for under ``direct_001``, a file that
+    does not exist, and ERE's delivery was read under the system convention it
+    had just been excused from. The caller now passes every identity it holds.
+    """
+
+    def test_the_portfolio_id_alone_finds_nothing_and_that_is_the_bug(self):
+        assert _period("current_loan_report", "direct_001") == "2026-09"
+
+    def test_the_tenant_beside_the_portfolio_finds_the_client(self):
+        assert _period("current_loan_report", ("ERE", "direct_001")) == "2026-08"
+
+    def test_order_does_not_matter_when_only_one_of_them_is_a_client(self):
+        assert _period("current_loan_report", ("direct_001", "ERE")) == "2026-08"
+
+    def test_candidates_drop_blanks_and_duplicates_and_keep_order(self):
+        assert spe.client_candidates(("ERE", "", None, "direct_001", "ERE")) == [
+            "ERE", "direct_001"]
+        assert spe.client_candidates("ERE") == ["ERE"]
+        assert spe.client_candidates("") == []
+        assert spe.client_candidates(()) == []
+
+    def test_no_identity_at_all_is_still_the_system_answer(self):
+        assert _period("current_loan_report", ("", "")) == "2026-09"
+
+    def test_the_identity_survives_the_whole_resolution_not_just_the_lookup(
+            self, tmp_path):
+        """End to end through the call onboarding actually makes.
+
+        The overlay being reachable from ``load_config`` proved nothing: the
+        bug was a caller handing the wrong name down. This runs the resolution
+        onboarding runs, under the two identities the live path carries, and
+        reads the period off the artefact it writes.
+        """
+        src = tmp_path / PACK["current_loan_report"]
+        pd.DataFrame({"Loan Policy Number": ["76034101"],
+                      "Current Balance": [1.0]}).to_csv(src, index=False)
+        inventory = [{"file_name": src.name, "file_path": str(src),
+                      "file_type": "csv", "sheet_name": "",
+                      "classification": "current_loan_report",
+                      "detected_reporting_date": ""}]
+        got = spe.resolve_and_write(
+            inventory, "mi_2026_08", tmp_path / "out",
+            input_dir=str(tmp_path), client_id=("ERE", "direct_001"))
+        tape = [r for r in got["rows"]
+                if r["output_domain"] == "central_lender_tape"]
+        assert tape, got["rows"]
+        assert tape[0]["inferred_reporting_period"] == "2026-08"
+        assert tape[0]["is_period_eligible"] is True
+        assert tape[0]["is_universe_source"] is True

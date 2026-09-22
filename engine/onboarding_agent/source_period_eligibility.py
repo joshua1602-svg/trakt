@@ -49,7 +49,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import yaml
 
@@ -108,8 +108,32 @@ _DEFAULTS: Dict[str, Any] = {
 _CLIENT_CONFIG_DIR = Path(__file__).resolve().parents[2] / "config" / "client"
 
 
+def client_candidates(client_id: "str | Sequence[str]") -> List[str]:
+    """The identifiers to look for a client block under, in order, de-duplicated.
+
+    THE PLATFORM CALLS TWO DIFFERENT THINGS ``client_id``. Onboarding's own
+    ``client_id`` argument is the SOURCE PORTFOLIO — the live adapter passes
+    ``source_portfolio_id`` into it and ``client_name`` carries the tenant, and
+    :mod:`onboarding_orchestrator` says so where it resolves mapping scope. So
+    a client block asked for under ``client_id`` alone was asked for under
+    ``direct_001``, never under ``ERE``, and no client ever overlaid anything
+    in the live path.
+
+    Rather than pick one name and be wrong wherever the other is the tenant,
+    a caller passes every identifier it holds. Tenant first, portfolio after,
+    so a portfolio that states its own convention outranks its tenant's.
+    """
+    raw = [client_id] if isinstance(client_id, str) else list(client_id or ())
+    out: List[str] = []
+    for ident in raw:
+        name = str(ident or "").strip()
+        if name and name not in out:
+            out.append(name)
+    return out
+
+
 def load_config(config_path: str | Path = "",
-                client_id: str = "") -> Dict[str, Any]:
+                client_id: "str | Sequence[str]" = "") -> Dict[str, Any]:
     """System defaults, then the system file, then this client's own answers.
 
     A FILING CONVENTION BELONGS TO THE CLIENT WHO FILES. Whether a file dated
@@ -122,11 +146,13 @@ def load_config(config_path: str | Path = "",
     A client block therefore overlays the system one, key by key, exactly as
     the system file overlays the defaults. A client that says nothing keeps
     every system answer.
+
+    ``client_id`` may be one identifier or several — see :func:`client_candidates`.
     """
     cfg = dict(_DEFAULTS)
     paths = [Path(config_path) if config_path else _CONFIG_PATH]
-    if client_id:
-        paths.append(_CLIENT_CONFIG_DIR / f"config_client_{client_id}.yaml")
+    for ident in client_candidates(client_id):
+        paths.append(_CLIENT_CONFIG_DIR / f"config_client_{ident}.yaml")
     for path in paths:
         try:
             doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -556,7 +582,7 @@ def compute_eligibility(
     config: Optional[Dict[str, Any]] = None,
     config_path: str | Path = "",
     input_dir: str | Path = "",
-    client_id: str = "",
+    client_id: "str | Sequence[str]" = "",
 ) -> List[SourcePeriodEligibility]:
     """Resolve **output-domain-aware** period eligibility for each source record.
 
@@ -690,7 +716,7 @@ def resolve_and_write(
     config_path: str | Path = "",
     input_dir: str | Path = "",
     enable_conversion: bool = False,
-    client_id: str = "",
+    client_id: "str | Sequence[str]" = "",
 ) -> Dict[str, Any]:
     """Load all (file, sheet) tables, resolve period eligibility, write 04c."""
     from . import source_table_loader as stl
