@@ -699,6 +699,13 @@ export const copy = {
     // wrong. Trakt reconciles the two against balance and valuation where it
     // can; where it cannot, the operator says which, because guessing from
     // magnitude is wrong for a genuinely small ratio and invisible after.
+    // THE WAY OUT OF A BLOCK, said on the row that is stopping them. A
+    // blocked case can always be re-run, and the button lived on a stage that
+    // by then read "done" and sat several screens above.
+    rerunBlocked: "Start rehearsal again",
+    rerunBlockedHelp:
+      "Fix what is in the way above, then run the rehearsal again. Nothing " +
+      "is created by running it.",
     mappingUnitLabel: "Written as",
     mappingUnitAuto: "Trakt works it out",
     mappingUnitPoints: "Percentage points (35 = 35%)",

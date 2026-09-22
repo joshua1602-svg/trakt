@@ -724,8 +724,21 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         # tape as the lender sent it and let validation speak, rather than take
         # a delivery down.
         try:
+            # THE LENDER'S OWN FILE NAMES, not Trakt's intermediate tape.
+            #
+            # Step 4 of the derivation resolves a bare period label — "August"
+            # — against a year it reads out of the filename. Handed
+            # `18_central_lender_tape.csv` it finds none and falls back to a
+            # hard-coded 2025, so a delivery whose own files state no year, and
+            # whose period column holds a label, would be stamped 2025 rather
+            # than left alone. The onboard stage answers the same question and
+            # answers it correctly — `_run_year` over the delivery's own names,
+            # returning None rather than guessing — and the two passes
+            # disagreeing about one field is how a wrong date becomes data.
             self.derivations = _derive_fields(
-                frame, spec.source_portfolio_type or "", tape.name,
+                frame, spec.source_portfolio_type or "",
+                self.artefact_paths[0].name if self.artefact_paths else "",
+                default_year=_run_year(self.artefact_paths),
                 source_units=self.source_units)
         except Exception as exc:            # noqa: BLE001 — reported, not fatal
             self.derivations = {"error": f"{type(exc).__name__}: {exc}"}
@@ -1538,8 +1551,8 @@ def percentage_scaled_fields(registry_path: Path = REGISTRY_PATH) -> List[str]:
 
 def _derive_fields(frame: "pd.DataFrame", portfolio_type: str,
                    filename: str,
-                   source_units: Optional[Dict[str, str]] = None
-                   ) -> Dict[str, Any]:
+                   source_units: Optional[Dict[str, str]] = None,
+                   default_year: Optional[int] = None) -> Dict[str, Any]:
     """The platform's own derivation step, run on the rehearsal's tape.
 
     ``config`` is empty by design: every key it reads is an OVERRIDE — a
@@ -1564,9 +1577,14 @@ def _derive_fields(frame: "pd.DataFrame", portfolio_type: str,
                 if u}
     if declared:
         config["aliases"] = declared
+    # `infer_year` reads a year out of `filename`; `default_year` is what it
+    # falls back to. Both now come from the delivery's own names, so this pass
+    # and the onboard pass cannot reach different answers about the same
+    # period — and where the delivery states no year at all, None is passed on
+    # rather than a guess, which is the onboard pass's rule too.
     return derive_fields(frame, portfolio_type, filename,
                          dayfirst=True, infer_year=True, derive_month=False,
-                         default_year=None, config=config) or {}
+                         default_year=default_year, config=config) or {}
 
 
 def _closed_sentence(outcome: Dict[str, Any]) -> str:
