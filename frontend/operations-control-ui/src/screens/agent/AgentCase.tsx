@@ -628,6 +628,31 @@ export function AgentCaseScreen() {
               {stages.map((stage) => (
                 <StageSection key={stage.key} stage={stage}>
                   {stage.status !== "future" ? stageBody(stage.key) : null}
+                  {/* THE WAY OUT, ON THE ROW THAT IS STOPPING THEM.
+                      A blocked case can always be re-run — the state machine
+                      says so — but the button lives on the `rehearsal` stage,
+                      which by then reads "done" and sits several screens up.
+                      So the row marked Blocked offered nothing at all and the
+                      only action that moves the case on was on a row that
+                      looked finished. Rendered only on the CURRENT stage, and
+                      only where that stage is not the rehearsal itself, so it
+                      never appears twice. */}
+                  {stage.status === "current"
+                    && stage.blocked
+                    && stage.key !== "rehearsal"
+                    && available.has("run_synthetic_onboarding") && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-stone-600">
+                        {copy.agent.rerunBlockedHelp}
+                      </p>
+                      <PrimaryButton
+                        busy={busy}
+                        onClick={() => void act(() => client.runAgentStep(caseId, "run"))}
+                      >
+                        {copy.agent.rerunBlocked}
+                      </PrimaryButton>
+                    </div>
+                  )}
                 </StageSection>
               ))}
             </ol>
