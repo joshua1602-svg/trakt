@@ -48,6 +48,7 @@ from .case import (
     REQUEST_SENT,
     STATUS_LABELS,
     STATUSES,
+    TERMINAL,
     WITHDRAWN,
     CaseError,
     InformationRequest,
@@ -359,9 +360,33 @@ class OnboardingService:
         intake already extracts when it reads a pack. Registering one lets Trakt
         answer the file format, the expected file names and often the asset
         class, instead of asking for them.
+
+        A SAMPLE IS EVIDENCE, NOT AN ANSWER, so the answer lock does not apply
+        to it. ``_require_editable`` refuses an APPROVED case, which is right
+        for an operator revising what they told Trakt and wrong here — and it
+        shut this method at exactly the wrong moment, because the practice run
+        REFUSES to start until the onboarding is approved:
+
+            run_synthetic_onboarding: if case.status != APPROVED: raise
+            classify_artefacts:       if case.status not in (APPROVED,) + ...
+
+        The two conditions are mutually exclusive, so every file uploaded FOR
+        the practice run — which is every file the practice run uses — could
+        never reach the sample. A client who supplied one file at onboarding
+        and then supplied the other two for the rehearsal went on being
+        registered as sending one, and no operator action could correct it.
+
+        Only an ACTIVATED or WITHDRAWN case refuses now: after activation the
+        expectation is governed on the other side, and a withdrawn case is
+        finished. The result is shown in the approval package before anything
+        is registered, so nothing about it is silent.
         """
         case = self.load_case(case_id)
-        self._require_editable(case)
+        if case.status in TERMINAL:
+            raise OpsError(
+                "OPS_ONBOARDING_LOCKED",
+                f"This onboarding is {STATUS_LABELS[case.status].lower()} and "
+                "can no longer record a sample.", 409)
         case.answers["sample"] = {"files": files,
                                   "registered_by": by,
                                   "registered_at": now_iso()}
