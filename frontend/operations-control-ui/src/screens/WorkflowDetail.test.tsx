@@ -267,3 +267,57 @@ describe("cancelling a delivery", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+/**
+ * A delivery that has stopped can be run again.
+ *
+ * Reported from the live case: the step read "Held by a blocking problem", the
+ * header read "Needs review", and the only control on the page was to cancel
+ * the delivery. The engine had always permitted the rerun —
+ *
+ *     RUN_NEEDS_REVIEW: (RUN_RUNNING, RUN_CANCELLED, RUN_PUBLISHED, RUN_HELD)
+ *
+ * — but the screen restated a list of three statuses and needs_review was not
+ * among them, so an operator whose delivery halted had nothing to press. The
+ * line below it takes its rule from the engine and says so in a comment; this
+ * one did not.
+ */
+describe("running a stopped delivery again", () => {
+  it("is offered while the delivery needs review", async () => {
+    const client = new MockOpsClient(0);
+    renderWorkflow(client, "/workflows/wf-1001");
+    await approvalStep();
+    expect(
+      screen.getByRole("button", { name: "Run again" }),
+    ).toBeInTheDocument();
+  });
+
+  it("is offered while the delivery is blocked", async () => {
+    const client = new MockOpsClient(0);
+    renderWorkflow(client, "/workflows/wf-1004");
+    await approvalStep();
+    expect(
+      screen.getByRole("button", { name: "Run again" }),
+    ).toBeInTheDocument();
+  });
+
+  it("is not offered once the delivery is published", async () => {
+    const client = new MockOpsClient(0);
+    await client.publishWorkflow("wf-1002");
+    renderWorkflow(client, "/workflows/wf-1002");
+    await approvalStep();
+    expect(
+      screen.queryByRole("button", { name: "Run again" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("is not offered once the delivery is cancelled", async () => {
+    const client = new MockOpsClient(0);
+    await client.cancelWorkflow("wf-1002", "no longer needed");
+    renderWorkflow(client, "/workflows/wf-1002");
+    await approvalStep();
+    expect(
+      screen.queryByRole("button", { name: "Run again" }),
+    ).not.toBeInTheDocument();
+  });
+});
