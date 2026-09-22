@@ -302,13 +302,36 @@ def test_every_answer_in_the_review_package_says_where_it_came_from(service,
         "nothing is recorded as having come from the client"
 
 
-def test_the_review_package_states_that_mappings_are_learned_later(service,
-                                                                   reviewed):
+def test_the_review_package_states_what_the_approval_does_to_the_mappings(
+        service, reviewed):
+    """This asserted the opposite, against a fixture that disproved it.
+
+    It pinned "Field mappings are NOT part of this configuration and were not
+    collected ... Approving this activation does not approve any mapping" — on
+    a case that has been through the rehearsal and settled its mappings, which
+    ``confirm_activation`` then carries into the governed store. The sentence
+    was written when a mapping was first proposed during the first live
+    ingestion and was never revisited, so the test went on holding shut a door
+    that had moved: an approver was told they were signing a SMALLER thing than
+    they were signing.
+
+    What the note must do is describe THIS case. A case that has settled
+    mappings says so; a case that has not still reads the old way, because that
+    sentence was right for that case all along.
+    """
     package = service.build_review_package(reviewed)
-    assert package.mapping_note == _review.MAPPING_NOTE
-    assert "were not collected" in package.mapping_note
-    assert "first representative delivery" in package.mapping_note
+    assert package.activation["mappings"] > 0, "fixture settled no mappings"
+    assert package.mapping_note == _review.mapping_note(
+        package.activation["mappings"], package.client_name)
+    assert "ARE part of this approval" in package.mapping_note
+    assert "does not approve any mapping" not in package.mapping_note
     assert "Field mappings" in package.document()
+
+
+def test_a_case_that_settled_no_mappings_still_says_they_come_later(service,
+                                                                    reviewed):
+    assert _review.mapping_note(0, "Northstar") == _review.MAPPING_NOTE_NONE
+    assert "first representative delivery" in _review.mapping_note(0, "N")
 
 
 def test_the_review_package_shows_what_activation_would_do(service, reviewed):
