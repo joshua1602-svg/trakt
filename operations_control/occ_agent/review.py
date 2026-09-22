@@ -41,13 +41,43 @@ from .pack import MAPPING_STATEMENT
 from .run import SyntheticRun
 
 #: What the approver is told about mappings, in as many words.
-MAPPING_NOTE = (
-    "Field mappings are NOT part of this configuration and were not collected. "
-    "They are proposed by Trakt from the first representative delivery, "
-    "reviewed and approved by an operator during that first ingestion, and "
-    "then fingerprinted and fixed. Approving this activation does not approve "
-    "any mapping."
+#:
+#: This used to end "Approving this activation does not approve any mapping",
+#: which was true when a mapping was first proposed during the first live
+#: ingestion — and became false when the rehearsal started settling them and
+#: :meth:`~operations_control.occ_agent.service.OccAgentService.confirm_activation`
+#: started carrying those decisions into the governed store. It then told an
+#: approver they were signing a SMALLER thing than they were signing, which is
+#: the one direction a consent record must never be wrong in.
+MAPPING_NOTE_SETTLED = (
+    "Field mappings ARE part of this approval. The mappings confirmed during "
+    "the practice run are carried into {client}'s governed rules when this "
+    "activation is confirmed, and from then on they are how Trakt reads every "
+    "delivery for this client until they are formally amended. Review them "
+    "before confirming."
 )
+
+#: And where no practice run has settled any, which is the case this note was
+#: originally written for.
+MAPPING_NOTE_NONE = (
+    "No field mappings have been settled on this case, so none are approved "
+    "here. They are proposed by Trakt from the first representative delivery, "
+    "reviewed and approved by an operator during that ingestion, and then "
+    "fingerprinted and fixed."
+)
+
+
+def mapping_note(settled: int, client: str = "") -> str:
+    """What the approver is told about mappings — which depends on whether any
+    exist. A fixed sentence cannot describe both cases truthfully."""
+    if settled <= 0:
+        return MAPPING_NOTE_NONE
+    return MAPPING_NOTE_SETTLED.format(client=client or "this client")
+
+
+#: Kept for readers that import the old name. It states the no-mappings case,
+#: which is what it always described correctly.
+MAPPING_NOTE = MAPPING_NOTE_NONE
 
 #: What the approver is told about user access.
 ACCESS_NOTE = (
@@ -241,6 +271,11 @@ def build(case: OnboardingCase, run: SyntheticRun, facts: ExecutionFacts, *,
     }
     package.readiness = dict(readiness or {})
     package.activation = dict(intent or {})
+    # WHAT THIS APPROVAL ACTUALLY SETTLES ABOUT THE MAPPINGS. Counted from the
+    # intent, which is built by the same call that activation performs, so the
+    # note and the action list cannot say different numbers.
+    package.mapping_note = mapping_note(
+        int((intent or {}).get("mappings") or 0), package.client_name)
     package.approvals = {
         "onboarding": {"status": case.status,
                        "status_label": STATUS_LABELS.get(case.status,

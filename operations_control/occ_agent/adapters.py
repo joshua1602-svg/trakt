@@ -169,6 +169,12 @@ class ActivationIntent:
     target_locations: List[str] = field(default_factory=list)
     actions: List[str] = field(default_factory=list)
     configuration_artefacts: List[str] = field(default_factory=list)
+    #: How many confirmed mappings this activation would write into the
+    #: client's governed rules, and how many requested fields it would raise as
+    #: a draft. Carried on the record rather than only in the prose, so the
+    #: approval note and the action list are counted once and cannot disagree.
+    mappings: int = 0
+    field_requests: int = 0
     statement: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -206,8 +212,29 @@ class ActivationResult:
 
 def build_intent(case: OnboardingCase, facts: ExecutionFacts, *,
                  reporting_period: str, files: List[Dict[str, str]],
-                 configuration_artefacts: List[str]) -> ActivationIntent:
-    """What confirming would cause. Built from the case, never from prose."""
+                 configuration_artefacts: List[str],
+                 mappings: int = 0,
+                 field_requests: int = 0) -> ActivationIntent:
+    """What confirming would cause. Built from the case, never from prose.
+
+    ``mappings`` and ``field_requests`` are the two things activation does
+    that this list used to leave out. Both were added to
+    :meth:`~operations_control.occ_agent.service.OccAgentService.confirm_activation`
+    after these four sentences were written, and neither was passed here — so
+    the intent could not have named them even in principle, and the record of
+    "what activation would do" understated what it does.
+    """
+    settling = []
+    if mappings:
+        settling.append(
+            f"Write {mappings} confirmed field mapping(s) into "
+            f"{facts.client_id}'s governed rules, as the standing reading of "
+            "every future delivery for this client.")
+    if field_requests:
+        settling.append(
+            f"Raise {field_requests} requested field(s) as a DRAFT system "
+            "configuration version for a configuration owner to decide. "
+            "Nothing is added to the registry by activating.")
     return ActivationIntent(
         client_id=facts.client_id, client_name=facts.client_name,
         portfolio_id=facts.portfolio_id, dataset=facts.dataset,
@@ -217,15 +244,23 @@ def build_intent(case: OnboardingCase, facts: ExecutionFacts, *,
         target_locations=sorted({str(f.get("target") or "") for f in files
                                  if f.get("target")}),
         configuration_artefacts=list(configuration_artefacts),
+        mappings=int(mappings), field_requests=int(field_requests),
         actions=[
             f"Write {len(configuration_artefacts)} configuration artefact(s) "
             f"for {facts.client_id}, as a new governed version.",
+            *settling,
             "Register the expected source deliveries in the production source "
             "registry.",
             f"Place {len(files)} file(s) in the production raw location, "
             "through the platform's own governed intake.",
-            "Start the existing Onboarding Agent, which will profile, map, "
-            "transform, validate and assemble the delivery.",
+            # "map" was in this sentence and should not have been where a
+            # rehearsal has already settled the mappings: it told an approver
+            # the reading was still to be decided when they had just decided it.
+            ("Start the existing Onboarding Agent, which will profile, "
+             "transform, validate and assemble the delivery against those "
+             "mappings." if mappings else
+             "Start the existing Onboarding Agent, which will profile, map, "
+             "transform, validate and assemble the delivery."),
         ],
         statement=(
             f"Confirming activates {facts.client_name or facts.client_id}'s "

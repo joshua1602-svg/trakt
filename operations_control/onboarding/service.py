@@ -366,6 +366,12 @@ class OnboardingService:
                                   "registered_by": by,
                                   "registered_at": now_iso()}
         self._sync_derived(case)
+        # THE SAMPLE HAS CHANGED, SO WHAT THE SAMPLE ANSWERS CHANGES WITH IT.
+        # `_sync_derived` fills blanks and never overwrites, which froze the
+        # first sample's answers in place: a client who sent one file and then
+        # sent three went on being expected to send one. See
+        # :func:`inference.refresh_from_sample`.
+        inference.refresh_from_sample(case)
         inferred = inference.infer_from_sample(case.answers["sample"])
         case.record("sample_registered", actor=by,
                     detail={"files": [f.get("name") for f in files],
