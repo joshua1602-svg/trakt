@@ -80,20 +80,37 @@ GENERIC_PROBLEM = ("Something did not go as expected on our side. "
                    "Nothing has been lost. You can try running this step again.")
 
 
-def humanise_blocker(raw: str) -> str:
-    """Translate one internal blocker string into an operator sentence."""
+def humanise_blocker(raw: str, allow: tuple = ()) -> str:
+    """Translate one internal blocker string into an operator sentence.
+
+    A BLOCKER ALREADY WRITTEN FOR A HUMAN IS KEPT. The fallback replaced every
+    unrecognised string with ``GENERIC_PROBLEM``, which is right for a traceback
+    and wrong for a sentence naming the file that was set aside and the period
+    it was read as. Upstream has started saying exactly that, and this stood
+    ready to throw it away and offer "something did not go as expected"
+    instead — the operator is then worse off than before the diagnosis existed.
+
+    So: a recognised internal phrase is still translated, because those are
+    jargon. Anything else is passed through when it is already free of
+    technical vocabulary, paths and artefact codes, and only replaced when it
+    is not. ``allow`` masks the operator's own file names before that check,
+    since their data is their vocabulary rather than ours.
+    """
     low = (raw or "").lower()
     for needle, sentence in _TRANSLATIONS:
         if needle in low:
             return sentence
+    text = str(raw or "").strip()
+    if text and is_operator_safe(text, allow=allow):
+        return text
     return GENERIC_PROBLEM
 
 
-def humanise_blockers(raw: Iterable[str]) -> List[str]:
+def humanise_blockers(raw: Iterable[str], allow: tuple = ()) -> List[str]:
     """Translate + de-duplicate a list of internal blockers."""
     out: List[str] = []
     for r in raw or []:
-        s = humanise_blocker(r)
+        s = humanise_blocker(r, allow=allow)
         if s not in out:
             out.append(s)
     return out

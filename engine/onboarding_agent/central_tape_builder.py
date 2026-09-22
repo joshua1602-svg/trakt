@@ -2022,3 +2022,81 @@ def build_central_tapes(
         "gap_count": summary["gap_count"],
         "mapped_field_count": summary["canonical_fields_populated"],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Why the lender tape came out empty
+# --------------------------------------------------------------------------- #
+
+def explain_empty_lender_tape(result: Dict[str, Any]) -> List[str]:
+    """Say why no loan tape was built, from what the build already recorded.
+
+    The build knows precisely what happened — which file it chose as the loan
+    listing, under which key column and normalisation rule, how many raw rows it
+    read, how many survived as identifiers, and which sources it excluded and
+    why. All of it was assembled into ``universe_debug`` and then dropped on the
+    floor: the caller reported ``onboarding did not produce a central lender
+    tape`` and the operator's screen translated that into a guess about a
+    missing loan listing.
+
+    Compare the sibling blocker three lines above it, which names the file role
+    and the column to look for. One of them can be acted on.
+
+    Returns operator sentences, most specific first. Never raises: a diagnosis
+    that fails must not replace the failure it is diagnosing.
+    """
+    try:
+        summary = (result or {}).get("lender_summary") or {}
+        debug = summary.get("universe_debug") or {}
+        said: List[str] = []
+
+        excluded = [e for e in (debug.get("excluded_sources") or [])
+                    if isinstance(e, dict)]
+        chosen = str(debug.get("selected_universe_source_file") or "")
+        raw = int(debug.get("raw_universe_rows") or 0)
+        canonical = int(debug.get("canonical_universe_rows") or 0)
+
+        if not chosen and excluded:
+            # Every file was set aside, so there was nothing to build from. The
+            # period gate is the usual reason and the one an operator can act on.
+            period = str(debug.get("run_reporting_period") or "")
+            for e in excluded[:4]:
+                found = str(e.get("inferred_reporting_period") or "")
+                said.append(
+                    f"{e.get('source_file') or 'a file'} was set aside"
+                    + (f" ({e.get('reason')})" if e.get("reason") else "")
+                    + (f": Trakt read it as covering {found}" if found else "")
+                    + (f", and this delivery is for {period}" if period else "")
+                    + f". It holds {e.get('row_count') or 0} row(s).")
+        elif not chosen:
+            said.append(
+                "No file in this pack was recognised as the loan listing — the "
+                "one file that says which loans exist. Every other file fills "
+                "columns onto it, so without it there is nothing to fill.")
+        elif canonical == 0 and raw > 0:
+            key = str(debug.get("selected_universe_key_column") or "")
+            rule = str(debug.get("selected_universe_normalisation_rule") or "")
+            said.append(
+                f"{chosen} was read as the loan listing and {raw} row(s) came "
+                f"back, but none produced a usable loan identifier"
+                + (f" from '{key}'" if key else "")
+                + (f" under the {rule} rule" if rule else "") + ".")
+        elif canonical == 0:
+            said.append(
+                f"{chosen} was chosen as the loan listing but no rows were read "
+                "from it.")
+
+        # Whatever the reason, say what was excluded — a file the operator
+        # mapped and confirmed, left out of the delivery, is news.
+        if chosen and excluded:
+            names = ", ".join(str(e.get("source_file") or "") for e in excluded[:4])
+            said.append(f"{len(excluded)} file(s) were not used: {names}.")
+
+        if debug.get("period_gate_active") and debug.get("run_reporting_period"):
+            said.append(
+                "This delivery is gated to the reporting period "
+                f"{debug['run_reporting_period']}; a file Trakt reads as another "
+                "period is set aside rather than mixed into it.")
+        return said
+    except Exception:                                    # pragma: no cover
+        return []
