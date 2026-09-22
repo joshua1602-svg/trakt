@@ -212,6 +212,10 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: contradicting it. A value the platform wrote rather than read has to
         #: be visible as such. See :func:`_closed_account_zeroing`.
         self.closed_accounts: Dict[str, Any] = {}
+        #: What the platform's own derivation step did to the tape — LTV scale
+        #: normalisation, balance coherence, geography, reporting date. Kept so
+        #: the stage can say it rather than leaving a changed value unexplained.
+        self.derivations: Dict[str, Any] = {}
         #: The governed budget for asking a model about a column the
         #: deterministic tiers could not settle — see :mod:`.llm_mapping`.
         self.llm_policy: _llm.Policy = llm_policy or _llm.Policy.load()
@@ -693,6 +697,30 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         # `derive_fields` too, so the rehearsal and production cannot drift
         # into two readings of the same rule.
         self.closed_accounts = _closed_account_zeroing(frame, self.asset_type)
+        # THE PLATFORM'S OWN DERIVATIONS, which this stage skipped entirely.
+        #
+        # It called the platform's `apply_types` and the platform's validators
+        # and then built the tape validation would judge WITHOUT the step
+        # production runs in between — so the rehearsal judged a thinner tape
+        # than the platform builds, and refused deliveries the platform accepts.
+        # The same drift as `base_mi_gate`, one gate further on.
+        #
+        # It is not only a filler of blanks, which is how it was waved away.
+        # `_resolve_ltv` brings a SUPPLIED loan-to-value onto the canonical
+        # percentage-point scale, reconciling it against balance and valuation:
+        # a lender who states LTV as a 0-1 fraction has every row fail LTV002
+        # against a rule that expects percentage points, at an error rate the
+        # policy then escalates from REVIEW to BLOCKING. Nothing was wrong with
+        # the delivery; the scale had simply never been normalised.
+        #
+        # Reported, never fatal: a derivation that cannot run must leave the
+        # tape as the lender sent it and let validation speak, rather than take
+        # a delivery down.
+        try:
+            self.derivations = _derive_fields(
+                frame, spec.source_portfolio_type or "", tape.name)
+        except Exception as exc:            # noqa: BLE001 — reported, not fatal
+            self.derivations = {"error": f"{type(exc).__name__}: {exc}"}
         typed = frame
         typed_fields = report.get("fields") or {}
         parse_failures = {name: spec.get("parse_failures", 0)
@@ -721,6 +749,7 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             metrics={"rows": int(len(typed)),
                      "typed_columns": len(typed_fields),
                      "closed_accounts": self.closed_accounts,
+                     "derivations": self.derivations,
                      "parse_failures": parse_failures},
             # A closed account STATING a balance is a contradiction: the
             # lender says the loan is repaid and also says money is owed on it.
@@ -920,11 +949,18 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             # consolidation knows, it says so here. See :func:`why_absent`.
             blockers = []
             for r in blocking:
-                said = (f"{r.get('field_name')}: {r.get('issue_type')} affects "
+                field = str(r.get("field_name") or "")
+                issue = str(r.get("issue_type") or "")
+                # WHAT IT IS ABOUT AND WHAT IT CHECKS, in the operator's words
+                # rather than the rule registry's. See :func:`rule_in_words`.
+                subject, checks = rule_in_words(issue, field)
+                said = (f"{subject}: {issue} affects "
                         f"{r.get('affected_rows')} record(s) "
                         f"({r.get('error_rate')}%) — materiality BLOCKING")
-                because = why_absent(str(r.get("field_name") or ""),
-                                     self.resolved_by_file, self.consolidation)
+                if checks:
+                    said = f"{said}. The check: {checks}"
+                because = why_absent(field, self.resolved_by_file,
+                                     self.consolidation)
                 blockers.append(f"{said}. {because}" if because else said)
             self._record(StageRecord(
                 stage="validate", outcome=STAGE_HARD_BLOCKED,
@@ -1470,6 +1506,27 @@ def consolidate_pack(frames: Dict[str, Any], resolved_by_file: Dict[str, Dict[st
     return spine, report
 
 
+def _derive_fields(frame: "pd.DataFrame", portfolio_type: str,
+                   filename: str) -> Dict[str, Any]:
+    """The platform's own derivation step, run on the rehearsal's tape.
+
+    ``config`` is empty by design: every key it reads is an OVERRIDE — a
+    declared percentage unit, an acquired-LTV disclosure, a static reporting
+    date — and a rehearsal that invented one would be rehearsing something
+    other than this delivery. With none of them, the derivation reconciles
+    against the tape's own balances and valuations, which is what a client
+    without those overrides gets in production.
+
+    ``closed_account`` is deliberately absent: it has already run above, before
+    balance coherence, which is where a repaid loan's nought has to be written
+    for the coherence step to see it.
+    """
+    from engine.gate_2_transform.canonical_transform import derive_fields
+    return derive_fields(frame, portfolio_type, filename,
+                         dayfirst=True, infer_year=True, derive_month=False,
+                         default_year=None, config={}) or {}
+
+
 def _closed_sentence(outcome: Dict[str, Any]) -> str:
     """What the closed-account rule did, for the stage an operator reads.
 
@@ -1515,6 +1572,48 @@ def _closed_account_zeroing(frame: "pd.DataFrame", asset_class: str
             zero_fields=closed.get("zero_fields") or [])
     except Exception:                       # pragma: no cover — config guard
         return {}
+
+
+def rule_in_words(issue_type: str, field_name: str) -> Tuple[str, str]:
+    """``(what to call it, what it checks)`` for a business-rule finding.
+
+    A BLOCKER HAS TO SAY WHAT IT IS ABOUT. This is what an operator was handed:
+
+        PORTFOLIO: LTV002 affects 567 record(s) (99.82%) — materiality BLOCKING
+
+        "These error messages are not intuitive enough and also do not allow
+         the operator to fix."
+
+    Neither word in front of the colon means anything to them. ``PORTFOLIO`` is
+    not a field — ``normalise_business_violations`` sets it as "a placeholder
+    until expansion", and the expansion step is never run — and ``LTV002`` is
+    an identifier whose meaning lives in a Python list nobody reading a screen
+    can open.
+
+    The rule states both, and has all along: ``description`` says what it
+    checks, ``required_columns`` says which fields it is about. Read here
+    rather than restated, so a rule that changes cannot leave the sentence
+    behind.
+
+    Returns the placeholder unchanged when the rule is not one of these, so a
+    canonical finding (CORE001, CORE002) reads exactly as it did.
+    """
+    try:
+        from engine.gate_3_validation.validate_business_rules import RULES
+    except Exception:                       # pragma: no cover — import guard
+        return field_name, ""
+    rule = next((r for r in RULES
+                 if str(r.get("rule_id") or "") == str(issue_type or "")), None)
+    if rule is None:
+        return field_name, ""
+    fields = [str(c) for c in (rule.get("required_columns") or [])]
+    said = str(rule.get("description") or "").strip()
+    # "DISABLED: ..." is a note to whoever maintains the rule, not to an
+    # operator, and a rule that never runs cannot be the one that stopped them.
+    if said.upper().startswith("DISABLED"):
+        said = ""
+    subject = ", ".join(f.replace("_", " ") for f in fields) if fields else ""
+    return (subject or field_name), said
 
 
 def why_absent(field: str, resolved_by_file: Dict[str, Dict[str, str]],
