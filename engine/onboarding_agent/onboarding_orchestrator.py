@@ -233,7 +233,11 @@ def run_onboarding(
         from . import source_period_eligibility as _spe
         _spe.resolve_and_write(
             [i.to_dict() for i in inventory], run_id, out_dir,
-            input_dir=str(in_dir), enable_conversion=enable_file_conversion_fallback)
+            input_dir=str(in_dir), enable_conversion=enable_file_conversion_fallback,
+            # WHOSE FILES THESE ARE. A filing convention — whether a pack dated
+            # the first of a month closes the month before — belongs to the
+            # client, so the client's own configuration gets a say here.
+            client_id=client_id)
     except Exception as _exc:  # never block onboarding on period eligibility
         import logging as _logging
         _logging.getLogger(__name__).warning("period eligibility skipped: %s", _exc)
