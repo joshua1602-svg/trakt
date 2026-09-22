@@ -99,6 +99,12 @@ LOW_CONFIDENCE = 0.90
 #: not "inferred" whatever its numeric confidence.
 _TRUSTED_TIERS = frozenset({"exact", "normalized", "alias"})
 
+#: What every validation finding sentence carries and nothing else does. It is
+#: how a rerun tells its own observations apart from the artefact notes beside
+#: them, so it can replace the last run's figures rather than stack on top of
+#: them. See :meth:`SyntheticOnboardingAdapters._finding_sentence`.
+MATERIALITY_MARK = "— materiality "
+
 
 class SyntheticExecutionError(OpsError):
     """The synthetic run could not be prepared or completed."""
@@ -190,6 +196,12 @@ class SyntheticOnboardingAdapters(AgentAdapters):
         #: hidden: "not applicable to this product" is an answer, and an
         #: operator who cannot see it cannot question it.
         self.excused_findings: List[Dict[str, Any]] = []
+        #: Findings that passed the run but want a human's eye, each said in
+        #: full rather than counted. A warning-severity check is no longer
+        #: promoted to a wall by volume alone, so this is where a systematic
+        #: disagreement across a whole book now arrives, and it has to be
+        #: legible from the case rather than only from the control log.
+        self.review_findings: List[str] = []
         #: The product the operator has confirmed this book to be, when they
         #: have. Empty until then, and nothing is excused without it.
         self.confirmed_product_profile: str = str(confirmed_product_profile
@@ -790,6 +802,31 @@ class SyntheticOnboardingAdapters(AgentAdapters):
     # ------------------------------------------------------------------ #
     # validate — real canonical + business rules + real materiality
     # ------------------------------------------------------------------ #
+    def _finding_sentence(self, r: Dict[str, Any]) -> str:
+        """One validation finding, said so an operator can act on it.
+
+        WHY, NOT ONLY WHAT. A line naming a field an operator has mapped and
+        confirmed is unanswerable on its own: their screen says 100%, this line
+        says nought records, and what happened to the file in between is
+        recorded on a different stage. Where the consolidation knows, it says
+        so here. See :func:`why_absent` and :func:`rule_in_words`.
+
+        Blocking and review findings are said identically but for the
+        materiality they carry, because they differ in what the operator must
+        do about them, not in what happened.
+        """
+        field = str(r.get("field_name") or "")
+        issue = str(r.get("issue_type") or "")
+        materiality = str(r.get("materiality") or "").upper() or "REVIEW"
+        subject, checks = rule_in_words(issue, field)
+        said = (f"{subject}: {issue} affects {r.get('affected_rows')} "
+                f"record(s) ({r.get('error_rate')}%)"
+                f"{MATERIALITY_MARK}{materiality}")
+        if checks:
+            said = f"{said}. The check: {checks}"
+        because = why_absent(field, self.resolved_by_file, self.consolidation)
+        return f"{said}. {because}" if because else said
+
     def validate(self, spec: PortfolioSpec, transformation_manifest: str,
                  work_dir: Path) -> StepResult:
         from engine.gate_3_validation import aggregate_validation_results as agg
@@ -932,6 +969,8 @@ class SyntheticOnboardingAdapters(AgentAdapters):
                           for r in self.regime_pending]))
         review = [r for r in self.validation_report
                   if str(r.get("materiality")).upper() == "REVIEW"]
+        review_said = [self._finding_sentence(r) for r in review]
+        self.review_findings = list(review_said)
         if excused:
             self._record(StageRecord(
                 stage="validate", outcome=STAGE_DETERMINISTIC_COMPLETED,
@@ -967,22 +1006,9 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             # mapped and confirmed is unanswerable on its own: their screen
             # says 100%, this line says nought records, and what happened to
             # the file in between is recorded on a different stage. Where the
-            # consolidation knows, it says so here. See :func:`why_absent`.
-            blockers = []
-            for r in blocking:
-                field = str(r.get("field_name") or "")
-                issue = str(r.get("issue_type") or "")
-                # WHAT IT IS ABOUT AND WHAT IT CHECKS, in the operator's words
-                # rather than the rule registry's. See :func:`rule_in_words`.
-                subject, checks = rule_in_words(issue, field)
-                said = (f"{subject}: {issue} affects "
-                        f"{r.get('affected_rows')} record(s) "
-                        f"({r.get('error_rate')}%) — materiality BLOCKING")
-                if checks:
-                    said = f"{said}. The check: {checks}"
-                because = why_absent(field, self.resolved_by_file,
-                                     self.consolidation)
-                blockers.append(f"{said}. {because}" if because else said)
+            # consolidation knows, it says so here — in the same words a
+            # review finding uses. See :meth:`_finding_sentence`.
+            blockers = [self._finding_sentence(r) for r in blocking]
             self._record(StageRecord(
                 stage="validate", outcome=STAGE_HARD_BLOCKED,
                 component="engine.gate_3_validation.validate_business_rules + "
@@ -1005,7 +1031,16 @@ class SyntheticOnboardingAdapters(AgentAdapters):
             summary=("All checks passed." if not review else
                      f"{len(review)} finding(s) need review but do not block."),
             metrics={"blocking": 0, "review": len(review),
-                     "rows": int(len(frame))}))
+                     "rows": int(len(frame))},
+            # SAY WHICH ONES. A review finding used to be a number on a stage
+            # that had passed, which is survivable only while the number is
+            # small. Now that a warning-severity check can no longer be
+            # promoted to a wall by volume alone, this is where a systematic
+            # disagreement across a whole book arrives — and a count of one is
+            # indistinguishable from every loan in the delivery disagreeing
+            # with its own stated figure. Each one is named, in the same words
+            # the refusal would have used.
+            blockers=review_said))
         return StepResult(ok=True, output_path=str(typed_csv),
                           manifest_path=str(val_manifest),
                           readiness={"ready_for_validation_complete": True},
