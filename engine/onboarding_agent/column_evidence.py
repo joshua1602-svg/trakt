@@ -257,6 +257,13 @@ def build_column_evidence(
             "sample_values_redacted": "; ".join(samples),
             "sample_values_distinct_redacted": "; ".join(distinct_samples),
             "data_type_guess": tguess,
+            # HOW MANY ROWS THE SHEET HOLDS. A cover sheet and the loan book it
+            # summarises carry columns of the SAME NAME, so a target field's
+            # candidates tie on confidence and the winner falls out of a
+            # tie-break on file and column name. `current_outstanding_balance`
+            # was selected from a seven-row `Summary` in front of a 568-row loan
+            # book. Coverage needs to be able to tell them apart.
+            "source_row_count": int(n),
             "null_count": int(n - len(non_null)),
             "null_rate": round((n - len(non_null)) / n, 4) if n else 0.0,
             "distinct_count": distinct,
@@ -351,7 +358,8 @@ def _value_profile_hint(tguess: str, like: Dict[str, float]) -> str:
 _EVIDENCE_COLUMNS = [
     "source_file", "source_sheet", "source_column", "normalized_column",
     "domain_guess", "file_domain_guess", "sample_values_redacted",
-    "sample_values_distinct_redacted", "data_type_guess", "null_count", "null_rate",
+    "sample_values_distinct_redacted", "data_type_guess", "source_row_count",
+    "null_count", "null_rate",
     "distinct_count", "uniqueness_ratio", "min_value", "max_value",
     "mean_value_if_numeric", "median_value_if_numeric", "date_parse_rate",
     "min_date", "max_date", "currency_like_score", "percentage_like_score",

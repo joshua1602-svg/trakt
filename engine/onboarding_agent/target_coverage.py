@@ -2244,8 +2244,32 @@ def _match_candidates(
             "basis": "canonical_field_match" if by_field else "name_synonym_match",
             "null_rate": ev.get("null_rate", 0),
             "data_type_guess": ev.get("data_type_guess", ""),
+            "source_row_count": int(ev.get("source_row_count") or 0),
         })
-    cands.sort(key=lambda c: (-c["confidence"], c["source_file"], c["source_column"]))
+    # A SUMMARY OF A BOOK IS NOT THE BOOK. A lender's loan extract opens on a
+    # cover sheet whose columns carry the SAME NAMES as the loan book behind it,
+    # so both reach this list at the same confidence and the winner used to fall
+    # out of a tie-break on file and column name — alphabetical, arbitrary, and
+    # in the live pack it chose the seven-row `Summary` as the authoritative
+    # source for `current_outstanding_balance` over 568 loans. The operator was
+    # then asked to confirm that choice for every future delivery.
+    #
+    # Within ONE FILE, a sheet less than half the size of that file's largest is
+    # a summary of it, and ranks below it. It stays in the list as a visible
+    # alternative rather than being dropped, because only the operator can say
+    # that a lender really does report a field on a small sheet. Sheets of
+    # comparable size are left alone: a workbook whose sheets are each a real
+    # dataset is not this case, and neither is a single-sheet file.
+    biggest: Dict[str, int] = {}
+    for c in cands:
+        f = c["source_file"]
+        biggest[f] = max(biggest.get(f, 0), c["source_row_count"])
+    for c in cands:
+        rows = c["source_row_count"]
+        c["summary_of_a_larger_sheet"] = bool(
+            rows and biggest.get(c["source_file"], 0) >= rows * 2)
+    cands.sort(key=lambda c: (c["summary_of_a_larger_sheet"], -c["confidence"],
+                              c["source_file"], c["source_column"]))
     return cands
 
 
