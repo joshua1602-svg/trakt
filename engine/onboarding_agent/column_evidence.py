@@ -252,8 +252,8 @@ def build_column_evidence(
             "null_rate": round((n - len(non_null)) / n, 4) if n else 0.0,
             "distinct_count": distinct,
             "uniqueness_ratio": round(distinct / len(non_null), 4) if len(non_null) else 0.0,
-            "min_value": str(non_null.min()) if len(non_null) else "",
-            "max_value": str(non_null.max()) if len(non_null) else "",
+            "min_value": _extreme(non_null, largest=False),
+            "max_value": _extreme(non_null, largest=True),
             "mean_value_if_numeric": round(float(nums.mean()), 4) if len(nums) else "",
             "median_value_if_numeric": round(float(nums.median()), 4) if len(nums) else "",
             "date_parse_rate": round(len(dates) / len(non_null), 4) if len(non_null) else 0.0,
@@ -272,6 +272,50 @@ def build_column_evidence(
             "known_client_memory_matches": memory_match,
         })
     return rows
+
+
+def _extreme(values: "pd.Series", *, largest: bool) -> str:
+    """The smallest or largest value in a column, as text for the profile.
+
+    A LENDER'S COLUMN IS NOT ALWAYS ONE TYPE. `Current Balance` carries
+    amounts and the word "N/A" where an amount is unknown; a valuation date
+    carries dates and "n/k". `pandas` holds that as an object column and
+    `Series.min()` hands it to `numpy`, which orders the values pairwise and
+    raises
+
+        TypeError: '<=' not supported between instances of 'str' and 'float'
+
+    on the first comparison between the two kinds. This is profiling — a
+    descriptive row in the evidence artefact — and it stopped the whole mapping
+    review, which writes 28a, 28c and 34; the run then failed several steps
+    later with three required artefacts missing.
+
+    So: the ordinary case is unchanged and still uses the column's own
+    ordering. A mixed column is ordered WITHIN a kind rather than across kinds
+    — the numbers if it carries any, then the dates, else the text, since a
+    column of amounts with some words in it is an amount column and a column
+    of dates with some words in it is a date column. Ordered as text instead,
+    a valuation column would report "n/k" as its latest date. Nothing is
+    invented and nothing is dropped: the placeholder words remain visible in
+    the sample values, the null counts and the type guess beside this.
+    """
+    if len(values) == 0:
+        return ""
+    try:
+        return str(values.max() if largest else values.min())
+    except TypeError:
+        pass
+    numeric = pd.to_numeric(values, errors="coerce").dropna()
+    if len(numeric):
+        return str(numeric.max() if largest else numeric.min())
+    try:
+        dated = pd.to_datetime(values, errors="coerce", format="mixed").dropna()
+    except Exception:                      # noqa: BLE001 — profiling never raises
+        dated = values.iloc[0:0]
+    if len(dated):
+        return str(dated.max() if largest else dated.min())
+    text = values.astype(str)
+    return str(text.max() if largest else text.min())
 
 
 def _value_profile_hint(tguess: str, like: Dict[str, float]) -> str:
