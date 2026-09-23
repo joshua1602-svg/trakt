@@ -410,10 +410,18 @@ class LLMFieldMapper:
         }
 
         try:
+            # ASKED, NOT ASSUMED — see trakt_core.llm_sampling. `self.temperature`
+            # stays configurable and is still sent where the runtime takes it;
+            # on an SDK that has removed the parameter it is dropped rather
+            # than raising `TypeError` before the request is made.
+            from trakt_core import llm_sampling
+            sampling = llm_sampling.sampling_for(client, self.model)
+            if sampling:
+                sampling["temperature"] = self.temperature
             message = client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
-                temperature=self.temperature,
+                **sampling,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_content}],
             )
