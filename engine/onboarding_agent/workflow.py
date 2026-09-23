@@ -726,6 +726,7 @@ def run_operator_workflow(
     mapping_callable = advisor_callable if enable_llm_mapping_review else None
 
     run_error = ""
+    run_error_report: Dict[str, Any] = {}
     input_files = 0
     # Use the (low-cost) LLM also for onboarding-context resolution so the asset
     # class / product profile can be DETECTED when deterministic file/column tokens
@@ -769,7 +770,12 @@ def run_operator_workflow(
         )
         input_files = len(project.file_inventory)
     except Exception as exc:  # produce a FAILED summary instead of crashing
+        # RECORD WHERE, NOT ONLY WHAT. This used to keep the message and drop
+        # the traceback, so a summary said `TypeError: ... 'temperature'` and
+        # left the line that sent it to be found by reading the package.
+        from trakt_core import fault_report as _fault
         run_error = f"{type(exc).__name__}: {exc}"
+        run_error_report = _fault.fault_report(exc)
 
     summary = build_workflow_summary(
         pdir, oroot, client_id=client_id, client_name=client_name, run_id=run_id,
@@ -778,6 +784,12 @@ def run_operator_workflow(
         input_source_files_count=input_files, run_error=run_error,
         regime_config_path=(regime_config if is_annex2 else ""),
         asset_config_path=(asset_config if is_annex2 else ""))
+
+    # The technical record of a failure sits beside the summary, never in the
+    # operator's sentence: `language.is_operator_safe` forbids this vocabulary
+    # in anything the UI renders, and the UI does not render the summary.
+    if run_error_report:
+        summary.update(run_error_report)
 
     (pdir / "40_operator_workflow_summary.json").write_text(
         json.dumps(summary, indent=2, default=str), encoding="utf-8")
