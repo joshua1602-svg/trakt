@@ -515,7 +515,15 @@ def run_onboarding(
                 "llm_estimated_cost_gbp": ru.get("estimated_cost_gbp", 0.0),
             }
         except Exception as exc:  # never break the onboarding run on review failure
-            project.mapping_review_summary = {"error": str(exc)}
+            # BUT SAY WHERE. This stage writes 28a, 28c and 34 — three of the
+            # four artefacts `build_workflow_summary` requires — so when it
+            # fails the run fails, several steps later, reporting FAILED with
+            # an EMPTY `run_error` and "the first step did not finish cleanly".
+            # `str(exc)` alone was `'<=' not supported between instances of
+            # 'str' and 'float'`: a real fault, no file, no line.
+            from trakt_core import fault_report as _fault
+            project.mapping_review_summary = {
+                "error": str(exc), **_fault.fault_report(exc)}
         for name in (
             "27a_deterministic_context_guess.json", "27b_llm_context_resolution.json",
             "27_onboarding_context.json", "27_onboarding_context_summary.md",
