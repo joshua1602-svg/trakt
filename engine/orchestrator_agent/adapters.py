@@ -19,6 +19,7 @@ No agent internals, canonical/MI calculations or Regime logic are modified here.
 from __future__ import annotations
 
 import glob
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -164,6 +165,33 @@ class AgentAdapters:
             message=f"projected → {projected[0]}")
 
 
+def run_id_for(reporting_period: str) -> str:
+    """A run id that carries the period the delivery is FOR.
+
+    Production called onboarding with the literal string ``"run"``, and a run
+    id is not decoration: two things read the period out of it.
+
+      * ``target_coverage`` fills ``reporting_date`` and ``data_cut_off_date``
+        by looking for a period token in the run id. ``"run"`` has none, so the
+        field was reported ``missing_required`` and BLOCKED the delivery —
+        while the period sat in the very same call, as ``reporting_date``.
+      * ``run_context.run_period`` reads it to gate funded sources on the
+        period. An empty run period makes that gate permissive, so a September
+        file would have been read into an August delivery without complaint.
+
+    Both were visible in the artefacts as ``run_reporting_period: ''``.
+
+    A period that cannot be read yields ``"run"`` again, so a delivery with no
+    period behaves exactly as it does today rather than acquiring a wrong one.
+    """
+    token = re.sub(r"[^0-9A-Za-z]+", "_", str(reporting_period or "").strip()).strip("_")
+    if not token:
+        return "run"
+    from engine.onboarding_agent import run_context as _rc
+    candidate = f"mi_{token}"
+    return candidate if _rc.dates_from_period_token(candidate) else "run"
+
+
 class RealAgentAdapters(AgentAdapters):
     """Wires the real Onboarding / Transformation / Validation agents."""
 
@@ -262,7 +290,7 @@ class RealAgentAdapters(AgentAdapters):
         _wf.run_operator_workflow(
             input_dir=spec.input,
             client_name=self.client_name or spec.source_portfolio_id,
-            client_id=spec.source_portfolio_id, run_id="run",
+            client_id=spec.source_portfolio_id, run_id=run_id_for(self.reporting_period or ""),
             project_dir=str(project_dir), mode=self.onboarding_mode,
             registry=self.registry or "config/system/fields_registry.yaml",
             aliases_dir=self.aliases_dir,
@@ -285,7 +313,7 @@ class RealAgentAdapters(AgentAdapters):
             # MI path: build the central lender tape (the MI canonical, output_path).
             run_paths = storage_paths.resolve_run_paths(
                 project_dir=str(project_dir), input_dir=spec.input, output_root=None,
-                client_id=spec.source_portfolio_id, run_id="run",
+                client_id=spec.source_portfolio_id, run_id=run_id_for(self.reporting_period or ""),
                 storage_backend="local", input_uri="", output_uri="")
             res = central_tape_builder.build_central_tapes(
                 str(project_dir), run_paths,
@@ -367,7 +395,7 @@ class RealAgentAdapters(AgentAdapters):
                 str(project_dir), Path(project_dir) / "output",
                 client_id=spec.source_portfolio_id,
                 client_name=self.client_name or spec.source_portfolio_id,
-                run_id="run", mode="mi_only",
+                run_id=run_id_for(self.reporting_period or ""), mode="mi_only",
                 registry=self.registry or "config/system/fields_registry.yaml",
                 aliases_dir=self.aliases_dir,
                 reporting_date=(self.reporting_period or ""),
