@@ -125,8 +125,58 @@ class MappingCandidate:
     alternative_candidates: List[Dict[str, Any]] = field(default_factory=list)
     ambiguity_rule_applied: str = ""
 
+    def __post_init__(self) -> None:
+        """``confidence: float`` is a promise; a dataclass does not keep it.
+
+        These are rebuilt straight from artefacts::
+
+            MappingCandidate(**{k: v for k, v in m.items()
+                                if k in MappingCandidate.__dataclass_fields__})
+
+        so whatever the JSON holds arrives unconverted, and the codebase writes
+        confidence BOTH ways: a number here, and elsewhere a word (``"high"``,
+        ``"low"``, ``"no_match"`` in the backstop validator) or a deliberate
+        blank for "not applicable" — ``mapping_trace`` records
+        ``semantic_alignment_confidence: ""`` on every column semantic
+        alignment did not decide.
+
+        One of those reaching this field is `'<=' not supported between
+        instances of 'str' and 'float'`, which is what stopped the mapping
+        review that writes 28a, 28c and 34 — the run then reported FAILED with
+        three required artefacts missing and no error of its own.
+
+        A word is read as the band it names, because that is what it means. A
+        blank is 0.0: not decided is not confident.
+        """
+        self.confidence = _as_confidence(self.confidence)
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+#: What the words mean where confidence is written as a band rather than a
+#: number. The midpoints of the bands `mapping_backstop_validator` assigns.
+_CONFIDENCE_WORDS = {
+    "high": 0.95, "medium": 0.85, "low": 0.5,
+    "none": 0.0, "no_match": 0.0, "unmapped": 0.0,
+}
+
+
+def _as_confidence(value: Any) -> float:
+    """Any way this codebase writes a confidence, read as a number."""
+    if isinstance(value, bool):          # bool is an int; not a confidence
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value or "").strip().lower()
+    if not text:
+        return 0.0
+    if text in _CONFIDENCE_WORDS:
+        return _CONFIDENCE_WORDS[text]
+    try:
+        return float(text.rstrip("%")) / (100.0 if text.endswith("%") else 1.0)
+    except ValueError:
+        return 0.0
 
 
 @dataclass
