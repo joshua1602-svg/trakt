@@ -35,6 +35,10 @@ UNSUPPORTED = "unsupported_file_type"
 DEPENDENCY_MISSING = "dependency_missing"
 DOCUMENT_ONLY = "document_only"
 EMPTY = "empty"
+#: A sheet that parsed cleanly and is deliberately NOT used — see
+#: `is_summary_sheet`. Recorded rather than dropped silently, so the operator
+#: can see the workbook held it and why nothing was read from it.
+SET_ASIDE = "set_aside"
 
 # Container signatures.
 _OLE_MAGIC = bytes([0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1])
@@ -226,6 +230,41 @@ def _deduplicate_labels(labels: List[str]) -> List[str]:
         used.add(candidate)
         out.append(candidate)
     return out
+
+
+def is_summary_sheet(rows: int, largest_in_workbook: int) -> bool:
+    """Is this sheet a summary of a bigger sheet in the same workbook?
+
+    A LENDER'S EXTRACT OPENS ON A COVER SHEET. `LoanExtract One` carries a
+    seven-row `Summary` in front of a 568-row loan book, and the cover sheet's
+    columns are named exactly like the book's — `Current Outstanding Balance`,
+    `Original Loan Amount`. Every layer that met both of them had to decide
+    between two identical-looking candidates, and each decided separately:
+
+      * the inventory recorded whichever sheet came first;
+      * target coverage tied on confidence and fell through to a tie-break on
+        file and column name, choosing the SUMMARY as the authoritative source
+        for `current_outstanding_balance` — then asked the operator to confirm
+        that for every future delivery of the portfolio;
+      * universe selection ranks overlap ahead of row count, so a cover sheet
+        whose few keys all appear elsewhere could outrank the book itself.
+
+    Patching each of those in turn leaves the next one to find. The cover sheet
+    is not a source, so it does not enter the pipeline: it is set aside HERE,
+    once, before inventory, profiling, evidence, period eligibility, coverage
+    and the tape ever see it.
+
+    SET ASIDE, NOT HIDDEN. The sheet is recorded in the file's coverage with
+    ``SET_ASIDE`` and the row counts that decided it, so an operator can see
+    the workbook held it and why nothing was read from it.
+
+    The rule is relative and needs no lender-specific configuration: within one
+    workbook, a sheet less than half the size of its largest sibling is a
+    summary of it. A single-sheet workbook is never affected. Sheets of
+    comparable size are all kept, so a workbook whose sheets are each a real
+    dataset is unchanged.
+    """
+    return bool(largest_in_workbook and rows * 2 <= largest_in_workbook)
 
 
 def redetect_header(df):
@@ -430,6 +469,10 @@ def load_source_tables(
                 cov.detected_excel_format = _excel_format(container, success=True, engine=engine,
                                                           suffix=suffix)
                 multi = len(frames) > 1
+                # Read every sheet first, THEN decide which of them the workbook
+                # is actually about: a sheet's size only means something next to
+                # its siblings'. See `is_summary_sheet`.
+                prepared: List[Tuple[str, "pd.DataFrame"]] = []
                 for sh, df in frames:
                     if df.shape[1] == 0 or df.dropna(how="all").empty:
                         cov.sheets_skipped.append(f"{sh} (empty)")
@@ -437,6 +480,17 @@ def load_source_tables(
                                                        df.shape[1], engine, ""))
                         continue
                     df, _hr, _hfail = redetect_header(df)
+                    prepared.append((sh, df))
+                largest = max((d.shape[0] for _s, d in prepared), default=0)
+                for sh, df in prepared:
+                    if multi and is_summary_sheet(df.shape[0], largest):
+                        cov.sheets_skipped.append(f"{sh} (summary of a larger sheet)")
+                        sheet_cov.append(SheetCoverage(
+                            name, suffix, container, sh, SET_ASIDE, df.shape[0],
+                            df.shape[1], engine,
+                            f"{df.shape[0]} row(s) against the workbook's "
+                            f"{largest}: a summary of the data sheet, not the data"))
+                        continue
                     tables.append(LoadedTable(name, path, sh if multi else "", df))
                     cov.sheets_parsed.append(sh)
                     sheet_cov.append(SheetCoverage(name, suffix, container, sh, PARSED,
