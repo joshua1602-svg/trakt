@@ -317,11 +317,33 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
             else:
                 title = (f"Decide how to treat '{friendly}'" if target
                          else "A data decision needs your confirmation")
-                question = (f"The field '{friendly}' could not be filled "
-                            "automatically. How should Trakt treat it?"
-                            if target else
-                            "Trakt needs your decision on how to treat part "
-                            "of this data.")
+                # SAY WHICH COLUMN OF WHICH FILE, AND ASK THE REAL QUESTION.
+                #
+                # The engine already writes a question that fits the decision:
+                # for overlapping sources it asks "Which source column is the
+                # authoritative source for X?", which is exactly right. It was
+                # discarded here and replaced with "could not be filled
+                # automatically" for every decision that is not a missing
+                # field — and for an overlap that sentence is simply untrue.
+                # `erm_product_type` WAS filled, from `Product Category`, and
+                # the operator was told it could not be.
+                #
+                # Worse, nothing named the file. An operator looking at eleven
+                # of these cannot say which of three workbooks a field came
+                # from, so there is no way to answer them — the one thing the
+                # question exists to obtain. The decision carries the chosen
+                # file and column; both are the lender's own vocabulary, which
+                # `language` admits by design.
+                question = str(d.get("operator_question") or "").strip()
+                if not question:
+                    question = (f"The field '{friendly}' could not be filled "
+                                "automatically. How should Trakt treat it?"
+                                if target else
+                                "Trakt needs your decision on how to treat part "
+                                "of this data.")
+                chosen = _chosen_source_sentence(d)
+                if chosen:
+                    question = f"{chosen} {question}"
             evidence: List[Dict[str, Any]] = []
             if d.get("issue") or d.get("evidence_summary"):
                 evidence.append({"label": "What Trakt found", "kind": "text",
@@ -570,6 +592,32 @@ def _regime_code_names() -> Dict[str, str]:
         pass
     _REGIME_CODE_NAMES = out
     return out
+
+
+def _chosen_source_sentence(decision: Dict[str, Any]) -> str:
+    """"Trakt is reading this from 'Column' in 'File'." — or nothing.
+
+    A decision about which of several sources should fill a field is
+    unanswerable without knowing which one Trakt picked. ERE's pack is three
+    workbooks that overlap: an interest rate appears in all three, a balance in
+    two. Eleven questions arrived naming only the target field, and the
+    operator said the obvious thing — "I don't know which tape these fields
+    emanate from".
+
+    The file and the column are the LENDER'S OWN WORDS, which
+    ``language.is_operator_safe`` admits through its ``allow`` mechanism for
+    exactly this reason: their data is their vocabulary rather than ours.
+
+    Returns "" when the decision names no source — a genuinely missing field
+    has none, and inventing one would be worse than the silence.
+    """
+    column = str(decision.get("source_column") or "").strip()
+    source_file = str(decision.get("source_file") or "").strip()
+    if not column:
+        return ""
+    if not source_file:
+        return f"Trakt is reading this from '{column}'."
+    return f"Trakt is reading this from '{column}' in '{source_file}'."
 
 
 def _friendly(field: str) -> str:
