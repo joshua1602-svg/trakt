@@ -346,9 +346,14 @@ class LLMEnumMapper:
             last_exc: Optional[Exception] = None
             for attempt in range(_LLM_MAX_RETRIES):
                 try:
+                    # ASKED, NOT ASSUMED — see trakt_core.llm_sampling.
+                    from trakt_core import llm_sampling
+                    sampling = llm_sampling.sampling_for(client, self.model)
+                    if sampling:
+                        sampling["temperature"] = self.temperature
                     response = client.messages.create(
                         model=self.model,
-                        temperature=self.temperature,
+                        **sampling,
                         max_tokens=self.max_tokens,
                         system=self._system_prompt(),
                         messages=[{"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)}],

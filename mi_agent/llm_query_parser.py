@@ -6175,58 +6175,26 @@ _CACHE_SUPPORTED: set = set()
 #: hour spans a working session.
 _CACHE_TTL = "1h"
 
-#: Phrases an SDK or the API uses when the sampling kwarg is the problem. Not a
-#: model list: a list of ways one specific rejection is worded.
-_SAMPLING_REJECTION_MARKS = ("temperature", "top_p", "top_k")
+from trakt_core import llm_sampling as _llm_sampling
+
+#: Phrases an SDK or the API uses when the sampling kwarg is the problem.
+_SAMPLING_REJECTION_MARKS = _llm_sampling.SAMPLING_REJECTION_MARKS
 
 
-def _sdk_sampling_parameters(client) -> frozenset:
-    """Which sampling parameters THIS SDK's ``messages.create`` accepts.
-
-    Asked of the signature rather than assumed from a version string, because
-    a version string is one more thing to keep in step with a release. An SDK
-    that accepts arbitrary ``**kwargs`` reports them as acceptable and the
-    model's own rejection (below) is then the authority, which is the correct
-    order: the SDK cannot know what the API allows.
-    """
-    import inspect
-
-    try:
-        params = inspect.signature(client.messages.create).parameters
-    except (TypeError, ValueError):  # noqa: BLE001 - an unreadable signature
-        return frozenset(_SAMPLING_REJECTION_MARKS)
-    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
-        return frozenset(_SAMPLING_REJECTION_MARKS)
-    return frozenset(n for n in _SAMPLING_REJECTION_MARKS if n in params)
-
-
-def _is_sampling_rejection(exc: BaseException) -> bool:
-    """Is this failure the sampling parameter being refused?
-
-    A `TypeError` from the SDK and a 400 from the API are the same fact told
-    two ways, and both must downgrade rather than escape. The old code caught
-    neither on the uncached call.
-    """
-    text = str(exc).lower()
-    if not any(mark in text for mark in _SAMPLING_REJECTION_MARKS):
-        return False
-    return isinstance(exc, TypeError) or "400" in text or "unexpected keyword" \
-        in text or "not supported" in text or "deprecated" in text \
-        or "unsupported" in text or "invalid_request" in text
+# THE MECHANISM NOW LIVES IN ONE PLACE. It was worked out here and three other
+# callers never heard it — the onboarding mapping reviewer, the Gate 1 mapper
+# and the enum agent each went on sending `temperature=` and each crashed on
+# the installed SDK. Moved to `trakt_core.llm_sampling` so a caller asks rather
+# than re-derives; these keep their names because this module's own memory of
+# what a model refused (`_SAMPLING_REJECTED`) is read at call time.
+_sdk_sampling_parameters = _llm_sampling.sdk_sampling_parameters
+_is_sampling_rejection = _llm_sampling.is_sampling_rejection
 
 
 def _sampling_for(client, model: str) -> Dict[str, Any]:
-    """The sampling kwargs to send for ``model`` on this client, possibly none.
-
-    Determinism where the runtime allows it. Where it does not, the task is a
-    constrained NL->JSON parse validated downstream, so the model's own default
-    sampling is used rather than the call being failed.
-    """
-    if (model or "") in _SAMPLING_REJECTED:
-        return {}
-    if "temperature" not in _sdk_sampling_parameters(client):
-        return {}
-    return {"temperature": 0.0}
+    """The sampling kwargs to send for ``model`` on this client, possibly none."""
+    return _llm_sampling.sampling_for(client, model,
+                                      rejected=_SAMPLING_REJECTED)
 
 
 def _call_llm(prompt: Dict[str, str], model: str, use_cache: bool = True):
