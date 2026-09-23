@@ -27,7 +27,7 @@ import pandas as pd
 
 from engine.gate_1_alignment.semantic_alignment import normalise_name
 from . import domain_coverage as dc
-from .file_profiler import redact_value
+from .file_profiler import blanks_as_null, redact_value
 from .pipeline_field_contract import RAW_TO_PIPELINE_FIELD, pipeline_contract_field_names
 
 _UK_POSTCODE = re.compile(r"^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$", re.I)
@@ -186,6 +186,15 @@ def build_column_evidence(
     """Build a compact evidence pack for every column in ``df``."""
     registry_fields = registry_fields or {}
     cols = [str(c) for c in df.columns]
+
+    # AN EMPTY CELL IS EMPTY HOWEVER EXCEL SPELLED IT, and this has to be true
+    # BEFORE anything is scored, not only where the counts are written out.
+    # `Amount Of Repayment` arrived as 19 amounts and 549 empty strings; read
+    # raw, that is 3% numeric and twenty distinct values in 568 rows, which
+    # scores as a stage/status enum. So a decimal column 96.6% empty was
+    # offered to mapping as a fully-populated category. See
+    # `file_profiler.blanks_as_null`.
+    df = df.apply(blanks_as_null) if len(df.columns) else df
 
     # Pre-classify columns for cross-column relationships.
     like_by_col = {c: _like_scores(df[c]) for c in cols}
