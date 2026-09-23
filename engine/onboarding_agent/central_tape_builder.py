@@ -438,16 +438,37 @@ def _collect_field_sources(
             )
         )
 
+    # WHERE "ANY FILE" MEANS. An approval records a column and a canonical
+    # field. On a multi-file pack the Operations Control Centre deliberately
+    # leaves `source_file` blank rather than guess which file the operator
+    # meant — and `add` discarded it, because a source needs a file. On the
+    # live three-file delivery that silently dropped EVERY approved mapping
+    # before the tape saw one, so the coverage matrix kept re-deriving
+    # mappings the operator had already confirmed.
+    #
+    # Neither half was wrong on its own; the seam between them lost the
+    # operator's intent. The pack itself settles it: an override with no file
+    # applies to every file that actually carries that column. One file is no
+    # guess at all, and several is the overlap question coverage already asks.
+    files_by_column: Dict[str, List[str]] = {}
+    for m in mapping_candidates or []:
+        col, fname = _norm(m.get("source_column", "")), m.get("source_file", "")
+        if col and fname and fname not in files_by_column.setdefault(col, []):
+            files_by_column[col].append(fname)
+
+    def add_override(o: Dict[str, Any], method: str, conf: float) -> None:
+        column = o.get("source_column", "")
+        named = o.get("source_file", "")
+        for file_name in ([named] if named else files_by_column.get(_norm(column), [])):
+            add(file_name, column, o.get("canonical_field", ""),
+                o.get("method", method), o.get("confidence", conf))
+
     # 1. Approved user overrides (highest priority — listed first).
     for o in (overrides or {}).get("user_overrides", []) or []:
-        add(o.get("source_file", ""), o.get("source_column", ""),
-            o.get("canonical_field", ""), o.get("method", "approved_override"),
-            o.get("confidence", 1.0))
+        add_override(o, "approved_override", 1.0)
     # 2. Approved high-confidence mappings.
     for o in (overrides or {}).get("approved_high_confidence_mappings", []) or []:
-        add(o.get("source_file", ""), o.get("source_column", ""),
-            o.get("canonical_field", ""), o.get("method", "approved"),
-            o.get("confidence", 0.92))
+        add_override(o, "approved", 0.92)
     # 3. Full deterministic mapping candidates (context hints etc.).
     for m in mapping_candidates or []:
         add(m.get("source_file", ""), m.get("source_column", ""),
