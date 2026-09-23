@@ -50,6 +50,7 @@ from typing import Any, Dict, List, Optional
 
 from ..contracts import KIND_FIELD_MAPPING, now_iso
 from ..rules import RuleRecord
+from .staging import NOT_USED_VALUE as NOT_USED
 
 #: The decision types this module knows how to read. A decision type it has
 #: never seen is left alone rather than guessed at — an unpromoted mapping
@@ -77,6 +78,15 @@ PROMOTED_SCOPE = "portfolio"
 #: Recorded on every promoted rule, so the governed record can always say a
 #: rule came from a rehearsal rather than from a live delivery.
 SUGGESTED_BY = "occ_agent_rehearsal"
+
+#: Recorded as the author of a withdrawal, so the rule's history says a
+#: settled operator decision took it out of force rather than a person.
+WITHDRAWN_BY = "occ_agent_withdrawal"
+
+
+def _key(source_column: str) -> str:
+    """One column, however the pack and the decision each spelled it."""
+    return " ".join(str(source_column or "").split()).strip().lower()
 
 
 def _read(decision: Dict[str, Any], key: str) -> str:
@@ -128,9 +138,41 @@ def mapping_of(decision: Dict[str, Any]) -> Optional[Dict[str, str]]:
         else:
             canonical = answer
 
-    if not source or not canonical:
+    if not source or not canonical or canonical == NOT_USED:
         return None
     return {"source_column": source, "canonical_field": canonical}
+
+
+def withdrawal_of(decision: Dict[str, Any]) -> str:
+    """The source column a settled decision says feeds NOTHING, if it says so.
+
+    ``mapping_of`` returns ``None`` for four different situations — not a
+    mapping decision, never resolved, rejected, or came out incomplete — and
+    the caller treated all four the same way: write no rule. For three of them
+    that is right. For the fourth it is the bug.
+
+    An operator setting a column aside is a POSITIVE STATEMENT that it feeds
+    nothing, and it usually lands on a column that was mapped before. Writing
+    no rule leaves the OLD rule current, because `RuleStore.approve` is what
+    supersedes and nothing called it. So the Operations Control Centre showed
+    the column with no target while the governed store still mapped it, the
+    engine read the store, and the operator's removal did nothing at all —
+    `Latest Property Value` was still feeding `current_valuation_amount` on
+    the live delivery, at v1, days after it was taken away.
+
+    Returns "" unless the decision is settled AND asserts no mapping, so a
+    question nobody answered never withdraws anything.
+    """
+    if _read(decision, "decision_type") not in PROMOTABLE_TYPES:
+        return ""
+    if str(decision.get("status") or "") != "approved":
+        return ""
+    if str(decision.get("resolution") or "") not in PROMOTABLE_RESOLUTIONS:
+        return ""
+    source = _read(decision, "source_column")
+    if not source:
+        return ""
+    return "" if mapping_of(decision) else source
 
 
 def rules_from(decisions: List[Dict[str, Any]], *, client_id: str,
@@ -218,4 +260,30 @@ def promote(rules_store: Any, decisions: List[Dict[str, Any]], *,
                       "version": str(stored.version),
                       "source_column": str(rule.payload.get("source_column")),
                       "canonical_field": str(rule.payload.get("canonical_field"))})
+
+    # AND WHAT THE OPERATOR TOOK AWAY. Settling a mapping wrote a rule; setting
+    # the same column aside wrote nothing, so the rule it had already written
+    # stayed in force and the removal was cosmetic. Both directions now reach
+    # the store, by the same governed path: `retire` marks the rule withdrawn
+    # and keeps its history, exactly as `approve` supersedes rather than
+    # overwrites. A column that was never mapped has nothing to withdraw.
+    withdrawn = {w for w in (withdrawal_of(d) for d in decisions or []) if w}
+    if not withdrawn:
+        return added
+    keyed = {_key(w) for w in withdrawn}
+    for rule in rules_store.list_current(client_id):
+        if rule.kind != KIND_FIELD_MAPPING:
+            continue
+        column = str((rule.payload or {}).get("source_column") or "")
+        if _key(column) not in keyed:
+            continue
+        retired = rules_store.retire(
+            client_id, rule.rule_id, by=WITHDRAWN_BY,
+            reason=f"'{column}' was set aside by an operator; it feeds nothing.")
+        if retired is not None:
+            added.append({"rule_id": rule.rule_id,
+                          "version": str(retired.version),
+                          "source_column": column,
+                          "canonical_field": "",
+                          "withdrawn": "true"})
     return added
