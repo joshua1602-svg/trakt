@@ -346,7 +346,7 @@ class OpsEngine:
     def _execute_safely(self, client_id: str, workflow_id: str) -> None:
         try:
             self._execute(client_id, workflow_id)
-        except Exception:
+        except Exception as exc:
             logger.exception("workflow execution failed: %s", workflow_id)
             run = self.store.load_workflow(client_id, workflow_id)
             if run is not None:
@@ -354,7 +354,12 @@ class OpsEngine:
                 run.blockers = [language.GENERIC_PROBLEM]
                 self.store.save_workflow(run)
                 self.store.clear_lease(run)
-                self.store.append_event(run, "execution_error")
+                # The operator gets GENERIC_PROBLEM, which is the contract. The
+                # event carries what an engineer needs, so "something did not go
+                # as expected" is not the whole of what was kept.
+                from trakt_core import fault_report as _fault
+                self.store.append_event(run, "execution_error",
+                                        detail=_fault.fault_report(exc))
 
     def _staging_dir(self, run: WorkflowRun) -> Path:
         return self.staging_root / run.client_id / run.workflow_id

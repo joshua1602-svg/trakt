@@ -178,11 +178,67 @@ def _is_numberish(v: str) -> bool:
         return False
 
 
+#: What a header cell holds when it holds nothing. ``str()`` of each of these
+#: is a NON-EMPTY string, which is the whole trap below.
+_MISSING_HEADER_TEXT = {"", "nan", "nat", "none", "<na>"}
+
+
+def _header_label(value: Any, position: int) -> str:
+    """One header cell's label; an empty cell is named for its position.
+
+    ``str(float("nan"))`` is ``"nan"`` — non-empty, and truthy — so
+    ``str(v).strip() or f"col_{j}"`` never reached its fallback for a blank
+    header cell and recorded a column literally called ``nan`` instead.
+    """
+    text = "" if value is None else str(value).strip()
+    if text.lower() in _MISSING_HEADER_TEXT:
+        return f"col_{position}"
+    return text
+
+
+def _deduplicate_labels(labels: List[str]) -> List[str]:
+    """``X``, ``X.1``, ``X.2`` — the suffixing ``pandas`` applies on read.
+
+    ``pd.read_excel`` mangles a repeated header itself, so nothing downstream
+    was ever written for duplicate labels. This function assigns the header row
+    BY HAND, which skips that, and two cells reading the same thing then gave
+    one frame two columns of one name. ``df[name]`` is a DataFrame when the
+    name is duplicated, so every reader that expects a Series breaks on it —
+    ``s.isna().any()`` returns a Series rather than a bool, and testing it
+    raises "The truth value of a Series is ambiguous".
+
+    Two blank cells at the end of a header row were enough, because both used
+    to be labelled ``nan``.
+    """
+    used: set = set()
+    counts: Dict[str, int] = {}
+    out: List[str] = []
+    for label in labels:
+        candidate = label
+        if candidate in used:
+            n = counts.get(label, 0)
+            while True:
+                n += 1
+                candidate = f"{label}.{n}"
+                if candidate not in used:   # a real ``X.1`` column keeps its
+                    break                   # name; the duplicate moves along
+            counts[label] = n
+        used.add(candidate)
+        out.append(candidate)
+    return out
+
+
 def redetect_header(df):
     """Rescan for the real header row when >40% of columns are ``Unnamed:*``.
 
     Returns (df, header_row_index, header_detection_failed). Leaves the frame
     untouched when the header already looks valid.
+
+    THE LABELS ARE MADE FIT TO INDEX WITH. Assigning a header row by hand skips
+    the two things ``pandas`` does for one it reads: naming the blank cells, and
+    suffixing the repeated ones. See ``_header_label`` and
+    ``_deduplicate_labels`` — between them they are why ``frame[column]`` is a
+    Series here, which is what every caller in this package assumes.
     """
     if _unnamed_fraction(df.columns) <= 0.4:
         return df, 0, False
@@ -198,7 +254,8 @@ def redetect_header(df):
             best_score, best_i = score, i
     if best_i is None:
         return df, 0, True
-    new_cols = [str(v).strip() or f"col_{j}" for j, v in enumerate(df.iloc[best_i].tolist())]
+    new_cols = _deduplicate_labels(
+        [_header_label(v, j) for j, v in enumerate(df.iloc[best_i].tolist())])
     out = df.iloc[best_i + 1:].copy()
     out.columns = new_cols
     out = out.reset_index(drop=True)
