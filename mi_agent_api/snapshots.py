@@ -346,6 +346,13 @@ def _loan_ids(df: pd.DataFrame) -> set:
 # unavailable (with the reason) rather than rendered blank — see
 # ``_funded_stratifications``. The set is the same for every portfolio type:
 # an acquired back book gets the same funded depth as a direct one.
+#: Where a funded tape carries its product. ``erm_product_type`` is the
+#: registry's equity-release field and what onboarding maps a lender's product
+#: column to — ERE's `Product Category` arrived there on every loan while this
+#: chart read only the three generic names and said "not supplied".
+_PRODUCT_COLUMNS = ("product_type", "product", "loan_product",
+                    "erm_product_type")
+
 _STRAT_DIMS = [
     ("ltv", "By LTV band"),
     ("age", "By borrower age"),
@@ -386,7 +393,7 @@ def _strat_series(df: pd.DataFrame, key: str, scope=None):
     if key == "region":
         return region_series(df, scope)
     if key == "product":
-        for col in ("product_type", "product", "loan_product"):
+        for col in _PRODUCT_COLUMNS:
             if col in df.columns and df[col].notna().any():
                 return df[col].astype("string")
         return None
@@ -453,7 +460,7 @@ _STRAT_SOURCE_COLUMNS: Dict[str, tuple] = {
             "youngest_borrower_age_bucket"),
     "region": ("canonical_region_detail", "canonical_region_reporting",
                "geographic_region_collateral", "geographic_region_obligor", "region"),
-    "product": ("product_type", "product", "loan_product"),
+    "product": _PRODUCT_COLUMNS,
     "rate": ("current_interest_rate",),
     "vintage": ("origination_date", "vintage_year"),
     "status": ("account_status", "loan_status", "performance_status"),

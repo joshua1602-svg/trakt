@@ -299,6 +299,46 @@ def _loan_key_candidates(df: pd.DataFrame, file_sheet: Tuple[str, str],
     return out
 
 
+#: Normalisations tried when looking for the column that joins a file to the
+#: loans: as written, digits only, the short form of a "…01" policy number,
+#: and without separators. The same rules the entity-key resolver uses.
+_JOIN_RULES = ("", "numeric_string", "strip_trailing_01", "remove_separators")
+
+
+def _best_joining_key(df: pd.DataFrame, universe_ids: set, join_key
+                      ) -> Optional[Tuple[str, str, str, int]]:
+    """``(column, file_rule, loan_rule, matches)`` for the column of ``df``
+    whose values match the most loans, or ``None`` when none matches half of
+    what it could.
+
+    Each side gets its OWN form: a loan written 76030101 is 760301 once its
+    trailing "01" is stripped, but a file already holding 760301 must be read
+    as written — stripping it too would make it 7603.
+
+    A key has to be nearly unique: a column with fewer distinct values than
+    half its rows (an originator, a product, a status) is never a loan key,
+    however many loans its one value happens to match.
+    """
+    best: Optional[Tuple[str, str, str, int]] = None
+    loan_forms = {rule: {join_key(u, rule) for u in universe_ids}
+                  for rule in _JOIN_RULES}
+    for col in df.columns:
+        values = df[col].dropna()
+        if values.empty or values.nunique() < 0.5 * len(values):
+            continue
+        for file_rule in _JOIN_RULES:
+            keys = {join_key(v, file_rule) for v in values}
+            keys.discard("")
+            for loan_rule, loans in loan_forms.items():
+                hits = len(keys & loans)
+                if best is None or hits > best[3]:
+                    best = (str(col), file_rule, loan_rule, hits)
+    if best is None:
+        return None
+    reach = min(len(universe_ids), int(df.shape[0]) or 1)
+    return best if best[3] >= 0.5 * reach else None
+
+
 def _reference_code_columns(df: pd.DataFrame) -> List[str]:
     """Columns of unique, non-empty, non-numeric, non-date codes."""
     found: List[str] = []
@@ -996,9 +1036,14 @@ def _build_lender_tape(
     indexes: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]] = {}
     all_ids: set = set()
     universe_pks: List[Tuple[str, str]] = []
-    for pk, df in frames.items():
-        key = key_cols[pk]
-        rule = _entity_for(pk).get("normalisation_rule", "")
+
+    def _index_frame(pk: Tuple[str, str], df: pd.DataFrame, key: str,
+                     rule: str,
+                     translate: Optional[Dict[str, str]] = None) -> None:
+        """Index one frame's rows by its normalised loan key (see below).
+
+        ``translate`` maps a key in this frame's form to the loan universe's
+        own id, for a file that writes the same loan number differently."""
         ld = load_debug.setdefault(pk, {})
         period_col = ld.get("period_column", "")
         actual_period_col = _actual_col(pk, period_col) if period_col else ""
@@ -1035,6 +1080,8 @@ def _build_lender_tape(
                     continue
             rows_kept += 1
             lid = _join_key(row[key], rule)
+            if translate:
+                lid = translate.get(lid, lid)
             if not lid:
                 continue
             if lid in idx:
@@ -1049,7 +1096,11 @@ def _build_lender_tape(
         ld["rows_raw"] = rows_raw
         ld["rows_after_period_filter"] = rows_kept
         ld["raw_keys_in_scope"] = rows_kept
-        if bool(ld.get("is_universe_source")):
+
+    for pk, df in frames.items():
+        _index_frame(pk, df, key_cols[pk],
+                     _entity_for(pk).get("normalisation_rule", ""))
+        if bool(load_debug.get(pk, {}).get("is_universe_source")):
             universe_pks.append(pk)
 
     # --- Universe SOURCE selection (not a blind union) ---------------------- #
@@ -1092,6 +1143,40 @@ def _build_lender_tape(
     universe_ids: set = set()
     for pk in selected_universe_pks:
         universe_ids |= set(indexes.get(pk, {}).keys())
+
+    # A SUPPORTING FILE MUST JOIN THE LOANS IT DESCRIBES. Its key column is
+    # chosen by name, and names mislead: ERE's property extract has no column
+    # called a loan number, so the word "ID" won and `Originator ID` — one
+    # value for all 568 rows — was used as the key. Nothing joined, and every
+    # valuation, postcode, date of birth and protected-equity figure was
+    # dropped from a tape that otherwise looked complete. When the chosen key
+    # matches few of the loans, the column that actually matches them is used
+    # instead, with the evidence recorded.
+    if universe_ids:
+        for pk, df in frames.items():
+            if pk in selected_set:
+                continue
+            current = indexes.get(pk, {})
+            joined = len(set(current) & universe_ids)
+            if joined >= 0.5 * min(len(universe_ids), max(len(current), 1)):
+                continue
+            best = _best_joining_key(df, universe_ids, _join_key)
+            if best is None or best[3] <= joined:
+                continue
+            col, rule, loan_rule, hits = best
+            # Both sides in a comparable form, then back to the loan's own id.
+            forms: Dict[str, List[str]] = {}
+            for uid in universe_ids:
+                forms.setdefault(_join_key(uid, loan_rule), []).append(uid)
+            translate = {f: ids[0] for f, ids in forms.items()
+                         if f and len(ids) == 1}
+            key_cols[pk] = col
+            ld = load_debug.setdefault(pk, {})
+            ld.update({"key_column": col, "normalisation_rule": rule,
+                       "key_resolution_basis": "overlap_with_loan_universe",
+                       "key_reselected_from": ld.get("key_column", ""),
+                       "key_matches_before": joined, "key_matches_after": hits})
+            _index_frame(pk, df, col, rule, translate)
 
     # Record universe candidates that lost selection (dominated / lower precedence).
     for pk in universe_pks:
