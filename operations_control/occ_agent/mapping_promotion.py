@@ -383,6 +383,8 @@ def promote(rules_store: Any, decisions: List[Dict[str, Any]], *,
     # A column set aside in one file and kept in another keeps its mapping:
     # only a column this run mapped NOWHERE has a mapping to withdraw.
     withdrawn = {w for w in (withdrawal_of(d) for d in decisions or []) if w}
+    if not withdrawn:
+        return added
     still_mapped = {_key(r["source_column"]) for r in added
                     if r.get("canonical_field")}
     keyed = {_key(w) for w in withdrawn} - still_mapped
