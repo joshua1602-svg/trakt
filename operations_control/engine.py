@@ -1007,20 +1007,15 @@ class OpsEngine:
         Onboarding screen was therefore found again by name and put back to
         the operator on every run.
         """
-        from .occ_agent.mapping_promotion import is_set_aside
+        from .occ_agent.mapping_promotion import set_aside_pairs
         out: List[Tuple[str, str]] = []
         for rule in self.rules.applicable(
                 client_id=run.client_id, portfolio_id=run.portfolio_id,
                 file_ref=run.delivery.get("schema_fingerprint", "")):
-            if rule.kind != "field_mapping" or not is_set_aside(rule):
-                continue
-            column = str((rule.payload or {}).get("source_column") or "")
-            if not column:
-                continue
-            files = [str(f) for f in (rule.payload.get("source_files") or [])
-                     if str(f).strip()]
-            out.extend((f, column) for f in (files or ["*"]))
-        return out
+            for pair in set_aside_pairs(rule):
+                if pair not in out:
+                    out.append(pair)
+        return sorted(out)
 
     def _execute(self, client_id: str, workflow_id: str) -> None:
         from engine.orchestrator_agent.adapters import PortfolioSpec
@@ -1886,10 +1881,44 @@ class OpsEngine:
     # Decisions
     # ------------------------------------------------------------------ #
     def _sync_decisions(self, run: WorkflowRun, gar: GovernedAgentResult) -> None:
-        """Persist newly-surfaced decisions; keep already-resolved ones."""
+        """Persist newly-surfaced decisions; keep already-resolved ones; close
+        the ones this stage no longer raises.
+
+        A QUESTION THE STAGE STOPPED ASKING IS NOT STILL A QUESTION. When a
+        stage runs again — because the operator's answers or set-asides
+        changed — its new result is the whole of what it asks. An open
+        decision from the earlier pass that it did not raise again stayed open
+        before, held the run in review and was shown as still to answer,
+        about a column nobody was reading any more. It is closed as
+        superseded, like a cancelled run's questions: nobody answered it, and
+        recording an answer would put a decision in the trail nobody made.
+        """
+        raised = {d.decision_id for d in gar.decisions_required}
+        # Only a stage that actually finished its pass has said everything it
+        # asks. A failed or blocked stage raised nothing because it stopped,
+        # not because the questions went away.
+        finished = gar.status in (ST_COMPLETED, ST_NEEDS_REVIEW)
+        for doc in (self.store.list_decisions(run.client_id, status=DEC_OPEN,
+                                              workflow_id=run.workflow_id)
+                    if finished else []):
+            if doc.get("stage") != gar.stage or doc.get("decision_id") in raised:
+                continue
+            doc.update(status=DEC_SUPERSEDED, resolved_by="system",
+                       resolved_at=now_iso(),
+                       resolution_reason="No longer asked: this step ran "
+                                         "again and did not raise it.")
+            self.store.save_decision(run.client_id, doc)
+            self.store.append_audit(
+                run.client_id, "decision_superseded", actor="system",
+                workflow_id=run.workflow_id,
+                decision_id=doc.get("decision_id", ""),
+                detail={"cause": "no_longer_raised", "stage": gar.stage})
         for d in gar.decisions_required:
             existing = self.store.load_decision(run.client_id, d.decision_id)
-            if existing is not None and existing.get("status") != DEC_OPEN:
+            # A superseded question raised again is open again; an ANSWERED
+            # one stays answered.
+            if existing is not None and existing.get("status") not in (
+                    DEC_OPEN, DEC_SUPERSEDED):
                 continue
             doc = d.to_dict()
             doc.update({"status": DEC_OPEN, "workflow_id": run.workflow_id,
@@ -2280,6 +2309,11 @@ class OpsEngine:
                 match = resolved.get(f"{run.workflow_id}_{entry.get('decision_id')}")
             if match is None:
                 continue
+            # The same number is not the same question once Gate 1 has run
+            # again: an answer applies only to the field it was given for.
+            answered = str((match.get("subject") or {}).get("target_field") or "")
+            if answered and answered != str(entry.get("target_field") or ""):
+                continue
             entry["status"] = "approved"
             sel = match.get("resolution_value") \
                 or entry.get("recommended_action") or entry.get("selected_action")
@@ -2410,6 +2444,17 @@ class OpsEngine:
             if p is not None and p.exists():
                 digest.update(p.read_bytes())
                 seen = True
+        # AND THE COLUMNS SET ASIDE. They change what Gate 1 asks, so a run
+        # resumed after they change must run Gate 1 again. Without this a
+        # rerun reused the finished mapping step and put the same questions
+        # back — on ERE's delivery, eleven of them, seventeen reruns running.
+        try:
+            set_aside = self._set_aside_columns(run)
+        except Exception:                     # noqa: BLE001 — never block a run
+            set_aside = []
+        if set_aside:
+            digest.update(repr(set_aside).encode("utf-8"))
+            seen = True
         return digest.hexdigest() if seen else ""
 
     def _approved_decisions_path(self, run: WorkflowRun) -> Optional[Path]:

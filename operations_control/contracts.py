@@ -149,10 +149,17 @@ KIND_PUBLICATION = "publication"
 #: it the central tape builder refuses the field rather than picking, which is
 #: right, and left an operator with no way to answer.
 KIND_SOURCE_PRECEDENCE = "source_precedence"
+#: A column in ONE FILE that feeds nothing. Its own kind rather than a
+#: field_mapping with no field, because a field_mapping is about a column NAME
+#: and a lender's overlapping extracts repeat names: ERE's `Current Interest
+#: Rate` is kept in the loan extract and set aside in the principal-and-
+#: interest file. As one rule per name, the two answers superseded each other
+#: and the duplicate came back as a question.
+KIND_COLUMN_SET_ASIDE = "column_set_aside"
 DECISION_KINDS = (KIND_FIELD_MAPPING, KIND_ALIAS, KIND_ENUM,
                   KIND_TRANSFORMATION, KIND_VALIDATION_EXCEPTION,
                   KIND_CLIENT_RULE, KIND_FILE_ROLE, KIND_PUBLICATION,
-                  KIND_SOURCE_PRECEDENCE)
+                  KIND_SOURCE_PRECEDENCE, KIND_COLUMN_SET_ASIDE)
 
 
 def now_iso() -> str:

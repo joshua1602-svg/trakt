@@ -97,6 +97,12 @@ class RuleRecord:
             # file for the same field is changing your mind, and must
             # supersede rather than stand beside the earlier answer.
             return f"source_precedence:{_norm(str(p.get('canonical_field', '')))}"
+        if self.kind == "column_set_aside":
+            # ABOUT ONE COLUMN OF ONE FILE ("*" = every file), so a set-aside
+            # in one extract never supersedes a mapping of the same name in
+            # another, nor a set-aside in a third.
+            return (f"column_set_aside:{_norm(p.get('source_file') or '*')}"
+                    f"::{_norm(p.get('source_column', ''))}")
         if self.kind == "client_rule":
             # A client rule is ABOUT its setting. Without this every client rule
             # shared one subject key, so approving a second one superseded the

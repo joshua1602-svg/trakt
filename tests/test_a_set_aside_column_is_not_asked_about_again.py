@@ -47,6 +47,7 @@ from operations_control.occ_agent import staging as _staging
 
 LOAN = "LoanExtract One - OMNI 2026_09_01.xlsx"
 PROP = "PropertyExtract - Omni 2026_09_01.xlsx"
+PANDI = "Principal And Interest - OMNI 2026_09_01.xlsx"
 
 
 def _committed(column, target, *, action, source_file=PROP, amended_to=""):
@@ -94,10 +95,10 @@ class TestASetAsideIsNotPromotedAsAMapping:
                                client_id="ERE", portfolio_id="direct_001",
                                workflow_id="ONB-2026-0010")
         assert mp.is_set_aside(rule)
-        assert rule.kind == "field_mapping"
+        assert rule.kind == "column_set_aside"
         assert rule.payload["source_column"] == "Latest Property Value"
+        assert rule.payload["source_file"] == PROP
         assert rule.payload["canonical_field"] == ""
-        assert rule.payload["source_files"] == [PROP]
 
     def test_a_confirmation_beside_it_is_still_a_mapping(self):
         rules = mp.rules_from([
@@ -108,16 +109,42 @@ class TestASetAsideIsNotPromotedAsAMapping:
                   for r in rules if not mp.is_set_aside(r)]
         assert mapped == [("Latest Valuation", "current_valuation_amount")]
 
-    def test_a_column_mapped_in_one_file_is_not_set_aside_by_another(self):
-        """One rule per column: taking a field away from a column an operator
-        mapped would be the worse error of the two."""
+    def test_kept_in_one_file_and_set_aside_in_another_both_stand(self):
+        """ERE's `Current Interest Rate`: kept in the loan extract, set aside
+        in the principal-and-interest file. Keyed on the name alone, one of
+        the two answers was lost and the duplicate was asked about again."""
+        rules = mp.rules_from([
+            _set_aside("Current Interest Rate", "current_interest_rate",
+                       source_file=PANDI),
+            _confirmed("Current Interest Rate", "current_interest_rate",
+                       source_file=LOAN)],
+            client_id="ERE", portfolio_id="direct_001", workflow_id="w")
+        assert [(r.payload["source_column"], r.payload["canonical_field"])
+                for r in rules if not mp.is_set_aside(r)] == [
+            ("Current Interest Rate", "current_interest_rate")]
+        assert [mp.set_aside_pairs(r) for r in rules if mp.is_set_aside(r)] == [
+            [(PANDI, "Current Interest Rate")]]
+        a, b = rules
+        assert a.subject_key() != b.subject_key()
+
+    def test_a_set_aside_with_no_file_gives_way_to_a_mapping(self):
+        """A decision older than file-scoping speaks for every file; it does
+        not take a field from a column the same case mapped."""
         rules = mp.rules_from([
             _set_aside("Loan Interest Rate", "current_interest_rate",
-                       source_file=PROP),
+                       source_file=""),
             _confirmed("Loan Interest Rate", "current_interest_rate",
                        source_file=LOAN)],
             client_id="ERE", portfolio_id="direct_001", workflow_id="w")
         assert not any(mp.is_set_aside(r) for r in rules)
+
+    def test_set_asides_in_two_files_are_two_rules(self):
+        rules = mp.rules_from([
+            _set_aside("Post Code", "postcode", source_file=LOAN),
+            _set_aside("Post Code", "postcode", source_file=PANDI)],
+            client_id="ERE", portfolio_id="direct_001", workflow_id="w")
+        assert sorted(p for r in rules for p in mp.set_aside_pairs(r)) == [
+            (LOAN, "Post Code"), (PANDI, "Post Code")]
 
     def test_the_activation_count_counts_mappings_not_removals(self):
         """The intent tells the operator how many mappings become standing
@@ -156,7 +183,7 @@ class TestTheStoreSaysWhatTheOperatorSaid:
                           portfolio_id="direct_001",
                           workflow_id="ONB-2026-0010")
 
-    def test_the_mapping_is_superseded_by_the_set_aside(self, rules):
+    def test_the_mapping_is_withdrawn_and_the_set_aside_stands(self, rules):
         old = _live_mapping(rules, "Latest Property Value",
                             "current_valuation_amount")
         self._promote(rules, [_set_aside("Latest Property Value",
@@ -165,10 +192,41 @@ class TestTheStoreSaysWhatTheOperatorSaid:
                                                  portfolio_id="direct_001")
                      if r.payload.get("source_column") == "Latest Property Value"]
         assert mp.is_set_aside(current)
-        assert current.rule_id == old.rule_id and current.version == 2
-        history = rules.history("ERE", old.rule_id)
-        assert [h.payload.get("canonical_field") for h in history] == [
-            "current_valuation_amount", ""]
+        assert rules.get("ERE", old.rule_id).status == "retired"
+
+    def test_a_mapping_kept_in_another_file_is_not_withdrawn(self, rules):
+        kept = _live_mapping(rules, "Current Interest Rate",
+                             "current_interest_rate")
+        self._promote(rules, [
+            _set_aside("Current Interest Rate", "current_interest_rate",
+                       source_file=PANDI),
+            _confirmed("Current Interest Rate", "current_interest_rate",
+                       source_file=LOAN)])
+        assert rules.get("ERE", kept.rule_id).status == "active"
+
+    def test_an_old_style_set_aside_is_replaced(self, rules):
+        """The column-wide shape the first fix wrote is retired for this book;
+        the per-file rules take over."""
+        from operations_control.rules import RuleRecord
+        legacy = rules.approve(RuleRecord(
+            rule_id="", version=0, kind="field_mapping", scope="portfolio",
+            client_id="ERE", portfolio_id="direct_001",
+            payload={"source_column": "Current Interest Rate",
+                     "canonical_field": "", "set_aside": True,
+                     "source_files": [PANDI]}))
+        self._promote(rules, [
+            _set_aside("Current Interest Rate", "current_interest_rate",
+                       source_file=PANDI),
+            _confirmed("Current Interest Rate", "current_interest_rate",
+                       source_file=LOAN)])
+        live = rules.applicable(client_id="ERE", portfolio_id="direct_001")
+        assert sorted(p for r in live for p in mp.set_aside_pairs(r)) == [
+            (PANDI, "Current Interest Rate")]
+        assert [(r.kind, r.payload["canonical_field"]) for r in live
+                if not mp.is_set_aside(r)] == [
+            ("field_mapping", "current_interest_rate")]
+        assert legacy.rule_id in {r.rule_id for r in live}  # superseded by
+        # the mapping of the same name, not left as a set-aside
 
     def test_promoting_twice_does_not_withdraw_the_set_aside(self, rules):
         """Carrying a case forward re-runs promotion. The set-aside it wrote
@@ -215,7 +273,7 @@ class TestTheEngineCarriesItToGateOne:
     def test_a_set_aside_with_no_file_applies_to_every_file(self, rules):
         from types import SimpleNamespace
         from operations_control.engine import OpsEngine
-        rules.approve(mp.set_aside_rule("Month Run", [], {},
+        rules.approve(mp.set_aside_rule("Month Run", "", {},
                                         client_id="ERE",
                                         portfolio_id="direct_001",
                                         workflow_id="w"))
@@ -293,30 +351,81 @@ class TestCoverageLeavesThemOut:
 # --------------------------------------------------------------------------- #
 class TestAnActivatedCaseCarriesItsChoicesForward:
 
-    def _service(self, rules, *, mode="live", activated="v1"):
-        from types import SimpleNamespace
+    def _service(self, rules, *, mode="live", activated="v1", decisions=None):
+        from types import MethodType, SimpleNamespace
         from operations_control.occ_agent import adapters as _adapters
+        from operations_control.occ_agent.service import OccAgentService
         audits = []
-        run = SimpleNamespace(case_ref="ONB-2026-0010", open_decisions=[
-            _set_aside("Latest Property Value", "current_valuation_amount"),
-            _confirmed("Latest Valuation", "current_valuation_amount")])
+        files = [LOAN, PROP, PANDI]
+        run = SimpleNamespace(
+            case_ref="ONB-2026-0010",
+            open_decisions=decisions if decisions is not None else [
+                _set_aside("Latest Property Value", "current_valuation_amount"),
+                _confirmed("Latest Valuation", "current_valuation_amount")],
+            artefacts=lambda: [SimpleNamespace(source_file=f) for f in files])
         svc = SimpleNamespace(
             adapter=SimpleNamespace(
                 mode=_adapters.MODE_LIVE if mode == "live" else "synthetic",
                 engine=SimpleNamespace(rules=rules)),
+            store=SimpleNamespace(save=lambda _r: None),
             facts=lambda _c: SimpleNamespace(client_id="ERE",
                                              portfolio_id="direct_001"),
+            _require_registry_field=lambda _c, _f: None,
+            _split_file_less_decisions=OccAgentService._split_file_less_decisions,
             _audit=lambda *a, **k: audits.append((a, k)))
+        for name in ("_require_live_activated", "carry_mappings_forward",
+                     "correct_live_mappings"):
+            setattr(svc, name, MethodType(getattr(OccAgentService, name), svc))
         case = SimpleNamespace(run=run,
                                case=SimpleNamespace(activated_version=activated))
         return svc, case, audits
+
+    def test_post_code_is_kept_in_one_file_and_set_aside_in_another(self, rules):
+        """ERE's one "Post Code" answer predates file-scoping and set the
+        column aside in EVERY file. The correction splits it per file and
+        changes only the file named."""
+        legacy = _set_aside("Post Code", "postcode")
+        legacy["subject"].pop("source_file")
+        svc, case, audits = self._service(rules, decisions=[legacy])
+        svc.correct_live_mappings(case, corrections=[
+            {"source_file": PROP, "source_column": "Post Code",
+             "target_field": "postcode"}], actor="operator")
+        live = rules.applicable(client_id="ERE", portfolio_id="direct_001")
+        assert [(r.payload["source_column"], r.payload["canonical_field"])
+                for r in live if not mp.is_set_aside(r)] == [
+            ("Post Code", "postcode")]
+        assert sorted(p for r in live for p in mp.set_aside_pairs(r)) == [
+            (LOAN, "Post Code"), (PANDI, "Post Code")]
+        assert legacy["status"] == "split"
+        assert audits[0][0][1] == "mappings_corrected_after_activation"
+
+    def test_a_correction_survives_carrying_forward_again(self, rules):
+        """The case is corrected, not worked around: re-deriving the rules
+        from it gives the same answer."""
+        legacy = _set_aside("Post Code", "postcode")
+        legacy["subject"].pop("source_file")
+        svc, case, _ = self._service(rules, decisions=[legacy])
+        svc.correct_live_mappings(case, corrections=[
+            {"source_file": PROP, "source_column": "Post Code",
+             "target_field": "postcode"}], actor="operator")
+        svc.carry_mappings_forward(case, actor="operator")
+        live = rules.applicable(client_id="ERE", portfolio_id="direct_001")
+        assert [r.payload["canonical_field"] for r in live
+                if not mp.is_set_aside(r)] == ["postcode"]
+
+    def test_a_file_outside_the_case_is_refused(self, rules):
+        from operations_control.engine import OpsError
+        svc, case, _ = self._service(rules)
+        with pytest.raises(OpsError):
+            svc.correct_live_mappings(case, corrections=[
+                {"source_file": "Other.xlsx", "source_column": "Post Code",
+                 "target_field": "postcode"}], actor="operator")
 
     def test_it_writes_the_set_aside_and_is_audited(self, rules):
         from operations_control.occ_agent.service import OccAgentService
         _live_mapping(rules, "Latest Property Value", "current_valuation_amount")
         svc, case, audits = self._service(rules)
-        written = OccAgentService.carry_mappings_forward(svc, case,
-                                                         actor="operator")
+        written = svc.carry_mappings_forward(case, actor="operator")
         assert [w["source_column"] for w in written
                 if w.get("set_aside") == "true"] == ["Latest Property Value"]
         assert audits and audits[0][0][1] == "mappings_carried_forward"
@@ -334,4 +443,39 @@ class TestAnActivatedCaseCarriesItsChoicesForward:
         from operations_control.occ_agent.service import OccAgentService
         svc, case, _ = self._service(rules, mode=mode, activated=activated)
         with pytest.raises(OpsError):
-            OccAgentService.carry_mappings_forward(svc, case, actor="operator")
+            svc.carry_mappings_forward(case, actor="operator")
+
+
+# --------------------------------------------------------------------------- #
+# 6. The same column name in two files: one kept, one set aside
+# --------------------------------------------------------------------------- #
+class TestTheSameNameInTwoFiles:
+    """The shape of ERE's live questions: `Current Interest Rate` in the loan
+    extract AND the principal-and-interest file, kept in one and set aside in
+    the other."""
+
+    def _asked(self, set_aside):
+        from engine.onboarding_agent.llm_assisted_mapping import \
+            run_llm_assisted_mapping
+        warnings.simplefilter("ignore")
+        n = 20
+        ids = [f"L{i}" for i in range(n)]
+        loan = pd.DataFrame({"Loan Policy Number": ids,
+                             "Current Interest Rate": [5.1] * n})
+        pandi = pd.DataFrame({"Loan Policy Number": ids,
+                              "Current Interest Rate": [5.1] * n})
+        out = Path(tempfile.mkdtemp())
+        run_llm_assisted_mapping(dataframes={LOAN: loan, PANDI: pandi},
+                                 output_dir=str(out), mode="mi_only",
+                                 client_id="direct_001", run_id="run",
+                                 set_aside_columns=set_aside)
+        doc = yaml.safe_load(
+            (out / "34_target_first_decisions.yaml").read_text())
+        return [d.get("target_field") for d in (doc.get("decisions") or [])]
+
+    def test_asked_while_both_files_offer_it(self):
+        assert "current_interest_rate" in self._asked(None)
+
+    def test_not_asked_once_one_file_s_copy_is_set_aside(self):
+        assert "current_interest_rate" not in self._asked(
+            [(PANDI, "Current Interest Rate")])

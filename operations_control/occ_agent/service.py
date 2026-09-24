@@ -2838,6 +2838,121 @@ class OccAgentService:
                     detail=result.to_dict())
         return agent_case
 
+    def correct_live_mappings(self, agent_case: AgentCase, *,
+                              corrections: List[Dict[str, str]], actor: str,
+                              reason: str = "") -> List[Dict[str, str]]:
+        """Correct what an ACTIVATED case says about particular columns, then
+        carry the case forward.
+
+        ``corrections`` are ``{source_file, source_column, target_field}``; an
+        empty ``target_field`` sets that column of that file aside.
+
+        THE CASE STAYS THE RECORD. The mapping table is closed once a case is
+        live, and writing a rule around it would leave the case saying one
+        thing and the store another — the defect this whole delivery kept
+        hitting. So the correction is made ON the case's decisions, audited,
+        and the rules are re-derived from them by the same promotion as
+        activation. Re-running the carry-forward later reproduces it.
+
+        A DECISION WITH NO FILE IS SPLIT FIRST. Decisions recorded before they
+        carried their file speak for every file with that column name — ERE's
+        one "Post Code" answer set the column aside in the property extract as
+        well as the loan extract. Correcting one file therefore replaces that
+        decision with one per file of the case, each keeping the original
+        answer, and then changes only the file named. The original is kept,
+        marked as split, for the audit trail.
+        """
+        self._require_live_activated(agent_case)
+        run = agent_case.run
+        files = [a.source_file for a in run.artefacts()]
+        at = now_iso()
+        norm = lambda c: " ".join(str(c or "").split()).lower()   # noqa: E731
+        applied: List[Dict[str, str]] = []
+        for fix in corrections or []:
+            source_file = str(fix.get("source_file") or "").strip()
+            column = str(fix.get("source_column") or "").strip()
+            target = str(fix.get("target_field") or "").strip()
+            if source_file not in files:
+                raise OpsError("OCC_AGENT_FILE_NOT_IN_CASE",
+                               f"'{source_file}' is not a file of this case.",
+                               http_status=404)
+            if not column:
+                raise OpsError("OCC_AGENT_COLUMN_REQUIRED",
+                               "Name the column to correct.", http_status=400)
+            if target:
+                self._require_registry_field(agent_case, target)
+            self._split_file_less_decisions(run, column, files, at=at)
+            decision = next(
+                (d for d in run.open_decisions
+                 if len((d.get("subject") or {}).get("source_columns") or []) < 2
+                 and norm((d.get("subject") or {}).get("source_column")) == norm(column)
+                 and str((d.get("subject") or {}).get("source_file") or "")
+                 == source_file
+                 and str(d.get("status") or "") in ("open", "approved", "pending")),
+                None)
+            if decision is None:
+                decision = {"decision_id": new_id("dec"),
+                            "decision_type": _mapping_promotion.PROPOSAL,
+                            "subject": {"source_file": source_file,
+                                        "source_column": column,
+                                        "target_field": target}}
+                run.open_decisions.append(decision)
+            decision["status"] = "approved"
+            if target:
+                decision["resolution"] = "amend"
+                decision["resolved_value"] = target
+            else:
+                decision["resolution"] = _staging.RESOLUTION[
+                    _staging.ACTION_NOT_USED]
+                decision["resolved_value"] = _staging.NOT_USED_VALUE
+            decision["resolved_by"] = actor
+            decision["resolved_at"] = at
+            decision["reason"] = reason or "corrected after activation"
+            applied.append({"source_file": source_file, "source_column": column,
+                            "target_field": target or "(not used)"})
+        self.store.save(run)
+        self._audit(run, "mappings_corrected_after_activation",
+                    actor_type=ACTOR_HUMAN, actor=actor,
+                    classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis=reason or "an operator corrected what the "
+                                             "case says about these columns",
+                    detail={"corrections": applied})
+        return self.carry_mappings_forward(agent_case, actor=actor)
+
+    @staticmethod
+    def _split_file_less_decisions(run: SyntheticRun, column: str,
+                                   files: List[str], *, at: str) -> None:
+        """Replace a settled decision about ``column`` that names no file with
+        one per file of the case. See ``correct_live_mappings``."""
+        norm = lambda c: " ".join(str(c or "").split()).lower()   # noqa: E731
+        for decision in list(run.open_decisions):
+            subject = decision.get("subject") or {}
+            if (subject.get("source_file")
+                    or len(subject.get("source_columns") or []) > 1
+                    or norm(subject.get("source_column")) != norm(column)
+                    or str(decision.get("status") or "") != "approved"):
+                continue
+            for source_file in files:
+                copy = json.loads(json.dumps(decision))
+                copy["decision_id"] = f"{decision.get('decision_id')}::{source_file}"
+                copy.setdefault("subject", {})["source_file"] = source_file
+                copy["split_from"] = decision.get("decision_id")
+                run.open_decisions.append(copy)
+            decision["status"] = "split"
+            decision["split_at"] = at
+
+    def _require_live_activated(self, agent_case: AgentCase) -> None:
+        engine = getattr(self.adapter, "engine", None)
+        if self.adapter.mode != _adapters.MODE_LIVE \
+                or getattr(engine, "rules", None) is None:
+            raise OpsError("OCC_AGENT_NOT_LIVE",
+                           "Mappings reach the governed rules only in live "
+                           "mode.", http_status=409)
+        if not agent_case.case.activated_version:
+            raise OpsError("OCC_AGENT_NOT_ACTIVATED",
+                           "This case has not been activated; its mappings "
+                           "are promoted when it is.", http_status=409)
+
     def carry_mappings_forward(self, agent_case: AgentCase, *,
                                actor: str) -> List[Dict[str, str]]:
         """Write an ACTIVATED case's settled mappings into the governed rules
@@ -2856,16 +2971,8 @@ class OccAgentService:
         still leave nothing in the governed store.
         """
         run = agent_case.run
-        engine = getattr(self.adapter, "engine", None)
-        rules = getattr(engine, "rules", None)
-        if self.adapter.mode != _adapters.MODE_LIVE or rules is None:
-            raise OpsError("OCC_AGENT_NOT_LIVE",
-                           "Mappings reach the governed rules only in live "
-                           "mode.", http_status=409)
-        if not agent_case.case.activated_version:
-            raise OpsError("OCC_AGENT_NOT_ACTIVATED",
-                           "This case has not been activated; its mappings "
-                           "are promoted when it is.", http_status=409)
+        self._require_live_activated(agent_case)
+        rules = self.adapter.engine.rules
         facts = self.facts(agent_case)
         written = _mapping_promotion.promote(
             rules, list(run.open_decisions or []),
