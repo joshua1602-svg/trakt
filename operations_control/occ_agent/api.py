@@ -1110,6 +1110,19 @@ def confirm_activation(case_ref: str, body: ConfirmActivation,
                 confirmation=body.confirmation))}
 
 
+@router.post("/cases/{case_ref}/mappings/carry-forward")
+def carry_mappings_forward(case_ref: str, body: TenantBody,
+                           principal: Principal = Depends(authenticate)
+                           ) -> Dict[str, Any]:
+    """Write an activated case's settled mappings — set-asides included —
+    into the governed rules again. See ``carry_mappings_forward``."""
+    _require_feature()
+    service = get_service()
+    agent_case = _load(service, _tenant_for(principal, body.tenant), case_ref)
+    written = service.carry_mappings_forward(agent_case, actor=principal.name)
+    return {"ok": True, "rules": written}
+
+
 @router.post("/cases/{case_ref}/cancel")
 def cancel_case(case_ref: str, body: TenantBody,
                 principal: Principal = Depends(authenticate)) -> Dict[str, Any]:

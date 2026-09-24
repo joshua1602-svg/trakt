@@ -990,8 +990,37 @@ class OpsEngine:
                                     and bool(llm_policy.get("enabled"))),
                 enable_llm_mapping_review=(not deterministic
                                            and bool(llm_policy.get("resolve_mapping"))),
-                managed_service=True)
+                managed_service=True,
+                set_aside_columns=self._set_aside_columns(run))
         return GovernedAdapters(inner, recorder)
+
+    def _set_aside_columns(self, run: WorkflowRun) -> List[Tuple[str, str]]:
+        """``(file, column)`` pairs an operator said feed nothing, from the
+        governed rules this run is subject to. ``"*"`` as the file means the
+        column is set aside wherever it appears.
+
+        Handed to Gate 1 explicitly because nothing else carried it there. The
+        rule store is projected into a client-memory directory the workflow's
+        onboarding never opens — it resolves its own, beside its output — and
+        the overrides file is read only by the tape builder, after coverage
+        has already asked its questions. A column set aside in the Client
+        Onboarding screen was therefore found again by name and put back to
+        the operator on every run.
+        """
+        from .occ_agent.mapping_promotion import is_set_aside
+        out: List[Tuple[str, str]] = []
+        for rule in self.rules.applicable(
+                client_id=run.client_id, portfolio_id=run.portfolio_id,
+                file_ref=run.delivery.get("schema_fingerprint", "")):
+            if rule.kind != "field_mapping" or not is_set_aside(rule):
+                continue
+            column = str((rule.payload or {}).get("source_column") or "")
+            if not column:
+                continue
+            files = [str(f) for f in (rule.payload.get("source_files") or [])
+                     if str(f).strip()]
+            out.extend((f, column) for f in (files or ["*"]))
+        return out
 
     def _execute(self, client_id: str, workflow_id: str) -> None:
         from engine.orchestrator_agent.adapters import PortfolioSpec

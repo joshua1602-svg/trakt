@@ -2063,6 +2063,51 @@ def apply_mi_capability_scope(
     return changes
 
 
+def apply_period_inference(
+    coverage_rows: List[Dict[str, Any]], *, run_id: str = "",
+    context: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Fill a MISSING ``reporting_date`` / ``data_cut_off_date`` from the period
+    the run is for (run id first, then the run's context).
+
+    NOT A PRODUCT QUESTION. This used to sit inside
+    ``apply_profile_proxy_derivations`` behind its "is a product profile
+    applied?" gate, so a delivery whose product was not detected had its
+    period ignored and ``reporting_date`` put to the operator as a blocker —
+    on a run whose own record said which month it was for. Every delivery has
+    a period; whether it is equity release does not change what month it is.
+    A real source column still wins: only a MISSING field is filled.
+    """
+    from . import run_context as rc
+    changes: List[Dict[str, Any]] = []
+    cov_by_field = {str(r.get("target_field", "")): r for r in coverage_rows}
+    period = ""
+    period_src = ""
+    for tok in (run_id,):
+        hits = rc.dates_from_period_token(tok) if tok else []
+        if hits:
+            period, period_src = hits[0], f"run_id:{tok}"
+            break
+    if not period and context:
+        iso = _context_period(context)
+        if iso:
+            period, period_src = iso, "context"
+    if period:
+        for fld in PERIOD_FIELDS:
+            r = cov_by_field.get(fld)
+            if r is not None and r.get("coverage_status") == MISSING_REQUIRED:
+                r["coverage_status"] = DEFAULTED_VALUE
+                r["coverage_basis"] = "run_context_period_inference"
+                r["selected_value"] = period
+                r["requires_user_decision"] = False
+                r["blocking"] = False
+                r["default_reason"] = (
+                    f"inferred reporting period {period} from {period_src}")
+                changes.append({"target_field": fld, "method": "period_inference",
+                                "value": period, "source": period_src})
+    return changes
+
+
 def apply_profile_proxy_derivations(
     coverage_rows: List[Dict[str, Any]],
     resolved_profile: Optional[Any],
@@ -2134,34 +2179,197 @@ def apply_profile_proxy_derivations(
                                 "method": "equivalent_field", "from": proxy_name,
                                 "profile_id": prof.profile_id})
 
-    # (2) reporting_date / data_cut_off_date from a run-id / context period.
-    from . import run_context as rc
-    period = ""
-    period_src = ""
-    for tok in (run_id,):
-        hits = rc.dates_from_period_token(tok) if tok else []
-        if hits:
-            period, period_src = hits[0], f"run_id:{tok}"
-            break
-    if not period and context:
-        iso = rc.normalize_to_iso(context.get("reporting_date")
-                                  or context.get("data_cut_off_date") or "")
-        if iso:
-            period, period_src = iso, "context"
-    if period:
-        for fld in ("reporting_date", "data_cut_off_date"):
-            r = cov_by_field.get(fld)
-            if r is not None and r.get("coverage_status") == MISSING_REQUIRED:
-                r["coverage_status"] = DEFAULTED_VALUE
-                r["coverage_basis"] = "run_context_period_inference"
-                r["selected_value"] = period
-                r["requires_user_decision"] = False
-                r["blocking"] = False
-                r["default_reason"] = (
-                    f"inferred reporting period {period} from {period_src}")
-                changes.append({"target_field": fld, "method": "period_inference",
-                                "value": period, "source": period_src})
+    # (2) The period, which does not depend on the product and is also run on
+    # its own by `run_target_first_coverage` (see `apply_period_inference`).
+    changes += apply_period_inference(coverage_rows, run_id=run_id,
+                                      context=context)
     return changes
+
+
+def _context_period(context: Optional[Dict[str, Any]]) -> str:
+    """The delivery's period end as ``YYYY-MM-DD``, from the run's context.
+
+    THE PERIOD ARRIVES AS A MONTH. The Operations Control Centre records a
+    delivery as ``2026-08``, and ``normalize_to_iso`` reads only whole dates —
+    so the one fact every run carries was read as nothing, and
+    ``reporting_date`` was put to an operator whose delivery had already said
+    which month it was for. A month token is read as its last day, the same
+    reading a period folder or a run id is given.
+    """
+    from . import run_context as rc
+    for key in ("reporting_date", "data_cut_off_date"):
+        raw = str((context or {}).get(key) or "").strip()
+        if not raw:
+            continue
+        iso = rc.normalize_to_iso(raw)
+        if iso:
+            return iso
+        hits = rc.dates_from_period_token(raw)
+        if hits:
+            return hits[0]
+    return ""
+
+
+def _column_key(column: Any) -> str:
+    return " ".join(str(column or "").split()).lower()
+
+
+def without_set_asides(rows: List[Dict[str, Any]],
+                       set_aside: Optional[Any]) -> List[Dict[str, Any]]:
+    """``rows`` less every column an operator said feeds nothing.
+
+    WHY COVERAGE HAS TO BE TOLD. Coverage finds a field's sources by reading
+    column NAMES against the registry's aliases. An operator setting
+    ``Latest Property Value`` aside removed its mapping, but not its name: the
+    next run found it again by alias, counted it as a second source for
+    ``current_valuation_amount`` beside the ``Latest Valuation`` they kept, and
+    asked them which of the two was authoritative. Eleven such questions, on
+    a delivery whose mapping had been read column by column and committed.
+
+    ``set_aside`` holds ``(file, column)`` pairs; a file of ``"*"`` (or blank)
+    sets the column aside in every file. Columns are matched however each side
+    spelled the spacing and case.
+    """
+    pairs = {(str(f or "*").strip() or "*", _column_key(c))
+             for f, c in (set_aside or []) if _column_key(c)}
+    if not pairs:
+        return list(rows or [])
+    anywhere = {c for f, c in pairs if f == "*"}
+
+    def _kept(row: Dict[str, Any]) -> bool:
+        col = _column_key(row.get("source_column"))
+        if col in anywhere:
+            return False
+        return (str(row.get("source_file") or ""), col) not in pairs
+
+    return [r for r in rows or [] if _kept(r)]
+
+
+def _run_period(run_id: str) -> str:
+    """The period end a run id names, if it names one (``..._2026-08``)."""
+    from . import run_context as rc
+    hits = rc.dates_from_period_token(run_id) if run_id else []
+    return hits[0] if hits else ""
+
+
+#: The fields that say WHEN a delivery is for. Every run already knows.
+#: ``cut_off_date`` is the regulatory scope's name for the same date.
+PERIOD_FIELDS = ("reporting_date", "data_cut_off_date", "cut_off_date")
+
+
+def _alternative_keys(cov: Dict[str, Any]) -> List[Tuple[str, str, str]]:
+    """``(file, sheet, column)`` of each alternative a coverage row lists.
+
+    Read back from the row's own display string rather than recomputed, so the
+    columns checked are exactly the ones the operator would be asked about.
+    Entries in any other shape (an excluded-source note) are skipped.
+    """
+    out: List[Tuple[str, str, str]] = []
+    for part in str(cov.get("alternative_source_candidates") or "").split("; "):
+        head = part.rsplit(" (", 1)[0].strip()
+        bits = head.split("::")
+        if len(bits) == 3 and bits[2]:
+            out.append((bits[0], bits[1], bits[2]))
+    return out
+
+
+def settle_period_fields(
+    coverage_rows: List[Dict[str, Any]],
+    source_value_candidates: List[Dict[str, Any]],
+    source_tables: Optional[List[Tuple[str, str, Any]]],
+    period_iso: str,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """Answer a period question from the period the delivery is for.
+
+    WHAT THE OPERATOR WAS ASKED. ERE's ``Month Run`` column says ``August`` on
+    every row of an August delivery. It is mapped to ``data_cut_off_date``,
+    ``August`` is not a date, and so the operator was asked::
+
+        Is 'August' in 'Month Run' a placeholder for 'no value', or a data
+        error to correct at source?
+
+    with "Treat the value as empty" as the only answer that settles it — which
+    would have thrown the cut-off away. The column is neither: it restates the
+    month the delivery already declared, in words.
+
+    THE RULE. For each of ``PERIOD_FIELDS`` that would otherwise reach an
+    operator — an unreadable value, or several columns claiming it — read
+    every value in every column claiming the field. If each one names the
+    delivery's own month, the question has an answer nobody needs to give: the
+    period end (or the one date every column agrees on). The field is filled
+    from the run's period, non-blocking, and says so.
+
+    A column that names ANY other month keeps its question. Disagreeing with
+    the delivery is exactly what an operator must see, so this never settles
+    by majority and never overrides a value it cannot read.
+
+    Returns ``(candidates still to ask about, what was settled)``.
+    """
+    from . import run_context as rc
+    from .source_period_eligibility import period_of_value
+    settled: List[Dict[str, Any]] = []
+    if not period_iso or not source_tables:
+        return source_value_candidates, settled
+    month, year = period_iso[:7], int(period_iso[:4])
+    frames = {(str(f), str(sh or "")): df for f, sh, df in source_tables}
+    by_file = {str(f): df for f, _sh, df in source_tables}
+    keep = list(source_value_candidates or [])
+
+    for cov in coverage_rows:
+        field = str(cov.get("target_field") or "")
+        if field not in PERIOD_FIELDS:
+            continue
+        asked = [c for c in keep
+                 if field in (c.get("canonical_field"), c.get("target_field"))]
+        if not (asked or cov.get("requires_user_decision")):
+            continue
+        claimants = [(str(cov.get("selected_source_file") or ""),
+                      str(cov.get("selected_source_sheet") or ""),
+                      str(cov.get("selected_source_column") or ""))]
+        claimants += _alternative_keys(cov)
+        claimants = [k for k in claimants if k[0] and k[2]]
+        if not claimants:
+            continue
+
+        agree, dates, read = True, set(), []
+        for f, sh, col in claimants:
+            df = frames.get((f, sh))
+            if df is None:
+                df = by_file.get(f)
+            if df is None or col not in getattr(df, "columns", []):
+                agree = False
+                break
+            values = [str(v).strip() for v in df[col].tolist()]
+            values = [v for v in values
+                      if v and v.lower() not in ("nan", "none", "nat")]
+            if not values or any(period_of_value(v, year) != month
+                                 for v in values):
+                agree = False
+                break
+            dates |= {rc.normalize_to_iso(v) or "" for v in set(values)}
+            read.append(f"'{col}' in '{f}'")
+        if not agree:
+            continue
+
+        # Every column names the delivery's month. If they also agree on one
+        # whole date, that date is the answer; a bare month is its last day.
+        value = next(iter(dates)) if len(dates) == 1 and "" not in dates \
+            else period_iso
+        cov["coverage_status"] = DEFAULTED_VALUE
+        cov["coverage_basis"] = "run_context_period_inference"
+        cov["selected_value"] = value
+        cov["requires_user_decision"] = False
+        cov["blocking"] = False
+        cov["decision_reason"] = ""
+        cov["operator_question"] = ""
+        cov["default_reason"] = (
+            f"{' and '.join(read)} name the delivery's own period ({month}) on "
+            f"every row, so {value} is used")
+        keep = [c for c in keep if c not in asked]
+        settled.append({"target_field": field, "method": "period_agreement",
+                        "value": value, "columns": read,
+                        "questions_removed": len(asked)})
+    return keep, settled
 
 
 def load_target_contract(
@@ -3081,8 +3289,13 @@ def run_target_first_coverage(
     scope_client_id: str = "",
     source_portfolio_id: str = "",
     source_schema_fingerprint: str = "",
+    set_aside_columns: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Build + write the target-first coverage artefacts (28a/28b/28c).
+
+    ``set_aside_columns`` are ``(file, column)`` pairs an operator said feed
+    nothing ("*" as the file means every file). They are not candidates for
+    any target field and not residuals: the operator has already read them.
 
     When approved Gate 4 decisions are available (``decisions_path``, else an
     auto-discovered ``34_target_first_decisions.yaml`` in ``output_dir``), they
@@ -3135,6 +3348,9 @@ def run_target_first_coverage(
 
     overlay = load_mi_applicability_overlay(
         mode, context, overlay_path=mi_overlay_path, resolved_profile=resolved_profile)
+    # What the operator set aside is not offered to anything again.
+    evidence_rows = without_set_asides(evidence_rows, set_aside_columns)
+    resolved_rows = without_set_asides(resolved_rows, set_aside_columns)
     coverage_rows, matched_by_key = build_target_coverage(
         mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows,
         overlay=overlay, artefact_roles=artefact_roles)
@@ -3142,6 +3358,8 @@ def run_target_first_coverage(
     # reporting-date period inference) — non-blocking, evidence-backed, auditable.
     proxy_changes = apply_profile_proxy_derivations(
         coverage_rows, resolved_profile, run_id=run_id, context=context)
+    proxy_changes += apply_period_inference(coverage_rows, run_id=run_id,
+                                            context=context)
     residual_rows = build_source_residual_register(mode, evidence_rows, matched_by_key)
 
     # --- Gate 4 decision application (deterministic, auditable) ---
@@ -3182,6 +3400,13 @@ def run_target_first_coverage(
                 existing_rules=settled_rules)
         except Exception:  # noqa: BLE001 — detection is advisory; never fail the run
             source_value_candidates = []
+
+    # A period column that only restates the delivery's month is not a
+    # question. See `settle_period_fields`.
+    source_value_candidates, period_settled = settle_period_fields(
+        coverage_rows, source_value_candidates, source_tables,
+        _run_period(run_id) or _context_period(context))
+    proxy_changes = list(proxy_changes or []) + period_settled
 
     decision_rows = build_human_decision_queue(
         mode, coverage_rows, residual_rows, source_value_candidates)

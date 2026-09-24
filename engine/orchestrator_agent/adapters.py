@@ -23,7 +23,7 @@ import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
@@ -180,8 +180,13 @@ class RealAgentAdapters(AgentAdapters):
                  enable_llm_mapping_review: bool = False,
                  llm_mapping_profile: str = "low",
                  managed_service: bool = False,
-                 regulatory_reporting_enabled: bool = False):
+                 regulatory_reporting_enabled: bool = False,
+                 set_aside_columns: Optional[List[Tuple[str, str]]] = None):
         self.registry = registry
+        # set_aside_columns: (file, column) pairs an operator said feed nothing
+        # ("*" = any file). Gate 1 leaves them out of every target field's
+        # candidates, so a column set aside once is not asked about again.
+        self.set_aside_columns = list(set_aside_columns or [])
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
         self.aliases_dir = aliases_dir
@@ -279,6 +284,7 @@ class RealAgentAdapters(AgentAdapters):
             reporting_period=(self.reporting_period or ""),
             managed_service=self.managed_service,
             regulatory_reporting_enabled=self.regulatory_reporting_enabled,
+            set_aside_columns=self.set_aside_columns,
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":

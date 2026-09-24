@@ -2838,6 +2838,47 @@ class OccAgentService:
                     detail=result.to_dict())
         return agent_case
 
+    def carry_mappings_forward(self, agent_case: AgentCase, *,
+                               actor: str) -> List[Dict[str, str]]:
+        """Write an ACTIVATED case's settled mappings into the governed rules
+        again, set-asides included.
+
+        WHY THIS EXISTS. Promotion runs once, at activation. A case activated
+        before set-asides were promoted crossed the doorway with its mappings
+        but without its removals, and there is no second doorway: the mapping
+        table is closed once a case is live, so the operator cannot re-commit
+        and the choices they made column by column stay on the practice run,
+        unread. This re-reads the same settled decisions and promotes them by
+        the same governed path. It is idempotent in effect — a rule restated
+        with the same content becomes its next version — and audited.
+
+        Only for a case that has activated, in live mode: a rehearsal must
+        still leave nothing in the governed store.
+        """
+        run = agent_case.run
+        engine = getattr(self.adapter, "engine", None)
+        rules = getattr(engine, "rules", None)
+        if self.adapter.mode != _adapters.MODE_LIVE or rules is None:
+            raise OpsError("OCC_AGENT_NOT_LIVE",
+                           "Mappings reach the governed rules only in live "
+                           "mode.", http_status=409)
+        if not agent_case.case.activated_version:
+            raise OpsError("OCC_AGENT_NOT_ACTIVATED",
+                           "This case has not been activated; its mappings "
+                           "are promoted when it is.", http_status=409)
+        facts = self.facts(agent_case)
+        written = _mapping_promotion.promote(
+            rules, list(run.open_decisions or []),
+            client_id=facts.client_id, portfolio_id=facts.portfolio_id,
+            workflow_id=run.case_ref)
+        self._audit(run, "mappings_carried_forward", actor_type=ACTOR_HUMAN,
+                    actor=actor, classification=EXEC_HUMAN_CONFIRMED,
+                    decision_basis="the case's settled mappings, including "
+                                   "the columns set aside, were written to "
+                                   "the governed rules",
+                    detail={"rules": written})
+        return written
+
     def activation_preconditions(self, agent_case: AgentCase, *,
                                  confirmed: bool) -> ActivationPreconditions:
         """Assemble the gate's inputs from state this service already holds.
@@ -2898,7 +2939,8 @@ class OccAgentService:
             files=files,
             configuration_artefacts=[str(a.get("path") or a.get("name") or a)
                                      for a in (preview.get("artefacts") or [])],
-            mappings=len(promotable),
+            mappings=len([r for r in promotable
+                          if not _mapping_promotion.is_set_aside(r)]),
             field_requests=len(run.field_requests or []))
 
     def _payloads(self, run: SyntheticRun) -> Dict[str, bytes]:

@@ -171,8 +171,11 @@ def present_rule(doc: Dict[str, Any]) -> Dict[str, Any]:
         "status": doc.get("status"),
         "source_term": p.get("source_column") or p.get("source_value")
         or p.get("subject") or "",
+        # A set-aside is a rule whose meaning is "nothing"; said so rather than
+        # shown blank, which reads as a rule nobody finished.
         "approved_meaning": p.get("canonical_field") or p.get("canonical_value")
-        or p.get("selected_action") or p.get("disposition") or "",
+        or p.get("selected_action") or p.get("disposition")
+        or ("Not used" if p.get("set_aside") else ""),
         "description": doc.get("description", ""),
         "approved_by": doc.get("approved_by", ""),
         "approved_at": doc.get("approved_at", ""),
