@@ -33,7 +33,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 
@@ -682,6 +682,7 @@ def run_operator_workflow(
     product_profile: str = "",
     enable_context_resolver: Optional[bool] = None,
     regulatory_reporting_enabled: bool = False,
+    set_aside_columns: Optional[List[Tuple[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Run the managed-service operator workflow; returns the 40 summary dict."""
     client_id = client_id or client_name.lower().replace(" ", "_")
@@ -767,6 +768,8 @@ def run_operator_workflow(
             # field scope so a column the lender supplied for Annex 2 survives
             # into the canonical. Scope only — what blocks is unchanged.
             regulatory_reporting_enabled=regulatory_reporting_enabled,
+            # Columns an operator set aside: not a source for anything.
+            set_aside_columns=set_aside_columns,
         )
         input_files = len(project.file_inventory)
     except Exception as exc:  # produce a FAILED summary instead of crashing

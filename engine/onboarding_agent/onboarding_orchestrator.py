@@ -151,6 +151,7 @@ def run_onboarding(
     asset_config_path: str = "",
     product_profile: str = "",
     reporting_date: str = "",
+    set_aside_columns=None,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -325,6 +326,26 @@ def run_onboarding(
             inv_dicts = [dataclasses.asdict(i) for i in inventory]
             memory_ignored_columns |= _mm.ignored_column_keys(store, inv_dicts)
             project.client_memory_summary = _mm.summarize_application(mem_result, store)
+
+    # --- Columns an operator set aside (governed; see the Operations Control
+    # engine). They feed nothing: the deterministic candidate is cleared, as
+    # an ignore_column memory entry clears it, and the target-first review
+    # below is told to leave them out rather than rediscover them by name. ---
+    set_aside = {(str(f or "*"), str(c)) for f, c in (set_aside_columns or [])
+                 if str(c or "").strip()}
+    if set_aside:
+        from .target_coverage import without_set_asides as _without
+        for cand in project.mapping_candidates:
+            probe = {"source_file": getattr(cand, "source_file", ""),
+                     "source_column": getattr(cand, "source_column", "")}
+            if _without([probe], set_aside):
+                continue
+            cand.candidate_canonical_field = ""
+            cand.method = "set_aside_by_operator"
+            cand.requires_review = False
+            cand.reason = "An operator set this column aside; it feeds nothing."
+            memory_ignored_columns.add((probe["source_file"],
+                                        probe["source_column"]))
 
     # --- PART 6 (docs): extract config-relevant facts under minimisation policy ---
     doc_policy = load_document_policy()
@@ -502,6 +523,7 @@ def run_onboarding(
                 regime_config_path=(regime_config_path or None),
                 asset_config_path=(asset_config_path or None),
                 precomputed_context=getattr(project, "resolved_context", None),
+                set_aside_columns=sorted(set_aside | memory_ignored_columns),
             )
             ru = mr.get("resolver_usage", {})
             project.mapping_review_summary = {

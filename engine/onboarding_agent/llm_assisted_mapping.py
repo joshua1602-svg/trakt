@@ -94,6 +94,7 @@ def run_llm_assisted_mapping(
     regime_config_path: Optional[str] = None,
     asset_config_path: Optional[str] = None,
     precomputed_context: Optional[Dict[str, Any]] = None,
+    set_aside_columns: Optional[List[Tuple[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Run the full controlled mapping workbench pipeline and write artefacts.
 
@@ -365,7 +366,8 @@ def run_llm_assisted_mapping(
         scope_client_id=(scope_client_id or client_id),
         source_portfolio_id=(scope_source_portfolio_id or client_id),
         source_schema_fingerprint=str(
-            (context or {}).get("source_schema_fingerprint", "") or ""))
+            (context or {}).get("source_schema_fingerprint", "") or ""),
+        set_aside_columns=set_aside_columns)
 
     # 36 — OPTIONAL target-first LLM ADVISOR. Operates on the 28c decisions +
     # 28a/28b evidence (NOT the raw source-column universe). Advisory only: it

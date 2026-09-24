@@ -35,6 +35,7 @@ import pytest
 
 from operations_control.contracts import KIND_FIELD_MAPPING
 from operations_control.occ_agent import mapping_promotion as mp
+from operations_control.occ_agent import staging as _staging
 from operations_control.occ_agent.staging import NOT_USED_VALUE
 
 
@@ -79,9 +80,18 @@ def _decision(column, target, *, resolution="approve", resolved_value="",
 
 
 def _set_aside(column, previous_target):
-    """What "Do not use" settles to: an answered decision with no target."""
-    return _decision(column, previous_target, resolution="amend",
-                     resolved_value=NOT_USED_VALUE)
+    """What "Do not use" settles to, EXACTLY as the mapping table commits it.
+
+    This helper used to write ``resolution="amend"``, which is not what the
+    commit writes. The real commit writes ``staging.RESOLUTION[not_used]`` —
+    "approve" — and that difference is the whole bug: promotion read an
+    approved set-aside as an approval of the proposed field. A test that
+    builds a friendlier shape than production proves nothing about production.
+    """
+    return _decision(column, previous_target,
+                     resolution=_staging.RESOLUTION[_staging.ACTION_NOT_USED],
+                     resolved_value=_staging.resolved_value(
+                         {"action": _staging.ACTION_NOT_USED}))
 
 
 def _promote(store, decisions):
@@ -122,7 +132,8 @@ class TestTheLiveRemoval:
             _set_aside("Latest Property Value", "current_valuation_amount"),
             _decision("Latest Valuation", "current_valuation_amount")])
         assert [r["rule_id"] for r in store.retired] == ["r_drop"]
-        assert [str(r.payload["source_column"]) for r in store.approved] == [
+        mapped = [r for r in store.approved if not mp.is_set_aside(r)]
+        assert [str(r.payload["source_column"]) for r in mapped] == [
             "Latest Valuation"]
 
 

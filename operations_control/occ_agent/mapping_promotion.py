@@ -83,6 +83,13 @@ SUGGESTED_BY = "occ_agent_rehearsal"
 #: settled operator decision took it out of force rather than a person.
 WITHDRAWN_BY = "occ_agent_withdrawal"
 
+#: The payload flag a set-aside rule carries. See :func:`set_aside_rule`.
+SET_ASIDE = "set_aside"
+
+#: Resolved values that mean "this column feeds nothing": the mapping table's
+#: own, and the one ``_approved_mappings`` has always also accepted.
+SET_ASIDE_VALUES = (NOT_USED, "__ignore__")
+
 
 def _key(source_column: str) -> str:
     """One column, however the pack and the decision each spelled it."""
@@ -130,6 +137,17 @@ def mapping_of(decision: Dict[str, Any]) -> Optional[Dict[str, str]]:
     canonical = _read(decision, "target_field")
     answer = str(decision.get("resolved_value") or "").strip()
 
+    # "DO NOT USE" IS AN APPROVAL WITH NO FIELD, whatever the resolution word.
+    # The mapping table commits a set-aside as ``resolution="approve"`` with
+    # ``resolved_value=NOT_USED`` (see ``staging.RESOLUTION``), and this
+    # function used to read only an AMENDMENT's answer — so an approved
+    # set-aside fell through to the decision's own proposed field and was
+    # promoted as that mapping. That is how `Latest Property Value`, taken away
+    # by hand, arrived in the governed store as a live rule for
+    # `current_valuation_amount`: not left behind, WRITTEN, at activation.
+    if answer in SET_ASIDE_VALUES:
+        return None
+
     if resolution == "amend" and answer:
         # Which side the operator's answer belongs on depends on which side the
         # question fixed. See the module note.
@@ -173,6 +191,46 @@ def withdrawal_of(decision: Dict[str, Any]) -> str:
     if not source:
         return ""
     return "" if mapping_of(decision) else source
+
+
+def set_aside_rule(column: str, files: List[str], decision: Dict[str, Any], *,
+                   client_id: str, portfolio_id: str,
+                   workflow_id: str) -> RuleRecord:
+    """The governed statement that a column feeds nothing.
+
+    WITHDRAWING THE OLD RULE WAS HALF OF IT. Retiring the mapping stopped the
+    store saying the column fed a field, but nothing then said it fed NOTHING,
+    and coverage does not need a rule to find a column: it reads names against
+    the registry's aliases. So ``Latest Property Value`` came straight back as
+    a second source for ``current_valuation_amount`` and the operator was
+    asked, on the live workflow, which of two columns was authoritative — one
+    of which they had set aside by hand.
+
+    A set-aside is therefore a rule in its own right: the column's
+    ``field_mapping`` with no field. Its subject is the column, so approving it
+    SUPERSEDES the mapping it replaces rather than standing beside it, and the
+    engine reads it back as a column to leave out (see
+    ``OpsEngine._set_aside_columns``). ``source_files`` names the files it was
+    set aside in; a column of the same name in any other file is untouched.
+    """
+    return RuleRecord(
+        rule_id="", version=0, kind=KIND_FIELD_MAPPING,
+        scope=PROMOTED_SCOPE, client_id=client_id, portfolio_id=portfolio_id,
+        payload={"source_column": column, "canonical_field": "",
+                 SET_ASIDE: True, "source_files": sorted(set(files))},
+        description=f"Do not use '{column}'; it feeds nothing.",
+        suggested_by=SUGGESTED_BY, confidence=None,
+        decision_id=str(decision.get("decision_id") or ""),
+        workflow_id=workflow_id,
+        approved_by=str(decision.get("resolved_by") or ""),
+        approved_at=str(decision.get("resolved_at") or "") or now_iso(),
+        reason=str(decision.get("reason") or "")
+        or "set aside during the onboarding rehearsal")
+
+
+def is_set_aside(rule: Any) -> bool:
+    """Is this governed rule a statement that its column feeds nothing?"""
+    return bool((getattr(rule, "payload", None) or {}).get(SET_ASIDE))
 
 
 def rules_from(decisions: List[Dict[str, Any]], *, client_id: str,
@@ -224,6 +282,27 @@ def rules_from(decisions: List[Dict[str, Any]], *, client_id: str,
             approved_at=str(decision.get("resolved_at") or "") or now_iso(),
             reason=str(decision.get("reason") or "")
             or "settled during the onboarding rehearsal"))
+
+    # AND WHAT FEEDS NOTHING. One rule per column, naming every file it was
+    # set aside in. A column the same run ALSO mapped keeps its mapping: the
+    # rule's subject is the column, so the two cannot both stand, and taking a
+    # field away from a column an operator mapped would be the worse error.
+    asides: Dict[str, Dict[str, Any]] = {}
+    mapped = {_key(k) for k in seen}
+    for decision in decisions or []:
+        column = withdrawal_of(decision)
+        if not column or _key(column) in mapped:
+            continue
+        entry = asides.setdefault(_key(column), {"column": column, "files": [],
+                                                 "decision": decision})
+        source_file = _read(decision, "source_file")
+        if source_file:
+            entry["files"].append(source_file)
+    for entry in asides.values():
+        out.append(set_aside_rule(entry["column"], entry["files"],
+                                  entry["decision"], client_id=client_id,
+                                  portfolio_id=portfolio_id,
+                                  workflow_id=workflow_id))
     return out
 
 
@@ -252,14 +331,19 @@ def promote(rules_store: Any, decisions: List[Dict[str, Any]], *,
     deleted, and the prior version stays readable in the rule's history.
     """
     added: List[Dict[str, str]] = []
+    written: set = set()
     for rule in rules_from(decisions, client_id=client_id,
                            portfolio_id=portfolio_id,
                            workflow_id=workflow_id):
         stored = rules_store.approve(rule)
-        added.append({"rule_id": stored.rule_id,
-                      "version": str(stored.version),
-                      "source_column": str(rule.payload.get("source_column")),
-                      "canonical_field": str(rule.payload.get("canonical_field"))})
+        written.add(stored.rule_id)
+        row = {"rule_id": stored.rule_id,
+               "version": str(stored.version),
+               "source_column": str(rule.payload.get("source_column")),
+               "canonical_field": str(rule.payload.get("canonical_field"))}
+        if is_set_aside(rule):
+            row["set_aside"] = "true"
+        added.append(row)
 
     # AND WHAT THE OPERATOR TOOK AWAY. Settling a mapping wrote a rule; setting
     # the same column aside wrote nothing, so the rule it had already written
@@ -273,6 +357,10 @@ def promote(rules_store: Any, decisions: List[Dict[str, Any]], *,
     keyed = {_key(w) for w in withdrawn}
     for rule in rules_store.list_current(client_id):
         if rule.kind != KIND_FIELD_MAPPING:
+            continue
+        # The set-aside just written is the column's rule now, not a mapping
+        # to take away; the mapping it superseded is already out of force.
+        if rule.rule_id in written or is_set_aside(rule):
             continue
         column = str((rule.payload or {}).get("source_column") or "")
         if _key(column) not in keyed:
