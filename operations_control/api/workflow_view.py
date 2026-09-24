@@ -86,26 +86,33 @@ STEP_STATUS_LABELS = {
 #: Publication approval scopes offered on a delivery. The platform-wide scope is
 #: deliberately absent — see ``contracts.PUBLICATION_SCOPES``.
 #:
-#: The wording is deliberately narrow. Today the answer is RECORDED against the
-#: publication and the audit trail; nothing reads it back to approve a later
-#: delivery. So nothing here may suggest that a future delivery will publish
-#: itself — a promise the system does not keep would be worse than not asking.
+#: "Yes" is a STANDING approval, and the wording says exactly when it acts:
+#: a later delivery with the same source schema, nothing open and nothing
+#: excepted publishes without a click (``OpsEngine._publish_on_standing_
+#: approval``). Anything else waits for a person, and the wording says that too.
 APPROVAL_SCOPES = (
     {"value": "delivery", "label": "No — this delivery only",
      "explanation": "Nothing is carried forward. Trakt will ask again next "
                     "time."},
     {"value": "portfolio", "label": "Yes — future deliveries for this portfolio",
-     "explanation": "Your answer is recorded against this portfolio. Someone "
-                    "still approves each delivery."},
+     "explanation": "Later deliveries for this portfolio with the same source "
+                    "schema publish without asking. A changed schema or an "
+                    "open question still waits for you."},
     {"value": "client", "label": "Yes — future deliveries for this client",
-     "explanation": "Your answer is recorded against this client. Someone "
-                    "still approves each delivery."},
+     "explanation": "Later deliveries for this client with the same source "
+                    "schema publish without asking. A changed schema or an "
+                    "open question still waits for you."},
 )
 
+#: The default is the operating model: onboard once, then report unchanged
+#: months without anyone touching them.
+APPROVAL_SCOPE_DEFAULT = "portfolio"
+
 #: Shown beneath the scope question, so what "remember" means is never guessed.
-APPROVAL_SCOPE_NOTE = ("Trakt records your answer so it is on the delivery's "
-                       "record. It does not publish anything on its own — every "
-                       "delivery is approved by a person.")
+APPROVAL_SCOPE_NOTE = ("A later delivery publishes on its own only when its "
+                       "source schema is the one approved here, no question is "
+                       "open and no exception was accepted. Anything else "
+                       "waits for a person.")
 
 
 def _fact(label: str, value: Any) -> Dict[str, str]:
@@ -414,16 +421,14 @@ def _approval_step(run: WorkflowRun, results: Dict[str, Dict[str, Any]],
                               "deliveries?",
             "scope_note": APPROVAL_SCOPE_NOTE,
             "scopes": [dict(s) for s in APPROVAL_SCOPES],
-            "default_scope": PUBLICATION_SCOPE_DEFAULT,
+            "default_scope": APPROVAL_SCOPE_DEFAULT,
             "consequence": consequence,
             "scope_consequences": {
                 "delivery": "This decision applies only to this delivery.",
-                "portfolio": "Your answer is also recorded against future "
-                             f"deliveries for {run.portfolio_id}, which are "
-                             "still approved one at a time.",
-                "client": "Your answer is also recorded against future "
-                          f"deliveries for {run.client_id}, which are still "
-                          "approved one at a time.",
+                "portfolio": f"Later {run.portfolio_id} deliveries with this "
+                             "source schema will publish without asking.",
+                "client": f"Later {run.client_id} deliveries with this source "
+                          "schema will publish without asking.",
             },
             "version": (publication or {}).get("version"),
         },

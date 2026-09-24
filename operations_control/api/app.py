@@ -915,6 +915,24 @@ def approve_publication(workflow_id: str, body: Optional[PublishBody] = None,
     return {"ok": True, "publication": presenters.present_publication(pub)}
 
 
+class StandingBody(BaseModel):
+    scope: str = "portfolio"
+
+
+@app.post("/ops/workflows/{workflow_id}/standing-approval")
+def grant_standing_publication(workflow_id: str, body: StandingBody,
+                               client: Optional[str] = None,
+                               principal: Principal = Depends(authenticate)
+                               ) -> Dict[str, Any]:
+    """Let an already-published delivery stand for later ones with the same
+    source schema. See ``OpsEngine.grant_standing_publication``."""
+    eng = get_engine()
+    run = _load_owned_workflow(eng, principal, workflow_id, client)
+    return {"ok": True, **eng.grant_standing_publication(
+        client_id=run.client_id, workflow_id=workflow_id, scope=body.scope,
+        actor=principal.name)}
+
+
 @app.post("/ops/workflows/{workflow_id}/hold")
 def reject_publication(workflow_id: str, body: ReasonBody,
                        client: Optional[str] = None,

@@ -319,12 +319,22 @@ class ProductionPersistence:
 
     # -- central platform canonical (latest + period) ---------------------- #
     def persist_platform(self, client_id: str, period: str,
-                         local_path: str) -> Dict[str, Optional[str]]:
+                         local_path: str, *, update_latest: bool = True
+                         ) -> Dict[str, Optional[str]]:
+        """Publish the platform canonical: the period copy, and — unless this
+        period is older than one already published — the ``latest`` copy.
+
+        ``update_latest=False`` is a BACKFILL: an earlier month is filed under
+        its own period and leaves ``latest`` on the newest month, so loading
+        history never makes MI read June as current after August.
+        """
         if not local_path or not Path(local_path).exists():
             return {"latest": None, "period": None}
+        latest = None
         uri = self.layout.platform_latest_uri(client_id)
         try:
-            latest = self.storage.upload_file(local_path, uri)
+            if update_latest:
+                latest = self.storage.upload_file(local_path, uri)
             uri = self.layout.platform_period_uri(client_id, period)
             period_uri = self.storage.upload_file(local_path, uri)
         except Exception:

@@ -84,7 +84,9 @@ from .contracts import (
     STAGE_VALIDATION,
     STAGE_XML,
     WF_NEW_CLIENT,
+    WF_BACKFILL,
     WF_NEW_PORTFOLIO,
+    WF_RECURRING,
     WORKFLOW_TYPES,
     WorkflowRun,
     new_id,
@@ -93,6 +95,23 @@ from .contracts import (
     transition,
 )
 from .rules import RuleRecord, RuleStore, project_rules_to_client_memory
+from .rules import SCOPE_CLIENT as SCOPE_CLIENT_PUB
+from .rules import SCOPE_PORTFOLIO as SCOPE_PORTFOLIO_PUB
+
+#: The subject of the rule a standing publication approval is stored as.
+STANDING_PUBLICATION = "standing_publication_approval"
+#: Who the audit trail names when a delivery publishes on a standing approval.
+AUTO_PUBLICATION_ACTOR = "trakt:standing-approval"
+
+
+def _dataset(run) -> str:
+    return str((getattr(run, "delivery", None) or {}).get("dataset")
+               or "funded")
+
+
+def _standing_subject(run) -> str:
+    """One standing approval per dataset: funded and pipeline are separate."""
+    return f"{STANDING_PUBLICATION}:{_dataset(run)}"
 from .stores import OpsStore
 
 logger = logging.getLogger("trakt.operations_control.engine")
@@ -1244,6 +1263,13 @@ class OpsEngine:
         self.store.clear_lease(run)
         self.store.append_event(run, "execution_finished",
                                 detail={"status": run.status})
+        if new_status == RUN_AWAITING_PUBLICATION:
+            try:
+                self._publish_on_standing_approval(run)
+            except Exception:                 # noqa: BLE001 — fall back to a person
+                logger.exception("standing-approval publication failed for %s",
+                                 run.workflow_id)
+            run = self.store.load_workflow(run.client_id, run.workflow_id) or run
         self._update_batch_from_run(run)
 
     # ------------------------------------------------------------------ #
@@ -1887,6 +1913,11 @@ class OpsEngine:
                 subject={"artefact": "publication"})])
         self._prepare_publication(run, state)
         self._park(run, RUN_AWAITING_PUBLICATION)
+        try:
+            self._publish_on_standing_approval(run)
+        except Exception:                     # noqa: BLE001 — fall back to a person
+            logger.exception("standing-approval publication failed for %s",
+                             run.workflow_id)
 
     def _on_step(self, client_id: str, workflow_id: str, step: str, result) -> None:
         """Live progress: persist a light stage-status update as each agent
@@ -2639,6 +2670,138 @@ class OpsEngine:
         return ProductionPersistence(storage=self.store.storage,
                                      layout=Layout.from_env())
 
+    # ------------------------------------------------------------------ #
+    # Standing publication approval — the monthly delivery that needs nobody
+    # ------------------------------------------------------------------ #
+    def _record_standing_approval(self, run: WorkflowRun, scope: str,
+                                  actor: str) -> Optional[RuleRecord]:
+        """Turn "Yes — future deliveries for this portfolio/client" into a
+        governed rule, tied to the SCHEMA of the delivery being approved.
+
+        THE MODEL THIS RESTORES: onboarding is done once, and a later month
+        whose source schema has not changed is reported without anyone
+        touching it. The approval screen offered exactly that choice and then
+        recorded it and did nothing with it, so every month waited for a click.
+
+        Every dataset and every product: a funded or pipeline delivery, for
+        management reporting and — where the product includes it — the
+        regulatory return. One standing approval per portfolio (or client) AND
+        dataset, because a funded tape and a pipeline file are different
+        sources with different schemas.
+        """
+        if scope not in (SCOPE_PORTFOLIO_PUB, SCOPE_CLIENT_PUB):
+            return None
+        fingerprint = str(run.delivery.get("schema_fingerprint") or "")
+        if not fingerprint:
+            return None
+        rule = RuleRecord(
+            rule_id="", version=0, kind=KIND_PUBLICATION, scope=scope,
+            client_id=run.client_id,
+            portfolio_id=run.portfolio_id if scope == SCOPE_PORTFOLIO_PUB else "",
+            payload={"subject": _standing_subject(run),
+                     "dataset": _dataset(run),
+                     "schema_fingerprint": fingerprint,
+                     "outcome": run.outcome,
+                     "approved_period": run.reporting_period or ""},
+            description=("Publish later management-report deliveries with "
+                         "this source schema without asking."),
+            approved_by=actor, workflow_id=run.workflow_id,
+            reason="standing approval given when publishing "
+                   f"{run.reporting_period or 'a delivery'}")
+        rule = self.rules.approve(rule)
+        self.store.append_audit(
+            run.client_id, "publication_standing_approval_recorded",
+            actor=actor, workflow_id=run.workflow_id, rule_id=rule.rule_id,
+            detail={"scope": scope, "schema_fingerprint": fingerprint})
+        return rule
+
+    def grant_standing_publication(self, *, client_id: str, workflow_id: str,
+                                   scope: str, actor: str) -> Dict[str, Any]:
+        """Give a standing approval from a delivery ALREADY published.
+
+        For a delivery approved before "Yes — future deliveries" did anything:
+        its publication was a person's approval of exactly this schema, so it
+        can stand for later deliveries without being published again.
+        """
+        run = self.store.load_workflow(client_id, workflow_id)
+        if run is None:
+            raise OpsError("OPS_WORKFLOW_NOT_FOUND",
+                           "That workflow could not be found.", 404)
+        if run.status != RUN_PUBLISHED:
+            raise OpsError("OPS_NOT_PUBLISHED",
+                           "Only a published delivery can stand for later "
+                           "ones.", 409)
+        rule = self._record_standing_approval(run, scope, actor)
+        if rule is None:
+            raise OpsError("OPS_BAD_SCOPE",
+                           "Choose this portfolio or this client, for a "
+                           "delivery whose schema was recorded.", 400)
+        return {"rule_id": rule.rule_id, "version": rule.version,
+                "scope": scope, "dataset": _dataset(run),
+                "schema_fingerprint": rule.payload.get("schema_fingerprint")}
+
+    def _standing_approval(self, run: WorkflowRun) -> Optional[RuleRecord]:
+        for rule in self.rules.applicable(client_id=run.client_id,
+                                          portfolio_id=run.portfolio_id):
+            p = rule.payload or {}
+            if rule.kind == KIND_PUBLICATION \
+                    and p.get("subject") == _standing_subject(run):
+                return rule
+        return None
+
+    def auto_publication_refusals(self, run: WorkflowRun) -> List[str]:
+        """Every reason this delivery may NOT publish on a standing approval.
+        Empty means it may. Each is a sentence an operator can act on."""
+        why: List[str] = []
+        rule = self._standing_approval(run)
+        if rule is None:
+            return ["No standing approval: publish one delivery with "
+                    "'Yes — future deliveries' to turn automatic publishing on."]
+        if run.workflow_type not in (WF_RECURRING, WF_BACKFILL):
+            why.append("A first delivery for a client or portfolio is always "
+                       "approved by a person.")
+        if run.outcome != (rule.payload or {}).get("outcome", run.outcome):
+            why.append("The products this delivery prepares differ from the "
+                       "ones approved for automatic publishing.")
+        fingerprint = str(run.delivery.get("schema_fingerprint") or "")
+        if not fingerprint or fingerprint != (rule.payload or {}).get(
+                "schema_fingerprint"):
+            why.append("The source schema differs from the one approved for "
+                       "automatic publishing.")
+        others = [d for d in self.store.open_decisions(run.client_id,
+                                                       run.workflow_id)
+                  if d.get("kind") != KIND_PUBLICATION]
+        if others:
+            why.append(f"{len(others)} question(s) are still open.")
+        if self._validation_exception_approved(run):
+            why.append("A validation exception was accepted for this delivery.")
+        if run.blockers:
+            why.append("The delivery carries a blocking problem.")
+        return why
+
+    def _publish_on_standing_approval(self, run: WorkflowRun) -> Optional[Dict[str, Any]]:
+        """Publish a prepared delivery that meets its standing approval.
+
+        Anything short of every condition leaves it waiting for a person,
+        with the reasons recorded on the run, never guessed past.
+        """
+        refusals = self.auto_publication_refusals(run)
+        if refusals:
+            self.store.append_event(run, "auto_publication_not_applied",
+                                    detail={"reasons": refusals})
+            return None
+        rule = self._standing_approval(run)
+        self.store.append_audit(
+            run.client_id, "publication_auto_approved",
+            actor=AUTO_PUBLICATION_ACTOR, workflow_id=run.workflow_id,
+            rule_id=rule.rule_id,
+            detail={"rule_version": rule.version,
+                    "schema_fingerprint": run.delivery.get("schema_fingerprint"),
+                    "approved_by": rule.approved_by})
+        return self.approve_publication(
+            client_id=run.client_id, workflow_id=run.workflow_id,
+            actor=AUTO_PUBLICATION_ACTOR)
+
     def approve_publication(self, *, client_id: str, workflow_id: str,
                             actor: str,
                             remember_scope: str = PUBLICATION_SCOPE_DEFAULT
@@ -2679,6 +2842,13 @@ class OpsEngine:
         pub.update(status="approved", approved_by=actor, approved_at=now_iso(),
                    approval_scope=remember_scope)
         self.store.save_publication(client_id, pub)
+        # "Yes — future deliveries for this portfolio / client" is a STANDING
+        # approval: later deliveries with this same schema publish without a
+        # click. See `_publish_on_standing_approval`.
+        standing = self._record_standing_approval(run, remember_scope, actor)
+        if standing is not None:
+            pub["standing_approval_rule"] = standing.rule_id
+            self.store.save_publication(client_id, pub)
 
         # Resolve any still-open publication decision for this workflow so it
         # leaves the Review Centre whichever surface the operator used.
@@ -2693,8 +2863,18 @@ class OpsEngine:
         persistence = self._persistence()
         central = (pub.get("source_artefacts") or {}).get("central_canonical")
         published: Dict[str, Any] = {}
+        # AN EARLIER MONTH DOES NOT BECOME "LATEST". Publishing always
+        # overwrote the latest copy, so backfilling June after August would
+        # have made MI read June as the current book.
+        newest = max((str(p.get("reporting_period") or "")
+                      for p in self.store.list_publications(client_id)
+                      if p.get("status") == "published"
+                      and p.get("workflow_id") != run.workflow_id), default="")
+        is_newest = not newest or str(period) >= newest
         if central and Path(str(central)).exists():
-            published = persistence.persist_platform(client_id, period, str(central))
+            published = persistence.persist_platform(
+                client_id, period, str(central), update_latest=is_newest)
+        published["is_latest"] = is_newest
         a2 = pub.get("annex2") or {}
         if a2.get("xml") and Path(str(a2["xml"])).exists():
             regime_dir = str(Path(str(a2["xml"])).parent)
