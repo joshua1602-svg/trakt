@@ -2230,7 +2230,11 @@ def without_set_asides(rows: List[Dict[str, Any]],
     sets the column aside in every file. Columns are matched however each side
     spelled the spacing and case.
     """
-    pairs = {(str(f or "*").strip() or "*", _column_key(c))
+    # Files are compared by FAMILY — the name without its date — so a column
+    # set aside in August's `PropertyExtract - Omni 2026_09_01.xlsx` is set
+    # aside in July's `... 2026_08_01.xlsx` too. See `file_identity`.
+    from .file_identity import file_family
+    pairs = {(file_family(str(f or "*").strip()) or "*", _column_key(c))
              for f, c in (set_aside or []) if _column_key(c)}
     if not pairs:
         return list(rows or [])
@@ -2240,7 +2244,7 @@ def without_set_asides(rows: List[Dict[str, Any]],
         col = _column_key(row.get("source_column"))
         if col in anywhere:
             return False
-        return (str(row.get("source_file") or ""), col) not in pairs
+        return (file_family(str(row.get("source_file") or "")), col) not in pairs
 
     return [r for r in rows or [] if _kept(r)]
 
