@@ -867,8 +867,9 @@ export class MockOpsClient implements OpsClient {
             question: "Publish this delivery as the latest official version?",
             scope_question: "Should Trakt remember this decision for future deliveries?",
             scope_note:
-              "Trakt records your answer so it is on the delivery's record. It does not " +
-              "publish anything on its own — every delivery is approved by a person.",
+              "A later delivery publishes on its own only when its source schema is the " +
+              "one approved here, no question is open and no exception was accepted. " +
+              "Anything else waits for a person.",
             scopes: [
               {
                 value: "delivery",
@@ -879,18 +880,18 @@ export class MockOpsClient implements OpsClient {
                 value: "portfolio",
                 label: "Yes — future deliveries for this portfolio",
                 explanation:
-                  "Your answer is recorded against this portfolio. Someone still approves " +
-                  "each delivery.",
+                  "Later deliveries for this portfolio with the same source schema publish " +
+                  "without asking. A changed schema or an open question still waits for you.",
               },
               {
                 value: "client",
                 label: "Yes — future deliveries for this client",
                 explanation:
-                  "Your answer is recorded against this client. Someone still approves " +
-                  "each delivery.",
+                  "Later deliveries for this client with the same source schema publish " +
+                  "without asking. A changed schema or an open question still waits for you.",
               },
             ],
-            default_scope: "delivery",
+            default_scope: "portfolio",
             consequence:
               `This will publish the ${periodWords(workflow.reporting_period)} ` +
               `${workflow.client_id} ${workflow.portfolio_id} delivery as the latest ` +
@@ -898,11 +899,11 @@ export class MockOpsClient implements OpsClient {
             scope_consequences: {
               delivery: "This decision applies only to this delivery.",
               portfolio:
-                `Your answer is also recorded against future deliveries for ` +
-                `${workflow.portfolio_id}, which are still approved one at a time.`,
+                `Later ${workflow.portfolio_id} deliveries with this source schema will ` +
+                `publish without asking.`,
               client:
-                `Your answer is also recorded against future deliveries for ` +
-                `${workflow.client_id}, which are still approved one at a time.`,
+                `Later ${workflow.client_id} deliveries with this source schema will ` +
+                `publish without asking.`,
             },
             version: publication?.version ?? null,
           },

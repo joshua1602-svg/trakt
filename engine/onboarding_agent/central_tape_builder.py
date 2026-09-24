@@ -59,6 +59,7 @@ import yaml
 from engine.gate_1_alignment.semantic_alignment import load_field_registry
 from engine import provenance as _provenance
 from . import domain_coverage as dc
+from . import file_identity as _file_identity
 from . import run_context as _rc
 from . import source_period_eligibility as spe
 from .field_scope import resolve_field_scope
@@ -467,6 +468,10 @@ def _collect_field_sources(
     def add_override(o: Dict[str, Any], method: str, conf: float) -> None:
         column = o.get("source_column", "")
         named = o.get("source_file", "")
+        if named:
+            # The file an override names may be another month's: this pack's
+            # file of the same family is the one meant.
+            named = _file_identity.resolve(named, inventory_by_name) or named
         for file_name in ([named] if named else files_by_column.get(_norm(column), [])):
             add(file_name, column, o.get("canonical_field", ""),
                 o.get("method", method), o.get("confidence", conf))
@@ -562,7 +567,11 @@ def _coverage_selections(
         if not canon:
             continue
         if status in _COV_SOURCE_MAPPED:
-            f = r.get("selected_source_file", "")
+            # An answer carried from another month names that month's file;
+            # this pack's file of the same family is the one meant.
+            f = (_file_identity.resolve(r.get("selected_source_file", ""),
+                                        inventory_by_name)
+                 or r.get("selected_source_file", ""))
             c = r.get("selected_source_column", "")
             if f and c:
                 inv = inventory_by_name.get(f, {})
@@ -675,7 +684,10 @@ def _order_sources(
     rule = (precedence or {}).get(canon)
     if rule and rule.get("primary_source_file"):
         primary_file = rule["primary_source_file"]
-        return sorted(srcs, key=lambda s: 0 if s.file_name == primary_file else 1)
+        # "This file is authoritative" was said about one month's file; it
+        # holds for the same file in every month.
+        return sorted(srcs, key=lambda s: 0 if _file_identity.same_source(
+            s.file_name, primary_file) else 1)
 
     # Default ordering by the field's domain -> classification precedence.
     domains = dc.field_domains(canon, registry_fields.get(canon, {}))

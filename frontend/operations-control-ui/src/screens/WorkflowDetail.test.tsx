@@ -126,38 +126,43 @@ describe("publication approval inside the workflow", () => {
     ).toBeInTheDocument();
     expect(within(approval).getByText(/0 blocking issues/)).toBeInTheDocument();
     expect(
-      within(approval).getByText(/as the latest official version\..*applies only to this delivery/s),
+      within(approval).getByText(
+        /as the latest official version\..*with this source schema will publish without asking/s,
+      ),
     ).toBeInTheDocument();
   });
 
-  it("defaults the remembered scope to this delivery only", async () => {
+  it("asks whether to remember the decision, and still offers this delivery only", async () => {
     renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
 
     const approval = await approvalStep();
     expect(
       within(approval).getByText("Should Trakt remember this decision for future deliveries?"),
     ).toBeInTheDocument();
-    const chosen = within(approval).getByRole("radio", {
-      name: /No — this delivery only/,
-    }) as HTMLInputElement;
-    expect(chosen.checked).toBe(true);
+    expect(
+      within(approval).getByRole("radio", { name: /No — this delivery only/ }),
+    ).toBeInTheDocument();
   });
 
-  it("does not promise automatic approval it cannot deliver", async () => {
+  it("says when a later delivery publishes itself, and when it waits", async () => {
     renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
     const approval = await approvalStep();
 
-    // The answer is recorded; it does not publish anything by itself, and the
-    // wording says so rather than implying a future delivery approves itself.
+    // "Yes" is a standing approval: an unchanged schema publishes without a
+    // click, and the wording says both that and what still waits for a person.
+    expect(within(approval).getByText(/waits for a person/i)).toBeInTheDocument();
     expect(
-      within(approval).getByText(/does not publish anything on its own/),
-    ).toBeInTheDocument();
+      within(approval).getAllByText(/same source schema publish without asking/).length,
+    ).toBe(2);
+    expect(within(approval).getAllByText(/still waits for you/).length).toBe(2);
+  });
+
+  it("defaults to the standing approval", async () => {
+    renderWorkflow(new MockOpsClient(0), "/workflows/wf-1002");
+    const approval = await approvalStep();
     expect(
-      within(approval).getByText(/every delivery is approved by a person/i),
-    ).toBeInTheDocument();
-    expect(within(approval).getAllByText(/Someone still approves each delivery/).length).toBe(2);
-    expect(within(approval).queryByText(/will apply this decision/i)).toBeNull();
-    expect(within(approval).queryByText(/automatically/i)).toBeNull();
+      within(approval).getByRole("radio", { name: /future deliveries for this portfolio/i }),
+    ).toBeChecked();
   });
 
   it("never offers a platform-wide scope on a single delivery", async () => {
@@ -181,7 +186,7 @@ describe("publication approval inside the workflow", () => {
     );
     // The consequence updates with the scope, before anything is confirmed.
     expect(
-      within(approval).getByText(/also recorded against future deliveries for/),
+      within(approval).getByText(/with this source schema will publish without asking/),
     ).toBeInTheDocument();
 
     await user.click(within(approval).getByRole("button", { name: "Approve and publish" }));
