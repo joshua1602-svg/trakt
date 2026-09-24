@@ -152,6 +152,7 @@ def run_onboarding(
     product_profile: str = "",
     reporting_date: str = "",
     set_aside_columns=None,
+    confirmed_mappings=None,
 ) -> OnboardingProject:
     in_dir = Path(input_dir)
     out_dir = Path(output_dir)
@@ -524,6 +525,7 @@ def run_onboarding(
                 asset_config_path=(asset_config_path or None),
                 precomputed_context=getattr(project, "resolved_context", None),
                 set_aside_columns=sorted(set_aside | memory_ignored_columns),
+                confirmed_mappings=confirmed_mappings,
             )
             ru = mr.get("resolver_usage", {})
             project.mapping_review_summary = {

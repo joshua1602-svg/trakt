@@ -2245,6 +2245,45 @@ def without_set_asides(rows: List[Dict[str, Any]],
     return [r for r in rows or [] if _kept(r)]
 
 
+def confirmed_by_column(pairs: Optional[Any]) -> Dict[str, set]:
+    """``{column key: {fields it was confirmed to}}`` from (column, field)."""
+    out: Dict[str, set] = {}
+    for column, field in pairs or []:
+        if _column_key(column) and str(field or "").strip():
+            out.setdefault(_column_key(column), set()).add(str(field).strip())
+    return out
+
+
+def honour_confirmed(field: str, candidates: List[Dict[str, Any]],
+                     confirmed: Dict[str, set]) -> List[Dict[str, Any]]:
+    """A field's candidates, read against what an operator confirmed.
+
+    WHY. Coverage finds sources by name, so after an operator confirmed
+    ``Product Category`` as the ERM product type, ``Product Type``,
+    ``Product`` and ``Loan Type`` still claimed the field on alias alone and
+    the operator was asked which of the four was authoritative — a question
+    they had answered, column by column, and committed.
+
+    Two rules, in order:
+
+    * a column confirmed to a DIFFERENT field is not a candidate here — the
+      operator has said what it is;
+    * if any remaining candidate was confirmed to THIS field, only confirmed
+      ones stay. Columns that merely look like it stop counting.
+
+    Two confirmed columns for one field remain a question: that overlap is
+    real, and it is the operator's to settle.
+    """
+    if not confirmed:
+        return candidates
+    kept = [c for c in candidates
+            if not confirmed.get(_column_key(c.get("source_column")))
+            or field in confirmed[_column_key(c.get("source_column"))]]
+    mine = [c for c in kept
+            if field in confirmed.get(_column_key(c.get("source_column")), ())]
+    return mine or kept
+
+
 def _run_period(run_id: str) -> str:
     """The period end a run id names, if it names one (``..._2026-08``)."""
     from . import run_context as rc
@@ -2726,6 +2765,7 @@ def build_target_coverage(
     resolved_rows: List[Dict[str, Any]],
     overlay: Optional[Dict[str, Dict[str, Any]]] = None,
     artefact_roles: Optional[Dict[str, str]] = None,
+    confirmed_mappings: Optional[Any] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[Tuple[str, str, str], List[Tuple[str, float, bool]]]]:
     """Build the target coverage matrix (28a) — one row per TARGET field.
 
@@ -2744,8 +2784,15 @@ def build_target_coverage(
 
     # Candidates for every target field, computed once, so a DERIVED field can be
     # checked against the candidates of the field it is derived from.
+    # What an operator confirmed is the answer, not one candidate among
+    # several. Only where the contract speaks canonical field names — an ESMA
+    # code is not a field an operator confirmed a column to.
+    confirmed = (confirmed_by_column(confirmed_mappings)
+                 if target_contract_id != "esma_annex_2" else {})
     candidates_by_field: Dict[str, List[Dict[str, Any]]] = {
-        tf["target_field"]: _match_candidates(tf, evidence_rows, resolved_by_key)
+        tf["target_field"]: honour_confirmed(
+            tf["target_field"],
+            _match_candidates(tf, evidence_rows, resolved_by_key), confirmed)
         for tf in target_fields}
     parent_candidate_keys: Dict[str, set] = {
         field: {(c["source_file"], c["source_sheet"], c["source_column"]) for c in cands}
@@ -3290,6 +3337,7 @@ def run_target_first_coverage(
     source_portfolio_id: str = "",
     source_schema_fingerprint: str = "",
     set_aside_columns: Optional[Any] = None,
+    confirmed_mappings: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Build + write the target-first coverage artefacts (28a/28b/28c).
 
@@ -3353,7 +3401,8 @@ def run_target_first_coverage(
     resolved_rows = without_set_asides(resolved_rows, set_aside_columns)
     coverage_rows, matched_by_key = build_target_coverage(
         mode, context, cid, csrc, target_fields, evidence_rows, resolved_rows,
-        overlay=overlay, artefact_roles=artefact_roles)
+        overlay=overlay, artefact_roles=artefact_roles,
+        confirmed_mappings=confirmed_mappings)
     # Profile-driven proxy/inference derivations (equity-release balance proxy;
     # reporting-date period inference) — non-blocking, evidence-backed, auditable.
     proxy_changes = apply_profile_proxy_derivations(

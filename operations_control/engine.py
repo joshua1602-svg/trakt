@@ -991,8 +991,33 @@ class OpsEngine:
                 enable_llm_mapping_review=(not deterministic
                                            and bool(llm_policy.get("resolve_mapping"))),
                 managed_service=True,
-                set_aside_columns=self._set_aside_columns(run))
+                set_aside_columns=self._set_aside_columns(run),
+                confirmed_mappings=self._confirmed_mappings(run))
         return GovernedAdapters(inner, recorder)
+
+    def _confirmed_mappings(self, run: WorkflowRun) -> List[Tuple[str, str]]:
+        """``(column, field)`` for every mapping an operator confirmed and the
+        governed rules hold for this run.
+
+        Handed to Gate 1 for the same reason as the set-asides: coverage finds
+        a field's sources by NAME, so a field the operator had answered —
+        `Product Category` is the ERM product type — was put back to them as
+        "which of these four columns is authoritative?", the other three being
+        columns that merely look like it. A confirmation IS that answer.
+        """
+        from .occ_agent.mapping_promotion import is_set_aside
+        out: List[Tuple[str, str]] = []
+        for rule in self.rules.applicable(
+                client_id=run.client_id, portfolio_id=run.portfolio_id,
+                file_ref=run.delivery.get("schema_fingerprint", "")):
+            p = rule.payload or {}
+            if rule.kind not in ("field_mapping", "alias") or is_set_aside(rule):
+                continue
+            column = str(p.get("source_column") or p.get("alias") or "")
+            field = str(p.get("canonical_field") or "")
+            if column and field and (column, field) not in out:
+                out.append((column, field))
+        return sorted(out)
 
     def _set_aside_columns(self, run: WorkflowRun) -> List[Tuple[str, str]]:
         """``(file, column)`` pairs an operator said feed nothing, from the
@@ -2454,6 +2479,14 @@ class OpsEngine:
             set_aside = []
         if set_aside:
             digest.update(repr(set_aside).encode("utf-8"))
+            seen = True
+        # And the confirmed mappings, which settle Gate 1's source questions.
+        try:
+            confirmed = self._confirmed_mappings(run)
+        except Exception:                     # noqa: BLE001 — never block a run
+            confirmed = []
+        if confirmed:
+            digest.update(repr(confirmed).encode("utf-8"))
             seen = True
         return digest.hexdigest() if seen else ""
 

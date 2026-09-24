@@ -479,3 +479,70 @@ class TestTheSameNameInTwoFiles:
     def test_not_asked_once_one_file_s_copy_is_set_aside(self):
         assert "current_interest_rate" not in self._asked(
             [(PANDI, "Current Interest Rate")])
+
+
+# --------------------------------------------------------------------------- #
+# 7. What the operator confirmed is the answer, not one candidate among four
+# --------------------------------------------------------------------------- #
+class TestAConfirmedColumnAnswersTheField:
+    """`Product Category` was confirmed as the ERM product type, and
+    `Latest Valuation Date` as the current valuation date. Coverage still found
+    `Product Type`, `Product`, `Loan Type` and `Valuation Date` by name and
+    asked which was authoritative."""
+
+    def _c(self, column, file_name=LOAN):
+        return {"source_file": file_name, "source_sheet": "",
+                "source_column": column, "confidence": 0.9}
+
+    def test_only_the_confirmed_column_stays(self):
+        cands = [self._c("Product Category"), self._c("Product Type", PROP),
+                 self._c("Product"), self._c("Loan Type")]
+        kept = tcov.honour_confirmed(
+            "erm_product_type", cands, tcov.confirmed_by_column(
+                [("Product Category", "erm_product_type")]))
+        assert [c["source_column"] for c in kept] == ["Product Category"]
+
+    def test_a_column_confirmed_to_another_field_is_not_a_candidate(self):
+        cands = [self._c("Valuation Date"), self._c("Latest Valuation Date", PROP)]
+        kept = tcov.honour_confirmed(
+            "current_valuation_date", cands, tcov.confirmed_by_column(
+                [("Valuation Date", "original_valuation_date")]))
+        assert [c["source_column"] for c in kept] == ["Latest Valuation Date"]
+
+    def test_nothing_confirmed_changes_nothing(self):
+        cands = [self._c("Product Category"), self._c("Product")]
+        assert tcov.honour_confirmed("erm_product_type", cands, {}) == cands
+
+    def test_two_confirmed_columns_are_still_a_question(self):
+        cands = [self._c("Product Category"), self._c("Product Type", PROP)]
+        kept = tcov.honour_confirmed(
+            "erm_product_type", cands, tcov.confirmed_by_column(
+                [("Product Category", "erm_product_type"),
+                 ("Product Type", "erm_product_type")]))
+        assert len(kept) == 2
+
+    def _asked(self, confirmed):
+        from engine.onboarding_agent.llm_assisted_mapping import \
+            run_llm_assisted_mapping
+        warnings.simplefilter("ignore")
+        n = 20
+        ids = [f"L{i}" for i in range(n)]
+        loan = pd.DataFrame({"Loan Policy Number": ids,
+                             "Product Category": ["Lifetime"] * n,
+                             "Product": ["Lifetime"] * n,
+                             "Loan Type": ["Lifetime"] * n})
+        prop = pd.DataFrame({"Loan Policy Number": ids,
+                             "Product Type": ["Lifetime"] * n})
+        out = Path(tempfile.mkdtemp())
+        run_llm_assisted_mapping(dataframes={LOAN: loan, PROP: prop},
+                                 output_dir=str(out), mode="mi_only",
+                                 client_id="direct_001", run_id="run",
+                                 confirmed_mappings=confirmed)
+        doc = yaml.safe_load(
+            (out / "34_target_first_decisions.yaml").read_text())
+        return [d.get("target_field") for d in (doc.get("decisions") or [])]
+
+    def test_on_ere_shaped_data_the_question_goes(self):
+        assert "erm_product_type" in self._asked(None)
+        assert "erm_product_type" not in self._asked(
+            [("Product Category", "erm_product_type")])
