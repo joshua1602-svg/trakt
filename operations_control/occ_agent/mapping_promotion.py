@@ -46,9 +46,9 @@ operator approved in production.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from ..contracts import KIND_FIELD_MAPPING, now_iso
+from ..contracts import KIND_COLUMN_SET_ASIDE, KIND_FIELD_MAPPING, now_iso
 from ..rules import RuleRecord
 from .staging import NOT_USED_VALUE as NOT_USED
 
@@ -85,6 +85,9 @@ WITHDRAWN_BY = "occ_agent_withdrawal"
 
 #: The payload flag a set-aside rule carries. See :func:`set_aside_rule`.
 SET_ASIDE = "set_aside"
+
+#: A set-aside's file when the decision named none: every file.
+ANY_FILE = "*"
 
 #: Resolved values that mean "this column feeds nothing": the mapping table's
 #: own, and the one ``_approved_mappings`` has always also accepted.
@@ -193,32 +196,36 @@ def withdrawal_of(decision: Dict[str, Any]) -> str:
     return "" if mapping_of(decision) else source
 
 
-def set_aside_rule(column: str, files: List[str], decision: Dict[str, Any], *,
+def set_aside_rule(column: str, source_file: str, decision: Dict[str, Any], *,
                    client_id: str, portfolio_id: str,
                    workflow_id: str) -> RuleRecord:
-    """The governed statement that a column feeds nothing.
+    """The governed statement that one column of one file feeds nothing.
 
-    WITHDRAWING THE OLD RULE WAS HALF OF IT. Retiring the mapping stopped the
-    store saying the column fed a field, but nothing then said it fed NOTHING,
-    and coverage does not need a rule to find a column: it reads names against
-    the registry's aliases. So ``Latest Property Value`` came straight back as
-    a second source for ``current_valuation_amount`` and the operator was
-    asked, on the live workflow, which of two columns was authoritative — one
-    of which they had set aside by hand.
+    WITHDRAWING THE OLD RULE WAS HALF OF IT. Retiring a mapping stops the
+    store saying the column feeds a field, but coverage does not need a rule to
+    find a column: it reads names against the registry's aliases. So a column
+    set aside came straight back as a second source, and the operator was asked
+    which of two columns was authoritative — one of which they had removed.
 
-    A set-aside is therefore a rule in its own right: the column's
-    ``field_mapping`` with no field. Its subject is the column, so approving it
-    SUPERSEDES the mapping it replaces rather than standing beside it, and the
-    engine reads it back as a column to leave out (see
-    ``OpsEngine._set_aside_columns``). ``source_files`` names the files it was
-    set aside in; a column of the same name in any other file is untouched.
+    ONE FILE, NOT ONE NAME. ERE's extracts overlap and repeat their names:
+    `Current Interest Rate` is kept in the loan extract and set aside in the
+    principal-and-interest file. The first version of this rule was a
+    ``field_mapping`` with no field, keyed — as every field_mapping is — on the
+    column name alone, so the kept mapping and the set-aside could not both
+    stand and the duplicate was asked about again. A set-aside is now its own
+    kind, keyed on the (file, column) pair; ``"*"`` as the file means a
+    decision recorded before decisions carried their file, and sets the column
+    aside wherever it appears.
     """
     return RuleRecord(
-        rule_id="", version=0, kind=KIND_FIELD_MAPPING,
+        rule_id="", version=0, kind=KIND_COLUMN_SET_ASIDE,
         scope=PROMOTED_SCOPE, client_id=client_id, portfolio_id=portfolio_id,
-        payload={"source_column": column, "canonical_field": "",
-                 SET_ASIDE: True, "source_files": sorted(set(files))},
-        description=f"Do not use '{column}'; it feeds nothing.",
+        payload={"source_column": column, "source_file": source_file or ANY_FILE,
+                 "canonical_field": "", SET_ASIDE: True},
+        description=(f"Do not use '{column}'"
+                     + (f" in '{source_file}'" if source_file
+                        and source_file != ANY_FILE else "")
+                     + "; it feeds nothing."),
         suggested_by=SUGGESTED_BY, confidence=None,
         decision_id=str(decision.get("decision_id") or ""),
         workflow_id=workflow_id,
@@ -226,6 +233,24 @@ def set_aside_rule(column: str, files: List[str], decision: Dict[str, Any], *,
         approved_at=str(decision.get("resolved_at") or "") or now_iso(),
         reason=str(decision.get("reason") or "")
         or "set aside during the onboarding rehearsal")
+
+
+def set_aside_pairs(rule: Any) -> List[Tuple[str, str]]:
+    """``(file, column)`` pairs a set-aside rule covers; ``[]`` for any other.
+
+    Reads both shapes: the per-file kind, and the column-wide field_mapping a
+    set-aside was first written as (``source_files``, empty meaning all).
+    """
+    if not is_set_aside(rule):
+        return []
+    p = getattr(rule, "payload", None) or {}
+    column = str(p.get("source_column") or "")
+    if not column:
+        return []
+    if getattr(rule, "kind", "") == KIND_COLUMN_SET_ASIDE:
+        return [(str(p.get("source_file") or ANY_FILE), column)]
+    files = [str(f) for f in (p.get("source_files") or []) if str(f).strip()]
+    return [(f, column) for f in (files or [ANY_FILE])]
 
 
 def is_set_aside(rule: Any) -> bool:
@@ -283,23 +308,26 @@ def rules_from(decisions: List[Dict[str, Any]], *, client_id: str,
             reason=str(decision.get("reason") or "")
             or "settled during the onboarding rehearsal"))
 
-    # AND WHAT FEEDS NOTHING. One rule per column, naming every file it was
-    # set aside in. A column the same run ALSO mapped keeps its mapping: the
-    # rule's subject is the column, so the two cannot both stand, and taking a
-    # field away from a column an operator mapped would be the worse error.
-    asides: Dict[str, Dict[str, Any]] = {}
+    # AND WHAT FEEDS NOTHING. One rule per (file, column). A column set
+    # aside with no file named — a decision older than file-scoping — covers
+    # every file, so it gives way when the same run mapped that column
+    # anywhere: taking a field from a column an operator mapped would be the
+    # worse error. Set aside in a NAMED file, it stands beside a mapping of the
+    # same name elsewhere, which is exactly ERE's overlapping extracts.
+    asides: Dict[Tuple[str, str], Dict[str, Any]] = {}
     mapped = {_key(k) for k in seen}
     for decision in decisions or []:
         column = withdrawal_of(decision)
-        if not column or _key(column) in mapped:
+        if not column:
             continue
-        entry = asides.setdefault(_key(column), {"column": column, "files": [],
-                                                 "decision": decision})
-        source_file = _read(decision, "source_file")
-        if source_file:
-            entry["files"].append(source_file)
+        source_file = _read(decision, "source_file") or ANY_FILE
+        if source_file == ANY_FILE and _key(column) in mapped:
+            continue
+        asides.setdefault((source_file, _key(column)),
+                          {"column": column, "file": source_file,
+                           "decision": decision})
     for entry in asides.values():
-        out.append(set_aside_rule(entry["column"], entry["files"],
+        out.append(set_aside_rule(entry["column"], entry["file"],
                                   entry["decision"], client_id=client_id,
                                   portfolio_id=portfolio_id,
                                   workflow_id=workflow_id))
@@ -343,6 +371,7 @@ def promote(rules_store: Any, decisions: List[Dict[str, Any]], *,
                "canonical_field": str(rule.payload.get("canonical_field"))}
         if is_set_aside(rule):
             row["set_aside"] = "true"
+            row["source_file"] = str(rule.payload.get("source_file") or "")
         added.append(row)
 
     # AND WHAT THE OPERATOR TOOK AWAY. Settling a mapping wrote a rule; setting
@@ -351,16 +380,34 @@ def promote(rules_store: Any, decisions: List[Dict[str, Any]], *,
     # the store, by the same governed path: `retire` marks the rule withdrawn
     # and keeps its history, exactly as `approve` supersedes rather than
     # overwrites. A column that was never mapped has nothing to withdraw.
+    # A column set aside in one file and kept in another keeps its mapping:
+    # only a column this run mapped NOWHERE has a mapping to withdraw.
     withdrawn = {w for w in (withdrawal_of(d) for d in decisions or []) if w}
     if not withdrawn:
         return added
-    keyed = {_key(w) for w in withdrawn}
+    still_mapped = {_key(r["source_column"]) for r in added
+                    if r.get("canonical_field")}
+    keyed = {_key(w) for w in withdrawn} - still_mapped
     for rule in rules_store.list_current(client_id):
-        if rule.kind != KIND_FIELD_MAPPING:
+        if rule.kind != KIND_FIELD_MAPPING or rule.rule_id in written:
             continue
-        # The set-aside just written is the column's rule now, not a mapping
-        # to take away; the mapping it superseded is already out of force.
-        if rule.rule_id in written or is_set_aside(rule):
+        if is_set_aside(rule):
+            # THE FIRST SHAPE A SET-ASIDE TOOK: a column-wide field_mapping
+            # with no field. The per-file rules written above replace it for
+            # this book, and left in force it would still set the column aside
+            # in files where the operator kept it.
+            if str(getattr(rule, "portfolio_id", "") or "") != portfolio_id:
+                continue
+            retired = rules_store.retire(
+                client_id, rule.rule_id, by=WITHDRAWN_BY,
+                reason="replaced by per-file set-aside rules")
+            if retired is not None:
+                added.append({"rule_id": rule.rule_id,
+                              "version": str(retired.version),
+                              "source_column": str(rule.payload.get(
+                                  "source_column") or ""),
+                              "canonical_field": "", "withdrawn": "true",
+                              "replaced": "true"})
             continue
         column = str((rule.payload or {}).get("source_column") or "")
         if _key(column) not in keyed:

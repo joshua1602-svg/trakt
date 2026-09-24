@@ -181,12 +181,17 @@ class RealAgentAdapters(AgentAdapters):
                  llm_mapping_profile: str = "low",
                  managed_service: bool = False,
                  regulatory_reporting_enabled: bool = False,
-                 set_aside_columns: Optional[List[Tuple[str, str]]] = None):
+                 set_aside_columns: Optional[List[Tuple[str, str]]] = None,
+                 confirmed_mappings: Optional[List[Tuple[str, str]]] = None):
         self.registry = registry
         # set_aside_columns: (file, column) pairs an operator said feed nothing
         # ("*" = any file). Gate 1 leaves them out of every target field's
         # candidates, so a column set aside once is not asked about again.
         self.set_aside_columns = list(set_aside_columns or [])
+        # confirmed_mappings: (column, field) pairs an operator confirmed. A
+        # field with one is answered; a column confirmed elsewhere is not a
+        # candidate for it.
+        self.confirmed_mappings = list(confirmed_mappings or [])
         self.client_name = client_name
         self.onboarding_mode = onboarding_mode
         self.aliases_dir = aliases_dir
@@ -285,6 +290,7 @@ class RealAgentAdapters(AgentAdapters):
             managed_service=self.managed_service,
             regulatory_reporting_enabled=self.regulatory_reporting_enabled,
             set_aside_columns=self.set_aside_columns,
+            confirmed_mappings=self.confirmed_mappings,
             target_first_decisions=((self.mapping_config_path or "") if deterministic else ""))
 
         if self.onboarding_mode == "mi_only":

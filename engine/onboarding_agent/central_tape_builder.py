@@ -406,6 +406,10 @@ class _Source:
         self.classification = classification
 
 
+#: How Gate 1 marks a candidate an operator (or client memory) set aside.
+_SET_ASIDE_METHODS = ("set_aside_by_operator", "ignored_by_client_memory")
+
+
 def _collect_field_sources(
     mapping_candidates: List[Dict[str, Any]],
     overrides: Dict[str, Any],
@@ -452,6 +456,10 @@ def _collect_field_sources(
     # guess at all, and several is the overlap question coverage already asks.
     files_by_column: Dict[str, List[str]] = {}
     for m in mapping_candidates or []:
+        # Not a file an operator set this column aside in: "every file that
+        # carries the column" means every file it is still IN USE in.
+        if m.get("method") in _SET_ASIDE_METHODS:
+            continue
         col, fname = _norm(m.get("source_column", "")), m.get("source_file", "")
         if col and fname and fname not in files_by_column.setdefault(col, []):
             files_by_column[col].append(fname)

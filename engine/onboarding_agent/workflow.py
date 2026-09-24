@@ -683,6 +683,7 @@ def run_operator_workflow(
     enable_context_resolver: Optional[bool] = None,
     regulatory_reporting_enabled: bool = False,
     set_aside_columns: Optional[List[Tuple[str, str]]] = None,
+    confirmed_mappings: Optional[List[Tuple[str, str]]] = None,
 ) -> Dict[str, Any]:
     """Run the managed-service operator workflow; returns the 40 summary dict."""
     client_id = client_id or client_name.lower().replace(" ", "_")
@@ -770,6 +771,9 @@ def run_operator_workflow(
             regulatory_reporting_enabled=regulatory_reporting_enabled,
             # Columns an operator set aside: not a source for anything.
             set_aside_columns=set_aside_columns,
+            # (column, field) pairs an operator confirmed: the answer to
+            # "which column is the source of this field?".
+            confirmed_mappings=confirmed_mappings,
         )
         input_files = len(project.file_inventory)
     except Exception as exc:  # produce a FAILED summary instead of crashing

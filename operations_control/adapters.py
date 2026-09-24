@@ -350,7 +350,7 @@ def extract_mapping_decisions(work_dir: Path, workflow: WorkflowRun) -> List[Dec
                                  "data": {"issue": d.get("issue", ""),
                                           "detail": d.get("evidence_summary", "")}})
             out.append(DecisionRequired(
-                decision_id=f"{workflow.workflow_id}_{did}",
+                decision_id=f"{workflow.workflow_id}_{did}_{_content_key(d)}",
                 kind=(KIND_FIELD_MAPPING if "mapping" in dtype
                       else KIND_TRANSFORMATION),
                 title=title,
@@ -562,6 +562,22 @@ NEEDS_CONFIGURATION_SENTENCE = (
     "The regulatory report needs additional set-up inside Trakt before this "
     "can continue. This is not something in your files — please contact your "
     "Trakt administrator.")
+
+
+def _content_key(d: Dict[str, Any]) -> str:
+    """A short, stable fingerprint of WHAT a Gate 4 decision is about.
+
+    The engine numbers its questions in order — ``DQ-mi_only-001`` — so when
+    Gate 1 runs again with fewer questions the numbers move: yesterday's 001
+    about the interest rate is today's 001 about the product type. Keyed on the
+    number alone, a stored answer about one field was matched to a different
+    field's question, and a question already answered could hide a new one.
+    """
+    import hashlib
+    basis = "|".join(str(d.get(k) or "") for k in (
+        "decision_type", "target_field", "source_file", "source_column",
+        "source_value"))
+    return hashlib.sha1(basis.encode("utf-8")).hexdigest()[:10]
 
 
 def _slug(s: str) -> str:
