@@ -109,6 +109,15 @@ def _dataset(run) -> str:
                or "funded")
 
 
+def _approved_fingerprints(rule) -> List[str]:
+    """Every source schema a standing publication approval covers."""
+    p = (getattr(rule, "payload", None) or {}) if rule is not None else {}
+    out = [str(f) for f in (p.get("schema_fingerprints") or []) if f]
+    if p.get("schema_fingerprint") and p["schema_fingerprint"] not in out:
+        out.append(str(p["schema_fingerprint"]))
+    return out
+
+
 def _standing_subject(run) -> str:
     """One standing approval per dataset: funded and pipeline are separate."""
     return f"{STANDING_PUBLICATION}:{_dataset(run)}"
@@ -2694,6 +2703,12 @@ class OpsEngine:
         fingerprint = str(run.delivery.get("schema_fingerprint") or "")
         if not fingerprint:
             return None
+        # EVERY schema a person has approved stays approved. A backfilled month
+        # with an older layout, approved by hand, must not replace the current
+        # layout — or the next ordinary month would stop publishing itself.
+        existing = self._standing_approval(run)
+        fingerprints = list(dict.fromkeys(
+            _approved_fingerprints(existing) + [fingerprint]))
         rule = RuleRecord(
             rule_id="", version=0, kind=KIND_PUBLICATION, scope=scope,
             client_id=run.client_id,
@@ -2701,6 +2716,7 @@ class OpsEngine:
             payload={"subject": _standing_subject(run),
                      "dataset": _dataset(run),
                      "schema_fingerprint": fingerprint,
+                     "schema_fingerprints": fingerprints,
                      "outcome": run.outcome,
                      "approved_period": run.reporting_period or ""},
             description=("Publish later management-report deliveries with "
@@ -2764,8 +2780,7 @@ class OpsEngine:
             why.append("The products this delivery prepares differ from the "
                        "ones approved for automatic publishing.")
         fingerprint = str(run.delivery.get("schema_fingerprint") or "")
-        if not fingerprint or fingerprint != (rule.payload or {}).get(
-                "schema_fingerprint"):
+        if not fingerprint or fingerprint not in _approved_fingerprints(rule):
             why.append("The source schema differs from the one approved for "
                        "automatic publishing.")
         others = [d for d in self.store.open_decisions(run.client_id,

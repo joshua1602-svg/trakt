@@ -173,3 +173,22 @@ class TestTheRegulatoryReturnToo:
         wait_for(lambda: not engine._is_executing(sep.workflow_id))
         sep = engine.store.load_workflow("client_a", sep.workflow_id)
         assert sep.status != RUN_PUBLISHED
+
+
+class TestEveryApprovedSchemaStaysApproved:
+
+    def test_approving_an_older_layout_keeps_the_current_one(self, engine,
+                                                            tmp_path):
+        _first_month(engine, tmp_path)                       # August layout
+        old = _later_month(engine, tmp_path, "mar", "2026-03-31",
+                           header="loan_ref,balance",         # older layout
+                           workflow_type=WF_BACKFILL)
+        assert old.status == RUN_AWAITING_PUBLICATION
+        engine.approve_publication(client_id="client_a",
+                                   workflow_id=old.workflow_id, actor="josh",
+                                   remember_scope="portfolio")
+        sep = _later_month(engine, tmp_path, "sep", "2026-09-30")
+        assert sep.status == RUN_PUBLISHED
+        feb = _later_month(engine, tmp_path, "feb", "2026-02-28",
+                           header="loan_ref,balance", workflow_type=WF_BACKFILL)
+        assert feb.status == RUN_PUBLISHED
