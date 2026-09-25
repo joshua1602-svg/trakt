@@ -104,6 +104,10 @@ STANDING_PUBLICATION = "standing_publication_approval"
 AUTO_PUBLICATION_ACTOR = "trakt:standing-approval"
 
 
+def _is_pipeline(run) -> bool:
+    return _dataset(run) == "pipeline"
+
+
 def _dataset(run) -> str:
     return str((getattr(run, "delivery", None) or {}).get("dataset")
                or "funded")
@@ -1016,7 +1020,13 @@ class OpsEngine:
                 # product it exists to protect. Depth is no longer a function of
                 # the outcome; the outcome still decides what happens AFTER the
                 # canonical is assembled (see _run_annex2_chain).
-                full_pipeline=True,
+                #
+                # EXCEPT THE PIPELINE. Its deliverable is the central pipeline
+                # tape, deliberately built without the funded contract's
+                # hand-off, so Transformation had nothing to read and ERE's first
+                # pipeline delivery stopped at "the first step did not finish
+                # cleanly". It takes the orchestrator's pipeline route.
+                full_pipeline=not _is_pipeline(run),
                 reporting_period=run.reporting_period,
                 enable_llm_advisor=(not deterministic
                                     and bool(llm_policy.get("enabled"))),
@@ -1220,8 +1230,12 @@ class OpsEngine:
             out_root=str(staging), adapters=adapters,
             created_at=now_iso(), run_id=orun_id,
             resume_state=resume_state,
-            # See _build_adapters: MI runs Gate 1 -> Gate 2 -> Gate 3 too.
-            full_pipeline=True,
+            # See _build_adapters: MI runs Gate 1 -> Gate 2 -> Gate 3 too;
+            # a pipeline delivery takes the pipeline route, and says so, so
+            # its pipeline tape is the canonical rather than the funded
+            # assembler's input.
+            full_pipeline=not _is_pipeline(run),
+            dataset=("pipeline" if _is_pipeline(run) else ""),
             force_publish=self._validation_exception_approved(run))
 
         run = self.store.load_workflow(client_id, workflow_id) or run
