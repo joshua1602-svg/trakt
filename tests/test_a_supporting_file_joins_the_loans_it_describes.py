@@ -126,3 +126,23 @@ class TestTheProductChartReadsTheEquityReleaseField:
         series = snapshots._strat_series(df, "product")
         assert list(series) == ["Lifetime", "Drawdown"]
         assert snapshots._strat_columns_present(df, "product")
+
+    def test_the_lender_s_products_beat_a_one_value_generic_column(self):
+        """ERE: `Product Type` says "Lump Sum" on every loan; `Product
+        Category` names 26 products. The chart showed one bar."""
+        from mi_agent_api import snapshots
+        df = pd.DataFrame({"product_type": ["Lump Sum"] * 3,
+                           "erm_product_type": ["Plan A", "Plan B", "Plan C"]})
+        assert list(snapshots._strat_series(df, "product")) == [
+            "Plan A", "Plan B", "Plan C"]
+
+    def test_a_generic_column_that_distinguishes_is_used_when_the_erm_one_does_not(self):
+        from mi_agent_api import snapshots
+        df = pd.DataFrame({"product_type": ["Plan A", "Plan B"],
+                           "erm_product_type": ["Lifetime", "Lifetime"]})
+        assert list(snapshots._strat_series(df, "product")) == ["Plan A", "Plan B"]
+
+    def test_one_product_for_the_whole_book_is_still_shown(self):
+        from mi_agent_api import snapshots
+        df = pd.DataFrame({"product_type": ["Lump Sum"] * 2})
+        assert list(snapshots._strat_series(df, "product")) == ["Lump Sum"] * 2
