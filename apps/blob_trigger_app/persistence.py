@@ -344,23 +344,29 @@ class ProductionPersistence:
 
     # -- weekly pipeline snapshot (React MI pipeline view) ----------------- #
     def persist_pipeline(self, client_id: str, period: str,
-                         local_path: str) -> Dict[str, Optional[str]]:
+                         local_path: str, *, update_latest: bool = True
+                         ) -> Dict[str, Optional[str]]:
         """Publish a weekly pipeline extract to the durable store: the period copy,
         the stable ``latest`` copy the MI API reads, and a JSON pointer (mirrors
         analytics.blob_storage.register_latest_pipeline_snapshot's shape). Returns
         the written URIs."""
         if not local_path or not Path(local_path).exists():
             return {"latest": None, "period": None, "pointer": None}
-        uri = self.layout.pipeline_latest_csv_uri(client_id)
+        # ``update_latest=False`` is a BACKFILL, as for the platform canonical:
+        # an older snapshot is filed under its own period and leaves the latest
+        # copy and its pointer on the newest one.
+        uri = self.layout.pipeline_period_csv_uri(client_id, period)
+        latest = pointer = None
         try:
-            latest = self.storage.upload_file(local_path, uri)
-            uri = self.layout.pipeline_period_csv_uri(client_id, period)
             period_uri = self.storage.upload_file(local_path, uri)
-            uri = self.layout.pipeline_latest_pointer_uri(client_id)
-            pointer = self.storage.write_text(uri, json.dumps({
-                "blob_name": latest, "period": period,
-                "source_file": latest, "registered_period": period,
-            }, indent=2))
+            if update_latest:
+                uri = self.layout.pipeline_latest_csv_uri(client_id)
+                latest = self.storage.upload_file(local_path, uri)
+                uri = self.layout.pipeline_latest_pointer_uri(client_id)
+                pointer = self.storage.write_text(uri, json.dumps({
+                    "blob_name": latest, "period": period,
+                    "source_file": latest, "registered_period": period,
+                }, indent=2))
         except Exception:
             _persist_step("persist_pipeline", uri)
             raise

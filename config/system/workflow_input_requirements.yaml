@@ -43,6 +43,14 @@ workflows:
       - collateral_extract
       - cashflow_extract
       - pipeline_report
+# What a PIPELINE pack needs, whichever workflow it runs. The workflows above
+# describe a funded delivery — a loan tape plus supporting tapes — and a
+# pipeline pack has no loan tape, so it waited for one that never comes.
+datasets:
+  pipeline:
+    required_roles:
+      - pipeline_report
+    optional_roles: []
 # Minimum recognition confidence for a file to SATISFY a required role without
 # operator confirmation. Below this, readiness parks as review_required.
 min_required_role_confidence: 0.4

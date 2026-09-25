@@ -168,6 +168,8 @@ class IntakeService:
                 return reopened
         req = load_requirements(self.requirements_path)
         wf_req = (req.get("workflows") or {}).get(workflow_type) or {}
+        # A book with its own requirements (the pipeline) uses them instead.
+        wf_req = (req.get("datasets") or {}).get(dataset or "") or wf_req
         batch = {
             "batch_id": bid,
             "version": int(bid.rsplit("_v", 1)[1]) if "_v" in bid else 1,
