@@ -2358,10 +2358,33 @@ def settle_period_fields(
     by_file = {str(f): df for f, _sh, df in source_tables}
     keep = list(source_value_candidates or [])
 
+    def _agreement(claimants):
+        """``(dates, columns read)`` when every value of every claimant names
+        the delivery's month; ``None`` when any column is missing, empty, or
+        names anything else."""
+        dates, read = set(), []
+        for f, sh, col in claimants:
+            df = frames.get((f, sh))
+            if df is None:
+                df = by_file.get(f)
+            if df is None or col not in getattr(df, "columns", []):
+                return None
+            values = [str(v).strip() for v in df[col].tolist()]
+            values = [v for v in values
+                      if v and v.lower() not in ("nan", "none", "nat")]
+            if not values or any(period_of_value(v, year) != month
+                                 for v in values):
+                return None
+            dates |= {rc.normalize_to_iso(v) or "" for v in set(values)}
+            read.append(f"'{col}' in '{f}'")
+        return dates, read
+
+    covered = set()
     for cov in coverage_rows:
         field = str(cov.get("target_field") or "")
         if field not in PERIOD_FIELDS:
             continue
+        covered.add(field)
         asked = [c for c in keep
                  if field in (c.get("canonical_field"), c.get("target_field"))]
         if not (asked or cov.get("requires_user_decision")):
@@ -2374,25 +2397,10 @@ def settle_period_fields(
         if not claimants:
             continue
 
-        agree, dates, read = True, set(), []
-        for f, sh, col in claimants:
-            df = frames.get((f, sh))
-            if df is None:
-                df = by_file.get(f)
-            if df is None or col not in getattr(df, "columns", []):
-                agree = False
-                break
-            values = [str(v).strip() for v in df[col].tolist()]
-            values = [v for v in values
-                      if v and v.lower() not in ("nan", "none", "nat")]
-            if not values or any(period_of_value(v, year) != month
-                                 for v in values):
-                agree = False
-                break
-            dates |= {rc.normalize_to_iso(v) or "" for v in set(values)}
-            read.append(f"'{col}' in '{f}'")
-        if not agree:
+        agreed = _agreement(claimants)
+        if agreed is None:
             continue
+        dates, read = agreed
 
         # Every column names the delivery's month. If they also agree on one
         # whole date, that date is the answer; a bare month is its last day.
@@ -2408,6 +2416,35 @@ def settle_period_fields(
         cov["default_reason"] = (
             f"{' and '.join(read)} name the delivery's own period ({month}) on "
             f"every row, so {value} is used")
+        keep = [c for c in keep if c not in asked]
+        settled.append({"target_field": field, "method": "period_agreement",
+                        "value": value, "columns": read,
+                        "questions_removed": len(asked)})
+
+    # A PERIOD QUESTION WITH NO COVERAGE ROW. A confirmed mapping (ERE's
+    # `Month Run` -> data_cut_off_date) feeds the tape whether or not the
+    # target contract has a row for the field, and its values are checked all
+    # the same. ERE's older layouts reached the operator this way — "Is
+    # 'October' in 'Month Run' a placeholder?" — on a delivery for October.
+    # The question names its own column; the same agreement answers it.
+    for field in PERIOD_FIELDS:
+        if field in covered:
+            continue
+        asked = [c for c in keep
+                 if field in (c.get("canonical_field"), c.get("target_field"))]
+        claimants = sorted({(str(c.get("source_file") or ""),
+                             str(c.get("source_sheet") or ""),
+                             str(c.get("source_column") or ""))
+                            for c in asked})
+        claimants = [k for k in claimants if k[0] and k[2]]
+        if not asked or not claimants:
+            continue
+        agreed = _agreement(claimants)
+        if agreed is None:
+            continue
+        dates, read = agreed
+        value = next(iter(dates)) if len(dates) == 1 and "" not in dates \
+            else period_iso
         keep = [c for c in keep if c not in asked]
         settled.append({"target_field": field, "method": "period_agreement",
                         "value": value, "columns": read,
