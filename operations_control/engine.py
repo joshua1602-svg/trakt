@@ -2427,6 +2427,20 @@ class OpsEngine:
         # ...and the source's standing mapping contract, which is what makes
         # next month deterministic. Decisions are matched on target_field, not
         # on position, so the same contract answers the same schema again.
+        #
+        # NOT FROM A BACKFILL. The contract is written whole, from this run's
+        # decisions. ERE's older months are a different layout — the interest
+        # rate is `Loan Interest Rate`, a property tape is missing — so their
+        # answers are about THAT layout, and writing them over the contract
+        # the current months run on would put next month's questions back.
+        # A backfilled month keeps its answers in its own record, above.
+        if run.workflow_type == WF_BACKFILL:
+            self.store.append_audit(
+                run.client_id, "approved_mapping_contract_kept", actor="system",
+                workflow_id=run.workflow_id,
+                detail={"portfolio_id": run.portfolio_id,
+                        "reason": "backfill answers stay with the backfilled run"})
+            return
         self.store.storage.write_text(
             self.store.layout.approved_decisions_uri(
                 run.client_id, run.portfolio_id,

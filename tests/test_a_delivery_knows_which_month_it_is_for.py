@@ -186,3 +186,37 @@ class TestAMonthColumnThatDisagreesIsStillAsked:
         rows = [dict(_claimed(), target_field="current_valuation_amount")]
         tcov.settle_period_fields(rows, [], _tables(), "2026-08-31")
         assert rows[0]["coverage_status"] == tcov.SOURCE_MAPPED_ALT
+
+
+class TestAQuestionWithNoCoverageRowIsSettledToo:
+    """ERE's older layouts: `Month Run` is a confirmed mapping to the cut-off,
+    the target contract has no row for it, and the value check asked "Is
+    'October' in 'Month Run' a placeholder?" on a delivery for October."""
+
+    def _asked(self, value="October"):
+        return [{"canonical_field": "data_cut_off_date",
+                 "target_field": "data_cut_off_date",
+                 "source_file": LOAN, "source_column": "Month Run",
+                 "source_value": value}]
+
+    def test_the_delivery_s_own_month_is_not_a_question(self):
+        tables = [(LOAN, "", pd.DataFrame({"Month Run": ["October"] * 4}))]
+        left, settled = tcov.settle_period_fields([], self._asked(), tables,
+                                                  "2025-10-31")
+        assert left == []
+        assert settled and settled[0]["value"] == "2025-10-31"
+
+    def test_another_month_is_still_asked(self):
+        tables = [(LOAN, "", pd.DataFrame({"Month Run": ["October"] * 3
+                                           + ["September"]}))]
+        asked = self._asked()
+        left, settled = tcov.settle_period_fields([], asked, tables,
+                                                  "2025-10-31")
+        assert left == asked and settled == []
+
+    def test_a_field_that_is_not_a_period_is_left_alone(self):
+        asked = [dict(self._asked()[0], canonical_field="current_valuation_date",
+                      target_field="current_valuation_date")]
+        tables = [(LOAN, "", pd.DataFrame({"Month Run": ["October"] * 2}))]
+        left, _ = tcov.settle_period_fields([], asked, tables, "2025-10-31")
+        assert left == asked
