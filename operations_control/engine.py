@@ -895,9 +895,13 @@ class OpsEngine:
             expected_outputs=(["platform_canonical", "annex2_submission_xml"]
                               if batch["workflow_type"] == OUTCOME_MI_ANNEX2
                               else ["platform_canonical"]))
+        # The pack's book and cadence travel with it. They were dropped here,
+        # so every pack — a pipeline file included — became a funded delivery.
         delivery = self.register_delivery(
             client_id=client_id, portfolio_id=batch["portfolio_id"],
             input_path=str(self.intake.batch_dir(batch)),
+            dataset=batch.get("dataset") or "funded",
+            frequency=batch.get("frequency") or "monthly",
             reporting_period=batch["reporting_date"], registered_by=actor)
         run = self.create_workflow(
             client_id=client_id, delivery_id=delivery["delivery_id"],
@@ -2894,13 +2898,27 @@ class OpsEngine:
         published: Dict[str, Any] = {}
         # AN EARLIER MONTH DOES NOT BECOME "LATEST". Publishing always
         # overwrote the latest copy, so backfilling June after August would
-        # have made MI read June as the current book.
+        # have made MI read June as the current book. Newest is judged within
+        # the delivery's own book: a pipeline snapshot dated 24 September is
+        # not a newer funded month than August.
+        dataset = _dataset(run)
+        pub["dataset"] = dataset
         newest = max((str(p.get("reporting_period") or "")
                       for p in self.store.list_publications(client_id)
                       if p.get("status") == "published"
-                      and p.get("workflow_id") != run.workflow_id), default="")
+                      and p.get("workflow_id") != run.workflow_id
+                      and self._publication_dataset(client_id, p) == dataset),
+                     default="")
         is_newest = not newest or str(period) >= newest
-        if central and Path(str(central)).exists():
+        if dataset == "pipeline":
+            # THE PIPELINE IS NOT THE FUNDED BOOK. Every publication used to go
+            # to the platform canonical — the funded book MI reads — so a
+            # pipeline file published through the OCC would have become the
+            # latest funded portfolio. It goes to the pipeline store, as the
+            # blob route always published it.
+            published = self._publish_pipeline(run, period, central,
+                                               persistence, is_newest)
+        elif central and Path(str(central)).exists():
             published = persistence.persist_platform(
                 client_id, period, str(central), update_latest=is_newest)
         published["is_latest"] = is_newest
@@ -2937,6 +2955,40 @@ class OpsEngine:
                                         "approval_scope": remember_scope})
         self._notify_publication(run, pub)
         return pub
+
+    def _publication_dataset(self, client_id: str, pub: Dict[str, Any]) -> str:
+        """The book a publication belongs to. Recorded on it from now on; an
+        older one is read from its workflow's delivery, and anything that says
+        nothing is the funded book — which every publication was, until now."""
+        if pub.get("dataset"):
+            return str(pub["dataset"])
+        wf = self.store.load_workflow(client_id, str(pub.get("workflow_id") or ""))
+        return _dataset(wf) if wf is not None else "funded"
+
+    def _publish_pipeline(self, run: WorkflowRun, period: str,
+                          central: Optional[str], persistence,
+                          is_newest: bool) -> Dict[str, Any]:
+        """Publish a pipeline delivery where MI's pipeline view reads it.
+
+        The same snapshot the blob route published: the RAW extract with its
+        original headers (the pipeline layer maps rate, value, dates, stage
+        and applicant ages from them), falling back to the central tape, with
+        a stable row identity. An earlier snapshot is filed under its own
+        period and never becomes the latest pipeline."""
+        from types import SimpleNamespace
+        from apps.blob_trigger_app import router as _router
+        parsed = SimpleNamespace(reporting_period=period)
+        raw = _router._pick_pipeline_source(
+            str(run.delivery.get("input_path") or ""), None)
+        snapshot = (_router._pipeline_snapshot_from_raw(raw, parsed)
+                    if raw and Path(str(raw)).exists() else None)
+        if not snapshot and central and Path(str(central)).exists():
+            snapshot = str(central)
+        if not snapshot:
+            return {"latest": None, "period": None, "pointer": None}
+        snapshot = _router._ensure_pipeline_identity(snapshot, parsed)
+        return persistence.persist_pipeline(run.client_id, period, snapshot,
+                                            update_latest=is_newest)
 
     def _notify_publication(self, run: WorkflowRun,
                             pub: Dict[str, Any]) -> None:
