@@ -353,6 +353,12 @@ class OnboardingProject:
     # Controlled LLM-assisted mapping review summary (artefacts 28-37).
     mapping_review_summary: Dict[str, Any] = field(default_factory=dict)
 
+    # (file, column) pairs that feed nothing: set aside by an operator or
+    # ignored by client memory. ``"*"`` as the file means every file. The
+    # central tape reads it so an approval naming only a column never brings a
+    # column back from a file it was set aside in.
+    set_aside_columns: List[List[str]] = field(default_factory=list)
+
     # Run-level status
     review_status: str = "draft"     # draft | review_required | blocked
     generated_artifacts: List[str] = field(default_factory=list)
@@ -383,6 +389,7 @@ class OnboardingProject:
             "llm_usage_summary": self.llm_usage_summary,
             "client_memory_summary": self.client_memory_summary,
             "mapping_review_summary": self.mapping_review_summary,
+            "set_aside_columns": [list(p) for p in self.set_aside_columns],
             "counts": {
                 "source_files": len(self.source_files),
                 "classified_files": len(self.file_inventory),

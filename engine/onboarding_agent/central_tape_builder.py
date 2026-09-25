@@ -245,6 +245,19 @@ def _loan_key_hints(project_dir: Path) -> Dict[Tuple[str, str], str]:
     return hints
 
 
+def _columns_by_file(project_dir: Path) -> Dict[str, List[str]]:
+    """``{file_name: [column, ...]}`` — every column each file carries, from
+    02_column_profiles (one row per column of every file profiled)."""
+    out: Dict[str, List[str]] = {}
+    for r in _load_json(Path(project_dir) / "02_column_profiles.json") or []:
+        if not isinstance(r, dict):
+            continue
+        fname, col = r.get("file_name", ""), r.get("source_column", "")
+        if fname and col and col not in out.setdefault(fname, []):
+            out[fname].append(col)
+    return out
+
+
 def _approved_loan_key(overrides: Dict[str, Any]) -> str:
     """The source column an operator APPROVED as the loan identifier, if any.
 
@@ -451,20 +464,47 @@ class _Source:
 _SET_ASIDE_METHODS = ("set_aside_by_operator", "ignored_by_client_memory")
 
 
+def _operator_fields(overrides: Dict[str, Any]) -> set:
+    """Canonical fields an operator mapped a column to (``user_overrides``).
+
+    An operator's confirmation is the most specific instruction a delivery
+    carries. The mode's field scope decides what Trakt ASKS about and what it
+    rediscovers by name; it must not silently drop a mapping someone already
+    confirmed. On ERE's August delivery it did: `Full Redemption Date`,
+    `Product Type`, `Type` (property type) and the cash-flow columns were
+    confirmed, reached this file, and were then filtered out as regulatory or
+    cash-flow fields of an MI-only run — so the mapping screen said "mapped"
+    and the tape did not carry them.
+    """
+    return {str(o.get("canonical_field") or "").strip()
+            for o in (overrides or {}).get("user_overrides", []) or []
+            if str(o.get("canonical_field") or "").strip()}
+
+
 def _collect_field_sources(
     mapping_candidates: List[Dict[str, Any]],
     overrides: Dict[str, Any],
     inventory_by_name: Dict[str, Dict[str, Any]],
     included_fields: set,
+    columns_by_file: Optional[Dict[str, List[str]]] = None,
+    set_aside: Optional[List[Any]] = None,
 ) -> Dict[str, List[_Source]]:
-    """canonical_field -> ordered list of candidate sources (in-scope only)."""
+    """canonical_field -> ordered list of candidate sources (in-scope only).
+
+    ``columns_by_file`` is every column each file actually carries (from the
+    column profiles); ``set_aside`` the ``(file, column)`` pairs that feed
+    nothing. Together they say where an approval that names only a column
+    applies.
+    """
     sources: Dict[str, List[_Source]] = {}
     seen: set = set()
+    operator_fields = _operator_fields(overrides)
 
     def add(file_name: str, column: str, canon: str, method: str, conf: float):
         if not canon or not file_name or not column:
             return
-        if included_fields and canon not in included_fields:
+        if (included_fields and canon not in included_fields
+                and canon not in operator_fields):
             return
         key = (canon, file_name, column)
         if key in seen:
@@ -495,14 +535,34 @@ def _collect_field_sources(
     # operator's intent. The pack itself settles it: an override with no file
     # applies to every file that actually carries that column. One file is no
     # guess at all, and several is the overlap question coverage already asks.
+    #
+    # "Every file that carries the column" is read from the files themselves.
+    # It used to be read from the mapping candidates, which leave out a column
+    # whose NAME suggested a field outside the mode's scope — so ERE's
+    # `Customer 1 DOB`, confirmed by an operator as borrower_1_DOB, had no file
+    # to come from and never reached the tape. The candidates still count, for
+    # a run whose column profiles are missing.
+    from .target_coverage import without_set_asides as _without
+    set_aside_pairs = [tuple(p) for p in (set_aside or [])
+                       if isinstance(p, (list, tuple)) and len(p) == 2]
+    set_aside_pairs += [(m.get("source_file", ""), m.get("source_column", ""))
+                        for m in mapping_candidates or []
+                        if m.get("method") in _SET_ASIDE_METHODS]
     files_by_column: Dict[str, List[str]] = {}
-    for m in mapping_candidates or []:
+    carried = [(fname, col) for fname, cols in (columns_by_file or {}).items()
+               for col in cols or []]
+    carried += [(m.get("source_file", ""), m.get("source_column", ""))
+                for m in mapping_candidates or []]
+    for fname, column in carried:
+        col = _norm(column or "")
+        if not col or not fname:
+            continue
         # Not a file an operator set this column aside in: "every file that
         # carries the column" means every file it is still IN USE in.
-        if m.get("method") in _SET_ASIDE_METHODS:
+        if not _without([{"source_file": fname, "source_column": column}],
+                        set_aside_pairs):
             continue
-        col, fname = _norm(m.get("source_column", "")), m.get("source_file", "")
-        if col and fname and fname not in files_by_column.setdefault(col, []):
+        if fname not in files_by_column.setdefault(col, []):
             files_by_column[col].append(fname)
 
     def add_override(o: Dict[str, Any], method: str, conf: float) -> None:
@@ -768,6 +828,8 @@ def _build_lender_tape(
     period_gate: Optional[Dict[str, Any]] = None,
     enrichment_fields: Optional[set] = None,
     static_field_specs: Optional[Dict[str, Dict[str, Any]]] = None,
+    columns_by_file: Optional[Dict[str, List[str]]] = None,
+    set_aside: Optional[List[Any]] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
     inventory_by_name = {i.get("file_name", ""): i for i in inventory}
     # Case/basename-tolerant file lookup (28a selected_source_file should match the
@@ -800,8 +862,10 @@ def _build_lender_tape(
     included = (getattr(field_scope, "included_fields", set()) or set()) | set(enrichment_fields)
 
     field_sources = _collect_field_sources(
-        mapping_candidates, overrides, inventory_by_name, included
+        mapping_candidates, overrides, inventory_by_name, included,
+        columns_by_file=columns_by_file, set_aside=set_aside,
     )
+    operator_fields = _operator_fields(overrides)
 
     # Lower-level source-selection basis per (canon, file, column) from the
     # deterministic mapping candidates — so the lineage can show the real
@@ -825,8 +889,11 @@ def _build_lender_tape(
     # fields bypass the domain filter so a linked collateral/pipeline field (e.g.
     # broker_channel) can ENRICH the funded universe via entity-key linkage — it
     # still never creates funded rows (universe selection is unchanged).
+    # A field an operator mapped a funded-pack column to is the lender's own
+    # data about that loan, whatever domain its name suggests (a per-loan
+    # redemption amount is "cashflow"): it is carried, not filtered out.
     def in_lender_scope(canon: str) -> bool:
-        if canon in enrichment_fields:
+        if canon in enrichment_fields or canon in operator_fields:
             return True
         return bool(dc.field_domains(canon, registry_fields.get(canon, {})) & _LENDER_DOMAINS)
 
@@ -1983,6 +2050,8 @@ def build_central_tapes(
         loan_key_hints=loan_key_hints, alias_loan_cols=alias_loan_cols,
         entity_keys=entity_keys, debug_dir=project_dir, period_gate=period_gate,
         enrichment_fields=enrichment_fields, static_field_specs=static_field_specs,
+        columns_by_file=_columns_by_file(project_dir),
+        set_aside=run_summary.get("set_aside_columns") or [],
     )
 
     central_dir = Path(run_paths.central_dir)
