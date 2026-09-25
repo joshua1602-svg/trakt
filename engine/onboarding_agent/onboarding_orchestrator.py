@@ -347,6 +347,8 @@ def run_onboarding(
             cand.reason = "An operator set this column aside; it feeds nothing."
             memory_ignored_columns.add((probe["source_file"],
                                         probe["source_column"]))
+    project.set_aside_columns = [
+        [f, c] for f, c in sorted(set_aside | memory_ignored_columns)]
 
     # --- PART 6 (docs): extract config-relevant facts under minimisation policy ---
     doc_policy = load_document_policy()
