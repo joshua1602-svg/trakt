@@ -346,12 +346,14 @@ def _loan_ids(df: pd.DataFrame) -> set:
 # unavailable (with the reason) rather than rendered blank — see
 # ``_funded_stratifications``. The set is the same for every portfolio type:
 # an acquired back book gets the same funded depth as a direct one.
-#: Where a funded tape carries its product. ``erm_product_type`` is the
-#: registry's equity-release field and what onboarding maps a lender's product
-#: column to — ERE's `Product Category` arrived there on every loan while this
-#: chart read only the three generic names and said "not supplied".
-_PRODUCT_COLUMNS = ("product_type", "product", "loan_product",
-                    "erm_product_type")
+#: Where a funded tape carries its product, the lender's own product first.
+#: ``erm_product_type`` is the registry's equity-release field and what
+#: onboarding maps a lender's product column to — ERE's `Product Category`, 26
+#: products — and what the MI Query Agent reads "product" as. The generic
+#: ``product_type`` came first and carried ERE's one-value `Product Type`, so
+#: the chart showed every loan as "Lump Sum". See ``_product_series``.
+_PRODUCT_COLUMNS = ("erm_product_type", "product_type", "product",
+                    "loan_product")
 
 _STRAT_DIMS = [
     ("ltv", "By LTV band"),
@@ -375,6 +377,22 @@ _RATE_BINS = [0, 3, 4, 5, 6, 7, 8, 100]
 _RATE_LABELS = ["<3%", "3–4%", "4–5%", "5–6%", "6–7%", "7–8%", "8%+"]
 
 
+def _product_series(df: pd.DataFrame):
+    """The product column that tells the loans apart.
+
+    The first populated column of ``_PRODUCT_COLUMNS`` that holds more than one
+    product; a column naming a single product for the whole book is a
+    stratification of nothing while another column distinguishes them. When no
+    column distinguishes, the first populated one is still shown.
+    """
+    present = [c for c in _PRODUCT_COLUMNS
+               if c in df.columns and df[c].notna().any()]
+    for col in present:
+        if df[col].dropna().astype("string").str.strip().nunique() > 1:
+            return df[col].astype("string")
+    return df[present[0]].astype("string") if present else None
+
+
 def _strat_series(df: pd.DataFrame, key: str, scope=None):
     """The per-row band/category label for a funded stratification dimension.
     LTV and age reuse the SAME bands as the cohort composition lens (one banding,
@@ -393,10 +411,7 @@ def _strat_series(df: pd.DataFrame, key: str, scope=None):
     if key == "region":
         return region_series(df, scope)
     if key == "product":
-        for col in _PRODUCT_COLUMNS:
-            if col in df.columns and df[col].notna().any():
-                return df[col].astype("string")
-        return None
+        return _product_series(df)
     if key == "vintage":
         from . import cohorts as _cohorts  # same vintage derivation as cohorts
         return _cohorts._vintage_series(df, "Y")
