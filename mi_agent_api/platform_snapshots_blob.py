@@ -43,8 +43,42 @@ logger = logging.getLogger(__name__)
 _PLATFORM_CANONICAL_NAME = "platform_canonical_typed.csv"
 #: A DATED platform canonical under a blob:// platform root. ``latest/`` is
 #: excluded because ``latest`` is not a ``YYYY-MM-DD`` date.
+#:
+#: A MONTH folder counts too: the Operations Control Centre publishes a
+#: delivery under its reporting period, and a monthly period is ``2026-08``.
+#: Every ERE month it published lived at ``platform/ERE/2026-08/`` — and none
+#: of them was a dated cut here, so Evolution showed "No periods available"
+#: with a year of history published. A month folder is read as that month's
+#: last day; a full-date folder for the same day wins.
 _DATED_RE = re.compile(
-    r"/(?P<date>\d{4}-\d{2}-\d{2})/" + re.escape(_PLATFORM_CANONICAL_NAME) + r"$")
+    r"/(?P<date>\d{4}-\d{2}(?:-\d{2})?)/" + re.escape(_PLATFORM_CANONICAL_NAME) + r"$")
+
+
+def _month_end(period: str) -> str:
+    """``2026-08`` -> ``2026-08-31``; a full date is returned unchanged."""
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", period):
+        return period
+    import calendar
+    y, m = int(period[:4]), int(period[5:7])
+    return f"{period}-{calendar.monthrange(y, m)[1]:02d}"
+
+
+def _run_uri(root: str, storage, run_id: str) -> str:
+    """The canonical a ``YYYY-MM-DD`` run addresses: its own dated folder, or —
+    when the run is a month end published under its month — the month folder."""
+    base = root.rstrip("/")
+    exact = f"{base}/{run_id}/{_PLATFORM_CANONICAL_NAME}"
+    month = f"{base}/{run_id[:7]}/{_PLATFORM_CANONICAL_NAME}"
+    if _month_end(run_id[:7]) != run_id:
+        return exact
+    try:
+        if storage.exists(exact):
+            return exact
+        if storage.exists(month):
+            return month
+    except Exception:  # noqa: BLE001 - discovery must never 500
+        pass
+    return exact
 
 #: uri -> (etag, DataFrame). A dated canonical is immutable per etag, so this
 #: avoids re-downloading on every /mi/snapshots (or per-run /mi/snapshot) call.
@@ -98,15 +132,20 @@ def list_dated_platform_canonicals(root: str, storage) -> List[Dict[str, str]]:
         uris = storage.list(root)
     except Exception:  # noqa: BLE001 - discovery must never 500
         return []
-    dated: List[Dict[str, str]] = []
+    by_date: Dict[str, Dict[str, str]] = {}
     for uri in uris:
         if "/latest/" in uri:
             continue
         m = _DATED_RE.search(uri)
-        if m:
-            dated.append({"date": m.group("date"), "uri": uri})
-    dated.sort(key=lambda d: d["date"])
-    return dated
+        if not m:
+            continue
+        raw = m.group("date")
+        date = _month_end(raw)
+        exact = raw == date
+        if date in by_date and not exact:
+            continue            # a full-date folder for this day already won
+        by_date[date] = {"date": date, "uri": uri}
+    return [by_date[d] for d in sorted(by_date)]
 
 
 def _read(uri: str, storage) -> Optional[pd.DataFrame]:
@@ -300,7 +339,7 @@ def canonical_etag(root: str, storage, run_id: str) -> Optional[str]:
     key derived caches on content identity without downloading anything."""
     if not is_blob_root(root) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(run_id)):
         return None
-    uri = f"{root.rstrip('/')}/{run_id}/{_PLATFORM_CANONICAL_NAME}"
+    uri = _run_uri(root, storage, str(run_id))
     try:
         return storage.etag(uri)
     except Exception:  # noqa: BLE001 - caching is additive
@@ -314,7 +353,7 @@ def resolve_run_frame(root: str, storage, source_portfolio_id: Optional[str],
     ``None`` when the dated canonical does not exist."""
     if not is_blob_root(root) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(run_id)):
         return None
-    uri = f"{root.rstrip('/')}/{run_id}/{_PLATFORM_CANONICAL_NAME}"
+    uri = _run_uri(root, storage, str(run_id))
     try:
         if not storage.exists(uri):
             return None
