@@ -409,6 +409,26 @@ def weekly_extract_inventory(root: str | os.PathLike,
     }
 
 
+def _source_and_as_of(source: str | os.PathLike | Dict[str, Any],
+                      as_of_date: Optional[str]) -> Tuple[Path, Optional[str]]:
+    """The source path and its as-of date, from a path or a discovery scope."""
+    if isinstance(source, dict):
+        as_of_date = as_of_date or source.get("pipeline_as_of_date")
+        source = source.get("source_file", "")
+    p = Path(source)
+    return p, (as_of_date or _extract_date(p))
+
+
+def _prepared_key(p: Path, rd: Optional[str],
+                  historical_model: Optional[Dict[str, Any]], kind: str) -> Optional[str]:
+    return _serving_cache.key_for(
+        tenant=_serving_cache.resolved_tenant(),
+        scope=f"{kind}={p.name}",
+        identity=[str(p), _serving_cache.file_identity(p),
+                  ("as_of", rd),
+                  ("model", _serving_cache.model_fingerprint(historical_model))])
+
+
 @_perf.stage_fn("pipeline_prep")
 def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
                            as_of_date: Optional[str] = None,
@@ -421,11 +441,7 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
     NOT the funded reporting cut-off. ``historical_model`` (from
     :func:`build_pipeline_history`) supplies empirical stage completion rates.
     """
-    if isinstance(source, dict):
-        as_of_date = as_of_date or source.get("pipeline_as_of_date")
-        source = source.get("source_file", "")
-    p = Path(source)
-    rd = as_of_date or _extract_date(p)
+    p, rd = _source_and_as_of(source, as_of_date)
 
     # Memoised on the immutable identity of the source file plus every input
     # that changes the OUTPUT: the as-of date and the historical model whose
@@ -437,12 +453,7 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
     # snapshot carries its date in the folder, not the filename) — not an
     # unidentifiable source. Only the path and its content marker may null the
     # key, which is what keeps "cannot identify the bytes" uncacheable.
-    key = _serving_cache.key_for(
-        tenant=_serving_cache.resolved_tenant(),
-        scope=f"source={p.name}",
-        identity=[str(p), _serving_cache.file_identity(p),
-                  ("as_of", rd),
-                  ("model", _serving_cache.model_fingerprint(historical_model))])
+    key = _prepared_key(p, rd, historical_model, "source")
 
     def _build() -> Tuple[pd.DataFrame, Dict[str, Any]]:
         raw = _read_source(p)
@@ -463,6 +474,62 @@ def load_prepared_pipeline(source: str | os.PathLike | Dict[str, Any],
     return df.copy(deep=False), copy.deepcopy(report)
 
 
+@_perf.stage_fn("pipeline_extract_summary")
+def load_extract_summary(source: str | os.PathLike | Dict[str, Any],
+                         as_of_date: Optional[str] = None,
+                         historical_model: Optional[Dict[str, Any]] = None
+                         ) -> Dict[str, Any]:
+    """The per-extract totals the weekly time series read, without the frame.
+
+    Evolution, the origination funnel and the forecast bridge walk EVERY
+    weekly extract, and a client with a year of history has more of them than
+    the prepared-frame memo holds (``_PIPELINE_PREP_CACHE``) — so each request
+    evicted the frames it was about to need and re-prepared the whole history.
+    ERE's 90 weekly extracts made the Evolution tab time out. The series need
+    only these few numbers per extract, so they are memoised here, keyed on
+    the SAME immutable identity as the prepared frame (source bytes, as-of
+    date, historical model), in a memo sized for years of weekly history.
+
+        {row_count, total_pipeline_amount, weighted_expected_funded_amount,
+         has_stage, has_balance, stages: {stage: {count, value}}}
+
+    ``value`` sums ``current_outstanding_balance`` per ``pipeline_stage``
+    (``None`` when the extract has no balance column).
+    """
+    p, rd = _source_and_as_of(source, as_of_date)
+    key = _prepared_key(p, rd, historical_model, "summary")
+
+    def _build() -> Dict[str, Any]:
+        df, report = load_prepared_pipeline(p, as_of_date=rd,
+                                            historical_model=historical_model)
+        stages: Dict[str, Dict[str, Any]] = {}
+        has_stage = "pipeline_stage" in df.columns
+        if has_stage:
+            stage_str = df["pipeline_stage"].astype(str)
+            counts = stage_str.groupby(stage_str).size()
+            amounts = (coerce_numeric(df[_SUMMARY_BALANCE]).groupby(stage_str).sum()
+                       if _SUMMARY_BALANCE in df.columns else None)
+            for stage, n in counts.items():
+                stages[str(stage)] = {
+                    "count": int(n),
+                    "value": (float(amounts.get(stage, 0.0))
+                              if amounts is not None else None)}
+        return {
+            "row_count": int(report.get("row_count", len(df))),
+            "total_pipeline_amount": report.get("total_pipeline_amount"),
+            "weighted_expected_funded_amount":
+                report.get("weighted_expected_funded_amount"),
+            "has_stage": has_stage,
+            "has_balance": _SUMMARY_BALANCE in df.columns,
+            "stages": stages,
+        }
+
+    return copy.deepcopy(_EXTRACT_SUMMARY_CACHE.get_or_build(key, _build))
+
+
+_SUMMARY_BALANCE = "current_outstanding_balance"
+
+
 def collect_weekly_history(root: str | os.PathLike,
                            client_id: str) -> List[Dict[str, Any]]:
     """The UNIQUE governed weekly pipeline extracts for a client across every
@@ -477,6 +544,10 @@ def collect_weekly_history(root: str | os.PathLike,
 #: rolling window of weekly extracts. See mi_agent_api/serving_cache.py.
 _HISTORY_CACHE = _serving_cache.BoundedCache("history_model", max_entries=16)
 _PIPELINE_PREP_CACHE = _serving_cache.BoundedCache("pipeline_prep", max_entries=64)
+#: Per-extract series totals (see load_extract_summary): a few numbers each,
+#: so sized for years of weekly extracts rather than a rolling window.
+_EXTRACT_SUMMARY_CACHE = _serving_cache.BoundedCache("pipeline_extract_summary",
+                                                     max_entries=4096)
 #: Governed pipeline SOURCE DISCOVERY (see discover_pipeline_sources).
 _DISCOVERY_CACHE = _serving_cache.BoundedCache("pipeline_discovery", max_entries=16)
 

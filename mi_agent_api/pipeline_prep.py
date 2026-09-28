@@ -703,8 +703,12 @@ _METRIC_FIELDS = [
 
 
 def _has_values(out: pd.DataFrame, col: str) -> bool:
-    return col in out.columns and out[col].notna().any() and (
-        out[col].astype(str).str.strip() != "").any()
+    if col not in out.columns or not out[col].notna().any():
+        return False
+    if not (pd.api.types.is_object_dtype(out[col])
+            or pd.api.types.is_string_dtype(out[col])):
+        return True  # a non-null number or date never renders as blank text
+    return bool((out[col].astype(str).str.strip() != "").any())
 
 
 def _numeric_coverage(out: pd.DataFrame, col: str) -> Tuple[int, int]:
