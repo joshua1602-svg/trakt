@@ -1,0 +1,292 @@
+name: Slice 1B live serving acceptance
+
+# Proves the ONE production assertion slice 1B adds: that for the allow-listed
+# principal the NEW deterministic result actually becomes the /mi/query response.
+#
+# WHY NOT THE SLICE 1A WORKFLOW. `deployed-shadow-acceptance.yml` adjudicates
+# through `run_acceptance.py`, whose adjudicator never reads the `serving` block
+# and stores the HTTP response under a field named `legacy_value` — so on a
+# serving canary it compares the new figure with itself. It cannot tell NEW from
+# LEGACY, and an eligible case that fell back to legacy would still classify as
+# parity and pass. That workflow is left exactly as it is.
+#
+# ORDER. The served commit is confirmed FIRST, by GET /health, and a mismatch
+# stops the run with zero questions asked — a POST would cost a live Opus
+# interpretation on a canary that is switched on. Then the evidence sink is
+# proved readable and its existing correlation ids are recorded, so no
+# pre-existing record can satisfy a case. Only then are the six asked.
+#
+# IT DEPLOYS NOTHING AND CONFIGURES NOTHING. `MI_AGENT_PLAN_SERVE` and
+# `MI_AGENT_PLAN_SERVE_PRINCIPALS` are App Service settings needing ARM access;
+# this repository's mi-api automation holds a publish profile, which grants Kudu
+# and nothing else. The canary must already be on when this runs, and turning it
+# off afterwards is an operator action the final step names on every run.
+#
+# THE TOKEN. `MI_BEARER` and the publish profile reach the script through `env:`
+# only — never an argv value, which lands in process listings and logs. Only
+# their lengths are printed, and the script rescans its own output for both and
+# refuses to write the file if either survived.
+
+# HOW THIS IS TRIGGERED, and why it is not only `workflow_dispatch`. A
+# dispatchable workflow has to exist on the DEFAULT branch before the API will
+# accept a dispatch — an unregistered file 404s, as this one did. Registering it
+# on `main` is a write to the default branch, which is not something to do for a
+# one-off acceptance run. A `push` trigger runs from the branch it is pushed to
+# with no such registration, and scoping it to THIS FILE means it fires when the
+# acceptance is published and on no other push to the branch.
+#
+# `workflow_dispatch` is kept so the run is repeatable the moment somebody does
+# register it, and every value below falls back to the literal the push path
+# needs — `inputs.x` is empty on a push event.
+on:
+  push:
+    branches: [ 'claude/mi-plan-interpretation-compiler-v1-jfonpp' ]
+    paths: [ '.github/workflows/slice1b-serving-acceptance.yml' ]
+  workflow_dispatch:
+    inputs:
+      expect_commit:
+        description: The deployed SHA this acceptance is certifying.
+        required: true
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: true
+      path:
+        default: /mi/query
+        required: true
+      portfolio_id:
+        description: The canary portfolio.
+        default: ERE/2026-06-30
+        required: true
+      evidence_path:
+        default: /home/LogFiles/mi-plan-shadow/evidence.jsonl
+        required: true
+      poll_timeout_seconds:
+        description: Per request. A timeout is INCONCLUSIVE, never a pass.
+        default: '120'
+        required: true
+      ref:
+        description: Repo ref to take the acceptance tooling from.
+        default: main
+        required: true
+      mode:
+        description: >-
+          `bank` runs the six-question acceptance. Anything else (and the push
+          path, where inputs are empty) runs the A01-A03 scalar probe only.
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+# Never two at once, and never cancelled mid-flight: overlapping runs would
+# each poll for the other's records.
+concurrency:
+  group: slice1b-serving-acceptance-trakt-mi-api
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Refuse to run without the credentials this needs
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MI_BEARER:-}" ]; then
+            echo "::error::repository secret MI_BEARER is not set"
+            exit 1
+          fi
+          if [ -z "${AZURE_MI_API_PUBLISH_PROFILE:-}" ]; then
+            echo "::error::AZURE_MI_API_PUBLISH_PROFILE is not set; which path \
+          served cannot be proved without reading the evidence sink"
+            exit 1
+          fi
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      # The six-question bank runs ONLY on an explicit `mode: bank` dispatch. On
+      # the push path `inputs.mode` is empty, so this is skipped and the
+      # three-question probe below is the whole run — which is what keeps this
+      # to exactly three live questions.
+      - name: Run the six-question serving acceptance
+        if: ${{ inputs.mode == 'bank' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          # Each falls back to the literal the push path needs; on a dispatch the
+          # input wins. The expected SHA is the deployment under acceptance.
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          API_PATH: ${{ inputs.path || '/mi/query' }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id || 'ERE/2026-06-30' }}
+          EXPECT_COMMIT: ${{ inputs.expect_commit || 'd360bead1ec5ea6d521ecaf86c59de2d8edaa79f' }}
+          EVIDENCE_PATH: ${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}
+          POLL_TIMEOUT: ${{ inputs.poll_timeout_seconds || '120' }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/slice1b_serving_canary/run_serving_acceptance.py \
+            --base-url "$BASE_URL" \
+            --path "$API_PATH" \
+            --portfolio-id "$PORTFOLIO_ID" \
+            --expect-commit "$EXPECT_COMMIT" \
+            --evidence-path "$EVIDENCE_PATH" \
+            --poll-timeout "$POLL_TIMEOUT" \
+            --json-out slice1b-serving-acceptance.json
+
+      # A01-A03 ONLY, asked once each, to settle one question the bank run could
+      # not: the three scalar cases reported "the response carries no <field>
+      # figure", which is an ABSENCE and could mean either that the acceptance
+      # looked for the wrong KPI name or that the served envelope genuinely
+      # carries no figure. So this assumes NO field name. It walks the whole
+      # response, collects every numeric leaf with its path, and asks whether any
+      # of them equals what the evidence record says the engine executed.
+      #
+      # Nothing is written and no product instrumentation changes: the envelope is
+      # printed, the record's seven relevant fields are printed, and the scalar is
+      # located generically.
+      - name: Settle A01-A03 — print the envelope and locate the scalar generically
+        if: ${{ inputs.mode != 'bank' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+          BASE_URL: ${{ inputs.base_url || 'https://app.traktinfra.io/api' }}
+          API_PATH: ${{ inputs.path || '/mi/query' }}
+          PORTFOLIO_ID: ${{ inputs.portfolio_id || 'ERE/2026-06-30' }}
+          EVIDENCE_PATH: ${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, sys
+          sys.path.insert(0, ".")
+          sys.path.insert(0, "due_diligence/evidence/deployed_acceptance_0399a315")
+          import run_acceptance as ra
+          from due_diligence.evidence.mi_api_certification.certify_mi_api import (
+              _live_asker)
+
+          TOL = 0.01
+          QUESTIONS = [
+              ("A01", "How many loans are to borrowers over 55 with LTV above 50%?"),
+              ("A02", "What is the balance of loans to borrowers over 75 with "
+                      "LTV above 40%?"),
+              ("A03", "How many drawdown loans have LTV above 50%?"),
+          ]
+          portfolio = os.environ["PORTFOLIO_ID"]
+          client_id = portfolio.split("/", 1)[0]
+          bearer = os.environ.get("MI_BEARER", "").strip()
+          profile = os.environ.get("AZURE_MI_API_PUBLISH_PROFILE", "").strip()
+          secrets = [s for s in (bearer, profile) if len(s) >= ra.MIN_SECRET_LENGTH]
+
+          scm, user, password = ra.publish_profile_credentials(profile)
+          sink = ra.Sink(scm, user, password, os.environ["EVIDENCE_PATH"])
+          rows, detail = sink.records()
+          if rows is None:
+              print(f"::error::the evidence sink could not be read: {detail}")
+              raise SystemExit(2)
+          seen = {r.get("correlation_id") for r in rows}
+          print(f"evidence sink      {sink.scm_host} — {detail} "
+                f"({len(rows)} records before this run)")
+
+          def leaves(node, path=""):
+              """Every numeric leaf in the envelope, with where it was found."""
+              found = []
+              if isinstance(node, dict):
+                  for key, value in node.items():
+                      found += leaves(value, f"{path}.{key}" if path else str(key))
+              elif isinstance(node, list):
+                  for index, value in enumerate(node):
+                      found += leaves(value, f"{path}[{index}]")
+              elif isinstance(node, bool):
+                  pass
+              elif isinstance(node, (int, float)):
+                  found.append((path, float(node)))
+              return found
+
+          ask = _live_asker(os.environ["BASE_URL"], os.environ["API_PATH"], [],
+                            portfolio)
+          summary = []
+          for case_id, question in QUESTIONS:
+              envelope = ask(question)
+              print(f"\n===== {case_id} COMPLETE HTTP RESPONSE ENVELOPE =====")
+              print(json.dumps(ra.scrub(envelope, secrets), indent=2,
+                               default=str))
+
+              record, how = ra.poll_for(sink, question, client_id, interval=3.0,
+                                        timeout=120.0, already=seen)
+              if record is None:
+                  print(f"----- {case_id} EVIDENCE: NOT MATCHED ({how})")
+                  summary.append((case_id, None, None, None, None, "INCONCLUSIVE"))
+                  continue
+              serving = record.get("serving") or {}
+              execution = record.get("execution") or {}
+              print(f"----- {case_id} EVIDENCE RECORD (the seven fields) -----")
+              for key, value in (
+                      ("serving.decision", serving.get("decision")),
+                      ("serving.response_served_from",
+                       serving.get("response_served_from")),
+                      ("serving.principal_matched",
+                       serving.get("principal_matched")),
+                      ("serving.new_value", serving.get("new_value")),
+                      ("execution.value", execution.get("value")),
+                      ("eligibility.eligible",
+                       (record.get("eligibility") or {}).get("eligible")),
+                      ("model.model_id",
+                       (record.get("model") or {}).get("model_id"))):
+                  print(f"  {key:<32} {value!r}")
+
+              executed = execution.get("value")
+              if executed is None:
+                  executed = serving.get("new_value")
+              numbers = leaves(envelope)
+              print(f"----- {case_id} EVERY NUMERIC LEAF IN THE RESPONSE "
+                    f"({len(numbers)}) -----")
+              for path, value in numbers:
+                  print(f"  {value!r:>22}   {path}")
+              matching = [p for p, v in numbers
+                          if executed is not None
+                          and abs(v - float(executed)) <= TOL]
+              present = "YES" if matching else ("YES" if numbers else "NO")
+              location = matching[0] if matching else ""
+              value = float(executed) if matching else None
+              match = "YES" if matching else "NO"
+              summary.append((case_id, present, location, value, executed, match))
+              print(f"----- {case_id} answer prose: "
+                    f"{str(envelope.get('answer'))[:200]!r}")
+
+          print("\n================ RESULT ================")
+          for case_id, present, location, value, executed, match in summary:
+              print(f"\n{case_id}")
+              print(f"HTTP_SCALAR_PRESENT  = {present}")
+              print(f"HTTP_SCALAR_LOCATION = {location}")
+              print(f"HTTP_SCALAR_VALUE    = {value}")
+              print(f"EVIDENCE_NEW_VALUE   = {executed}")
+              print(f"MATCH                = {match}")
+          matched = sum(1 for row in summary if row[5] == "YES")
+          print(f"\nmatched            {matched} of {len(QUESTIONS)}")
+          raise SystemExit(0 if matched == len(QUESTIONS) else 1)
+          PY
+
+      - name: Keep the evidence whatever the verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slice1b-serving-acceptance
+          path: slice1b-serving-acceptance.json
+          if-no-files-found: warn
+
+      - name: Turn the serving canary back off
+        if: always()
+        run: |
+          echo "::warning::This workflow cannot change App Service settings — it \
+          holds a publish profile (Kudu), not ARM access. Set \
+          MI_AGENT_PLAN_SERVE back to off on trakt-mi-api now. The acceptance is \
+          not finished until that is done, whatever the verdict above."

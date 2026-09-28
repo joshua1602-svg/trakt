@@ -1,0 +1,587 @@
+{
+  "phase": "Deployed slice 1 shadow acceptance \u2014 phase 0 provenance and phase 3 pre-registration",
+  "written_before_any_deployment_and_any_shadow_model_call": true,
+  "deploy_candidate_sha": "0399a315",
+  "frozen_source": "mi_agent/interpretation_v2/evidence/run8_135_signoff_2b00172.json",
+  "frozen_source_sha256": "8468f02413fec26bbfe78a6a01a682e44f106c69e14638b2edc424c8d4cc649c",
+  "required_model": "claude-opus-5",
+  "required_configuration": {
+    "MI_AGENT_PLAN_SHADOW": "shadow",
+    "MI_AGENT_PLAN_SHADOW_CLIENTS": "<exactly ONE authorised test client id; no wildcard>",
+    "MI_AGENT_PLAN_SHADOW_EVIDENCE": "<a path outside any git checkout, verified writable AND readable before the bank runs>",
+    "MI_AGENT_PLAN_SHADOW_MAX_IN_FLIGHT": "1 (the default)"
+  },
+  "polling_policy": {
+    "why": "the HTTP response returns before the daemon shadow thread finishes, so absence immediately after the response is not a failure",
+    "interval_seconds": 2,
+    "timeout_seconds": 60,
+    "on_timeout": "ASYNC_EVIDENCE_LOST \u2014 makes acceptance INCONCLUSIVE for that case, never a silent pass and never a semantic FAIL"
+  },
+  "evidence_association": {
+    "how": "the evidence record's request.question plus request.client_id, within the polling window",
+    "why_not_the_correlation_id": "the correlation id is generated server-side inside the shadow and is NOT returned on the HTTP response, so the caller cannot quote it",
+    "unambiguous_for_this_bank": "all 12 questions are distinct strings, so question + client identifies one record",
+    "limitation": "a bank that repeated a question would need a time-window tiebreak; this one does not"
+  },
+  "bank_size": 12,
+  "eligible_expected": 8,
+  "ineligible_expected": 4,
+  "distinct_ineligible_reasons": [
+    "CAPABILITY_NOT_GENERIC",
+    "EXPLICIT_LENS",
+    "GEOGRAPHY_REQUESTED",
+    "OPERATION_NOT_GENERIC"
+  ],
+  "provenance": {
+    "deploy_candidate_sha": "0399a315b48a7cf6cf39403227a360703121db33",
+    "deploy_candidate_sha_matches_brief": true,
+    "tree_clean_outside_this_evidence_directory": true,
+    "candidate_blob_identities": {
+      "mi_agent/plan_runtime_adapter.py": "e73196f69baf4405945263cb89374309eb599922",
+      "mi_agent/plan_shadow_wiring.py": "855653aef49297e84e02899c34b556f6c52cbb4c",
+      "mi_agent/plan_shadow_evidence.py": "45b22898fda4ee5819bb2a6db8878d31ed11adc6",
+      "mi_agent_api/mi_service.py": "1b4784c79c84186affec6dffa68c038498a4851b"
+    },
+    "adapter_identical_to_accepted_slice1": true,
+    "interpretation_v2_code_frozen_since_run8": true,
+    "quarantined_branch_is_ancestor": false,
+    "shadow_mode_with_var_unset": "off",
+    "canary_with_var_unset": [],
+    "wildcard_attempts": {
+      "*": {
+        "allow_list": [],
+        "an_unlisted_client_is_shadowed": false
+      },
+      "all": {
+        "allow_list": [],
+        "an_unlisted_client_is_shadowed": false
+      },
+      "any": {
+        "allow_list": [],
+        "an_unlisted_client_is_shadowed": false
+      },
+      "everyone": {
+        "allow_list": [],
+        "an_unlisted_client_is_shadowed": false
+      },
+      "*,acme": {
+        "allow_list": [
+          "acme"
+        ],
+        "an_unlisted_client_is_shadowed": false
+      },
+      " ALL , Any ": {
+        "allow_list": [],
+        "an_unlisted_client_is_shadowed": false
+      },
+      "**": {
+        "allow_list": [
+          "**"
+        ],
+        "an_unlisted_client_is_shadowed": false
+      }
+    },
+    "no_wildcard_opens_the_canary": true,
+    "note_on_double_star": "'**' is not in FORBIDDEN_CANARY_TOKENS so it survives as a LITERAL client id, and matches nothing: the canary compares exact strings and does no globbing, so an unlisted client is still not shadowed",
+    "gate_perimeter": {
+      "capability": "generic_analysis",
+      "operations": [
+        "breakdown",
+        "point_in_time"
+      ],
+      "period_forms": [
+        "current"
+      ],
+      "population_lens": [
+        "",
+        "all",
+        "none",
+        "total"
+      ],
+      "max_dimensions": 2
+    }
+  },
+  "cases": [
+    {
+      "case_id": "A01",
+      "frozen_question_id": "Q01A",
+      "question": "How many loans are to borrowers over 55 with LTV above 50%?",
+      "coverage": [
+        "count",
+        "two_numeric_filters",
+        "scalar"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "statistic": "count",
+        "measure_field": null,
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [
+          [
+            "current_loan_to_value",
+            "gt",
+            50
+          ],
+          [
+            "youngest_borrower_age",
+            "gt",
+            55
+          ]
+        ],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED",
+      "expected_frozen_plan_id": "plan_08020e58b735f771",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the plan must reach the spec with no measure, filter or dimension dropped; a grouped result must reconcile against the receipt's own row counts",
+      "provenance": "run8_135_signoff_2b00172.json :: Q01A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "A02",
+      "frozen_question_id": "Q02A",
+      "question": "What is the balance of loans to borrowers over 75 with LTV above 40%?",
+      "coverage": [
+        "sum_balance",
+        "two_numeric_filters",
+        "scalar"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [
+          [
+            "current_loan_to_value",
+            "gt",
+            40
+          ],
+          [
+            "youngest_borrower_age",
+            "gt",
+            75
+          ]
+        ],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED",
+      "expected_frozen_plan_id": "plan_e096446463a30208",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the plan must reach the spec with no measure, filter or dimension dropped; a grouped result must reconcile against the receipt's own row counts",
+      "provenance": "run8_135_signoff_2b00172.json :: Q02A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "A03",
+      "frozen_question_id": "Q03A",
+      "question": "How many drawdown loans have LTV above 50%?",
+      "coverage": [
+        "count",
+        "categorical_filter_governed_value",
+        "numeric_filter"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "statistic": "count",
+        "measure_field": null,
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [
+          [
+            "current_loan_to_value",
+            "gt",
+            50
+          ],
+          [
+            "erm_product_type",
+            "eq",
+            "drawdown"
+          ]
+        ],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED",
+      "expected_frozen_plan_id": "plan_d7adabfaa9308f12",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the plan must reach the spec with no measure, filter or dimension dropped; a grouped result must reconcile against the receipt's own row counts",
+      "provenance": "run8_135_signoff_2b00172.json :: Q03A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "A04",
+      "frozen_question_id": "Q12A",
+      "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+      "coverage": [
+        "sum_balance",
+        "two_dimensions",
+        "grouped"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [
+          "ltv_bucket",
+          "age_bucket"
+        ],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED",
+      "expected_frozen_plan_id": "plan_92964eb7c19d2b43",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the plan must reach the spec with no measure, filter or dimension dropped; a grouped result must reconcile against the receipt's own row counts",
+      "provenance": "run8_135_signoff_2b00172.json :: Q12A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "A05",
+      "frozen_question_id": "Q11A",
+      "question": "Show a table of balance by LTV bucket and ticket-size bucket.",
+      "coverage": [
+        "sum_balance",
+        "two_dimensions",
+        "ticket_bucket",
+        "absent_from_the_local_oracle_book"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [
+          "ltv_bucket",
+          "ticket_bucket"
+        ],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED if the deployed funded frame carries ['ticket_bucket'], otherwise EXECUTION_ERROR naming the missing column",
+      "expected_frozen_plan_id": "plan_d9bfe5fd29761fb5",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "both branches are acceptable and neither is a product defect: whether the deployed frame carries these governed fields is a DATASET fact. EXECUTION_ERROR here is TRUTH_UNAVAILABLE, not a DETERMINISTIC_EXECUTION_DEFECT",
+      "provenance": "run8_135_signoff_2b00172.json :: Q11A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "A06",
+      "frozen_question_id": "Q13A",
+      "question": "Show a table of balance by LTV bucket and interest-rate bucket.",
+      "coverage": [
+        "sum_balance",
+        "two_dimensions",
+        "interest_rate_bucket",
+        "absent_from_the_local_oracle_book"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [
+          "ltv_bucket",
+          "interest_rate_bucket"
+        ],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED if the deployed funded frame carries ['interest_rate_bucket'], otherwise EXECUTION_ERROR naming the missing column",
+      "expected_frozen_plan_id": "plan_ca02491b13e8e042",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "both branches are acceptable and neither is a product defect: whether the deployed frame carries these governed fields is a DATASET fact. EXECUTION_ERROR here is TRUTH_UNAVAILABLE, not a DETERMINISTIC_EXECUTION_DEFECT",
+      "provenance": "run8_135_signoff_2b00172.json :: Q13A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "A07",
+      "frozen_question_id": "Q01B",
+      "question": "How many loans have a borrower older than 55 and an LTV greater than 50%?",
+      "coverage": [
+        "count",
+        "paraphrase_stability_pair_with_A01"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "statistic": "count",
+        "measure_field": null,
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [
+          [
+            "current_loan_to_value",
+            "gt",
+            50
+          ],
+          [
+            "youngest_borrower_age",
+            "gt",
+            55
+          ]
+        ],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED",
+      "expected_frozen_plan_id": "plan_08020e58b735f771",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the plan must reach the spec with no measure, filter or dimension dropped; a grouped result must reconcile against the receipt's own row counts",
+      "provenance": "run8_135_signoff_2b00172.json :: Q01B (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "A08",
+      "frozen_question_id": "Q02C",
+      "question": "Show the total balance for loans with borrowers older than 75 and current LTV greater than 40%.",
+      "coverage": [
+        "sum_balance",
+        "paraphrase_stability_pair_with_A02"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [
+          [
+            "current_loan_to_value",
+            "gt",
+            40
+          ],
+          [
+            "youngest_borrower_age",
+            "gt",
+            75
+          ]
+        ],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": true,
+      "expected_ineligible_reason": "",
+      "expected_shadow_disposition": "EXECUTED",
+      "expected_frozen_plan_id": "plan_e096446463a30208",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the plan must reach the spec with no measure, filter or dimension dropped; a grouped result must reconcile against the receipt's own row counts",
+      "provenance": "run8_135_signoff_2b00172.json :: Q02C (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "B01",
+      "frozen_question_id": "Q04A",
+      "question": "What is the balance of Direct-book loans in London to borrowers over 75?",
+      "coverage": [
+        "ineligible",
+        "explicit_direct_lens"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "point_in_time",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [
+          [
+            "youngest_borrower_age",
+            "gt",
+            75
+          ]
+        ],
+        "population_base": "funded",
+        "population_lens": "direct",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": true,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": false,
+      "expected_ineligible_reason": "EXPLICIT_LENS",
+      "expected_shadow_disposition": "INELIGIBLE",
+      "expected_frozen_plan_id": "plan_6b4ced7ca93be1cb",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the gate must return exactly the reason below; an ineligible control becoming eligible is an ELIGIBILITY_DEFECT, and the adapter must not have executed",
+      "provenance": "run8_135_signoff_2b00172.json :: Q04A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "B02",
+      "frozen_question_id": "Q14A",
+      "question": "Show loan count by region and product type.",
+      "coverage": [
+        "ineligible",
+        "governed_geography_axis"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "breakdown",
+        "statistic": "count",
+        "measure_field": null,
+        "weight_field": null,
+        "dimensions": [
+          "erm_product_type"
+        ],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": true,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": false,
+      "expected_ineligible_reason": "GEOGRAPHY_REQUESTED",
+      "expected_shadow_disposition": "INELIGIBLE",
+      "expected_frozen_plan_id": "plan_9c6ebdc78046f1c2",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the gate must return exactly the reason below; an ineligible control becoming eligible is an ELIGIBILITY_DEFECT, and the adapter must not have executed",
+      "provenance": "run8_135_signoff_2b00172.json :: Q14A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "B03",
+      "frozen_question_id": "Q19A",
+      "question": "How did the Direct book change last month?",
+      "coverage": [
+        "ineligible",
+        "specialist_capability",
+        "historical_temporal"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "period_movement",
+        "operation": "movement",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "direct",
+        "period_form": "relative_pair",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": false,
+      "expected_ineligible_reason": "CAPABILITY_NOT_GENERIC",
+      "expected_shadow_disposition": "INELIGIBLE",
+      "expected_frozen_plan_id": "plan_5681bb585344ef43",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the gate must return exactly the reason below; an ineligible control becoming eligible is an ELIGIBILITY_DEFECT, and the adapter must not have executed",
+      "provenance": "run8_135_signoff_2b00172.json :: Q19A (frozen sign-off; no deployed answer consulted)"
+    },
+    {
+      "case_id": "B04",
+      "frozen_question_id": "Q12C",
+      "question": "Plot portfolio balance across LTV buckets and borrower-age buckets.",
+      "coverage": [
+        "ineligible",
+        "unsupported_shape_distribution",
+        "same_canonical_as_A04"
+      ],
+      "expected_interpretation_disposition": "PLAN",
+      "expected_semantics": {
+        "capability": "generic_analysis",
+        "operation": "distribution",
+        "statistic": "sum",
+        "measure_field": "current_outstanding_balance",
+        "weight_field": null,
+        "dimensions": [
+          "ltv_bucket",
+          "age_bucket"
+        ],
+        "filters": [],
+        "population_base": "funded",
+        "population_lens": "all",
+        "period_form": "current",
+        "comparison_kind": "none",
+        "geography_requested": false,
+        "output_count": 1
+      },
+      "expected_slice1_eligible": false,
+      "expected_ineligible_reason": "OPERATION_NOT_GENERIC",
+      "expected_shadow_disposition": "INELIGIBLE",
+      "expected_frozen_plan_id": "plan_c56510dee3605727",
+      "independent_numerical_truth": null,
+      "independent_numerical_truth_status": "TRUTH_UNAVAILABLE \u2014 this harness cannot see the deployed portfolio, so no oracle figure exists. The legacy answer is NOT the oracle; a figure matching it is a signal, not a pass",
+      "adjudication_rule": "the gate must return exactly the reason below; an ineligible control becoming eligible is an ELIGIBILITY_DEFECT, and the adapter must not have executed",
+      "provenance": "run8_135_signoff_2b00172.json :: Q12C (frozen sign-off; no deployed answer consulted)"
+    }
+  ]
+}

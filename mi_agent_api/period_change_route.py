@@ -41,6 +41,8 @@ from mi_agent.period_change import (
 )
 from mi_agent.period_change.models import (
     BRIDGE_STATUS_AVAILABLE,
+    DISPOSITION_GOVERNED_REFUSAL,
+    DISPOSITION_QUALIFIED,
     FAIL_AMBIGUOUS_PERIOD_RANGE,
     FAIL_CROSS_TENANT_ACCESS,
     FAIL_IDENTICAL_SNAPSHOTS,
@@ -1341,11 +1343,63 @@ def _bridge_rows(result: PeriodChangeResult) -> List[Dict[str, Any]]:
     ]
 
 
+def _requested_metric_answer(row: Dict[str, Any], start: str, end: str) -> str:
+    """One named metric, stated. Values copied from the owner, never derived.
+
+    THE QUALIFICATION IS ATTACHED TO THE FIGURE, not offered instead of it. A
+    partially available movement was computed from a population with rows
+    excluded, and the reader is told both — which is what the estate already
+    does everywhere a value is published beside its status.
+    """
+    unit = row.get("movement_unit")
+    name = row.get("display_name") or row.get("canonical_field")
+    disposition = row.get("disposition")
+
+    if disposition == DISPOSITION_GOVERNED_REFUSAL:
+        note = " ".join(row.get("notes") or ()) or (
+            f"The owner reported status {row.get('status')!r}.")
+        return (f"{name} could not be compared between {start} and {end}, so no "
+                f"movement is stated. {note}")
+
+    stated = (f"{name} moved {_format_movement(row.get('movement_value'), unit)} "
+              f"between {start} and {end}, from "
+              f"{_format_value(row.get('start_value'), unit)} to "
+              f"{_format_value(row.get('end_value'), unit)}"
+              f"{_aggregation_clause(row)}.")
+    if disposition != DISPOSITION_QUALIFIED:
+        return stated
+
+    excluded = row.get("excluded_population") or {}
+    valid = row.get("valid_population") or {}
+    return (f"{stated} This is a partially available comparison: "
+            f"{excluded.get('start', 0)} row(s) were excluded at {start} and "
+            f"{excluded.get('end', 0)} at {end}, leaving {valid.get('start', 0)} "
+            f"and {valid.get('end', 0)} in the compared population. It is "
+            f"reported with that qualification and is excluded from the "
+            f"governed comparability count below.")
+
+
+def _aggregation_clause(row: Dict[str, Any]) -> str:
+    """How the figure was aggregated, from the registry's own answer."""
+    aggregation = row.get("aggregation")
+    if not aggregation:
+        return ""
+    weight = row.get("weight_field")
+    readable = str(aggregation).replace("_", " ")
+    return (f" ({readable} weighted by {weight})" if weight
+            else f" ({readable})")
+
+
 def build_answer(result: PeriodChangeResult) -> str:
     """Plain-language rendering of the deterministic summary.
 
     Every clause restates a value from ``result.summary``; no fact is added, no
     cause is asserted, and no movement is described as material.
+
+    TWO READINGS, ONE PRESENTER. A reader who named a metric is answered about
+    that metric; a reader who asked what changed gets the governed overview. The
+    difference is which clauses lead — not a second renderer, and not a second
+    derivation of any figure.
     """
     from . import chat_routing
 
@@ -1353,10 +1407,28 @@ def build_answer(result: PeriodChangeResult) -> str:
     period = summary.get("period") or {}
     start = chat_routing._date_label(period.get("start"))
     end = chat_routing._date_label(period.get("end"))
-    parts = [f"Between {start} and {end}, "
-             f"{summary.get('metrics_comparable', 0)} of "
-             f"{summary.get('metrics_analysed', 0)} governed metrics could be "
-             f"compared across both snapshots."]
+
+    parts: List[str] = []
+
+    # THE METRIC THE READER NAMED LEADS, and the overview does not stand in for
+    # it. Every overview clause is built from `metrics_comparable`, which is
+    # `available` only; a partially available metric falls out of all of them,
+    # and the live canary caught the consequence — a reader who asked whether the
+    # weighted average interest rate had moved was told "0 of 1 governed metrics
+    # could be compared" and then given the balance bridge. The movement was
+    # computed and published in the metric table, and absent from the answer.
+    #
+    # NO NEW ARITHMETIC AND NO SECOND PRESENTER. Every value comes from
+    # `summary["requested_metrics"]`, which `build_summary` copied off the
+    # owner's own `MetricChange`.
+    requested = summary.get("requested_metrics") or []
+    for row in requested:
+        parts.append(_requested_metric_answer(row, start, end))
+
+    parts.append(f"Between {start} and {end}, "
+                 f"{summary.get('metrics_comparable', 0)} of "
+                 f"{summary.get('metrics_analysed', 0)} governed metrics could be "
+                 f"compared across both snapshots.")
 
     # Reported per unit, and said so: a currency movement and a percentage-point
     # movement are not ranked against each other, so presenting them in one

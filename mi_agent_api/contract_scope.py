@@ -118,3 +118,71 @@ def requested_context_id(interpretation: Any) -> Optional[str]:
         return lens_mod.context_id(lens)
     except Exception:  # noqa: BLE001 - an identity fault must not fail a route
         return None
+
+
+#: Population lenses that state NO narrowing at all. `all` is the governed
+#: default and "total"/"none"/"" are the spellings the plan perimeter already
+#: admits for it (`plan_runtime_adapter.ELIGIBLE_POPULATION_LENS`); none of them
+#: produces a scope predicate at the compiler, so none of them produces a lens
+#: here either.
+_WHOLE_BOOK_LENSES = frozenset({"", "all", "total", "none"})
+
+
+def lens_from_plan(plan: Any) -> tuple:
+    """``(ok, lens, detail)`` — the RESOLVED portfolio lens a PLAN states.
+
+    THE SAME MAPPING :func:`lens_from_contract` PERFORMS, from the other
+    transcription of the reader's request. A `GovernedQueryPlan` carries the
+    scope on `population.lens` (the role), `population.source_reference` /
+    `population.source_portfolio_id` (the named book) and `population.seasoning`
+    — and `mi_agent.portfolio_lens` remains the only thing that decides what any
+    of them MEANS. Nothing here reads a question and nothing here decides a
+    scope.
+
+    `ok` False means the plan states a scope axis this mapping cannot express as
+    a lens, and the caller must REFUSE. It must not widen: an unexpressible
+    scope answered over the whole book is the one failure this axis exists to
+    prevent, and it is indistinguishable from a correct answer once rendered.
+    """
+    from mi_agent import portfolio_lens as lens_mod
+
+    body = plan if isinstance(plan, dict) else (
+        plan.to_dict() if hasattr(plan, "to_dict") else {})
+    population = (body.get("population") or {})
+    role = str(population.get("lens") or "").strip().lower()
+    reference = str(population.get("source_reference") or "").strip()
+    portfolio_id = str(population.get("source_portfolio_id") or "").strip()
+    seasoning = str(population.get("seasoning") or "any").strip().lower()
+
+    # SEASONING IS A ROW PREDICATE, NOT A LENS. `portfolio_lens` filters on
+    # portfolio identity; a front/back-book segment narrows rows within one
+    # portfolio and is applied by `mi_agent.population`. A caller with no
+    # population passthrough therefore cannot honour it, and says so.
+    if seasoning not in ("", "any"):
+        return (False, None,
+                f"population.seasoning={seasoning!r} is a row predicate, not a "
+                f"portfolio lens, and this owner applies no row predicates")
+
+    # A NAMED BOOK WINS OVER ITS ROLE, because it is the narrower of the two and
+    # the registry — not this mapping — decides whether they agree. The id is
+    # the compiler's own resolution of the name through the governed source
+    # registry; a reference with no resolved id never reached a plan.
+    if reference:
+        if not portfolio_id:
+            return (False, None,
+                    f"population.source_reference={reference!r} carries no "
+                    f"resolved source_portfolio_id on the plan")
+        return (True, _through_the_registry(
+            lens_mod._selection_lens([portfolio_id])), "")
+    if role in ("direct", "acquired"):
+        return True, _through_the_registry(lens_mod.lens_from_term(role)), ""
+    if role in _WHOLE_BOOK_LENSES:
+        # NO LENS, NOT A TOTAL LENS. `build_snapshots` narrows nothing when the
+        # lens is None, which is the whole funded book — the population every
+        # question already has. Handing it a total lens instead would put a
+        # no-op filter in the scope evidence and make "the whole book" look like
+        # a scope that had been applied.
+        return True, None, ""
+    return (False, None,
+            f"population.lens={role!r} is not a governed portfolio role this "
+            f"mapping can express")

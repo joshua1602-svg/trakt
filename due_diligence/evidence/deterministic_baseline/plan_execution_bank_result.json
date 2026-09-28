@@ -1,0 +1,1118 @@
+{
+ "base_sha": "ea8c65b592ae5d2203d924bf66afa051618641e6",
+ "test_sha": "2b00172c0b033c97de8afe5fa5b60ba43e1443ec",
+ "bank_size": 20,
+ "pass": 16,
+ "fail": 4,
+ "cases": [
+  {
+   "case_id": "A1-count",
+   "surface": "AGGREGATION/STATISTIC",
+   "plan": "COUNT over funded book",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "value": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 400.0,
+   "actual_result": 400.0,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 400.0,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A2-sum-balance",
+   "surface": "AGGREGATION/STATISTIC",
+   "plan": "SUM(balance)",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "value": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 115450800.7,
+   "actual_result": 115450800.7,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 115450800.7,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A3-weighted-avg-ltv",
+   "surface": "AGGREGATION/STATISTIC",
+   "plan": "WA(LTV) weighted by balance",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "value": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 48.352044162773836,
+   "actual_result": 48.352044162773836,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 48.352044162773836,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "A4-simple-avg-age",
+   "surface": "AGGREGATION/STATISTIC",
+   "plan": "AVERAGE(age) \u2014 an unweighted mean must not silently weight",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "value": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 77.3525,
+   "actual_result": 77.3525,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 77.3525,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B1-single-filter",
+   "surface": "POPULATION/FILTER",
+   "plan": "SUM(balance) WHERE joint",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "value": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 57744445.760000005,
+   "actual_result": 57744445.760000005,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 57744445.760000005,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 194,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B2-two-filters",
+   "surface": "POPULATION/FILTER",
+   "plan": "two filters must narrow together, not replace one another",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "value": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 12931879.91,
+   "actual_result": 12931879.91,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 12931879.91,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "filter collateral_geography='Scotland' kept 42/194 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       },
+       {
+        "field": "collateral_geography",
+        "canonical_field": "collateral_geography",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Scotland"
+        ],
+        "rows_before": 194,
+        "rows_after": 42
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 42,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B3-threshold-keeps-every-row",
+   "surface": "POPULATION/FILTER",
+   "plan": "a predicate true of every row must still be APPLIED and recorded",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "value": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 115450800.7,
+   "actual_result": 115450800.7,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 115450800.7,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter current_loan_to_value gt 0.0 kept 400/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": [
+       {
+        "field": "current_loan_to_value",
+        "canonical_field": "current_loan_to_value",
+        "op": "gt",
+        "kind": "numeric",
+        "values": [
+         "0.0"
+        ],
+        "rows_before": 400,
+        "rows_after": 400
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "B4-filter-keeps-no-row",
+   "surface": "POPULATION/FILTER",
+   "plan": "an empty population must not be reported as a confident 0",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "disposition": "EMPTY_OR_REFUSAL_NOT_INVENTED_ZERO"
+   },
+   "verdict": "FAIL",
+   "classification": "RECEIPT/GOVERNANCE",
+   "detail": "an empty population (filtered_row_count=0) returned a confident 0.0 with no unavailability warning \u2014 an invented zero",
+   "expected_result": 0,
+   "actual_result": {
+    "output_id": "a",
+    "value": 0.0,
+    "ok": true,
+    "error": "",
+    "warnings": [
+     "filter current_loan_to_value gt 1000.0 kept 0/400 rows",
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "row_count": 1,
+    "group_field_keys": [],
+    "filters_applied": [
+     {
+      "field": "current_loan_to_value",
+      "canonical_field": "current_loan_to_value",
+      "op": "gt",
+      "kind": "numeric",
+      "values": [
+       "1000.0"
+      ],
+      "rows_before": 400,
+      "rows_after": 0
+     }
+    ],
+    "dataset": null,
+    "period": null,
+    "filtered_row_count": 0,
+    "rows": 1
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 0.0,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter current_loan_to_value gt 1000.0 kept 0/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": [
+       {
+        "field": "current_loan_to_value",
+        "canonical_field": "current_loan_to_value",
+        "op": "gt",
+        "kind": "numeric",
+        "values": [
+         "1000.0"
+        ],
+        "rows_before": 400,
+        "rows_after": 0
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 0,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C1-one-dimension",
+   "surface": "PLAN_BINDING/DIMENSIONS",
+   "plan": "SUM(balance) by product type",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "cells": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": {
+    "Drawdown": 57510952.09,
+    "Lump Sum": 57939848.61
+   },
+   "actual_result": {
+    "Lump Sum": 57939848.61,
+    "Drawdown": 57510952.09
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": null,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "row_count": 2,
+      "group_field_keys": [
+       "erm_product_type"
+      ],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 2
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C2-two-dimension-grid",
+   "surface": "PLAN_BINDING/DIMENSIONS",
+   "plan": "a grid's mass must be in the right cells, not merely total right",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "cells": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": {
+    "Drawdown | London": 14781722.19,
+    "Drawdown | North West": 14416471.4,
+    "Drawdown | Scotland": 12975211.4,
+    "Drawdown | Wales": 15337547.100000001,
+    "Lump Sum | London": 13883345.740000002,
+    "Lump Sum | North West": 13683988.600000001,
+    "Lump Sum | Scotland": 12430442.829999998,
+    "Lump Sum | Wales": 17942071.439999998
+   },
+   "actual_result": {
+    "Lump Sum | Wales": 17942071.439999998,
+    "Drawdown | Wales": 15337547.100000001,
+    "Drawdown | London": 14781722.19,
+    "Drawdown | North West": 14416471.4,
+    "Lump Sum | London": 13883345.740000002,
+    "Lump Sum | North West": 13683988.600000001,
+    "Drawdown | Scotland": 12975211.4,
+    "Lump Sum | Scotland": 12430442.829999998
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": null,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "row_count": 8,
+      "group_field_keys": [
+       "erm_product_type",
+       "collateral_geography"
+      ],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 8
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "C3-absent-dimension",
+   "surface": "RECEIPT/GOVERNANCE",
+   "plan": "a dimension the dataset lacks must refuse, never be swapped",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "disposition": "GOVERNED_REFUSAL_NO_SUBSTITUTION"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "refused: Canonical column 'erm_product_type' (for semantic field 'erm_product_type') is not present in the data",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "value": null,
+    "ok": false,
+    "error": "Canonical column 'erm_product_type' (for semantic field 'erm_product_type') is not present in the data",
+    "group_field_keys": [],
+    "filters_applied": null,
+    "dataset": null,
+    "period": null,
+    "rows": 0
+   },
+   "receipt": {
+    "complete": false,
+    "raised": "MIQueryExecutionError",
+    "reason": "Canonical column 'erm_product_type' (for semantic field 'erm_product_type') is not present in the data",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": null,
+      "ok": false,
+      "error": "Canonical column 'erm_product_type' (for semantic field 'erm_product_type') is not present in the data",
+      "group_field_keys": [],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "rows": 0
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D1-region-grouping",
+   "surface": "GEOGRAPHY",
+   "plan": "grouping on the collateral geography column the book carries",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "cells": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": {
+    "London": 28665067.93,
+    "North West": 28100460.0,
+    "Scotland": 25405654.230000004,
+    "Wales": 33279618.54
+   },
+   "actual_result": {
+    "Wales": 33279618.54,
+    "London": 28665067.93,
+    "North West": 28100460.0,
+    "Scotland": 25405654.230000004
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": null,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "row_count": 4,
+      "group_field_keys": [
+       "collateral_geography"
+      ],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 4
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "D2-itl3-codes",
+   "surface": "GEOGRAPHY",
+   "plan": "a column of ITL3 CODES grouped as a region: codes are not names",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "disposition": "CODES_MUST_NOT_BE_PRESENTED_AS_PLACE_NAMES"
+   },
+   "verdict": "FAIL",
+   "classification": "GEOGRAPHY",
+   "detail": "returned raw ITL3 codes as region labels: ['TLI31', 'TLJ21']",
+   "expected_result": {
+    "TLI31": 58180670.22,
+    "TLJ21": 57270130.48
+   },
+   "actual_result": {
+    "output_id": "a",
+    "value": null,
+    "ok": true,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "table",
+    "row_count": 2,
+    "group_field_keys": [
+     "geographic_region_obligor_itl3"
+    ],
+    "filters_applied": null,
+    "dataset": null,
+    "period": null,
+    "filtered_row_count": 400,
+    "rows": 2
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": null,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "row_count": 2,
+      "group_field_keys": [
+       "geographic_region_obligor_itl3"
+      ],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 2
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "E1-bridge-decomposition",
+   "surface": "SPECIALIST_CAPABILITY",
+   "plan": "continuing / new / redeemed against a longhand decomposition",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "bridge": "recomputed"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "opening=600.0 closing=740.0 continuing=40.0 new=400.0 exited=300.0 residual=0.0",
+   "expected_result": {
+    "continuing": 40.0,
+    "new": 400.0,
+    "redeemed": -300.0,
+    "net": 140.0
+   },
+   "actual_result": {
+    "status": "available",
+    "balance_field": "current_outstanding_balance",
+    "identifier_field": "loan_identifier",
+    "identifier_fields": [
+     "loan_identifier"
+    ],
+    "opening_balance": 600.0,
+    "closing_balance": 740.0,
+    "new_loan_balance": 400.0,
+    "exited_loan_balance": 300.0,
+    "continuing_movement": 40.0,
+    "new_loan_count": 1,
+    "exited_loan_count": 1,
+    "continuing_loan_count": 2,
+    "reconciles": true,
+    "residual": 0.0,
+    "tolerance": 0.01,
+    "limitation": null,
+    "evidence": [
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s0",
+      "reporting_date": "2026-05-31",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "opening",
+      "loan_count": 3
+     },
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s1",
+      "reporting_date": "2026-06-30",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "closing",
+      "loan_count": 3
+     }
+    ]
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "E2-bridge-full-redemption",
+   "surface": "SPECIALIST_CAPABILITY",
+   "plan": "every opening loan gone: redemption must be the whole opening book",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "bridge": "recomputed"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "opening=150.0 closing=10.0 continuing=0.0 new=10.0 exited=150.0 residual=0.0",
+   "expected_result": {
+    "continuing": 0,
+    "new": 10.0,
+    "redeemed": -150.0,
+    "net": -140.0
+   },
+   "actual_result": {
+    "status": "available",
+    "balance_field": "current_outstanding_balance",
+    "identifier_field": "loan_identifier",
+    "identifier_fields": [
+     "loan_identifier"
+    ],
+    "opening_balance": 150.0,
+    "closing_balance": 10.0,
+    "new_loan_balance": 10.0,
+    "exited_loan_balance": 150.0,
+    "continuing_movement": 0.0,
+    "new_loan_count": 1,
+    "exited_loan_count": 2,
+    "continuing_loan_count": 0,
+    "reconciles": true,
+    "residual": 0.0,
+    "tolerance": 0.01,
+    "limitation": null,
+    "evidence": [
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s0",
+      "reporting_date": "2026-05-31",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "opening",
+      "loan_count": 2
+     },
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s1",
+      "reporting_date": "2026-06-30",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "closing",
+      "loan_count": 1
+     }
+    ]
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "E3-bridge-no-change",
+   "surface": "SPECIALIST_CAPABILITY",
+   "plan": "identical snapshots: a zero movement must read as zero, not as a change",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "bridge": "recomputed"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "opening=150.0 closing=150.0 continuing=0.0 new=0.0 exited=0.0 residual=0.0",
+   "expected_result": {
+    "continuing": 0.0,
+    "new": 0,
+    "redeemed": 0,
+    "net": 0.0
+   },
+   "actual_result": {
+    "status": "available",
+    "balance_field": "current_outstanding_balance",
+    "identifier_field": "loan_identifier",
+    "identifier_fields": [
+     "loan_identifier"
+    ],
+    "opening_balance": 150.0,
+    "closing_balance": 150.0,
+    "new_loan_balance": 0.0,
+    "exited_loan_balance": 0.0,
+    "continuing_movement": 0.0,
+    "new_loan_count": 0,
+    "exited_loan_count": 0,
+    "continuing_loan_count": 2,
+    "reconciles": true,
+    "residual": 0.0,
+    "tolerance": 0.01,
+    "limitation": null,
+    "evidence": [
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s0",
+      "reporting_date": "2026-05-31",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "opening",
+      "loan_count": 2
+     },
+     {
+      "kind": "balance_bridge",
+      "snapshot_id": "s1",
+      "reporting_date": "2026-06-30",
+      "dataset_label": null,
+      "dataset_reference": null,
+      "row_count": null,
+      "canonical_field": "current_outstanding_balance",
+      "role": "closing",
+      "loan_count": 2
+     }
+    ]
+   },
+   "receipt": null
+  },
+  {
+   "case_id": "F1-as-at-unhonourable",
+   "surface": "TEMPORAL_RESOLUTION",
+   "plan": "a period the flat book cannot honour must not answer as if current",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "disposition": "GOVERNED_REFUSAL_OR_DISCLOSED"
+   },
+   "verdict": "FAIL",
+   "classification": "TEMPORAL_RESOLUTION",
+   "detail": "a period the book cannot honour returned the whole-book total as though it were that period's figure",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "value": 115450800.7,
+    "ok": true,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "row_count": 1,
+    "group_field_keys": [],
+    "filters_applied": null,
+    "dataset": null,
+    "period": null,
+    "filtered_row_count": 400,
+    "rows": 1
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 115450800.7,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "F2-period-is-recorded",
+   "surface": "RECEIPT/GOVERNANCE",
+   "plan": "the receipt must say which period the figure is for",
+   "truth_source": "recomputed",
+   "expected_disposition": {
+    "disposition": "RECEIPT_STATES_THE_PERIOD_EXECUTED"
+   },
+   "verdict": "FAIL",
+   "classification": "RECEIPT/GOVERNANCE",
+   "detail": "the receipt does not state which period was executed",
+   "expected_result": null,
+   "actual_result": {
+    "output_id": "a",
+    "value": 115450800.7,
+    "ok": true,
+    "error": "",
+    "warnings": [
+     "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+    ],
+    "result_type": "summary",
+    "row_count": 1,
+    "group_field_keys": [],
+    "filters_applied": null,
+    "dataset": null,
+    "period": null,
+    "filtered_row_count": 400,
+    "rows": 1
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": 115450800.7,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": null,
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 400,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "G1-multi-output-one-population",
+   "surface": "AGGREGATION/STATISTIC",
+   "plan": "three measures over one population, each against its own truth",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "multi": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": {
+    "n": 194.0,
+    "b": 57744445.760000005,
+    "w": 47.76903174181577
+   },
+   "actual_result": {
+    "n": 194.0,
+    "b": 57744445.760000005,
+    "w": 47.76903174181577
+   },
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "n",
+      "value": 194.0,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 194,
+      "rows": 1
+     },
+     {
+      "output_id": "b",
+      "value": 57744445.760000005,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 194,
+      "rows": 1
+     },
+     {
+      "output_id": "w",
+      "value": 47.76903174181577,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "summary",
+      "row_count": 1,
+      "group_field_keys": [],
+      "filters_applied": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 194,
+      "rows": 1
+     }
+    ]
+   }
+  },
+  {
+   "case_id": "G2-grid-reconciles-to-total",
+   "surface": "AGGREGATION/STATISTIC",
+   "plan": "the cells of a grid must sum to the population total",
+   "truth_source": "independent_oracle",
+   "expected_disposition": {
+    "reconcile": "oracle"
+   },
+   "verdict": "PASS",
+   "classification": null,
+   "detail": "",
+   "expected_result": 57744445.760000005,
+   "actual_result": 57744445.76,
+   "receipt": {
+    "complete": true,
+    "reason": "",
+    "outputs": [
+     {
+      "output_id": "a",
+      "value": null,
+      "ok": true,
+      "error": "",
+      "warnings": [
+       "filter borrower_type='Joint' kept 194/400 rows",
+       "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+      ],
+      "result_type": "table",
+      "row_count": 8,
+      "group_field_keys": [
+       "erm_product_type",
+       "collateral_geography"
+      ],
+      "filters_applied": [
+       {
+        "field": "borrower_type",
+        "canonical_field": "borrower_type",
+        "op": "eq",
+        "kind": "categorical",
+        "values": [
+         "Joint"
+        ],
+        "rows_before": 400,
+        "rows_after": 194
+       }
+      ],
+      "dataset": null,
+      "period": null,
+      "filtered_row_count": 194,
+      "rows": 8
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -1,0 +1,77 @@
+{
+  "catalogue_contract": "datasets.snapshot_index ({portfolios:[{client_id,runs:[{run_id,reporting_date}]}]})",
+  "catalogue_is": "production-SHAPED over the independent oracle history",
+  "clients_in_catalogue": [
+    "ERE",
+    "OTHER_TENANT"
+  ],
+  "model_calls": 0,
+  "series_values_reconciled": 14,
+  "grouped_cells_reconciled": 40,
+  "verdicts": {
+    "PASS": 8
+  },
+  "results": [
+    {
+      "control": "CURRENT_SLICE1_CONTROL",
+      "why": "a slice 1 request is unchanged",
+      "problems": [],
+      "verdict": "PASS",
+      "value": 227.0,
+      "expected": 227.0
+    },
+    {
+      "control": "TEMPORAL_SERIES_CONTROL",
+      "why": "funded balance series",
+      "problems": [],
+      "verdict": "PASS",
+      "snapshots": 6,
+      "rows": 6
+    },
+    {
+      "control": "FILTERED_TEMPORAL_CONTROL",
+      "why": "filtered temporal series",
+      "problems": [],
+      "verdict": "PASS",
+      "snapshots": 8,
+      "rows": 8
+    },
+    {
+      "control": "GROUPED_TEMPORAL_CONTROL",
+      "why": "temporal grouped result",
+      "problems": [],
+      "verdict": "PASS",
+      "snapshots": 8,
+      "rows": 40
+    },
+    {
+      "control": "UNAVAILABLE_PERIOD_CONTROL",
+      "why": "24 periods asked of an 8-period catalogue",
+      "problems": [],
+      "verdict": "PASS",
+      "reason": "TEMPORAL_NOT_RESOLVED:PERIOD_NOT_AVAILABLE"
+    },
+    {
+      "control": "CROSS_PORTFOLIO_CONTROL",
+      "why": "another client / route / unlisted run is unreachable",
+      "problems": [],
+      "verdict": "PASS",
+      "this_client": 8,
+      "other_client": 2
+    },
+    {
+      "control": "NO_CATALOGUE_CONTROL",
+      "why": "slice 1 survives; slice 2 fabricates nothing",
+      "problems": [],
+      "verdict": "PASS",
+      "reason": "TEMPORAL_NOT_RESOLVED:NO_SNAPSHOTS"
+    },
+    {
+      "control": "NO_STORE_CONTROL",
+      "why": "the production state today",
+      "problems": [],
+      "verdict": "PASS",
+      "reason": "TEMPORAL_STORE_UNAVAILABLE"
+    }
+  ]
+}

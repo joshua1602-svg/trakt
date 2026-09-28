@@ -34,6 +34,22 @@ portfolios:
   - source_portfolio_id: direct_001
     source_portfolio_type: direct
     source_portfolio_label: ERE Direct Originations
+    # WHAT A READER CALLS THIS BOOK. Declared here and nowhere else, because a
+    # source portfolio id is an opaque client string — `alp_acquired` — and
+    # nobody says that out loud. MI resolves a question naming a portfolio by
+    # EXACT match (case- and whitespace-insensitive) against this list plus the
+    # id and the label above.
+    #
+    # There is no fuzzy matching, no prefix match and no nearest-neighbour. A
+    # phrasing that is not declared REFUSES and the refusal names what this
+    # client does govern, so the gap is visible and closeable here. Two
+    # portfolios sharing an alias make that alias AMBIGUOUS and every question
+    # using it clarifies — which is why an alias belongs to one book.
+    #
+    # Optional. Without it a portfolio is still nameable by its id and label.
+    aliases:
+      - ERE Direct
+      - the direct book
     # THE GOVERNED ASSET CLASS. Established once by onboarding; a fact about the
     # BOOK, not about any loan, which is why it lives here and not on the tape.
     #

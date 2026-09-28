@@ -1,0 +1,1054 @@
+{
+  "what_this_is": "one record per reachable disposition, produced by the production orchestration with a replayed frozen payload",
+  "live_model_calls": 0,
+  "canary_client": "acme",
+  "summary": [
+    {
+      "scenario": "EXECUTED_SCALAR",
+      "disposition": "EXECUTED",
+      "served_envelope_unchanged": true,
+      "evidence_persisted": true,
+      "model_id": "claude-opus-5",
+      "plan_id": "plan_08020e58b735f771",
+      "eligible": true,
+      "eligibility_reason": "",
+      "value": 195.0,
+      "grouped_cells": 0,
+      "execution_error": ""
+    },
+    {
+      "scenario": "EXECUTED_GROUPED",
+      "disposition": "EXECUTED",
+      "served_envelope_unchanged": true,
+      "evidence_persisted": true,
+      "model_id": "claude-opus-5",
+      "plan_id": "plan_92964eb7c19d2b43",
+      "eligible": true,
+      "eligibility_reason": "",
+      "value": null,
+      "grouped_cells": 20,
+      "execution_error": ""
+    },
+    {
+      "scenario": "INELIGIBLE",
+      "disposition": "INELIGIBLE",
+      "served_envelope_unchanged": true,
+      "evidence_persisted": true,
+      "model_id": "claude-opus-5",
+      "plan_id": "plan_7f9dcc7e0705c75a",
+      "eligible": false,
+      "eligibility_reason": "EXPLICIT_LENS",
+      "value": null,
+      "grouped_cells": 0,
+      "execution_error": null
+    },
+    {
+      "scenario": "CLARIFY",
+      "disposition": "CLARIFY",
+      "served_envelope_unchanged": true,
+      "evidence_persisted": true,
+      "model_id": "claude-opus-5",
+      "plan_id": null,
+      "eligible": null,
+      "eligibility_reason": null,
+      "value": null,
+      "grouped_cells": 0,
+      "execution_error": null
+    },
+    {
+      "scenario": "INTERPRETER_FAILURE",
+      "disposition": "INTERPRETER_FAILURE",
+      "served_envelope_unchanged": true,
+      "evidence_persisted": true,
+      "model_id": "",
+      "plan_id": null,
+      "eligible": null,
+      "eligibility_reason": null,
+      "value": null,
+      "grouped_cells": 0,
+      "execution_error": null
+    },
+    {
+      "scenario": "EXECUTION_ERROR",
+      "disposition": "EXECUTION_ERROR",
+      "served_envelope_unchanged": true,
+      "evidence_persisted": true,
+      "model_id": "claude-opus-5",
+      "plan_id": "plan_08020e58b735f771",
+      "eligible": true,
+      "eligibility_reason": "",
+      "value": null,
+      "grouped_cells": 0,
+      "execution_error": "MIQueryExecutionError: data must be a pandas DataFrame or a path to a CSV file"
+    },
+    {
+      "scenario": "OUTSIDE_CANARY",
+      "disposition": "OUTSIDE_CANARY",
+      "served_envelope_unchanged": true,
+      "evidence_persisted": false,
+      "model_id": null,
+      "plan_id": null,
+      "eligible": null,
+      "eligibility_reason": null,
+      "value": null,
+      "grouped_cells": 0,
+      "execution_error": null
+    }
+  ],
+  "full_records": {
+    "EXECUTED_GROUPED": {
+      "schema_version": "plan_shadow_evidence/1.0",
+      "correlation_id": "shadow_bc2c3361165444e69311",
+      "recorded_at": "2026-09-10T17:17:13.654564+00:00",
+      "request": {
+        "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+        "client_id": "acme",
+        "run_id": "2026-03",
+        "dataset_view": "funded",
+        "portfolio_id": "acme/2026-03"
+      },
+      "disposition": "EXECUTED",
+      "model": {
+        "model_id": "claude-opus-5",
+        "usage": {},
+        "raw_payload": {
+          "schema_version": "candidate_intent/1.0",
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "measures": [
+            {
+              "concept": "current_outstanding_balance"
+            }
+          ],
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "evidence": [
+            {
+              "claim": "Requested measure is the current outstanding balance",
+              "text": "Chart the balance"
+            },
+            {
+              "claim": "Grouped by governed LTV band",
+              "text": "by LTV bucket"
+            },
+            {
+              "claim": "Also grouped by governed borrower age band",
+              "text": "and borrower-age bucket"
+            }
+          ],
+          "ambiguity": [
+            {
+              "slot": "dimensions",
+              "note": "Read as a single breakdown cross-tabulated by both bands. If separate one-dimensional stratifications were wanted, the grouping would need splitting into two outputs.",
+              "blocking": false,
+              "options": [
+                "cross-tab by both bands",
+                "two separate breakdowns"
+              ]
+            }
+          ]
+        },
+        "metadata_calls": [],
+        "failure": null
+      },
+      "interpretation": {
+        "produced_intent": true,
+        "candidate_intent": {
+          "schema_version": "candidate_intent/1.0",
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "population": {
+            "base": "funded",
+            "lens": "all",
+            "seasoning": "any"
+          },
+          "measures": [
+            {
+              "concept": "current_outstanding_balance",
+              "statistic": null,
+              "weight": null
+            }
+          ],
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "filters": [],
+          "geography": {
+            "requested": false,
+            "basis": null,
+            "level": null,
+            "group_by": false,
+            "values": []
+          },
+          "time": {
+            "form": "current",
+            "labels": [],
+            "grain": null,
+            "periods_back": null
+          },
+          "comparison": {
+            "kind": "none",
+            "left": null,
+            "right": null
+          },
+          "target": null,
+          "outputs": [],
+          "ambiguity": [
+            {
+              "slot": "dimensions",
+              "note": "Read as a single breakdown cross-tabulated by both bands. If separate one-dimensional stratifications were wanted, the grouping would need splitting into two outputs.",
+              "options": [
+                "cross-tab by both bands",
+                "two separate breakdowns"
+              ],
+              "blocking": false
+            }
+          ],
+          "evidence": [
+            {
+              "claim": "Requested measure is the current outstanding balance",
+              "text": "Chart the balance"
+            },
+            {
+              "claim": "Grouped by governed LTV band",
+              "text": "by LTV bucket"
+            },
+            {
+              "claim": "Also grouped by governed borrower age band",
+              "text": "and borrower-age bucket"
+            }
+          ],
+          "provenance": {
+            "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+            "model_id": "claude-opus-5",
+            "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+            "vocabulary_version": "2.0.0",
+            "usage": {}
+          }
+        },
+        "ambiguities": [
+          {
+            "slot": "dimensions",
+            "note": "Read as a single breakdown cross-tabulated by both bands. If separate one-dimensional stratifications were wanted, the grouping would need splitting into two outputs.",
+            "options": [
+              "cross-tab by both bands",
+              "two separate breakdowns"
+            ],
+            "blocking": false
+          }
+        ]
+      },
+      "compiler": {
+        "outcome": "PLAN",
+        "reasons": [],
+        "compiler_version": "interpretation_v2.compiler/1.0.0",
+        "plan": {
+          "schema_version": "governed_query_plan/1.0",
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "population": {
+            "base": "funded",
+            "lens": "all",
+            "seasoning": "any",
+            "scope_predicates": []
+          },
+          "outputs": [
+            {
+              "id": "primary",
+              "measures": [
+                {
+                  "concept": "current_outstanding_balance",
+                  "statistic": "sum",
+                  "canonical_field": "current_outstanding_balance",
+                  "weight_concept": null,
+                  "weight_field": null,
+                  "capability_owner": null,
+                  "statistic_defaulted": true
+                }
+              ],
+              "dimensions": [
+                {
+                  "concept": "ltv_bucket",
+                  "canonical_field": "ltv_bucket",
+                  "capability_owner": null
+                },
+                {
+                  "concept": "age_bucket",
+                  "canonical_field": "age_bucket",
+                  "capability_owner": null
+                }
+              ],
+              "filters": [],
+              "geography": null
+            }
+          ],
+          "period": {
+            "form": "current",
+            "labels": [],
+            "grain": null,
+            "periods_back": null,
+            "contract": "latest_governed_reporting_period",
+            "resolved": true,
+            "owned_by_capability": false
+          },
+          "comparison_kind": "none",
+          "comparison_left": null,
+          "comparison_right": null,
+          "filters": [],
+          "geography": null,
+          "target": null,
+          "provenance": {
+            "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+            "model_id": "claude-opus-5",
+            "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+            "vocabulary_version": "2.0.0",
+            "compiler_version": "interpretation_v2.compiler/1.0.0",
+            "intent_schema_version": "candidate_intent/1.0",
+            "intent_claims": {
+              "capability": "generic_analysis",
+              "operation": "breakdown",
+              "population": [
+                "funded",
+                "all",
+                "any"
+              ],
+              "measures": [
+                [
+                  "current_outstanding_balance",
+                  null,
+                  null
+                ]
+              ],
+              "dimensions": [
+                "ltv_bucket",
+                "age_bucket"
+              ],
+              "filters": [],
+              "geography": [
+                false,
+                null,
+                null,
+                false,
+                []
+              ],
+              "time": [
+                "current",
+                [],
+                null,
+                null
+              ],
+              "comparison": [
+                "none",
+                null,
+                null
+              ],
+              "target": null,
+              "evidence": [
+                {
+                  "claim": "Requested measure is the current outstanding balance",
+                  "text": "Chart the balance"
+                },
+                {
+                  "claim": "Grouped by governed LTV band",
+                  "text": "by LTV bucket"
+                },
+                {
+                  "claim": "Also grouped by governed borrower age band",
+                  "text": "and borrower-age bucket"
+                }
+              ]
+            },
+            "compiler_bindings": {
+              "geography_field": null,
+              "population_predicates": [],
+              "outputs": {
+                "primary": {
+                  "measures": [
+                    {
+                      "concept": "current_outstanding_balance",
+                      "field": "current_outstanding_balance",
+                      "statistic": "sum",
+                      "weight_field": null,
+                      "capability_owner": null
+                    }
+                  ],
+                  "dimensions": [
+                    {
+                      "concept": "ltv_bucket",
+                      "field": "ltv_bucket"
+                    },
+                    {
+                      "concept": "age_bucket",
+                      "field": "age_bucket"
+                    }
+                  ],
+                  "filters": []
+                }
+              },
+              "normalisation": {
+                "normal_form_version": "candidate_intent_normal_form/1.0",
+                "applied": []
+              }
+            },
+            "notes": [
+              "disclosed reading [dimensions]: Read as a single breakdown cross-tabulated by both bands. If separate one-dimensional stratifications were wanted, the grouping would need splitting into two outputs.",
+              "statistic for 'current_outstanding_balance' defaulted to 'sum' by the governed registry"
+            ],
+            "usage": {}
+          },
+          "plan_id": "plan_92964eb7c19d2b43"
+        },
+        "reason_codes": [],
+        "plan_id": "plan_92964eb7c19d2b43"
+      },
+      "eligibility": {
+        "eligible": true,
+        "reason": "",
+        "detail": "",
+        "gate_capability": "generic_analysis",
+        "gate_operations": [
+          "breakdown",
+          "point_in_time"
+        ],
+        "gate_period_forms": [
+          "current"
+        ],
+        "gate_max_dimensions": 2
+      },
+      "execution": {
+        "attempted": true,
+        "requested_semantics": {
+          "capability": "generic_analysis",
+          "operation": "breakdown",
+          "measure_concept": "current_outstanding_balance",
+          "measure_field": "current_outstanding_balance",
+          "statistic": "sum",
+          "weight_field": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "dimension_concepts": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "filters": [],
+          "population": {
+            "base": "funded",
+            "lens": "all",
+            "seasoning": "any",
+            "scope_predicates": []
+          },
+          "geography": {},
+          "period_form": "current",
+          "period_contract": "latest_governed_reporting_period"
+        },
+        "bound_spec": {
+          "intent": "table",
+          "chart_type": "none",
+          "metric": "current_outstanding_balance",
+          "metric_defaulted": false,
+          "dimension": "ltv_bucket",
+          "x": null,
+          "y": null,
+          "size": null,
+          "color": null,
+          "aggregation": "sum",
+          "weight_field": null,
+          "measures": [],
+          "filters": {},
+          "top_n": null,
+          "ranking_mode": null,
+          "sort_by": null,
+          "sort_direction": "desc",
+          "limit": null,
+          "dimensions": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "hierarchy": [],
+          "title": null,
+          "explanation": "Shadow execution of a governed plan (slice 1).",
+          "output_format": "table",
+          "route_id": "mi",
+          "execution_mode": null,
+          "state": null,
+          "temporal_mode": null,
+          "as_of_date": null,
+          "baseline_date": null,
+          "current_date": null,
+          "start_date": null,
+          "end_date": null,
+          "segment": null,
+          "risk_monitor": null,
+          "snapshot_client_id": null,
+          "snapshot_store_root": null,
+          "query_id": null,
+          "state_filters": {},
+          "reporting_date": null,
+          "cut_off_date": null,
+          "portfolio_id": null,
+          "spv_id": null,
+          "acquired_portfolio_id": null,
+          "portfolio_lens": null,
+          "comparison_basis": null,
+          "trend_grain": null,
+          "forecast_mode": null,
+          "forecast_probability_source": null,
+          "allow_config_probability": null,
+          "bridge_query": false,
+          "bridge_dimension": null,
+          "cohort_progression": false,
+          "cohort_vintage": null,
+          "cohort_grain": null,
+          "risk_monitor_mode": null,
+          "migration_dimension": null,
+          "concentration_dimension": null,
+          "risk_dimension": null,
+          "baseline_risk_field": null,
+          "current_risk_field": null,
+          "bucket_strategy": null,
+          "bucket_count": 4,
+          "bucket_field": null,
+          "bucket_config_key": null,
+          "output_type": null,
+          "chart_preference": null,
+          "allow_chart_fallback": null,
+          "require_structured_issues": true,
+          "allow_partial_result": null,
+          "strict_mode": null,
+          "compare_periods": [],
+          "forecast_question": null,
+          "forecast_target_value": null,
+          "risk_limit_query": null,
+          "risk_limit_category": null,
+          "unavailable_filters": []
+        },
+        "value": null,
+        "receipt": {
+          "aggregation": "sum",
+          "group_field_keys": [
+            "ltv_bucket",
+            "age_bucket"
+          ],
+          "applied_predicates": [],
+          "input_row_count": 400,
+          "filtered_row_count": 400,
+          "balance_field_used": "current_outstanding_balance",
+          "result_type": "table",
+          "row_count": 20
+        },
+        "warnings": [
+          "percent-scale heuristically detected as 'whole_number_percent' (median 27.42); the executor does NOT rescale percentages"
+        ],
+        "error": "",
+        "grouped_cells": [
+          {
+            "ltv_bucket": "60%+",
+            "age_bucket": "70-79",
+            "value": 12653450.56
+          },
+          {
+            "ltv_bucket": "60%+",
+            "age_bucket": "80-89",
+            "value": 12552931.05
+          },
+          {
+            "ltv_bucket": "0-30%",
+            "age_bucket": "<70",
+            "value": 11059388.480000002
+          },
+          {
+            "ltv_bucket": "60%+",
+            "age_bucket": "<70",
+            "value": 10496683.249999996
+          },
+          {
+            "ltv_bucket": "0-30%",
+            "age_bucket": "70-79",
+            "value": 9425255.129999999
+          },
+          {
+            "ltv_bucket": "0-30%",
+            "age_bucket": "80-89",
+            "value": 8585334.55
+          },
+          {
+            "ltv_bucket": "30-40%",
+            "age_bucket": "80-89",
+            "value": 8430223.35
+          },
+          {
+            "ltv_bucket": "50-60%",
+            "age_bucket": "<70",
+            "value": 6006921.8
+          },
+          {
+            "ltv_bucket": "60%+",
+            "age_bucket": "90+",
+            "value": 5016288.11
+          },
+          {
+            "ltv_bucket": "40-50%",
+            "age_bucket": "70-79",
+            "value": 4245131.029999999
+          },
+          {
+            "ltv_bucket": "40-50%",
+            "age_bucket": "80-89",
+            "value": 3767494.54
+          },
+          {
+            "ltv_bucket": "50-60%",
+            "age_bucket": "70-79",
+            "value": 3666565.5900000003
+          },
+          {
+            "ltv_bucket": "0-30%",
+            "age_bucket": "90+",
+            "value": 3470659.1000000006
+          },
+          {
+            "ltv_bucket": "30-40%",
+            "age_bucket": "70-79",
+            "value": 2903145.9099999997
+          },
+          {
+            "ltv_bucket": "30-40%",
+            "age_bucket": "<70",
+            "value": 2696673.93
+          },
+          {
+            "ltv_bucket": "40-50%",
+            "age_bucket": "<70",
+            "value": 2489710.95
+          },
+          {
+            "ltv_bucket": "50-60%",
+            "age_bucket": "80-89",
+            "value": 2287371.1199999996
+          },
+          {
+            "ltv_bucket": "50-60%",
+            "age_bucket": "90+",
+            "value": 1964695.44
+          },
+          {
+            "ltv_bucket": "30-40%",
+            "age_bucket": "90+",
+            "value": 1877480.92
+          },
+          {
+            "ltv_bucket": "40-50%",
+            "age_bucket": "90+",
+            "value": 1855395.8900000001
+          }
+        ],
+        "grouped_note": null,
+        "cell_capture_reran_the_adapters_own_spec": true,
+        "cell_capture_row_count": 20
+      },
+      "legacy_control": {
+        "served_ok": true,
+        "served_value": 1.0,
+        "served_route": null,
+        "classification": "PRESENTATION_ONLY",
+        "note": "no comparable scalar (new=None, control=1.0)"
+      },
+      "redactions": [],
+      "evidence_persisted": true
+    },
+    "INELIGIBLE": {
+      "schema_version": "plan_shadow_evidence/1.0",
+      "correlation_id": "shadow_aca09b60515a4a198b68",
+      "recorded_at": "2026-09-10T17:17:13.674913+00:00",
+      "request": {
+        "question": "What is the weighted-average LTV of lump sum loans in the Direct book?",
+        "client_id": "acme",
+        "run_id": "2026-03",
+        "dataset_view": "funded",
+        "portfolio_id": "acme/2026-03"
+      },
+      "disposition": "INELIGIBLE",
+      "model": {
+        "model_id": "claude-opus-5",
+        "usage": {},
+        "raw_payload": {
+          "schema_version": "candidate_intent/1.0",
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "measures": [
+            {
+              "concept": "current_loan_to_value",
+              "statistic": "weighted_average"
+            }
+          ],
+          "filters": [
+            {
+              "concept": "erm_product_type",
+              "comparator": "eq",
+              "value": "lump_sum"
+            }
+          ],
+          "population": {
+            "base": "funded",
+            "lens": "direct"
+          },
+          "time": {
+            "form": "current"
+          },
+          "evidence": [
+            {
+              "claim": "Measure is loan-to-value, taken as the governed current LTV concept",
+              "text": "weighted-average LTV"
+            },
+            {
+              "claim": "Statistic explicitly requested as a weighted average",
+              "text": "weighted-average"
+            },
+            {
+              "claim": "Population restricted to the lump sum product type",
+              "text": "lump sum loans"
+            },
+            {
+              "claim": "Portfolio lens is the direct/originated book",
+              "text": "in the Direct book"
+            }
+          ],
+          "ambiguity": [
+            {
+              "slot": "measures[0].concept",
+              "note": "'LTV' read as the governed current LTV concept (its alias). Indexed LTV and original LTV also exist; current LTV is the standard unqualified reading.",
+              "options": [
+                "current_loan_to_value",
+                "indexed_loan_to_value",
+                "original_loan_to_value"
+              ],
+              "blocking": false
+            },
+            {
+              "slot": "measures[0].weight",
+              "note": "The question says 'weighted-average' without naming a weight; left empty so the governed registry weight (current outstanding balance) applies.",
+              "blocking": false
+            }
+          ]
+        },
+        "metadata_calls": [],
+        "failure": null
+      },
+      "interpretation": {
+        "produced_intent": true,
+        "candidate_intent": {
+          "schema_version": "candidate_intent/1.0",
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "population": {
+            "base": "funded",
+            "lens": "direct",
+            "seasoning": "any"
+          },
+          "measures": [
+            {
+              "concept": "current_loan_to_value",
+              "statistic": "weighted_average",
+              "weight": null
+            }
+          ],
+          "dimensions": [],
+          "filters": [
+            {
+              "concept": "erm_product_type",
+              "comparator": "eq",
+              "value": "lump_sum"
+            }
+          ],
+          "geography": {
+            "requested": false,
+            "basis": null,
+            "level": null,
+            "group_by": false,
+            "values": []
+          },
+          "time": {
+            "form": "current",
+            "labels": [],
+            "grain": null,
+            "periods_back": null
+          },
+          "comparison": {
+            "kind": "none",
+            "left": null,
+            "right": null
+          },
+          "target": null,
+          "outputs": [],
+          "ambiguity": [
+            {
+              "slot": "measures[0].concept",
+              "note": "'LTV' read as the governed current LTV concept (its alias). Indexed LTV and original LTV also exist; current LTV is the standard unqualified reading.",
+              "options": [
+                "current_loan_to_value",
+                "indexed_loan_to_value",
+                "original_loan_to_value"
+              ],
+              "blocking": false
+            },
+            {
+              "slot": "measures[0].weight",
+              "note": "The question says 'weighted-average' without naming a weight; left empty so the governed registry weight (current outstanding balance) applies.",
+              "options": [],
+              "blocking": false
+            }
+          ],
+          "evidence": [
+            {
+              "claim": "Measure is loan-to-value, taken as the governed current LTV concept",
+              "text": "weighted-average LTV"
+            },
+            {
+              "claim": "Statistic explicitly requested as a weighted average",
+              "text": "weighted-average"
+            },
+            {
+              "claim": "Population restricted to the lump sum product type",
+              "text": "lump sum loans"
+            },
+            {
+              "claim": "Portfolio lens is the direct/originated book",
+              "text": "in the Direct book"
+            }
+          ],
+          "provenance": {
+            "question": "What is the weighted-average LTV of lump sum loans in the Direct book?",
+            "model_id": "claude-opus-5",
+            "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+            "vocabulary_version": "2.0.0",
+            "usage": {}
+          }
+        },
+        "ambiguities": [
+          {
+            "slot": "measures[0].concept",
+            "note": "'LTV' read as the governed current LTV concept (its alias). Indexed LTV and original LTV also exist; current LTV is the standard unqualified reading.",
+            "options": [
+              "current_loan_to_value",
+              "indexed_loan_to_value",
+              "original_loan_to_value"
+            ],
+            "blocking": false
+          },
+          {
+            "slot": "measures[0].weight",
+            "note": "The question says 'weighted-average' without naming a weight; left empty so the governed registry weight (current outstanding balance) applies.",
+            "options": [],
+            "blocking": false
+          }
+        ]
+      },
+      "compiler": {
+        "outcome": "PLAN",
+        "reasons": [],
+        "compiler_version": "interpretation_v2.compiler/1.0.0",
+        "plan": {
+          "schema_version": "governed_query_plan/1.0",
+          "capability": "generic_analysis",
+          "operation": "point_in_time",
+          "population": {
+            "base": "funded",
+            "lens": "direct",
+            "seasoning": "any",
+            "scope_predicates": [
+              {
+                "concept": "portfolio_lens",
+                "comparator": "eq",
+                "canonical_field": "source_portfolio_type",
+                "value": "direct",
+                "capability_owner": null
+              }
+            ]
+          },
+          "outputs": [
+            {
+              "id": "primary",
+              "measures": [
+                {
+                  "concept": "current_loan_to_value",
+                  "statistic": "weighted_average",
+                  "canonical_field": "current_loan_to_value",
+                  "weight_concept": "current_outstanding_balance",
+                  "weight_field": "current_outstanding_balance",
+                  "capability_owner": null,
+                  "statistic_defaulted": false
+                }
+              ],
+              "dimensions": [],
+              "filters": [],
+              "geography": null
+            }
+          ],
+          "period": {
+            "form": "current",
+            "labels": [],
+            "grain": null,
+            "periods_back": null,
+            "contract": "latest_governed_reporting_period",
+            "resolved": true,
+            "owned_by_capability": false
+          },
+          "comparison_kind": "none",
+          "comparison_left": null,
+          "comparison_right": null,
+          "filters": [
+            {
+              "concept": "erm_product_type",
+              "comparator": "eq",
+              "canonical_field": "erm_product_type",
+              "value": "lump_sum",
+              "capability_owner": null
+            }
+          ],
+          "geography": null,
+          "target": null,
+          "provenance": {
+            "question": "What is the weighted-average LTV of lump sum loans in the Direct book?",
+            "model_id": "claude-opus-5",
+            "interpreter_version": "interpretation_v2.opus_interpreter/1.0.0",
+            "vocabulary_version": "2.0.0",
+            "compiler_version": "interpretation_v2.compiler/1.0.0",
+            "intent_schema_version": "candidate_intent/1.0",
+            "intent_claims": {
+              "capability": "generic_analysis",
+              "operation": "point_in_time",
+              "population": [
+                "funded",
+                "direct",
+                "any"
+              ],
+              "measures": [
+                [
+                  "current_loan_to_value",
+                  "weighted_average",
+                  null
+                ]
+              ],
+              "dimensions": [],
+              "filters": [
+                [
+                  "erm_product_type",
+                  "eq",
+                  "lump_sum"
+                ]
+              ],
+              "geography": [
+                false,
+                null,
+                null,
+                false,
+                []
+              ],
+              "time": [
+                "current",
+                [],
+                null,
+                null
+              ],
+              "comparison": [
+                "none",
+                null,
+                null
+              ],
+              "target": null,
+              "evidence": [
+                {
+                  "claim": "Measure is loan-to-value, taken as the governed current LTV concept",
+                  "text": "weighted-average LTV"
+                },
+                {
+                  "claim": "Statistic explicitly requested as a weighted average",
+                  "text": "weighted-average"
+                },
+                {
+                  "claim": "Population restricted to the lump sum product type",
+                  "text": "lump sum loans"
+                },
+                {
+                  "claim": "Portfolio lens is the direct/originated book",
+                  "text": "in the Direct book"
+                }
+              ]
+            },
+            "compiler_bindings": {
+              "geography_field": null,
+              "population_predicates": [
+                {
+                  "field": "source_portfolio_type",
+                  "comparator": "eq",
+                  "value": "direct"
+                }
+              ],
+              "outputs": {
+                "primary": {
+                  "measures": [
+                    {
+                      "concept": "current_loan_to_value",
+                      "field": "current_loan_to_value",
+                      "statistic": "weighted_average",
+                      "weight_field": "current_outstanding_balance",
+                      "capability_owner": null
+                    }
+                  ],
+                  "dimensions": [],
+                  "filters": []
+                }
+              },
+              "normalisation": {
+                "normal_form_version": "candidate_intent_normal_form/1.0",
+                "applied": []
+              }
+            },
+            "notes": [
+              "disclosed reading [measures[0].concept]: 'LTV' read as the governed current LTV concept (its alias). Indexed LTV and original LTV also exist; current LTV is the standard unqualified reading.",
+              "disclosed reading [measures[0].weight]: The question says 'weighted-average' without naming a weight; left empty so the governed registry weight (current outstanding balance) applies.",
+              "population lens 'direct' bound to source_portfolio_type",
+              "weight for 'current_loan_to_value' defaulted to 'current_outstanding_balance' by the governed registry"
+            ],
+            "usage": {}
+          },
+          "plan_id": "plan_7f9dcc7e0705c75a"
+        },
+        "reason_codes": [],
+        "plan_id": "plan_7f9dcc7e0705c75a"
+      },
+      "eligibility": {
+        "eligible": false,
+        "reason": "EXPLICIT_LENS",
+        "detail": "population.lens='direct' is resolved and applied by portfolio_lens on the production path",
+        "gate_capability": "generic_analysis",
+        "gate_operations": [
+          "breakdown",
+          "point_in_time"
+        ],
+        "gate_period_forms": [
+          "current"
+        ],
+        "gate_max_dimensions": 2
+      },
+      "execution": {
+        "attempted": false,
+        "why_not": "EXPLICIT_LENS: population.lens='direct' is resolved and applied by portfolio_lens on the production path"
+      },
+      "legacy_control": {
+        "served_ok": true,
+        "served_value": 1.0,
+        "served_route": null,
+        "classification": "NOT_ELIGIBLE",
+        "note": "EXPLICIT_LENS"
+      },
+      "redactions": [],
+      "evidence_persisted": true
+    }
+  }
+}

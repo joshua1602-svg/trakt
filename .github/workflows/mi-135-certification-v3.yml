@@ -1,0 +1,263 @@
+name: MI 135 release certification (v3)
+
+# THE FULL ESTATE, ONCE, AGAINST THE RELEASE CANDIDATE. ATTEMPT 2.
+#
+# V2 IS SPENT AND IMMUTABLE and nothing here writes into its directory. It failed
+# for two instrument reasons, neither of them the product's: the bearer died at
+# question 53, and the scorer could not parse a recorded intent carrying the
+# derived `time.stated`. Both are repaired and that is the only difference.
+#
+# TWO GATES V2 DID NOT HAVE. The bearer must have at least an hour of life left —
+# V2's authenticated cleanly and was dead half an hour later, so "it authenticates"
+# was never the right question. And the collector now stops after three
+# consecutive 401/403 instead of asking eighty-two questions into a dead
+# credential and reporting a completed bank.
+#
+# IT COLLECTS; IT SCORES NOTHING. The collector is stdlib-only and runs on a bare
+# runner, because an acceptance harness that imports the product has already
+# failed this estate once, mid-bank, after live interpretations had been spent.
+# Judgement happens offline afterwards against the SIGNED-OFF `score_135.py` —
+# the scorer that produced the historical baseline — so the before/after
+# comparison is between two runs of one rubric and not between two rubrics.
+#
+# NOTHING HISTORICAL IS TOUCHED. The 135 questions, the expectation overlay, the
+# collector and the scorer are all read from the historical directory, unmodified
+# and hash-checked; the evidence is written into this certification's own
+# directory. The historical raw records and results are never opened for writing.
+#
+# THE PREFLIGHT COSTS NOTHING AND INCLUDES THE N01 GATE. The output-contract
+# canary's first question returned HTTP 500 because changing
+# MI_AGENT_PLAN_SERVE restarts App Service and the question was asked seventeen
+# seconds into the new container's warm-up. So the app's own liveness probe must
+# answer healthy TWICE, separated by a wait, before a single interpretation is
+# bought.
+#
+# THE SPEND IS GUARDED TWICE MORE. The collector asks three questions first and
+# stops if none was served by the governed path and none matched the canary
+# principal — three live calls to detect a wrong flag rather than a hundred and
+# thirty-five. And the evidence is committed whatever happens, because an
+# aborted run's evidence is the most informative kind.
+#
+# MI_AGENT_PLAN_SERVE IS NOT TOUCHED HERE AND CANNOT BE: it is an App Service
+# application setting needing ARM access and this repository holds a publish
+# profile. Returning it to `off` afterwards is the operator's step.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/mi-135-certification-v3.yml' ]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: >-
+          `collect` asks the 135. Anything else runs the free gates only and
+          calls nothing.
+        default: ''
+        required: false
+      base_url:
+        default: https://app.traktinfra.io/api
+        required: false
+      portfolio_id:
+        default: ERE/2026-06-30
+        required: false
+      poll_timeout_seconds:
+        default: '180'
+        required: false
+      abort_after:
+        default: '3'
+        required: false
+      ref:
+        default: ''
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mi-135-certification-v3
+  cancel-in-progress: false
+
+env:
+  PRODUCT_SHA: 5c436961ebe279bc0820ab006867b9f8a869bde2
+  V3: due_diligence/evidence/mi_135_release_certification_v3
+  HIST: due_diligence/evidence/mi_135_live_bank_00bb3e9d
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: The certification must not already have been run
+        run: |
+          set -euo pipefail
+          if [ -f "${V3}/raw_records.json" ]; then
+            echo "::error::${V3}/raw_records.json is already committed — this"
+            echo "::error::certification has been run. Read the committed"
+            echo "::error::evidence; do not re-run the estate."
+            exit 1
+          fi
+          echo "CERTIFICATION_STATE = NOT_YET_RUN"
+
+      - name: The product must be the certified SHA
+        run: |
+          set -euo pipefail
+          echo "git rev-parse HEAD = $(git rev-parse HEAD)"
+          if ! git merge-base --is-ancestor "${PRODUCT_SHA}" HEAD; then
+            echo "::error::the certified SHA is not an ancestor of this tree"
+            exit 1
+          fi
+          DELTA="$(git diff --name-only "${PRODUCT_SHA}..HEAD" \
+            | grep -v -e '^due_diligence/' -e '^\.github/' -e '^tests/' || true)"
+          echo "--- product files changed since the certified SHA ---"
+          echo "${DELTA:-(none)}"
+          if [ -n "${DELTA}" ]; then
+            echo "::error::product code changed since ${PRODUCT_SHA}"; exit 1
+          fi
+          echo "NO_LATER_PRODUCT_COMMIT = CONFIRMED"
+
+      # The harness is proved before it is pointed at anything that costs money.
+      #
+      # THE SCORING SHIM IS NOT PROVED HERE, DELIBERATELY. `score_v2 --replay`
+      # imports the signed-off scorer, which imports the product, which reaches
+      # for yaml, pandas and plotly. Installing those here would put a dependency
+      # resolution between the dispatch and the bank — the exact thing the
+      # collector's stdlib-only design exists to prevent, and something that has
+      # already failed this estate once mid-bank after live interpretations had
+      # been spent. The first version of this workflow did install them and died
+      # on the missing one.
+      #
+      # The replay is a SCORING instrument check and it belongs where the scoring
+      # runs: offline, before any result is trusted. It reproduces the historical
+      # 52 / 56 / 25 / 2 exactly or the scoring does not proceed. Collection does
+      # not depend on it, and collection is the only thing that spends anything.
+      - name: Prove the collector — stdlib only, no product import
+        run: |
+          set -euo pipefail
+          python "${HIST}/collect_135.py" --self-test
+          python - <<'PY'
+          import sys
+          product = sorted(n for n in sys.modules if n.startswith("mi_agent"))
+          if product:
+              raise SystemExit(f"the collector self-test imported {product}")
+          print("collector self-test imported no product module")
+          PY
+
+      - name: Refuse to run without the credentials
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          test -n "$MI_BEARER" || { echo "::error::MI_BEARER is empty"; exit 1; }
+          test -n "$AZURE_MI_API_PUBLISH_PROFILE" || {
+            echo "::error::publish profile is empty"; exit 1; }
+          echo "MI_BEARER present (${#MI_BEARER} characters)."
+          echo "Publish profile present (${#AZURE_MI_API_PUBLISH_PROFILE} characters)."
+
+      # THE GATE. Deployed SHA, auth, sink, hashes, and liveness healthy twice.
+      - name: Pre-run infrastructure gate
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          python "${V3}/preflight.py" \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --expect-commit "${PRODUCT_SHA}" \
+            --out "${GITHUB_WORKSPACE}/${V3}/preflight_result.json"
+
+      - name: Ask the 135, once each
+        if: ${{ inputs.mode == 'collect' }}
+        env:
+          MI_BEARER: ${{ secrets.MI_BEARER }}
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}/${HIST}"
+          set +e
+          python collect_135.py \
+            --base-url "${{ inputs.base_url || 'https://app.traktinfra.io/api' }}" \
+            --portfolio-id "${{ inputs.portfolio_id || 'ERE/2026-06-30' }}" \
+            --expect-commit "${PRODUCT_SHA}" \
+            --poll-timeout "${{ inputs.poll_timeout_seconds || '180' }}" \
+            --abort-after "${{ inputs.abort_after || '3' }}" \
+            --out "${GITHUB_WORKSPACE}/${V3}/raw_records.json"
+          echo "COLLECTOR_EXIT=$?" >> "${GITHUB_ENV}"
+          set -e
+
+      # KEPT WHATEVER HAPPENED. An aborted run's evidence — the abort reason
+      # above all — is worth more than a clean slate, so this is unconditional.
+      - name: Commit the evidence before the job exits
+        if: ${{ always() && inputs.mode == 'collect' }}
+        run: |
+          set -euo pipefail
+          cd "${GITHUB_WORKSPACE}"
+          ls "${V3}"/raw_records*.json >/dev/null 2>&1 || {
+            echo "no evidence file was written"; exit 0; }
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${V3}"/raw_records*.json "${V3}"/preflight_result.json || true
+          git diff --cached --quiet && { echo "evidence unchanged"; exit 0; }
+          git commit -m "MI 135 release certification: raw evidence, unscored
+
+          Collected by .github/workflows/mi-135-certification-v3.yml against
+          ${PRODUCT_SHA}. This is what the service returned and what the governed
+          evidence sink recorded; judgement happens offline against the
+          signed-off scorer. Run ${GITHUB_RUN_ID}."
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" \
+              && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** attempt))
+          done
+          echo "::error::could not push the evidence"; exit 1
+
+      - name: Publish the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mi-135-certification-v3
+          path: |
+            due_diligence/evidence/mi_135_release_certification_v3/preflight_result.json
+            due_diligence/evidence/mi_135_release_certification_v3/raw_records*.json
+          if-no-files-found: warn
+
+      - name: What the operator must still do
+        if: always()
+        run: |
+          echo "::warning::MI_AGENT_PLAN_SERVE is an App Service application setting; this workflow holds a publish profile and cannot change it. Set it back to off on trakt-mi-api once the evidence is committed."
+
+      # THE PREFLIGHT VERDICT, LAST, SO IT IS READABLE. The Actions log API
+      # returns only the final few kilobytes of a job, and the artifact upload
+      # and warning steps are verbose enough to push a mid-job failure out of
+      # that window — which is exactly what happened to the first two runs of
+      # this workflow. A gate whose reason cannot be read is a gate nobody can
+      # act on.
+      - name: The preflight verdict
+        if: always()
+        run: |
+          set -euo pipefail
+          F="${GITHUB_WORKSPACE}/${V3}/preflight_result.json"
+          if [ ! -f "$F" ]; then
+            echo "no preflight report was written"; exit 0
+          fi
+          python - "$F" <<'PY'
+          import json, sys
+          report = json.load(open(sys.argv[1]))
+          print(f"PREFLIGHT {report.get('verdict')}")
+          print(f"deployed_sha {report.get('deployed_sha')}")
+          for name, check in (report.get("checks") or {}).items():
+              print(f"  {'PASS' if check['ok'] else 'FAIL'}  {name:34} "
+                    f"{check['detail']}")
+          print(f"failed: {report.get('failed_checks')}")
+          PY
+

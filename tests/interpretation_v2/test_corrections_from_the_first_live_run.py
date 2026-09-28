@@ -1,0 +1,341 @@
+"""What the first live run over the 135-question bank taught, pinned as tests.
+
+Every case here is a well-formed reading that the compiler REFUSED on the first
+measurement, where the refusal was the compiler's fault rather than the model's.
+The corrections are recorded as tests so they cannot silently regress, and so a
+reader can see exactly what changed between the two runs in
+``mi_agent/interpretation_v2/evidence/``.
+
+The common shape of all four: the compiler was demanding that the interpreter
+specify something the interpreter is deliberately never shown.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from mi_agent.interpretation_v2 import (
+    OUTCOME_PLAN,
+    load_governed_vocabulary,
+)
+from mi_agent.interpretation_v2.vocabulary import GOVERNED_DEFAULTS
+
+from .conftest import build_intent
+
+
+# --------------------------------------------------------------------------- #
+# 1 · a specialist operation owns its own period window
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("capability,operation,measure", [
+    ("pipeline_stage_movement", "transition", "cases_moved"),
+    ("pipeline_stage_movement", "arrivals", "cases_arrived"),
+    ("pipeline_stage_movement", "stayers", "cases_stayed"),
+    ("pipeline_stage_movement", "departures", "cases_departed"),
+    ("pipeline_stage_movement", "reconciliation", "stage_opening"),
+    ("borrowing_base", "bridge", "borrowing_base"),
+])
+def test_a_capability_owned_movement_needs_no_period_stated(
+        capability, operation, measure, compiler):
+    """"How many cases moved from KFI to Application?" is a complete question.
+
+    The window a stage transition spans is part of what a stage transition IS.
+    Requiring the intent to name two periods refused eleven well-formed pipeline
+    questions on the first run.
+    """
+    intent = build_intent(capability=capability, operation=operation,
+                          measures=[{"concept": measure}],
+                          population={"base": "pipeline", "lens": "all",
+                                      "seasoning": "any"},
+                          time={"form": "current"})
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN, result.codes()
+    assert result.plan.period.owned_by_capability is True
+
+
+def test_a_GENERIC_movement_still_needs_two_periods(compiler):
+    """The exemption is for capability-owned windows only.
+
+    A generic period movement is composed by the compiler from two governed
+    snapshots, so which two is a thing the question has to settle.
+    """
+    intent = build_intent(capability="period_movement", operation="movement",
+                          time={"form": "current"})
+    result = compiler.compile(intent)
+    assert result.outcome != OUTCOME_PLAN
+    assert "UNSUPPORTED_COMPOSITION" in result.codes()
+
+
+# --------------------------------------------------------------------------- #
+# 2 · a period comparison is stated once, by the operation and the time form
+# --------------------------------------------------------------------------- #
+
+def test_period_pair_is_not_a_comparison_kind():
+    """Run 4's largest remaining finding: three slots, one fact.
+
+    ``operation: movement`` plus ``time.form: relative_pair`` already says "two
+    periods". A `comparison.kind: period_pair` flag says it a third time, and
+    the model filled the redundant slot inconsistently across paraphrases —
+    nine scoring misses and several invariance divergences where every binding
+    agreed and only this flag differed. The member is gone; the redundancy with
+    it.
+    """
+    from mi_agent.interpretation_v2 import parse_candidate_intent
+    from mi_agent.interpretation_v2.intent import IntentParseError
+    from mi_agent.interpretation_v2.vocabulary import COMPARISON_KINDS
+
+    assert "period_pair" not in COMPARISON_KINDS
+    assert COMPARISON_KINDS == {"none", "population_pair", "dimension_pair"}
+
+    from .conftest import intent_payload
+    with pytest.raises(IntentParseError):
+        parse_candidate_intent(intent_payload(
+            comparison={"kind": "period_pair"}))
+
+
+def test_a_period_on_period_movement_needs_no_comparison_flag(compiler):
+    """"How did the Direct book change last month?" states the pair completely."""
+    # The authored fixture states its form: a period-on-period movement of one
+    # named measure is a metric delta. The subject is unchanged — that such a
+    # request needs no separate comparison flag, because the operation and the
+    # time form already state the pair.
+    intent = build_intent(capability="period_movement", operation="movement",
+                          change_form="metric_delta",
+                          population={"base": "funded", "lens": "direct",
+                                      "seasoning": "any"},
+                          time={"form": "relative_pair"})
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN, result.codes()
+    assert result.plan.comparison_kind == "none"
+    assert result.plan.period.form == "relative_pair"
+
+
+@pytest.mark.parametrize("kind", ["population_pair", "dimension_pair"])
+def test_a_population_or_dimension_pair_still_needs_both_sides(kind, compiler):
+    intent = build_intent(operation="compare", comparison={"kind": kind,
+                                                           "left": "balance"})
+    result = compiler.compile(intent)
+    assert result.outcome != OUTCOME_PLAN
+    assert "CONFLICTING_CLAIMS" in result.codes()
+
+
+# --------------------------------------------------------------------------- #
+# 3 · share and contribution are governed analytic modes
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("statistic", ["share", "contribution"])
+def test_an_analytic_mode_is_permitted_on_an_additive_measure(statistic, compiler):
+    """"Which region contributed most to balance growth?" names a mode this
+    repository already governs (P1A, P1D) — it is not an aggregation OF the
+    balance field, so it is absent from the field's allowed_aggregations."""
+    intent = build_intent(capability="period_movement", operation="rank",
+                          measures=[{"concept": "balance",
+                                     "statistic": statistic}],
+                          dimensions=["source_portfolio"],
+                          time={"form": "relative_pair"})
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN, result.codes()
+    assert result.plan.outputs[0].measures[0].statistic == statistic
+
+
+@pytest.mark.parametrize("statistic", ["share", "contribution"])
+def test_an_analytic_mode_is_not_permitted_on_a_non_additive_measure(
+        statistic, compiler):
+    """A share of an average is not a quantity."""
+    vocabulary = load_governed_vocabulary()
+    ltv = vocabulary.resolve("current_ltv")
+    assert "sum" not in ltv.allowed_statistics, "premise: LTV is not additive"
+    assert statistic not in ltv.allowed_statistics
+
+    intent = build_intent(measures=[{"concept": "current_ltv",
+                                     "statistic": statistic}])
+    result = compiler.compile(intent)
+    assert result.outcome != OUTCOME_PLAN
+    assert "UNSUPPORTED_STATISTIC" in result.codes()
+
+
+def test_a_contribution_needs_no_weight_named(compiler):
+    intent = build_intent(capability="period_movement", operation="rank",
+                          measures=[{"concept": "balance",
+                                     "statistic": "contribution"}],
+                          dimensions=["source_portfolio"],
+                          time={"form": "relative_pair"})
+    assert compiler.compile(intent).outcome == OUTCOME_PLAN
+
+
+# --------------------------------------------------------------------------- #
+# 4 · a capability that owns its grouping needs none stated
+# --------------------------------------------------------------------------- #
+
+def test_a_concentration_rank_needs_no_dimension_stated(compiler):
+    """"Where are our largest concentrations today?" ranks the governed
+    concentration tests, and which those are is the capability's to know."""
+    intent = build_intent(capability="concentration", operation="rank",
+                          measures=[{"concept": "concentration_exposure"}],
+                          time={"form": "current"})
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN, result.codes()
+
+
+def test_a_GENERIC_rank_still_needs_something_to_rank(compiler):
+    intent = build_intent(operation="rank", measures=[{"concept": "balance"}])
+    result = compiler.compile(intent)
+    assert result.outcome != OUTCOME_PLAN
+    assert "UNSUPPORTED_COMPOSITION" in result.codes()
+
+
+# --------------------------------------------------------------------------- #
+# 5 · the vocabulary declares governed value lists, and their absence
+# --------------------------------------------------------------------------- #
+
+def test_a_dimension_with_a_governed_enum_shows_its_business_values():
+    from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+
+    vocabulary = load_governed_vocabulary()
+    service = GovernedMetadataService(vocabulary)
+    result = service.get_allowed_values("collateral_type")
+    assert result["has_governed_values"] is True
+    assert result["values"]
+    # Business spellings, never the ESMA codes behind them.
+    assert not any(v.isupper() and len(v) == 4 for v in result["values"])
+
+
+def test_the_product_and_stage_gap_the_first_runs_closed_over():
+    """Runs 1-3's largest finding, and where it actually lived.
+
+    Sixteen of twenty clarifications were the interpreter declining to assert
+    "drawdown" or "Offer", because ``fields_registry.allowed_values`` is null
+    for product type and pipeline stage. The values were governed all along, in
+    two sources the vocabulary was not reading: the asset profile's
+    ``match.product_type``, and the estate's one question-side stage
+    vocabulary. Reading them is the addendum applied.
+    """
+    from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+
+    service = GovernedMetadataService(load_governed_vocabulary())
+
+    products = service.get_allowed_values("erm_product_type")
+    assert products["has_governed_values"] is True
+    assert "drawdown" in products["values"]
+    assert "lump_sum" in products["values"]
+
+    stages = service.get_allowed_values("pipeline_stage")
+    assert stages["has_governed_values"] is True
+    assert {"KFI", "APPLICATION", "OFFER", "COMPLETED"} <= set(stages["values"])
+
+
+def test_a_dimension_with_no_governed_enum_still_says_so():
+    """Absence must be reported, not left as silence.
+
+    Some dimensions genuinely have no governed value list. The tool says so
+    explicitly and tells the interpreter what to do about it, because silence
+    reads as "any value is fine" — which is how a guess gets asserted.
+    """
+    from mi_agent.interpretation_v2.metadata import GovernedMetadataService
+
+    vocabulary = load_governed_vocabulary()
+    service = GovernedMetadataService(vocabulary)
+    ungoverned = [c.concept_id for c in vocabulary.concepts.values()
+                  if c.role == "dimension" and not c.values
+                  and not c.owning_capability]
+    assert ungoverned, "premise: some dimensions carry no governed values"
+
+    result = service.get_allowed_values(ungoverned[0])
+    assert result["found"] is True
+    assert result["has_governed_values"] is False
+    assert "Do NOT assert a filter value" in result["guidance"]
+
+
+def test_the_governed_defaults_are_declared_to_the_model():
+    """An empty slot is only safe if the model is told which slots have
+    defaults. On the first run nothing said so, and the interpreter blocked on
+    every bare "region" it saw."""
+    vocabulary = load_governed_vocabulary()
+    declared = vocabulary.orientation_payload()["governed_defaults"]
+    assert declared == dict(GOVERNED_DEFAULTS)
+    for slot in ("geography.basis", "geography.level", "measures[].statistic",
+                 "measures[].weight", "population.base", "time.form"):
+        assert slot in declared
+
+    # And what it declares must be true of the compiler.
+    assert "nuts3" in declared["geography.basis"], (
+        "the declaration must warn that NUTS3 and ITL3 have NO default")
+
+
+def test_the_declared_geography_default_matches_what_the_compiler_does(compiler):
+    intent = build_intent(operation="breakdown",
+                          geography={"requested": True, "group_by": True})
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN
+    assert result.plan.geography.resolved_level == "reporting"
+    assert result.plan.geography.canonical_field == "canonical_region_reporting"
+    assert result.plan.geography.defaulted is True
+
+
+# --------------------------------------------------------------------------- #
+# 6 · a milestone target is a slot, not a filter
+# --------------------------------------------------------------------------- #
+
+def test_a_milestone_target_is_representable(compiler):
+    """Run 4's other finding: "when will we reach £100m" had nowhere to go.
+
+    The interpreter correctly refused to express the figure as a filter — a
+    milestone does not narrow the population to loans above it — and correctly
+    reported that it had no other slot. A forecast milestone is not
+    representable without one.
+    """
+    intent = build_intent(capability="forecast",
+                          operation="forecast_milestone",
+                          measures=[],
+                          time={"form": "forward_looking"},
+                          target={"concept": "forecast_funded_balance",
+                                  "value": 100_000_000})
+    result = compiler.compile(intent)
+    assert result.outcome == OUTCOME_PLAN, result.codes()
+    assert result.plan.target is not None
+    assert result.plan.target.concept == "forecast_funded_balance"
+    assert result.plan.target.value == 100_000_000
+    assert result.plan.target.comparator == "gte"
+    assert result.plan.target.capability_owner == "forecast"
+
+
+def test_a_milestone_without_a_target_is_incomplete(compiler):
+    """"When will we reach it?" is not a question until "it" is named."""
+    intent = build_intent(capability="forecast",
+                          operation="forecast_milestone", measures=[],
+                          time={"form": "forward_looking"})
+    result = compiler.compile(intent)
+    assert result.plan is None
+    assert "MISSING_REQUIRED_SLOT" in result.codes()
+
+
+def test_a_target_is_not_a_filter_and_does_not_narrow_the_population(compiler):
+    """The two are different authorised work, and the plan keeps them apart."""
+    with_target = compiler.compile(build_intent(
+        capability="forecast", operation="forecast_milestone", measures=[],
+        time={"form": "forward_looking"},
+        target={"concept": "forecast_funded_balance", "value": 100_000_000}))
+    assert with_target.plan.filters == ()
+    assert with_target.plan.target is not None
+
+
+def test_a_target_concept_is_still_validated(compiler):
+    intent = build_intent(capability="forecast",
+                          operation="forecast_milestone", measures=[],
+                          time={"form": "forward_looking"},
+                          target={"concept": "made_up_aggregate",
+                                  "value": 100_000_000})
+    result = compiler.compile(intent)
+    assert result.plan is None
+    assert "UNREGISTERED_CONCEPT" in result.codes()
+
+
+def test_a_target_must_be_a_number(compiler):
+    from mi_agent.interpretation_v2 import parse_candidate_intent
+    from mi_agent.interpretation_v2.intent import IntentParseError
+
+    from .conftest import intent_payload
+    with pytest.raises(IntentParseError):
+        parse_candidate_intent(intent_payload(
+            target={"concept": "forecast_funded_balance",
+                    "value": ["a", "b"]}))

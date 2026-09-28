@@ -57,21 +57,49 @@ def load_bank(paths: List[Path]) -> List[Dict[str, Any]]:
     return rows
 
 
-def _ask(question: str, *, portfolio: Optional[str], lens: Optional[str]):
+#: The governed-plan serving decision for the question being asked — captured
+#: from the canary's evidence record (NEW = the plan path answered;
+#: LEGACY_FALLBACK = the legacy path did, with the reason).
+_SERVING: Dict[str, Any] = {}
+
+
+def _capture_serving() -> None:
+    """Wrap the plan-serving evidence writer so each run records which path
+    answered. A no-op on a build without the governed-plan architecture."""
+    try:
+        from mi_agent import plan_shadow_evidence as evidence
+    except Exception:  # noqa: BLE001
+        return
+    if getattr(evidence.write, "_question_bank", False):
+        return
+    original = evidence.write
+
+    def write(body, *a, **kw):
+        if isinstance(body, dict) and isinstance(body.get("serving"), dict):
+            _SERVING.update(body["serving"])
+        return original(body, *a, **kw)
+    write._question_bank = True  # type: ignore[attr-defined]
+    evidence.write = write
+
+
+def _ask(question: str, *, portfolio: Optional[str], lens: Optional[str],
+         principal: str):
     from mi_agent_api.dependencies import default_tenant_id
     from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
     from trakt_core.context import ExecutionContext
-    ctx = ExecutionContext.for_internal(default_tenant_id(), actor_id="question-bank")
+    ctx = ExecutionContext.for_internal(default_tenant_id(), actor_id=principal)
     return execute_governed_mi_query(
         MiQueryRequest(question=question, portfolio_id=portfolio,
                        source_portfolio_lens=lens), ctx)
 
 
 def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
-            lens: Optional[str]) -> Dict[str, Any]:
+            lens: Optional[str], principal: str = "question-bank") -> Dict[str, Any]:
     t0 = time.monotonic()
+    _SERVING.clear()
     try:
-        result = _ask(row["question"], portfolio=portfolio, lens=lens)
+        result = _ask(row["question"], portfolio=portfolio, lens=lens,
+                      principal=principal)
         res = result.result or {}
         meta = res.get("metadata") or {}
         ok = bool(res.get("ok"))
@@ -81,9 +109,11 @@ def run_one(row: Dict[str, Any], *, portfolio: Optional[str],
         view = meta.get("datasetContext")
     except Exception as exc:  # noqa: BLE001 - an audit records, never stops
         outcome, answer, route, view = "ERROR", f"{type(exc).__name__}: {exc}", None, None
+    served = _SERVING.get("response_served_from") or "-"
     return {"id": row.get("id"), "category": row.get("category"),
             "question": row["question"], "outcome": outcome, "route": route,
             "view": view, "seconds": round(time.monotonic() - t0, 1),
+            "served": served, "serving_reason": _SERVING.get("reason") or "",
             "answer": answer}
 
 
@@ -96,12 +126,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ids", default="", help="comma-separated question ids")
     ap.add_argument("--portfolio", default=None, help="portfolioId, e.g. ERE/2026-08-31")
     ap.add_argument("--lens", default=None, help="source-portfolio lens, e.g. direct_001")
+    ap.add_argument("--principal", default="question-bank",
+                    help="actor id to ask as; name one listed in "
+                         "MI_AGENT_PLAN_SERVE_PRINCIPALS to exercise the "
+                         "governed-plan path (MI_AGENT_PLAN_SERVE=canary)")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--out", type=Path, default=Path("question_bank_results.jsonl"))
     args = ap.parse_args(argv)
 
     import logging
+    import os
     logging.disable(logging.WARNING)
+    _capture_serving()
+    mode = os.environ.get("MI_AGENT_PLAN_SERVE", "off")
+    listed = args.principal.strip().lower() in {
+        p.strip().lower() for p in
+        os.environ.get("MI_AGENT_PLAN_SERVE_PRINCIPALS", "").split(",")}
+    print(f"MI_AGENT_PLAN_SERVE={mode}; principal {args.principal!r} "
+          f"{'IS' if listed else 'is NOT'} on the allow-list", flush=True)
     rows = load_bank(args.bank or DEFAULT_BANKS)
     if args.ids:
         wanted = {s.strip() for s in args.ids.split(",") if s.strip()}
@@ -115,15 +157,20 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     tally: Dict[str, Counter] = defaultdict(Counter)
     routes: Counter = Counter()
+    served: Counter = Counter()
     with args.out.open("w", encoding="utf-8") as fh:
         for row in rows:
-            rec = run_one(row, portfolio=args.portfolio, lens=args.lens)
+            rec = run_one(row, portfolio=args.portfolio, lens=args.lens,
+                          principal=args.principal)
             fh.write(json.dumps(rec, default=str) + "\n")
             fh.flush()
             tally[rec["category"]][rec["outcome"]] += 1
             routes[rec["route"] or "(point-in-time)"] += 1
+            served[rec["served"] + (f" ({rec['serving_reason']})"
+                                    if rec["serving_reason"] else "")] += 1
             snippet = " ".join(rec["answer"].split())[:110]
-            print(f"{rec['outcome']:<8} {rec['id']:<22} {str(rec['route'] or '-'):<26} "
+            print(f"{rec['outcome']:<8} {rec['id']:<22} {rec['served']:<6} "
+                  f"{str(rec['route'] or '-'):<26} "
                   f"{rec['seconds']:>5}s  {row['question'][:60]!r}\n"
                   f"{'':8} -> {snippet}", flush=True)
 
@@ -134,6 +181,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     print("\nROUTES")
     for route, n in routes.most_common():
         print(f"  {route:<28} {n}")
+    print("\nSERVED BY  (NEW = governed plan; '-' = canary not engaged)")
+    for how, n in served.most_common():
+        print(f"  {how:<60} {n}")
     print(f"\nfull answers: {args.out.resolve()}")
     return 0
 

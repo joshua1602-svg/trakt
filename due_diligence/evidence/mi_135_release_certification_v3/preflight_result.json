@@ -1,0 +1,99 @@
+{
+  "base_url": "https://app.traktinfra.io/api",
+  "build_read_attempts": [
+    {
+      "commit": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+      "path": "/",
+      "status": 200
+    }
+  ],
+  "checks": {
+    "MI_BEARER present": {
+      "detail": "1826 characters",
+      "ok": true
+    },
+    "authenticated preflight": {
+      "detail": "HTTP 200",
+      "ok": true
+    },
+    "bearer lifetime >= 60 minutes": {
+      "detail": "70.9 minutes remaining of 77.6 total",
+      "ok": true
+    },
+    "certification manifest": {
+      "detail": "058fdcd9df49f4c972be44d7a90c1529",
+      "ok": true
+    },
+    "deployed SHA": {
+      "detail": "serving 5c436961ebe279bc0820ab006867b9f8a869bde2",
+      "ok": true
+    },
+    "evidence sink readable": {
+      "detail": "read; 271 existing records",
+      "ok": true
+    },
+    "historical results present": {
+      "detail": "MI_135_LIVE_BANK_RESULTS.json",
+      "ok": true
+    },
+    "liveness twice in succession": {
+      "detail": "2 healthy of 2 reads",
+      "ok": true
+    },
+    "publish profile present": {
+      "detail": "1512 characters",
+      "ok": true
+    },
+    "question count": {
+      "detail": "135",
+      "ok": true
+    },
+    "unmodified: collector": {
+      "detail": "ebb17776db847bb0402a930bf9fbf994",
+      "ok": true
+    },
+    "unmodified: expectation_overlay": {
+      "detail": "a842479642ec2202a61e303df44eeb95",
+      "ok": true
+    },
+    "unmodified: questions": {
+      "detail": "9624a0a8f2e7d1c3e59ccf88ad2698be",
+      "ok": true
+    },
+    "unmodified: scoring_contract": {
+      "detail": "bdec83f9f7ad86de3343de72677e672a",
+      "ok": true
+    }
+  },
+  "deployed_sha": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+  "expect_commit": "5c436961ebe279bc0820ab006867b9f8a869bde2",
+  "failed_checks": [],
+  "live_mi_query_calls": 0,
+  "live_model_calls": 0,
+  "liveness_reads": [
+    {
+      "at": "2026-09-13T18:52:25.617342+00:00",
+      "healthy": true,
+      "status": 200
+    },
+    {
+      "at": "2026-09-13T18:52:41.155215+00:00",
+      "healthy": true,
+      "status": 200
+    }
+  ],
+  "pre_existing_sink_records": 271,
+  "recorded_at": "2026-09-13T18:52:21.287936+00:00",
+  "token_window": {
+    "cross_checked_against": "provenance._token_expiry",
+    "exp": 1789329797,
+    "expired": false,
+    "expires_at_utc": "2026-09-13T20:03:17+00:00",
+    "iat": 1789325140,
+    "issued_at_utc": "2026-09-13T18:45:40+00:00",
+    "readable": true,
+    "remaining_minutes": 70.9,
+    "total_lifetime_minutes": 77.6
+  },
+  "verdict": "PASS"
+}

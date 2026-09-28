@@ -1,0 +1,179 @@
+{
+  "bank_version": "slice1b_local_acceptance/1.0",
+  "cases": [
+    {
+      "case_id": "E1",
+      "expected_dimensions": [],
+      "expected_eligible": true,
+      "expected_filters": [
+        [
+          "youngest_borrower_age",
+          "gt",
+          55
+        ],
+        [
+          "current_loan_to_value",
+          "gt",
+          50
+        ]
+      ],
+      "expected_ineligibility_reason": "",
+      "expected_measure_field": null,
+      "expected_plan_id": "plan_08020e58b735f771",
+      "expected_statistic": "count",
+      "oracle_cells": null,
+      "oracle_grid_sha256": null,
+      "oracle_value": 195.0,
+      "question": "How many loans are to borrowers over 55 with LTV above 50%?"
+    },
+    {
+      "case_id": "E2",
+      "expected_dimensions": [],
+      "expected_eligible": true,
+      "expected_filters": [
+        [
+          "youngest_borrower_age",
+          "gt",
+          75
+        ],
+        [
+          "current_loan_to_value",
+          "gt",
+          40
+        ]
+      ],
+      "expected_ineligibility_reason": "",
+      "expected_measure_field": "current_outstanding_balance",
+      "expected_plan_id": "plan_e096446463a30208",
+      "expected_statistic": "sum",
+      "oracle_cells": null,
+      "oracle_grid_sha256": null,
+      "oracle_value": 37948448.76,
+      "question": "What is the balance of loans to borrowers over 75 with LTV above 40%?"
+    },
+    {
+      "case_id": "E3",
+      "expected_dimensions": [],
+      "expected_eligible": true,
+      "expected_filters": [
+        [
+          "erm_product_type",
+          "eq",
+          "drawdown"
+        ],
+        [
+          "current_loan_to_value",
+          "gt",
+          50
+        ]
+      ],
+      "expected_ineligibility_reason": "",
+      "expected_measure_field": null,
+      "expected_plan_id": "plan_d7adabfaa9308f12",
+      "expected_statistic": "count",
+      "oracle_cells": null,
+      "oracle_grid_sha256": null,
+      "oracle_value": 93.0,
+      "question": "How many drawdown loans have LTV above 50%?"
+    },
+    {
+      "case_id": "E4",
+      "expected_dimensions": [
+        "ltv_bucket",
+        "age_bucket"
+      ],
+      "expected_eligible": true,
+      "expected_filters": [],
+      "expected_ineligibility_reason": "",
+      "expected_measure_field": "current_outstanding_balance",
+      "expected_plan_id": "plan_92964eb7c19d2b43",
+      "expected_statistic": "sum",
+      "oracle_cells": 20,
+      "oracle_grid_sha256": "df1cdcd0c4e2162554b052211ecdd093aa8c4992a128c0985320636aaeb261d9",
+      "oracle_grid_total": 115450800.7,
+      "oracle_value": null,
+      "question": "Chart the balance by LTV bucket and borrower-age bucket."
+    },
+    {
+      "case_id": "E5",
+      "expected_dimensions": [
+        "ltv_bucket",
+        "ticket_bucket"
+      ],
+      "expected_eligible": true,
+      "expected_filters": [],
+      "expected_ineligibility_reason": "",
+      "expected_measure_field": "current_outstanding_balance",
+      "expected_plan_id": "plan_d9bfe5fd29761fb5",
+      "expected_statistic": "sum",
+      "oracle_cells": 20,
+      "oracle_grid_sha256": "11d3f3ac98de3a3db8e3d1e3f65a4ec2f502b934af0a403f94b8e9c37feec89d",
+      "oracle_grid_total": 115450800.7,
+      "oracle_value": null,
+      "question": "Show a table of balance by LTV bucket and ticket-size bucket."
+    },
+    {
+      "case_id": "E6",
+      "expected_dimensions": [
+        "ltv_bucket",
+        "interest_rate_bucket"
+      ],
+      "expected_eligible": true,
+      "expected_filters": [],
+      "expected_ineligibility_reason": "",
+      "expected_measure_field": "current_outstanding_balance",
+      "expected_plan_id": "plan_ca02491b13e8e042",
+      "expected_statistic": "sum",
+      "oracle_cells": 20,
+      "oracle_grid_sha256": "ef07c6c3d277082d575d75ee7c1a9373933be38d3db3771317302d2dbac7bc66",
+      "oracle_grid_total": 115450800.7,
+      "oracle_value": null,
+      "question": "Show a table of balance by LTV bucket and interest-rate bucket."
+    },
+    {
+      "case_id": "C1",
+      "expected_dimensions": [],
+      "expected_eligible": false,
+      "expected_filters": [
+        [
+          "erm_product_type",
+          "eq",
+          "lump_sum"
+        ]
+      ],
+      "expected_ineligibility_reason": "EXPLICIT_LENS",
+      "expected_measure_field": "current_loan_to_value",
+      "expected_plan_id": "plan_7f9dcc7e0705c75a",
+      "expected_statistic": "weighted_average",
+      "oracle_cells": null,
+      "oracle_grid_sha256": null,
+      "oracle_value": null,
+      "question": "What is the weighted-average LTV of lump sum loans in the Direct book?"
+    },
+    {
+      "case_id": "C2",
+      "expected_dimensions": [
+        "erm_product_type"
+      ],
+      "expected_eligible": false,
+      "expected_filters": [],
+      "expected_ineligibility_reason": "GEOGRAPHY_REQUESTED",
+      "expected_measure_field": null,
+      "expected_plan_id": "plan_9c6ebdc78046f1c2",
+      "expected_statistic": "count",
+      "oracle_cells": null,
+      "oracle_grid_sha256": null,
+      "oracle_value": null,
+      "question": "Show loan count by region and product type."
+    }
+  ],
+  "frame": {
+    "added_columns": [
+      "ticket_bucket",
+      "interest_rate_bucket"
+    ],
+    "oracle": "portfolio_truth_oracle.canonical_book(400, 20260905)",
+    "row_count": 400
+  },
+  "no_live_model_calls": true
+}

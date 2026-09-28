@@ -1,0 +1,982 @@
+..................ssss...ssssssssss.sssssssssss.....s.sssssssssssssssss. [  7%]
+..............................x....FF...........sssssssssFFFFF...FF.ssss [ 15%]
+ssssssssssssssssssssss...sssss.........s....F......FFFF................. [ 23%]
+..F.......................FFFF................F...ss...FF.ssssssssssssss [ 31%]
+sssss..............sssss.sssssssssssssssssssssssssssssssssssssssssssssss [ 39%]
+sss.ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 47%]
+sssss.s.............ssssssssssssss.sssF......FFFF......F................ [ 54%]
+...FFFF.FF.Fx...................ssssssssssssssssssssssssssssssssssssssss [ 62%]
+sssss......................FF.FF.FFFF.....ssssssssss.................... [ 70%]
+.......F.................FF........................sssssssssssssssssssss [ 78%]
+sssss......F.F...........FFF.xx........................................s [ 86%]
+ssssssssssssssssss.ss.sss...ssss.ssssssssss.s........................... [ 94%]
+...........ssssssssssssssss........................sss                   [100%]
+=================================== FAILURES ===================================
+_ TestTheRefusalIsRouteIndependent.test_a_held_name_is_not_refused_by_this_guard _
+
+self = <tests.test_portfolio_name_resolution.TestTheRefusalIsRouteIndependent object at 0x7fdecd9dc950>
+live_book = 'alderbridge'
+
+    def test_a_held_name_is_not_refused_by_this_guard(self, live_book):
+        """The guard must fire on names the registry does NOT hold, and only
+        those. A guard that refused every named portfolio would be safe and
+        useless."""
+        result = _ask(live_book, "Summarise the ALP Origination Book")
+>       assert result.get("ok") is True
+E       AssertionError: assert False is True
+E        +  where False = <built-in method get of dict object at 0x7fdecb33f7c0>('ok')
+E        +    where <built-in method get of dict object at 0x7fdecb33f7c0> = {'ok': False, 'error': 'I understood that you asked for ALP Origination Book, but that could not be applied to the cal...overned portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure.', ...}.get
+
+tests/test_portfolio_name_resolution.py:359: AssertionError
+_ TestTheRefusalIsRouteIndependent.test_a_question_naming_no_portfolio_is_untouched _
+
+self = <tests.test_portfolio_name_resolution.TestTheRefusalIsRouteIndependent object at 0x7fdecd9dd010>
+live_book = 'alderbridge'
+
+    def test_a_question_naming_no_portfolio_is_untouched(self, live_book):
+        result = _ask(live_book, "Please provide a portfolio summary")
+        assert result.get("ok") is True
+>       assert "11,035" in (result.get("answer") or "")
+E       AssertionError: assert '11,035' in (('36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.'))
+E        +  where '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.' = <built-in method get of dict object at 0x7fdecb33db40>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecb33db40> = {'ok': True, 'error': None, 'question': 'Please provide a portfolio summary', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...}.get
+
+tests/test_portfolio_name_resolution.py:365: AssertionError
+_ TestTheExecutedGroupingIsDeclared.test_bridge_by_region_declares_and_delivers _
+
+self = <tests.test_funded_bridge_grouping_declaration.TestTheExecutedGroupingIsDeclared object at 0x7fdecd83b690>
+live = <function live.<locals>.ask at 0x7fdecb314040>
+
+    def test_bridge_by_region_declares_and_delivers(self, live):
+        e = live("Funded balance bridge by region")
+        assert _meta(e)["route"] == "funded_bridge"
+>       assert _meta(e)["groupedBy"] == ["collateral_geography"]
+               ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'groupedBy'
+
+tests/test_funded_bridge_grouping_declaration.py:65: KeyError
+_ TestTheExecutedGroupingIsDeclared.test_bridge_by_ltv_band_declares_the_dimension_it_used _
+
+self = <tests.test_funded_bridge_grouping_declaration.TestTheExecutedGroupingIsDeclared object at 0x7fdecd8480d0>
+live = <function live.<locals>.ask at 0x7fdecb314040>
+
+    def test_bridge_by_ltv_band_declares_the_dimension_it_used(self, live):
+        """A different governed bridge dimension: the EXACT executed axis is
+        declared, not a fixed route axis."""
+        e = live("balance bridge by LTV band")
+>       assert _meta(e)["groupedBy"] == ["ltv_bucket"]
+               ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'groupedBy'
+
+tests/test_funded_bridge_grouping_declaration.py:75: KeyError
+_ TestTheExecutedGroupingIsDeclared.test_a_scoped_bridge_declares_the_same_axis _
+
+self = <tests.test_funded_bridge_grouping_declaration.TestTheExecutedGroupingIsDeclared object at 0x7fdecd848690>
+live = <function live.<locals>.ask at 0x7fdecb314040>
+
+    def test_a_scoped_bridge_declares_the_same_axis(self, live):
+        e = live("Funded balance bridge by region", "acquired")
+>       assert _meta(e)["groupedBy"] == ["collateral_geography"]
+               ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'groupedBy'
+
+tests/test_funded_bridge_grouping_declaration.py:81: KeyError
+_ TestTheExecutedGroupingIsDeclared.test_the_generic_proof_is_what_certifies_it _
+
+self = <tests.test_funded_bridge_grouping_declaration.TestTheExecutedGroupingIsDeclared object at 0x7fdecd848c90>
+live = <function live.<locals>.ask at 0x7fdecb314040>
+
+    def test_the_generic_proof_is_what_certifies_it(self, live):
+        """No route allowlist: `funded_bridge` is absent from
+        ROUTE_DECLARED_AXES, so the certification stands on the declaration."""
+        assert "funded_bridge" not in R.ROUTE_DECLARED_AXES
+        e = live("Funded balance bridge by region")
+>       assert "collateral_geography" in R.declared_group_fields(e, "funded_bridge")
+E       assert 'collateral_geography' in set()
+E        +  where set() = <function declared_group_fields at 0x7fdecd840720>({'ok': False, 'error': "I can't build a funded balance bridge yet: at least two funded reporting periods are needed fo...wer': "I can't build a funded balance bridge yet: at least two funded reporting periods are needed for a bridge.", ...}, 'funded_bridge')
+E        +    where <function declared_group_fields at 0x7fdecd840720> = R.declared_group_fields
+
+tests/test_funded_bridge_grouping_declaration.py:91: AssertionError
+_ TestGroupingAndFilterRolesDoNotCollapse.test_a_companion_dimension_is_judged_on_its_own _
+
+self = <tests.test_funded_bridge_grouping_declaration.TestGroupingAndFilterRolesDoNotCollapse object at 0x7fdecd849410>
+live = <function live.<locals>.ask at 0x7fdecb314040>
+
+    def test_a_companion_dimension_is_judged_on_its_own(self, live):
+        """'by region for joint borrowers' — region is the executed axis and is
+        applied; borrower type is judged separately and is NOT swept into the
+        grouping declaration."""
+        e = live("Bridge the funded balance by region for joint borrowers")
+>       assert _meta(e)["groupedBy"] == ["collateral_geography"]
+               ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'groupedBy'
+
+tests/test_funded_bridge_grouping_declaration.py:100: KeyError
+_ TestTheWholeBookBridgeIsUnchanged.test_a_bridge_naming_no_dimension_still_delivers _
+
+self = <tests.test_funded_bridge_grouping_declaration.TestTheWholeBookBridgeIsUnchanged object at 0x7fdecd84a850>
+live = <function live.<locals>.ask at 0x7fdecb314040>
+
+    def test_a_bridge_naming_no_dimension_still_delivers(self, live):
+        e = live("funded balance bridge")
+>       assert e["ok"] is True
+E       assert False is True
+
+tests/test_funded_bridge_grouping_declaration.py:153: AssertionError
+_ TestTheWholeBookBridgeIsUnchanged.test_a_scoped_bridge_naming_no_dimension_still_delivers _
+
+self = <tests.test_funded_bridge_grouping_declaration.TestTheWholeBookBridgeIsUnchanged object at 0x7fdecd84ab90>
+live = <function live.<locals>.ask at 0x7fdecb314040>
+
+    def test_a_scoped_bridge_naming_no_dimension_still_delivers(self, live):
+        e = live("Funded balance bridge for the acquired book")
+>       assert e["ok"] is True
+E       assert False is True
+
+tests/test_funded_bridge_grouping_declaration.py:158: AssertionError
+_ TestBothSemanticInputsComeFromTheContract.test_the_population_comes_from_governed_ids _
+
+self = <tests.test_conversion2_period_movement.TestBothSemanticInputsComeFromTheContract object at 0x7fdecd87c4d0>
+book = 'alderbridge'
+
+    def test_the_population_comes_from_governed_ids(self, book):
+        from mi_agent_api import analytical_plan as plan_mod
+        qi = _project("What has changed since last month in the acquired book?")
+        plan = plan_mod.build_period_movement_plan(
+            qi, region_column="collateral_geography", has_portfolio_column=True)
+>       assert plan_mod.lens_filters(plan) == {
+            "source_portfolio_id": ["alp_acquired"]}
+E       AssertionError: assert None == {'source_portfolio_id': ['alp_acquired']}
+E        +  where None = <function lens_filters at 0x7fdecc431f80>(Plan(steps=(Step(primitive='stack_periods', inputs={'dataset': 'funded', 'take': 'pair', 'span_periods': 1, 'governed_...the movement by source portfolio', blocked=None)), declares_grouped_by=('collateral_geography', 'source_portfolio_id')))
+E        +    where <function lens_filters at 0x7fdecc431f80> = <module 'mi_agent_api.analytical_plan' from '/home/user/trakt/mi_agent_api/analytical_plan.py'>.lens_filters
+
+tests/test_conversion2_period_movement.py:117: AssertionError
+_ TestTheAnswersAreUnchanged.test_movement_figures[What has changed since last month?-None-\xa318.1m] _
+
+self = <tests.test_conversion2_period_movement.TestTheAnswersAreUnchanged object at 0x7fdecd888450>
+book = 'alderbridge', question = 'What has changed since last month?'
+default = None, fragment = '£18.1m'
+
+    @pytest.mark.parametrize("question,default,fragment", [
+        ("What has changed since last month?", None, "£18.1m"),
+        ("What has changed since last month in the acquired book?", None, "£6.6m"),
+        ("What has changed since last month in the direct book?", None, "£11.5m"),
+        ("What has changed since last month?", "acquired", "£6.6m"),
+    ])
+    def test_movement_figures(self, book, question, default, fragment):
+        result = _ask(question, default)
+        assert (result.get("metadata") or {}).get("route") == "period_movement"
+>       assert fragment in (result.get("answer") or "")
+E       assert '£18.1m' in (("I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement."))
+E        +  where "I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement." = <built-in method get of dict object at 0x7fdecb07e180>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecb07e180> = {'ok': False, 'error': "I can't compare against the prior month yet: at least two funded reporting periods are needed ... funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement.", ...}.get
+
+tests/test_conversion2_period_movement.py:240: AssertionError
+_ TestTheAnswersAreUnchanged.test_movement_figures[What has changed since last month in the acquired book?-None-\xa36.6m] _
+
+self = <tests.test_conversion2_period_movement.TestTheAnswersAreUnchanged object at 0x7fdecd888690>
+book = 'alderbridge'
+question = 'What has changed since last month in the acquired book?'
+default = None, fragment = '£6.6m'
+
+    @pytest.mark.parametrize("question,default,fragment", [
+        ("What has changed since last month?", None, "£18.1m"),
+        ("What has changed since last month in the acquired book?", None, "£6.6m"),
+        ("What has changed since last month in the direct book?", None, "£11.5m"),
+        ("What has changed since last month?", "acquired", "£6.6m"),
+    ])
+    def test_movement_figures(self, book, question, default, fragment):
+        result = _ask(question, default)
+        assert (result.get("metadata") or {}).get("route") == "period_movement"
+>       assert fragment in (result.get("answer") or "")
+E       assert '£6.6m' in (("I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement."))
+E        +  where "I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement." = <built-in method get of dict object at 0x7fdecb07c140>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecb07c140> = {'ok': False, 'error': "I can't compare against the prior month yet: at least two funded reporting periods are needed ... funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement.", ...}.get
+
+tests/test_conversion2_period_movement.py:240: AssertionError
+_ TestTheAnswersAreUnchanged.test_movement_figures[What has changed since last month in the direct book?-None-\xa311.5m] _
+
+self = <tests.test_conversion2_period_movement.TestTheAnswersAreUnchanged object at 0x7fdecd8888d0>
+book = 'alderbridge'
+question = 'What has changed since last month in the direct book?'
+default = None, fragment = '£11.5m'
+
+    @pytest.mark.parametrize("question,default,fragment", [
+        ("What has changed since last month?", None, "£18.1m"),
+        ("What has changed since last month in the acquired book?", None, "£6.6m"),
+        ("What has changed since last month in the direct book?", None, "£11.5m"),
+        ("What has changed since last month?", "acquired", "£6.6m"),
+    ])
+    def test_movement_figures(self, book, question, default, fragment):
+        result = _ask(question, default)
+        assert (result.get("metadata") or {}).get("route") == "period_movement"
+>       assert fragment in (result.get("answer") or "")
+E       assert '£11.5m' in (("I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement."))
+E        +  where "I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement." = <built-in method get of dict object at 0x7fdecb08e0c0>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecb08e0c0> = {'ok': False, 'error': "I can't compare against the prior month yet: at least two funded reporting periods are needed ... funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement.", ...}.get
+
+tests/test_conversion2_period_movement.py:240: AssertionError
+_ TestTheAnswersAreUnchanged.test_movement_figures[What has changed since last month?-acquired-\xa36.6m] _
+
+self = <tests.test_conversion2_period_movement.TestTheAnswersAreUnchanged object at 0x7fdecd888b10>
+book = 'alderbridge', question = 'What has changed since last month?'
+default = 'acquired', fragment = '£6.6m'
+
+    @pytest.mark.parametrize("question,default,fragment", [
+        ("What has changed since last month?", None, "£18.1m"),
+        ("What has changed since last month in the acquired book?", None, "£6.6m"),
+        ("What has changed since last month in the direct book?", None, "£11.5m"),
+        ("What has changed since last month?", "acquired", "£6.6m"),
+    ])
+    def test_movement_figures(self, book, question, default, fragment):
+        result = _ask(question, default)
+        assert (result.get("metadata") or {}).get("route") == "period_movement"
+>       assert fragment in (result.get("answer") or "")
+E       assert '£6.6m' in (("I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement."))
+E        +  where "I can't compare against the prior month yet: at least two funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement." = <built-in method get of dict object at 0x7fdecb3bc980>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecb3bc980> = {'ok': False, 'error': "I can't compare against the prior month yet: at least two funded reporting periods are needed ... funded reporting periods are needed to compare against the prior month.\n\nCalculated: Month-on-month movement.", ...}.get
+
+tests/test_conversion2_period_movement.py:240: AssertionError
+_______________ test_the_bare_word_stage_is_not_self_evidencing ________________
+
+    def test_the_bare_word_stage_is_not_self_evidencing():
+        """A canonical stage NAME is its own evidence; the word "stage" is ordinary
+        English and needs an axis marker or a pipeline dataset behind it."""
+>       assert L.pipeline_stage_request("What stage is the securitisation at?") == (None, False)
+E       assert (None, True) == (None, False)
+E         
+E         At index 1 diff: True != False
+E         Use -v to get more diff
+
+tests/test_pipeline_stage_contract.py:207: AssertionError
+_________ TestTheAnswersAreUnchanged.test_the_whole_book_is_unchanged __________
+
+self = <tests.test_conversion3_geo_exposure.TestTheAnswersAreUnchanged object at 0x7fdecd8b4190>
+live = <function live.<locals>.ask at 0x7fdecb256ac0>
+
+    def test_the_whole_book_is_unchanged(self, live):
+        e = live("What is the geographic exposure?")
+        assert (e.get("metadata") or {}).get("route") == "geo_exposure"
+        assert e.get("ok") is True
+>       assert "£83.4m" in e["answer"] and "4.2% of the book" in e["answer"]
+E       AssertionError: assert ('£83.4m' in 'Largest geographic concentration: Nottingham at £831k (15.4% of the book) across 10 ITL3 area(s). Basis: collateral; resolved coverage 100.0%.\n\nCalculated: Geographic exposure.')
+
+tests/test_conversion3_geo_exposure.py:176: AssertionError
+_ TestTheAnswersAreUnchanged.test_a_named_scope_narrows_and_says_so[Geographic exposure for the acquired book-expected0] _
+
+self = <tests.test_conversion3_geo_exposure.TestTheAnswersAreUnchanged object at 0x7fdecd8b4d90>
+live = <function live.<locals>.ask at 0x7fdecb256ac0>
+question = 'Geographic exposure for the acquired book'
+expected = ('£26.3m', 'Acquired')
+
+    @pytest.mark.parametrize("question,expected", [
+        ("Geographic exposure for the acquired book", ("£26.3m", "Acquired")),
+        ("Geographic exposure for the direct book", ("£57.1m", "Direct")),
+    ])
+    def test_a_named_scope_narrows_and_says_so(self, live, question, expected):
+        e = live(question)
+>       assert e.get("ok") is True
+E       AssertionError: assert False is True
+E        +  where False = <built-in method get of dict object at 0x7fdecb04e6c0>('ok')
+E        +    where <built-in method get of dict object at 0x7fdecb04e6c0> = {'ok': False, 'error': 'I understood that you asked about acquired, but I could not confirm it was applied to this cal...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...}.get
+
+tests/test_conversion3_geo_exposure.py:184: AssertionError
+_ TestTheAnswersAreUnchanged.test_a_named_scope_narrows_and_says_so[Geographic exposure for the direct book-expected1] _
+
+self = <tests.test_conversion3_geo_exposure.TestTheAnswersAreUnchanged object at 0x7fdecd8b4fd0>
+live = <function live.<locals>.ask at 0x7fdecb256ac0>
+question = 'Geographic exposure for the direct book'
+expected = ('£57.1m', 'Direct')
+
+    @pytest.mark.parametrize("question,expected", [
+        ("Geographic exposure for the acquired book", ("£26.3m", "Acquired")),
+        ("Geographic exposure for the direct book", ("£57.1m", "Direct")),
+    ])
+    def test_a_named_scope_narrows_and_says_so(self, live, question, expected):
+        e = live(question)
+>       assert e.get("ok") is True
+E       AssertionError: assert False is True
+E        +  where False = <built-in method get of dict object at 0x7fdecb2bb1c0>('ok')
+E        +    where <built-in method get of dict object at 0x7fdecb2bb1c0> = {'ok': False, 'error': 'I understood that you asked about direct, but I could not confirm it was applied to this calcu...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...}.get
+
+tests/test_conversion3_geo_exposure.py:184: AssertionError
+_ TestTheAnswersAreUnchanged.test_the_caller_scope_narrows_the_same_way_the_question_does _
+
+self = <tests.test_conversion3_geo_exposure.TestTheAnswersAreUnchanged object at 0x7fdecd8b5550>
+live = <function live.<locals>.ask at 0x7fdecb256ac0>
+
+    def test_the_caller_scope_narrows_the_same_way_the_question_does(self, live):
+        by_question = live("Geographic exposure for the acquired book")["answer"]
+        by_caller = live("What is the geographic exposure?", "acquired")["answer"]
+>       assert "£26.3m" in by_question and "£26.3m" in by_caller
+E       AssertionError: assert ('£26.3m' in 'I understood that you asked about acquired, but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.')
+
+tests/test_conversion3_geo_exposure.py:191: AssertionError
+___ test_capability_layer_has_no_source_level_dependency_on_the_http_module ____
+
+    def test_capability_layer_has_no_source_level_dependency_on_the_http_module():
+        """A grep-level guard: it is easy to reintroduce ``from . import app`` inside
+        a function, where an import test would not catch it until that branch ran."""
+        import ast
+    
+        def _imported_modules(path: Path) -> set[str]:
+            """Every module name imported anywhere in the file, including inside a
+            function body — which is where the old deferred ``from . import app``
+            lived, and where an import test alone would not have caught it."""
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            names: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names.update(a.name for a in node.names)
+                elif isinstance(node, ast.ImportFrom):
+                    # level>0 is a relative import; record it as ".<module>".
+                    names.add(("." * node.level) + (node.module or ""))
+            return names
+    
+        for name in ("mi_service.py", "datasets.py", "artefacts.py", "presenters.py",
+                     "dependencies.py"):
+            imported = _imported_modules(_REPO_ROOT / "mi_agent_api" / name)
+            assert ".app" not in imported, f"{name} imports the FastAPI module"
+            assert not any(m.startswith("fastapi") or m.startswith("starlette")
+                           for m in imported), f"{name} imports a web framework"
+    
+        for path in (_REPO_ROOT / "trakt_core").glob("*.py"):
+            imported = _imported_modules(path)
+>           assert not any(m.startswith(("fastapi", "starlette", "mi_agent_api",
+                                         "mi_agent", "apps.", "engine."))
+                           for m in imported), (
+                f"trakt_core/{path.name} depends on an application package: {imported}")
+E           AssertionError: trakt_core/regime_exception_reconciliation.py depends on an application package: {'__future__', 'typing', 'yaml', 'argparse', 'json', 'collections', 'logging', 'pathlib', 'engine.regime_contract.annex2_contract', 'pandas'}
+E           assert not True
+E            +  where True = any(<generator object test_capability_layer_has_no_source_level_dependency_on_the_http_module.<locals>.<genexpr> at 0x7fdecb32ec00>)
+
+tests/test_governance_dependency_direction.py:165: AssertionError
+_____ test_a_population_the_route_tried_and_could_not_express_is_disclosed _____
+
+    def test_a_population_the_route_tried_and_could_not_express_is_disclosed():
+        """Honest incapacity is not the P1K harm. A predicate the route demonstrably
+        attempted and could not apply narrowed nothing, so no figure is being passed
+        off as the narrow one — the same reasoning P1I-A used for an absent column.
+    
+        This matters: without it, a bogus predicate the PARSER invented (a place
+        called "Concentration", from "the largest geographic area concentration")
+        would refuse a sound question the user actually asked."""
+        facets = er.population_facets({"filters": {"geographic_region_obligor": "X"}})
+        er.reconcile_population(
+            facets, {"applied": [], "unavailable": ["geographic_region_obligor = X"]})
+        assert facets[0].status in er.DISCLOSABLE
+        verdict, _message = er.assess(er.ExecutionReceipt(facets=facets))
+>       assert verdict != er.VERDICT_REFUSE
+E       AssertionError: assert 'refuse' != 'refuse'
+E        +  where 'refuse' = er.VERDICT_REFUSE
+
+tests/test_p1l_population_propagation.py:198: AssertionError
+________ test_a_field_this_book_does_not_carry_is_disclosed_not_refused ________
+
+    def test_a_field_this_book_does_not_carry_is_disclosed_not_refused():
+        facets = er.population_facets({"filters": {"no_such_field": "X"}})
+        er.reconcile_population(facets, {"applied": [], "unavailable": []},
+                                dataset_columns={"current_outstanding_balance"})
+        assert facets[0].status == er.UNSUPPORTED
+        verdict, _m = er.assess(er.ExecutionReceipt(facets=facets))
+>       assert verdict != er.VERDICT_REFUSE
+E       AssertionError: assert 'refuse' != 'refuse'
+E        +  where 'refuse' = er.VERDICT_REFUSE
+
+tests/test_p1l_population_propagation.py:207: AssertionError
+_ TestReactAndMiShareTheModel.test_react_builds_its_selector_from_the_governed_registry _
+
+self = <tests.test_portfolio_identity_alignment.TestReactAndMiShareTheModel object at 0x7fdecd795690>
+book = 'alderbridge'
+
+    def test_react_builds_its_selector_from_the_governed_registry(self, book):
+        """Not a duplicate table — the same context index MI resolves against."""
+        from mi_agent_api import portfolio_context as ctx_mod
+        index = ctx_mod.context_index(client_id=book)
+>       assert index["available"] is True
+E       assert False is True
+
+tests/test_portfolio_identity_alignment.py:63: AssertionError
+_ TestNamedPortfolioLabelsDoNotResolve.test_a_react_label_widens_to_the_whole_book[Summarise the ALP Origination Book] _
+
+self = <tests.test_portfolio_identity_alignment.TestNamedPortfolioLabelsDoNotResolve object at 0x7fdecd7a06d0>
+question = 'Summarise the ALP Origination Book', book = 'alderbridge'
+
+    @pytest.mark.parametrize("question", [
+        "Summarise the ALP Origination Book",
+        "portfolio summary for ALP Origination Book",
+        "Summarise the spv1_sponsored portfolio",
+        "portfolio summary for spv1_sponsored",
+    ])
+    def test_a_react_label_widens_to_the_whole_book(self, question, book):
+        selected = _ids_for_question(question)
+        assert selected == _ids_for_context("total"), selected
+>       assert len(selected) > 1
+E       assert 0 > 1
+E        +  where 0 = len(())
+
+tests/test_portfolio_identity_alignment.py:99: AssertionError
+_ TestNamedPortfolioLabelsDoNotResolve.test_a_react_label_widens_to_the_whole_book[portfolio summary for ALP Origination Book] _
+
+self = <tests.test_portfolio_identity_alignment.TestNamedPortfolioLabelsDoNotResolve object at 0x7fdecd7a0810>
+question = 'portfolio summary for ALP Origination Book', book = 'alderbridge'
+
+    @pytest.mark.parametrize("question", [
+        "Summarise the ALP Origination Book",
+        "portfolio summary for ALP Origination Book",
+        "Summarise the spv1_sponsored portfolio",
+        "portfolio summary for spv1_sponsored",
+    ])
+    def test_a_react_label_widens_to_the_whole_book(self, question, book):
+        selected = _ids_for_question(question)
+        assert selected == _ids_for_context("total"), selected
+>       assert len(selected) > 1
+E       assert 0 > 1
+E        +  where 0 = len(())
+
+tests/test_portfolio_identity_alignment.py:99: AssertionError
+_ TestNamedPortfolioLabelsDoNotResolve.test_a_react_label_widens_to_the_whole_book[Summarise the spv1_sponsored portfolio] _
+
+self = <tests.test_portfolio_identity_alignment.TestNamedPortfolioLabelsDoNotResolve object at 0x7fdecd7a0950>
+question = 'Summarise the spv1_sponsored portfolio', book = 'alderbridge'
+
+    @pytest.mark.parametrize("question", [
+        "Summarise the ALP Origination Book",
+        "portfolio summary for ALP Origination Book",
+        "Summarise the spv1_sponsored portfolio",
+        "portfolio summary for spv1_sponsored",
+    ])
+    def test_a_react_label_widens_to_the_whole_book(self, question, book):
+        selected = _ids_for_question(question)
+        assert selected == _ids_for_context("total"), selected
+>       assert len(selected) > 1
+E       assert 0 > 1
+E        +  where 0 = len(())
+
+tests/test_portfolio_identity_alignment.py:99: AssertionError
+_ TestNamedPortfolioLabelsDoNotResolve.test_a_react_label_widens_to_the_whole_book[portfolio summary for spv1_sponsored] _
+
+self = <tests.test_portfolio_identity_alignment.TestNamedPortfolioLabelsDoNotResolve object at 0x7fdecd7a0a90>
+question = 'portfolio summary for spv1_sponsored', book = 'alderbridge'
+
+    @pytest.mark.parametrize("question", [
+        "Summarise the ALP Origination Book",
+        "portfolio summary for ALP Origination Book",
+        "Summarise the spv1_sponsored portfolio",
+        "portfolio summary for spv1_sponsored",
+    ])
+    def test_a_react_label_widens_to_the_whole_book(self, question, book):
+        selected = _ids_for_question(question)
+        assert selected == _ids_for_context("total"), selected
+>       assert len(selected) > 1
+E       assert 0 > 1
+E        +  where 0 = len(())
+
+tests/test_portfolio_identity_alignment.py:99: AssertionError
+_ TestVintageIsNotPortfolioIdentity.test_a_point_in_time_vintage_year_is_dropped_without_disclosure _
+
+self = <tests.test_portfolio_identity_alignment.TestVintageIsNotPortfolioIdentity object at 0x7fdecd7a3050>
+book = 'alderbridge'
+
+    def test_a_point_in_time_vintage_year_is_dropped_without_disclosure(self, book):
+        """The client asks for ONE vintage and is shown ALL of them.
+    
+        The answer groups by vintage across every cohort the book holds, and the
+        only facet raised is the grouping DIMENSION. The requested YEAR — a
+        narrowing — is not represented and nothing says it was dropped.
+        """
+        from mi_agent_api.mi_service import MiQueryRequest, execute_governed_mi_query
+        from trakt_core.context import ExecutionContext
+    
+        ctx = ExecutionContext.for_internal(os.environ["MI_AGENT_CLIENT_ID"])
+        result = execute_governed_mi_query(
+            MiQueryRequest(question="Summarise the 2023 vintage"), ctx).result or {}
+        summary = result.get("executionSummary") or {}
+        facets = summary.get("facets") or []
+    
+>       assert result.get("ok") is True
+E       assert False is True
+E        +  where False = <built-in method get of dict object at 0x7fdecb332100>('ok')
+E        +    where <built-in method get of dict object at 0x7fdecb332100> = {'ok': False, 'error': "'Vintage' is not available in this dataset. This book does not report it, so the question cann...his book does not report it, so the question cannot be answered from the current data (no value was fabricated).", ...}.get
+
+tests/test_portfolio_identity_alignment.py:217: AssertionError
+__ TestPhase1EPopulationSemanticsHold.test_funded_book_is_every_funded_asset ___
+
+self = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7bbcd0>
+book = 'alderbridge'
+
+    def test_funded_book_is_every_funded_asset(self, book):
+>       assert "11,035" in (self._ask("Summarise the funded book").get("answer") or "")
+E       AssertionError: assert '11,035' in (('36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.'))
+E        +  where '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.' = <built-in method get of dict object at 0x7fdecaa1c300>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecaa1c300> = {'ok': True, 'error': None, 'question': 'Summarise the funded book', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...}.get
+E        +      where {'ok': True, 'error': None, 'question': 'Summarise the funded book', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...} = <function TestPhase1EPopulationSemanticsHold._ask at 0x7fdecd777b00>('Summarise the funded book')
+E        +        where <function TestPhase1EPopulationSemanticsHold._ask at 0x7fdecd777b00> = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7bbcd0>._ask
+
+tests/test_portfolio_summary_conversion_prerequisites.py:180: AssertionError
+_ TestPhase1EPopulationSemanticsHold.test_direct_book_is_the_direct_portfolios _
+
+self = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7c0410>
+book = 'alderbridge'
+
+    def test_direct_book_is_the_direct_portfolios(self, book):
+>       assert "7,126" in (self._ask("Summarise the direct book").get("answer") or "")
+E       AssertionError: assert '7,126' in (('I understood that you asked about direct, but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.'))
+E        +  where 'I understood that you asked about direct, but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.' = <built-in method get of dict object at 0x7fdecaa08b40>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecaa08b40> = {'ok': False, 'error': 'I understood that you asked about direct, but I could not confirm it was applied to this calcu...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...}.get
+E        +      where {'ok': False, 'error': 'I understood that you asked about direct, but I could not confirm it was applied to this calcu...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...} = <function TestPhase1EPopulationSemanticsHold._ask at 0x7fdecd777b00>('Summarise the direct book')
+E        +        where <function TestPhase1EPopulationSemanticsHold._ask at 0x7fdecd777b00> = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7c0410>._ask
+
+tests/test_portfolio_summary_conversion_prerequisites.py:183: AssertionError
+_ TestPhase1EPopulationSemanticsHold.test_acquired_book_is_the_acquired_portfolios _
+
+self = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7c0b10>
+book = 'alderbridge'
+
+    def test_acquired_book_is_the_acquired_portfolios(self, book):
+>       assert "3,909" in (self._ask("Summarise the acquired book").get("answer") or "")
+E       AssertionError: assert '3,909' in (('I understood that you asked about acquired, but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.'))
+E        +  where 'I understood that you asked about acquired, but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.' = <built-in method get of dict object at 0x7fdecaa0aec0>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecaa0aec0> = {'ok': False, 'error': 'I understood that you asked about acquired, but I could not confirm it was applied to this cal...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...}.get
+E        +      where {'ok': False, 'error': 'I understood that you asked about acquired, but I could not confirm it was applied to this cal...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...} = <function TestPhase1EPopulationSemanticsHold._ask at 0x7fdecd777b00>('Summarise the acquired book')
+E        +        where <function TestPhase1EPopulationSemanticsHold._ask at 0x7fdecd777b00> = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7c0b10>._ask
+
+tests/test_portfolio_summary_conversion_prerequisites.py:186: AssertionError
+_ TestPhase1EPopulationSemanticsHold.test_a_named_portfolio_is_only_that_portfolio _
+
+self = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7b9ad0>
+book = 'alderbridge'
+
+    def test_a_named_portfolio_is_only_that_portfolio(self, book):
+        answer = self._ask("Summarise the ALP Origination Book").get("answer") or ""
+>       assert "7,126" in answer and "11,035" not in answer
+E       AssertionError: assert ('7,126' in 'I understood that you asked for ALP Origination Book, but that could not be applied to the calculation (ALP Originati...ot a governed portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure.')
+
+tests/test_portfolio_summary_conversion_prerequisites.py:190: AssertionError
+_ TestPhase1EPopulationSemanticsHold.test_a_valid_portfolio_with_no_funded_rows_states_it _
+
+self = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7c1110>
+book = 'alderbridge'
+
+    def test_a_valid_portfolio_with_no_funded_rows_states_it(self, book):
+        result = self._ask("Summarise the spv1_sponsored portfolio")
+        answer = result.get("answer") or ""
+>       assert "no funded loans in spv1_sponsored" in answer
+E       AssertionError: assert 'no funded loans in spv1_sponsored' in '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.'
+
+tests/test_portfolio_summary_conversion_prerequisites.py:200: AssertionError
+_ TestPhase1EPopulationSemanticsHold.test_the_back_book_label_collision_still_refuses _
+
+self = <tests.test_portfolio_summary_conversion_prerequisites.TestPhase1EPopulationSemanticsHold object at 0x7fdecd7c1450>
+book = 'alderbridge'
+
+    def test_the_back_book_label_collision_still_refuses(self, book):
+        """§7 — the safe refusal must not disappear. A conversion that turns
+        this into an answer has silently dropped one of the two interpretations
+        rather than arbitrating between them."""
+        result = self._ask("Summarise the ALP Acquired Back Book")
+>       assert result.get("controlledRefusal") is True
+E       assert None is True
+E        +  where None = <built-in method get of dict object at 0x7fdecaa1d4c0>('controlledRefusal')
+E        +    where <built-in method get of dict object at 0x7fdecaa1d4c0> = {'ok': False, 'error': "'alp acquired' is not a governed measure in this dataset; no substitute was used. I haven't co...governed measure — e.g. balance, LTV, interest rate, borrower age or property value — optionally by a dimension.", ...}.get
+
+tests/test_portfolio_summary_conversion_prerequisites.py:208: AssertionError
+_ TestThePlanMustResolveThroughTheRegistry.test_production_resolves_a_governed_id_list _
+
+self = <tests.test_portfolio_summary_conversion_prerequisites.TestThePlanMustResolveThroughTheRegistry object at 0x7fdecd7c1cd0>
+book = 'alderbridge'
+
+    def test_production_resolves_a_governed_id_list(self, book):
+        from mi_agent_api import portfolio_context as ctx_mod
+        scope = ctx_mod.resolve_context("acquired", discover_pipeline=False).scope
+>       assert dict(scope.filters) == {"source_portfolio_id": ["alp_acquired"]}
+E       AssertionError: assert {} == {'source_port...lp_acquired']}
+E         
+E         Right contains 1 more item:
+E         {'source_portfolio_id': ['alp_acquired']}
+E         Use -v to get more diff
+
+tests/test_portfolio_summary_conversion_prerequisites.py:232: AssertionError
+_ TestTheRoutedPathReallyBuildsAContract.test_a_routed_question_produces_a_contract _
+
+self = <tests.test_conversion1_portfolio_summary.TestTheRoutedPathReallyBuildsAContract object at 0x7fdecd628bd0>
+book = 'alderbridge'
+
+    def test_a_routed_question_produces_a_contract(self, book):
+        from mi_agent_api import chat_routing as routing
+        seen = []
+        original = routing._summary_population
+    
+        def _spy(question, source_lens, interpretation, **kw):
+            seen.append(interpretation)
+            return original(question, source_lens, interpretation, **kw)
+    
+        routing._summary_population = _spy
+        try:
+            _ask("Summarise the acquired book")
+        finally:
+            routing._summary_population = original
+        assert seen, "the route never reached the summary population"
+        assert seen[0] is not None, (
+            "the routed path handed the handler no interpretation — the "
+            "provider raised and was swallowed")
+        assert seen[0].source_scope.state == "filled"
+>       assert seen[0].source_scope.portfolio_ids == ("alp_acquired",)
+E       AssertionError: assert () == ('alp_acquired',)
+E         
+E         Right contains one more item: 'alp_acquired'
+E         Use -v to get more diff
+
+tests/test_conversion1_portfolio_summary.py:129: AssertionError
+_ TestThePopulationIsGoverned.test_a_category_selects_governed_ids_not_a_type_column _
+
+self = <tests.test_conversion1_portfolio_summary.TestThePopulationIsGoverned object at 0x7fdecd629310>
+book = 'alderbridge'
+
+    def test_a_category_selects_governed_ids_not_a_type_column(self, book):
+        from mi_agent_api import portfolio_context as ctx_mod
+        from mi_agent_api import analytical_plan as plan_mod
+        from mi_agent.mi_query_validator import load_mi_semantics
+        from mi_agent_api.datasets import semantics_path
+        from question_interpretation import projection
+    
+        qi = projection.project("Summarise the acquired book",
+                                semantics=load_mi_semantics(semantics_path()),
+                                registry=ctx_mod.build_registry())
+        plan = plan_mod.build_plan(qi, region_column="collateral_geography",
+                                   has_portfolio_column=True)
+        filters = plan_mod.lens_filters(plan)
+>       assert filters == {"source_portfolio_id": ["alp_acquired"]}
+E       AssertionError: assert None == {'source_portfolio_id': ['alp_acquired']}
+
+tests/test_conversion1_portfolio_summary.py:146: AssertionError
+_ TestUnresolvableDoesNotBlockButDoesNotWiden.test_an_unresolvable_scope_still_refuses_from_this_route[Summarise the acquired_001 book] _
+
+self = <tests.test_conversion1_portfolio_summary.TestUnresolvableDoesNotBlockButDoesNotWiden object at 0x7fdecd62a590>
+book = 'alderbridge', question = 'Summarise the acquired_001 book'
+
+    @pytest.mark.parametrize("question", [
+        "Summarise the acquired_001 book",
+        "Summarise the Highgate Mortgages Book",
+    ])
+    def test_an_unresolvable_scope_still_refuses_from_this_route(
+            self, book, question):
+        result = _ask(question)
+>       assert (result.get("metadata") or {}).get("route") == "portfolio_summary"
+E       assert None == 'portfolio_summary'
+E        +  where None = <built-in method get of dict object at 0x7fdecaad4dc0>('route')
+E        +    where <built-in method get of dict object at 0x7fdecaad4dc0> = ({'portfolioId': None, 'asOfDate': None, 'engine': 'mi_agent', 'source': 'python', ...}).get
+E        +      where {'portfolioId': None, 'asOfDate': None, 'engine': 'mi_agent', 'source': 'python', ...} = <built-in method get of dict object at 0x7fdecaad5c00>('metadata')
+E        +        where <built-in method get of dict object at 0x7fdecaad5c00> = {'ok': False, 'error': "I understood that you asked for acquired_001, but that could not be applied to the calculation...overned portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure.", ...}.get
+
+tests/test_conversion1_portfolio_summary.py:182: AssertionError
+_ TestUnresolvableDoesNotBlockButDoesNotWiden.test_an_unresolvable_scope_still_refuses_from_this_route[Summarise the Highgate Mortgages Book] _
+
+self = <tests.test_conversion1_portfolio_summary.TestUnresolvableDoesNotBlockButDoesNotWiden object at 0x7fdecd62a7d0>
+book = 'alderbridge', question = 'Summarise the Highgate Mortgages Book'
+
+    @pytest.mark.parametrize("question", [
+        "Summarise the acquired_001 book",
+        "Summarise the Highgate Mortgages Book",
+    ])
+    def test_an_unresolvable_scope_still_refuses_from_this_route(
+            self, book, question):
+        result = _ask(question)
+>       assert (result.get("metadata") or {}).get("route") == "portfolio_summary"
+E       AssertionError: assert None == 'portfolio_summary'
+E        +  where None = <built-in method get of dict object at 0x7fdecb00ed40>('route')
+E        +    where <built-in method get of dict object at 0x7fdecb00ed40> = ({'portfolioId': None, 'asOfDate': None, 'engine': 'mi_agent', 'source': 'python', ...}).get
+E        +      where {'portfolioId': None, 'asOfDate': None, 'engine': 'mi_agent', 'source': 'python', ...} = <built-in method get of dict object at 0x7fdecb00fbc0>('metadata')
+E        +        where <built-in method get of dict object at 0x7fdecb00fbc0> = {'ok': False, 'error': 'I understood that you asked for Highgate Mortgages Book, but that could not be applied to the ...overned portfolio for this book, so the answer was not narrowed to it). I have not substituted a broader figure.', ...}.get
+
+tests/test_conversion1_portfolio_summary.py:182: AssertionError
+_ TestTheContractDecidesPrecedence.test_precedence_end_to_end[Please provide a portfolio summary-acquired-3,909] _
+
+self = <tests.test_conversion1_portfolio_summary.TestTheContractDecidesPrecedence object at 0x7fdecd62ab10>
+book = 'alderbridge', question = 'Please provide a portfolio summary'
+default = 'acquired', loans = '3,909'
+
+    @pytest.mark.parametrize("question,default,loans", [
+        ("Please provide a portfolio summary", "acquired", "3,909"),
+        ("Please provide a portfolio summary", None, "11,035"),
+        ("Summarise the acquired book", "direct", "3,909"),
+        ("Summarise the funded book", "acquired", "11,035"),
+    ])
+    def test_precedence_end_to_end(self, book, question, default, loans):
+>       assert loans in (_ask(question, default).get("answer") or "")
+E       AssertionError: assert '3,909' in (('36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.'))
+E        +  where '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.' = <built-in method get of dict object at 0x7fdecb00ffc0>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecb00ffc0> = {'ok': True, 'error': None, 'question': 'Please provide a portfolio summary', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...}.get
+E        +      where {'ok': True, 'error': None, 'question': 'Please provide a portfolio summary', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...} = _ask('Please provide a portfolio summary', 'acquired')
+
+tests/test_conversion1_portfolio_summary.py:209: AssertionError
+_ TestTheContractDecidesPrecedence.test_precedence_end_to_end[Please provide a portfolio summary-None-11,035] _
+
+self = <tests.test_conversion1_portfolio_summary.TestTheContractDecidesPrecedence object at 0x7fdecd628610>
+book = 'alderbridge', question = 'Please provide a portfolio summary'
+default = None, loans = '11,035'
+
+    @pytest.mark.parametrize("question,default,loans", [
+        ("Please provide a portfolio summary", "acquired", "3,909"),
+        ("Please provide a portfolio summary", None, "11,035"),
+        ("Summarise the acquired book", "direct", "3,909"),
+        ("Summarise the funded book", "acquired", "11,035"),
+    ])
+    def test_precedence_end_to_end(self, book, question, default, loans):
+>       assert loans in (_ask(question, default).get("answer") or "")
+E       AssertionError: assert '11,035' in (('36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.'))
+E        +  where '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.' = <built-in method get of dict object at 0x7fdecb00f140>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecb00f140> = {'ok': True, 'error': None, 'question': 'Please provide a portfolio summary', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...}.get
+E        +      where {'ok': True, 'error': None, 'question': 'Please provide a portfolio summary', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...} = _ask('Please provide a portfolio summary', None)
+
+tests/test_conversion1_portfolio_summary.py:209: AssertionError
+_ TestTheContractDecidesPrecedence.test_precedence_end_to_end[Summarise the acquired book-direct-3,909] _
+
+self = <tests.test_conversion1_portfolio_summary.TestTheContractDecidesPrecedence object at 0x7fdecd629cd0>
+book = 'alderbridge', question = 'Summarise the acquired book'
+default = 'direct', loans = '3,909'
+
+    @pytest.mark.parametrize("question,default,loans", [
+        ("Please provide a portfolio summary", "acquired", "3,909"),
+        ("Please provide a portfolio summary", None, "11,035"),
+        ("Summarise the acquired book", "direct", "3,909"),
+        ("Summarise the funded book", "acquired", "11,035"),
+    ])
+    def test_precedence_end_to_end(self, book, question, default, loans):
+>       assert loans in (_ask(question, default).get("answer") or "")
+E       AssertionError: assert '3,909' in (('I understood that you asked about acquired, but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.'))
+E        +  where 'I understood that you asked about acquired, but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.' = <built-in method get of dict object at 0x7fdecaad6f00>('answer')
+E        +    where <built-in method get of dict object at 0x7fdecaad6f00> = {'ok': False, 'error': 'I understood that you asked about acquired, but I could not confirm it was applied to this cal...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...}.get
+E        +      where {'ok': False, 'error': 'I understood that you asked about acquired, but I could not confirm it was applied to this cal...but I could not confirm it was applied to this calculation. I have not answered over a wider population instead.', ...} = _ask('Summarise the acquired book', 'direct')
+
+tests/test_conversion1_portfolio_summary.py:209: AssertionError
+_ TestTheContractDecidesPrecedence.test_precedence_end_to_end[Summarise the funded book-acquired-11,035] _
+
+self = <tests.test_conversion1_portfolio_summary.TestTheContractDecidesPrecedence object at 0x7fdecd629710>
+book = 'alderbridge', question = 'Summarise the funded book'
+default = 'acquired', loans = '11,035'
+
+    @pytest.mark.parametrize("question,default,loans", [
+        ("Please provide a portfolio summary", "acquired", "3,909"),
+        ("Please provide a portfolio summary", None, "11,035"),
+        ("Summarise the acquired book", "direct", "3,909"),
+        ("Summarise the funded book", "acquired", "11,035"),
+    ])
+    def test_precedence_end_to_end(self, book, question, default, loans):
+>       assert loans in (_ask(question, default).get("answer") or "")
+E       AssertionError: assert '11,035' in (('36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.'))
+E        +  where '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.' = <built-in method get of dict object at 0x7fdeca977e80>('answer')
+E        +    where <built-in method get of dict object at 0x7fdeca977e80> = {'ok': True, 'error': None, 'question': 'Summarise the funded book', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...}.get
+E        +      where {'ok': True, 'error': None, 'question': 'Summarise the funded book', 'answer': '36 loans · Current Outstanding Balance: £5.4MM.\n\nCalculated: Count of loans · 36 loans · as at 30 November 2025.', ...} = _ask('Summarise the funded book', 'acquired')
+
+tests/test_conversion1_portfolio_summary.py:209: AssertionError
+______________ test_the_easy_auth_guard_exempts_the_agent_prefix _______________
+
+    def test_the_easy_auth_guard_exempts_the_agent_prefix():
+        """A regression test for a real defect this suite initially missed.
+    
+        ``auth.auth_guard`` is a GLOBAL dependency on the app: it demands an Easy Auth
+        ``X-MS-CLIENT-PRINCIPAL`` header on every path it does not exempt. A machine
+        identity carries no such header, so without the exemption every agent call
+        was refused 401 by the wrong guard — before ``agent_auth`` ran at all.
+    
+        Testing the router in isolation could not catch this, because the global
+        dependency lives on the app rather than on the router. Hence this test
+        asserts the exemption itself.
+        """
+        import asyncio
+    
+        from mi_agent_api import auth
+    
+        assert auth.AGENT_PATH_PREFIX == "/v1/agent"
+    
+        class _Req:
+            def __init__(self, path):
+                self.url = type("U", (), {"path": path})()
+                self.method = "POST"
+                self.headers: Dict[str, str] = {}
+                self.state = type("S", (), {})()
+    
+        # Exempt: the agent's own guard authenticates these.
+        for path in ("/v1/agent/tools", "/v1/agent/tools/evaluate_covenants"):
+            assert asyncio.run(auth.auth_guard(_Req(path))) is None
+    
+        # Still guarded: the exemption must not have widened to anything else.
+        from fastapi import HTTPException
+    
+>       with pytest.raises(HTTPException):
+E       Failed: DID NOT RAISE HTTPException
+
+tests/test_agent_identity_and_api.py:466: Failed
+__ TestTheAnswersAreUnchanged.test_a_grouped_bridge_delivers_the_same_figures __
+
+self = <tests.test_conversion4_funded_bridge.TestTheAnswersAreUnchanged object at 0x7fdecc7be950>
+live = <function live.<locals>.ask at 0x7fdec98db7e0>
+
+    def test_a_grouped_bridge_delivers_the_same_figures(self, live):
+        e = live("Funded balance bridge by region")
+>       assert e["ok"] is True
+E       assert False is True
+
+tests/test_conversion4_funded_bridge.py:209: AssertionError
+_________ TestTheAnswersAreUnchanged.test_a_scoped_bridge_is_unchanged _________
+
+self = <tests.test_conversion4_funded_bridge.TestTheAnswersAreUnchanged object at 0x7fdecc7bf050>
+live = <function live.<locals>.ask at 0x7fdec98db7e0>
+
+    def test_a_scoped_bridge_is_unchanged(self, live):
+        e = live("Funded balance bridge for the acquired book")
+>       assert e["ok"] is True and "£568.3m" in e["answer"]
+E       assert (False is True)
+
+tests/test_conversion4_funded_bridge.py:215: AssertionError
+_ TestProductionPrecedence.test_case_d_an_unresolvable_scope_widens_to_the_whole_book _
+
+self = <tests.test_source_scope_production_semantics.TestProductionPrecedence object at 0x7fdecc7f6390>
+book = 'alderbridge'
+
+    def test_case_d_an_unresolvable_scope_widens_to_the_whole_book(self, book):
+        """§3 Case D asked us to show production does NOT silently widen.
+    
+        IT DOES. Pinned here as measured behaviour, not endorsed: the governed
+        registry falls back to Total for a portfolio id it does not hold, and
+        records `fell_back_to_total`. See
+        docs/mi_phase1c_report.md — this is why Phase 1C stopped.
+        """
+        from mi_agent_api import portfolio_context as ctx_mod
+    
+        scope = ctx_mod.resolve_context("acquired_001", discover_pipeline=False).scope
+        assert scope.fell_back_to_total is True
+        assert scope.requested_context_id == "acquired_001"
+        assert scope.filters == {}          # no narrowing at all
+>       assert len(scope.portfolio_ids) > 1  # the whole book
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert 0 > 1
+E        +  where 0 = len(())
+E        +    where () = PortfolioScope(context_id='total', context_kind='total', label='Total', portfolio_ids=(), portfolio_types=(), asset_classes=(), fell_back_to_total=True, requested_context_id='acquired_001').portfolio_ids
+
+tests/test_source_scope_production_semantics.py:103: AssertionError
+___ TestGovernedVsRawResolution.test_on_the_shipped_book_both_paths_coincide ___
+
+self = <tests.test_source_scope_production_semantics.TestGovernedVsRawResolution object at 0x7fdecc7f4190>
+book = 'alderbridge'
+
+    def test_on_the_shipped_book_both_paths_coincide(self, book):
+        """Why a discrimination fixture is needed at all.
+    
+        One portfolio per type here, so `type == 'acquired'` and
+        `id in ['alp_acquired']` select the same rows. Phase 1A's equivalence
+        was numerically right for exactly this reason and proved nothing about
+        the semantics.
+        """
+        from mi_agent_api import evolution as evolution_mod
+    
+        frames = evolution_mod.funded_frames(
+            os.environ["MI_AGENT_ONBOARDING_OUTPUT_ROOT"], book, None)
+>       df = frames[-1]["df"]
+             ^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/test_source_scope_production_semantics.py:159: IndexError
+_ TestT3Acceptance.test_t3_artifact_carries_both_a_period_axis_and_a_region_breakdown _
+
+self = <tests.test_migration_preregistered.TestT3Acceptance object at 0x7fdecc508350>
+
+    def test_t3_artifact_carries_both_a_period_axis_and_a_region_breakdown(self):
+        result = _ask("balance over time by region")
+>       assert result.get("ok") is True, result.get("answer")
+E       AssertionError: No reporting periods are available to build a funded balance trend.
+E       assert False is True
+E        +  where False = <built-in method get of dict object at 0x7fdeca98bac0>('ok')
+E        +    where <built-in method get of dict object at 0x7fdeca98bac0> = {'ok': False, 'error': 'No reporting periods are available to build a funded balance trend.', 'question': 'balance over time by region', 'answer': 'No reporting periods are available to build a funded balance trend.', ...}.get
+
+tests/test_migration_preregistered.py:98: AssertionError
+_ TestT3Acceptance.test_t3_reconciles_to_the_shipped_t1_series_period_by_period _
+
+self = <tests.test_migration_preregistered.TestT3Acceptance object at 0x7fdecc508a50>
+
+    def test_t3_reconciles_to_the_shipped_t1_series_period_by_period(self):
+        """The migration bar is byte-identical economics, not a plausible shape."""
+        from collections import defaultdict
+    
+        t3 = _rows(_ask("balance over time by region"))
+        t1 = _rows(_ask("balance over time"))
+>       assert t1 and t3
+E       assert ([])
+
+tests/test_migration_preregistered.py:113: AssertionError
+________ TestT3Acceptance.test_t3_declares_the_dimension_it_grouped_by _________
+
+self = <tests.test_migration_preregistered.TestT3Acceptance object at 0x7fdecc6f4b90>
+
+    def test_t3_declares_the_dimension_it_grouped_by(self):
+        """A route that declares nothing proves nothing — `grouping_proven`'s bar."""
+        from mi_agent import execution_receipt as receipt
+    
+        result = _ask("balance over time by region")
+        declared = receipt.declared_group_fields(result, result.get("route"))
+>       assert declared, "the answer declares no grouping axis"
+E       AssertionError: the answer declares no grouping axis
+E       assert set()
+
+tests/test_migration_preregistered.py:142: AssertionError
+=============================== warnings summary ===============================
+tests/test_governance_artefacts_and_envelope.py::test_react_route_cannot_be_pointed_at_another_tenant
+  /usr/local/lib/python3.11/dist-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_portfolio_name_resolution.py::TestTheRefusalIsRouteIndependent::test_a_held_name_is_not_refused_by_this_guard
+FAILED tests/test_portfolio_name_resolution.py::TestTheRefusalIsRouteIndependent::test_a_question_naming_no_portfolio_is_untouched
+FAILED tests/test_funded_bridge_grouping_declaration.py::TestTheExecutedGroupingIsDeclared::test_bridge_by_region_declares_and_delivers
+FAILED tests/test_funded_bridge_grouping_declaration.py::TestTheExecutedGroupingIsDeclared::test_bridge_by_ltv_band_declares_the_dimension_it_used
+FAILED tests/test_funded_bridge_grouping_declaration.py::TestTheExecutedGroupingIsDeclared::test_a_scoped_bridge_declares_the_same_axis
+FAILED tests/test_funded_bridge_grouping_declaration.py::TestTheExecutedGroupingIsDeclared::test_the_generic_proof_is_what_certifies_it
+FAILED tests/test_funded_bridge_grouping_declaration.py::TestGroupingAndFilterRolesDoNotCollapse::test_a_companion_dimension_is_judged_on_its_own
+FAILED tests/test_funded_bridge_grouping_declaration.py::TestTheWholeBookBridgeIsUnchanged::test_a_bridge_naming_no_dimension_still_delivers
+FAILED tests/test_funded_bridge_grouping_declaration.py::TestTheWholeBookBridgeIsUnchanged::test_a_scoped_bridge_naming_no_dimension_still_delivers
+FAILED tests/test_conversion2_period_movement.py::TestBothSemanticInputsComeFromTheContract::test_the_population_comes_from_governed_ids
+FAILED tests/test_conversion2_period_movement.py::TestTheAnswersAreUnchanged::test_movement_figures[What has changed since last month?-None-\xa318.1m]
+FAILED tests/test_conversion2_period_movement.py::TestTheAnswersAreUnchanged::test_movement_figures[What has changed since last month in the acquired book?-None-\xa36.6m]
+FAILED tests/test_conversion2_period_movement.py::TestTheAnswersAreUnchanged::test_movement_figures[What has changed since last month in the direct book?-None-\xa311.5m]
+FAILED tests/test_conversion2_period_movement.py::TestTheAnswersAreUnchanged::test_movement_figures[What has changed since last month?-acquired-\xa36.6m]
+FAILED tests/test_pipeline_stage_contract.py::test_the_bare_word_stage_is_not_self_evidencing
+FAILED tests/test_conversion3_geo_exposure.py::TestTheAnswersAreUnchanged::test_the_whole_book_is_unchanged
+FAILED tests/test_conversion3_geo_exposure.py::TestTheAnswersAreUnchanged::test_a_named_scope_narrows_and_says_so[Geographic exposure for the acquired book-expected0]
+FAILED tests/test_conversion3_geo_exposure.py::TestTheAnswersAreUnchanged::test_a_named_scope_narrows_and_says_so[Geographic exposure for the direct book-expected1]
+FAILED tests/test_conversion3_geo_exposure.py::TestTheAnswersAreUnchanged::test_the_caller_scope_narrows_the_same_way_the_question_does
+FAILED tests/test_governance_dependency_direction.py::test_capability_layer_has_no_source_level_dependency_on_the_http_module
+FAILED tests/test_p1l_population_propagation.py::test_a_population_the_route_tried_and_could_not_express_is_disclosed
+FAILED tests/test_p1l_population_propagation.py::test_a_field_this_book_does_not_carry_is_disclosed_not_refused
+FAILED tests/test_portfolio_identity_alignment.py::TestReactAndMiShareTheModel::test_react_builds_its_selector_from_the_governed_registry
+FAILED tests/test_portfolio_identity_alignment.py::TestNamedPortfolioLabelsDoNotResolve::test_a_react_label_widens_to_the_whole_book[Summarise the ALP Origination Book]
+FAILED tests/test_portfolio_identity_alignment.py::TestNamedPortfolioLabelsDoNotResolve::test_a_react_label_widens_to_the_whole_book[portfolio summary for ALP Origination Book]
+FAILED tests/test_portfolio_identity_alignment.py::TestNamedPortfolioLabelsDoNotResolve::test_a_react_label_widens_to_the_whole_book[Summarise the spv1_sponsored portfolio]
+FAILED tests/test_portfolio_identity_alignment.py::TestNamedPortfolioLabelsDoNotResolve::test_a_react_label_widens_to_the_whole_book[portfolio summary for spv1_sponsored]
+FAILED tests/test_portfolio_identity_alignment.py::TestVintageIsNotPortfolioIdentity::test_a_point_in_time_vintage_year_is_dropped_without_disclosure
+FAILED tests/test_portfolio_summary_conversion_prerequisites.py::TestPhase1EPopulationSemanticsHold::test_funded_book_is_every_funded_asset
+FAILED tests/test_portfolio_summary_conversion_prerequisites.py::TestPhase1EPopulationSemanticsHold::test_direct_book_is_the_direct_portfolios
+FAILED tests/test_portfolio_summary_conversion_prerequisites.py::TestPhase1EPopulationSemanticsHold::test_acquired_book_is_the_acquired_portfolios
+FAILED tests/test_portfolio_summary_conversion_prerequisites.py::TestPhase1EPopulationSemanticsHold::test_a_named_portfolio_is_only_that_portfolio
+FAILED tests/test_portfolio_summary_conversion_prerequisites.py::TestPhase1EPopulationSemanticsHold::test_a_valid_portfolio_with_no_funded_rows_states_it
+FAILED tests/test_portfolio_summary_conversion_prerequisites.py::TestPhase1EPopulationSemanticsHold::test_the_back_book_label_collision_still_refuses
+FAILED tests/test_portfolio_summary_conversion_prerequisites.py::TestThePlanMustResolveThroughTheRegistry::test_production_resolves_a_governed_id_list
+FAILED tests/test_conversion1_portfolio_summary.py::TestTheRoutedPathReallyBuildsAContract::test_a_routed_question_produces_a_contract
+FAILED tests/test_conversion1_portfolio_summary.py::TestThePopulationIsGoverned::test_a_category_selects_governed_ids_not_a_type_column
+FAILED tests/test_conversion1_portfolio_summary.py::TestUnresolvableDoesNotBlockButDoesNotWiden::test_an_unresolvable_scope_still_refuses_from_this_route[Summarise the acquired_001 book]
+FAILED tests/test_conversion1_portfolio_summary.py::TestUnresolvableDoesNotBlockButDoesNotWiden::test_an_unresolvable_scope_still_refuses_from_this_route[Summarise the Highgate Mortgages Book]
+FAILED tests/test_conversion1_portfolio_summary.py::TestTheContractDecidesPrecedence::test_precedence_end_to_end[Please provide a portfolio summary-acquired-3,909]
+FAILED tests/test_conversion1_portfolio_summary.py::TestTheContractDecidesPrecedence::test_precedence_end_to_end[Please provide a portfolio summary-None-11,035]
+FAILED tests/test_conversion1_portfolio_summary.py::TestTheContractDecidesPrecedence::test_precedence_end_to_end[Summarise the acquired book-direct-3,909]
+FAILED tests/test_conversion1_portfolio_summary.py::TestTheContractDecidesPrecedence::test_precedence_end_to_end[Summarise the funded book-acquired-11,035]
+FAILED tests/test_agent_identity_and_api.py::test_the_easy_auth_guard_exempts_the_agent_prefix
+FAILED tests/test_conversion4_funded_bridge.py::TestTheAnswersAreUnchanged::test_a_grouped_bridge_delivers_the_same_figures
+FAILED tests/test_conversion4_funded_bridge.py::TestTheAnswersAreUnchanged::test_a_scoped_bridge_is_unchanged
+FAILED tests/test_source_scope_production_semantics.py::TestProductionPrecedence::test_case_d_an_unresolvable_scope_widens_to_the_whole_book
+FAILED tests/test_source_scope_production_semantics.py::TestGovernedVsRawResolution::test_on_the_shipped_book_both_paths_coincide
+FAILED tests/test_migration_preregistered.py::TestT3Acceptance::test_t3_artifact_carries_both_a_period_axis_and_a_region_breakdown
+FAILED tests/test_migration_preregistered.py::TestT3Acceptance::test_t3_reconciles_to_the_shipped_t1_series_period_by_period
+FAILED tests/test_migration_preregistered.py::TestT3Acceptance::test_t3_declares_the_dimension_it_grouped_by
+51 failed, 473 passed, 390 skipped, 4 xfailed, 1 warning in 27.20s
+EXIT=1

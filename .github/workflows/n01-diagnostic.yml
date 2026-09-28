@@ -1,0 +1,85 @@
+name: N01 diagnostic — read the App Service log around the 500
+
+# READ ONLY, AND THAT IS THE WHOLE CONTRACT. No question is asked, no model is
+# called, no MI endpoint is touched, no configuration is changed and the spent
+# bank is neither re-read for expectations nor re-scored. It opens App Service
+# log files over the Kudu VFS — the same read-only door the evidence sink is read
+# through — and prints the lines inside N01's own request window.
+#
+# WHY THE LOGS. N01 returned HTTP 500 and the sink was polled for 120 seconds
+# during the run without a record ever appearing, so the request failed before
+# `plan_serving_canary` recorded anything. The application log is the only place
+# the cause can be.
+#
+# WHY THE WINDOW IS NARROW. N01 was asked at 14:23:26Z and the envelope returned
+# after 33.5 seconds. A wider window would pull in the other four questions and
+# invite reading their traces as this one's.
+
+on:
+  push:
+    branches: [ 'claude/wizardly-faraday-o712ib' ]
+    paths: [ '.github/workflows/n01-diagnostic.yml' ]
+  workflow_dispatch:
+    inputs:
+      dir:
+        default: /home/LogFiles
+        required: true
+      start:
+        default: '2026-09-13T14:23:20'
+        required: true
+      end:
+        default: '2026-09-13T14:24:10'
+        required: true
+      ref:
+        default: ''
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: n01-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  read:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: The spent bank must still hash to its pin
+        run: |
+          set -euo pipefail
+          D=due_diligence/evidence/metric_delta_output_contract
+          RECOMPUTED="$(sha256sum "$D/delta_contract_bank_manifest.json" | cut -d' ' -f1)"
+          PINNED="$(cut -d' ' -f1 "$D/delta_contract_bank_manifest.sha256")"
+          if [ "$RECOMPUTED" != "$PINNED" ]; then
+            echo "::error::the spent bank was edited after hashing"; exit 1
+          fi
+          echo "spent bank intact: $PINNED"
+
+      - name: Read the log around the failing request
+        env:
+          AZURE_MI_API_PUBLISH_PROFILE: ${{ secrets.AZURE_MI_API_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          python due_diligence/evidence/metric_delta_output_contract/n01_diagnostic.py \
+            --dir "${{ inputs.dir || '/home/LogFiles' }}" \
+            --start "${{ inputs.start || '2026-09-13T14:23:20' }}" \
+            --end "${{ inputs.end || '2026-09-13T14:24:10' }}" \
+            --out n01_diagnostic.json
+
+      - name: Publish the projection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: n01-diagnostic
+          path: n01_diagnostic.json
+          if-no-files-found: warn

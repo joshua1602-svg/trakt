@@ -1,0 +1,375 @@
+............................................................................................................. [  5%]
+........................................................................ [  9%]
+......................................................F.F..F............ [ 13%]
+.......F................................................................ [ 17%]
+...............................FF.................................F..... [ 21%]
+.................F...................................................... [ 25%]
+........................................................................ [ 29%]
+........................................................................ [ 33%]
+.......................................................... [ 36%]
+........................................................................ [ 40%]
+........................................................................ [ 44%]
+........................................................................ [ 48%]
+........................................................................ [ 52%]
+.............................................................. [ 55%]
+........................................................................ [ 59%]
+...............ssss........................ss........................... [ 63%]
+........................................................................ [ 67%]
+........................................................................ [ 71%]
+................................................FF...................... [ 75%]
+..................................................... [ 78%]
+.................................................................. [ 81%]
+....................................................................s... [ 85%]
+........................................................................ [ 89%]
+...................................F............................. [ 92%]
+............................................................... [ 96%]
+............................................. [ 98%]
+.....................                                                    [100%]
+=================================== FAILURES ===================================
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='collateral_geography only', lens='total') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : collateral_geography only / total bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='collateral_geography only', lens='direct') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : collateral_geography only / direct bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='collateral_geography only', lens='acquired') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : collateral_geography only / acquired bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='canonical_region_reporting only', lens='total') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : canonical_region_reporting only / total bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='canonical_region_reporting only', lens='direct') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : canonical_region_reporting only / direct bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='canonical_region_reporting only', lens='acquired') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : canonical_region_reporting only / acquired bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='both present', lens='total') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : both present / total bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='both present', lens='direct') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : both present / direct bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ TestOneRegionPredicatePerRequest.test_every_frame_and_lens_binds_exactly_one_region_field (frame='both present', lens='acquired') _
+
+self = <mi_agent_api.tests.test_a_region_request_binds_one_field.TestOneRegionPredicatePerRequest testMethod=test_every_frame_and_lens_binds_exactly_one_region_field>
+
+    def test_every_frame_and_lens_binds_exactly_one_region_field(self):
+        for frame_name, columns in _FRAMES.items():
+            for lens_name, lens in _LENSES.items():
+                with self.subTest(frame=frame_name, lens=lens_name):
+                    envelope, frame = _ask(columns, lens)
+                    region = self._region_filters(envelope)
+>                   self.assertEqual(
+                        len(region), 1,
+                        "%s / %s bound %s" % (frame_name, lens_name, region))
+E                   AssertionError: 0 != 1 : both present / acquired bound {}
+
+mi_agent_api/tests/test_a_region_request_binds_one_field.py:146: AssertionError
+_ test_point_in_time_question_never_needs_a_run_id[Where is the book most concentrated by region?] _
+
+question = 'Where is the book most concentrated by region?'
+
+    @pytest.mark.parametrize("question", _POINT_IN_TIME_QUESTIONS)
+    def test_point_in_time_question_never_needs_a_run_id(question):
+        """A point-in-time question with NO run id must succeed on BOTH channels and
+        must never be downgraded to a run-scoped 'no funded frame' answer."""
+        react = _react(question)
+        copilot = _copilot(question)
+    
+>       assert react["ok"] is True, f"React failed: {react.get('error')}"
+E       AssertionError: React failed: I can't build a geographic exposure view for this book: no ITL3 field and no property postcode on the tape.
+E       assert False is True
+
+mi_agent_api/tests/test_channel_parity.py:273: AssertionError
+_ test_point_in_time_question_never_needs_a_run_id[Show balance by collateral region.] _
+
+question = 'Show balance by collateral region.'
+
+    @pytest.mark.parametrize("question", _POINT_IN_TIME_QUESTIONS)
+    def test_point_in_time_question_never_needs_a_run_id(question):
+        """A point-in-time question with NO run id must succeed on BOTH channels and
+        must never be downgraded to a run-scoped 'no funded frame' answer."""
+        react = _react(question)
+        copilot = _copilot(question)
+    
+>       assert react["ok"] is True, f"React failed: {react.get('error')}"
+E       AssertionError: React failed: 'Region' is not available in this dataset. This book does not report it, so the question cannot be answered from the current data (no value was fabricated).
+E       assert False is True
+
+mi_agent_api/tests/test_channel_parity.py:273: AssertionError
+_____________ test_geography_regression_matches_react_row_for_row ______________
+
+    def test_geography_regression_matches_react_row_for_row():
+        """The exact failure this refactor fixes: regional concentration with no run
+        id. Both channels must return the same ranked exposure rows."""
+        question = "Where is the book most concentrated by region?"
+        react = _react(question)
+        copilot = _copilot(question)
+    
+>       react_rows = _data_artifacts(react)[0]["rows"]
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+mi_agent_api/tests/test_channel_parity.py:291: IndexError
+___________________ test_cumulative_cohort_conversion_routes ___________________
+
+    def test_cumulative_cohort_conversion_routes():
+        r = _ask("What is our cumulative cohort conversion?", view="pipeline")
+>       assert r["ok"] is True and r["metadata"]["route"] == "cohort_conversion"
+E       assert (False is True)
+
+mi_agent_api/tests/test_chat_routing_e2e.py:286: AssertionError
+_____________ TestRoutes.test_history_reports_a_controlled_absence _____________
+
+self = <mi_agent_api.tests.test_concentration_tests_api.TestRoutes object at 0x7f83dd605d50>
+approved_config = ActiveConfiguration(client_id='client_001', portfolio_id='', version=1, status='active', tests=[ActiveTest(test_id='ct...ed_on_version=None, reason='initial', content_hash='156341c4d8b65ee7', library_version='1.0.0', schema_version='1.0.0')
+frames = (  loan_id  current_outstanding_balance collateral_geography
+0      L1                       100000          East Angl...      L3                       300000           South East
+3      L4                       250000          East Anglia)
+
+    def test_history_reports_a_controlled_absence(self, approved_config,
+                                                  frames):
+        r = client.get("/mi/concentration-tests/history",
+                       params={"portfolioId": "client_001"})
+        body = r.json()
+>       assert body["available"] is False
+E       assert True is False
+
+mi_agent_api/tests/test_concentration_tests_api.py:163: AssertionError
+_____________________ TestRoutes.test_the_route_never_500s _____________________
+
+self = <mi_agent_api.tests.test_concentration_tests_api.TestRoutes object at 0x7f83dd604d90>
+env = PosixPath('/tmp/pytest-of-root/pytest-12/test_the_route_never_500s0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f83da390c50>
+
+    def test_the_route_never_500s(self, env, monkeypatch):
+        def boom(*a, **kw):
+            raise RuntimeError("boom")
+        monkeypatch.setattr(conc_mod, "compute_concentration_tests", boom)
+        r = client.get("/mi/concentration-tests",
+                       params={"portfolioId": "client_001"})
+        assert r.status_code == 200
+>       assert r.json()["available"] is False
+E       assert True is False
+
+mi_agent_api/tests/test_concentration_tests_api.py:173: AssertionError
+________________ test_mi_valid_question_uses_deterministic_path ________________
+
+live_dataset = None
+
+    def test_mi_valid_question_uses_deterministic_path(live_dataset):
+        r = client.post("/v1/copilot/mi/query",
+                        json={"question": "What is the total current balance?"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["ok"] is True, body
+>       assert body["dataSourceKind"] == "explicit_csv"      # governed, not synthetic
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert 'funded_mi_prepared_dataset' == 'explicit_csv'
+E         
+E         - explicit_csv
+E         + funded_mi_prepared_dataset
+
+mi_agent_api/tests/test_copilot_actions.py:113: AssertionError
+_____________ test_mi_row_truncation_is_explicit_and_deterministic _____________
+
+live_dataset = None
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f83db086dd0>
+
+    def test_mi_row_truncation_is_explicit_and_deterministic(live_dataset, monkeypatch):
+        import mi_agent_api.copilot_actions as ca
+    
+        monkeypatch.setattr(ca, "_MAX_SUPPORTING_ROWS", 3)
+        r = client.post("/v1/copilot/mi/query",
+                        json={"question": "Show balance by collateral region."})
+        body = r.json()
+>       table = next(a for a in body["supportingValues"] if a["kind"] in ("table", "chart"))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+mi_agent_api/tests/test_copilot_actions.py:439: StopIteration
+_ TestClassification.test_a_new_arrival_is_not_given_a_prior_stage_it_never_had _
+
+self = <mi_agent_api.tests.test_pipeline_stage_transition.TestClassification testMethod=test_a_new_arrival_is_not_given_a_prior_stage_it_never_had>
+
+    def test_a_new_arrival_is_not_given_a_prior_stage_it_never_had(self):
+        """A synthetic source token here would be indistinguishable downstream
+        from a real governed stage."""
+        e = self._events(frame([{"id": "A", "amount": 100}]), frame([]))
+>       self.assertIsNone(e.loc["A", "source_stage"])
+E       AssertionError: nan is not None
+
+mi_agent_api/tests/test_pipeline_stage_transition.py:185: AssertionError
+________ TestClassification.test_a_prior_only_identifier_is_a_departure ________
+
+self = <mi_agent_api.tests.test_pipeline_stage_transition.TestClassification testMethod=test_a_prior_only_identifier_is_a_departure>
+
+    def test_a_prior_only_identifier_is_a_departure(self):
+        e = self._events(frame([]), frame([{"id": "A", "amount": 100, "stage": "OFFER"}]))
+        self.assertEqual(e.loc["A", "event_class"], md.EVENT_DEPARTURE)
+        self.assertEqual(e.loc["A", "source_stage"], "OFFER")
+>       self.assertIsNone(e.loc["A", "destination_stage"])
+E       AssertionError: nan is not None
+
+mi_agent_api/tests/test_pipeline_stage_transition.py:206: AssertionError
+___________ test_an_unavailable_dimension_is_refused_not_substituted ___________
+
+    def test_an_unavailable_dimension_is_refused_not_substituted():
+        """P0 contract change, deliberate and asserted here rather than dropped.
+    
+        ``coverage by borrower type`` previously answered ``ok:true`` on this
+        dataset: ``borrower_type`` is absent, so the parser reached for
+        ``amortisation_type`` and the user received a confident single-bucket
+        breakdown of a dimension they never named. That is the DIMENSION form of the
+        measure substitution this module already forbids, and the P0 launch
+        invariant rules it out explicitly — an unavailable requested field is never
+        silently replaced by an available one.
+    
+        The question is still parsed and still routed; what changed is that the
+        substitution now fails closed instead of being presented as the answer.
+        """
+        body = ask("coverage by borrower type")
+        assert body["ok"] is False
+        error = (body.get("error") or "").lower()
+        assert "borrower type" in error
+        # The substitute is NAMED, so the refusal is actionable rather than opaque.
+>       assert "amortisation" in error
+E       assert 'amortisation' in "'borrower type' is not available in this dataset. this book does not report it, so the question cannot be answered from the current data (no value was fabricated)."
+
+mi_agent_api/tests/test_single_parse_and_substitution.py:190: AssertionError
+------------------------------ Captured log call -------------------------------
+INFO     mi_agent_api.perf:perf_http.py:133 perf {"caches": {}, "counter_ms": {}, "counters": {}, "event": "perf.request", "method": "POST", "response_bytes": 5975, "route": "/mi/query", "stage_calls": {"mi_query.geography": 1, "mi_query.parse": 1, "mi_query.resolve_frame": 1, "pipeline_root_mirror": 1}, "stages": {"mi_query.geography": 2.67, "mi_query.parse": 123.99, "mi_query.resolve_frame": 0.26, "pipeline_root_mirror": 0.01}, "status": 200, "tenant_id": "client_001", "total_ms": 178.29}
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.11/dist-packages/starlette/testclient.py:53
+  /usr/local/lib/python3.11/dist-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SUBFAILED(frame='collateral_geography only', lens='total') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='collateral_geography only', lens='direct') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='collateral_geography only', lens='acquired') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='canonical_region_reporting only', lens='total') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='canonical_region_reporting only', lens='direct') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='canonical_region_reporting only', lens='acquired') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='both present', lens='total') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='both present', lens='direct') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+SUBFAILED(frame='both present', lens='acquired') mi_agent_api/tests/test_a_region_request_binds_one_field.py::TestOneRegionPredicatePerRequest::test_every_frame_and_lens_binds_exactly_one_region_field
+FAILED mi_agent_api/tests/test_channel_parity.py::test_point_in_time_question_never_needs_a_run_id[Where is the book most concentrated by region?]
+FAILED mi_agent_api/tests/test_channel_parity.py::test_point_in_time_question_never_needs_a_run_id[Show balance by collateral region.]
+FAILED mi_agent_api/tests/test_channel_parity.py::test_geography_regression_matches_react_row_for_row
+FAILED mi_agent_api/tests/test_chat_routing_e2e.py::test_cumulative_cohort_conversion_routes
+FAILED mi_agent_api/tests/test_concentration_tests_api.py::TestRoutes::test_history_reports_a_controlled_absence
+FAILED mi_agent_api/tests/test_concentration_tests_api.py::TestRoutes::test_the_route_never_500s
+FAILED mi_agent_api/tests/test_copilot_actions.py::test_mi_valid_question_uses_deterministic_path
+FAILED mi_agent_api/tests/test_copilot_actions.py::test_mi_row_truncation_is_explicit_and_deterministic
+FAILED mi_agent_api/tests/test_pipeline_stage_transition.py::TestClassification::test_a_new_arrival_is_not_given_a_prior_stage_it_never_had
+FAILED mi_agent_api/tests/test_pipeline_stage_transition.py::TestClassification::test_a_prior_only_identifier_is_a_departure
+FAILED mi_agent_api/tests/test_single_parse_and_substitution.py::test_an_unavailable_dimension_is_refused_not_substituted
+20 failed, 1820 passed, 7 skipped, 1 warning, 118 subtests passed in 262.50s (0:04:22)
+EXIT=1

@@ -1,0 +1,3805 @@
+{
+ "source_run": "interpretation_v2/135",
+ "non_invariant_canonicals": 27,
+ "invariant_before": 18,
+ "canonicals_total": 45,
+ "resolved_by_normal_form_alone": [
+  "NL9"
+ ],
+ "counts_by_cause": {
+  "REPRESENTATIONAL": 12,
+  "INTERPRETATION_POLICY": 7,
+  "MODEL_MISS": 2,
+  "GENUINE_AMBIGUITY": 5,
+  "OTHER": 1
+ },
+ "canonicals_by_cause": {
+  "REPRESENTATIONAL": [
+   "NL2",
+   "NL5",
+   "NL9",
+   "Q12",
+   "Q17",
+   "Q18",
+   "Q19",
+   "Q20",
+   "Q22",
+   "Q23",
+   "SM07",
+   "SM08"
+  ],
+  "INTERPRETATION_POLICY": [
+   "NL6",
+   "NL7",
+   "Q08",
+   "Q10",
+   "Q24",
+   "Q25",
+   "SM09"
+  ],
+  "MODEL_MISS": [
+   "Q16",
+   "Q21"
+  ],
+  "GENUINE_AMBIGUITY": [
+   "BB01",
+   "NL1",
+   "NL3",
+   "NL4",
+   "NL8"
+  ],
+  "OTHER": [
+   "Q09"
+  ]
+ },
+ "cases": [
+  {
+   "canonical_id": "BB01",
+   "variants": [
+    {
+     "question_id": "BB01A",
+     "question": "What is the borrowing-base headroom?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "borrowing_base",
+      "operation": "headroom",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "borrowing_base_headroom"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "BB01B",
+     "question": "How much headroom do we have under the borrowing base?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "borrowing_base",
+      "operation": "headroom",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "borrowing_base_headroom"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "BB01C",
+     "question": "What is the headroom?",
+     "outcome": "CLARIFY",
+     "reason_codes": [
+      "MODEL_FLAGGED_AMBIGUITY"
+     ],
+     "normal_form": {
+      "capability": "borrowing_base",
+      "operation": "headroom",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outcome"
+   ],
+   "first_material_difference": "measure_set",
+   "all_material_differences": [
+    "measure_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "GENUINE_AMBIGUITY",
+   "adjudication_reason": "The three frozen variants are \"What is the borrowing-base headroom?\", \"How much headroom do we have under the borrowing base?\" and \"What is the headroom?\" The third names no subject: headroom under the facility, or against a concentration limit? BB01C clarified, and that is the correct outcome \u2014 this canonical SHOULD be non-invariant, because its third variant is a genuinely less specific question.",
+   "policy_detail": [
+    "added unrequested measure"
+   ]
+  },
+  {
+   "canonical_id": "NL1",
+   "variants": [
+    {
+     "question_id": "NL1A",
+     "question": "How has the profile of our new lending changed over the last few months?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "series",
+      "population": [
+       "funded",
+       "all",
+       "front_book"
+      ],
+      "measure_set": [
+       "loan",
+       "original_loan_to_value",
+       "original_principal_balance",
+       "youngest_borrower_age"
+      ],
+      "dimension_set": [],
+      "output_nesting": 4,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "series",
+       "monthly",
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL1B",
+     "question": "Are we originating different types of loans now compared with a few months ago?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "direct",
+       "any"
+      ],
+      "measure_set": [
+       "loan",
+       "original_principal_balance"
+      ],
+      "dimension_set": [
+       "erm_product_type"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL1C",
+     "question": "How does recent lending compare with what we were originating earlier in the year?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "original_principal_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       null,
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "capability",
+    "operation",
+    "population",
+    "period",
+    "outputs"
+   ],
+   "first_material_difference": "capability",
+   "all_material_differences": [
+    "capability",
+    "operation",
+    "population",
+    "measure_set",
+    "dimension_set",
+    "output_nesting",
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "GENUINE_AMBIGUITY",
+   "adjudication_reason": "\"The profile of our new lending\" names no measures and no window. Capability, operation, measures, dimensions and time all differ. expected_semantics.yaml already records an unresolved tension on this question's population; marked human_review before any run.",
+   "policy_detail": [
+    "added unrequested measure",
+    "added unrequested dimension",
+    "added unrequested capability/analysis"
+   ]
+  },
+  {
+   "canonical_id": "NL2",
+   "variants": [
+    {
+     "question_id": "NL2A",
+     "question": "When do we expect the funded book to reach \u00a3100m?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        100000000
+       ]
+      ]
+     }
+    },
+    {
+     "question_id": "NL2B",
+     "question": "At the current run rate, when should we get to \u00a3100m of loans?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        100000000
+       ]
+      ]
+     }
+    },
+    {
+     "question_id": "NL2C",
+     "question": "When are we forecast to cross \u00a3100m of funded balances?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        100000000
+       ]
+      ]
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "population"
+   ],
+   "first_material_difference": "population",
+   "all_material_differences": [
+    "population"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "Same as Q23 and on the same axis: A and C said funded, B said forecast, everything else including the \u00a3100m target identical. The same undefined `population.base` semantic for a forward-looking question.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "NL3",
+   "variants": [
+    {
+     "question_id": "NL3A",
+     "question": "How much do we currently have at offer and how much of it is likely to complete?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline",
+      "operation": "point_in_time",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_funded_balance",
+       "pipeline_amount"
+      ],
+      "dimension_set": [],
+      "output_nesting": 2,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "OFFER"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL3B",
+     "question": "What's the value of outstanding offers, and when do we expect them to fund?",
+     "outcome": "REFUSE",
+     "reason_codes": [
+      "UNSUPPORTED_COMPOSITION"
+     ],
+     "normal_form": {
+      "capability": "pipeline",
+      "operation": "summary",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "pipeline_amount"
+      ],
+      "dimension_set": [
+       "forecast_funding_date"
+      ],
+      "output_nesting": 2,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "OFFER"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL3C",
+     "question": "Of the current offer pipeline, how much should convert and over what timeframe?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_projection",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_completion_rate",
+       "forecast_funded_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "OFFER"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outcome"
+   ],
+   "first_material_difference": "capability",
+   "all_material_differences": [
+    "capability",
+    "operation",
+    "measure_set",
+    "dimension_set",
+    "output_nesting",
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "GENUINE_AMBIGUITY",
+   "adjudication_reason": "A stock, a projection and a timing across two capabilities. NL3B refused. Marked human_review; the brief's own ruling was not to settle it here.",
+   "policy_detail": [
+    "added unrequested measure",
+    "added unrequested dimension",
+    "added unrequested capability/analysis"
+   ]
+  },
+  {
+   "canonical_id": "NL4",
+   "variants": [
+    {
+     "question_id": "NL4A",
+     "question": "What completion rate are we currently running at?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "point_in_time",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_completion_rate"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL4B",
+     "question": "How many loans are we completing at the moment?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline",
+      "operation": "point_in_time",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "pipeline_case_count"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "COMPLETED"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL4C",
+     "question": "What's our recent run rate for completions?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "arrivals",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "amount_moved",
+       "cases_arrived"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "destination_stage",
+        "eq",
+        "COMPLETED"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "range",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "capability",
+    "operation",
+    "population",
+    "period",
+    "filters",
+    "outputs"
+   ],
+   "first_material_difference": "capability",
+   "all_material_differences": [
+    "capability",
+    "operation",
+    "population",
+    "measure_set",
+    "filters",
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "GENUINE_AMBIGUITY",
+   "adjudication_reason": "\"What completion rate are we running at?\" Independent truth Q4.2 classifies this as a RUN_RATE operation, which this vocabulary does not carry. Run 6 produced three different capabilities \u2014 forecast, pipeline and pipeline_stage_movement \u2014 because none of them is the right one. A vocabulary gap presenting as ambiguity, already recorded.",
+   "policy_detail": [
+    "added unrequested measure",
+    "added unrequested capability/analysis"
+   ]
+  },
+  {
+   "canonical_id": "NL5",
+   "variants": [
+    {
+     "question_id": "NL5A",
+     "question": "Are any of our concentration limits likely to breach over the next three months?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "forecast_projection",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       "monthly",
+       0,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL5B",
+     "question": "Do we expect to hit any concentration limits in the next quarter?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "forecast_projection",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       "quarterly",
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL5C",
+     "question": "Which concentration limits are at risk of being breached over the next three months?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "forecast_projection",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       "monthly",
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "period"
+   ],
+   "first_material_difference": "time",
+   "all_material_differences": [
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "All three agree on capability, operation, measures and dimensions. A and C differ ONLY in periods_back 0 versus absent \u2014 the same horizon written two ways \u2014 which is sufficient on its own to break invariance. (B additionally uses grain=quarterly because its question says \"next quarter\" rather than \"next three months\"; that part is a wording difference, and it is not what splits A from C.)",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "NL6",
+   "variants": [
+    {
+     "question_id": "NL6A",
+     "question": "Which concentration limits have the least headroom?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_headroom"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL6B",
+     "question": "Where are we closest to our limits?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_headroom",
+       "limit_utilisation"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL6C",
+     "question": "Which of our limits are currently most at risk?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_headroom",
+       "limit_utilisation"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outputs"
+   ],
+   "first_material_difference": "measure_set",
+   "all_material_differences": [
+    "measure_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "INTERPRETATION_POLICY",
+   "adjudication_reason": "\"Which concentration limits have the least headroom?\" \u2014 identical capability, operation and dimension. A reported {limit_headroom}; B and C added limit_utilisation. The question names one measure; two readers volunteered a companion. No schema change decides this.",
+   "policy_detail": [
+    "added unrequested measure"
+   ]
+  },
+  {
+   "canonical_id": "NL7",
+   "variants": [
+    {
+     "question_id": "NL7A",
+     "question": "How does the front book compare with our older lending from a risk perspective?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_loan_to_value",
+       "youngest_borrower_age"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "front_book",
+       "back_book"
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL7B",
+     "question": "Are older loans riskier than the loans we've originated recently?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_loan_to_value"
+      ],
+      "dimension_set": [
+       "seasoning_segment"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "back_book",
+       "front_book"
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL7C",
+     "question": "How different is the risk profile of recent originations versus the back book?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_interest_rate",
+       "current_loan_to_value",
+       "current_outstanding_balance",
+       "youngest_borrower_age"
+      ],
+      "dimension_set": [
+       "seasoning_segment"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "front_book",
+       "back_book"
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outputs"
+   ],
+   "first_material_difference": "measure_set",
+   "all_material_differences": [
+    "measure_set",
+    "dimension_set",
+    "comparison"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "INTERPRETATION_POLICY",
+   "adjudication_reason": "All three understood the comparison (population_pair over the seasoning split). The measure sets are two, one and four: \"riskier\" names no single governed measure, and each reader chose a different basket of proxies for it. The core request is agreed; the scope of the answer is not.",
+   "policy_detail": [
+    "added unrequested measure",
+    "added unrequested dimension"
+   ]
+  },
+  {
+   "canonical_id": "NL8",
+   "variants": [
+    {
+     "question_id": "NL8A",
+     "question": "How has lending to direct changed compared with acquired?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       null,
+       1,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "direct",
+       "acquired"
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL8B",
+     "question": "How has the balance of direct loans moved relative to acquired loans?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       null,
+       1,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "direct",
+       "acquired"
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL8C",
+     "question": "Are direct and acquired balances developing differently over time?",
+     "outcome": "CLARIFY",
+     "reason_codes": [
+      "AMBIGUOUS_PERIOD"
+     ],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "series",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "series",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "direct",
+       "acquired"
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outcome"
+   ],
+   "first_material_difference": "capability",
+   "all_material_differences": [
+    "capability",
+    "operation",
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "GENUINE_AMBIGUITY",
+   "adjudication_reason": "Independent truth gives \"two or more governed snapshots\" without fixing whether that is a pair or a series, and the question does not either. A and B chose relative_pair, C chose series and clarified. Marked human_review.",
+   "policy_detail": [
+    "added unrequested capability/analysis"
+   ]
+  },
+  {
+   "canonical_id": "NL9",
+   "variants": [
+    {
+     "question_id": "NL9A",
+     "question": "What do we expect the funded book to grow to based on the current pipeline?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_projection",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_funded_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL9B",
+     "question": "Where is the funded balance forecast to get to from today's pipeline?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_projection",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_funded_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "NL9C",
+     "question": "If the current pipeline converts as expected, what will our funded balance be?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_projection",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_funded_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "plan_identity_unexplained"
+   ],
+   "first_material_difference": null,
+   "all_material_differences": [],
+   "resolved_by_normal_form": true,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "The three plans are byte-identical except time.labels: NL9B carried [\"today's pipeline\"], NL9A and NL9C carried none. Period labels are the question's own WORDS and are load-bearing only for explicit_period, where they are the sole statement of which period. Carrying them in plan identity for every other form makes wording a difference in authorised work. The normal form resolves this canonical on its own.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "Q08",
+   "variants": [
+    {
+     "question_id": "Q08A",
+     "question": "Where are our largest concentrations today?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "concentration",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "concentration_share"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q08B",
+     "question": "What are the biggest concentration exposures in the book?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "concentration",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "concentration_exposure"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q08C",
+     "question": "Summarise the main current portfolio concentrations.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "concentration",
+      "operation": "summary",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "concentration_exposure",
+       "concentration_share"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "operation",
+    "outputs"
+   ],
+   "first_material_difference": "operation",
+   "all_material_differences": [
+    "operation",
+    "measure_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "INTERPRETATION_POLICY",
+   "adjudication_reason": "A and B both rank, and differ only in WHICH measure \u2014 concentration_share against concentration_exposure \u2014 for the same request. That is a policy choice between two adjacent measures. C additionally summarises rather than ranks, which its wording supports.",
+   "policy_detail": [
+    "added unrequested measure"
+   ]
+  },
+  {
+   "canonical_id": "Q09",
+   "variants": [
+    {
+     "question_id": "Q09A",
+     "question": "Are any concentration limits currently breached or close to breach?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "summary",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom",
+       "limit_utilisation"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q09B",
+     "question": "Which of our concentration tests are most at risk today?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom",
+       "limit_utilisation"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q09C",
+     "question": "Summarise our current position against the concentration limits.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "summary",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom",
+       "limit_utilisation"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "operation"
+   ],
+   "first_material_difference": "operation",
+   "all_material_differences": [
+    "operation"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "OTHER",
+   "adjudication_reason": "Identical capability, measures and dimensions in all three. The operations are summary, rank, summary \u2014 and the wordings are \"Are any limits breached or close to breach?\" (a status), \"Which tests are most at risk today?\" (an ordering) and \"Summarise our current position\" (a summary). The frozen variants ask three different shapes of the same subject, so divergence here is correct and must not be normalised away.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "Q10",
+   "variants": [
+    {
+     "question_id": "Q10A",
+     "question": "Summarise the current pipeline.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline",
+      "operation": "summary",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q10B",
+     "question": "Give me an overview of the pipeline by size and stage.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline",
+      "operation": "breakdown",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "dimension_set": [
+       "pipeline_stage",
+       "ticket_bucket"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q10C",
+     "question": "What does the current pipeline look like?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline",
+      "operation": "summary",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "pipeline_amount",
+       "pipeline_case_count"
+      ],
+      "dimension_set": [
+       "pipeline_stage"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "operation",
+    "outputs"
+   ],
+   "first_material_difference": "operation",
+   "all_material_differences": [
+    "operation",
+    "dimension_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "INTERPRETATION_POLICY",
+   "adjudication_reason": "Identical measures. Dimensions are none, {pipeline_stage, ticket_bucket}, and {pipeline_stage}. Q10B's question does say \"by size and stage\", so part of this is wording \u2014 but Q10C added a stage grouping its question never asked for, and that is policy.",
+   "policy_detail": [
+    "added unrequested dimension"
+   ]
+  },
+  {
+   "canonical_id": "Q12",
+   "variants": [
+    {
+     "question_id": "Q12A",
+     "question": "Chart the balance by LTV bucket and borrower-age bucket.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "age_bucket",
+       "ltv_bucket"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q12B",
+     "question": "Show me balance split by both LTV band and age band.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "age_bucket",
+       "ltv_bucket"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q12C",
+     "question": "Plot portfolio balance across LTV buckets and borrower-age buckets.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "distribution",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "age_bucket",
+       "ltv_bucket"
+      ],
+      "output_nesting": 2,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "operation",
+    "outputs"
+   ],
+   "first_material_difference": "operation",
+   "all_material_differences": [
+    "operation",
+    "output_nesting"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "Same measure, same two dimensions. A and B called it operation=breakdown in one output; C called it operation=distribution in two. A grouped aggregate over governed bands is one analysis, and two OPERATION members describe it. An operation-enum overlap, not a different request.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "Q16",
+   "variants": [
+    {
+     "question_id": "Q16A",
+     "question": "For drawdown loans, show balance by region and LTV bucket.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "ltv_bucket"
+      ],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "erm_product_type",
+        "eq",
+        "drawdown"
+       ]
+      ],
+      "geography": [
+       [
+        "group_by",
+        true
+       ],
+       [
+        "level",
+        "reporting"
+       ],
+       [
+        "requested",
+        true
+       ]
+      ],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q16B",
+     "question": "Break drawdown balance down by both geography and LTV band.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "ltv_bucket"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [
+       [
+        "group_by",
+        true
+       ],
+       [
+        "level",
+        "reporting"
+       ],
+       [
+        "requested",
+        true
+       ]
+      ],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q16C",
+     "question": "Show me the regional balance by LTV bucket for drawdown loans.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "ltv_bucket"
+      ],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "erm_product_type",
+        "eq",
+        "drawdown"
+       ]
+      ],
+      "geography": [
+       [
+        "group_by",
+        true
+       ],
+       [
+        "level",
+        "reporting"
+       ],
+       [
+        "requested",
+        true
+       ]
+      ],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "filters"
+   ],
+   "first_material_difference": "filters",
+   "all_material_differences": [
+    "filters"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "MODEL_MISS",
+   "adjudication_reason": "\"Break drawdown balance down by both geography and LTV band.\" A and C bound erm_product_type == drawdown; B bound no filter at all. The product restriction is explicit in all three wordings and one variant dropped it. Identical contract, one less complete reading.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "Q17",
+   "variants": [
+    {
+     "question_id": "Q17A",
+     "question": "For the Direct book, show balance by LTV bucket, ticket-size bucket and borrower-age bucket.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "direct",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "age_bucket",
+       "ltv_bucket",
+       "ticket_bucket"
+      ],
+      "output_nesting": 3,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q17B",
+     "question": "Give me a table of Direct-book balance split by LTV band, ticket-size band and age band.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "direct",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "age_bucket",
+       "ltv_bucket",
+       "ticket_bucket"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q17C",
+     "question": "Break Direct portfolio balance down across LTV, ticket size and borrower age.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "generic_analysis",
+      "operation": "breakdown",
+      "population": [
+       "funded",
+       "direct",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "age_bucket",
+       "ltv_bucket",
+       "ticket_bucket"
+      ],
+      "output_nesting": 3,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outputs"
+   ],
+   "first_material_difference": "output_nesting",
+   "all_material_differences": [
+    "output_nesting"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "Same measure, same three dimensions, same population. A and C wrapped them in three outputs; B used one. Pure nesting.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "Q18",
+   "variants": [
+    {
+     "question_id": "Q18A",
+     "question": "How did the book change in the last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "funded_bridge",
+      "operation": "bridge",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "bridge_component",
+       "funded_balance_movement"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q18B",
+     "question": "What changed in the portfolio since last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q18C",
+     "question": "Give me a summary of how the funded book moved over the last month.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "funded_bridge",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "funded_balance_movement"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "previous_reporting_period",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "capability",
+    "operation",
+    "period",
+    "outputs"
+   ],
+   "first_material_difference": "capability",
+   "all_material_differences": [
+    "capability",
+    "operation",
+    "measure_set",
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "Same movement/bridge duplication as Q19, and messier: A is funded_bridge/bridge, B period_movement/movement, C funded_bridge/movement. Three combinations of two capabilities and two operations for one request.",
+   "policy_detail": [
+    "added unrequested measure",
+    "added unrequested capability/analysis"
+   ]
+  },
+  {
+   "canonical_id": "Q19",
+   "variants": [
+    {
+     "question_id": "Q19A",
+     "question": "How did the Direct book change last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "direct",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q19B",
+     "question": "What changed in the Direct portfolio since last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "funded_bridge",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "direct",
+       "any"
+      ],
+      "measure_set": [
+       "funded_balance_movement"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q19C",
+     "question": "Summarise the month-on-month movement in the Direct book.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "direct",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "capability",
+    "period",
+    "outputs"
+   ],
+   "first_material_difference": "capability",
+   "all_material_differences": [
+    "capability",
+    "measure_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "\"How did the Direct book change last month?\" All three agree on the period. A and C chose capability=period_movement with current_outstanding_balance; B chose funded_bridge with funded_balance_movement. Two capabilities implementing one economic analysis, and the model is choosing between internal owners.",
+   "policy_detail": [
+    "added unrequested measure",
+    "added unrequested capability/analysis"
+   ]
+  },
+  {
+   "canonical_id": "Q20",
+   "variants": [
+    {
+     "question_id": "Q20A",
+     "question": "How did drawdown loans change last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "erm_product_type",
+        "eq",
+        "drawdown"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "previous_reporting_period",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q20B",
+     "question": "What changed in the drawdown book since last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "erm_product_type",
+        "eq",
+        "drawdown"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q20C",
+     "question": "Summarise the month-on-month movement for drawdown loans.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "movement",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "erm_product_type",
+        "eq",
+        "drawdown"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "period"
+   ],
+   "first_material_difference": "time",
+   "all_material_differences": [
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "Identical in every slot except the period encoding: A used previous_reporting_period + monthly, B and C relative_pair + monthly + periods_back 1. One relative relationship, two spellings.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "Q21",
+   "variants": [
+    {
+     "question_id": "Q21A",
+     "question": "Which region added the most balance last month for loans with LTV above 50%?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "current_loan_to_value",
+        "gt",
+        "50"
+       ]
+      ],
+      "geography": [
+       [
+        "group_by",
+        true
+       ],
+       [
+        "level",
+        "reporting"
+       ],
+       [
+        "requested",
+        true
+       ]
+      ],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q21B",
+     "question": "For loans over 50% LTV, which region contributed the most balance growth since last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "canonical_region_reporting"
+      ],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "current_loan_to_value",
+        "gt",
+        "50"
+       ]
+      ],
+      "geography": [
+       [
+        "group_by",
+        true
+       ],
+       [
+        "level",
+        "reporting"
+       ],
+       [
+        "requested",
+        true
+       ]
+      ],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q21C",
+     "question": "Among loans with current LTV above 50%, where did balance increase the most over the last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "current_loan_to_value",
+        "gt",
+        "50"
+       ]
+      ],
+      "geography": [
+       [
+        "group_by",
+        true
+       ],
+       [
+        "level",
+        "reporting"
+       ],
+       [
+        "requested",
+        true
+       ]
+      ],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outputs"
+   ],
+   "first_material_difference": "dimension_set",
+   "all_material_differences": [
+    "dimension_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "MODEL_MISS",
+   "adjudication_reason": "\"Which region added the most balance last month?\" B grouped by canonical_region_reporting; A and C grouped by nothing. \"Which region\" IS the grouping, and two variants did not bind it \u2014 they planned anyway because period_movement is permitted to own its grouping, which means the miss passed silently.",
+   "policy_detail": [
+    "added unrequested dimension"
+   ]
+  },
+  {
+   "canonical_id": "Q22",
+   "variants": [
+    {
+     "question_id": "Q22A",
+     "question": "Which source portfolio contributed most to balance growth last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "rank",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [
+       "source_portfolio_id"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q22B",
+     "question": "Did Direct or Acquired add more balance during the last month?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "direct",
+       "acquired"
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q22C",
+     "question": "Which of the Direct and Acquired books drove more of the month-on-month balance increase?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "period_movement",
+      "operation": "compare",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "current_outstanding_balance"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "relative_pair",
+       "monthly",
+       1,
+       []
+      ],
+      "comparison": [
+       "population_pair",
+       "direct",
+       "acquired"
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "operation",
+    "period",
+    "outputs"
+   ],
+   "first_material_difference": "operation",
+   "all_material_differences": [
+    "operation",
+    "dimension_set",
+    "comparison"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "\"Which source portfolio contributed most to balance growth last month?\" A expressed it as rank over dimension source_portfolio_id; B and C as compare with comparison={population_pair, direct, acquired}. Ranking a two-valued dimension and comparing its two values are one request.",
+   "policy_detail": [
+    "added unrequested dimension"
+   ]
+  },
+  {
+   "canonical_id": "Q23",
+   "variants": [
+    {
+     "question_id": "Q23A",
+     "question": "When will we reach \u00a3100m of funded loans?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        100000000
+       ]
+      ]
+     }
+    },
+    {
+     "question_id": "Q23B",
+     "question": "At the current trajectory, when do we get to \u00a3100 million?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        100000000
+       ]
+      ]
+     }
+    },
+    {
+     "question_id": "Q23C",
+     "question": "When does the funded book reach the \u00a3100m milestone?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        100000000
+       ]
+      ]
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "population"
+   ],
+   "first_material_difference": "population",
+   "all_material_differences": [
+    "population"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "Identical including the target, differing only in population.base: A and B said forecast, C said funded. For a forward-looking milestone the contract never defines whether `base` names the book being projected or the projection itself, so both readings are permitted encodings of one meaning. An undefined contract semantic, not a disagreement.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "Q24",
+   "variants": [
+    {
+     "question_id": "Q24A",
+     "question": "At the current run rate, when will we reach \u00a3250m?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_funded_balance",
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        250000000
+       ]
+      ]
+     }
+    },
+    {
+     "question_id": "Q24B",
+     "question": "When are we expected to get to \u00a3250 million of funded loans?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_funded_balance",
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        250000000
+       ]
+      ]
+     }
+    },
+    {
+     "question_id": "Q24C",
+     "question": "Based on the current run rate, when does the book reach \u00a3250m?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "forecast",
+      "operation": "forecast_milestone",
+      "population": [
+       "forecast",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "forecast_milestone_date"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": [
+       [
+        "comparator",
+        "gte"
+       ],
+       [
+        "concept",
+        "forecast_funded_balance"
+       ],
+       [
+        "value",
+        250000000
+       ]
+      ]
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outputs"
+   ],
+   "first_material_difference": "measure_set",
+   "all_material_differences": [
+    "measure_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "INTERPRETATION_POLICY",
+   "adjudication_reason": "All three carry the \u00a3250m target and forecast_milestone_date. A and B also report forecast_funded_balance; C does not. \"When will we reach \u00a3250m?\" asks for a date; two readers added the balance alongside it.",
+   "policy_detail": [
+    "added unrequested measure"
+   ]
+  },
+  {
+   "canonical_id": "Q25",
+   "variants": [
+    {
+     "question_id": "Q25A",
+     "question": "Do we expect to breach any concentration tests?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "forecast_projection",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q25B",
+     "question": "Are any concentration limits likely to be breached as the book grows?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "forecast_projection",
+      "population": [
+       "funded",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "forward_looking",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "Q25C",
+     "question": "Based on the current book and forward pipeline, which concentration tests are we at risk of breaching?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "limit_assessment",
+      "operation": "headroom",
+      "population": [
+       "whole_book",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "limit_breach_status",
+       "limit_headroom",
+       "limit_utilisation"
+      ],
+      "dimension_set": [
+       "concentration_test"
+      ],
+      "output_nesting": 1,
+      "filters": [],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "operation",
+    "population",
+    "period",
+    "outputs"
+   ],
+   "first_material_difference": "operation",
+   "all_material_differences": [
+    "operation",
+    "population",
+    "measure_set",
+    "time"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "INTERPRETATION_POLICY",
+   "adjudication_reason": "Measure sets of one, two and three limit measures on identical capability and dimension. C additionally read the question as current headroom rather than a forward projection, which is a temporal miss on top of the policy divergence, and is recorded here rather than split into a second entry.",
+   "policy_detail": [
+    "added unrequested measure"
+   ]
+  },
+  {
+   "canonical_id": "SM07",
+   "variants": [
+    {
+     "question_id": "SM07A",
+     "question": "What was the amount change on cases that stayed in Application?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "stayers",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "stayer_amount_change"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "origin_stage",
+        "eq",
+        "APPLICATION"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "SM07B",
+     "question": "How much did Application stayers change in value?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "stayers",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "stayer_amount_change"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "APPLICATION"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "SM07C",
+     "question": "What was the balance amendment on cases remaining in Application?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "stayers",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "stayer_amount_change"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "APPLICATION"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "filters"
+   ],
+   "first_material_difference": "filters",
+   "all_material_differences": [
+    "filters"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "Identical except the stage filter concept: A used origin_stage == APPLICATION, B and C used pipeline_stage == APPLICATION. Two governed concepts address one stage in a stayer context.",
+   "policy_detail": [
+    "other"
+   ]
+  },
+  {
+   "canonical_id": "SM08",
+   "variants": [
+    {
+     "question_id": "SM08A",
+     "question": "Where did cases leaving Offer go?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "transition",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "cases_moved"
+      ],
+      "dimension_set": [
+       "destination_stage"
+      ],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "origin_stage",
+        "eq",
+        "OFFER"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "SM08B",
+     "question": "Break down departures from Offer by destination.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "departures",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "cases_departed"
+      ],
+      "dimension_set": [
+       "destination_stage"
+      ],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "origin_stage",
+        "eq",
+        "OFFER"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "SM08C",
+     "question": "What happened to cases that left Offer?",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "departures",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "cases_departed"
+      ],
+      "dimension_set": [
+       "destination_stage"
+      ],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "origin_stage",
+        "eq",
+        "OFFER"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "operation",
+    "outputs"
+   ],
+   "first_material_difference": "operation",
+   "all_material_differences": [
+    "operation",
+    "measure_set"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "REPRESENTATIONAL",
+   "adjudication_reason": "\"Where did cases leaving Offer go?\" All three group by destination_stage. B and C used operation=departures with cases_departed; A used operation=transition with cases_moved. A departure broken down by destination and a transition out of a stage are the same analysis under two operation names.",
+   "policy_detail": [
+    "added unrequested measure"
+   ]
+  },
+  {
+   "canonical_id": "SM09",
+   "variants": [
+    {
+     "question_id": "SM09A",
+     "question": "Reconcile Application stage this period.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "reconciliation",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "cases_arrived",
+       "cases_departed",
+       "cases_stayed",
+       "stage_closing",
+       "stage_opening"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "APPLICATION"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "SM09B",
+     "question": "Show opening, arrivals, departures and closing for Application.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "reconciliation",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "cases_arrived",
+       "cases_departed",
+       "stage_closing",
+       "stage_opening"
+      ],
+      "dimension_set": [],
+      "output_nesting": 4,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "APPLICATION"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    },
+    {
+     "question_id": "SM09C",
+     "question": "Reconcile the Application stage from opening to closing.",
+     "outcome": "PLAN",
+     "reason_codes": [],
+     "normal_form": {
+      "capability": "pipeline_stage_movement",
+      "operation": "reconciliation",
+      "population": [
+       "pipeline",
+       "all",
+       "any"
+      ],
+      "measure_set": [
+       "stage_closing",
+       "stage_opening"
+      ],
+      "dimension_set": [],
+      "output_nesting": 1,
+      "filters": [
+       [
+        "pipeline_stage",
+        "eq",
+        "APPLICATION"
+       ]
+      ],
+      "geography": [],
+      "time": [
+       "current",
+       null,
+       null,
+       []
+      ],
+      "comparison": [
+       "none",
+       null,
+       null
+      ],
+      "target": null
+     }
+    }
+   ],
+   "plan_level_divergent_slots": [
+    "outputs"
+   ],
+   "first_material_difference": "measure_set",
+   "all_material_differences": [
+    "measure_set",
+    "output_nesting"
+   ],
+   "resolved_by_normal_form": false,
+   "cause": "INTERPRETATION_POLICY",
+   "adjudication_reason": "\"Reconcile the Application stage.\" Measure sets of five, four and two drawn from the same governed reconciliation family (opening, arrivals, departures, stayers, closing). What a reconciliation reports is arguably the CAPABILITY's to decide, which is why this is policy rather than ambiguity \u2014 the model is enumerating something it should probably not have to enumerate.",
+   "policy_detail": [
+    "added unrequested measure"
+   ]
+  }
+ ]
+}

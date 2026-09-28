@@ -43,6 +43,11 @@ ENV_REGISTRY_PATH = "TRAKT_PORTFOLIO_REGISTRY"
 _ALLOWED_KEYS = frozenset({
     "portfolio_id", "source_portfolio_id", "source_portfolio_type", "portfolio_type",
     "source_portfolio_label", "label", "originates", "pipeline_data_available",
+    # THE GOVERNED NAMES A READER MAY USE FOR THIS BOOK. Declared at onboarding,
+    # never inferred: production ids are opaque client strings (`alp_acquired`)
+    # and nobody says those, so without a declared alias a question naming a
+    # book REFUSES rather than being matched to whichever id looks closest.
+    "aliases",
     "forecast_treatment", "runoff_profile_id", "runoff_profile", "runoff_curve",
     "monthly_retention", "reporting_dates",
     # The governed ASSET CLASS, established once by onboarding. It is what lets
