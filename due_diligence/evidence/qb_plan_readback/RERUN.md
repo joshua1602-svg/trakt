@@ -36,8 +36,19 @@ file or later).
 *Apply*; the app restarts. Only the listed principal gets governed answers;
 everyone else is served exactly as before.
 
-**4. Note the start time (UTC), then run the bank** the same way `qb_full.txt`
-was produced, signed in as that principal. Keep the output.
+**4. Run the bank.** Azure portal → `trakt-mi-api` → *SSH* → *Go*, then:
+
+    for d in $(ls -td /tmp/*/); do [ -f "$d/mi_agent_api/app.py" ] && cd "$d" && break; done
+    bash mi_agent_api/run_production_bank.sh <your Entra object id>
+
+`mi_agent_api/run_production_bank.sh` asks the same 135 questions as
+`qb_full.txt` (the six categories that select exactly `qb_questions.json`; the
+runner's default adds the limits categories, 160 questions). It refuses, before
+asking anything, when the deployed vocabulary is not 2.3.0, when the canary is
+not on for that principal, or when the evidence sink is unset. The run is under
+`nohup`: Ctrl-C or closing the tab stops the watching, not the run. The log,
+`/home/qb_plan_rerun_<stamp>.log`, starts with the START TIME (UTC) and is what
+to hand back; the `.jsonl` beside it holds the full answers.
 
 **5. Switch the canary off.** `MI_AGENT_PLAN_SERVE` = `off`.
 
