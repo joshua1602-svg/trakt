@@ -84,8 +84,8 @@ def _status_series():
                 for i, s in enumerate(statuses)]
         fr = _cut(date, rows, advance=True)
         fr["df"]["account_status"] = statuses
-        fr["df"]["further_advance_amount"] = [fa if s != "Redeemed" else fa
-                                             for s in statuses]
+        # ERE's convention: the cumulative total advanced, initial included.
+        fr["df"]["further_advance_amount"] = 100_000.0 + fa
         return fr
     live = ["Inforce"] * 10
     dec = ["Deceased", "Redeemed"] + ["Inforce"] * 8
@@ -122,3 +122,17 @@ def test_the_matrix_carries_rates_by_cause():
                 if r["vintage"] == "2025-10")
     assert oct_["cells"]["2"]["deathRate"] == pytest.approx(0.1)
     assert oct_["cells"]["2"]["voluntaryRepaymentRate"] == pytest.approx(0.1)
+
+
+def test_the_initial_advance_is_not_a_further_advance():
+    """Live defect: further_advance_amount is the CUMULATIVE total advanced,
+    initial advance included, so reading it as further advances put the
+    whole £4.6MM initial lending under "Further advances" and made roll-up
+    -£4.6MM. With no further lending the split reads £0 further advances."""
+    pool = C.cohort_static_pool(_status_series(), vintage="2025-10", grain="M")
+    first = pool["periods"][0]["balanceSplit"]
+    assert first["furtherAdvances"] == 0.0
+    assert first["originalAdvance"] == 10 * 100_000.0
+    assert first["rolledUpInterest"] == pytest.approx(10 * 10_000.0)
+    for p in pool["periods"]:
+        assert p["balanceSplit"]["rolledUpInterest"] >= 0

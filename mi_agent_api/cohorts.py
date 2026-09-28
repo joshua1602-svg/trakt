@@ -39,7 +39,8 @@ _ORIG_LTV = "original_loan_to_value"
 #: The amount originally advanced — the market-standard base for a balance
 #: factor, where the tape carries it.
 _ORIG_PRINCIPAL = "original_principal_balance"
-#: Cumulative further advances per loan (a running total, not the month's).
+#: Cumulative amount advanced per loan to date — INCLUDING the initial
+#: advance (ERE's convention), not further advances alone.
 _FURTHER_ADVANCE = "further_advance_amount"
 _STATUS = "account_status"
 
@@ -792,9 +793,17 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                 and _BALANCE in sub.columns:
             bal = coerce_numeric(sub[_BALANCE]).fillna(0.0)
             live = bal > 0
-            advanced = float(coerce_numeric(sub.loc[live, _ORIG_PRINCIPAL]).fillna(0.0).sum())
-            further = (float(coerce_numeric(sub.loc[live, _FURTHER_ADVANCE]).fillna(0.0).sum())
-                       if _FURTHER_ADVANCE in sub.columns else 0.0)
+            orig = coerce_numeric(sub.loc[live, _ORIG_PRINCIPAL]).fillna(0.0)
+            advanced = float(orig.sum())
+            # The field is the loan's cumulative total advanced, initial
+            # advance included, so further advances are what it holds ABOVE
+            # the original advance. A blank or zero field means none; it never
+            # makes a further advance negative.
+            if _FURTHER_ADVANCE in sub.columns:
+                total = coerce_numeric(sub.loc[live, _FURTHER_ADVANCE]).fillna(0.0)
+                further = float((total - orig).clip(lower=0.0).sum())
+            else:
+                further = 0.0
             row["balanceSplit"] = {
                 "originalAdvance": round(advanced, 2),
                 "furtherAdvances": round(further, 2),
