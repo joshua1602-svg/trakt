@@ -1180,11 +1180,19 @@ def forecast_evolution(output_root: str | os.PathLike,
             if include_pipeline else {"periods": []})
     # Index pipeline weighted-expected by year-month (latest extract per month).
     weighted_by_month: Dict[str, float] = {}
+    # WHICH EXTRACT WON, recorded in the same statement as the value it supplied
+    # so the two cannot fall out of step under "later extract overwrites". The
+    # join below pairs by calendar month and used to discard this date, leaving a
+    # composed forecast unable to say which pipeline extract fed it. That is
+    # lineage, not arithmetic: no figure changes, an existing value stops being
+    # thrown away. D1 (P0 design §4.1) needs it to state both input vintages.
+    extract_by_month: Dict[str, Optional[str]] = {}
     for p in pipe["periods"]:
         ym = (p.get("period") or "")
         w = p["metrics"].get("weighted_expected_funded_amount")
         if ym and w is not None:
             weighted_by_month[ym] = float(w)  # later extract overwrites -> latest wins
+            extract_by_month[ym] = p.get("extract_date")
 
     periods: List[Dict[str, Any]] = []
     for fp in funded["periods"]:
@@ -1202,6 +1210,10 @@ def forecast_evolution(output_root: str | os.PathLike,
             },
             "reconciliation": fp.get("reconciliation"),
             "source_file": fp.get("source_file"),
+            # The pipeline extract that supplied `weighted_expected_pipeline`, or
+            # None when no extract fell in this calendar month — in which case the
+            # forecast above equals the funded balance and this says why.
+            "pipeline_extract_date": extract_by_month.get(ym),
         })
     return {
         "dataset": "forecast",

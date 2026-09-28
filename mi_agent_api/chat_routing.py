@@ -2097,34 +2097,21 @@ def _route_forecast(question, spec, spec_dict, *, client_id, run_id, output_root
     scenarios = rr.get("scenarioMonthlyRunRate", {})
     milestones = rr.get("milestones", [])
 
-    def _ms(thr: float) -> Optional[Dict[str, Any]]:
-        """The milestone FOR THIS THRESHOLD, or the next one above it.
-
-        NEVER `milestones[-1]`. That fallback returned the largest milestone the
-        projection happened to carry whenever the requested threshold was beyond
-        it, and the caller then reported that milestone's state as the answer for
-        the threshold actually asked about. Measured: the milestone list tops out
-        at £75m — all reached — so "when do we reach £250m?" answered "the book
-        has already reached £250.0m" on a book holding £172.1m.
-        """
-        exact = next((m for m in milestones if m["threshold"] == thr), None)
-        if exact:
-            return exact
-        above = [m for m in milestones if m["threshold"] >= thr]
-        return above[0] if above else None
-
     if kind in ("reach_threshold",) and target:
-        m = _ms(target)
-        # THE ARITHMETIC DECIDES, not a milestone flag. "Already reached" is a
-        # statement about the CURRENT balance and the REQUESTED target, and it is
-        # true exactly when one is at least the other.
-        if float(cur or 0) >= float(target):
+        # WHICH ANSWER, decided by the owner's one rule — `milestone_answer`,
+        # which the governed forecast runtime also reads. It was a closure here,
+        # and the governed serving path may not import this module, so the rule
+        # lived where it could only have been copied. See the owner's docstring
+        # for the £250m defect it guards. Only the PHRASING stays here.
+        decided = fx_mod.milestone_answer(milestones, target, cur)
+        state, m = decided["state"], decided["milestone"]
+        if state == fx_mod.MILESTONE_ALREADY_REACHED:
             answer = f"The book has already reached {_gbp(target)} (current funded balance {_gbp(cur)})."
-        elif m and m.get("reached"):
+        elif state == fx_mod.MILESTONE_BEYOND_HORIZON_LADDER:
             answer = (f"Current funded balance is {_gbp(cur)}; {_gbp(target)} is "
                       f"beyond the projection horizon, so I cannot say when it is "
                       f"reached. {caveat}")
-        elif m:
+        elif state == fx_mod.MILESTONE_PROJECTED:
             answer = (f"At the current base completion run-rate (~{_gbp(base)}/month, "
                       f"{_gbp(ann)}/year), the book reaches {_gbp(target)} around "
                       f"{m.get('baseDate')} (downside {m.get('downsideDate')}, "
