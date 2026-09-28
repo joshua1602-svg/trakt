@@ -68,6 +68,8 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
   }, [client, portfolioId, portfolioContext, grain, selected]);
 
   const rekeyed = (pool?.periods ?? []).filter((p) => p.idsRekeyed).map((p) => p.period);
+  const hasSplit = (pool?.periods ?? []).some((p) => p.balanceSplit);
+  const hasCause = (pool?.periods ?? []).some((p) => p.exitsByCause);
 
   const [matrix, setMatrix] = useState<CohortMatrix | null>(null);
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("balanceFactor");
@@ -179,9 +181,21 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
               <tr className="border-b border-[var(--color-line)] text-ink-400">
                 <th className="px-3 py-2 text-left font-medium">Period</th>
                 <th className="px-3 py-2 text-right font-medium">Seasoning</th>
-                <th className="px-3 py-2 text-right font-medium">Surviving</th>
+                <th className="px-3 py-2 text-right font-medium"
+                  title={hasCause ? "Loans still in force: not deceased, not redeemed." : undefined}>
+                  {hasCause ? "In force" : "Surviving"}</th>
                 <th className="px-3 py-2 text-right font-medium">Balance</th>
                 <th className="px-3 py-2 text-right font-medium">Balance retention</th>
+                {hasSplit && (
+                  <>
+                    <th className="px-3 py-2 text-right font-medium"
+                      title="Cumulative further advances on loans still carrying a balance.">
+                      Further advances</th>
+                    <th className="px-3 py-2 text-right font-medium"
+                      title="Balance less the amounts advanced (original + further): interest rolled up.">
+                      Roll-up</th>
+                  </>
+                )}
                 <th className="px-3 py-2 text-right font-medium">Exits</th>
                 <th className="px-3 py-2 text-right font-medium">WA LTV</th>
               </tr>
@@ -204,8 +218,19 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
                   <td className="px-3 py-1.5 text-right text-ink-200">{p.survivingLoanCount.toLocaleString("en-GB")}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{gbp(p.currentBalance)}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{pct(p.balanceRetention)}</td>
-                  <td className="px-3 py-1.5 text-right text-ink-200">
-                    {p.exitsInPeriod > 0 ? `${p.exitsInPeriod} (${p.cumulativeExits} cum.)` : "—"}</td>
+                  {hasSplit && (
+                    <>
+                      <td className="px-3 py-1.5 text-right text-ink-200">
+                        {p.balanceSplit ? gbp(p.balanceSplit.furtherAdvances) : "—"}</td>
+                      <td className="px-3 py-1.5 text-right text-ink-200">
+                        {p.balanceSplit ? gbp(p.balanceSplit.rolledUpInterest) : "—"}</td>
+                    </>
+                  )}
+                  <td className="px-3 py-1.5 text-right text-ink-200"
+                    data-testid={`pool-exits-${p.period}`}>
+                    {p.exitsByCause
+                      ? (p.cumulativeExits > 0 ? exitsByCauseLabel(p.exitsByCause) : "—")
+                      : p.exitsInPeriod > 0 ? `${p.exitsInPeriod} (${p.cumulativeExits} cum.)` : "—"}</td>
                   <td className="px-3 py-1.5 text-right text-ink-200">{pct(p.waLtv)}</td>
                 </tr>
               ))}
@@ -219,6 +244,8 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
         or exit and the count can never rise; balance retention above 100% is interest
         roll-up, not new lending. Periods marked <span className="text-cyan-200">Forming</span>{" "}
         pre-date that: the vintage was still admitting loans, so no retention is shown.
+        {hasCause && " Exits are cumulative by cause: a death counts from the month it is reported and stays a death when the estate repays; a redemption with no death before it is a voluntary repayment."}
+        {hasSplit && " Roll-up is the balance less the amounts advanced (original plus cumulative further advances)."}
       </p>
       {rekeyed.length > 0 && (
         <p className="text-[10px] text-amber-300/80" data-testid="cohort-ids-rekeyed">
@@ -232,11 +259,23 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
 }
 
 
-type MatrixMetric = "balanceFactor" | "cumulativeExitRate" | "survivingLoanCount" | "waLtv";
+type MatrixMetric = "balanceFactor" | "cumulativeExitRate" | "deathRate"
+  | "voluntaryRepaymentRate" | "survivingLoanCount" | "waLtv";
+
+function exitsByCauseLabel(c: { deaths: number; voluntaryRepayments: number; leftTape: number }): string {
+  const parts = [
+    c.deaths ? `${c.deaths} death${c.deaths === 1 ? "" : "s"}` : "",
+    c.voluntaryRepayments ? `${c.voluntaryRepayments} repaid` : "",
+    c.leftTape ? `${c.leftTape} left tape` : "",
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
 
 const MATRIX_METRICS: { key: MatrixMetric; label: string }[] = [
   { key: "balanceFactor", label: "Balance factor" },
   { key: "cumulativeExitRate", label: "Cumulative exits" },
+  { key: "deathRate", label: "Deaths" },
+  { key: "voluntaryRepaymentRate", label: "Voluntary repayments" },
   { key: "survivingLoanCount", label: "Surviving loans" },
   { key: "waLtv", label: "WA LTV" },
 ];
@@ -261,6 +300,10 @@ function VintageMatrix({ matrix, metric, onMetric, selected, onSelect }: {
 }) {
   const months = matrix.monthsOnBook;
   const advanceBased = matrix.vintages.some((v) => v.basis === "original_advance");
+  const hasCause = matrix.vintages.some((v) =>
+    Object.values(v.cells).some((c) => c.deathRate != null));
+  const metrics = MATRIX_METRICS.filter((m) =>
+    hasCause || (m.key !== "deathRate" && m.key !== "voluntaryRepaymentRate"));
   return (
     <div className="space-y-1.5" data-testid="vintage-matrix">
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -268,7 +311,7 @@ function VintageMatrix({ matrix, metric, onMetric, selected, onSelect }: {
           Vintage matrix — each vintage by months on book
         </div>
         <div role="group" aria-label="Vintage matrix measure" className="nav-unit">
-          {MATRIX_METRICS.map((m) => (
+          {metrics.map((m) => (
             <button key={m.key} type="button" aria-pressed={metric === m.key}
               aria-selected={metric === m.key} data-testid={`matrix-metric-${m.key}`}
               onClick={() => onMetric(m.key)}

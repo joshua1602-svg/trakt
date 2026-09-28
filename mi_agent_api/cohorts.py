@@ -39,6 +39,21 @@ _ORIG_LTV = "original_loan_to_value"
 #: The amount originally advanced — the market-standard base for a balance
 #: factor, where the tape carries it.
 _ORIG_PRINCIPAL = "original_principal_balance"
+#: Cumulative further advances per loan (a running total, not the month's).
+_FURTHER_ADVANCE = "further_advance_amount"
+_STATUS = "account_status"
+
+
+def _exit_status(df: pd.DataFrame) -> Optional[pd.Series]:
+    """``deceased`` / ``redeemed`` / ``in_force`` per row, or None without a
+    status column. ERE's tape reports Inforce, Deceased and Redeemed."""
+    if _STATUS not in df.columns or not df[_STATUS].notna().any():
+        return None
+    raw = df[_STATUS].astype(str).str.strip().str.lower()
+    out = pd.Series("in_force", index=df.index, dtype=object)
+    out[raw.str.contains("deceas|death|died", regex=True, na=False)] = "deceased"
+    out[raw.str.contains("redeem|repaid|redemption", regex=True, na=False)] = "redeemed"
+    return out
 _ORIG_CHANNEL = "origination_channel"
 _BROKER = "broker_channel"
 
@@ -690,6 +705,10 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
     original_advance: Optional[float] = None
     prior_ids: Optional[set] = None
     prior_count: Optional[int] = None
+    prior_cum: int = 0
+    # Loans ever reported deceased: a death stays the exit's cause when the
+    # estate later repays and the status moves on to Redeemed.
+    ever_deceased: set = set()
     for fr, id_col, mask in zip(usable, id_cols, members_by_cut):
         df = fr["df"]
         if mask is None:
@@ -703,11 +722,23 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         ids = _ids(sub, id_col)
         sub = sub[~(ids.notna() & ids.duplicated()).to_numpy()]
         here = set(_ids(sub, id_col).dropna().tolist())
-        count = int(len(sub))
+        rows_in_tape = int(len(sub))
+        status = _exit_status(sub)
+        if status is not None:
+            sub_ids = _ids(sub, id_col)
+            ever_deceased |= set(sub_ids[status == "deceased"].dropna().tolist())
+            died = (status == "deceased") | ((status == "redeemed")
+                                            & sub_ids.isin(ever_deceased))
+            repaid = (status == "redeemed") & ~died
+            in_force = ~(died | repaid)
+            count = int(in_force.sum())
+        else:
+            died = repaid = None
+            count = rows_in_tape
         balance = (float(coerce_numeric(sub[_BALANCE]).sum())
                    if _BALANCE in sub.columns and len(sub) else 0.0)
         if original_count is None and not forming:
-            original_count, original_balance = count, balance
+            original_count, original_balance = rows_in_tape, balance
             if _ORIG_PRINCIPAL in sub.columns and _has_values(sub, _ORIG_PRINCIPAL):
                 original_advance = float(coerce_numeric(sub[_ORIG_PRINCIPAL]).sum())
         # Exits only mean something once the pool is fixed. They are named by
@@ -715,13 +746,25 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         # not (fewer than half the previous cut's ids found, e.g. a re-keyed
         # cut) the ids cannot say who left, so the fall in count is used and
         # the period says so.
-        rekeyed = False
-        if prior_count is None or forming:
+        rekeyed = bool(prior_ids) and len(prior_ids & here) < 0.5 * len(prior_ids)
+        by_cause: Optional[Dict[str, int]] = None
+        if status is not None and original_count and not forming:
+            # Exits by cause from the statuses THIS cut reports — no loan is
+            # matched across cuts, so a re-keyed cut changes nothing here. A
+            # loan that has left the tape altogether is counted separately.
+            by_cause = {
+                "deaths": int(died.sum()),
+                "voluntaryRepayments": int(repaid.sum()),
+                "leftTape": max(original_count - rows_in_tape, 0),
+            }
+            cum = sum(by_cause.values())
+            exits = max(cum - prior_cum, 0) if prior_count is not None else cum
+            prior_cum = cum
+        elif prior_count is None or forming:
             exits = 0
-        elif prior_ids and len(prior_ids & here) >= 0.5 * len(prior_ids):
+        elif not rekeyed:
             exits = len(prior_ids - here)
         else:
-            rekeyed = bool(prior_ids)
             exits = max(prior_count - count, 0)
         row: Dict[str, Any] = {
             "period": (fr.get("reporting_date") or fr.get("run_id") or "")[:7],
@@ -735,10 +778,29 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
             "balanceRetention": (round(balance / original_balance, 4)
                                  if original_balance and not forming else None),
             "exitsInPeriod": exits,
-            "cumulativeExits": (max(original_count - count, 0)
+            "cumulativeExits": (sum(by_cause.values()) if by_cause is not None
+                                else max(original_count - count, 0)
                                 if original_count and not forming else 0),
-            "idsRekeyed": rekeyed,
+            "idsRekeyed": rekeyed and by_cause is None,
         }
+        if by_cause is not None:
+            row["exitsByCause"] = by_cause
+        # Balance split: what was advanced (original + cumulative further
+        # advances) and what has rolled up on it, over loans still carrying a
+        # balance. Read per cut, so it needs no matching across cuts.
+        if _ORIG_PRINCIPAL in sub.columns and _has_values(sub, _ORIG_PRINCIPAL) \
+                and _BALANCE in sub.columns:
+            bal = coerce_numeric(sub[_BALANCE]).fillna(0.0)
+            live = bal > 0
+            advanced = float(coerce_numeric(sub.loc[live, _ORIG_PRINCIPAL]).fillna(0.0).sum())
+            further = (float(coerce_numeric(sub.loc[live, _FURTHER_ADVANCE]).fillna(0.0).sum())
+                       if _FURTHER_ADVANCE in sub.columns else 0.0)
+            row["balanceSplit"] = {
+                "originalAdvance": round(advanced, 2),
+                "furtherAdvances": round(further, 2),
+                "rolledUpInterest": round(float(bal[live].sum()) - advanced - further, 2),
+                "furtherAdvancesReported": _FURTHER_ADVANCE in sub.columns,
+            }
         if len(sub) and _BALANCE in sub.columns:
             w = sub[_BALANCE]
             if _LTV in sub.columns:
@@ -810,7 +872,9 @@ def cohort_matrix(frames: List[Dict[str, Any]], *, grain: str = "M",
                                it, else the balance when the pool was fixed
                                (``basis`` says which);
       * ``cumulativeExitRate`` share of the fixed pool's loans that have left;
-      * ``survivingLoanCount`` and ``waLtv``.
+      * ``deathRate`` / ``voluntaryRepaymentRate`` — cumulative exits by
+                               cause, where the tape reports account status;
+      * ``survivingLoanCount`` (in force) and ``waLtv``.
 
     Forming periods (the vintage still originating) carry no cell.
     """
@@ -849,6 +913,12 @@ def cohort_matrix(frames: List[Dict[str, Any]], *, grain: str = "M",
                 "waLtv": p.get("waLtv"),
                 "idsRekeyed": bool(p.get("idsRekeyed")),
             }
+            cause = p.get("exitsByCause")
+            if cause:
+                n = pool["originalLoanCount"]
+                cells[str(int(mob))]["deathRate"] = round(cause["deaths"] / n, 4)
+                cells[str(int(mob))]["voluntaryRepaymentRate"] = round(
+                    cause["voluntaryRepayments"] / n, 4)
         rows.append({
             "vintage": v["vintage"],
             "originalLoanCount": pool["originalLoanCount"],

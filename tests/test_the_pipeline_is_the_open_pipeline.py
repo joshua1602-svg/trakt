@@ -32,6 +32,25 @@ def test_open_stages_are_kfi_application_offer():
     assert OPEN_STAGES == ("KFI", "APPLICATION", "OFFER")
 
 
+def test_the_drill_down_uses_the_same_open_stages():
+    # Restated in movement_detail (it ships without pipeline_prep); pinned here.
+    assert md.OPEN_STAGES == OPEN_STAGES
+
+
+def test_the_drill_down_does_not_import_pipeline_prep():
+    """movement_detail ships in the blob-trigger Function App package, which
+    does not carry pipeline_prep's dependencies (mi_agent.states -> snapshot).
+    Importing it there failed that deploy's package check."""
+    import ast
+    import inspect
+    tree = ast.parse(inspect.getsource(md))
+    # Module-level only: a function-local import runs on that function's path,
+    # not at import time, which is what the package check exercises.
+    imported = {n.module for n in tree.body
+                if isinstance(n, ast.ImportFrom) and n.module}
+    assert not any("pipeline_prep" in m for m in imported), imported
+
+
 def test_the_snapshot_counts_open_cases_and_discloses_the_rest():
     df, report = _prepared(["KFI", "Application", "Offer", "Completed", "Withdrawn"],
                            [10_000, 20_000, 30_000, 40_000, 50_000])

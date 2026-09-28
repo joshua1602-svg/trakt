@@ -144,6 +144,16 @@ export interface StaticPoolPeriod {
   idsRekeyed?: boolean;
   waLtv?: number | null;
   waRate?: number | null;
+  /** Cumulative exits by cause, from the account status the cut reports. */
+  exitsByCause?: { deaths: number; voluntaryRepayments: number; leftTape: number };
+  /** Balance of loans still carrying one: advanced (original + cumulative
+   *  further advances) and the interest rolled up on it. */
+  balanceSplit?: {
+    originalAdvance: number;
+    furtherAdvances: number;
+    rolledUpInterest: number;
+    furtherAdvancesReported: boolean;
+  };
 }
 
 export interface CohortStaticPool {
@@ -177,6 +187,9 @@ export interface CohortMatrixCell {
   cumulativeExitRate: number;
   waLtv?: number | null;
   idsRekeyed?: boolean;
+  /** Cumulative deaths / voluntary repayments ÷ pool, where status is reported. */
+  deathRate?: number | null;
+  voluntaryRepaymentRate?: number | null;
 }
 
 export interface CohortMatrixRow {
