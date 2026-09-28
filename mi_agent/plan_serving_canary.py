@@ -382,6 +382,13 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             snapshot_store=snapshot_store,
             snapshot_client_id=snapshot_client_id,
             snapshot_route=snapshot_route,
+            # THE CLIENT'S GOVERNED SOURCE PORTFOLIOS. Accepted above and, from
+            # e6e16c63 until this line was restored, never forwarded: every
+            # production compilation ran with no registry, so a question naming
+            # a portfolio was refused on the governed path however well the
+            # production seam built one. A structural test now asserts that
+            # every input `serve` shares with `_attempt` is passed through.
+            source_registry=source_registry,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
             pipeline_history=pipeline_history, pipeline_run_id=run_id,

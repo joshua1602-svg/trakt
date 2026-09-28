@@ -1179,5 +1179,68 @@ class TestKTemporalDispatch(unittest.TestCase):
         self.assertTrue(adapter.check_eligibility(plan)[0])
 
 
+# --------------------------------------------------------------------------- #
+# L — what the production seam hands `serve` reaches the attempt
+# --------------------------------------------------------------------------- #
+class TestLServeForwardsItsInputs(unittest.TestCase):
+    """`serve` is a pass-through for the governed inputs, and must stay one.
+
+    FOUND, NOT HYPOTHESISED. From e6e16c63 `serve` accepted `source_registry`
+    and dropped it: `mi_service` built the client's governed portfolio registry
+    and handed it over, and every compilation still ran without one, so a
+    question naming a portfolio was refused on the governed path. Every test of
+    the registry compiled through `wiring._compiler` directly and never through
+    `serve`, which is why nothing noticed.
+    """
+
+    def test_the_client_registry_reaches_the_compiler(self):
+        registry = object()
+        seen = {}
+        real = wiring.build_plan
+
+        def capture(question, **kwargs):
+            seen.update(kwargs)
+            return real(question, **kwargs)
+
+        with _Canary():
+            with mock.patch.object(canary.wiring, "build_plan", capture):
+                canary.serve(
+                    question=ELIGIBLE_SCALAR,
+                    context=Principal(CANARY_PRINCIPAL), client_id="acme",
+                    run_id="2026-03", legacy_result=legacy_envelope(),
+                    frame=_BOOK, semantics=_SEMANTICS, view="funded",
+                    source_registry=registry)
+        self.assertIn("source_registry", seen, "build_plan was never reached")
+        self.assertIs(seen["source_registry"], registry,
+                      "the registry the production seam supplied never reached "
+                      "the compiler")
+
+    def test_every_input_serve_shares_with_the_attempt_is_forwarded(self):
+        """Structural: a parameter both functions name is passed by that name.
+
+        The defect class is "accepted and silently dropped", which a behavioural
+        test only catches for the one input it thought to exercise. This reads
+        the call `serve` makes and fails for any shared input it omits — the
+        next runtime's inputs included.
+        """
+        tree = ast.parse(Path(canary.__file__).read_text())
+        functions = {node.name: node for node in tree.body
+                     if isinstance(node, ast.FunctionDef)}
+
+        def names(fn):
+            return {a.arg for a in fn.args.args + fn.args.kwonlyargs}
+
+        shared = names(functions["serve"]) & names(functions["_attempt"])
+        calls = [node for node in ast.walk(functions["serve"])
+                 if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name)
+                 and node.func.id == "_attempt"]
+        self.assertEqual(len(calls), 1, "serve should call _attempt once")
+        passed = {k.arg for k in calls[0].keywords}
+        self.assertTrue(shared, "the two signatures share nothing?")
+        self.assertEqual(sorted(shared - passed), [],
+                         "serve accepts these and never hands them on")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
