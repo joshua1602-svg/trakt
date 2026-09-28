@@ -79,6 +79,19 @@ export interface PipelineWeeklyPrior {
   weightedExpectedFundedAmount?: number | null;
 }
 
+/** The pipeline's credit profile, on the funded tiles' definitions (amount-
+ *  weighted averages; single-borrower share of cases). A null measure means the
+ *  extract does not carry its inputs — the tile is then omitted. */
+export interface PipelineProfile {
+  waLtvPct: number | null;
+  waInterestRatePct: number | null;
+  waYoungestAge: number | null;
+  waPropertyValue: number | null;
+  singleBorrowerPct: number | null;
+  singleBorrowerCount: number | null;
+  borrowerTypeKnownCount: number | null;
+}
+
 /** A backend data-quality diagnostic (blocker | warning | info). */
 export interface PipelineDiagnostic {
   check: string;
@@ -135,6 +148,8 @@ export interface PipelineSnapshot {
   historicalCompletionModel?: Record<string, unknown>;
   historicalModelEvidence?: HistoricalModelEvidence;
   stageBreakdown: PipelineStageBucket[];
+  /** Credit profile tiles (additive; absent on older payloads). */
+  profile?: PipelineProfile | null;
   /** Unchanged — drives the completion-month chart. */
   expectedCompletionBreakdown: ExpectedCompletionBucket[];
   /** Completion months classified vs the as-of month (overdue / current / next). */
