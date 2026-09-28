@@ -20,3 +20,22 @@ high_confidence_threshold: 0.70
 forward_risk:
   funded_region_column: geographic_region
   funded_exposure_column: total_balance
+
+# Stage run-off method (mi_agent_api/pipeline_runoff.py), mirroring the
+# market-standard pull-through model: only these stages carry forward
+# expected-funding weight. KFIs stay in the pipeline view as top of funnel.
+forecast_stages: [APPLICATION, OFFER]
+runoff:
+  # A stage's rates and window are measured only with at least this many
+  # observed advances; below it the configured values above are used.
+  min_events: 12
+  # Validity window = this quantile of the days advancing cases spent in the
+  # stage. A live case in the stage for longer has lapsed (weight 0).
+  window_quantile: 0.95
+  max_weeks: 156
+  # Validity windows used only where history is too thin to measure one
+  # (the pipeline run-off workbook's assumptions: 2, 4 and 18 weeks).
+  fallback_validity_days:
+    KFI: 14
+    APPLICATION: 28
+    OFFER: 126

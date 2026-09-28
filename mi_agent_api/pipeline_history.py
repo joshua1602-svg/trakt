@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 
+from . import pipeline_runoff as _runoff
 from .pipeline_prep import ACTIVE_STAGES, case_stage_frame
 from trakt_core import perf as _perf
 
@@ -32,6 +33,7 @@ MIN_OBSERVATIONS = 12
 
 COMPLETED = "COMPLETED"
 WITHDRAWN = "WITHDRAWN"
+_ENTRY_FIELDS = ("kfi_date", "application_date", "offer_date")
 
 
 def _read(path: Path) -> Optional[pd.DataFrame]:
@@ -48,6 +50,7 @@ def build_historical_completion_model(
     weekly_entries: List[Dict[str, Any]],
     *,
     min_observations: int = MIN_OBSERVATIONS,
+    runoff_settings: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the historical completion model from chronological weekly snapshots.
 
@@ -91,13 +94,26 @@ def build_historical_completion_model(
         completion_dates = (csf["completion_date"].to_numpy()
                             if "completion_date" in csf.columns
                             else [None] * len(csf))
-        for cid_raw, stage_raw, cd in zip(case_ids, stages, completion_dates):
+        entry_dates = [csf[f].to_numpy() if f in csf.columns else [None] * len(csf)
+                       for f in _ENTRY_FIELDS]
+        for cid_raw, stage_raw, cd, *entries in zip(case_ids, stages,
+                                                    completion_dates, *entry_dates):
             cid = str(cid_raw).strip()
             if not cid or cid.lower() in ("nan", "none", ""):
                 continue
             stage = str(stage_raw)
             t = timelines.setdefault(cid, {"stages": {}, "completed_on": None, "ever": set()})
             t["ever"].add(stage)
+            # Run-off inputs: the latest stage dates the file states, the
+            # case's latest stage, and the first snapshot it showed withdrawn.
+            for fld, value in zip(_ENTRY_FIELDS, entries):
+                if value is not None and not pd.isna(value):
+                    t[fld] = pd.Timestamp(value)
+            t["final_stage"] = stage
+            if stage in ACTIVE_STAGES:
+                t["seen_open"] = True
+            if stage == WITHDRAWN and not t.get("withdrawn_on"):
+                t["withdrawn_on"] = extract_date
             # First snapshot at which the case was seen at this stage.
             if stage not in t["stages"]:
                 t["stages"][stage] = extract_date
@@ -186,8 +202,18 @@ def build_historical_completion_model(
     stages_config_fallback = sorted(s for s in ACTIVE_STAGES
                                     if observed[s] > 0 and s not in stage_rates)
 
+    runoff = _runoff.fit_runoff(
+        ({"kfi_date": t.get("kfi_date"), "application_date": t.get("application_date"),
+          "offer_date": t.get("offer_date"), "completed_on": t.get("completed_on"),
+          "withdrawn_on": t.get("withdrawn_on"), "first_seen": t["stages"],
+          "final_stage": t.get("final_stage"), "seen_open": t.get("seen_open", False)}
+         for t in timelines.values()),
+        min(dates) if dates else None, max(dates) if dates else None,
+        runoff_settings)
+
     return {
-        "available": bool(stage_rates),
+        "available": bool(stage_rates) or bool(runoff.get("available")),
+        "runoff": runoff,
         "minObservations": int(min_observations),
         "snapshotCount": snapshots_used,
         "weeklyFilesUsed": snapshots_used,
@@ -302,4 +328,6 @@ def historical_model_evidence(model: Optional[Dict[str, Any]],
         "duplicatesExcluded": m.get("duplicatesExcluded", 0),
         "primarySourcePreference": m.get("primarySourcePreference"),
         "available": bool(m.get("available")),
+        # The stage run-off model behind the forecast (additive).
+        "runoff": _runoff.evidence(m.get("runoff")),
     }

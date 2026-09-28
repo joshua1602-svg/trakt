@@ -413,7 +413,10 @@ def _source_and_as_of(source: str | os.PathLike | Dict[str, Any],
                       as_of_date: Optional[str]) -> Tuple[Path, Optional[str]]:
     """The source path and its as-of date, from a path or a discovery scope."""
     if isinstance(source, dict):
-        as_of_date = as_of_date or source.get("pipeline_as_of_date")
+        # A weekly extract's as-of is its extract date (a published snapshot
+        # carries it in its folder, not its file name).
+        as_of_date = (as_of_date or source.get("pipeline_as_of_date")
+                      or source.get("pipeline_extract_date"))
         source = source.get("source_file", "")
     p = Path(source)
     return p, (as_of_date or _extract_date(p))
@@ -585,6 +588,7 @@ def build_pipeline_history(root: str | os.PathLike,
     performs exactly the calculation below.
     """
     from .pipeline_history import build_historical_completion_model
+    from .pipeline_prep import runoff_settings as _prep_runoff_settings
     inv = weekly_extract_inventory(root, client_id)
     key = _serving_cache.key_for(
         tenant=_serving_cache.resolved_tenant(),
@@ -594,7 +598,8 @@ def build_pipeline_history(root: str | os.PathLike,
         identity=[str(root), *(_extract_set_identity(inv["extracts"]) or [None])])
 
     def _build() -> Dict[str, Any]:
-        model = build_historical_completion_model(inv["extracts"])
+        model = build_historical_completion_model(
+            inv["extracts"], runoff_settings=_prep_runoff_settings())
         # Provenance: how many files were scanned vs how many unique extracts
         # were used.
         model["sourceFilesScanned"] = inv["sourceFilesScanned"]
@@ -783,9 +788,18 @@ def build_pipeline_dataset_contract(
 # --------------------------------------------------------------------------- #
 # Pipeline snapshot (API block)
 # --------------------------------------------------------------------------- #
+#: Probability sources that carry forward expected-funding weight. Settled
+#: (completed / withdrawn), lapsed and not-forecast cases have none, so they
+#: have no expected completion month to report.
+_FORECAST_SOURCES = ("row_level", "historical_runoff", "historical_stage_rate",
+                     "configured_stage_rate")
+
+
 def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if "expected_completion_month" not in df.columns:
         return []
+    if "completion_probability_source" in df.columns:
+        df = df[df["completion_probability_source"].isin(_FORECAST_SOURCES)]
     rows: List[Dict[str, Any]] = []
     grp = df.groupby(df["expected_completion_month"].astype(str), dropna=False)
     for month, sub in grp:
