@@ -22,6 +22,11 @@
     D2b SCENARIO OPERATION MAPPING                                 OPEN — see §6
         Still the only thing blocking plan_forecast_runtime.
 
+    D4  ANSWER PROVENANCE POLICY                         SETTLED 2026-09-28, see §13
+        Measure name and as-at ALWAYS on the answer itself. Everything else
+        published in the envelope and disclosed by the surface on demand.
+        Owner decision; recorded, not inferred.
+
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
         any vintage today, so "state both vintages" cannot be satisfied until the
@@ -378,3 +383,62 @@ the change is a regression however good the headline looks.
     the 24-day funded/pipeline gap will start refusing or caveating answers that
     used to publish silently. That is the design working, and it should be expected
     rather than treated as a regression.
+
+
+## 13. The answer-composition contract — D4
+
+P1's build is out of scope here, but D1 needs a defined place for a vintage to land,
+so the contract it lands in is stated.
+
+**Two things are never optional, on every governed answer, of every shape:**
+
+    the MEASURE, by its governed display name — "Total Balance", not `balance`,
+      and never a raw canonical field. The production bank shows why: three
+      different pipeline questions returned one identical sentence because the
+      measure was absent from it.
+    the AS-AT BASIS — see the four shapes below.
+
+**Everything else is published, not omitted.** `on demand` means disclosed by the
+surface, never withheld from the envelope. The fields already exist and already carry
+this: `sourceNotes` today reads `Governed snapshots · 2025-11-30 → 2026-06-30`,
+`warnings` carries the period-length caveat, `governance.snapshot` carries the
+content hash, row count and approval state. So D4 needs no new mechanism — the
+composer puts two things in the sentence, and the surface reveals the rest from
+fields that are populated today.
+
+The distinction matters for one reason: an answer leaves the product as a screenshot,
+an export or a pasted line far more often than as a live envelope. If provenance is
+only in a panel nobody expands, it is not provenance. Hence measure and as-at travel
+**in the sentence**.
+
+### The as-at basis has four shapes, and the composer is written for all four
+
+Written out because a composer built for the point case and patched afterwards is how
+the current stub happened.
+
+    POINT        one snapshot            "as at 1 September 2026"
+    PAIR         a movement or compare   "1 August 2026 vs 1 September 2026"
+    SPAN         a series or evolution   "across 90 weekly extracts to 24 Sep 2026"
+    COMPOSED     a derived population    BOTH input vintages, per D1 —
+                                         "funded as at 31 Aug 2026, pipeline as at
+                                          24 Sep 2026"
+
+`COMPOSED` is where D1 and D4 meet: D1 requires both vintages on the face of the
+answer, and this is the shape that carries them. Neither decision is implementable
+without the other, which is §11's dependency restated from the other end.
+
+### Grouped and charted answers are not exempt
+
+"Here is the bar for your query, covering 6 groups" satisfies neither rule. A grouped
+answer names its measure, its grouping and its as-at like any other:
+*"Total Balance by Pipeline Stage — 6 stages, as at 1 September 2026."* The chart is
+the artifact; the sentence is still the answer.
+
+### Acceptance
+
+Added to §10's hard gates, and measured on the same bank:
+
+    governed answers naming their measure          0 of 41  ->  41 of 41
+    governed answers stating an as-at basis        0 of 41  ->  41 of 41
+    governed answers leaking a raw field name      3 of 41  ->  0
+    distinct questions returning identical text    3        ->  0
