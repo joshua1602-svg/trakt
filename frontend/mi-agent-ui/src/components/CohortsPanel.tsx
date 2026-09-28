@@ -67,6 +67,8 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
     return () => { live = false; };
   }, [client, portfolioId, portfolioContext, grain, selected]);
 
+  const rekeyed = (pool?.periods ?? []).filter((p) => p.idsRekeyed).map((p) => p.period);
+
   return (
     <div className="space-y-3" data-testid="cohorts-panel">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-[var(--color-line)] bg-navy-900/40 px-3 py-2.5">
@@ -200,6 +202,13 @@ export function CohortsPanel({ client, portfolioId, portfolioContext }: {
         roll-up, not new lending. Periods marked <span className="text-cyan-200">Forming</span>{" "}
         pre-date that: the vintage was still admitting loans, so no retention is shown.
       </p>
+      {rekeyed.length > 0 && (
+        <p className="text-[10px] text-amber-300/80" data-testid="cohort-ids-rekeyed">
+          Loan identifiers change between cuts at {rekeyed.join(", ")}, so loans cannot
+          be matched there by id. Membership and counts come from each cut's origination
+          dates; exits in those periods are the fall in count.
+        </p>
+      )}
     </div>
   );
 }

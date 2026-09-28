@@ -146,3 +146,58 @@ def test_a_cut_that_cannot_be_joined_says_so():
     out = C.cohort_formation(frames, grain="M")
     dec = next(l for l in out["idLinkage"] if l["reportingDate"] == "2025-12-31")
     assert dec["linkedFromPriorPct"] == 0.0
+
+
+def _live_series():
+    """The live book: 33 loans originated in 2025-10, 40 in 2025-11, 57 in
+    2025-12, and a 2025-12 cut whose ids match NO other cut in any column.
+
+    Before the fix formation read 66 / 80 / 114 — every 2025 vintage doubled —
+    and the 2025-11 pool showed "40 (40 cum.)" exits at 2025-12, then "40 (0
+    cum.)" at 2026-01.
+    """
+    plan = [("2025-10-15", 33, 0), ("2025-11-15", 40, 100), ("2025-12-15", 57, 200)]
+
+    def cut(through, rekey=False):
+        ids, dates = [], []
+        for d, n, base in plan:
+            if d[:7] <= through:
+                ids += [f"{'X' if rekey else 'L'}{base + i}" for i in range(n)]
+                dates += [d] * n
+        df = pd.DataFrame({"loan_identifier": ids,
+                           BALANCE: [100_000.0] * len(ids),
+                           "origination_date": pd.to_datetime(dates)})
+        return df
+
+    return [
+        {"reporting_date": "2025-10-31", "df": cut("2025-10")},
+        {"reporting_date": "2025-11-30", "df": cut("2025-11")},
+        {"reporting_date": "2025-12-31", "df": cut("2025-12", rekey=True)},
+        {"reporting_date": "2026-01-31", "df": cut("2025-12")},
+        {"reporting_date": "2026-02-28", "df": cut("2025-12")},
+    ]
+
+
+def test_a_rekeyed_cut_does_not_double_any_vintage():
+    out = C.cohort_formation(_live_series(), grain="M")
+    counts = {r["vintage"]: r["originalLoanCount"] for r in out["vintages"]}
+    assert counts == {"2025-10": 33, "2025-11": 40, "2025-12": 57}
+    bal = {r["vintage"]: r["originalBalance"] for r in out["vintages"]}
+    assert bal["2025-11"] == 40 * 100_000.0
+    assert out["totalLoanCount"] == 130
+
+
+def test_a_rekeyed_cut_is_not_read_as_the_pool_leaving():
+    pool = C.cohort_static_pool(_live_series(), vintage="2025-11", grain="M")
+    assert pool["originalLoanCount"] == 40
+    by = {p["period"]: p for p in pool["periods"]}
+    assert all(p["survivingLoanCount"] == 40 for p in pool["periods"])
+    assert all(p["exitsInPeriod"] == 0 and p["cumulativeExits"] == 0
+               for p in pool["periods"])
+    assert by["2025-12"]["idsRekeyed"] and by["2026-01"]["idsRekeyed"]
+    assert not by["2026-02"]["idsRekeyed"]
+
+
+def test_a_year_vintage_is_the_whole_year():
+    out = C.cohort_formation(_live_series(), grain="Y")
+    assert [(r["vintage"], r["originalLoanCount"]) for r in out["vintages"]] == [("2025", 130)]

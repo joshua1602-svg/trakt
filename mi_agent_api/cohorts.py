@@ -521,48 +521,54 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
                           "be assigned to an origination vintage"}
 
     id_cols, linkage = frame_id_columns(usable)
-    entry, corrections = cohort_entry_map(usable, grain, id_cols)
-    seen: set = set()
-    rows: Dict[str, Dict[str, Any]] = {}
+    _entry, corrections = cohort_entry_map(usable, grain, id_cols)
+
+    # Each vintage is measured in ONE reporting cut: the first that falls on or
+    # after the vintage's formation end, i.e. once it has stopped admitting
+    # loans. Membership is that cut's own origination dates, so no loan is
+    # matched across cuts — a cut that re-keys its loan identifiers (the live
+    # 2025-12 cut did) can no longer count a vintage twice. Accumulating "new"
+    # identifiers across cuts is what doubled every 2025 vintage.
+    labelled = []
     for fr, id_col in zip(usable, id_cols):
-        df = fr["df"]
-        if id_col is None:
-            continue
-        ids = _ids(df, id_col)
-        # A loan repeated within one cut still enters once.
-        fresh = (~ids.isin(seen) & ids.notna() & ~ids.duplicated()).to_numpy()
-        if not fresh.any():
-            continue
-        newly = df[fresh].copy()
-        seen.update(ids[fresh].dropna().tolist())
-        # Group this period's new arrivals by the vintage they were assigned.
-        newly["_assigned_vintage"] = ids[fresh].map(entry).to_numpy()
-        for label, sub in newly.groupby("_assigned_vintage", dropna=True):
-            row = rows.setdefault(str(label), {
-                "vintage": str(label), "originalLoanCount": 0,
-                "originalBalance": 0.0, "firstSeen": fr.get("reporting_date"),
-            })
-            row["originalLoanCount"] += int(len(sub))
-            if _BALANCE in sub.columns:
-                row["originalBalance"] += float(coerce_numeric(sub[_BALANCE]).sum())
-            row.setdefault("_ltv", []).append(sub)
+        labels = _vintage_series(fr["df"], grain)
+        if labels is not None:
+            labelled.append((fr, id_col, labels.astype("string")))
+    all_vintages = sorted({str(v) for _fr, _c, lab in labelled
+                           for v in lab.dropna().unique()})
 
     out: List[Dict[str, Any]] = []
-    for label, row in rows.items():
-        parts = row.pop("_ltv", [])
-        entry_rows = pd.concat(parts) if parts else None
-        if entry_rows is not None and _BALANCE in entry_rows.columns:
-            w = entry_rows[_BALANCE]
-            if _ORIG_LTV in entry_rows.columns:
-                row["waOriginalLtv"] = _weighted_avg_pct(
-                    entry_rows[_ORIG_LTV], w, entry_rows[_ORIG_LTV])
-            if _LTV in entry_rows.columns:
-                row["waEntryLtv"] = _weighted_avg_pct(
-                    entry_rows[_LTV], w, entry_rows[_LTV])
-            if _RATE in entry_rows.columns:
-                row["waRate"] = _weighted_avg_pct(
-                    entry_rows[_RATE], w, entry_rows[_RATE])
-        row["originalBalance"] = round(row["originalBalance"], 2)
+    for label in all_vintages:
+        end = _formation_end(label, grain)
+        present = [(fr, c, lab) for fr, c, lab in labelled if (lab == label).any()]
+        if not present:
+            continue
+        anchored = [t for t in present
+                    if end and str(t[0].get("reporting_date") or "")[:10] >= end]
+        fr, id_col, lab = anchored[0] if anchored else present[-1]
+        df = fr["df"]
+        sub = df[(lab == label).fillna(False).to_numpy()]
+        if id_col is not None:
+            ids = _ids(sub, id_col)
+            sub = sub[~(ids.notna() & ids.duplicated()).to_numpy()]
+        row: Dict[str, Any] = {
+            "vintage": label,
+            "originalLoanCount": int(len(sub)),
+            "originalBalance": (round(float(coerce_numeric(sub[_BALANCE]).sum()), 2)
+                                if _BALANCE in sub.columns else 0.0),
+            "firstSeen": present[0][0].get("reporting_date"),
+            "measuredAt": fr.get("reporting_date"),
+            # Still admitting loans at the latest cut: the count can yet grow.
+            "forming": not anchored,
+        }
+        if _BALANCE in sub.columns and len(sub):
+            w = sub[_BALANCE]
+            if _ORIG_LTV in sub.columns:
+                row["waOriginalLtv"] = _weighted_avg_pct(sub[_ORIG_LTV], w, sub[_ORIG_LTV])
+            if _LTV in sub.columns:
+                row["waEntryLtv"] = _weighted_avg_pct(sub[_LTV], w, sub[_LTV])
+            if _RATE in sub.columns:
+                row["waRate"] = _weighted_avg_pct(sub[_RATE], w, sub[_RATE])
         out.append(row)
     out.sort(key=lambda r: r["vintage"])
     return {
@@ -578,9 +584,11 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
         "lineage": {
             "source": "governed funded reporting periods, by origination vintage",
             "metric": "loans and balance ENTERING the book in each vintage",
-            "note": "Formation counts each loan once, in the period it was "
-                    "originated — not the book outstanding at a reporting date. "
-                    "Portfolio evolution is a separate view.",
+            "note": "Each vintage is counted in the first reporting cut after it "
+                    "stops originating (measuredAt), from that cut's origination "
+                    "dates — so each loan is counted once without matching "
+                    "identifiers across cuts. Not the book outstanding at a "
+                    "reporting date; portfolio evolution is a separate view.",
         },
     }
 
@@ -637,9 +645,16 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                           "static pool cannot be followed"}
 
     id_cols, linkage = frame_id_columns(usable)
-    entry, _ = cohort_entry_map(usable, grain, id_cols)
-    members = {loan for loan, label in entry.items() if label == str(vintage)}
-    if not members:
+    # Membership comes from each cut's OWN origination dates, not from loan
+    # ids carried across cuts: a cut that re-keys its identifiers still holds
+    # the same loans, so the pool neither doubles nor "exits" wholesale.
+    members_by_cut = []
+    for fr, id_col in zip(usable, id_cols):
+        labels = _vintage_series(fr["df"], grain)
+        mask = ((labels.astype("string") == str(vintage)).fillna(False).to_numpy()
+                if labels is not None else None)
+        members_by_cut.append(mask)
+    if not any(m is not None and m.any() for m in members_by_cut):
         return {**base, "available": False, "periods": [],
                 "reason": f"no loans were originated in {vintage}"}
 
@@ -653,46 +668,53 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
     original_count: Optional[int] = None
     original_balance: Optional[float] = None
     prior_ids: Optional[set] = None
-    anchor_ids: set = set()
-    for fr, id_col in zip(usable, id_cols):
+    prior_count: Optional[int] = None
+    for fr, id_col, mask in zip(usable, id_cols, members_by_cut):
         df = fr["df"]
-        if id_col is None:
+        if mask is None:
             continue
-        ids = _ids(df, id_col)
-        present = ids.isin(members)
-        if not present.any() and original_count is None:
+        if not mask.any() and original_count is None:
             continue  # the vintage has not formed yet
         reporting_date = str(fr.get("reporting_date") or "")
         forming = bool(formation_end and reporting_date
                        and reporting_date[:10] < formation_end)
-        sub = df[present.values]
-        here = set(ids[present].dropna().tolist())
+        sub = df[mask]
+        ids = _ids(sub, id_col)
+        sub = sub[~(ids.notna() & ids.duplicated()).to_numpy()]
+        here = set(_ids(sub, id_col).dropna().tolist())
+        count = int(len(sub))
         balance = (float(coerce_numeric(sub[_BALANCE]).sum())
                    if _BALANCE in sub.columns and len(sub) else 0.0)
         if original_count is None and not forming:
-            original_count, original_balance = len(here), balance
-            anchor_ids = set(here)
-        # Exits only mean something once the pool is fixed. While the vintage is
-        # still forming, a loan absent last period may simply not have completed
-        # yet, so it is not an exit.
-        exits = (sorted(prior_ids - here)
-                 if prior_ids is not None and not forming else [])
+            original_count, original_balance = count, balance
+        # Exits only mean something once the pool is fixed. They are named by
+        # identifier where this cut links to the previous one; where it does
+        # not (fewer than half the previous cut's ids found, e.g. a re-keyed
+        # cut) the ids cannot say who left, so the fall in count is used and
+        # the period says so.
+        rekeyed = False
+        if prior_count is None or forming:
+            exits = 0
+        elif prior_ids and len(prior_ids & here) >= 0.5 * len(prior_ids):
+            exits = len(prior_ids - here)
+        else:
+            rekeyed = bool(prior_ids)
+            exits = max(prior_count - count, 0)
         row: Dict[str, Any] = {
             "period": (fr.get("reporting_date") or fr.get("run_id") or "")[:7],
             "reportingDate": fr.get("reporting_date"),
             "monthsSinceEntry": _months_between(vintage, fr.get("reporting_date")),
-            "survivingLoanCount": len(here),
+            "survivingLoanCount": count,
             "currentBalance": round(balance, 2),
             "forming": forming,
-            "loanRetention": (round(len(here) / original_count, 4)
+            "loanRetention": (round(count / original_count, 4)
                               if original_count and not forming else None),
             "balanceRetention": (round(balance / original_balance, 4)
                                  if original_balance and not forming else None),
-            "exitsInPeriod": len(exits),
-            # Counted against the anchored pool itself, so it agrees with the
-            # per-period exits rather than being a difference of two counts.
-            "cumulativeExits": (len(anchor_ids - here)
+            "exitsInPeriod": exits,
+            "cumulativeExits": (max(original_count - count, 0)
                                 if original_count and not forming else 0),
+            "idsRekeyed": rekeyed,
         }
         if len(sub) and _BALANCE in sub.columns:
             w = sub[_BALANCE]
@@ -701,7 +723,7 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
             if _RATE in sub.columns:
                 row["waRate"] = _weighted_avg_pct(sub[_RATE], w, df[_RATE])
         periods.append(row)
-        prior_ids = here
+        prior_ids, prior_count = here, count
 
     return {
         **base,
