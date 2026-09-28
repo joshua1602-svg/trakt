@@ -131,6 +131,9 @@ export interface StaticPoolPeriod {
   balanceRetention?: number | null;
   exitsInPeriod: number;
   cumulativeExits: number;
+  /** This cut's loan ids did not match the previous cut's, so exits here are
+   *  the fall in count rather than named loans. */
+  idsRekeyed?: boolean;
   waLtv?: number | null;
   waRate?: number | null;
 }
