@@ -170,7 +170,7 @@ export function BarList({
       : format === "pct" ? `${v.toFixed(1)}%`
       : v.toLocaleString("en-GB");
   return (
-    <div className="grid grid-cols-[7rem_1fr_auto] items-center gap-x-3 gap-y-2">
+    <div className="grid grid-cols-[7rem_1fr_minmax(5rem,auto)] items-center gap-x-3 gap-y-2">
       {data.map((d) => {
         const cells = (
           <>
@@ -186,10 +186,10 @@ export function BarList({
             {/* The figure is the point of the row; the label and any suffix
                 are context, so they sit a full ink step behind it. */}
             <span className="t-num text-right text-[var(--fs-label)] font-semibold text-ink-100">
+              {/* Only the selected measure is drawn: the count is not
+                  suffixed onto a balance (or vice versa) — the toggle is the
+                  way to read the other measure. */}
               {render(d.value)}
-              {d.count != null && format === "gbp" && (
-                <span className="ml-1.5 font-normal text-ink-500">· {d.count}</span>
-              )}
               {d.secondary && <span className="ml-1.5 font-normal text-ink-500">{d.secondary}</span>}
             </span>
           </>
@@ -201,7 +201,10 @@ export function BarList({
             type="button"
             onClick={() => onSelect(d.label)}
             title={selectTitle?.(d.label)}
-            className="col-span-3 grid grid-cols-[7rem_1fr_auto] items-center gap-x-3 rounded-sm
+            // A SUBGRID of the list, not a grid of its own: a nested grid
+            // sized its own `auto` value column per row, so each bar track
+            // was a different length. The subgrid shares the parent's columns.
+            className="col-span-3 grid grid-cols-subgrid items-center rounded-sm
                        px-1 py-0.5 text-left transition-colors hover:bg-navy-700/60"
           >
             {cells}

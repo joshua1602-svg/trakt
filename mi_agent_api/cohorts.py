@@ -339,8 +339,10 @@ def cohort_analysis(df: pd.DataFrame, *, client_id: str = "",
 # maps "policy completion date" to it). It is a property of the loan, not of
 # the reporting period, so a loan belongs to exactly one vintage for life.
 # --------------------------------------------------------------------------- #
-_LOAN_ID_CANDIDATES = ("loan_id", "loan_identifier", "loan_policy_number",
-                       "account_number")
+# ``loan_identifier`` first, matching the platform assembler's loan key and
+# ``evolution._LOAN_ID_COLS``: the canonical key is the one every cut carries.
+_LOAN_ID_CANDIDATES = ("loan_identifier", "unique_identifier", "loan_id",
+                       "loan_policy_number", "account_number")
 
 
 def loan_id_column(df: pd.DataFrame) -> Optional[str]:
@@ -355,11 +357,40 @@ def loan_id_column(df: pd.DataFrame) -> Optional[str]:
     return None
 
 
-def _ids(df: pd.DataFrame, id_col: str) -> pd.Series:
-    return df[id_col].astype("string").str.strip()
+def series_id_column(frames: List[Dict[str, Any]]) -> Optional[str]:
+    """The ONE loan-id column used for a whole run of reporting periods.
+
+    Chosen from the first period that has one, then held. Choosing per period
+    let the key switch column between cuts (a ``loan_id`` populated only from
+    some month on), and a loan keyed differently on either side of the switch
+    was counted as a new loan — every vintage formed before it doubled.
+    """
+    for fr in frames:
+        df = fr.get("df")
+        if df is not None and len(df):
+            col = loan_id_column(df)
+            if col is not None:
+                return col
+    return None
 
 
-def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M"
+def _ids(df: pd.DataFrame, id_col: Optional[str]) -> pd.Series:
+    """Loan ids as comparable strings, or all-missing when the column is absent.
+
+    The same loan must key identically in every cut. A cut whose id column
+    was read as float (one blank cell is enough) renders ``1000`` as
+    ``"1000.0"``, so a trailing ``.0`` is dropped; blanks and null spellings
+    are missing, never an id.
+    """
+    if id_col is None or id_col not in getattr(df, "columns", ()):
+        return pd.Series(pd.NA, index=df.index, dtype="string")
+    ids = (df[id_col].astype("string").str.strip()
+           .str.replace(r"\.0+$", "", regex=True))
+    return ids.mask(ids.isin(["", "nan", "NaN", "None", "<NA>"]))
+
+
+def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M",
+                     id_col: Optional[str] = None
                      ) -> Tuple[Dict[str, str], List[Dict[str, Any]]]:
     """Map every loan id to its vintage, plus any late corrections observed.
 
@@ -373,13 +404,13 @@ def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M"
     # cost of the whole surface. One concat + drop_duplicates does the same
     # work, and keeps the "first assignment wins" rule explicit.
     seen: List[pd.DataFrame] = []
+    id_col = id_col or series_id_column(frames)
     for fr in frames:
         df = fr.get("df")
         if df is None or not len(df):
             continue
-        id_col = loan_id_column(df)
         labels = _vintage_series(df, grain)
-        if id_col is None or labels is None:
+        if id_col is None or id_col not in df.columns or labels is None:
             continue
         part = pd.DataFrame({
             "loan": _ids(df, id_col).to_numpy(),
@@ -434,16 +465,17 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
                 "reason": f"no {_ORIG_DATE} on the funded tape, so loans cannot "
                           "be assigned to an origination vintage"}
 
-    entry, corrections = cohort_entry_map(frames, grain)
+    id_col = series_id_column(usable)
+    entry, corrections = cohort_entry_map(frames, grain, id_col)
     seen: set = set()
     rows: Dict[str, Dict[str, Any]] = {}
     for fr in usable:
         df = fr["df"]
-        id_col = loan_id_column(df)
-        if id_col is None:
+        if id_col not in df.columns:
             continue
         ids = _ids(df, id_col)
-        fresh = (~ids.isin(seen) & ids.notna()).to_numpy()
+        # A loan repeated within one cut still enters once.
+        fresh = (~ids.isin(seen) & ids.notna() & ~ids.duplicated()).to_numpy()
         if not fresh.any():
             continue
         newly = df[fresh].copy()
@@ -546,7 +578,8 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                 "reason": "the funded tape carries no loan identifier, so a "
                           "static pool cannot be followed"}
 
-    entry, _ = cohort_entry_map(frames, grain)
+    id_col = series_id_column(usable)
+    entry, _ = cohort_entry_map(frames, grain, id_col)
     members = {loan for loan, label in entry.items() if label == str(vintage)}
     if not members:
         return {**base, "available": False, "periods": [],
@@ -562,10 +595,10 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
     original_count: Optional[int] = None
     original_balance: Optional[float] = None
     prior_ids: Optional[set] = None
+    anchor_ids: set = set()
     for fr in usable:
         df = fr["df"]
-        id_col = loan_id_column(df)
-        if id_col is None:
+        if id_col not in df.columns:
             continue
         ids = _ids(df, id_col)
         present = ids.isin(members)
@@ -580,6 +613,7 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                    if _BALANCE in sub.columns and len(sub) else 0.0)
         if original_count is None and not forming:
             original_count, original_balance = len(here), balance
+            anchor_ids = set(here)
         # Exits only mean something once the pool is fixed. While the vintage is
         # still forming, a loan absent last period may simply not have completed
         # yet, so it is not an exit.
@@ -597,7 +631,9 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
             "balanceRetention": (round(balance / original_balance, 4)
                                  if original_balance and not forming else None),
             "exitsInPeriod": len(exits),
-            "cumulativeExits": (original_count - len(here)
+            # Counted against the anchored pool itself, so it agrees with the
+            # per-period exits rather than being a difference of two counts.
+            "cumulativeExits": (len(anchor_ids - here)
                                 if original_count and not forming else 0),
         }
         if len(sub) and _BALANCE in sub.columns:

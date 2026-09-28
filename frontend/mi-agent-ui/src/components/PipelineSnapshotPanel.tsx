@@ -107,7 +107,7 @@ export function PipelineSnapshotPanel({
   const amountDelta = weeklyDelta(amount, prior?.pipelineAmount, "gbp");
   const weightedDelta = weeklyDelta(weighted, prior?.weightedExpectedFundedAmount, "gbp");
   const avgDelta = weeklyDelta(avg, priorAvg, "gbp");
-  const topStage = [...snapshot.stageBreakdown].sort((a, b) => b.pipelineAmount - a.pipelineAmount)[0];
+  const profile = snapshot.profile ?? null;
   // The "next" expected completion is the first FUTURE month (> pipeline as-of
   // month); a past month is overdue, not next. Classified backend-side.
   const summary = snapshot.expectedCompletionSummary;
@@ -198,9 +198,30 @@ export function PipelineSnapshotPanel({
           hint="probability-weighted" />
         <StatTile label="Average case amount" value={formatGBP(avg)}
           delta={avgDelta.delta} deltaIntent={avgDelta.deltaIntent} />
-        {topStage && (
-          <StatTile label="Top stage by amount" value={topStage.stage}
-            hint={`${formatGBP(topStage.pipelineAmount)} · ${topStage.caseCount} cases`} />
+        {/* The credit profile, tile for tile with the funded snapshot, so the
+            two lenses read alike. A measure the extract cannot supply is
+            omitted, never shown as an invented figure. */}
+        {profile?.waLtvPct != null && (
+          <StatTile label="Weighted avg LTV" value={`${profile.waLtvPct.toFixed(1)}%`}
+            hint="amount-weighted" />
+        )}
+        {profile?.waInterestRatePct != null && (
+          <StatTile label="Weighted avg interest rate" value={`${profile.waInterestRatePct.toFixed(1)}%`}
+            hint="amount-weighted" />
+        )}
+        {profile?.waYoungestAge != null && (
+          <StatTile label="Weighted avg youngest age" value={profile.waYoungestAge.toFixed(1)}
+            hint="amount-weighted" />
+        )}
+        {profile?.singleBorrowerPct != null && (
+          <StatTile label="Single borrowers" value={`${profile.singleBorrowerPct.toFixed(1)}%`}
+            hint={profile.singleBorrowerCount != null && profile.borrowerTypeKnownCount != null
+              ? `${profile.singleBorrowerCount.toLocaleString("en-GB")} of ${profile.borrowerTypeKnownCount.toLocaleString("en-GB")} cases`
+              : undefined} />
+        )}
+        {profile?.waPropertyValue != null && (
+          <StatTile label="Weighted avg property value" value={formatGBP(profile.waPropertyValue)}
+            hint="amount-weighted estimated value" />
         )}
         {nextCompletion ? (
           <StatTile label="Next expected completions" value={nextCompletion.month}

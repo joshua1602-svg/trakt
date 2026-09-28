@@ -933,6 +933,57 @@ def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
     return head + [other]
 
 
+def _pipeline_profile(df: pd.DataFrame) -> Dict[str, Any]:
+    """The pipeline's credit profile, on the same definitions as the funded
+    snapshot's tiles, so the two lenses read alike: weighted-average LTV,
+    interest rate, youngest-borrower age and property value (each weighted by
+    the pipeline amount, as the funded tiles weight by balance), and the
+    single-borrower share of cases.
+
+    Computed over the same population as the pipeline totals beside it. A
+    measure whose inputs the extract does not carry is ``None`` — the UI then
+    omits the tile rather than showing an invented figure.
+    """
+    from mi_agent.mi_dataset_profile import percent_storage_scale, to_display_points
+    from .snapshots import _weighted_average
+
+    weights = (df["current_outstanding_balance"] if "current_outstanding_balance" in df.columns
+               else pd.Series(1.0, index=df.index))
+
+    def _wavg(col: str) -> Optional[float]:
+        if col not in df.columns or not coerce_numeric(df[col]).notna().any():
+            return None
+        return _weighted_average(df[col], weights)
+
+    def _points(col: str) -> Optional[float]:
+        value = _wavg(col)
+        if value is None:
+            return None
+        return round(float(to_display_points(value, percent_storage_scale(df[col]))), 2)
+
+    def _rounded(value: Optional[float], ndigits: int) -> Optional[float]:
+        return None if value is None else round(float(value), ndigits)
+
+    single_pct = single = known_n = None
+    if "borrower_type" in df.columns:
+        btype = df["borrower_type"].astype(str).str.strip().str.lower()
+        known = btype.isin(["single", "joint"])
+        if known.any():
+            single = int((btype == "single").sum())
+            known_n = int(known.sum())
+            single_pct = round(single / known_n * 100.0, 1)
+
+    return {
+        "waLtvPct": _points("current_loan_to_value"),
+        "waInterestRatePct": _points("current_interest_rate"),
+        "waYoungestAge": _rounded(_wavg("youngest_borrower_age"), 1),
+        "waPropertyValue": _rounded(_wavg("current_valuation_amount"), 2),
+        "singleBorrowerPct": single_pct,
+        "singleBorrowerCount": single,
+        "borrowerTypeKnownCount": known_n,
+    }
+
+
 def compute_pipeline_snapshot(
     df: pd.DataFrame,
     report: Dict[str, Any],
@@ -1002,6 +1053,8 @@ def compute_pipeline_snapshot(
             report.get("historical_completion_model"),
             report.get("completion_probability_basis")),
         "stageBreakdown": _stage_breakdown(df),
+        # Credit profile on the funded tiles' definitions (additive).
+        "profile": _pipeline_profile(df),
         "expectedCompletionBreakdown": completion_breakdown,
         "expectedCompletionSummary": completion_summary,
         # Named diagnostics (relative to the pipeline as-of month).

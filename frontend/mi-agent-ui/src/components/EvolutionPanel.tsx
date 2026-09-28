@@ -444,12 +444,19 @@ export function FunnelStageCard({
                 formatter={(v: number, name: string) => [gbpCompact(Number(v)), name]}
                 contentStyle={{ background: "#0a0b0d", border: "1px solid #262a31", fontSize: 12 }}
                 {...(tooltipContent ? { content: tooltipContent } : {})} />
-              {avgFlow != null && (
-                <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeDasharray="4 3"
-                  label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 9, position: "insideTopRight" }} />
-              )}
               <Bar yAxisId="flow" dataKey="flow" name="Weekly flow (£)"
                 fill={THEME.cyan} radius={[2, 2, 0, 0]} />
+              {/* Drawn AFTER the bars: recharts paints children in order, so
+                  a reference line declared first sat behind the bars and its
+                  label was hidden wherever a bar reached it. The dark halo
+                  keeps the label legible where it crosses a bar. */}
+              {avgFlow != null && (
+                <ReferenceLine yAxisId="flow" y={avgFlow} stroke="#e0a458" strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  label={{ value: "5-wk avg flow", fill: "#e0a458", fontSize: 10, fontWeight: 600,
+                    position: "insideTopRight", stroke: "#0a0b0d", strokeWidth: 3,
+                    paintOrder: "stroke" }} />
+              )}
               {showCumulative && (
                 <Line yAxisId="stock" type="monotone" dataKey="stock" name="Stock (£)"
                   stroke={THEME.mint} strokeWidth={2} dot={false} />
@@ -830,7 +837,9 @@ export function EvolutionPanel({
   const [funnel, setFunnel] = useState<PipelineFunnelEvolution | null>(null);
   const [loading, setLoading] = useState(false);
   const [stageMode, setStageMode] = useState<StageViewMode>("amount");
-  const [includeKfi, setIncludeKfi] = useState(true);
+  // Off by default: KFI stock dwarfs the downstream stages, which then read
+  // as flat lines along the axis. KFI is one click away.
+  const [includeKfi, setIncludeKfi] = useState(false);
   // Origination funnel: overlay the stock line on the weekly-flow bars.
   const [showCumulative, setShowCumulative] = useState(false);
   // Which origination stage (if any) is enlarged in the focus modal.
@@ -1064,7 +1073,7 @@ export function EvolutionPanel({
                     : "Conversion = cumulative % of the KFI cohort reaching each milestone to date. Cohort history is thin for this book, so a lagged stock-ratio approximation is shown until more weeks accrue.")
                 : `${stageMode === "amount" ? "Amount (£)" : "Case count"} for the main funnel`
                   + ` (KFI → Application → Offer → Completion).${hasWithdrawn ? " Withdrawn is tracked separately, not in the funnel." : ""}`
-                  + " Toggle 'Include KFI' off to read the smaller downstream stages."}
+                  + " KFI is off by default so the smaller downstream stages are readable; tick 'Include KFI' to add it."}
             </p>
           </div>
         </div>
