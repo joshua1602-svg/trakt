@@ -769,3 +769,27 @@ sentence and in the source notes. The month-label reader moved to a neutral
 `mi_agent/period_labels.py` so this runtime reads "October 2025" by the funded
 runtime's rule without importing the module that owns the funded catalogue.
 Guarded by `tests/interpretation_v2/test_specialist_runtime_pipeline_dated.py`.
+
+### 14.5 Stage movement as built — the largest single POPULATION_NOT_EXECUTABLE family
+
+Not in the original P0 scope; added with the owner's go-ahead because it moves
+more questions than Change 3. `mi_agent/plan_stage_movement_runtime.py`, a
+population-owning runtime dispatched above the funded gate, serves
+`pipeline_stage_movement` plans — transition, arrivals, stayers, departures (by
+destination) and reconciliation — over the latest governed pair of weekly
+extracts. It translates the plan's stage filters into the owner's own reading
+(`stage_movement_query.StageMovement`), takes every figure from
+`movement_detail.resolve_stage_transition_detail`, and every word from the
+owner's pure `compose`. It reads no question and does no arithmetic.
+
+Proof, against the legacy route as oracle on its own fixture: for 26 of the 27
+recorded certification plans the governed reading equals the reading legacy
+built from the sentence, and the governed answer equals the legacy answer word
+for word. The 27th (SM03C, "arrivals" that also name an origin stage) is refused
+by name — a new arrival has no origin, and legacy's answer to it was adjudicated
+PARTIALLY_CORRECT.
+
+One shared change: `requested_semantics` now transcribes a capability-owned
+filter or axis by its concept when it has no canonical field (`origin_stage`,
+`destination_stage`), so the coverage owner proves the stage axis by name rather
+than matching an empty field.

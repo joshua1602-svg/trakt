@@ -42,6 +42,7 @@ from mi_agent import plan_material_summary as material_summary
 from mi_agent import plan_metric_delta as metric_delta
 from mi_agent import plan_pipeline_runtime as pipeline
 from mi_agent import plan_runtime_adapter as generic
+from mi_agent import plan_stage_movement_runtime as stage_movement
 from mi_agent import plan_temporal_runtime as temporal
 
 __all__ = ["POPULATION_OWNING_RUNTIMES", "FUNDED_RUNTIMES", "GOVERNED_RUNTIMES",
@@ -53,7 +54,7 @@ __all__ = ["POPULATION_OWNING_RUNTIMES", "FUNDED_RUNTIMES", "GOVERNED_RUNTIMES",
 #: a DERIVED population — it composes funded with pipeline — and declares those
 #: inputs itself (`plan_forecast_runtime.POPULATION_INPUTS`); what it executes is
 #: still only `forecast`, never the funded book it reads from.
-POPULATION_OWNING_RUNTIMES: Tuple = (pipeline, forecast)
+POPULATION_OWNING_RUNTIMES: Tuple = (pipeline, stage_movement, forecast)
 
 #: Runtimes executing over the funded book, in the order the canary tries them
 #: BELOW the funded population gate. The order is the canary's and is

@@ -640,7 +640,10 @@ def requested_semantics(plan: Any) -> Dict[str, Any]:
         "measure_field": measure.get("canonical_field"),
         "statistic": measure.get("statistic"),
         "weight_field": measure.get("weight_field"),
-        "dimensions": [d.get("canonical_field")
+        # A CAPABILITY-OWNED axis has no canonical field — `destination_stage`
+        # is the stage movement capability's own — and is transcribed by its
+        # concept, so the ledger names the axis instead of `None`.
+        "dimensions": [d.get("canonical_field") or d.get("concept")
                        for d in (output.get("dimensions") or ())],
         "dimension_concepts": [d.get("concept")
                                for d in (output.get("dimensions") or ())],
@@ -655,7 +658,7 @@ def requested_semantics(plan: Any) -> Dict[str, Any]:
         # coverage owner would find a predicate in the receipt that the request
         # never claimed — and on a temporal answer it must hold for every
         # snapshot, which the slice 2 per-receipt rule already enforces.
-        "filters": [{"field": f.get("canonical_field"),
+        "filters": [{"field": f.get("canonical_field") or f.get("concept"),
                      "comparator": str(f.get("comparator") or "eq"),
                      "value": f.get("value")}
                     for f in plan_predicates(body, output)],

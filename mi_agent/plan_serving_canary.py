@@ -55,13 +55,14 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Tuple
 
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
 from mi_agent import plan_pipeline_runtime as pipeline_rt
 from mi_agent import plan_forecast_runtime as forecast_rt
+from mi_agent import plan_stage_movement_runtime as stage_rt
 from mi_agent import plan_runtime_registry as runtime_registry
 from mi_agent import plan_temporal_runtime as temporal
 from mi_agent import plan_material_summary as material_summary
@@ -697,6 +698,123 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     return payload
 
 
+def _attempt_stage_movement(body: Dict[str, Any], *, plan: Mapping[str, Any],
+                            question: str, pipeline_root: Any,
+                            pipeline_client_id: Optional[str],
+                            pipeline_history: Any,
+                            render_portfolio_id: Optional[str],
+                            as_of: Optional[str]
+                            ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One STAGE MOVEMENT serving attempt. Same contract as `_attempt`.
+
+    Perimeter, prove the population, execute, render, record — with the stage
+    movement runtime's own perimeter and declaration, and the pipeline inputs
+    the legacy stage movement route hands the same owner.
+    """
+    eligible, why, detail = stage_rt.check_eligibility(plan)
+    body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail,
+                           "perimeter": "stage_movement_specialist"}
+    if not eligible:
+        body["execution"] = {"attempted": False, "why_not": f"{why}: {detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{why}"
+
+    base_ok, base_why, base_detail = adapter.check_population_base(
+        plan, stage_rt.EXECUTION_POPULATION,
+        executable=stage_rt.EXECUTABLE_POPULATIONS)
+    if not base_ok:
+        body["eligibility"] = {"eligible": False, "reason": base_why,
+                               "detail": base_detail,
+                               "perimeter": "stage_movement_population"}
+        body["execution"] = {"attempted": False,
+                             "why_not": f"{base_why}: {base_detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{base_why}"
+
+    body["execution"] = {"attempted": True, "runtime": "stage_movement",
+                         "requested_semantics": adapter.requested_semantics(plan)}
+    try:
+        outcome = stage_rt.execute(plan, root=pipeline_root,
+                                   client_id=pipeline_client_id or "",
+                                   history_model=pipeline_history)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, EXECUTION_FAILED
+    if not outcome.ok:
+        body["execution"].update({"attempted": False,
+                                  "why_not": f"{outcome.reason}: {outcome.detail}"[:300]})
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{outcome.reason}"
+
+    body["execution"].update({"receipt": dict(outcome.receipt),
+                              "grouped_cells": outcome.rows,
+                              "row_count": len(outcome.rows)})
+    body["disposition"] = evidence.EXECUTED
+    try:
+        payload = render_stage_movement(plan, outcome, question=question,
+                                        portfolio_id=render_portfolio_id,
+                                        as_of=as_of)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    return dict(payload), ""
+
+
+def render_stage_movement(plan: Mapping[str, Any], outcome: Any, *,
+                          question: str, portfolio_id: Optional[str],
+                          as_of: Optional[str]) -> Dict[str, Any]:
+    """The stage movement result, in the envelope every channel renders.
+
+    THE SENTENCE IS THE OWNER'S. `stage_movement_query.compose` worded it from
+    the governed payload, and it already states the measure and the window
+    ("between <prior extract> and <latest extract>") — D4 on the sentence.
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    receipt = dict(outcome.receipt)
+    dataset = receipt.get("dataset") or {}
+    spec_dict = {"capability": receipt.get("capability"),
+                 "population": receipt.get("population_base"),
+                 "operation": receipt.get("operation"),
+                 "measure": receipt.get("measure_concept")}
+    artefacts: List[Dict[str, Any]] = []
+    if outcome.rows:
+        artefacts.append({
+            "id": f"art_{uuid.uuid4().hex[:8]}", "type": "table",
+            "title": "Governed stage movement", "rows": outcome.rows,
+            "columns": outcome.columns,
+            "description": f"{len(outcome.rows)} row(s).",
+            "source": {"engine": "mi_agent.governed_plan",
+                       "label": "MI Agent · table", "spec": spec_dict,
+                       "asOf": dataset.get("as_of_date") or as_of,
+                       "portfolio": portfolio_id},
+            "createdAt": datetime.now(timezone.utc).isoformat(), "mock": False})
+    reconciliation = {"dataset": "pipeline", "coverage_by_balance_pct": 100.0}
+    for artefact in artefacts:
+        artefact["reconciliation"] = reconciliation
+    notes = [{"field": "stage_movement",
+              "note": (f"{receipt.get('execution_owner')}: weekly extracts "
+                       f"{dataset.get('comparison_date')} and "
+                       f"{dataset.get('as_of_date')}")}]
+    return {
+        "ok": True, "error": None, "question": question, "answer": outcome.answer,
+        "interpreted": "", "spec": spec_dict,
+        "validation": {"ok": True, "errors": [], "warnings": [],
+                       "resolved_fields": {}},
+        "artifacts": artefacts, "reconciliation": reconciliation,
+        "sourceNotes": notes, "warnings": [], "diagnostics": [],
+        "assumptions": [],
+        "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                     "route": "governed_plan_stage_movement", "lensApplied": None,
+                     "parserMode": "governed_plan",
+                     "governedPlan": {
+                         "requested": dict(adapter.requested_semantics(plan)),
+                         "executed": receipt}},
+    }
+
+
 def _attempt_forecast(body: Dict[str, Any], *, plan: Mapping[str, Any],
                       question: str, client_id: Optional[str],
                       output_root: Optional[str], pipeline_root: Any,
@@ -1237,6 +1355,16 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
             pipeline_history=pipeline_history, pipeline_run_id=pipeline_run_id)
+
+    # STAGE MOVEMENT, a second pipeline owner, above the gate for the same
+    # reason: its plans are about the pipeline and the funded runtimes would
+    # refuse them for a population they never execute.
+    if stage_rt.claims(plan):
+        return _attempt_stage_movement(
+            body, plan=plan, question=question,
+            pipeline_root=pipeline_root, pipeline_client_id=pipeline_client_id,
+            pipeline_history=pipeline_history,
+            render_portfolio_id=render_portfolio_id, as_of=as_of)
 
     # FORECAST, the derived population, likewise above the gate: a forecast plan
     # is not the funded runtimes' to refuse. It reads the funded book and the
