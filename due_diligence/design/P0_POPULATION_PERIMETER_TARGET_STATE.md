@@ -51,6 +51,15 @@
         threshold names that concept as a target, and only the run-rate owner
         produces dates.
 
+    D7  WHICH WEEKLY EXTRACT A NAMED MONTH MEANS            OPEN — owner to decide
+        Found while scoping Change 3 (§14.4). The temporal runtime refuses a
+        month that holds more than one snapshot, so against weekly extracts it
+        would refuse every month; the legacy owner takes the latest extract in
+        any year with that month number. Recommendation: the last weekly
+        extract dated within the named month, year-aware, with its date stated
+        on the answer. Blocks named-month pipeline comparisons only; relative
+        pairs ("latest vs prior") do not need it.
+
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
         any vintage today, so "state both vintages" cannot be satisfied until the
@@ -683,3 +692,50 @@ rule 6 tests in `test_contract_normalisation.py`. Mutation-tested: disabling the
 skew check fails 3; dropping the target proof fails 2; dispatching forecast below
 the funded gate fails 4.
 
+### 14.4 Change 3 is a store and a decision, not a widened constant
+
+§7 read Change 3 as "widen `EXECUTABLE_POPULATIONS` to include pipeline, because
+the temporal runtime owns frame selection". Reading the code before building it:
+
+- **The temporal runtime selects frames through `SnapshotStore`, and the only
+  store production builds is funded.** `governed_snapshot_store` serves
+  `FUNDED_ROUTE` alone and refuses any other route by design, and
+  `plan_pipeline_runtime` states the rule that follows: pipeline time is weekly
+  extracts under a different owner, and answering a pipeline question from the
+  funded catalogue "is the single worst outcome available". Widening the
+  constant without a weekly pipeline store would admit pipeline plans into a
+  runtime that can only load funded frames.
+- **What fails in production is pair comparison, not series.** Weekly series
+  already serve through the pipeline runtime ([70]–[73] NEW). The refusals are
+  [80]/[81] "October and November pipeline" (PERIOD_NOT_SUPPORTED) and [82]/[83]
+  "latest vs prior", "growth from October to November"
+  (POPULATION_NOT_EXECUTABLE).
+- **No governed rule says which weekly extract a named month is.** The temporal
+  runtime matches a month EXACTLY and refuses when more than one snapshot falls
+  in it (`PERIOD_LABEL_AMBIGUOUS`) — right for monthly funded snapshots, and it
+  would refuse every month against weekly extracts, which carry four or five.
+  The legacy owner (`temporal_compare._match_period`) takes the latest extract
+  whose month NUMBER matches, in any year — so "October" can silently mean an
+  October from a different year. Neither can be reused as it stands.
+
+**D7 — WHICH WEEKLY EXTRACT A NAMED MONTH MEANS (open).** Recommendation: the
+last weekly extract dated within the named month, year-aware (a bare month that
+occurs in two years stays ambiguous and clarifies, as it does for funded), with
+the extract date stated on the answer (e.g. "October 2025, weekly extract of <date>").
+It is the month-end position, it is what legacy intends minus the year defect,
+and stating the date makes the choice auditable. Relative forms need no
+decision: "latest vs prior" on a weekly grain is the two most recent extracts.
+
+So Change 3 as it will be built: a governed WEEKLY pipeline store implementing
+the same `SnapshotStore` protocol (headers from the weekly extract inventory,
+`cadence=weekly`, `load_loans` returning the prepared pipeline frame), handed to
+the temporal runtime for pipeline plans; the D7 rule applied only on the weekly
+route; `EXECUTION_POPULATION` resolved per request from the store actually used;
+the pipeline amount bound to `pipeline_prep.PIPELINE_AMOUNT_FIELD` exactly as
+the pipeline runtime binds it. Relative pairs can be built before D7 is settled;
+named months wait for it.
+
+`pipeline_stage_movement` (27 certification cases refused
+POPULATION_NOT_EXECUTABLE, [84] in production) is a separate population-owning
+runtime over the stage-movement owner, not part of Change 3, and is recorded
+here so it is not mistaken for one.
