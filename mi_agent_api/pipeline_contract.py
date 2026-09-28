@@ -34,8 +34,10 @@ from trakt_core import perf as _perf
 from . import serving_cache as _serving_cache
 from .mi_dataset_contract import build_dataset_contract
 from .pipeline_prep import (
+    OPEN_STAGES,
     field_correlation_to_funded,
     forecast_readiness,
+    open_pipeline,
     prepare_pipeline_mi_dataset,
 )
 from . import pipeline_history as _history
@@ -755,13 +757,15 @@ def compute_prior_week_aggregates(
             prior, as_of_date=extract_date, historical_model=historical_model)
     except Exception:  # noqa: BLE001 - a bad prior file must not break the snapshot
         return None
-    cases = int(report.get("row_count", len(df)))
+    # Same open-pipeline population as the current snapshot's tiles, so the
+    # week-on-week delta is like-for-like.
+    totals = _open_totals(df)
     return {
         "snapshotDate": extract_date or prior.get("pipeline_source_folder_date"),
         "sourceFile": Path(prior.get("source_file", "")).name or None,
-        "pipelineRowCount": cases,
-        "pipelineAmount": report.get("total_pipeline_amount"),
-        "weightedExpectedFundedAmount": report.get("weighted_expected_funded_amount"),
+        "pipelineRowCount": totals["cases"],
+        "pipelineAmount": totals["amount"],
+        "weightedExpectedFundedAmount": totals["weighted"],
     }
 
 
@@ -933,6 +937,39 @@ def cap_breakdown(rows: List[Dict[str, Any]], top_n: int = 10,
     return head + [other]
 
 
+def _col_sum(df: pd.DataFrame, col: str) -> Optional[float]:
+    if col not in df.columns:
+        return None
+    return round(float(coerce_numeric(df[col]).sum()), 2)
+
+
+def _open_totals(df: pd.DataFrame) -> Dict[str, Any]:
+    """Case count, amount and weighted expected funded of the OPEN pipeline."""
+    odf = open_pipeline(df)
+    return {
+        "cases": int(len(odf)),
+        "amount": _col_sum(odf, "current_outstanding_balance") or 0.0,
+        "expected": _col_sum(odf, "expected_funded_amount"),
+        "weighted": _col_sum(odf, "weighted_expected_funded_amount"),
+    }
+
+
+def _excluded_from_open(df: pd.DataFrame) -> Dict[str, Any]:
+    """What the open-pipeline figures leave out, by stage — disclosed, never
+    silently dropped: completed and withdrawn cases stay in the weekly extract,
+    and an unmapped stage is not evidence of a live case."""
+    if "pipeline_stage" not in df.columns:
+        return {"stages": [], "cases": 0, "amount": 0.0}
+    stage = df["pipeline_stage"].astype(str).str.strip().str.upper()
+    rest = df[~stage.isin(OPEN_STAGES)]
+    rows = []
+    for key, sub in rest.groupby(stage[~stage.isin(OPEN_STAGES)], sort=True):
+        rows.append({"stage": str(key), "caseCount": int(len(sub)),
+                     "amount": _col_sum(sub, "current_outstanding_balance") or 0.0})
+    return {"stages": rows, "cases": int(len(rest)),
+            "amount": _col_sum(rest, "current_outstanding_balance") or 0.0}
+
+
 def _pipeline_profile(df: pd.DataFrame) -> Dict[str, Any]:
     """The pipeline's credit profile, on the same definitions as the funded
     snapshot's tiles, so the two lenses read alike: weighted-average LTV,
@@ -1006,8 +1043,14 @@ def compute_pipeline_snapshot(
     prior weekly snapshot exists — the UI then shows "No prior week").
     """
     contract = build_pipeline_dataset_contract(df, semantics, report)
-    weighted = report.get("weighted_expected_funded_amount")
     src = source or {}
+    # Every figure below is the OPEN pipeline (KFI / Application / Offer).
+    # Completed and withdrawn cases stay in the weekly extract with their
+    # balance; they are disclosed in ``excludedFromOpenPipeline``, not counted.
+    excluded = _excluded_from_open(df)
+    totals = _open_totals(df)
+    full_df, df = df, open_pipeline(df)
+    weighted = totals["weighted"]
     as_of = src.get("pipeline_as_of_date") or report.get("pipeline_as_of_date")
     # Long categorical breakdowns are capped to top 10 (+ Other) for the visual;
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
@@ -1039,9 +1082,13 @@ def compute_pipeline_snapshot(
         "duplicatesExcluded": src.get("duplicates_excluded"),
         "primarySourcePreference": src.get("primary_source_preference"),
         "sourceFoldersIncluded": src.get("source_folders_included", []),
-        "pipelineRowCount": int(report.get("row_count", len(df))),
-        "pipelineAmount": report.get("total_pipeline_amount"),
-        "expectedFundedAmount": report.get("expected_funded_amount"),
+        "pipelineRowCount": totals["cases"],
+        "pipelineAmount": totals["amount"],
+        "expectedFundedAmount": totals["expected"],
+        "pipelinePopulation": "open",
+        "openStages": list(OPEN_STAGES),
+        "excludedFromOpenPipeline": excluded,
+        "extractRowCount": int(len(full_df)),
         "weightedExpectedFundedAmount": weighted,
         # Prior weekly extract aggregates for week-on-week tile deltas (null when
         # no earlier weekly snapshot exists — the UI shows "No prior week").

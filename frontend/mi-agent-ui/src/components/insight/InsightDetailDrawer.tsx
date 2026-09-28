@@ -19,6 +19,18 @@ import type { MovementContributor, MovementDetail } from "@/domain";
 import { COMPONENT_LABEL, MOVEMENT_COMPONENTS } from "@/domain";
 import { cn, formatGBP } from "@/lib/utils";
 
+/** "vs 2026-08-27 (4 days)" — the comparison the payload actually made. The
+ *  pair is the clicked extract and the one before it, which is not always a
+ *  week apart, so the gap is stated rather than assumed. */
+export function comparisonLabel(asOf?: string | null, comparison?: string | null): string {
+  if (!comparison) return "vs prior extract";
+  const days = asOf
+    ? Math.round((Date.parse(asOf) - Date.parse(comparison)) / 86_400_000)
+    : NaN;
+  if (!Number.isFinite(days)) return `vs ${comparison}`;
+  return `vs ${comparison} (${days} day${days === 1 ? "" : "s"})`;
+}
+
 function signed(v: number): string {
   return `${v >= 0 ? "+" : "−"}${formatGBP(Math.abs(v), { compact: true })}`;
 }
@@ -41,7 +53,9 @@ function Contributors({ title, rows, total }: {
               <th className="py-1 text-left font-normal">Name</th>
               <th className="py-1 text-right font-normal">Contribution</th>
               <th className="py-1 text-right font-normal">Share</th>
-              <th className="py-1 text-right font-normal">Cases</th>
+              <th className="py-1 text-right font-normal" title="Cases in this group whose balance or stage moved">
+                Cases moved
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -143,7 +157,9 @@ export function InsightDetailDrawer({ detail, loading, onClose }: {
                 head.change < 0 ? "text-[#eb6f6f]" : "text-[#5ec6b8]")}>
                 {signed(head.change)}
                 {head.change_pct != null && ` / ${head.change_pct >= 0 ? "+" : ""}${head.change_pct.toFixed(1)}%`}
-                <span className="text-ink-500"> vs prior week</span>
+                <span className="text-ink-500">
+                  {" "}{comparisonLabel(detail?.as_of_date, detail?.comparison_date)}
+                </span>
               </div>
               {detail?.counts && (
                 <div className="mt-1 text-[11px] tabular-nums text-ink-400">

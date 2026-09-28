@@ -45,29 +45,51 @@ function Row({ label, value, hint }: {
   );
 }
 
-export function ConversionContext({ stage, conversion, cohortPct, latestWeek }: {
+export function ConversionContext({ stage, conversion, cohortPct, cohortSize, latestWeek }: {
   stage: string;
   conversion: FunnelConversion;
   /** The canonical cumulative cohort conversion for this stage. */
   cohortPct: number | null;
+  /** Cases in the KFI cohort — the denominator of ``cohortPct``. */
+  cohortSize?: number | null;
   /** The most recent governed weekly extract date. */
   latestWeek?: string | null;
 }) {
   const lag = conversion.lagApplied && conversion.lagWeeks != null
     ? `${conversion.lagWeeks}w lag applied`
     : "no lag applied";
+  // The cohort figure's own numerator: the percentage was computed from whole
+  // cases over ``cohortSize``, so the count is recovered exactly by rounding.
+  const reached = cohortPct != null && cohortSize
+    ? Math.round((cohortPct / 100) * cohortSize)
+    : null;
 
   return (
     <div className="mt-2 border-t border-[var(--color-line-soft)] pt-2"
       data-testid={`conversion-context-${stage}`}>
       <div className="text-[9px] uppercase tracking-wide text-ink-400">
-        Governed evidence
+        Governed evidence · cohort conversion
       </div>
 
-      <div className="mt-1 space-y-0.5">
+      {/* The rows that reproduce the headline: reached ÷ cohort = %. */}
+      <div className="mt-1 space-y-0.5" data-testid={`conversion-context-cohort-${stage}`}>
         <Row label="Definition"
-          value={conversion.basis ?? "—"} />
+          value="cases reaching this stage ÷ every case seen at KFI or later" />
+        <Row label="Numerator" hint="cases reached, to date" value={`${num(reached)} cases`} />
+        <Row label="Denominator" hint="KFI cohort" value={`${num(cohortSize)} cases`} />
         <Row label="Cumulative cohort conversion" value={pct1(cohortPct)} />
+        {latestWeek && <Row label="Latest extract" value={latestWeek} />}
+      </div>
+      <p className="mt-1 text-[9px] leading-snug text-ink-500">
+        By case count. The cohort includes recent KFIs that have not yet had
+        time to convert, so the rate reads low for a young book.
+      </p>
+
+      <div className="mt-2 text-[9px] uppercase tracking-wide text-ink-400">
+        Weekly velocity · forecast input, not conversion
+      </div>
+      <div className="mt-1 space-y-0.5" data-testid={`conversion-context-velocity-${stage}`}>
+        <Row label="Basis" value={conversion.basis ?? "—"} />
         <Row label="Weekly velocity (value)" value={`${pct1(conversion.weeklyRateValue)}/wk`} />
         <Row label="Weekly velocity (count)" value={`${pct1(conversion.weeklyRateCount)}/wk`} />
         <Row label="Numerator" hint="avg weekly flow, 5wk"
@@ -75,9 +97,8 @@ export function ConversionContext({ stage, conversion, cohortPct, latestWeek }: 
         <Row label="Denominator" hint={lag}
           value={`${money(conversion.kfiStockValue)} · ${num(conversion.kfiStockCount)} KFIs`} />
         <Row label="Observation window"
-          value={`${conversion.weeksInWindow ?? "—"} of ${conversion.minWeeks ?? "—"}+ weeks`} />
+          value={`${conversion.weeksInWindow ?? "—"} weeks (minimum ${conversion.minWeeks ?? "—"})`} />
         <Row label="Denominator week" value={conversion.denominatorWeek ?? "—"} />
-        {latestWeek && <Row label="Latest extract" value={latestWeek} />}
       </div>
 
       {!conversion.sufficient && (

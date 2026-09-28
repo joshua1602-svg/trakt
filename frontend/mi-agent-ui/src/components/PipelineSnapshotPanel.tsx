@@ -108,6 +108,7 @@ export function PipelineSnapshotPanel({
   const weightedDelta = weeklyDelta(weighted, prior?.weightedExpectedFundedAmount, "gbp");
   const avgDelta = weeklyDelta(avg, priorAvg, "gbp");
   const profile = snapshot.profile ?? null;
+  const excluded = snapshot.excludedFromOpenPipeline ?? null;
   // The "next" expected completion is the first FUTURE month (> pipeline as-of
   // month); a past month is overdue, not next. Classified backend-side.
   const summary = snapshot.expectedCompletionSummary;
@@ -235,6 +236,21 @@ export function PipelineSnapshotPanel({
             hint={`${formatGBP(overdueWeighted)} weighted · before as-of month`} />
         )}
       </div>
+
+      {excluded && excluded.cases > 0 && (
+        <p className="t-micro mt-[var(--gap-group)]" data-testid="pipeline-open-scope">
+          Open pipeline only (KFI · Application · Offer). The weekly extract also
+          holds{" "}
+          {excluded.stages.map((x, i) => (
+            <span key={x.stage}>
+              {i > 0 && (i === excluded.stages.length - 1 ? " and " : ", ")}
+              {x.caseCount.toLocaleString("en-GB")} {x.stage.toLowerCase()} (
+              {formatGBP(x.amount)})
+            </span>
+          ))}
+          {" "}— not counted in these figures.
+        </p>
+      )}
 
       {/* One switch for every breakdown that carries both measures. Each
           breakdown already returned amount AND case count in the same payload,

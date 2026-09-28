@@ -148,6 +148,17 @@ export interface PipelineSnapshot {
   historicalCompletionModel?: Record<string, unknown>;
   historicalModelEvidence?: HistoricalModelEvidence;
   stageBreakdown: PipelineStageBucket[];
+  /** "open": every figure is KFI / Application / Offer only. */
+  pipelinePopulation?: "open";
+  openStages?: string[];
+  /** What the open-pipeline figures leave out (still in the weekly extract). */
+  excludedFromOpenPipeline?: {
+    stages: { stage: string; caseCount: number; amount: number }[];
+    cases: number;
+    amount: number;
+  } | null;
+  /** Every row in the weekly extract, open or not. */
+  extractRowCount?: number;
   /** Credit profile tiles (additive; absent on older payloads). */
   profile?: PipelineProfile | null;
   /** Unchanged — drives the completion-month chart. */
