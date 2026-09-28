@@ -462,6 +462,26 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
                 "disposition": (_coverage_resolved() if grouped
                                 else _coverage_missing()),
             })
+        # A THRESHOLD IS PART OF WHAT WAS ASKED. "When do we reach £250m?"
+        # answered for £75m is a substitution no predicate or axis shows, and
+        # it is the defect the milestone rule was moved to its owner to end. So
+        # the executed side must state the same concept, comparator and value.
+        wanted_target = requested.get("target")
+        if isinstance(wanted_target, Mapping) and wanted_target:
+            got = executed.get("target")
+            same = isinstance(got, Mapping) and all(
+                str(got.get(key)) == str(wanted_target.get(key))
+                for key in ("concept", "comparator")) and \
+                _same_number(got.get("value"), wanted_target.get("value"))
+            entries.append({
+                "kind": "governed_plan:target", "field": "target",
+                "value": (f"{wanted_target.get('comparator')} "
+                          f"{wanted_target.get('value')}"),
+                "term": f"the {wanted_target.get('value')} threshold",
+                "owner": "governed_plan + specialist execution receipt",
+                "disposition": (_coverage_resolved() if same
+                                else _coverage_missing()),
+            })
         return {"version": 1, "concepts": entries,
                 "unaccounted": [e for e in entries
                                 if e["disposition"] == _coverage_missing()]}
@@ -480,6 +500,13 @@ def _governed_plan_coverage(envelope: Dict[str, Any]) -> Optional[Dict[str, Any]
     return {"version": 1, "concepts": entries,
             "unaccounted": [e for e in entries
                             if e["disposition"] == _coverage_missing()]}
+
+
+def _same_number(left: Any, right: Any) -> bool:
+    try:
+        return float(left) == float(right)
+    except (TypeError, ValueError):
+        return False
 
 
 def _coverage_resolved() -> str:

@@ -685,3 +685,117 @@ def test_the_model_still_cannot_author_an_executable_binding():
         "population", "measures", "dimensions", "filters", "geography",
         "time", "comparison", "target", "outputs", "ambiguity", "evidence"}
     assert schema["properties"]["change_form"]["enum"]
+
+
+# --------------------------------------------------------------------------- #
+# 6. a derived population has one spelling
+# --------------------------------------------------------------------------- #
+
+from mi_agent.interpretation_v2.normalise import (  # noqa: E402
+    DERIVED_POPULATION_OF,
+    DERIVED_POPULATION_SPELLINGS,
+)
+
+
+def milestone_intent(**over):
+    """The Q23 shape: when does the book reach a stated threshold."""
+    payload = {
+        "schema_version": "candidate_intent/1.0",
+        "capability": "forecast",
+        "operation": "forecast_milestone",
+        "measures": [{"concept": "forecast_milestone_date"}],
+        "time": {"form": "forward_looking"},
+        "target": {"concept": "forecast_funded_balance", "comparator": "gte",
+                   "value": 100_000_000},
+    }
+    payload.update(over)
+    return parse_candidate_intent(payload)
+
+
+def _canonical(intent, vocabulary):
+    return canonical_intent(intent, vocabulary,
+                            capability_operations=CAPABILITY_OPERATIONS)
+
+
+def test_the_funded_spelling_of_a_forecast_is_the_forecast(compiler, vocabulary):
+    """Production: one milestone question, two spellings of its population.
+
+    The certification run recorded Q23A as `forecast` and Q23B/Q23C as
+    `funded`; the forecast runtime executes `forecast` only, so two of the three
+    were refused for a difference that is not a difference.
+    """
+    funded = milestone_intent(population={"base": "funded"})
+    stated = milestone_intent(population={"base": "forecast"})
+    result = _canonical(funded, vocabulary)
+    assert result.intent.population.base == "forecast"
+    assert any(a.startswith("derived_population:") for a in result.applied)
+    assert (compiler.compile(funded).plan.plan_id
+            == compiler.compile(stated).plan.plan_id)
+
+
+def test_an_unstated_base_is_the_default_and_means_the_same(vocabulary):
+    """The schema defaults `base` to `funded`; under forecast that is a spelling."""
+    result = _canonical(milestone_intent(), vocabulary)
+    assert result.intent.population.base == "forecast"
+
+
+def test_the_pipeline_base_is_not_a_spelling_and_is_left_alone(vocabulary):
+    """"Of the offer pipeline, how much converts" is not the whole forecast.
+
+    Rewriting it would answer with funded plus pipeline — a wider population
+    than the one named. It stays as stated and the runtime refuses it.
+    """
+    assert "pipeline" not in DERIVED_POPULATION_SPELLINGS
+    assert "whole_book" not in DERIVED_POPULATION_SPELLINGS
+    assert "forecast_of_the_pipeline" in BOUNDED
+    for base in ("pipeline", "whole_book"):
+        result = _canonical(
+            milestone_intent(operation="forecast_projection",
+                             measures=[{"concept": "forecast_funded_balance"}],
+                             target=None, population={"base": base}),
+            vocabulary)
+        assert result.intent.population.base == base
+        assert not any("derived_population" in a for a in result.applied)
+
+
+def test_only_a_capability_that_outputs_a_population_is_rewritten(vocabulary):
+    """A funded question about funded rows is not touched by this rule."""
+    assert set(DERIVED_POPULATION_OF) == {"forecast"}
+    result = _canonical(movement_intent(), vocabulary)
+    assert result.intent.population.base == "funded"
+    assert not any("derived_population" in a for a in result.applied)
+
+
+def test_the_rewrite_moves_the_base_and_nothing_else(vocabulary):
+    """Lens, seasoning and a named source travel unchanged.
+
+    A scoped forecast is the runtime's to refuse or honour. Dropping the scope
+    here would make it indistinguishable from a whole-book question.
+    """
+    intent = milestone_intent(population={
+        "base": "funded", "lens": "acquired", "seasoning": "back_book",
+        "source_reference": "ALP back book"})
+    after = _canonical(intent, vocabulary).intent.population
+    assert (after.base, after.lens, after.seasoning, after.source_reference) \
+        == ("forecast", "acquired", "back_book", "ALP back book")
+
+
+def test_rule_6_follows_the_owner_rule_3_derives(vocabulary):
+    """A forecast measure named under a generic capability: 3 binds, 6 follows."""
+    result = _canonical(milestone_intent(capability="generic_analysis",
+                                         population={"base": "funded"}),
+                        vocabulary)
+    assert result.intent.capability == "forecast"
+    assert result.intent.population.base == "forecast"
+    kinds = [a.split(":", 1)[0] for a in result.applied]
+    assert kinds == ["implementation_owner", "derived_population"]
+
+
+def test_rule_6_is_idempotent_and_keeps_the_model_s_claim(compiler, vocabulary):
+    intent = milestone_intent(population={"base": "funded"})
+    once = _canonical(intent, vocabulary).intent
+    assert _canonical(once, vocabulary).applied == ()
+    plan = compiler.compile(intent).plan
+    assert plan.provenance.intent_claims["population"][0] == "funded"
+    assert any("derived_population" in a for a in
+               plan.provenance.compiler_bindings["normalisation"]["applied"])

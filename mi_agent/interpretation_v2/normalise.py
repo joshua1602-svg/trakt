@@ -58,6 +58,7 @@ from .vocabulary import (CHANGE_FORM_CANONICAL_OPERATION,
 
 __all__ = ["NORMAL_FORM_VERSION", "PAIR_IMPLYING_OPERATIONS",
            "CANONICAL_PAIR_FORM", "CANONICAL_PAIR_PERIODS_BACK", "BOUNDED",
+           "DERIVED_POPULATION_OF", "DERIVED_POPULATION_SPELLINGS",
            "LABELS_ARE_WORDING_ONLY", "identity_labels",
            "NormalisationResult", "canonical_intent"]
 
@@ -138,7 +139,40 @@ BOUNDED: Mapping[str, str] = {
         "MEASURES, not between two owners of one measure. Collapsing it would "
         "decide whether a period change is a net movement or a bridge figure, "
         "which is deterministic analytical behaviour this sprint may not change."),
+    "forecast_of_the_pipeline": (
+        "A forecast intent on the PIPELINE base asks what the pipeline alone "
+        "converts into, which is a different figure from the funded book "
+        "projected forward. Rule 6 leaves it as stated, so the forecast runtime "
+        "refuses it by population rather than answering it as the whole "
+        "forecast."),
 }
+
+# --------------------------------------------------------------------------- #
+# 6. a derived population has one spelling
+# --------------------------------------------------------------------------- #
+
+#: THE POPULATION A CAPABILITY'S OUTPUT IS. `forecast` is not a dataset anyone
+#: loads: it is the funded book projected forward from funded and pipeline
+#: inputs (P0 design §4.1), and it is the only population the forecast runtime
+#: executes. So a forecast intent names its population twice — once in
+#: `capability`, once in `population.base` — and the production bank shows the
+#: model spelling the second one two ways for one question: "when does the book
+#: reach £100m" arrived five times as `forecast` and four times as `funded`,
+#: and the four were refused for a population nobody asked to change.
+DERIVED_POPULATION_OF: Mapping[str, str] = {"forecast": "forecast"}
+
+#: WHICH STATED BASES ARE SPELLINGS OF THE DERIVED ONE, and which are not.
+#: `funded` is: under the forecast capability it means "the funded book, going
+#: forward", which is what `forecast` means. It is also the schema's DEFAULT,
+#: so an intent that stated no base arrives as `funded` and means the same.
+#:
+#: `pipeline` is NOT, and neither is `whole_book`. "Of the current offer
+#: pipeline, how much should convert?" asks for the pipeline's contribution on
+#: its own; rewriting it to `forecast` would answer with funded plus pipeline,
+#: which is a wider population than the one named. Those stay as stated and are
+#: refused by the runtime that cannot execute them — see
+#: `BOUNDED["forecast_of_the_pipeline"]`.
+DERIVED_POPULATION_SPELLINGS: frozenset = frozenset({"funded"})
 
 
 @dataclass(frozen=True)
@@ -311,5 +345,26 @@ def canonical_intent(intent: CandidateIntent,
         # does not produce. It is left exactly as it is, so the compiler refuses
         # it against the capability's own operation set rather than this module
         # silently flattening it into a summary.
+
+    # -- 6. a derived population has one spelling --------------------------- #
+    #
+    # AFTER RULES 3-5, because they can set the capability: an intent naming
+    # `forecast_milestone_date` under `generic_analysis` becomes a forecast
+    # intent in rule 3, and its base is then this rule's to canonicalise.
+    #
+    # STRUCTURED SLOTS ONLY, and NO WIDENING. The capability and the stated base
+    # are read; nothing else is. Only a base listed in
+    # `DERIVED_POPULATION_SPELLINGS` is rewritten, lens, seasoning and a named
+    # source travel unchanged, and a pipeline base is left for the runtime to
+    # refuse. The model's original base still travels in `intent_claims`.
+    derived = DERIVED_POPULATION_OF.get(intent.capability)
+    population = intent.population
+    if (derived is not None and population.base != derived
+            and population.base in DERIVED_POPULATION_SPELLINGS):
+        applied.append(
+            f"derived_population: base {population.base!r} -> {derived!r} "
+            f"(capability {intent.capability!r} outputs the {derived!r} "
+            f"population)")
+        intent = replace(intent, population=replace(population, base=derived))
 
     return NormalisationResult(intent=intent, applied=tuple(applied))

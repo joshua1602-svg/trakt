@@ -1,6 +1,7 @@
 # P0 target state — the governed population perimeter
 
-    STATUS    design only. Nothing implemented, nothing changed.
+    STATUS    in build. Change 1 built (ed0f6a9e); Change 2a built (§14.3);
+              Change 2b (scenario), Change 3 and P1 not yet started.
     BASIS     production question-bank run of 135 questions (review at 036778a1)
               product code at 5c436961ebe279bc0820ab006867b9f8a869bde2
     SCOPE     the funded / pipeline / forecast population bases.
@@ -33,6 +34,22 @@
         Measure name and as-at ALWAYS on the answer itself. Everything else
         published in the envelope and disclosed by the surface on demand.
         Owner decision; recorded, not inferred.
+
+    D6  WHICH OWNER DEFINES "FORECAST FUNDED BALANCE"       OPEN — owner to decide
+        Found while building Change 2a (§14.3). Two governed owners answer the
+        same measure with different figures on the production book:
+          analytical composition    £94.1m   funded + expected completions,
+                                             EXCLUDING 6,084 cases the extract
+                                             already shows completed/withdrawn
+          weighted-pipeline bridge  £96.2m   funded + £9.1m weighted pipeline
+                                             (Model C)
+        The £2.1m gap is most plausibly the bridge re-counting cases that have
+        already funded. Recommendation: the analytical composer defines it.
+        Until decided, every plan whose MEASURE is `forecast_funded_balance`
+        — projection, series and point-in-time alike — refuses
+        DEFINITION_UNSETTLED and legacy serves. Milestones are unaffected: the
+        threshold names that concept as a target, and only the run-rate owner
+        produces dates.
 
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
@@ -598,3 +615,71 @@ by nearest extract is correct — is a *calculation* question and is deliberatel
 NOT changed by P0. It is recorded here because D1 will make it visible, and the
 first composed answer that states both dates will show whether the pairing is the
 one a reader expects.
+
+### 14.3 Change 2a as built — what it serves, and four things building it found
+
+**Served** by `mi_agent/plan_forecast_runtime.py`, dispatched above the funded
+gate from `plan_runtime_registry.POPULATION_OWNING_RUNTIMES`:
+
+    forecast_milestone / forecast_milestone_date   the run-rate owner's
+        + target forecast_funded_balance >= X      `milestone_answer`
+    point_in_time / forecast_completion_rate       the owner's base run-rate
+
+**Refused by name**, legacy serves: any `forecast_funded_balance` measure (D6);
+`scenario` (Change 2b); a `pipeline` or `whole_book` base; any lens, seasoning or
+named source; filters, axes, geography, comparisons; a `gt` threshold (the
+owner's rule is `>=`); a run-rate over any window but the current one.
+
+**1. Normalisation rule 6.** The production bank spelled one milestone question's
+population two ways — five `forecast`, four `funded`. Under the forecast
+capability `funded` (and the schema default, which is `funded`) now normalises to
+`forecast`; `pipeline` deliberately does not ("of the offer pipeline, how much
+converts" is the pipeline's contribution alone, not the whole forecast). Replaying
+the signed-off 135: five plans move, four of them onto the exact plan a sibling
+already had (Q23C and NL2A onto Q23A's, Q24B onto Q24A's), and the replay guard
+pins them as an authorised migration with a proof that the base is the only slot
+that moved.
+
+**2. `POPULATION_INPUTS["pipeline"]` is required WHEN it is the completion
+signal, not always.** §4.1 declared it required. The run-rate owner falls back to
+funded balance growth when the pipeline has no observed completion flow — its own
+documented rule, with its own sufficiency floor — and in that case the pipeline
+fed nothing and has no vintage to state. So the receipt records which inputs each
+answer USED: a projected milestone uses both; "already reached" reads the funded
+balance alone; the run-rate uses whichever signal the owner took. D1's skew check
+runs over the inputs used. The owner now says which signal it took as a code
+(`completionSignalKind`), not only as prose, so this needs no sentence parsed.
+
+**3. The run-rate's pipeline vintage is a different extract from Model C's.**
+§14.2 added the extract that fed the weighted pipeline. The run-rate's pipeline
+input is the funnel's trailing completion flow, which ends at the funnel's latest
+extract — surfaced as `completionFlowExtractDate`. On the production book that is
+the 24-day gap §4.1 described (funded 2026-08-31, pipeline 2026-09-24).
+
+**4. The legacy run-rate answer most likely misstates its own basis.**
+Production [112]: *"~£1.2m/month … based on 7 month(s) of funded growth"*. The
+±25% bands (£925k / £1.5m) are what the observed-completion-flow branch produces;
+the funded-growth proxy produces them only if fewer than three of its seven
+observations survive step-change screening, and otherwise uses percentiles. So
+the figure most likely came from the pipeline's completion flow, and the legacy
+sentence hard-codes "funded growth" whichever branch ran. Not proven from the
+bank text alone; the governed answer removes the question by taking the signal
+from the owner's own description.
+
+**Also found, and fixed separately (90a32d42):** `plan_serving_canary.serve`
+had accepted the client's source registry since f244e211 and, from e6e16c63,
+stopped forwarding it — every governed compilation ran without the registry, so
+a question naming a portfolio was refused on the governed path. A structural
+test now asserts every input `serve` shares with `_attempt` is passed through.
+
+**The target is now proved on the way out.** `requested_semantics` transcribes
+the plan's target and `mi_service._governed_plan_coverage` requires the executed
+receipt to state the same concept, comparator and value — so an answer for a
+different threshold (the £250m defect) is UNACCOUNTED even if a future runtime
+reintroduced it.
+
+Guarded by `tests/interpretation_v2/test_specialist_runtime_forecast.py` and the
+rule 6 tests in `test_contract_normalisation.py`. Mutation-tested: disabling the
+skew check fails 3; dropping the target proof fails 2; dispatching forecast below
+the funded gate fails 4.
+

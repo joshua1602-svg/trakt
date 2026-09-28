@@ -135,6 +135,20 @@ _MIGRATED_BY_CHANGE_FORM_COMPLETENESS: Mapping[str, str] = {
 _MIGRATION_CODE = MISSING_REQUIRED_SLOT
 _MIGRATION_SUBJECT = "change_form"
 
+#: THE SECOND AUTHORISED MIGRATION: normalisation rule 6 (P0 Change 2a). Under
+#: the forecast capability a stated or defaulted `funded` base is a spelling of
+#: `forecast`, so these five still compile to a PLAN, with a new identity and one
+#: changed slot. Four land exactly on a plan a SIBLING already had at sign-off —
+#: Q23C and NL2A on Q23A's, Q24B on Q24A's — which is the convergence the rule
+#: exists for. NL4A and NL4C move together and stay identical to each other.
+#:
+#: Pinned to the rule, not just the ids: each must stay a PLAN, the rewrite must
+#: be recorded, and re-compiling the RECORDED payload with its base set to
+#: `forecast` must give the same plan — proving the base is the only thing that
+#: moved.
+_MIGRATED_BY_DERIVED_POPULATION = frozenset({"Q23C", "Q24B", "NL2A", "NL4A",
+                                             "NL4C"})
+
 
 def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
     """Every recorded payload, re-parsed and re-compiled by this code.
@@ -167,9 +181,27 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
         if now == was:
             # A case on the migration list that did NOT move is also wrong: it
             # would mean the gate stopped covering a request it is meant to.
-            if question_id in _MIGRATED_BY_CHANGE_FORM_COMPLETENESS:
+            if (question_id in _MIGRATED_BY_CHANGE_FORM_COMPLETENESS
+                    or question_id in _MIGRATED_BY_DERIVED_POPULATION):
                 unexpected.append((question_id, "expected to migrate, did not",
                                    was, now))
+            continue
+
+        if question_id in _MIGRATED_BY_DERIVED_POPULATION:
+            spelled = dict(row["raw_payload"])
+            spelled["population"] = dict(spelled.get("population") or {},
+                                         base="forecast")
+            respelled = compiler.compile(parse_candidate_intent(spelled)).plan
+            applied = (plan.provenance.compiler_bindings["normalisation"]
+                       ["applied"] if plan is not None else ())
+            if (now[0] != was[0] or plan.population.base != "forecast"
+                    or not any(a.startswith("derived_population:")
+                               for a in applied)
+                    or respelled is None or respelled.plan_id != now[1]):
+                unexpected.append((question_id, "moved, but not only by "
+                                                "rule 6", was, now))
+            else:
+                migrated[question_id] = (was[0], now[0])
             continue
 
         expected_was = _MIGRATED_BY_CHANGE_FORM_COMPLETENESS.get(question_id)
@@ -194,9 +226,10 @@ def test_proof_2_the_signed_off_135_replays_identically_except_the_migration():
             migrated[question_id] = (was[0], now[0])
 
     assert unexpected == [], f"UNEXPECTED_MOVES: {unexpected}"
-    assert set(migrated) == set(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS), (
-        f"expected {sorted(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS)}, "
-        f"migrated {sorted(migrated)}")
+    authorised = (set(_MIGRATED_BY_CHANGE_FORM_COMPLETENESS)
+                  | _MIGRATED_BY_DERIVED_POPULATION)
+    assert set(migrated) == authorised, (
+        f"expected {sorted(authorised)}, migrated {sorted(migrated)}")
 
 
 def test_the_signed_off_evidence_itself_is_never_rewritten():

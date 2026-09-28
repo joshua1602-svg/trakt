@@ -663,6 +663,11 @@ def requested_semantics(plan: Any) -> Dict[str, Any]:
         "geography": body.get("geography") or {},
         "period_form": period.get("form"),
         "period_contract": period.get("contract"),
+        # THE THRESHOLD A MILESTONE ASKED ABOUT. Transcribed so the coverage
+        # owner can prove the answer is for THIS threshold: an answer for a
+        # different one is the £250m defect, and it reads exactly like a correct
+        # answer once rendered.
+        "target": body.get("target"),
     }
 
 

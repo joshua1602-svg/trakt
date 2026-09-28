@@ -37,6 +37,7 @@ from __future__ import annotations
 from typing import FrozenSet, Iterable, Tuple
 
 from mi_agent import plan_attribution as attribution
+from mi_agent import plan_forecast_runtime as forecast
 from mi_agent import plan_material_summary as material_summary
 from mi_agent import plan_metric_delta as metric_delta
 from mi_agent import plan_pipeline_runtime as pipeline
@@ -48,8 +49,11 @@ __all__ = ["POPULATION_OWNING_RUNTIMES", "FUNDED_RUNTIMES", "GOVERNED_RUNTIMES",
            "executable_populations"]
 
 #: Runtimes owning a population OTHER than the funded book. Dispatched ABOVE the
-#: funded population gate, each checked against its own declaration.
-POPULATION_OWNING_RUNTIMES: Tuple = (pipeline,)
+#: funded population gate, each checked against its own declaration. Forecast is
+#: a DERIVED population — it composes funded with pipeline — and declares those
+#: inputs itself (`plan_forecast_runtime.POPULATION_INPUTS`); what it executes is
+#: still only `forecast`, never the funded book it reads from.
+POPULATION_OWNING_RUNTIMES: Tuple = (pipeline, forecast)
 
 #: Runtimes executing over the funded book, in the order the canary tries them
 #: BELOW the funded population gate. The order is the canary's and is
@@ -78,8 +82,9 @@ FUNDED_GATE_POPULATIONS: FrozenSet[str] = executable_populations(FUNDED_RUNTIMES
 #: Bases in the governed vocabulary that no runtime executes, ON PURPOSE. Each is
 #: refused `POPULATION_NOT_EXECUTABLE` rather than approximated.
 #:
-#:   forecast    composes funded with pipeline at two cut-off dates. Its owner is
-#:               the P0 forecast connectivity module, which removes it from here.
 #:   whole_book  needs the limit schedule, and concentration limits are not yet
 #:               established by the client. Stays refused, and says so.
-DELIBERATELY_UNEXECUTED: FrozenSet[str] = frozenset({"forecast", "whole_book"})
+#:
+#: `forecast` was listed here until its owner existed; it left when
+#: `plan_forecast_runtime` did, which is the only way anything leaves this set.
+DELIBERATELY_UNEXECUTED: FrozenSet[str] = frozenset({"whole_book"})

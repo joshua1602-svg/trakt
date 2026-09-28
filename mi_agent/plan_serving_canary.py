@@ -61,6 +61,7 @@ from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
 from mi_agent import plan_pipeline_runtime as pipeline_rt
+from mi_agent import plan_forecast_runtime as forecast_rt
 from mi_agent import plan_runtime_registry as runtime_registry
 from mi_agent import plan_temporal_runtime as temporal
 from mi_agent import plan_material_summary as material_summary
@@ -642,6 +643,210 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     return payload
 
 
+def _attempt_forecast(body: Dict[str, Any], *, plan: Mapping[str, Any],
+                      question: str, client_id: Optional[str],
+                      output_root: Optional[str], pipeline_root: Any,
+                      pipeline_history: Any, run_id: Optional[str],
+                      render_portfolio_id: Optional[str], as_of: Optional[str]
+                      ) -> Tuple[Optional[Dict[str, Any]], str]:
+    """One FORECAST serving attempt. Same contract as `_attempt`.
+
+    Stage for stage the pipeline attempt — perimeter, prove the population,
+    execute, render, record — with the forecast runtime's perimeter and its own
+    population declaration. The inputs are the ones the legacy forecast route
+    hands the same owner: the governed funded root, the pipeline discovery root,
+    the client's historical model and the selected run. None is discovered here,
+    and with any missing the runtime refuses and the legacy envelope serves.
+    """
+    eligible, why, detail = forecast_rt.check_eligibility(plan)
+    body["eligibility"] = {"eligible": eligible, "reason": why, "detail": detail,
+                           "perimeter": "forecast_specialist"}
+    if not eligible:
+        body["execution"] = {"attempted": False, "why_not": f"{why}: {detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{why}"
+
+    base_ok, base_why, base_detail = adapter.check_population_base(
+        plan, forecast_rt.EXECUTION_POPULATION,
+        executable=forecast_rt.EXECUTABLE_POPULATIONS)
+    if not base_ok:
+        body["eligibility"] = {"eligible": False, "reason": base_why,
+                               "detail": base_detail,
+                               "perimeter": "forecast_population"}
+        body["execution"] = {"attempted": False,
+                             "why_not": f"{base_why}: {base_detail}"[:300]}
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{base_why}"
+
+    body["execution"] = {"attempted": True, "runtime": "forecast",
+                         "requested_semantics": adapter.requested_semantics(plan)}
+    try:
+        outcome = forecast_rt.execute(
+            plan, output_root=output_root, pipeline_root=pipeline_root,
+            client_id=client_id or "", run_id=run_id,
+            history_model=pipeline_history)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
+        body["disposition"] = evidence.EXECUTION_ERROR
+        return None, EXECUTION_FAILED
+    if not outcome.ok:
+        body["execution"].update({"attempted": False,
+                                  "why_not": f"{outcome.reason}: {outcome.detail}"[:300]})
+        body["disposition"] = evidence.INELIGIBLE
+        return None, f"{INELIGIBLE}:{outcome.reason}"
+
+    body["execution"].update({"value": outcome.value,
+                              "receipt": dict(outcome.receipt)})
+    body["disposition"] = evidence.EXECUTED
+
+    try:
+        payload = render_forecast(plan, outcome, question=question,
+                                  portfolio_id=render_portfolio_id, as_of=as_of)
+    except Exception as exc:                                         # noqa: BLE001
+        body["execution"]["render_error"] = f"{type(exc).__name__}: {exc}"[:300]
+        return None, RENDER_FAILED
+    if not isinstance(payload, Mapping) or not payload.get("ok"):
+        body["execution"]["render_error"] = "the rendered envelope was not ok"
+        return None, RENDER_FAILED
+    return dict(payload), ""
+
+
+def _money(value: Any) -> str:
+    """A reader-facing GBP amount. Presentation only: no figure is derived."""
+    amount = float(value)
+    for size, unit in ((1e9, "bn"), (1e6, "m"), (1e3, "k")):
+        if abs(amount) >= size:
+            return f"£{amount / size:,.1f}{unit}"
+    return f"£{amount:,.0f}"
+
+
+def _as_at_clause(inputs: Mapping[str, Any]) -> str:
+    """D4 + D1: the as-at date of EVERY input the figure used, on the sentence.
+
+    One input, one date. Two inputs, both dates, each named — a forecast that
+    composes a funded snapshot with a pipeline extract and states one date has
+    not said what it is as at.
+    """
+    labels = {"funded": "funded book", "pipeline": "pipeline completion flow"}
+    parts = [f"{labels.get(name, name)} {row.get('as_of')}"
+             for name, row in sorted(inputs.items())]
+    return "As at " + " and ".join(parts) + "."
+
+
+def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
+                    portfolio_id: Optional[str], as_of: Optional[str]
+                    ) -> Dict[str, Any]:
+    """The forecast result, in the envelope every channel already renders.
+
+    D4: the MEASURE and its AS-AT are in the sentence itself, every time. D1:
+    when the figure composes two datasets, both vintages are. Everything else
+    the owner said — the completion signal it used, its scenario basis, its
+    caveats — is published in `sourceNotes` and `warnings`, not dropped.
+
+    THE WORDS COME FROM THE RECEIPT. The milestone state is the owner's
+    `milestone_answer`; the dates, the run-rate and the balance are the owner's
+    own figures; the completion signal is the owner's own description. Nothing
+    is re-derived here, including the verb: "already reached", "around
+    <date>" and "beyond the projection horizon" map one-to-one onto the owner's
+    states (its two beyond-horizon states share the last).
+    """
+    import uuid
+    from datetime import datetime, timezone
+
+    receipt = dict(outcome.receipt)
+    kind = str(receipt.get("measure_kind") or "")
+    measure = str(receipt.get("measure_concept") or "")
+    inputs = dict(receipt.get("inputs") or {})
+    as_at = _as_at_clause(inputs)
+    signal = (receipt.get("completion_signal") or {}).get("description") or ""
+    base_rate = receipt.get("base_monthly_run_rate")
+    annual = receipt.get("annualised_run_rate")
+    spec_dict = {"capability": receipt.get("capability"),
+                 "population": receipt.get("population_base"),
+                 "measure": measure, "operation": receipt.get("operation")}
+
+    if kind == forecast_rt.KIND_MILESTONE:
+        target = receipt.get("target") or {}
+        threshold = _money(target.get("value"))
+        state = str(receipt.get("milestone_state") or "")
+        row = receipt.get("milestone") or {}
+        label = f"Forecast milestone date (funded balance reaching {threshold})"
+        from mi_agent_api import forecast_extrapolation as fx_mod
+        if state == fx_mod.MILESTONE_ALREADY_REACHED:
+            answer = (f"{label}: already reached — the funded balance is "
+                      f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
+            kpi_value = "reached"
+        elif state == fx_mod.MILESTONE_PROJECTED:
+            answer = (f"{label}: around {row.get('baseDate')} at the base "
+                      f"completion run-rate of {_money(base_rate)}/month "
+                      f"(downside {row.get('downsideDate')}, upside "
+                      f"{row.get('upsideDate')}), from a funded balance of "
+                      f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
+            kpi_value = str(row.get("baseDate"))
+        else:
+            answer = (f"{label}: beyond the projection horizon, so no date is "
+                      f"given. The funded balance is "
+                      f"{_money(receipt.get('current_funded_balance'))}. {as_at}")
+            kpi_value = "beyond horizon"
+        kpis = [{"field": measure, "label": label, "value": kpi_value,
+                 "rawValue": outcome.value}]
+        title = "Forecast milestone"
+    else:
+        label = "Completion run-rate"
+        answer = (f"{label}: {_money(base_rate)}/month ({_money(annual)}/year). "
+                  f"{as_at}")
+        kpis = [{"field": measure, "label": label,
+                 "value": f"{_money(base_rate)}/month",
+                 "rawValue": outcome.value}]
+        title = "Completion run-rate"
+
+    artefact = {"id": f"art_{uuid.uuid4().hex[:8]}", "type": "kpi", "title": title,
+                "kpis": kpis, "description": "Governed forecast.",
+                "source": {"engine": "mi_agent.governed_plan",
+                           "label": "MI Agent · kpi", "spec": spec_dict,
+                           "asOf": as_of, "portfolio": portfolio_id},
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "mock": False}
+    notes = [{"field": "completion_signal", "note": signal}] if signal else []
+    if receipt.get("scenario_basis"):
+        notes.append({"field": "scenario_basis",
+                      "note": str(receipt.get("scenario_basis"))})
+    for name, row in sorted(inputs.items()):
+        notes.append({"field": f"input:{name}",
+                      "note": f"{row.get('owner')} as at {row.get('as_of')}"})
+    if receipt.get("input_vintage_skew_days") is not None:
+        notes.append({"field": "input_vintage_skew",
+                      "note": (f"{receipt['input_vintage_skew_days']} days between "
+                               f"inputs; ceiling "
+                               f"{receipt.get('input_vintage_ceiling_days')} days")})
+    warnings = [str(c) for c in (receipt.get("caveats") or ())]
+    if kpis[0]["rawValue"] is not None and kind == forecast_rt.KIND_MILESTONE:
+        # Only a PROJECTED date has bands to qualify; "already reached" and
+        # "beyond the horizon" state no banded figure.
+        warnings.append("Downside/base/upside are indicative scenario bands, not "
+                        "statistically validated confidence intervals.")
+
+    reconciliation = {"dataset": "forecast",
+                      "inputs": sorted(inputs), "coverage_by_balance_pct": 100.0}
+    artefact["reconciliation"] = reconciliation
+    payload: Dict[str, Any] = {
+        "ok": True, "error": None, "question": question, "answer": answer,
+        "interpreted": "", "spec": spec_dict,
+        "validation": {"ok": True, "errors": [], "warnings": [],
+                       "resolved_fields": {}},
+        "artifacts": [artefact], "reconciliation": reconciliation,
+        "sourceNotes": notes, "warnings": warnings, "diagnostics": [],
+        "assumptions": [],
+        "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
+                     "route": "governed_plan_forecast", "lensApplied": None,
+                     "parserMode": "governed_plan",
+                     "governedPlan": {
+                         "requested": dict(adapter.requested_semantics(plan)),
+                         "executed": receipt}},
+    }
+    return payload
+
+
 #: Reader-facing names for the governed pipeline measures. Presentation only.
 _PIPELINE_LABELS = {
     "pipeline_amount": "Pipeline amount",
@@ -962,6 +1167,17 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
             pipeline_history=pipeline_history, pipeline_run_id=pipeline_run_id)
+
+    # FORECAST, the derived population, likewise above the gate: a forecast plan
+    # is not the funded runtimes' to refuse. It reads the funded book and the
+    # pipeline as INPUTS and executes neither — `forecast_rt` declares
+    # `forecast` alone, so this branch cannot carry a funded plan past the gate.
+    if forecast_rt.claims(plan):
+        return _attempt_forecast(
+            body, plan=plan, question=question, client_id=client_id,
+            output_root=output_root, pipeline_root=pipeline_root,
+            pipeline_history=pipeline_history, run_id=pipeline_run_id,
+            render_portfolio_id=render_portfolio_id, as_of=as_of)
 
     # WHICH POPULATION, BEFORE WHICH RUNTIME. Placed above the dispatch because
     # it is true of both: the temporal runtime reads the same funded route the
