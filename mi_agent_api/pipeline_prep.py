@@ -53,6 +53,10 @@ _STAGE_CANON = {
     "kfi": "KFI", "kfi issued": "KFI", "illustration": "KFI", "quote": "KFI",
     "application": "APPLICATION", "applied": "APPLICATION", "app": "APPLICATION",
     "offer": "OFFER", "offered": "OFFER", "offer issued": "OFFER",
+    # Live cases between the steps above, spelled as ERE's pipeline report
+    # spells them. Unmapped they read UNKNOWN and fall out of the forecast —
+    # and "funds requested" is the case nearest to completing.
+    "decision refer": "APPLICATION", "funds requested": "OFFER",
     "completed": "COMPLETED", "complete": "COMPLETED", "completion": "COMPLETED",
     "funds released": "COMPLETED", "funded": "COMPLETED", "drawn": "COMPLETED",
     "drawdown": "COMPLETED", "live": "COMPLETED",
