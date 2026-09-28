@@ -795,11 +795,17 @@ _FORECAST_SOURCES = ("row_level", "historical_runoff", "historical_stage_rate",
                      "configured_stage_rate")
 
 
+def forecast_rows(df: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+    """The cases that carry forecast weight (see ``_FORECAST_SOURCES``)."""
+    if df is None or "completion_probability_source" not in df.columns:
+        return df
+    return df[df["completion_probability_source"].isin(_FORECAST_SOURCES)]
+
+
 def _expected_completion_breakdown(df: pd.DataFrame) -> List[Dict[str, Any]]:
     if "expected_completion_month" not in df.columns:
         return []
-    if "completion_probability_source" in df.columns:
-        df = df[df["completion_probability_source"].isin(_FORECAST_SOURCES)]
+    df = forecast_rows(df)
     rows: List[Dict[str, Any]] = []
     grp = df.groupby(df["expected_completion_month"].astype(str), dropna=False)
     for month, sub in grp:
@@ -956,6 +962,7 @@ def compute_pipeline_snapshot(
     # the uncapped detail stays in ``*BreakdownFull`` for the API / agent.
     broker_full = _dimension_breakdown(df, "broker_channel", key_name="key")
     region_full = _dimension_breakdown(df, "geographic_region_obligor", key_name="key")
+    product_full = _dimension_breakdown(df, "product_type", key_name="key")
     completion_breakdown = _expected_completion_breakdown(df)
     completion_summary = _expected_completion_summary(completion_breakdown, as_of)
     return {
@@ -1006,6 +1013,12 @@ def compute_pipeline_snapshot(
         "brokerBreakdownFull": broker_full,
         "regionBreakdown": cap_breakdown(region_full, 10),
         "regionBreakdownFull": region_full,
+        # Product and LTV band (additive): the same amount / count / weighted
+        # rows as broker and region. LTV bands come from the shared bucket
+        # engine the funded book uses, so the two books band alike.
+        "productBreakdown": cap_breakdown(product_full, 10),
+        "productBreakdownFull": product_full,
+        "ltvBreakdown": _dimension_breakdown(df, "ltv_bucket", key_name="key"),
         "availableMetrics": report.get("metrics_available", []),
         "availableDimensions": report.get("dimensions_available", []),
         "missingDimensions": report.get("missing_dimensions", []),

@@ -148,6 +148,20 @@ export function PipelineSnapshotPanel({
     })),
   );
 
+  const byProduct: BarDatum[] = (snapshot.productBreakdown ?? []).map((p) => ({
+    label: p.key,
+    value: p.pipelineAmount,
+    count: p.caseCount,
+  }));
+  // LTV bands read in band order (lowest first, Unknown last).
+  const byLtv: BarDatum[] = sortStratBars(
+    (snapshot.ltvBreakdown ?? []).map((r) => ({
+      label: cleanBucketLabel(r.key),
+      value: r.pipelineAmount,
+      count: r.caseCount,
+    })),
+  );
+
   return (
     <section className="rounded-xl border border-[var(--color-line)] bg-navy-900/50 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -238,6 +252,16 @@ export function PipelineSnapshotPanel({
         {byRegion.length > 0 && (
           <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by region`}>
             <BarList data={asMeasure(byRegion, measure)} format={BAR_MEASURE_FORMAT[measure]} />
+          </Panel>
+        )}
+        {byProduct.length > 0 && (
+          <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by product`}>
+            <BarList data={asMeasure(byProduct, measure)} format={BAR_MEASURE_FORMAT[measure]} />
+          </Panel>
+        )}
+        {byLtv.length > 0 && (
+          <Panel title={`Pipeline ${measure === "count" ? "count" : "amount"} by LTV band`}>
+            <BarList data={asMeasure(byLtv, measure)} format={BAR_MEASURE_FORMAT[measure]} />
           </Panel>
         )}
       </div>

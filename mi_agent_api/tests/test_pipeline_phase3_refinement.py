@@ -234,8 +234,23 @@ class TestForecastDisclosure(unittest.TestCase):
         # funding. This fixture carries one of each: £80k withdrawn and £90k
         # already completed. Previously only the withdrawn case was excluded and
         # the completed one was weighted at the configured probability of 1.00.
-        self.assertEqual(self.b["excludedFromWeightingAmount"], 170000.0)
-        self.assertEqual(self.b["excludedCaseCount"], 2)
+        # Settled cases (£80k withdrawn, £90k completed) are excluded, and —
+        # under the stage run-off method — so are open cases carrying no
+        # forecast weight: KFIs (top of funnel) and cases lapsed past their
+        # stage validity window. Excluded is everything outside the forecast
+        # population, so gross = excluded + active.
+        src = self.pdf["completion_probability_source"].astype(str)
+        amount = pd.to_numeric(self.pdf["current_outstanding_balance"], errors="coerce")
+        outside = (src.str.startswith(("excluded_", "not_forecast_", "expired_"))
+                   | src.isin(["missing_stage", "unavailable"]))
+        self.assertEqual(self.b["excludedFromWeightingAmount"],
+                         round(float(amount[outside].sum()), 2))
+        self.assertEqual(self.b["excludedCaseCount"], int(outside.sum()))
+        settled = src.isin(["excluded_withdrawn", "excluded_completed"])
+        self.assertEqual(round(float(amount[settled].sum()), 2), 170000.0)
+        self.assertAlmostEqual(self.b["excludedFromWeightingAmount"]
+                               + self.b["activeGrossPipelineAmount"],
+                               self.b["grossPipelineAmount"], places=2)
         self.assertEqual(self.b["completionProbabilityBasis"], "stage_config")
 
     def test_blended_conversion_present(self):

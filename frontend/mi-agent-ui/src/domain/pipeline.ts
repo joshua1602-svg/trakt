@@ -149,6 +149,10 @@ export interface PipelineSnapshot {
   /** Uncapped detail (API / agent), present when the breakdown was capped. */
   brokerBreakdownFull?: DimensionBucket[];
   regionBreakdownFull?: DimensionBucket[];
+  /** Product (capped top 10 + Other) and LTV band breakdowns — additive. */
+  productBreakdown?: DimensionBucket[];
+  productBreakdownFull?: DimensionBucket[];
+  ltvBreakdown?: DimensionBucket[];
   availableMetrics: string[];
   availableDimensions: string[];
   missingDimensions: { dimension: string; reason: string; detail: string }[];
