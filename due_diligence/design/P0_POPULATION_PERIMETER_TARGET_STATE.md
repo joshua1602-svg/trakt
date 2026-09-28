@@ -6,6 +6,19 @@
     SCOPE     the funded / pipeline / forecast population bases.
               `whole_book` is explicitly out of scope — see §11.
 
+## 0. Decisions taken
+
+    D1  VINTAGE SKEW POLICY                                        SETTLED 2026-09-28
+        Caveat, with a 45-day ceiling, the same ceiling the funded book uses.
+        Beyond the ceiling: refuse. Within it: answer, with both vintages stated
+        on the face of the answer. Owner decision; recorded, not inferred.
+
+    D2  FORECAST OPERATION MAPPING (scenario, cohort_conversion)    OPEN — see §6
+        Blocks writing plan_forecast_runtime. Nothing else.
+
+    D3  SEQUENCING                                                 OPEN — see §11
+        Recommendation: P0 and P1 committed as one piece of work.
+
 ## 1. What the evidence asks this design to fix
 
     80 of 135 questions are pipeline or forecast and fell back to legacy
@@ -97,7 +110,7 @@ the value `{"funded"}` — those forms genuinely are funded-only — but they no
 that statement instead of repeating a constant, which is what makes a later change
 to one of them local.
 
-### 4.1 A derived population must declare its inputs
+### 4.1 A derived population must declare its inputs, and its skew
 
 `forecast` is not a dataset. The production evidence shows what it actually is:
 
@@ -110,15 +123,51 @@ Two datasets, at two different cut-off dates, composed. `EXECUTION_POPULATION =
 nothing, so a derived population additionally declares its lineage:
 
     POPULATION_INPUTS = {
-        "funded":   {"required": True,  "as_of": "governed funded snapshot"},
-        "pipeline": {"required": True,  "as_of": "governed weekly extract"},
+        "funded":   {"required": True, "as_of": "governed funded snapshot"},
+        "pipeline": {"required": True, "as_of": "governed weekly extract"},
     }
 
-and the receipt carries the resolved `as_of` for each input. This is the one genuinely
-new obligation in the design, and it exists because of a defect the run already
-shows: funded at 2026-08-31 composed with pipeline at 2026-09-24 is a real
-twenty-four-day skew that no current receipt states. A composed answer that cannot
-name both vintages should not be publishable.
+and the receipt carries the resolved `as_of` for each input.
+
+**D1 — the skew rule, and it introduces no new number.** The ceiling is not a
+constant in this module. It is read from the policy that already owns the funded
+book's ceiling:
+
+    mi_agent/period_change/selection.py:100
+        SelectionPolicy.max_snapshot_gap_days(context_id)
+    config/period_change_selection.yaml:47
+        max_snapshot_gap_days: 45
+        max_snapshot_gap_days_by_portfolio: {}   # per-portfolio overrides
+
+That method is already per-portfolio, with a documented reason — *"A book on a
+quarterly cadence legitimately needs a wider ceiling than a monthly one, so the value
+is per-portfolio configuration rather than a constant."* The forecast runtime calls
+the same method with the same `context_id`. **No new config key, no second 45.** A
+lender that widens its ceiling widens it once, for both.
+
+    inputs within the ceiling   ANSWER, both vintages stated on the answer
+    inputs beyond the ceiling   REFUSE, naming both dates and the ceiling
+    a required input missing    REFUSE  (POPULATION_INPUT_UNRESOLVED, §9)
+
+**Two distances, one ceiling — and the receipt must say which.** The funded rule
+measures the distance from a REQUESTED period to the nearest available snapshot
+("you asked for 31 May, the nearest snapshot is 30 Nov, 182 days"). The forecast rule
+measures the distance BETWEEN TWO DATASETS' cut-offs ("funded 31 Aug, pipeline
+24 Sep, 24 days"). Both answer the same question — how far apart may two dates be
+before the answer stops meaning what it says — and one ceiling over both is the
+right call. But they are not the same measurement, so the receipt names the distance
+it checked (`input_vintage_skew_days` alongside the existing `gap_days`), or a reader
+will later mistake a forecast caveat for a snapshot-gap caveat.
+
+**What D1 means for production today.** Funded 2026-08-31 against pipeline
+2026-09-24 is **24 days, inside the 45-day ceiling**. So the current book produces a
+forecast that ANSWERS and carries both dates. D1 does not block today's forecast; it
+makes it state its own basis. The ceiling bites only if the pipeline extract goes
+stale — which is exactly when a forecast should stop being published quietly.
+
+**If the two ceilings should ever differ,** the extension point is the policy method
+(a named distance argument), not a new constant in the forecast module. Stated so the
+next person does not reach for the constant.
 
 ## 5. Change 1 — one registry, and dispatch derived from it
 
@@ -217,9 +266,21 @@ each keeps its exact current meaning:
     POPULATION_BASE_MISMATCH      a runtime loaded a different population
     EXECUTED_POPULATION_UNPROVEN  a runtime declared nothing
 
-A derived population adds one: `POPULATION_INPUT_UNRESOLVED`, when a required input
-(§4.1) has no governed snapshot. It is a refusal, not a caveat — a forecast with no
-pipeline extract is not a forecast with a footnote.
+A derived population adds two, both from D1:
+
+    POPULATION_INPUT_UNRESOLVED   a required input (§4.1) has no governed snapshot.
+                                  A refusal, not a caveat — a forecast with no
+                                  pipeline extract is not a forecast with a footnote.
+    POPULATION_VINTAGE_SKEW       the inputs are further apart than the portfolio's
+                                  `max_snapshot_gap_days`. A refusal, and it names
+                                  both dates and the ceiling, so the operator can
+                                  see whether the fix is a fresher extract or a
+                                  wider configured ceiling.
+
+Within the ceiling there is no reason code, because there is no refusal — but the
+caveat is not optional either. Both input vintages appear on the answer, in the same
+governed fields that already carry `sourceNotes` and `warnings`. An answer that
+composes two datasets and states one date has not satisfied D1.
 
 ## 10. Acceptance — measured against this same bank, re-run once
 
@@ -237,6 +298,7 @@ The design is accepted only on evidence, and the bank is the instrument.
       refusals losing their reason     0            ->  must remain 0
       funded categories               35/45 NEW     ->  must not regress
       answers with an unproven population           ->  must be 0
+      composed answers not stating both vintages    ->  must be 0   (D1)
 
 The last line is the one that matters most: widening the perimeter without the proof
 obligation would convert honest refusals into unprovable answers, which is worse than
