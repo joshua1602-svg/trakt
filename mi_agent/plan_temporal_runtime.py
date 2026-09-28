@@ -49,7 +49,7 @@ wiring it to a request is a later decision made with evidence in hand.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
 from mi_agent import plan_runtime_adapter as adapter
 from mi_agent.states.selectors import SnapshotSelector
@@ -78,7 +78,13 @@ SLICE_2_PERIOD_FORMS = frozenset({
 #: The funded book, and only the funded book. Slice 1 never needed this test
 #: because its caller resolved the frame by view; slice 2 SELECTS its own
 #: frames, so the population base becomes this module's to honour.
-SLICE_2_POPULATION_BASES = frozenset({"funded"})
+#:
+#: WHICH POPULATIONS THIS RUNTIME EXECUTES, AND WHICH ONE IT LOADS. This runtime's
+#: own declaration, read by `plan_runtime_registry` — which is how the estate
+#: knows what it can execute and by whom. Not a shared constant: another funded
+#: runtime holding the same value is a coincidence of scope, not a dependency.
+EXECUTABLE_POPULATIONS: FrozenSet[str] = frozenset({"funded"})
+EXECUTION_POPULATION = "funded"
 
 #: Operations whose period form is fixed by the operation itself. A `series`
 #: over a period PAIR, or a `compare` over an open span, is a question whose
@@ -165,7 +171,7 @@ def check_temporal_eligibility(plan: Any) -> Tuple[bool, str, str]:
                 f"and the plan states {form!r}")
 
     base = str(((body.get("population") or {}).get("base") or "")).strip().lower()
-    if base not in SLICE_2_POPULATION_BASES:
+    if base not in EXECUTABLE_POPULATIONS:
         return (False, POPULATION_NOT_FUNDED,
                 f"population.base={base!r}; this slice selects funded-book "
                 f"snapshots and no other dataset")

@@ -61,6 +61,7 @@ from mi_agent import plan_runtime_adapter as adapter
 from mi_agent import plan_shadow_evidence as evidence
 from mi_agent import plan_shadow_wiring as wiring
 from mi_agent import plan_pipeline_runtime as pipeline_rt
+from mi_agent import plan_runtime_registry as runtime_registry
 from mi_agent import plan_temporal_runtime as temporal
 from mi_agent import plan_material_summary as material_summary
 from mi_agent import plan_attribution as attribution
@@ -962,8 +963,15 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
     # the reason that matters — a refusal here means zero rows were touched, so
     # a pipeline question cannot produce a funded number even transiently, in
     # the evidence sink or anywhere else.
+    #
+    # WHOSE DECLARATION THIS CHECKS, named rather than inherited. The gate speaks
+    # for the funded runtimes below it, so it admits exactly what they declare —
+    # `runtime_registry.FUNDED_GATE_POPULATIONS`, derived from those runtimes and
+    # nothing else. A runtime owning another population is dispatched ABOVE this
+    # line from `POPULATION_OWNING_RUNTIMES`; one that is not is refused here.
     base_ok, base_why, base_detail = adapter.check_population_base(
-        plan, execution_population)
+        plan, execution_population,
+        executable=runtime_registry.FUNDED_GATE_POPULATIONS)
     if not base_ok:
         body["eligibility"] = {"eligible": False, "reason": base_why,
                                "detail": base_detail,

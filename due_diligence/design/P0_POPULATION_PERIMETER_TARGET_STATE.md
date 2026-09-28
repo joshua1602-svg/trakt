@@ -535,3 +535,66 @@ Added to §10's hard gates, and measured on the same bank:
     governed answers stating an as-at basis        0 of 41  ->  41 of 41
     governed answers leaking a raw field name      3 of 41  ->  0
     distinct questions returning identical text    3        ->  0
+
+
+## 14. Implementation notes — what building it changed in this design
+
+### 14.1 Change 1's premise was partly overstated, and is corrected here
+
+§3 called `{"funded"}` "restated in five places" with one of them "the default
+every other caller silently inherits". Reading the code to build it showed a more
+precise picture, and the implementation follows the precise one:
+
+- **The four per-module sets were already locally owned.** They were four local
+  declarations holding the same value under three different names — not four
+  copies of a shared constant. What was missing was a *uniform name* a registry
+  could read, and any runtime but pipeline saying which population it LOADS.
+- **The adapter's default was correct for its one production use.** The funded
+  gate guards material summary, attribution, metric delta, the temporal runtime
+  and the generic executor — all funded. So `{"funded"}` was the right set; the
+  defect was that the gate did not NAME whose declaration it checked.
+- **The real hazard was a comment, and it was worse than a default.** The
+  adapter's docstring told the next owner to *"declare `pipeline` here"* — in the
+  generic funded executor's own set. An owner following it would have had its
+  base admitted by the funded gate into funded-only runtimes and executed over a
+  funded frame. Pipeline happened to take the other route the comment offered.
+
+So Change 1 as built: a uniform `EXECUTABLE_POPULATIONS` / `EXECUTION_POPULATION`
+on every runtime; `plan_runtime_registry` partitioning runtimes into those
+dispatched ABOVE the funded gate and those guarded BY it; the gate passing
+`executable=runtime_registry.FUNDED_GATE_POPULATIONS` explicitly; the comment
+corrected. The adapter keeps its name and value — tests rightly pin both, and
+renaming it would have been churn rather than repair.
+
+Guarded by `tests/interpretation_v2/test_plan_runtime_registry.py`, 23 tests, each
+of the three hazards mutation-tested to fail: dropping `executable=` from the gate
+(2 fail), widening the generic executor to `forecast` (3 fail), reintroducing an
+old perimeter name (1 fails).
+
+### 14.2 D1 exposes a real lineage defect in the forecast owner
+
+`evolution.forecast_evolution` joins funded to pipeline **by calendar-month
+string**:
+
+    weighted_by_month[ym] = w          # "later extract overwrites -> latest wins"
+    wpipe = weighted_by_month.get(ym)  # ym = the FUNDED period's year-month
+
+The pipeline `extract_date` is available at the join and **discarded**; the output
+period carries the funded `reporting_date` and no pipeline date. So:
+
+- the composed forecast never records which pipeline extract fed it;
+- a funded period can only pair with an extract from the same calendar month —
+  August funded pairs with an August extract or with **nothing**, in which case
+  `weighted_expected_pipeline` is None and the forecast silently equals funded;
+- `build_extrapolation` then returns `reportingPeriod` (funded) with no pipeline
+  vintage at all.
+
+**D1 cannot be satisfied without the pipeline vintage, and the owner currently
+throws it away.** The fix is additive lineage, not arithmetic: record the
+`extract_date` that fed each period's `weighted_expected_pipeline`, and surface it
+through `build_extrapolation`. No figure changes; an existing value stops being
+discarded. The month-join itself — whether pairing by calendar month rather than
+by nearest extract is correct — is a *calculation* question and is deliberately
+NOT changed by P0. It is recorded here because D1 will make it visible, and the
+first composed answer that states both dates will show whether the pairing is the
+one a reader expects.

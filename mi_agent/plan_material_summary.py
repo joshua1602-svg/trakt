@@ -43,7 +43,7 @@ decision made with evidence in hand.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, FrozenSet, Mapping, Optional, Tuple
 
 from mi_agent import plan_runtime_adapter as adapter
 
@@ -60,7 +60,13 @@ WORKFLOW_MODE = "portfolio_overview"
 #: The funded book, and only the funded book. A material-change summary is over
 #: governed portfolio snapshots; the pipeline extract is a different population
 #: with a different owner and its own weekly brief.
-POPULATION_BASES = frozenset({"funded"})
+#:
+#: WHICH POPULATIONS THIS RUNTIME EXECUTES, AND WHICH ONE IT LOADS. This runtime's
+#: own declaration, read by `plan_runtime_registry` — which is how the estate
+#: knows what it can execute and by whom. Not a shared constant: another funded
+#: runtime holding the same value is a coincidence of scope, not a dependency.
+EXECUTABLE_POPULATIONS: FrozenSet[str] = frozenset({"funded"})
+EXECUTION_POPULATION = "funded"
 
 #: THE ONE OPERATION THIS FORM EXECUTES AS. A reader asking "what changed" says
 #: it as `movement`, `compare` or `summary` — one analytical form, three
@@ -215,7 +221,7 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
             f"produce; it is refused rather than flattened into a summary")
 
     base = (body.get("population") or {}).get("base")
-    if base not in POPULATION_BASES:
+    if base not in EXECUTABLE_POPULATIONS:
         return False, POPULATION_NOT_FUNDED, (
             f"population base {base!r}: a material-change summary is over "
             f"governed funded snapshots")

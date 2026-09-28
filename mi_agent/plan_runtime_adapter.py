@@ -160,13 +160,20 @@ POPULATION_BASE_MISMATCH = "POPULATION_BASE_MISMATCH"
 #: generic executor binds funded fields against a funded frame, and `mi_service`
 #: resolves that frame through `datasets._resolve_query_frame("funded", …)`.
 #:
-#: THIS IS THE REGISTRATION POINT FOR A FUTURE OWNER, and the reason
-#: `population.base` does not need redesigning when one arrives: a deterministic
-#: pipeline runtime declares `pipeline` here (or declares its own set and calls
-#: `check_population_base` with it), and nothing in `CandidateIntent`, the
-#: compiler or the plan changes. Until then a pipeline plan is refused rather
-#: than approximated, which is the whole point.
+#: THIS IS THE GENERIC EXECUTOR'S OWN DECLARATION, AND NOTHING ELSE'S. It is not
+#: the estate's executable set and it is not a registration point. This comment
+#: used to say a future owner "declares `pipeline` here" — and following that
+#: would have been dangerous rather than merely untidy: the funded population
+#: gate in `plan_serving_canary` guards the funded runtimes below it, so a base
+#: added HERE would be admitted into funded-only runtimes and executed over a
+#: funded frame. The pipeline owner took the other route the comment offered and
+#: declared its own set; that is now the only route.
+#:
+#: A NEW OWNER declares its own `EXECUTABLE_POPULATIONS` / `EXECUTION_POPULATION`
+#: on its own module and is listed in `plan_runtime_registry`. The estate's
+#: executable set is the union of those declarations, and nothing edits this one.
 EXECUTABLE_POPULATIONS: FrozenSet[str] = frozenset({"funded"})
+EXECUTION_POPULATION = "funded"
 
 #: The governed default. `compiler._bind_population` already resolves an unstated
 #: base to `funded`, so every plan carries one; this is the belt for the braces,
@@ -315,8 +322,15 @@ def check_population_base(plan: Any, executed_population: Any,
        defect lived in, so it refuses rather than assuming funded.
     2. The plan wants a population this runtime does not execute — `pipeline`,
        `forecast`, or `whole_book`, which spans two frames and cannot be proven
-       against one. A future owner registers itself in `EXECUTABLE_POPULATIONS`
-       rather than being special-cased here.
+       against one. A future owner declares its OWN set on its own module, is
+       listed in `plan_runtime_registry`, and is checked here by passing that
+       set as `executable=` — never by widening this module's set, which speaks
+       for the generic funded executor alone.
+
+    `executable` defaults to this module's own set, so a call without it checks
+    against the GENERIC FUNDED EXECUTOR. Production callers pass it explicitly
+    so the reader can see whose declaration is being checked; the registry's
+    tests hold them to that.
     3. The plan wants one population and the runtime loaded another.
 
     `(eligible, reason, detail)`, matching every other perimeter check.
