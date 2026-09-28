@@ -63,8 +63,6 @@ import pandas as pd
 
 from analytics_lib.numeric import coerce_numeric
 
-from .pipeline_prep import OPEN_STAGES
-
 #: Detail types this module can build.
 DETAIL_PIPELINE = "PIPELINE_WEEKLY_MOVEMENT"
 DETAIL_COMPLETIONS = "COMPLETIONS_WEEKLY_MOVEMENT"
@@ -87,6 +85,13 @@ UNKNOWN = "Unknown"
 
 #: Stages a case can sit at without being in the ACTIVE pipeline.
 TERMINAL_STAGES = ("COMPLETED", "WITHDRAWN")
+
+#: The OPEN pipeline — the same stages as ``pipeline_prep.OPEN_STAGES``.
+#: Restated rather than imported: this module ships in the blob-trigger
+#: Function App (Teams insight notifications), whose package does not carry
+#: pipeline_prep's dependency chain, so importing it broke that deploy.
+#: ``tests/test_the_pipeline_is_the_open_pipeline.py`` pins the two equal.
+OPEN_STAGES = ("KFI", "APPLICATION", "OFFER")
 
 #: The attribution convention, echoed in every payload.
 ATTRIBUTION = "current_period_dimension_prior_for_removed"
