@@ -199,9 +199,16 @@ class TestProbabilityGovernance(unittest.TestCase):
         pdf, prep = _pipeline()
         b = _bridge_for(_funded_df(), pdf, prep)["forecastBridge"]
         self.assertEqual(b["completionProbabilityBasis"], "stage_config")
-        # KFI cases must carry exactly the configured 0.20 — not a frontend/ad-hoc value.
+        # A KFI is top of funnel: open pipeline with no forecast weight.
         kfi = pdf[pdf["pipeline_stage"] == "KFI"]
-        self.assertTrue((kfi["completion_probability"] == probs["KFI"]).all())
+        self.assertTrue((kfi["completion_probability"] == 0.0).all())
+        self.assertTrue((kfi["completion_probability_source"] == "not_forecast_kfi").all())
+        # Forecast stages carry exactly the configured value — not a frontend/
+        # ad-hoc one — unless they have lapsed past the stage validity window.
+        live = pdf[pdf["completion_probability_source"] == "configured_stage_rate"]
+        self.assertFalse(live.empty)
+        for _, row in live.iterrows():
+            self.assertEqual(row["completion_probability"], probs[row["pipeline_stage"]])
         # Weighted < unweighted because non-completed stages discount.
         self.assertLess(b["weightedExpectedFundedAmount"], b["pipelineAmount"])
 
