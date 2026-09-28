@@ -13,21 +13,21 @@
         Beyond the ceiling: refuse. Within it: answer, with both vintages stated
         on the face of the answer. Owner decision; recorded, not inferred.
 
-    D2a COHORT CONVERSION OWNERSHIP                  PROPOSED 2026-09-28, see §6.1
+    D2a COHORT CONVERSION OWNERSHIP                   SETTLED 2026-09-28, see §6.1
         Owner's reading: it belongs in stage movement, but where it pertains to
         COMPLETIONS it carries a forward-looking funded angle. Resolution proposed:
         `pipeline_stage_movement` owns the CALCULATION; `forecast` CONSUMES it as a
-        declared input and never recomputes it. Awaiting confirmation.
+        declared input and never recomputes it. Confirmed by the owner.
 
     D2b SCENARIO OPERATION MAPPING                       SETTLED 2026-09-28, §6.2
         Its own operation, because it takes an assumption. Owner decision.
         Consequence: a new typed `assumption` intent slot — see §6.2 for why it
         cannot share `target`.
 
-    D5  ASSUMPTION ON THE ANSWER                          PROPOSED, see §6.2
+    D5  ASSUMPTION ON THE ANSWER                        SETTLED 2026-09-28, §6.2
         A scenario states its assumption in the sentence, alongside the measure
-        and as-at that D4 already makes mandatory. Proposed as an extension of D4;
-        awaiting confirmation.
+        and as-at that D4 already makes mandatory. Extension of D4, confirmed by
+        the owner.
 
     D4  ANSWER PROVENANCE POLICY                         SETTLED 2026-09-28, see §13
         Measure name and as-at ALWAYS on the answer itself. Everything else
@@ -330,12 +330,12 @@ to run-rate VOLUME, a different quantity. A governed lever concept closes that.
 population the engine cannot honour — it perturbs the whole run-rate. Applying it
 book-wide is the silent widening §8.6 forbids, so it refuses and says why.
 
-**D5, proposed.** A scenario answer states its assumption in the sentence, with the
+**D5, confirmed.** A scenario answer states its assumption in the sentence, with the
 measure and as-at that D4 already requires: *"Funded balance reaches £100m around
 2028-03 under a −25% completion run-rate, as at 31 Aug 2026."* The reasoning: a
 scenario answer without its assumption is unfalsifiable — "£100m by 2028-03" is a
-different claim from the base forecast and reads identically without it. Proposed as
-an extension of D4 rather than assumed, because D4 is the owner's decision.
+different claim from the base forecast and reads identically without it. Settled as an
+extension of D4 by the owner.
 
 **Scope of change for D2b:** `scenario` added to `OPERATIONS` and to
 `CAPABILITY_OPERATIONS["forecast"]`; the `assumption` slot added to the intent schema
@@ -346,7 +346,7 @@ and parser with a bounded lever vocabulary; `plan_forecast_runtime` maps
 `scenario` and `cohort_conversion` open, warning that guessing them would repeat the
 operation-vocabulary mistake this programme has already made once. Neither was
 guessed: cohort conversion is D2a (§6.1, proposed) and scenario is D2b (§6.2,
-settled). Once D2a is confirmed, nothing in this section blocks writing
+settled). Both are confirmed; nothing in this section blocks writing
 `plan_forecast_runtime`.
 
 ## 7. Change 3 — widen the temporal runtime to the pipeline population
