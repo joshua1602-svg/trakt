@@ -50,7 +50,13 @@ from .metadata import _slug
 #: model was SHOWN, and an interpretation made against a different orientation
 #: block is not comparable with one made against this. Every run recorded before
 #: this change was made at 2.0.0 or 2.1.0 and says so.
-VOCABULARY_VERSION = "2.2.0"
+#:
+#: 2.3.0 defines the three forecast measures (`SPECIALIST_MEASURE_DEFINITIONS`).
+#: Replaying the owner's 2026-09-28 production run showed the model putting
+#: different questions into one forecast measure because it was shown a name and
+#: no definition; the orientation block is unchanged, and what moved is what
+#: `search_concepts` and `get_concept_metadata` return for those three concepts.
+VOCABULARY_VERSION = "2.3.0"
 
 
 # --------------------------------------------------------------------------- #
@@ -518,6 +524,47 @@ SPECIALIST_MEASURES: Mapping[str, Tuple[str, ...]] = {
     "portfolio_summary": ("portfolio_overview",),
 }
 
+#: WHAT A SPECIALIST MEASURE IS, for the ones whose name does not say it.
+#:
+#: A specialist measure is shown to the model with a name and, by default, only
+#: "owned by the <capability> capability". For most that is enough. For the
+#: three forecast measures it was not: the owner's production run (2026-09-28,
+#: replayed in `tests/interpretation_v2/test_production_bank_perimeter.py`) put
+#: "the extrapolation curve", "the base forecast", "expected completions by
+#: month" and "how much of the forecast comes from the funded book" into
+#: `forecast_funded_balance`, and "a KFI-to-completion conversion rate" and "the
+#: forecast's method" into `forecast_completion_rate`. Each was answered — or
+#: would have been — with a figure it did not ask for.
+#:
+#: So each definition says what the figure IS, in the owner's terms, and what it
+#: is NOT, naming the readings the production run actually made. It states no
+#: methodology the model could decompose (rule 3 still holds: the capability
+#: owns the arithmetic) and no column, dataset or date.
+SPECIALIST_MEASURE_DEFINITIONS: Mapping[str, str] = {
+    "forecast_funded_balance": (
+        "ONE figure: today's funded balance plus the probability-weighted "
+        "completions expected from the OPEN pipeline in the latest weekly "
+        "extract — the figure on the Forecast tab. It is NOT a curve or a "
+        "month-by-month projection, NOT the base, downside or upside scenario "
+        "of the scale-up forecast, NOT expected completions on their own, and "
+        "NOT one part of itself: the funded part is the funded balance, the "
+        "pipeline part is the expected completions. As the `target` of a "
+        "`forecast_milestone` it stands for the funded balance the book is "
+        "projected to reach."),
+    "forecast_completion_rate": (
+        "The completion RUN-RATE: the £ AMOUNT of loans completing per MONTH "
+        "(the annualised figure is twelve times it), from the pipeline's "
+        "observed completions. It is an amount per month, NOT a percentage: it "
+        "is NOT a conversion rate from KFI, application or offer to "
+        "completion, and NOT a description of how the forecast is calculated."),
+    "forecast_milestone_date": (
+        "The MONTH in which the funded balance is projected to reach ONE "
+        "stated amount, at the completion run-rate. Its `target` is "
+        "`forecast_funded_balance`, comparator `gte`, with the amount the "
+        "question names. It is NOT a balance, and NOT a table of dates for "
+        "several amounts."),
+}
+
 SPECIALIST_DIMENSIONS: Mapping[str, Tuple[str, ...]] = {
     "borrowing_base": ("ineligibility_reason",),
     "pipeline_stage_movement": ("origin_stage", "destination_stage"),
@@ -898,9 +945,10 @@ def _specialist_concepts(capabilities: Iterable[str]) -> Dict[str, SemanticConce
             out[concept_id] = SemanticConcept(
                 concept_id=concept_id,
                 label=concept_id.replace("_", " ").title(),
-                description=(f"Owned by the {cap} capability. Its methodology is "
-                             f"deterministic and is not composed by the "
-                             f"interpreter."),
+                description=SPECIALIST_MEASURE_DEFINITIONS.get(
+                    concept_id,
+                    f"Owned by the {cap} capability. Its methodology is "
+                    f"deterministic and is not composed by the interpreter."),
                 role="measure", allowed_statistics=(), owning_capability=cap)
     for cap, ids in SPECIALIST_DIMENSIONS.items():
         if cap not in caps:

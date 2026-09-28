@@ -20,12 +20,12 @@ name: Production bank — read back the recorded plans
 # keys dropped, row-length lists dropped, long strings truncated. The publish
 # profile is scrubbed and the output rescanned for it before it is written.
 #
-# WHEN IT RUNS. Once on a push that changes this file or the reader — the
-# branch-local trigger this repository's workflows use, because a
-# workflow_dispatch button only appears once a workflow is on the default
-# branch — and on demand thereafter. `since` (ISO timestamp, optional) ignores
-# records written before it; use the start of the run you want if the sink holds
-# several.
+# WHEN IT RUNS. Once on a push that changes this file, the reader, or
+# READBACK_REQUEST.json — the branch-local trigger this repository's workflows
+# use, because a workflow_dispatch button only appears once a workflow is on the
+# default branch — and on demand thereafter. `since` (ISO timestamp) ignores
+# records written before it: the dispatch input when given, otherwise the
+# request file's. To read back a new bank run, commit its start time there.
 
 on:
   push:
@@ -34,6 +34,7 @@ on:
       - '.github/workflows/qb-plan-readback.yml'
       - 'due_diligence/evidence/qb_plan_readback/readback.py'
       - 'due_diligence/evidence/qb_plan_readback/qb_questions.json'
+      - 'due_diligence/evidence/qb_plan_readback/READBACK_REQUEST.json'
   workflow_dispatch:
     inputs:
       evidence_path:
@@ -93,6 +94,7 @@ jobs:
           python "${READBACK_DIR}/readback.py" \
             --evidence-path "${{ inputs.evidence_path || '/home/LogFiles/mi-plan-shadow/evidence.jsonl' }}" \
             --since "${{ inputs.since }}" \
+            --request "${READBACK_DIR}/READBACK_REQUEST.json" \
             --out qb_plan_readback.json
 
       - name: The projection, gzip+base64

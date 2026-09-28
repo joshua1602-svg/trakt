@@ -1,0 +1,5 @@
+{
+ "what_this_is": "Committing a change to this file runs qb-plan-readback.yml once, reading the recorded plans written since `since` (UTC). Set `since` to the start of the bank run you want read back.",
+ "label": "baseline — the 2026-09-28 production run (vocabulary 2.2.0)",
+ "since": "2026-09-28T00:00:00"
+}

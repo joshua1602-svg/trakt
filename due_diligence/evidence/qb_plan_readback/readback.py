@@ -58,6 +58,11 @@ def summarise(record: Dict[str, Any]) -> Dict[str, Any]:
     eligibility = record.get("eligibility") or {}
     filters = list(plan.get("filters") or ()) + list(output.get("filters") or ())
     return {
+        # WHAT THE MODEL WAS SHOWN. 2.3.0 is the first vocabulary that defines
+        # the forecast measures, so a comparison across runs must be able to
+        # tell which vocabulary each reading was made against.
+        "vocabulary_version": (plan.get("provenance") or {}).get(
+            "vocabulary_version"),
         "compile_outcome": compiler.get("outcome"),
         "reason_codes": compiler.get("reason_codes"),
         "capability": plan.get("capability"),
@@ -110,6 +115,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--bank", default=str(HERE / "qb_questions.json"))
     parser.add_argument("--since", default="",
                         help="ISO timestamp; ignore records written before it")
+    parser.add_argument("--request", default="",
+                        help="a READBACK_REQUEST.json whose `since` applies when "
+                             "--since is empty")
     parser.add_argument("--out", default="qb_plan_readback.json")
     args = parser.parse_args(argv)
 
@@ -118,6 +126,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("::error::AZURE_MI_API_PUBLISH_PROFILE is not set; the sink "
               "cannot be read")
         return 2
+    if not args.since and args.request and Path(args.request).exists():
+        request = json.loads(Path(args.request).read_text(encoding="utf-8"))
+        args.since = str(request.get("since") or "")
+        print(f"request: since={args.since or '(none)'} "
+              f"label={request.get('label')!r}")
     bank = load_bank(Path(args.bank))
     scm, user, password = ra.publish_profile_credentials(profile)
     sink = ra.Sink(scm, user, password, args.evidence_path)
