@@ -101,3 +101,48 @@ def test_cumulative_exits_agree_with_period_exits():
     by = {p["period"]: p for p in pool["periods"]}
     assert (by["2026-01"]["exitsInPeriod"], by["2026-01"]["cumulativeExits"]) == (3, 3)
     assert (by["2026-02"]["exitsInPeriod"], by["2026-02"]["cumulativeExits"]) == (2, 5)
+
+
+def _odd_cut_series():
+    """The live pattern: 2025-12 alone keys its loans differently.
+
+    Seen on the 2025-10 static pool: 33 exits at 2025-12, then 33 exits again
+    at 2026-01 with 0 cumulative — the 2025-12 cut's loan column held other
+    values, while the same loans' ids sat in another identifier column.
+    """
+    ref = [f"{776000 + i}01" for i in range(33)]
+    odd = _cut([f"{776000 + i}" for i in range(33)],
+               extra={"original_underlying_exposure_identifier": ref})
+    for fr in (odd,):
+        fr["origination_date"] = pd.Timestamp("2025-10-10")
+    def ok():
+        df = _cut(ref)
+        df["origination_date"] = pd.Timestamp("2025-10-10")
+        return df
+    return [
+        {"reporting_date": "2025-10-31", "df": ok()},
+        {"reporting_date": "2025-11-30", "df": ok()},
+        {"reporting_date": "2025-12-31", "df": odd},
+        {"reporting_date": "2026-01-31", "df": ok()},
+    ]
+
+
+def test_a_cut_keyed_in_another_column_is_followed():
+    frames = _odd_cut_series()
+    assert _formation_row(frames, "2025-10")["originalLoanCount"] == 33
+    pool = C.cohort_static_pool(frames, vintage="2025-10", grain="M")
+    assert all(p["survivingLoanCount"] == 33 for p in pool["periods"])
+    assert all(p["exitsInPeriod"] == 0 and p["cumulativeExits"] == 0
+               for p in pool["periods"])
+    dec = next(l for l in pool["idLinkage"] if l["reportingDate"] == "2025-12-31")
+    assert dec["idColumn"] == "original_underlying_exposure_identifier"
+    assert dec["linkedFromPriorPct"] == 100.0
+
+
+def test_a_cut_that_cannot_be_joined_says_so():
+    frames = _odd_cut_series()
+    frames[2]["df"] = frames[2]["df"].drop(
+        columns="original_underlying_exposure_identifier")
+    out = C.cohort_formation(frames, grain="M")
+    dec = next(l for l in out["idLinkage"] if l["reportingDate"] == "2025-12-31")
+    assert dec["linkedFromPriorPct"] == 0.0
