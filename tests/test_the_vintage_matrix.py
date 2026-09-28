@@ -74,3 +74,51 @@ def test_without_an_original_advance_the_base_is_the_fixed_pool_balance():
                 if r["vintage"] == "2025-10")
     assert oct_["basis"] == "balance_when_pool_fixed"
     assert oct_["base"] == 1_000_000.0
+
+
+def _status_series():
+    """Ten October loans. By December one has died and one repaid voluntarily;
+    by January the deceased loan's estate has repaid (status Redeemed)."""
+    def cut(date, statuses, fa=0.0):
+        rows = [(f"A{i}", "2025-10-10", 0.0 if s == "Redeemed" else 110_000.0 + fa)
+                for i, s in enumerate(statuses)]
+        fr = _cut(date, rows, advance=True)
+        fr["df"]["account_status"] = statuses
+        fr["df"]["further_advance_amount"] = [fa if s != "Redeemed" else fa
+                                             for s in statuses]
+        return fr
+    live = ["Inforce"] * 10
+    dec = ["Deceased", "Redeemed"] + ["Inforce"] * 8
+    jan = ["Redeemed", "Redeemed"] + ["Inforce"] * 8
+    return [cut("2025-10-31", live), cut("2025-11-30", live),
+            cut("2025-12-31", dec, fa=5_000.0), cut("2026-01-31", jan, fa=5_000.0)]
+
+
+def test_exits_are_split_by_cause_and_a_death_stays_a_death():
+    pool = C.cohort_static_pool(_status_series(), vintage="2025-10", grain="M")
+    by = {p["period"]: p for p in pool["periods"]}
+    assert by["2025-12"]["exitsByCause"] == {"deaths": 1, "voluntaryRepayments": 1,
+                                              "leftTape": 0}
+    # The estate repaid in January: still a death, not a voluntary repayment.
+    assert by["2026-01"]["exitsByCause"]["deaths"] == 1
+    assert by["2026-01"]["exitsByCause"]["voluntaryRepayments"] == 1
+    assert by["2025-12"]["survivingLoanCount"] == 8
+    assert by["2025-12"]["exitsInPeriod"] == 2 and by["2026-01"]["exitsInPeriod"] == 0
+    assert by["2025-12"]["cumulativeExits"] == 2
+
+
+def test_the_balance_splits_into_advance_further_advances_and_roll_up():
+    pool = C.cohort_static_pool(_status_series(), vintage="2025-10", grain="M")
+    dec = next(p for p in pool["periods"] if p["period"] == "2025-12")
+    split = dec["balanceSplit"]
+    # Nine loans still carry a balance (the voluntary repayment is at zero).
+    assert split["originalAdvance"] == 9 * 100_000.0
+    assert split["furtherAdvances"] == 9 * 5_000.0
+    assert split["rolledUpInterest"] == pytest.approx(9 * 115_000.0 - 9 * 105_000.0)
+
+
+def test_the_matrix_carries_rates_by_cause():
+    oct_ = next(r for r in C.cohort_matrix(_status_series(), grain="M")["vintages"]
+                if r["vintage"] == "2025-10")
+    assert oct_["cells"]["2"]["deathRate"] == pytest.approx(0.1)
+    assert oct_["cells"]["2"]["voluntaryRepaymentRate"] == pytest.approx(0.1)

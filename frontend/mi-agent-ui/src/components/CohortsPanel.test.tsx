@@ -120,4 +120,30 @@ describe("CohortsPanel", () => {
     await screen.findByTestId("formation-table");
     expect(screen.queryByTestId("vintage-matrix")).toBeNull();
   });
+
+  it("splits exits by cause and the balance into advances and roll-up", async () => {
+    const base = new MockAgentClient();
+    const client = Object.assign(base, {
+      getCohortVintages: async (pid: string, q?: { vintage?: string; grain?: "M" | "Q" | "Y" }) => {
+        const r = await new MockAgentClient().getCohortVintages(pid, q);
+        if (r.dataset !== "cohort_static_pool") return r;
+        return {
+          ...r,
+          periods: r.periods.map((p, i) => i === 0 ? p : {
+            ...p,
+            exitsByCause: { deaths: 1, voluntaryRepayments: 2, leftTape: 0 },
+            cumulativeExits: 3,
+            balanceSplit: { originalAdvance: 3_000_000, furtherAdvances: 50_000,
+                            rolledUpInterest: 120_000, furtherAdvancesReported: true },
+          }),
+        };
+      },
+    });
+    render(<CohortsPanel client={client} portfolioId="client_001/mi_2025_12" />);
+    const pool = await screen.findByTestId("static-pool-table");
+    await waitFor(() => expect(within(pool).getAllByText("1 death · 2 repaid").length)
+      .toBeGreaterThan(0));
+    expect(within(pool).getByText("Roll-up")).toBeInTheDocument();
+    expect(within(pool).getByText("In force")).toBeInTheDocument();
+  });
 });
