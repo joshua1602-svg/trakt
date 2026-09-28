@@ -34,12 +34,14 @@ EXPECTED_COUNTS = {
     "2026-05-29": {"KFI": 1, "APPLICATION": 1, "OFFER": 3,
                    "COMPLETED": 2, "WITHDRAWN": 1},
 }
+#: The OPEN pipeline (KFI / Application / Offer): completed and withdrawn
+#: cases stay in the extract but not in the pipeline series.
 EXPECTED_CASES = {"2026-05-01": 6, "2026-05-08": 7, "2026-05-15": 8,
-                  "2026-05-22": 8, "2026-05-29": 8}
+                  "2026-05-22": 5, "2026-05-29": 5}
 #: Loan amounts are 100k..800k by case, so each subtotal names its cases.
 EXPECTED_AMOUNT = {"2026-05-01": 2_300_000.0, "2026-05-08": 2_800_000.0,
-                   "2026-05-15": 3_600_000.0, "2026-05-22": 3_600_000.0,
-                   "2026-05-29": 3_600_000.0}
+                   "2026-05-15": 3_600_000.0, "2026-05-22": 2_400_000.0,
+                   "2026-05-29": 2_400_000.0}
 
 
 @pytest.fixture(scope="module")
@@ -92,9 +94,10 @@ def test_the_movements_the_fixture_exists_to_provide(evo):
     # COMPLETION and WITHDRAWAL appear only once cases reach them.
     assert "COMPLETED" not in by["2026-05-15"] and "WITHDRAWN" not in by["2026-05-15"]
     assert by["2026-05-22"]["COMPLETED"] == 2 and by["2026-05-22"]["WITHDRAWN"] == 1
-    # STASIS: the population is flat across the last three weeks even though the
-    # stage mix is not — a series that only ever grows proves less.
-    assert counts["2026-05-15"] == counts["2026-05-22"] == counts["2026-05-29"]
+    # EXIT, then STASIS: completion and withdrawal take three cases out of the
+    # open pipeline, which is then flat even though the stage mix is not — a
+    # series that only ever grows proves less.
+    assert counts["2026-05-15"] - 3 == counts["2026-05-22"] == counts["2026-05-29"]
     assert by["2026-05-22"] != by["2026-05-29"]
 
 

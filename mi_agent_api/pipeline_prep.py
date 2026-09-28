@@ -80,6 +80,25 @@ _STAGE_BUCKET = {
     "COMPLETED": "completed", "WITHDRAWN": "withdrawn",
 }
 
+#: The OPEN pipeline: stages a case can still progress from. Completed and
+#: withdrawn cases stay in the weekly extract with their balance, and an
+#: unmapped (UNKNOWN) stage is not evidence of a live case, so the pipeline
+#: totals, profile, breakdowns, weekly series and movement drill-down all read
+#: these stages only. Derived from the one bucket map above.
+OPEN_STAGES = tuple(s for s, b in _STAGE_BUCKET.items() if b in ("early", "mid", "late"))
+
+
+def open_stage_mask(df: pd.DataFrame) -> pd.Series:
+    """True for rows at an open pipeline stage (all False without a stage)."""
+    if "pipeline_stage" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["pipeline_stage"].astype(str).str.strip().str.upper().isin(OPEN_STAGES)
+
+
+def open_pipeline(df: pd.DataFrame) -> pd.DataFrame:
+    """The open-pipeline rows of a prepared frame (see :data:`OPEN_STAGES`)."""
+    return df[open_stage_mask(df)]
+
 # Pipeline status (reuses funded-status semantics): funded / pipeline / withdrawn.
 _OPEN_PIPELINE_STAGES = {"KFI", "APPLICATION", "OFFER"}
 

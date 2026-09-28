@@ -25,6 +25,7 @@ from mi_agent.mi_dataset_profile import PERCENT_POINTS, percent_storage_scale
 
 from . import snapshots as snap
 from . import pipeline_contract as pipeline_mod
+from .pipeline_prep import OPEN_STAGES as _OPEN_STAGES
 
 _BALANCE = "current_outstanding_balance"
 # Funded breakdown dimensions exposed over time (kept small + governed).
@@ -759,8 +760,19 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
                 ext, historical_model=historical_model)
         except Exception:  # noqa: BLE001
             continue
-        amount = summary.get("total_pipeline_amount")
         weighted = summary.get("weighted_expected_funded_amount")
+        # The OPEN pipeline (KFI / Application / Offer), the same population as
+        # the snapshot tiles and the movement drill-down. Completed and
+        # withdrawn cases stay in the extract; they are not pipeline exposure.
+        if summary.get("has_stage"):
+            open_aggs = [agg for name, agg in summary["stages"].items()
+                         if name.strip().upper() in _OPEN_STAGES]
+            case_count = int(sum(agg["count"] for agg in open_aggs))
+            amount = (float(sum(agg["value"] or 0.0 for agg in open_aggs))
+                      if summary.get("has_balance") else None)
+        else:
+            case_count = int(summary["row_count"])
+            amount = summary.get("total_pipeline_amount")
         sources.append(ext.get("source_file", ""))
         dates.append(edate)
         periods.append({
@@ -769,14 +781,14 @@ def pipeline_evolution(pipeline_root: str | os.PathLike, client_id: str,
             "week": edate,
             "metrics": {
                 "pipeline_amount": (round(float(amount), 2) if amount is not None else None),
-                "pipeline_case_count": int(summary["row_count"]),
+                "pipeline_case_count": case_count,
                 "weighted_expected_funded_amount": (round(float(weighted), 2)
                                                     if weighted is not None else None),
             },
             "reconciliation": {
                 "dataset": "pipeline",
                 "extract_date": edate,
-                "total_records": int(summary["row_count"]),
+                "total_records": case_count,
                 "total_balance": (round(float(amount), 2) if amount is not None else None),
                 "coverage_by_balance_pct": 100.0,
                 "missing_measure_fields": [],

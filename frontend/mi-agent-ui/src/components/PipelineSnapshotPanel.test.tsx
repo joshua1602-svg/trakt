@@ -29,6 +29,26 @@ describe("PipelineSnapshotPanel", () => {
     expect(screen.getAllByText("OFFER").length).toBeGreaterThanOrEqual(1);
   });
 
+  it("says the figures are the open pipeline and what the extract also holds", () => {
+    render(<PipelineSnapshotPanel snapshot={{
+      ...NOV,
+      excludedFromOpenPipeline: {
+        stages: [{ stage: "COMPLETED", caseCount: 579, amount: 85_000_000 },
+                 { stage: "WITHDRAWN", caseCount: 750, amount: 127_600_000 }],
+        cases: 1329, amount: 212_600_000,
+      },
+    }} />);
+    const note = screen.getByTestId("pipeline-open-scope").textContent ?? "";
+    expect(note).toMatch(/Open pipeline only/);
+    expect(note).toContain("579 completed");
+    expect(note).toContain("750 withdrawn");
+  });
+
+  it("shows no scope note when nothing is excluded", () => {
+    render(<PipelineSnapshotPanel snapshot={NOV} />);
+    expect(screen.queryByTestId("pipeline-open-scope")).toBeNull();
+  });
+
   it("renders the expected completion breakdown when months exist", () => {
     render(<PipelineSnapshotPanel snapshot={NOV} />);
     expect(screen.getByText("Weighted expected funded by completion month")).toBeInTheDocument();

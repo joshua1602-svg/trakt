@@ -43,7 +43,7 @@ _OFF = {"0", "off", "false", "no"}
 
 #: Bumped when a route's response SHAPE changes, so a client holding an old
 #: validator revalidates into a fresh body rather than a 304.
-ROUTE_VERSION = "2"  # 2: pipelineSnapshot.profile (credit profile tiles)
+ROUTE_VERSION = "3"  # 3: pipeline figures are the OPEN pipeline (KFI / Application / Offer)
 
 CACHE_CONTROL = "private, no-cache"
 

@@ -50,7 +50,7 @@ export const COMPONENT_LABEL: Record<MovementComponentKey, string> = {
   new: "New cases",
   increased: "Increased value",
   decreased: "Decreased value",
-  progressed_out: "Left active pipeline",
+  progressed_out: "Completed / withdrawn (left pipeline)",
   removed: "Removed cases",
   unchanged: "Unchanged",
 };

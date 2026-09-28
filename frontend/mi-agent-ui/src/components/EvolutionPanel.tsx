@@ -284,10 +284,12 @@ function pct1(v: number | null | undefined): string {
  * this milestone to date) — and shows the weekly completion velocity below it as
  * a labelled operational/forecast input, NOT as "conversion". Hidden until
  * expanded to keep the card calm. */
-function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWeek }: {
+function ConversionDisclosure({ stage, conversion, cohortPct, cohortSize, enhanced, latestWeek }: {
   stage: string;
   conversion: FunnelConversion;
   cohortPct: number | null;
+  /** Cases in the KFI cohort — the denominator of ``cohortPct``. */
+  cohortSize?: number | null;
   /** Phase 2A: append the governed evidence block. Off by default. */
   enhanced?: boolean;
   latestWeek?: string | null;
@@ -330,7 +332,7 @@ function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWe
           )}
           {enhanced && (
             <ConversionContext stage={stage} conversion={conversion}
-              cohortPct={cohortPct} latestWeek={latestWeek} />
+              cohortPct={cohortPct} cohortSize={cohortSize} latestWeek={latestWeek} />
           )}
         </div>
       )}
@@ -345,8 +347,8 @@ function ConversionDisclosure({ stage, conversion, cohortPct, enhanced, latestWe
  * disclosure. Renders
  * compact in the 2×2 grid and larger inside the focus modal (``large``). */
 export function FunnelStageCard({
-  stage, label, points, flowPoints, summary, conversion, cohortPct, showCumulative, large, onExpand,
-  enhanced, latestWeek, tooltipContent, onActivePoint, onPointClick,
+  stage, label, points, flowPoints, summary, conversion, cohortPct, cohortSize, showCumulative,
+  large, onExpand, enhanced, latestWeek, tooltipContent, onActivePoint, onPointClick,
 }: {
   stage: string;
   label: string;
@@ -356,6 +358,8 @@ export function FunnelStageCard({
   conversion: FunnelConversion | null;
   /** Latest cumulative cohort % for this stage (the canonical conversion). */
   cohortPct: number | null;
+  /** Cases in the KFI cohort behind ``cohortPct``. */
+  cohortSize?: number | null;
   showCumulative: boolean;
   /** Larger chart for the focus modal. */
   large?: boolean;
@@ -508,7 +512,8 @@ export function FunnelStageCard({
         </div>
       )}
       {conversion && <ConversionDisclosure stage={stage} conversion={conversion}
-        cohortPct={cohortPct} enhanced={enhanced} latestWeek={latestWeek} />}
+        cohortPct={cohortPct} cohortSize={cohortSize} enhanced={enhanced}
+        latestWeek={latestWeek} />}
     </div>
   );
 }
@@ -1104,6 +1109,7 @@ export function EvolutionPanel({
                 summary={funnel?.summary?.[stage]}
                 conversion={funnel?.summary?.[stage]?.conversion ?? null}
                 cohortPct={cohortPctFor(stage)}
+                cohortSize={funnel?.cohortProgression?.cohortSize ?? null}
                 enhanced={enhancedHovers}
                 latestWeek={funnel?.weeks?.[(funnel?.weeks?.length ?? 1) - 1] ?? null}
                 showCumulative={showCumulative}
@@ -1128,6 +1134,7 @@ export function EvolutionPanel({
                 summary={funnel.summary?.[expandedStage]}
                 conversion={funnel.summary?.[expandedStage]?.conversion ?? null}
                 cohortPct={cohortPctFor(expandedStage)}
+                cohortSize={funnel.cohortProgression?.cohortSize ?? null}
                 enhanced={enhancedHovers}
                 latestWeek={funnel.weeks?.[(funnel.weeks?.length ?? 1) - 1] ?? null}
                 showCumulative={showCumulative}

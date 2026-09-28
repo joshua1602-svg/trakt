@@ -29,6 +29,7 @@ export interface InsightStageCardProps {
   summary: PipelineFunnelEvolution["summary"][string] | undefined;
   conversion: FunnelConversion | null;
   cohortPct: number | null;
+  cohortSize?: number | null;
   showCumulative: boolean;
   large?: boolean;
   onExpand?: () => void;

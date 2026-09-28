@@ -29,8 +29,9 @@ def _snapshot():
 def test_the_pipeline_is_broken_down_by_product():
     snap = _snapshot()
     rows = {r["key"]: r for r in snap["productBreakdown"]}
-    assert rows["Lump Sum"]["pipelineAmount"] == 180_000
-    assert rows["Lump Sum"]["caseCount"] == 2
+    # The open pipeline: A4 is Completed, so it is not in the breakdown.
+    assert rows["Lump Sum"]["pipelineAmount"] == 100_000
+    assert rows["Lump Sum"]["caseCount"] == 1
     assert rows["Drawdown"]["pipelineAmount"] == 80_000
     assert snap["productBreakdownFull"] == snap["productBreakdown"]
 
@@ -39,5 +40,5 @@ def test_the_pipeline_is_broken_down_by_ltv_band():
     snap = _snapshot()
     rows = snap["ltvBreakdown"]
     assert rows, "LTV derives from loan amount / estimated value"
-    assert sum(r["caseCount"] for r in rows) == 4
-    assert sum(r["pipelineAmount"] for r in rows) == 260_000
+    assert sum(r["caseCount"] for r in rows) == 3
+    assert sum(r["pipelineAmount"] for r in rows) == 180_000

@@ -70,8 +70,9 @@ def test_the_series_read_the_same_numbers(year_of_weeks):
     root, weeks, _prepared = year_of_weeks
     evo = ev.pipeline_evolution(root, "ERE")
     last = evo["periods"][-1]["metrics"]
-    assert last["pipeline_case_count"] == 3
-    assert last["pipeline_amount"] == 100000 + (weeks - 1) + 50000 + 75000
+    # The open pipeline: the Completed case stays in the extract, not the series.
+    assert last["pipeline_case_count"] == 2
+    assert last["pipeline_amount"] == 100000 + (weeks - 1) + 50000
     stages = {r["stage"]: r for r in evo["byStage"] if r["week"] == evo["periods"][-1]["week"]}
     assert stages["OFFER"]["value"] == 50000 and stages["OFFER"]["count"] == 1
     funnel = ev.pipeline_funnel_evolution(root, "ERE")

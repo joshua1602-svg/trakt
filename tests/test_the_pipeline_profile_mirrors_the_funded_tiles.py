@@ -34,18 +34,18 @@ def test_profile_is_amount_weighted_like_the_funded_tiles():
         "DOB App 1": ["01/01/1950", "01/01/1955", "01/01/1960", "01/01/1945"],
         "DOB App 2": ["01/01/1952", None, None, None],
     })["profile"]
-    total = 260_000
+    # The open pipeline only: A4 is Completed, so the profile reads A1-A3.
+    total = 180_000
     # LTV = loan amount / estimated value, weighted by loan amount.
-    ltv = (100_000 * 25 + 50_000 * 50 + 30_000 * 10 + 80_000 * 40) / total
+    ltv = (100_000 * 25 + 50_000 * 50 + 30_000 * 10) / total
     assert prof["waLtvPct"] == pytest.approx(ltv, abs=0.01)
-    rate = (100_000 * 6.5 + 50_000 * 7.0 + 30_000 * 7.1 + 80_000 * 6.9) / total
+    rate = (100_000 * 6.5 + 50_000 * 7.0 + 30_000 * 7.1) / total
     assert prof["waInterestRatePct"] == pytest.approx(rate, abs=0.01)
     assert prof["waPropertyValue"] == pytest.approx(
-        (100_000 * 400_000 + 50_000 * 100_000 + 30_000 * 300_000 + 80_000 * 200_000) / total,
-        abs=0.01)
+        (100_000 * 400_000 + 50_000 * 100_000 + 30_000 * 300_000) / total, abs=0.01)
     assert prof["waYoungestAge"] is not None
-    assert (prof["singleBorrowerCount"], prof["borrowerTypeKnownCount"]) == (3, 4)
-    assert prof["singleBorrowerPct"] == 75.0
+    assert (prof["singleBorrowerCount"], prof["borrowerTypeKnownCount"]) == (2, 3)
+    assert prof["singleBorrowerPct"] == pytest.approx(66.7, abs=0.05)
 
 
 def test_a_fractional_rate_reads_in_points():
