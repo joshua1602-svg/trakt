@@ -374,6 +374,60 @@ def series_id_column(frames: List[Dict[str, Any]]) -> Optional[str]:
     return None
 
 
+#: Every column that may carry a loan's identity in some cut. A regulatory-regime
+#: cut (ESMA Annex 2) can key a loan on its exposure identifier while the lender
+#: tape keys it on the loan reference, so the linking column is chosen per cut.
+_LINK_CANDIDATES = _LOAN_ID_CANDIDATES + (
+    "original_underlying_exposure_identifier", "underlying_exposure_identifier",
+    "new_underlying_exposure_identifier")
+
+
+def frame_id_columns(frames: List[Dict[str, Any]]
+                     ) -> Tuple[List[Optional[str]], List[Dict[str, Any]]]:
+    """The id column for EACH cut, chosen by what actually links, plus linkage.
+
+    The first cut uses the series key (:func:`series_id_column`). Every later
+    cut uses whichever candidate column shares the most ids with the loans
+    already seen — so a cut that keys the same loans in a different column is
+    followed, not read as a whole new book. When no column links, the series
+    key is kept and the linkage block says so.
+
+    Linkage, per cut: the column used and the share of the previous cut's
+    loans found in this one. A share near zero between consecutive monthly
+    cuts is not redemption; it means the cuts cannot be joined.
+    """
+    base = series_id_column(frames)
+    cols: List[Optional[str]] = []
+    linkage: List[Dict[str, Any]] = []
+    seen: set = set()
+    prior: Optional[set] = None
+    for fr in frames:
+        df = fr.get("df")
+        if df is None or not len(df):
+            cols.append(None)
+            continue
+        present = [c for c in _LINK_CANDIDATES
+                   if c in df.columns and df[c].notna().any()]
+        chosen = base if base in present else (present[0] if present else None)
+        if seen and present:
+            best = max(present, key=lambda c: len(set(_ids(df, c).dropna()) & seen))
+            if len(set(_ids(df, best).dropna()) & seen) > len(
+                    set(_ids(df, chosen).dropna()) & seen if chosen else set()):
+                chosen = best
+        cols.append(chosen)
+        here = set(_ids(df, chosen).dropna()) if chosen else set()
+        linkage.append({
+            "reportingDate": fr.get("reporting_date"),
+            "idColumn": chosen,
+            "loans": len(here),
+            "linkedFromPriorPct": (round(len(here & prior) / len(prior) * 100, 1)
+                                   if prior else None),
+        })
+        seen |= here
+        prior = here
+    return cols, linkage
+
+
 def _ids(df: pd.DataFrame, id_col: Optional[str]) -> pd.Series:
     """Loan ids as comparable strings, or all-missing when the column is absent.
 
@@ -390,7 +444,7 @@ def _ids(df: pd.DataFrame, id_col: Optional[str]) -> pd.Series:
 
 
 def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M",
-                     id_col: Optional[str] = None
+                     id_cols: Optional[List[Optional[str]]] = None
                      ) -> Tuple[Dict[str, str], List[Dict[str, Any]]]:
     """Map every loan id to its vintage, plus any late corrections observed.
 
@@ -404,8 +458,9 @@ def cohort_entry_map(frames: List[Dict[str, Any]], grain: str = "M",
     # cost of the whole surface. One concat + drop_duplicates does the same
     # work, and keeps the "first assignment wins" rule explicit.
     seen: List[pd.DataFrame] = []
-    id_col = id_col or series_id_column(frames)
-    for fr in frames:
+    if id_cols is None:
+        id_cols, _ = frame_id_columns(frames)
+    for fr, id_col in zip(frames, id_cols):
         df = fr.get("df")
         if df is None or not len(df):
             continue
@@ -465,13 +520,13 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
                 "reason": f"no {_ORIG_DATE} on the funded tape, so loans cannot "
                           "be assigned to an origination vintage"}
 
-    id_col = series_id_column(usable)
-    entry, corrections = cohort_entry_map(frames, grain, id_col)
+    id_cols, linkage = frame_id_columns(usable)
+    entry, corrections = cohort_entry_map(usable, grain, id_cols)
     seen: set = set()
     rows: Dict[str, Dict[str, Any]] = {}
-    for fr in usable:
+    for fr, id_col in zip(usable, id_cols):
         df = fr["df"]
-        if id_col not in df.columns:
+        if id_col is None:
             continue
         ids = _ids(df, id_col)
         # A loan repeated within one cut still enters once.
@@ -517,6 +572,9 @@ def cohort_formation(frames: List[Dict[str, Any]], *, grain: str = "M",
         "vintages": out,
         "totalLoanCount": sum(r["originalLoanCount"] for r in out),
         "lateCorrections": corrections,
+        # Which id column joined each cut, and how much of the prior cut it
+        # found — the evidence that each loan was counted once.
+        "idLinkage": linkage,
         "lineage": {
             "source": "governed funded reporting periods, by origination vintage",
             "metric": "loans and balance ENTERING the book in each vintage",
@@ -578,8 +636,8 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
                 "reason": "the funded tape carries no loan identifier, so a "
                           "static pool cannot be followed"}
 
-    id_col = series_id_column(usable)
-    entry, _ = cohort_entry_map(frames, grain, id_col)
+    id_cols, linkage = frame_id_columns(usable)
+    entry, _ = cohort_entry_map(usable, grain, id_cols)
     members = {loan for loan, label in entry.items() if label == str(vintage)}
     if not members:
         return {**base, "available": False, "periods": [],
@@ -596,9 +654,9 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
     original_balance: Optional[float] = None
     prior_ids: Optional[set] = None
     anchor_ids: set = set()
-    for fr in usable:
+    for fr, id_col in zip(usable, id_cols):
         df = fr["df"]
-        if id_col not in df.columns:
+        if id_col is None:
             continue
         ids = _ids(df, id_col)
         present = ids.isin(members)
@@ -652,6 +710,7 @@ def cohort_static_pool(frames: List[Dict[str, Any]], *, vintage: str,
         "formationEnd": formation_end,
         "poolAnchored": original_count is not None,
         "formingPeriods": sum(1 for r in periods if r.get("forming")),
+        "idLinkage": linkage,
         "originalLoanCount": original_count,
         "originalBalance": (round(original_balance, 2)
                             if original_balance is not None else None),
