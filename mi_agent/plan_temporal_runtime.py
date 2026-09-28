@@ -52,6 +52,11 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple
 
 from mi_agent import plan_runtime_adapter as adapter
+# THE LABEL READER, shared with the pipeline runtime's dated periods. It
+# lives in a neutral module so a runtime that must never reach the funded
+# catalogue can read a month label without importing this one.
+from mi_agent.period_labels import (_ANCHOR_PREFIXES, _MONTHS,  # noqa: F401
+                                    PeriodAnchor, _normalise, parse_anchor)
 from mi_agent.states.selectors import SnapshotSelector
 from snapshot.model import SnapshotNotFoundError, parse_date
 
@@ -194,19 +199,6 @@ WHOLE_SERIES_LABELS = frozenset({
     "per month", "each of the last months", "the whole period",
 })
 
-#: Words that prefix a span label without changing which period it names.
-#: Stripped so "since March" and "March" resolve to the same governed anchor.
-_ANCHOR_PREFIXES = ("since ", "from ", "starting ", "beginning ", "as at ",
-                    "as of ", "in ", "during ", "for ", "the ", "back to ")
-
-_MONTHS: Mapping[str, int] = {
-    "january": 1, "jan": 1, "february": 2, "feb": 2, "march": 3, "mar": 3,
-    "april": 4, "apr": 4, "may": 5, "june": 6, "jun": 6, "july": 7, "jul": 7,
-    "august": 8, "aug": 8, "september": 9, "sep": 9, "sept": 9,
-    "october": 10, "oct": 10, "november": 11, "nov": 11, "december": 12,
-    "dec": 12,
-}
-
 #: Cadence words that mean the same reporting rhythm. `SnapshotHeader.cadence`
 #: and `vocabulary.TIME_GRAINS` spell it differently in places, and a mismatch
 #: of spelling is not a mismatch of cadence.
@@ -220,79 +212,8 @@ _CADENCE_SYNONYMS: Mapping[str, str] = {
 }
 
 
-def _normalise(label: Any) -> str:
-    """A label reduced to the words that name a period. No regular expressions.
-
-    THE ONE STRING THIS MODULE READS is `period.labels`, and it is governed plan
-    content rather than the reader's sentence: the compiler put it there, and
-    `interpretation_v2.intent` already refuses a payload whose label carries a
-    date or a snapshot id. Nothing else on the plan is read as prose.
-    """
-    words = str(label or "").strip().lower()
-    for character in ".,;:!?'\"()[]":
-        words = words.replace(character, " ")
-    return " ".join(words.split())
-
-
 def _cadence(value: Any) -> str:
     return _CADENCE_SYNONYMS.get(_normalise(value), _normalise(value))
-
-
-@dataclass(frozen=True)
-class PeriodAnchor:
-    """A month, and optionally a year, that a plan label named.
-
-    Never a date. A month with no year is matched against the months the
-    catalogue actually carries, and it is the CATALOGUE that supplies the day.
-    """
-
-    month: int
-    year: Optional[int] = None
-    label: str = ""
-
-
-def parse_anchor(label: Any) -> Optional[PeriodAnchor]:
-    """The governed period a plan label names, or None if it names none.
-
-    Recognises a month name, optionally with a four-digit year, after the
-    prefixes a span phrase puts in front of it. Everything else returns None,
-    and the caller clarifies rather than choosing a period on the reader's
-    behalf.
-
-    A four-digit year alone is NOT an anchor: "2025" names twelve reporting
-    periods, and picking one of them would be exactly the substitution this
-    module refuses.
-    """
-    words = _normalise(label)
-    if not words:
-        return None
-    changed = True
-    while changed:
-        changed = False
-        for prefix in _ANCHOR_PREFIXES:
-            if words.startswith(prefix):
-                words = words[len(prefix):]
-                changed = True
-    tokens = [token for token in words.split() if token]
-    month: Optional[int] = None
-    year: Optional[int] = None
-    for token in tokens:
-        if token in _MONTHS:
-            if month is not None and _MONTHS[token] != month:
-                return None                      # two months in one label
-            month = _MONTHS[token]
-            continue
-        if len(token) == 4 and token.isdigit():
-            candidate = int(token)
-            if 1900 <= candidate <= 2999:
-                if year is not None and year != candidate:
-                    return None
-                year = candidate
-                continue
-        return None                              # a word this contract cannot read
-    if month is None:
-        return None
-    return PeriodAnchor(month=month, year=year, label=_normalise(label))
 
 
 # --------------------------------------------------------------------------- #

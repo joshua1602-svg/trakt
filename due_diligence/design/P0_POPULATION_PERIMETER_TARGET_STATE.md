@@ -756,3 +756,16 @@ named months wait for it.
 POPULATION_NOT_EXECUTABLE, [84] in production) is a separate population-owning
 runtime over the stage-movement owner, not part of Change 3, and is recorded
 here so it is not mistaken for one.
+
+**Step 1 as built (owner go-ahead 2026-09-28).** The pipeline runtime — not the
+temporal runtime — now serves a pipeline plan whose period is a named month
+(`explicit_period`) or "latest against previous" (`relative_pair`, weekly or
+monthly grain). It asks the weekly owner (`evolution.pipeline_evolution`) for
+the history, chooses the extracts — D7 for a month, extract order for weeks —
+and returns those extracts' own figures, total or by stage. It computes no
+change between them: a movement is a different operation. Each chosen extract
+and the rule that chose it are on the receipt (`period_resolution`), in the
+sentence and in the source notes. The month-label reader moved to a neutral
+`mi_agent/period_labels.py` so this runtime reads "October 2025" by the funded
+runtime's rule without importing the module that owns the funded catalogue.
+Guarded by `tests/interpretation_v2/test_specialist_runtime_pipeline_dated.py`.

@@ -490,13 +490,21 @@ def _attempt_pipeline(body: Dict[str, Any], *, plan: Mapping[str, Any],
         return None, f"{INELIGIBLE}:{base_why}"
 
     temporal_plan = pipeline_rt.is_temporal(plan)
+    dated_plan = pipeline_rt.is_dated(plan)
     body["execution"] = {"attempted": True,
                          "runtime": ("pipeline_temporal" if temporal_plan
+                                     else "pipeline_dated" if dated_plan
                                      else "pipeline_current"),
                          "requested_semantics": adapter.requested_semantics(plan)}
     try:
         if temporal_plan:
             outcome = pipeline_rt.execute_temporal(
+                plan, root=pipeline_root, client_id=pipeline_client_id or "",
+                to_run_id=pipeline_run_id, history_model=pipeline_history)
+        elif dated_plan:
+            # Named months (D7) and "latest against previous", from the same
+            # weekly owner; the runtime only chooses which extracts.
+            outcome = pipeline_rt.execute_dated(
                 plan, root=pipeline_root, client_id=pipeline_client_id or "",
                 to_run_id=pipeline_run_id, history_model=pipeline_history)
         else:
@@ -596,6 +604,40 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
                       "label": _PIPELINE_LABELS.get(measure, measure)}],
             description=f"{len(rows)} rows.")]
         answer = f"Pipeline by {axis} across {len(rows)} governed stage(s)."
+    elif shape in ("dated", "grouped_dated"):
+        # THE PIPELINE AT NAMED DATES. D4: the measure and every extract date
+        # are in the sentence; the rule that chose each extract (D7 for a
+        # month) is in the source notes. No change between them is stated,
+        # because none was computed — the plan asked for the dates' figures.
+        label = _PIPELINE_LABELS.get(measure, measure)
+        dates = [str(r.get("extract_date"))
+                 for r in (receipt.get("period_resolution") or ())]
+        if shape == "dated":
+            rows = [{"period": str(c["period"]), "value": c["value"]}
+                    for c in outcome.cells]
+            def _shown(value: Any) -> str:
+                if value is None:
+                    return "n/a"
+                return f"£{float(value):,.0f}" if is_amount else f"{float(value):,.0f}"
+
+            values = "; ".join(f"{r['period']} {_shown(r['value'])}" for r in rows)
+            answer = f"{label} at each weekly extract — {values}."
+            columns = [{"key": "period", "label": "Weekly extract"},
+                       {"key": "value", "label": label}]
+        else:
+            stages = sorted({str(c[axis]) for c in outcome.cells})
+            by_period: Dict[str, Dict[str, Any]] = {}
+            for c in outcome.cells:
+                by_period.setdefault(str(c["period"]), {"period": str(c["period"])})[
+                    str(c[axis])] = c["value"]
+            rows = [by_period[d] for d in sorted(by_period)]
+            answer = (f"{label} by {axis} at the weekly extracts of "
+                      f"{' and '.join(dates)}: {', '.join(stages)}.")
+            columns = ([{"key": "period", "label": "Weekly extract"}]
+                       + [{"key": st, "label": st} for st in stages])
+        artefacts = [_artefact("table", "Pipeline at the named dates",
+                               rows=rows, columns=columns,
+                               description=f"{len(rows)} weekly extract(s).")]
     else:
         # A SERIES, weekly. One row per governed extract; a grouped series gets
         # one column per stage, which is the shape the accepted evolution route
@@ -626,13 +668,19 @@ def render_pipeline(plan: Mapping[str, Any], outcome: Any, *, question: str,
     reconciliation = {"dataset": "pipeline", "coverage_by_balance_pct": 100.0}
     for artefact in artefacts:
         artefact.setdefault("reconciliation", reconciliation)
+    # WHICH EXTRACT ANSWERED WHICH REQUESTED DATE, and by what rule — D7 for a
+    # named month. Empty for every shape that selects no dates.
+    source_notes = [{"field": f"period: {row.get('requested')}",
+                     "note": f"{row.get('extract_date')} — {row.get('rule')}"}
+                    for row in (receipt.get("period_resolution") or ())]
     payload: Dict[str, Any] = {
         "ok": True, "error": None, "question": question, "answer": answer,
         "interpreted": "", "spec": spec_dict,
         "validation": {"ok": True, "errors": [], "warnings": [],
                        "resolved_fields": {}},
         "artifacts": artefacts, "reconciliation": reconciliation,
-        "sourceNotes": [], "warnings": [], "diagnostics": [], "assumptions": [],
+        "sourceNotes": source_notes, "warnings": [], "diagnostics": [],
+        "assumptions": [],
         "metadata": {"engine": "mi_agent", "source": "python", "mock": False,
                      "route": "governed_plan_pipeline", "lensApplied": None},
     }

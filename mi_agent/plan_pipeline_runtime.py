@@ -93,6 +93,11 @@ NOT_SINGLE_OUTPUT = "NOT_SINGLE_OUTPUT"
 SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
 HISTORY_UNAVAILABLE = "HISTORY_UNAVAILABLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
+#: A named month the plan's label does not read as one, one that the weekly
+#: history holds in more than one year, and one it does not hold at all.
+PERIOD_LABEL_UNRESOLVED = "PERIOD_LABEL_UNRESOLVED"
+PERIOD_LABEL_AMBIGUOUS = "PERIOD_LABEL_AMBIGUOUS"
+PERIOD_NOT_AVAILABLE = "PERIOD_NOT_AVAILABLE"
 
 #: GOVERNED MEASURE -> WHICH EXISTING PIPELINE FIGURE. The map is the whole of
 #: the measure translation, and it is a map rather than a computation on purpose:
@@ -124,6 +129,22 @@ CURRENT_PERIOD_FORMS: FrozenSet[str] = frozenset({"current"})
 #: Temporal operations, served by the WEEKLY evolution owner.
 TEMPORAL_OPERATIONS: FrozenSet[str] = frozenset({"series", "breakdown"})
 TEMPORAL_PERIOD_FORMS: FrozenSet[str] = frozenset({"series"})
+
+#: DATED operations: the pipeline AT named points in time rather than now or
+#: across the whole history — "October and November", "latest against the week
+#: before". Served by the same weekly owner; this runtime only chooses WHICH
+#: extracts, by the rule below, and never computes the change between them.
+DATED_PERIOD_FORMS: FrozenSet[str] = frozenset({"explicit_period",
+                                                "relative_pair"})
+DATED_OPERATIONS: FrozenSet[str] = frozenset({"point_in_time", "summary",
+                                              "breakdown", "series"})
+DATED_GRAINS: FrozenSet[str] = frozenset({"weekly", "monthly"})
+
+#: D7, the owner's decision (2026-09-28): a named month means the LAST weekly
+#: extract dated within it. Year-aware — a bare month the history holds in two
+#: years is ambiguous and clarifies, exactly as it does for funded snapshots —
+#: and the chosen extract's date is stated on the receipt and the answer.
+MONTH_RULE = "D7: the last weekly extract dated within the named month"
 
 #: The grain the weekly extracts are on. Stated, not inferred, and carried into
 #: the receipt so a reader can see the answer is weekly rather than monthly.
@@ -174,6 +195,12 @@ def requested_dimensions(plan: Any) -> List[str]:
     output = _single_output(_as_mapping(plan)) or {}
     return [str(d.get("canonical_field") or d.get("concept") or "")
             for d in (output.get("dimensions") or ())]
+
+
+def is_dated(plan: Any) -> bool:
+    """Does this plan ask for the pipeline AT named points in time?"""
+    period = _as_mapping(plan).get("period") or {}
+    return str(period.get("form") or "") in DATED_PERIOD_FORMS
 
 
 def is_temporal(plan: Any) -> bool:
@@ -261,6 +288,27 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         if operation not in TEMPORAL_OPERATIONS:
             return (False, OPERATION_NOT_SUPPORTED,
                     f"operation={operation!r} has no weekly pipeline owner")
+        return True, "", ""
+
+    if is_dated(body):
+        if operation not in DATED_OPERATIONS:
+            return (False, OPERATION_NOT_SUPPORTED,
+                    f"operation={operation!r} has no dated pipeline owner")
+        if form == "explicit_period" and not (period.get("labels") or ()):
+            return (False, PERIOD_NOT_SUPPORTED,
+                    "an explicit period with no label names no point in time")
+        if form == "relative_pair":
+            grain = str(period.get("grain") or "")
+            back = period.get("periods_back")
+            if grain not in DATED_GRAINS:
+                return (False, PERIOD_NOT_SUPPORTED,
+                        f"a relative pair needs a weekly or monthly grain to "
+                        f"say what 'previous' means; this plan states "
+                        f"{grain or 'none'!r}")
+            if isinstance(back, bool) or not isinstance(back, int) or back < 1:
+                return (False, PERIOD_NOT_SUPPORTED,
+                        f"a relative pair needs a positive distance; this plan "
+                        f"states periods_back={back!r}")
         return True, "", ""
 
     if form not in CURRENT_PERIOD_FORMS:
@@ -599,3 +647,175 @@ def execute_temporal(plan: Any, *, root: Any, client_id: str,
         receipt=_receipt(body, measure=measure, kind=kind, dimensions=[],
                          dataset=dataset, result_shape="series",
                          owner=OWNER_EVOLUTION, periods=weeks))
+
+
+# --------------------------------------------------------------------------- #
+# dated — the pipeline AT named points in time
+# --------------------------------------------------------------------------- #
+
+def _month_of(extract_date: Any) -> Optional[Tuple[int, int]]:
+    text = str(extract_date or "")
+    try:
+        return int(text[0:4]), int(text[5:7])
+    except ValueError:
+        return None
+
+
+def last_extract_in_month(dates: Sequence[str], *, month: int,
+                          year: Optional[int]) -> Tuple[Optional[str], str, str]:
+    """D7 for one named month: `(extract_date, reason, detail)`.
+
+    The last weekly extract dated within the month. A month with no year that
+    the history holds in more than one year is AMBIGUOUS — choosing the latest
+    would answer for a year the reader did not name, which is the defect the
+    legacy owner (`temporal_compare._match_period`) carries.
+    """
+    in_month = [d for d in dates
+                if (_month_of(d) or (0, 0))[1] == month
+                and (year is None or (_month_of(d) or (0, 0))[0] == year)]
+    if not in_month:
+        return (None, PERIOD_NOT_AVAILABLE,
+                f"no weekly extract falls in month {month}"
+                + (f" of {year}" if year else "")
+                + f"; the history runs {min(dates) if dates else '-'} to "
+                  f"{max(dates) if dates else '-'}")
+    years = sorted({(_month_of(d) or (0, 0))[0] for d in in_month})
+    if year is None and len(years) > 1:
+        return (None, PERIOD_LABEL_AMBIGUOUS,
+                f"month {month} occurs in {years}; name the year")
+    return max(in_month), "", ""
+
+
+def _dated_selection(plan: Mapping[str, Any], dates: Sequence[str]
+                     ) -> Tuple[List[Dict[str, str]], str, str]:
+    """Which extracts a dated plan names: `(resolution rows, reason, detail)`.
+
+    A SELECTION of dates, by the owner's rule, and nothing else — every figure
+    still comes from the weekly owner for exactly those extracts.
+    """
+    from mi_agent.period_labels import parse_anchor
+
+    period = plan.get("period") or {}
+    ordered = sorted(d for d in dates if d)
+    rows: List[Dict[str, str]] = []
+    if str(period.get("form") or "") == "explicit_period":
+        seen = set()
+        for label in period.get("labels") or ():
+            anchor = parse_anchor(label)
+            if anchor is None:
+                return ([], PERIOD_LABEL_UNRESOLVED,
+                        f"{label!r} does not name a month this contract reads")
+            key = (anchor.month, anchor.year)
+            if key in seen:
+                continue
+            seen.add(key)
+            chosen, why, detail = last_extract_in_month(
+                ordered, month=anchor.month, year=anchor.year)
+            if chosen is None:
+                return [], why, f"{label!r}: {detail}"
+            rows.append({"requested": str(label), "extract_date": chosen,
+                         "rule": MONTH_RULE})
+        return rows, "", ""
+
+    grain = str(period.get("grain") or "")
+    back = int(period.get("periods_back"))
+    if grain == "weekly":
+        if len(ordered) <= back:
+            return ([], PERIOD_NOT_AVAILABLE,
+                    f"{back} week(s) back needs {back + 1} weekly extracts; the "
+                    f"history holds {len(ordered)}")
+        rule = (f"the latest weekly extract, and the one {back} extract(s) "
+                f"before it")
+        return ([{"requested": f"{back} week(s) before the latest",
+                  "extract_date": ordered[-1 - back], "rule": rule},
+                 {"requested": "latest", "extract_date": ordered[-1],
+                  "rule": rule}], "", "")
+    latest = _month_of(ordered[-1]) if ordered else None
+    if latest is None:
+        return [], PERIOD_NOT_AVAILABLE, "the weekly history is empty"
+    index = latest[0] * 12 + (latest[1] - 1) - back
+    earlier = (index // 12, index % 12 + 1)
+    out = []
+    for requested, (year, month) in ((f"{back} month(s) before the latest",
+                                      earlier), ("latest month", latest)):
+        chosen, why, detail = last_extract_in_month(ordered, month=month,
+                                                    year=year)
+        if chosen is None:
+            return [], why, detail
+        out.append({"requested": requested, "extract_date": chosen,
+                    "rule": MONTH_RULE})
+    return out, "", ""
+
+
+def execute_dated(plan: Any, *, root: Any, client_id: str,
+                  to_run_id: Optional[str] = None,
+                  history_model: Optional[Mapping[str, Any]] = None
+                  ) -> PipelineOutcome:
+    """The pipeline at named points in time, through the weekly owner.
+
+    `evolution.pipeline_evolution` — the owner the weekly series already comes
+    from — supplies every figure; this chooses which of its extracts the plan
+    named (D7 for a month, the extract order for "latest against previous") and
+    returns their figures as they are. The CHANGE between them is not computed
+    here: the plan asked for the pipeline at those dates, and a movement is a
+    different operation with a different owner.
+    """
+    from mi_agent_api import evolution as evolution_mod
+
+    body = _as_mapping(plan)
+    output = _single_output(body) or {}
+    measure = str((output.get("measures") or [{}])[0].get("concept") or "")
+    kind = SUPPORTED_MEASURES[measure]
+    dimensions = requested_dimensions(body)
+
+    if not root or not client_id:
+        return PipelineOutcome(
+            ok=False, reason=HISTORY_UNAVAILABLE,
+            detail="no governed weekly pipeline history was supplied for this "
+                   "request")
+    try:
+        series = evolution_mod.pipeline_evolution(
+            root, client_id, to_run_id, historical_model=history_model)
+    except Exception as exc:                                         # noqa: BLE001
+        return PipelineOutcome(ok=False, reason=EXECUTION_FAILED,
+                               detail=f"{type(exc).__name__}: {exc}"[:200])
+
+    periods = list(series.get("periods") or ())
+    by_date = {str(p.get("extract_date") or ""): p for p in periods}
+    resolution, why, detail = _dated_selection(body, list(by_date))
+    if why:
+        return PipelineOutcome(ok=False, reason=why, detail=detail[:300])
+    chosen = [row["extract_date"] for row in resolution]
+    dataset = {
+        "identity": "governed_weekly_pipeline_extracts",
+        "extracts_used": len(chosen),
+        "source_files": [str(by_date[d].get("source_file") or "") for d in chosen],
+    }
+
+    if dimensions:
+        key = "value" if kind == _AMOUNT else "count"
+        rows = [r for r in (series.get("byStage") or ())
+                if str(r.get("period") or "") in set(chosen)]
+        if not rows:
+            return PipelineOutcome(
+                ok=False, reason=HISTORY_UNAVAILABLE,
+                detail="the chosen weekly extracts carry no stage breakdown")
+        cells = [{"period": str(r.get("period") or ""),
+                  dimensions[0]: str(r.get("stage") or ""),
+                  "value": (float(r.get(key)) if r.get(key) is not None else None)}
+                 for r in rows]
+        shape = "grouped_dated"
+    else:
+        metric = "pipeline_amount" if kind == _AMOUNT else "pipeline_case_count"
+        cells = [{"period": d,
+                  "value": ((float((by_date[d].get("metrics") or {}).get(metric))
+                             if (by_date[d].get("metrics") or {}).get(metric)
+                             is not None else None))}
+                 for d in chosen]
+        shape = "dated"
+    receipt = _receipt(body, measure=measure, kind=kind, dimensions=dimensions,
+                       dataset=dataset, result_shape=shape,
+                       owner=OWNER_EVOLUTION, periods=chosen)
+    receipt["period_resolution"] = resolution
+    return PipelineOutcome(ok=True, cells=cells, value=None, receipt=receipt)
+
