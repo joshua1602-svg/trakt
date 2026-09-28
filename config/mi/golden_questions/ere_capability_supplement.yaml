@@ -1,0 +1,24 @@
+# Supplement to ere_mi_questions.yaml for the capability audit
+# (python -m mi_agent_api.question_bank). Covers what the generated library
+# does not: forward (forecast-book) concentration limits, the pipeline
+# stratifications the dashboard now shows, and the run-off forecast method.
+version: 1
+client: ERE
+questions:
+  # Limits against the forecast book (funded + pipeline).
+  - {id: limits_fwd_001, category: risk_limits_forward, question: "If all pipeline loans complete, which concentration limits would breach?"}
+  - {id: limits_fwd_002, category: risk_limits_forward, question: "Which concentration limits are we expected to breach?"}
+  - {id: limits_fwd_003, category: risk_limits_forward, question: "What is the forecast headroom on the London concentration limit?"}
+  - {id: limits_fwd_004, category: risk_limits_forward, question: "Show concentration limits on the forecast book."}
+  - {id: limits_fwd_005, category: risk_limits_forward, question: "Show forward concentration test results."}
+  - {id: limits_fwd_006, category: risk_limits_forward, question: "Which limits are at risk of breaching once the pipeline funds?"}
+  - {id: limits_fwd_007, category: risk_limits_forward, question: "Show concentration limits including the weighted pipeline."}
+  # Pipeline stratifications shown on the dashboard.
+  - {id: pipeline_strat_001, category: pipeline, question: "Show pipeline amount by product."}
+  - {id: pipeline_strat_002, category: pipeline, question: "Show pipeline amount by LTV band."}
+  - {id: pipeline_strat_003, category: pipeline, question: "What is the pipeline case count by product?"}
+  # The run-off forecast method.
+  - {id: forecast_runoff_001, category: forecast, question: "What is the weighted expected pipeline?"}
+  - {id: forecast_runoff_002, category: forecast, question: "How much of the pipeline has lapsed past its stage window?"}
+  - {id: forecast_runoff_003, category: forecast, question: "What is the offer to completion pull-through rate?"}
+  - {id: forecast_runoff_004, category: forecast, question: "When are pipeline cases expected to complete?"}
