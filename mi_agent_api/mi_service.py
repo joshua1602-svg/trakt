@@ -2109,6 +2109,12 @@ def _run_analysis(req: MiQueryRequest, authorised: AuthorisedPortfolio, view: st
             # only book `build_snapshots` will read.
             output_root=ds._onboarding_output_root(),
             tenant_id=authorised.tenant_id,
+            # THE GOVERNED FUNDED FRAME RESOLVER the legacy analytical route is
+            # handed as `base_frame_resolver`, so the governed forecast composer
+            # reads the funded book exactly as the legacy composed answer does
+            # (D6). `_routed_frame` is defined below this function and resolved
+            # when the attempt RUNS, which is after it exists on both paths.
+            funded_frame_resolver=_routed_frame,
             # THE PIPELINE OWNERS' INPUTS, resolved by the dataset module that
             # already owns discovery. A pipeline PLAN is served from these
             # regardless of which view the legacy router picked, which is what

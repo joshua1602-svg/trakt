@@ -127,22 +127,23 @@ def test_the_ceiling_context_is_the_funded_routes_whole_book_context():
 
 def test_the_recorded_milestone_and_run_rate_plans_are_eligible():
     for plan in (_plan(), _plan(population={"base": "funded"}),
-                 _plan(**_RUN_RATE)):
+                 _plan(**_RUN_RATE), _plan(**_BALANCE), _plan(**_PROJECTION)):
         assert forecast_rt.check_eligibility(plan) == (True, "", "")
 
 
+_BALANCE = {"operation": "point_in_time", "target": None,
+            "measures": [{"concept": "forecast_funded_balance"}],
+            "time": {"form": "current"}}
+_PROJECTION = {"operation": "forecast_projection", "target": None,
+               "measures": [{"concept": "forecast_funded_balance"}],
+               "time": {"form": "forward_looking"}}
+
+
 @pytest.mark.parametrize("over, reason", [
-    ({"operation": "forecast_projection", "target": None,
-      "measures": [{"concept": "forecast_funded_balance"}]},
-     forecast_rt.DEFINITION_UNSETTLED),
     ({"operation": "series", "target": None,
       "measures": [{"concept": "forecast_funded_balance"}],
       "time": {"form": "series", "grain": "monthly"}},
-     forecast_rt.DEFINITION_UNSETTLED),
-    ({"operation": "point_in_time", "target": None,
-      "measures": [{"concept": "forecast_funded_balance"}],
-      "time": {"form": "current"}},
-     forecast_rt.DEFINITION_UNSETTLED),
+     forecast_rt.OPERATION_NOT_SUPPORTED),
     ({"population": {"base": "pipeline"}}, forecast_rt.POPULATION_NOT_FORECAST),
     ({"population": {"base": "funded", "lens": "direct"}},
      forecast_rt.SCOPE_NOT_SUPPORTED),
@@ -159,10 +160,14 @@ def test_what_2a_does_not_serve_is_refused_by_name(over, reason):
     assert (ok, why) == (False, reason), detail
 
 
-def test_the_d6_refusal_names_the_open_decision():
-    plan = _plan(operation="forecast_projection", target=None,
-                 measures=[{"concept": "forecast_funded_balance"}])
-    assert "D6" in forecast_rt.check_eligibility(plan)[2]
+def test_a_balance_series_is_refused_naming_the_definition():
+    """D6 defined the POINT figure; the only series is the month-joined one."""
+    plan = _plan(operation="series", target=None,
+                 measures=[{"concept": "forecast_funded_balance"}],
+                 time={"form": "series", "grain": "monthly"})
+    ok, why, detail = forecast_rt.check_eligibility(plan)
+    assert (ok, why) == (False, forecast_rt.OPERATION_NOT_SUPPORTED)
+    assert "D6" in detail
 
 
 def test_a_filtered_or_grouped_forecast_is_refused():
@@ -311,8 +316,20 @@ def test_the_forecast_runtime_never_reads_the_question():
     code = _code_of(forecast_rt)
     for forbidden in ("ParsedQuestion", "parse_with_repair", "resolve_dataset",
                       "try_route", "llm_query_parser", "chat_routing",
-                      "recognise", "_scenario_multiplier", "question"):
+                      "recognise", "_scenario_multiplier"):
         assert forbidden not in code, forbidden
+    # The one mention allowed: the composer's context takes a `question`, and
+    # this module hands it an EMPTY one — it has none to give.
+    tree = ast.parse(Path(forecast_rt.__file__).read_text())
+    mentions = [node for node in ast.walk(tree)
+                if (isinstance(node, ast.Name) and node.id == "question")
+                or (isinstance(node, ast.Attribute) and node.attr == "question")
+                or (isinstance(node, ast.keyword) and node.arg == "question")
+                or (isinstance(node, ast.arg) and node.arg == "question")]
+    assert len(mentions) == 1, [ast.unparse(m) if not isinstance(m, (ast.keyword, ast.arg))
+                                else m.arg for m in mentions]
+    assert isinstance(mentions[0], ast.keyword)
+    assert isinstance(mentions[0].value, ast.Constant) and mentions[0].value.value == ""
 
 
 # --------------------------------------------------------------------------- #
@@ -383,3 +400,114 @@ def test_a_different_threshold_on_the_receipt_is_unaccounted(monkeypatch,
     executed["target"] = dict(executed["target"], value=75_000_000)
     unaccounted = _governed_plan_coverage(payload)["unaccounted"]
     assert [e["kind"] for e in unaccounted] == ["governed_plan:target"]
+
+
+# --------------------------------------------------------------------------- #
+# D6 — the forecast funded balance is the composer's, which is the tab's
+# --------------------------------------------------------------------------- #
+
+@pytest.fixture
+def estate(funded_root, monkeypatch):
+    """The environment `mi_service` resolves a production request in."""
+    monkeypatch.chdir(Path(__file__).resolve().parents[2])
+    monkeypatch.setenv("MI_AGENT_ONBOARDING_OUTPUT_ROOT", funded_root)
+    monkeypatch.setenv("MI_AGENT_PIPELINE_ROOT", _NEAR)
+    # As `mi_agent_api/tests/conftest.py` does for every API test: the tab's
+    # endpoint is called in-process, not through an authenticated client.
+    monkeypatch.setenv("MI_AGENT_AUTH_ENABLED", "false")
+    from mi_agent_api import datasets as ds
+
+    def funded_frame(client_id, run_id):
+        """What `mi_service._routed_frame` does, verbatim in effect."""
+        pid = f"{client_id}/{run_id}" if run_id else (client_id or None)
+        frame, err = ds._resolve_query_frame("funded", pid)
+        return None if err else frame
+
+    return funded_frame
+
+
+def _tab(run_id="mi_2025_11"):
+    """What the React Forecast tab is served for the same book."""
+    from fastapi.testclient import TestClient
+    from mi_agent_api.app import app
+    body = TestClient(app).get(
+        f"/mi/forecast/snapshot?portfolioId={_CLIENT}/{run_id}").json()
+    return body.get("forecastBridge") or {}
+
+
+def _semantics():
+    from mi_agent.mi_query_validator import load_mi_semantics
+    from mi_agent_api.data_source import semantics_path
+    return load_mi_semantics(semantics_path())
+
+
+def test_the_governed_balance_is_the_forecast_tabs_figure(funded_root, estate):
+    for plan in (_plan(**_BALANCE), _plan(**_PROJECTION)):
+        outcome = forecast_rt.execute(
+            plan, output_root=funded_root, pipeline_root=_NEAR,
+            client_id=_CLIENT, run_id="mi_2025_11",
+            funded_frame_resolver=estate, semantics=_semantics())
+        assert outcome.ok, outcome.detail
+        tab = _tab()
+        assert tab.get("forecastFundedBalance") is not None
+        assert outcome.value == tab["forecastFundedBalance"]
+        receipt = outcome.receipt
+        assert receipt["current_funded_balance"] == tab["fundedBalance"]
+        assert receipt["weighted_expected_funded_amount"] == \
+            tab["weightedExpectedFundedAmount"]
+        assert receipt["execution_owner"] == forecast_rt.OWNER_COMPOSER
+        assert receipt["definition_decision"] == "D6"
+
+
+def test_the_balance_states_both_vintages(funded_root, estate):
+    outcome = forecast_rt.execute(
+        _plan(**_BALANCE), output_root=funded_root, pipeline_root=_NEAR,
+        client_id=_CLIENT, run_id="mi_2025_11",
+        funded_frame_resolver=estate, semantics=_semantics())
+    tab = _tab()
+    inputs = outcome.receipt["inputs"]
+    assert inputs["funded"]["as_of"] == tab["fundedReportingDate"]
+    assert inputs["pipeline"]["as_of"] == tab["pipelineAsOfDate"]
+    assert outcome.receipt["input_vintage_skew_days"] is not None
+
+
+def test_the_balance_is_not_the_month_joined_series(funded_root, estate):
+    """The other definition exists, and is not what is served."""
+    outcome = forecast_rt.execute(
+        _plan(**_BALANCE), output_root=funded_root, pipeline_root=_NEAR,
+        client_id=_CLIENT, run_id="mi_2025_11",
+        funded_frame_resolver=estate, semantics=_semantics())
+    series = _owner(funded_root, _NEAR)["currentWeightedPipelineForecast"]
+    assert outcome.receipt["execution_owner"] != forecast_rt.OWNER_EXTRAPOLATION
+    assert outcome.receipt["calculation_owner"].endswith("compute_forecast_bridge")
+    # On this fixture the funded month has no same-month extract, so the
+    # month-joined figure has no weighted pipeline at all while the composer's
+    # does: two definitions, visibly different.
+    assert series["weightedExpectedPipeline"] != \
+        outcome.receipt["weighted_expected_funded_amount"]
+
+
+def test_the_balance_without_a_funded_resolver_refuses(funded_root, estate):
+    outcome = forecast_rt.execute(
+        _plan(**_BALANCE), output_root=funded_root, pipeline_root=_NEAR,
+        client_id=_CLIENT, run_id="mi_2025_11", funded_frame_resolver=None,
+        semantics=_semantics())
+    assert outcome.reason == forecast_rt.INPUTS_UNAVAILABLE
+
+
+def test_serve_answers_the_forecast_funded_balance(monkeypatch, funded_root,
+                                                   estate):
+    from mi_agent_api.mi_service import _governed_plan_coverage
+
+    payload, record = _served(_intent(**_BALANCE), monkeypatch, funded_root,
+                              run_id="mi_2025_11", funded_frame_resolver=estate,
+                              semantics=_semantics())
+    assert payload is not None, record.get("execution")
+    tab = _tab()
+    answer = payload["answer"]
+    assert answer.startswith("Forecast funded balance: ")
+    assert tab["fundedReportingDate"] in answer
+    assert tab["pipelineAsOfDate"] in answer
+    assert payload["artifacts"][0]["kpis"][0]["rawValue"] == \
+        tab["forecastFundedBalance"]
+    assert _governed_plan_coverage(payload)["unaccounted"] == []

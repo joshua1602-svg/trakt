@@ -345,6 +345,11 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
           pipeline_source: Any = None, pipeline_root: Any = None,
           pipeline_client_id: Optional[str] = None,
           pipeline_history: Any = None,
+          # THE GOVERNED FUNDED FRAME, as a resolver `f(client_id, run_id)` —
+          # the one `mi_service` already hands the legacy analytical route. The
+          # forecast composer reads the funded book through it (D6). Supplied,
+          # never discovered here.
+          funded_frame_resolver: Any = None,
           # THE CHANGE-INTELLIGENCE OWNERS' INPUTS, resolved by the caller that
           # already owns discovery and authorisation. `output_root` is the
           # governed source root `mi_service` already resolves for its routed
@@ -393,6 +398,7 @@ def serve(*, question: str, context: Any, client_id: Optional[str] = None,
             pipeline_source=pipeline_source, pipeline_root=pipeline_root,
             pipeline_client_id=pipeline_client_id,
             pipeline_history=pipeline_history, pipeline_run_id=run_id,
+            funded_frame_resolver=funded_frame_resolver,
             client_id=client_id, output_root=output_root, tenant_id=tenant_id,
             authorised_portfolio_ids=tuple(authorised_portfolio_ids),
             # `view` IS THE EXECUTED POPULATION, and it is load-bearing here
@@ -647,7 +653,8 @@ def _attempt_forecast(body: Dict[str, Any], *, plan: Mapping[str, Any],
                       question: str, client_id: Optional[str],
                       output_root: Optional[str], pipeline_root: Any,
                       pipeline_history: Any, run_id: Optional[str],
-                      render_portfolio_id: Optional[str], as_of: Optional[str]
+                      render_portfolio_id: Optional[str], as_of: Optional[str],
+                      funded_frame_resolver: Any = None, semantics: Any = None
                       ) -> Tuple[Optional[Dict[str, Any]], str]:
     """One FORECAST serving attempt. Same contract as `_attempt`.
 
@@ -684,7 +691,9 @@ def _attempt_forecast(body: Dict[str, Any], *, plan: Mapping[str, Any],
         outcome = forecast_rt.execute(
             plan, output_root=output_root, pipeline_root=pipeline_root,
             client_id=client_id or "", run_id=run_id,
-            history_model=pipeline_history)
+            history_model=pipeline_history,
+            funded_frame_resolver=funded_frame_resolver,
+            semantics=semantics if isinstance(semantics, Mapping) else None)
     except Exception as exc:                                         # noqa: BLE001
         body["execution"]["error"] = f"{type(exc).__name__}: {exc}"[:300]
         body["disposition"] = evidence.EXECUTION_ERROR
@@ -727,8 +736,7 @@ def _as_at_clause(inputs: Mapping[str, Any]) -> str:
     composes a funded snapshot with a pipeline extract and states one date has
     not said what it is as at.
     """
-    labels = {"funded": "funded book", "pipeline": "pipeline completion flow"}
-    parts = [f"{labels.get(name, name)} {row.get('as_of')}"
+    parts = [f"{row.get('label') or name} {row.get('as_of')}"
              for name, row in sorted(inputs.items())]
     return "As at " + " and ".join(parts) + "."
 
@@ -791,6 +799,17 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
         kpis = [{"field": measure, "label": label, "value": kpi_value,
                  "rawValue": outcome.value}]
         title = "Forecast milestone"
+    elif kind == forecast_rt.KIND_BALANCE:
+        label = "Forecast funded balance"
+        answer = (f"{label}: {_money(receipt.get('forecast_funded_balance'))} — "
+                  f"the funded balance of "
+                  f"{_money(receipt.get('current_funded_balance'))} plus "
+                  f"{_money(receipt.get('weighted_expected_funded_amount'))} of "
+                  f"expected completions from the open pipeline. {as_at}")
+        kpis = [{"field": measure, "label": label,
+                 "value": _money(receipt.get("forecast_funded_balance")),
+                 "rawValue": outcome.value}]
+        title = "Forecast funded balance"
     else:
         label = "Completion run-rate"
         answer = (f"{label}: {_money(base_rate)}/month ({_money(annual)}/year). "
@@ -808,6 +827,8 @@ def render_forecast(plan: Mapping[str, Any], outcome: Any, *, question: str,
                 "createdAt": datetime.now(timezone.utc).isoformat(),
                 "mock": False}
     notes = [{"field": "completion_signal", "note": signal}] if signal else []
+    if receipt.get("formula"):
+        notes.append({"field": "formula", "note": str(receipt.get("formula"))})
     if receipt.get("scenario_basis"):
         notes.append({"field": "scenario_basis",
                       "note": str(receipt.get("scenario_basis"))})
@@ -1115,6 +1136,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
              pipeline_client_id: Optional[str] = None,
              pipeline_history: Any = None,
              pipeline_run_id: Optional[str] = None,
+             funded_frame_resolver: Any = None,
              client_id: Optional[str] = None,
              output_root: Optional[str] = None,
              tenant_id: Optional[str] = None,
@@ -1177,6 +1199,7 @@ def _attempt(body: Dict[str, Any], *, question: str, frame: Any, semantics: Any,
             body, plan=plan, question=question, client_id=client_id,
             output_root=output_root, pipeline_root=pipeline_root,
             pipeline_history=pipeline_history, run_id=pipeline_run_id,
+            funded_frame_resolver=funded_frame_resolver, semantics=semantics,
             render_portfolio_id=render_portfolio_id, as_of=as_of)
 
     # WHICH POPULATION, BEFORE WHICH RUNTIME. Placed above the dispatch because

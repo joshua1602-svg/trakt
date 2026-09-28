@@ -23,6 +23,10 @@ owner already takes, calls it, and writes down what ran:
                          reads the rule instead of copying it
     completion
     run-rate           the same owner's Model A `baseMonthlyRunRate`
+    forecast funded    the analytical composer's `funded_balance_forecast` —
+    balance              `forecast_bridge.compute_forecast_bridge` over the
+                         LATEST weekly extract, the figure the React Forecast
+                         tab shows (D6, settled by the owner)
 
 It computes no figure. There is no projection, no division by a run-rate and no
 milestone date worked out here — every number in the receipt is read out of
@@ -51,11 +55,12 @@ says which inputs each answer used rather than claiming both every time.
 
 WHAT IS REFUSED, AND WHY, rather than approximated:
 
-    forecast_projection,     D6 — two owners give two different forecast funded
-    series, and any          balances today (analytical composition £94.1m,
-    forecast_funded_balance  weighted-pipeline bridge £96.2m). Which one DEFINES
-    measure                  the measure is an owner decision, not a routing
-                             choice, and this module does not make it.
+    a forecast funded        D6 made the composer's point figure the definition.
+    balance SERIES           The only forecast series in the estate pairs each
+                             funded month with that month's last extract — a
+                             different definition (£96.2m against £94.1m on the
+                             production book) — so a series is refused rather
+                             than answered from it.
     scenario                 D2b — its own operation with a typed `assumption`
                              slot, built separately (Change 2b).
     a scoped forecast        the run-rate is book-wide; applying it to one book
@@ -100,7 +105,8 @@ POPULATION_INPUTS: Mapping[str, Mapping[str, Any]] = {
                "owner": "evolution.funded_evolution"},
     "pipeline": {"required": False,
                  "required_when": "the completion signal is the observed "
-                                  "completion flow",
+                                  "completion flow, or the figure is the "
+                                  "forecast funded balance",
                  "as_of": "governed weekly pipeline extract",
                  "owner": "evolution.pipeline_funnel_evolution"},
     "conversion": {"required": False,
@@ -132,9 +138,6 @@ MEASURE_NOT_SUPPORTED = "MEASURE_NOT_SUPPORTED"
 OPERATION_NOT_SUPPORTED = "OPERATION_NOT_SUPPORTED"
 PERIOD_NOT_SUPPORTED = "PERIOD_NOT_SUPPORTED"
 TARGET_NOT_SUPPORTED = "TARGET_NOT_SUPPORTED"
-#: D6: the measure has two owners that disagree, and nobody has said which one
-#: defines it. Refused with the decision named, never answered from either.
-DEFINITION_UNSETTLED = "DEFINITION_UNSETTLED"
 INPUTS_UNAVAILABLE = "INPUTS_UNAVAILABLE"
 FORECAST_UNAVAILABLE = "FORECAST_UNAVAILABLE"
 EXECUTION_FAILED = "EXECUTION_FAILED"
@@ -145,9 +148,14 @@ POPULATION_VINTAGE_SKEW = "POPULATION_VINTAGE_SKEW"
 #: WHAT THIS RUNTIME SERVES, as (operation, measure) -> the figure it reads.
 KIND_MILESTONE = "milestone"
 KIND_RUN_RATE = "completion_run_rate"
+KIND_BALANCE = "forecast_funded_balance"
 SERVED: Mapping[Tuple[str, str], str] = {
     ("forecast_milestone", "forecast_milestone_date"): KIND_MILESTONE,
     ("point_in_time", "forecast_completion_rate"): KIND_RUN_RATE,
+    # D6: "what is the forecast funded balance" and "what will the book grow to
+    # on the current pipeline" are one figure, the composer's.
+    ("point_in_time", "forecast_funded_balance"): KIND_BALANCE,
+    ("forecast_projection", "forecast_funded_balance"): KIND_BALANCE,
 }
 
 #: The period form each served figure is stated in. A milestone looks forward;
@@ -156,13 +164,14 @@ SERVED: Mapping[Tuple[str, str], str] = {
 PERIOD_FORMS: Mapping[str, FrozenSet[str]] = {
     KIND_MILESTONE: frozenset({"forward_looking"}),
     KIND_RUN_RATE: frozenset({"current"}),
+    # "What is the forecast funded balance?" arrives as current, "what will the
+    # book grow to?" as forward-looking; both ask for the one composer figure.
+    KIND_BALANCE: frozenset({"current", "forward_looking"}),
 }
 
-#: THE MEASURE D6 HAS NOT SETTLED. Refused under every operation, including
-#: `series` and `point_in_time`: which owner's figure IS the forecast funded
-#: balance is exactly the open decision.
-UNSETTLED_MEASURES: FrozenSet[str] = frozenset({"forecast_funded_balance"})
-UNSETTLED_DECISION = "D6"
+#: The owner decision that defines the forecast funded balance, named on every
+#: refusal and receipt that depends on it.
+BALANCE_DECISION = "D6"
 
 #: A milestone's threshold: what the owner's rule answers, and nothing wider.
 #: `milestone_answer` decides "already reached" as `current >= threshold`, so a
@@ -174,6 +183,8 @@ TARGET_COMPARATORS: FrozenSet[str] = frozenset({"gte"})
 #: WHICH OWNER PRODUCED THE FIGURES, named on the receipt.
 OWNER_EXTRAPOLATION = "forecast_extrapolation.build_extrapolation"
 OWNER_MILESTONE_RULE = "forecast_extrapolation.milestone_answer"
+OWNER_COMPOSER = "mi_workflows.analytical.executors.funded_balance_forecast"
+OWNER_BRIDGE = "forecast_bridge.compute_forecast_bridge"
 
 
 # --------------------------------------------------------------------------- #
@@ -268,12 +279,14 @@ def check_eligibility(plan: Any) -> Tuple[bool, str, str]:
         return (False, MEASURE_NOT_SUPPORTED,
                 f"exactly one measure is served; this plan names {measures}")
     operation = str(body.get("operation") or "")
-    if measures[0] in UNSETTLED_MEASURES:
-        return (False, DEFINITION_UNSETTLED,
-                f"{measures[0]!r} has two governed owners that disagree "
-                f"(analytical composition and the weighted-pipeline bridge); "
-                f"which one defines it is decision {UNSETTLED_DECISION}, open")
     kind = SERVED.get((operation, measures[0]))
+    if not kind and measures[0] == KIND_BALANCE:
+        return (False, OPERATION_NOT_SUPPORTED,
+                f"the forecast funded balance is the composer's point figure "
+                f"over the latest extract ({BALANCE_DECISION}); "
+                f"operation={operation!r} would need a series of it, and the "
+                f"only forecast series pairs each funded month with that "
+                f"month's last extract — a different definition")
     if not kind:
         served = sorted(f"{op}/{m}" for op, m in SERVED)
         return (False, OPERATION_NOT_SUPPORTED,
@@ -381,16 +394,18 @@ def _ceiling(policy: Any) -> Optional[int]:
 def execute(plan: Any, *, output_root: Any, pipeline_root: Any, client_id: str,
             run_id: Optional[str] = None,
             history_model: Optional[Mapping[str, Any]] = None,
+            funded_frame_resolver: Any = None,
+            semantics: Optional[Mapping[str, Any]] = None,
             policy: Any = None) -> ForecastOutcome:
     """An ELIGIBLE forecast plan, through the owner that already computes it.
 
     `output_root`, `pipeline_root`, `client_id` and `history_model` are the
     inputs the production request already resolved — the same ones the legacy
-    forecast route hands this same owner. This module discovers none of them.
-    `policy` is injectable for tests; production reads the governed file.
+    forecast route hands this same owner. `funded_frame_resolver` and
+    `semantics` are what the legacy analytical route hands the composer. This
+    module discovers none of them. `policy` is injectable for tests;
+    production reads the governed file.
     """
-    from mi_agent_api import forecast_extrapolation as fx_mod
-
     body = _as_mapping(plan)
     kind = kind_of(body)
     if not kind:
@@ -401,6 +416,118 @@ def execute(plan: Any, *, output_root: Any, pipeline_root: Any, client_id: str,
         return _refuse(INPUTS_UNAVAILABLE,
                        "no governed funded source root or client was supplied "
                        "for this request")
+    if kind == KIND_BALANCE:
+        return _execute_balance(
+            body, output_root=output_root, pipeline_root=pipeline_root,
+            client_id=client_id, run_id=run_id,
+            funded_frame_resolver=funded_frame_resolver, semantics=semantics,
+            policy=policy)
+    return _execute_run_rate(body, kind=kind, output_root=output_root,
+                             pipeline_root=pipeline_root, client_id=client_id,
+                             run_id=run_id, history_model=history_model,
+                             policy=policy)
+
+
+def _execute_balance(body: Mapping[str, Any], *, output_root: Any,
+                     pipeline_root: Any, client_id: str, run_id: Optional[str],
+                     funded_frame_resolver: Any,
+                     semantics: Optional[Mapping[str, Any]],
+                     policy: Any) -> ForecastOutcome:
+    """The forecast funded balance, from the composer the Forecast tab agrees with.
+
+    THE OWNER IS `funded_balance_forecast`, called with the context the legacy
+    analytical route builds — the governed funded frame from the resolver
+    `mi_service` supplies, the latest governed weekly extract the context
+    resolves itself, no lens (a scoped forecast never reaches here) — and it
+    delegates to `forecast_bridge.compute_forecast_bridge`, the function
+    `/mi/forecast/snapshot` calls for the React Forecast tab. So the governed
+    figure, the legacy composed answer and the tab are one definition (D6).
+
+    `question` is empty on purpose: the executor does not read it, and this
+    module never has one to give.
+    """
+    from mi_workflows.analytical import contract as contract_mod
+    from mi_workflows.analytical import executors as composer
+    from mi_workflows.analytical.context import AnalyticalContext
+
+    if funded_frame_resolver is None:
+        return _refuse(INPUTS_UNAVAILABLE,
+                       "no governed funded frame resolver was supplied, and the "
+                       "composer reads the funded book through one")
+    ctx = AnalyticalContext(
+        question="", spec=None, spec_dict={}, semantics=dict(semantics or {}),
+        client_id=client_id, run_id=run_id, output_root=output_root,
+        pipeline_root=pipeline_root, view=EXECUTION_POPULATION, lens=None,
+        frame_resolver=funded_frame_resolver,
+        base_frame_resolver=funded_frame_resolver)
+    try:
+        findings = composer.funded_balance_forecast(ctx)
+    except Exception as exc:                                         # noqa: BLE001
+        return _refuse(EXECUTION_FAILED, f"{type(exc).__name__}: {exc}")
+
+    def _finding(metric: str) -> Any:
+        return next((f for f in findings if f.metric == metric
+                     and f.kind == contract_mod.KIND_FORECAST), None)
+
+    forecast = _finding("forecast_funded_balance")
+    expected = _finding("weighted_expected_funded_amount")
+    if forecast is None or not forecast.ok or forecast.value is None:
+        # The composer says no governed pipeline exists. A forecast with no
+        # pipeline is not a forecast with a footnote (P0 §9).
+        return _refuse(POPULATION_INPUT_UNRESOLVED,
+                       (getattr(forecast, "note", None)
+                        or "the composer produced no forecast funded balance"))
+    evidence = dict(forecast.evidence or {})
+    expected_evidence = dict(getattr(expected, "evidence", None) or {})
+    used = {
+        "funded": {"as_of": evidence.get("fundedReportingDate"),
+                   "label": "funded book", "owner": OWNER_BRIDGE},
+        "pipeline": {"as_of": evidence.get("pipelineAsOfDate"),
+                     "label": "pipeline extract", "owner": OWNER_BRIDGE},
+    }
+    ceiling = _ceiling(policy)
+    ok, why, detail, skew = vintage_skew(used, ceiling_days=ceiling)
+    if not ok:
+        return _refuse(why, detail)
+
+    receipt: Dict[str, Any] = {
+        "capability": CAPABILITY,
+        "population_base": EXECUTION_POPULATION,
+        "operation": str(body.get("operation") or ""),
+        "measure_concept": _measure(body),
+        "measure_kind": KIND_BALANCE,
+        "result_shape": "scalar",
+        "execution_owner": OWNER_COMPOSER,
+        "calculation_owner": evidence.get("engine") or OWNER_BRIDGE,
+        "definition_decision": BALANCE_DECISION,
+        "applied_predicates": [],
+        "group_field_keys": [],
+        "inputs": used,
+        "inputs_declared": sorted(POPULATION_INPUTS),
+        "input_vintage_skew_days": skew,
+        "input_vintage_ceiling_days": ceiling,
+        "input_vintage_ceiling_owner": CEILING_OWNER,
+        "formula": evidence.get("formula"),
+        "forecast_funded_balance": forecast.value,
+        "current_funded_balance": evidence.get("fundedBalance"),
+        "weighted_expected_funded_amount":
+            evidence.get("weightedExpectedFundedAmount"),
+        "forecast_loan_count": evidence.get("forecastLoanCount"),
+        "eligible_case_count": expected_evidence.get("eligibleCaseCount"),
+        "excluded_case_count": expected_evidence.get("excludedCaseCount"),
+        "excluded_amount": expected_evidence.get("excludedFromWeightingAmount"),
+        "probability_basis": forecast.probability_basis,
+        "caveats": [str(w) for w in ctx.warnings],
+    }
+    return ForecastOutcome(ok=True, value=forecast.value, receipt=receipt)
+
+
+def _execute_run_rate(body: Mapping[str, Any], *, kind: str, output_root: Any,
+                      pipeline_root: Any, client_id: str, run_id: Optional[str],
+                      history_model: Optional[Mapping[str, Any]],
+                      policy: Any) -> ForecastOutcome:
+    """A milestone or the completion run-rate, from the scale-up owner."""
+    from mi_agent_api import forecast_extrapolation as fx_mod
 
     target = target_of(body) if kind == KIND_MILESTONE else None
     threshold = float(target["value"]) if target else None
@@ -429,8 +556,10 @@ def execute(plan: Any, *, output_root: Any, pipeline_root: Any, client_id: str,
 
     funded_input = {"as_of": fx.get("fundedReportingDate"),
                     "reporting_period": fx.get("reportingPeriod"),
+                    "label": "funded book",
                     "owner": POPULATION_INPUTS["funded"]["owner"]}
     pipeline_input = {"as_of": fx.get("completionFlowExtractDate"),
+                      "label": "pipeline completion flow",
                       "owner": POPULATION_INPUTS["pipeline"]["owner"]}
     signal_input = pipeline_input if pipeline_fed else funded_input
 

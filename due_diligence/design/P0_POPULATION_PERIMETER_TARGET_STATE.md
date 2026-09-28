@@ -35,30 +35,26 @@
         published in the envelope and disclosed by the surface on demand.
         Owner decision; recorded, not inferred.
 
-    D6  WHICH OWNER DEFINES "FORECAST FUNDED BALANCE"       OPEN — owner to decide
-        Found while building Change 2a (§14.3). Two governed owners answer the
-        same measure with different figures on the production book:
-          analytical composition    £94.1m   funded + expected completions,
-                                             EXCLUDING 6,084 cases the extract
-                                             already shows completed/withdrawn
-          weighted-pipeline bridge  £96.2m   funded + £9.1m weighted pipeline
-                                             (Model C)
-        The £2.1m gap is most plausibly the bridge re-counting cases that have
-        already funded. Recommendation: the analytical composer defines it.
-        Until decided, every plan whose MEASURE is `forecast_funded_balance`
-        — projection, series and point-in-time alike — refuses
-        DEFINITION_UNSETTLED and legacy serves. Milestones are unaffected: the
-        threshold names that concept as a target, and only the run-rate owner
-        produces dates.
+    D6  WHICH OWNER DEFINES "FORECAST FUNDED BALANCE"         SETTLED 2026-09-28
+        The analytical composer — `forecast_bridge.compute_forecast_bridge` over
+        the LATEST weekly extract, the figure the React Forecast tab shows
+        (£94.1m on the production book). Owner decision.
 
-    D7  WHICH WEEKLY EXTRACT A NAMED MONTH MEANS            OPEN — owner to decide
-        Found while scoping Change 3 (§14.4). The temporal runtime refuses a
-        month that holds more than one snapshot, so against weekly extracts it
-        would refuse every month; the legacy owner takes the latest extract in
-        any year with that month number. Recommendation: the last weekly
-        extract dated within the named month, year-aware, with its date stated
-        on the answer. Blocks named-month pipeline comparisons only; relative
-        pairs ("latest vs prior") do not need it.
+        Where the other figure comes from, corrected: the £96.2m is the
+        scale-up forecast's "current weighted pipeline forecast" (Model C),
+        read from `evolution.forecast_evolution`. Same formula, same pipeline
+        preparation — it is NOT double counting, as first suspected. It pairs
+        the August funded book with the LAST AUGUST extract (the calendar-month
+        join of §14.2) instead of the latest extract (24 Sep): £9.1m of
+        expected completions instead of £6.9m. The same series feeds
+        `/mi/evolution/forecast`, so the dashboard's forecast-over-time chart
+        most likely ends at ~£96.2m beside the tab's £94.1m — to be checked on
+        the deployed surface; not changed by P0.
+
+    D7  WHICH WEEKLY EXTRACT A NAMED MONTH MEANS              SETTLED 2026-09-28
+        The last weekly report in the named month. Owner decision. Applied
+        year-aware: a bare month the catalogue holds in two different years
+        still clarifies, exactly as it does for funded snapshots.
 
     D3  SEQUENCING                                     RECOMMENDATION HARDENED, §11
         P1 is now a DEPENDENCY of D1, not a preference. No governed answer states
@@ -633,9 +629,14 @@ gate from `plan_runtime_registry.POPULATION_OWNING_RUNTIMES`:
     forecast_milestone / forecast_milestone_date   the run-rate owner's
         + target forecast_funded_balance >= X      `milestone_answer`
     point_in_time / forecast_completion_rate       the owner's base run-rate
+    point_in_time | forecast_projection /          the analytical composer,
+        forecast_funded_balance                    `funded_balance_forecast`
+                                                   -> compute_forecast_bridge
+                                                   (added once D6 settled)
 
-**Refused by name**, legacy serves: any `forecast_funded_balance` measure (D6);
-`scenario` (Change 2b); a `pipeline` or `whole_book` base; any lens, seasoning or
+**Refused by name**, legacy serves: a `forecast_funded_balance` SERIES (the only
+series in the estate is the month-joined one D6 did not choose); `scenario`
+(Change 2b); a `pipeline` or `whole_book` base; any lens, seasoning or
 named source; filters, axes, geography, comparisons; a `gt` threshold (the
 owner's rule is `>=`); a run-rate over any window but the current one.
 
@@ -692,6 +693,21 @@ rule 6 tests in `test_contract_normalisation.py`. Mutation-tested: disabling the
 skew check fails 3; dropping the target proof fails 2; dispatching forecast below
 the funded gate fails 4.
 
+**D6 as built.** The balance is served through the composer's own executor with
+the context the legacy analytical route builds — the funded frame from the same
+`_routed_frame` resolver `mi_service` hands that route, the latest governed
+weekly extract, no lens. A test calls `/mi/forecast/snapshot` (the React Forecast
+tab's endpoint) for the same book and asserts the governed figure, the funded
+balance and the expected completions all equal the tab's, and that the answer
+states the tab's two dates.
+
+**Broad regression for Change 2a (ad931b70).** mi_agent + mi_agent_api, 3,992
+tests: 70 failed / 3,655 passed against 69 / 3,654 at Change 1. One failing ID
+differed, `test_serve_threads_the_registry_to_the_compiler_seam`, and it was an
+artefact of the run: `plan_serving_canary.py` was edited three minutes into it,
+so `inspect.getsource(_attempt)` read shifted lines and returned the next
+function. On HEAD it passes. Zero new failures.
+
 ### 14.4 Change 3 is a store and a decision, not a widened constant
 
 §7 read Change 3 as "widen `EXECUTABLE_POPULATIONS` to include pipeline, because
@@ -718,8 +734,9 @@ the temporal runtime owns frame selection". Reading the code before building it:
   whose month NUMBER matches, in any year — so "October" can silently mean an
   October from a different year. Neither can be reused as it stands.
 
-**D7 — WHICH WEEKLY EXTRACT A NAMED MONTH MEANS (open).** Recommendation: the
-last weekly extract dated within the named month, year-aware (a bare month that
+**D7 — WHICH WEEKLY EXTRACT A NAMED MONTH MEANS (settled: the last weekly report
+in the month).** As recommended: the last weekly extract dated within the named
+month, year-aware (a bare month that
 occurs in two years stays ambiguous and clarifies, as it does for funded), with
 the extract date stated on the answer (e.g. "October 2025, weekly extract of <date>").
 It is the month-end position, it is what legacy intends minus the year defect,
